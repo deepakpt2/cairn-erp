@@ -42,14 +42,15 @@ Do not rebuild these.
   `CA01`/`CA02`/`CA03` routings (`/production/routings`, `/production/routing-display`) and `C223` production
   versions (`/production/production-versions`, `/production/production-version-display`) are screens with their
   own display route, and `CO01` reads the version rather than a typed list.
-- `CO11N` confirms one operation, and it now posts what the material asks for: a component marked for backflush is
-  withdrawn and a final confirmation of a marked finished good is received, in the confirmation's own transaction,
-  through the MIGO services. `CO13` cancels the confirmation and refuses while a document it caused still stands.
-  `CO15` confirms the order header and posts no movement. The time ticket is `PROD.CONFIRM.ENTER` at
-  `/production/time-ticket`.
-- **Next missing PP confirmation transaction: `CO14` (display one confirmation).** Confirmation values can be
-  found in the order information and ticket flows, but there is no dedicated single-confirmation display route;
-  CO13 is a separate cancellation workflow and must not be duplicated or broadened into CO14.
+- `CO11N` confirms one operation. Eligible automatic issues and final-confirmation receipts are recorded as
+  durable movement intents with the confirmation and posted independently through the MIGO services. If a posting
+  fails, the confirmation remains saved and the failed movement can be reviewed and retried in COGI at
+  `/production/cogi`; supported corrections are quantity, storage location, and batch. `CO13` cancels the
+  confirmation and refuses while a document it caused still stands. `CO15` confirms the order header and posts no
+  movement. The time ticket is `PROD.CONFIRM.ENTER` at `/production/time-ticket`.
+- `CO14` displays recorded operation- and header-level confirmations at `/production/confirmation-display`.
+  It is read-only, shares the production-order display authority, and links to CO13 for cancellation; it neither
+  changes a confirmation nor posts a movement.
 - The two marks live on the material's plant view, on the MRP screen. A material carries neither mark by default,
   so a confirmation posts no movement until someone maintains it there. No order type, scheduling profile, or
   confirmation profile overrides that decision.
@@ -79,16 +80,16 @@ The steps are kept in this order, and each carries what was delivered against it
 8. `CO41` — convert the selected planned orders together. **Wired:** `/production/planned-order-conversion-collective`.
 9. `CO03`, `CO02` — display, then change, the production order. **Wired**, with technical completion and its
    revocation in the same service, after confirmation and receipt.
-10. `CO11N` — confirm yield, scrap, and time against the operations. Done, with `CO13` and `CO15` beside it. The
-    time ticket stores no activity cost, no personnel, and no shift, and it does not change the order status. What
-    it moves is read from the material's own plant marks on the MRP view, and the browser target `co11n-movement`
-    drives those marks, the withdrawal, the receipt a final confirmation causes, and the `CO13` refusal that waits
-    for the reversal.
+10. `CO11N` — confirm yield, scrap, and time against the operations. Done, with `CO13`, `CO15`, and the
+    CO11N-only COGI recovery workbench beside it. The time ticket stores no activity cost, no personnel, and no
+    shift, and it does not change the order status. What it moves is read from the material's own plant marks on the
+    MRP view; the `co11n-movement` browser target covers the withdrawal, final-confirmation receipt, `CO13` refusal
+    until reversal, and a failed-movement correction/retry in `/production/cogi`.
 11. MIGO issue and receipt stay the goods movements. Wired: the order and the confirmation now reach them, and no
     second goods-receipt transaction was added. What is still not wired is named on the confirmation screen —
     scrap is not grossed into a component quantity, no order type switches a receipt on or off, a batch is not
     determined, and a reservation is not cleared by an issue.
-12. `CO88` — settle the production order. Implemented at `/production/order-settlement` (PROD.ORDER.SETTLE). The run
+12. `CO88` — settle the production order. **Implemented** at `/production/order-settlement` (PROD.ORDER.SETTLE). The run
     settles actual costs collected on the order — journal lines that cite it — to configured receivers through
     `postJournalEntry`. A settlement rule must be stored first (`/production/settlement-rules`); no receiver or
     percentage is assumed. Cost estimates, WIP calculation (DV-003), and variance categorization (DV-004) remain

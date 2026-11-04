@@ -7,6 +7,7 @@ import {
   validateConfirmationDisplaySelection,
 } from '@/modules/production/confirmation-display';
 import { PRODUCTION_ORDER_DISPLAY_CAPABILITY } from '@/modules/production/production-order-display';
+import { SCREENS } from '@/ui/shell/screen-catalog';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
@@ -50,6 +51,10 @@ describe('CO14 confirmation display contract', () => {
     const registry = read('src/platform/registry/index.ts');
     expect(CONFIRMATION_DISPLAY_ROUTE).toBe('/production/confirmation-display');
     expect(PRODUCTION_ORDER_DISPLAY_CAPABILITY).toBe('PROD.ORDER.DISPLAY');
+    expect(SCREENS.find((screen) => screen.path === CONFIRMATION_DISPLAY_ROUTE)).toMatchObject({
+      code: PRODUCTION_ORDER_DISPLAY_CAPABILITY,
+      accepts: expect.arrayContaining(['confirmation', 'order', 'plant']),
+    });
     expect(page).toContain('requireSession(CONFIRMATION_DISPLAY_ROUTE)');
     expect(page).toContain('can(session, PRODUCTION_ORDER_DISPLAY_CAPABILITY)');
     expect(page).toContain('getProductionConfirmationDisplay');

@@ -25,9 +25,15 @@ import {
   recoverAbandonedProductionGoodsMovementFailure,
   releaseProductionGoodsMovementFailure,
 } from '../src/modules/production/production-goods-movement-failures';
+import {
+  correctProductionCogiFailure,
+  discardProductionCogiFailure,
+  retryProductionCogiFailure,
+} from '../src/modules/production/production-cogi';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
+import { createProductionCogiTestActor, type ProductionCogiTestActor } from './helpers/production-cogi-actor';
 
 /**
  * CO11N and the goods movements a confirmation causes.
@@ -50,6 +56,7 @@ const LOCATION = 'SG01';
 describe('CO11N confirmation goods movement', () => {
   let tenant: TestTenant;
   let cancellationActor!: ConfirmationCancelTestActor;
+  let cogiActor!: ProductionCogiTestActor;
   let client = '';
   let orderA = '';
   let orderB = '';
@@ -297,6 +304,9 @@ describe('CO11N confirmation goods movement', () => {
     });
     cancellationActor = await createConfirmationCancelTestActor(client, {
       username: 'CO11N_CO13_AUTHORIZED', companyScopes: [COMPANY], plantScopes: [PLANT],
+    });
+    cogiActor = await createProductionCogiTestActor(client, {
+      username: 'CO11N_COGI_AUTHORIZED', companyScopes: [COMPANY], plantScopes: [PLANT],
     });
     await saveOrderTypeParameter({
       client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP01',
@@ -769,6 +779,101 @@ describe('CO11N confirmation goods movement', () => {
          where client = ${client} and company_code = ${COMPANY}
       `);
     });
+  });
+
+  it('corrects one failed CO11N issue as an append-only revision and reprocesses that revision', async () => {
+    const stockBefore = await componentStock();
+    const valuationBefore = await valuationOf('MV-RM');
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_period_control set current_period = 10, previous_period = 9, allow_backposting = true
+         where client = ${client} and company_code = ${COMPANY}
+      `);
+      await tx.execute(sql`update plant set default_storage_location = null where client = ${client} and plant = ${PLANT}`);
+    });
+    const order = await newOrder(nextKey());
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update production_order_component set storage_location = null
+         where client = ${client} and order_number = ${order}
+      `);
+    });
+    const saved = await enterTimeTicket(client, ticket(order, await orderVersion(order), { yieldQuantity: '4' }));
+    expect(saved.movementFailures[0]).toMatchObject({ status: 'FAILED', failureCode: 'GOODS_ISSUE_REFUSED' });
+    const failureId = await failureIdOn(saved.confirmationNumber, 'ISSUE');
+    const before = await getProductionGoodsMovementFailure(client, failureId);
+    expect(before?.failure.originalPayload).toBeTruthy();
+    expect((before?.failure.originalPayload as { lines: Array<{ storageLocation: string | null }> }).lines[0]?.storageLocation).toBeNull();
+
+    // The source request has already frozen a blank explicit location. Restore the plant
+    // default for later tests; COGI must use its corrected, saved snapshot rather than reread it.
+    await withTenant(client, (tx) => tx.execute(sql`
+      update plant set default_storage_location = ${LOCATION} where client = ${client} and plant = ${PLANT}
+    `));
+    const corrected = await correctProductionCogiFailure({
+      client,
+      failureId,
+      expectedRevision: 0,
+      reason: 'Component storage location corrected after review',
+      changes: [{ lineNumber: 1, storageLocation: LOCATION }],
+      authorization: cogiActor.authorization,
+    });
+    expect(corrected.revisionNumber).toBe(1);
+    const afterCorrection = await getProductionGoodsMovementFailure(client, failureId);
+    expect(afterCorrection?.failure.originalPayload).toEqual(before?.failure.originalPayload);
+    expect(afterCorrection?.failure.idempotencyFingerprint).toBe(before?.failure.idempotencyFingerprint);
+    expect(afterCorrection?.failure).toMatchObject({ status: 'FAILED', failureCode: 'DETAILS_CORRECTED' });
+    expect(afterCorrection?.revisions.map((revision) => revision.revisionNumber)).toEqual([1]);
+
+    const result = await retryProductionCogiFailure({ client, failureId, authorization: cogiActor.authorization });
+    expect(result).toMatchObject({ outcome: 'POSTED', failureId });
+    const afterRetry = await getProductionGoodsMovementFailure(client, failureId);
+    expect(afterRetry?.failure.status).toBe('POSTED');
+    expect(afterRetry?.attempts.map((attempt) => attempt.payloadRevision)).toEqual([0, 1]);
+    expect((afterRetry?.revisions[0]?.correctedPayload as { lines: Array<{ storageLocation: string | null }> }).lines[0]?.storageLocation).toBe(LOCATION);
+    expect(await documentsOn(order)).toHaveLength(1);
+    // Keep this test's successful retry from exhausting stock shared by later scenario tests.
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update stock_quantity set quantity = ${stockBefore}, changed_by = ${ACTOR}, changed_at = now()
+         where client = ${client} and material_number = 'MV-RM' and plant = ${PLANT}
+           and storage_location = ${LOCATION} and stock_type = 'UNRESTRICTED' and batch_number = ''
+      `);
+      await tx.execute(sql`
+        update material_valuation set total_stock_quantity = ${valuationBefore.quantity}, stock_value = ${valuationBefore.value},
+                                     changed_by = ${ACTOR}, changed_at = now()
+         where client = ${client} and material_number = 'MV-RM' and valuation_area = ${PLANT}
+      `);
+    });
+  });
+
+  it('retains an explicitly discarded failure without changing reservation quantities or allowing retry', async () => {
+    const order = await newOrder(nextKey());
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_period_control set current_period = 12, previous_period = 11, allow_backposting = false
+         where client = ${client} and company_code = ${COMPANY}
+      `);
+    });
+    const saved = await enterTimeTicket(client, ticket(order, await orderVersion(order), { yieldQuantity: '4' }));
+    const failureId = await failureIdOn(saved.confirmationNumber, 'ISSUE');
+    expect((await getProductionGoodsMovementFailure(client, failureId))?.failure.status).toBe('FAILED');
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_period_control set current_period = 10, previous_period = 9, allow_backposting = true
+         where client = ${client} and company_code = ${COMPANY}
+      `);
+    });
+    const reservationsBefore = await reservationWithdrawnTotal();
+    const discarded = await discardProductionCogiFailure({
+      client, failureId, reason: 'The failed intent must not be posted', authorization: cogiActor.authorization,
+    });
+    expect(discarded).toMatchObject({ failureId, alreadyDiscarded: false });
+    const retained = await getProductionGoodsMovementFailure(client, failureId);
+    expect(retained?.failure).toMatchObject({ status: 'DISCARDED', dispositionReason: 'The failed intent must not be posted' });
+    expect(retained?.failure.originalPayload).toBeTruthy();
+    expect(await reservationWithdrawnTotal()).toBe(reservationsBefore);
+    expect((await retryProductionCogiFailure({ client, failureId, authorization: cogiActor.authorization })).outcome).toBe('NOT_ELIGIBLE');
   });
 
   it('blocks recovery when CO13 cancels a confirmation whose failed movement left no document', async () => {

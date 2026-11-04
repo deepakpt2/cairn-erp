@@ -138,7 +138,10 @@ export default function OrderInformationResultView({
           <ChildTable title="Goods movements" rows={result.overview.movements} />
           <ChildTable title="Dependent requirements" rows={result.overview.dependents} />
           {result.overview.confirmations.map((row) => (
-            <p key={String(row.confirmationNumber)}>Confirmation {row.confirmationNumber} · {row.confirmationLevel} · yield {row.yieldQuantity}. CO14 is not implemented.</p>
+            <p key={String(row.confirmationNumber)}>
+              Confirmation {row.confirmationNumber} · {row.confirmationLevel} · yield {row.yieldQuantity}.{' '}
+              <Link href={`/production/confirmation-display?confirmation=${encodeURIComponent(String(row.confirmationNumber))}`}>Open CO14 display</Link>
+            </p>
           ))}
         </section>
       )}

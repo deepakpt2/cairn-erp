@@ -8,14 +8,12 @@
  *
  * A posted confirmation is not edited here. Cancellation is not this screen.
  *
- * The confirmation and the goods movements it causes are one unit of work. A component
- * whose material is marked for backflush is withdrawn against the order, and a final
- * confirmation of a material marked for automatic goods receipt receives the finished
- * good. Both are posted by the goods-movement services MIGO uses, inside the
- * transaction this screen already holds: a movement that is refused takes the
- * confirmation with it, and a confirmation never stands beside a movement it was owed.
- * A material that carries neither mark behaves exactly as this screen always did — a
- * confirmation and no movement.
+ * The confirmation and its immutable automatic-movement intents commit together, before
+ * any inventory posting. Each eligible component issue or final finished-good receipt is
+ * then attempted in its own transaction through the same posting services MIGO uses. A
+ * failed posting rolls back only that movement attempt and is recorded for COGI recovery;
+ * the confirmation remains saved and can be reviewed or cancelled through its own flow.
+ * A material that carries neither mark behaves as before — a confirmation and no movement.
  */
 import { sql } from 'drizzle-orm';
 
@@ -71,7 +69,7 @@ const REFUSED: Record<string, string> = {
   clearOpenReservations: 'This order has no reservation. Open reservations were not cleared, and a backflush does not withdraw one.',
   confirmationNumber: 'A posted confirmation is not overwritten. Cancellation is not this screen.',
   co13: 'Cancellation is not this screen. Open CO13. A posted confirmation was not cancelled.',
-  co14: 'CO14 is not implemented. Open the confirmation from this result, or the order from CO03.',
+  co14: 'CO14 displays saved confirmations at /production/confirmation-display. A posted confirmation is not edited here.',
   co15: 'CO15 is order confirmation. This screen confirms one operation.',
   cost: 'Activity cost is not calculated. No cost was posted.',
   workCenter: 'The work center is read from the operation. It was not changed.',
@@ -209,7 +207,7 @@ const GAPS = [
   'A confirmation profile is not configured. Automatic confirmation is refused.',
   'A movement follows the material marks only. Scrap is not grossed into a component quantity, no order type switches a receipt on or off, and a reservation is not cleared.',
   'Personnel, a shift, and activity cost are not stored.',
-  'Cancellation is CO13. This screen does not cancel a posted confirmation. CO14 is not implemented.',
+  'CO14 displays saved confirmations at /production/confirmation-display. Cancellation is CO13, not this screen; a posted confirmation is not edited here.',
   'The order status is not changed. Technical completion is a separate CO02 action.',
 ];
 

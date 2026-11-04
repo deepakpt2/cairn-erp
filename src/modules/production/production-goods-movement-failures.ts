@@ -30,7 +30,13 @@ import {
   productionGoodsMovementFailure,
   productionGoodsMovementFailureAttempt,
   productionGoodsMovementFailureLine,
+  productionGoodsMovementFailureRevision,
 } from './schema';
+import {
+  requireProductionCogiAuthorityInTx,
+  requireProductionCogiFailureScopeInTx,
+  type ProductionCogiAuthorizationContext,
+} from './production-cogi-auth';
 
 const SOURCE_TRANSACTION = 'CO11N';
 const SOURCE_DOCUMENT_CLASS = 'production_confirmation';
@@ -38,10 +44,10 @@ const FAILURE_AUDIT_CLASS = 'production_goods_movement';
 const DEFAULT_LEASE_MS = 5 * 60_000;
 const MAX_PAGE_SIZE = 200;
 
-export type ProductionGoodsMovementStatus = 'PENDING' | 'PROCESSING' | 'FAILED' | 'BLOCKED' | 'POSTED';
+export type ProductionGoodsMovementStatus = 'PENDING' | 'PROCESSING' | 'FAILED' | 'BLOCKED' | 'POSTED' | 'DISCARDED';
 export type ProductionGoodsMovementKind = 'ISSUE' | 'RECEIPT';
 
-type StoredIssueLine = {
+export type StoredIssueLine = {
   materialNumber: string;
   plant: string;
   storageLocation: string | null;
@@ -55,7 +61,7 @@ type StoredIssueLine = {
   reservationItem: number | null;
 };
 
-type StoredIssuePayload = {
+export type StoredIssuePayload = {
   schemaVersion: 1;
   movementTypeCode: string;
   postingDate: string;
@@ -65,7 +71,7 @@ type StoredIssuePayload = {
   lines: StoredIssueLine[];
 };
 
-type StoredReceiptLine = {
+export type StoredReceiptLine = {
   quantity: number;
   entryUnit: string;
   storageLocation: string | null;
@@ -73,7 +79,7 @@ type StoredReceiptLine = {
   batch: string | null;
 };
 
-type StoredReceiptPayload = {
+export type StoredReceiptPayload = {
   schemaVersion: 1;
   postingDate: string;
   documentDate: string;
@@ -84,7 +90,7 @@ type StoredReceiptPayload = {
   lines: StoredReceiptLine[];
 };
 
-type StoredPayload = StoredIssuePayload | StoredReceiptPayload;
+export type StoredPayload = StoredIssuePayload | StoredReceiptPayload;
 
 export interface PersistConfirmationMovementsInput {
   client: string;
@@ -116,6 +122,9 @@ export interface ProductionGoodsMovementFailureDetail {
   failure: typeof productionGoodsMovementFailure.$inferSelect;
   lines: Array<typeof productionGoodsMovementFailureLine.$inferSelect>;
   attempts: Array<typeof productionGoodsMovementFailureAttempt.$inferSelect>;
+  revisions: Array<typeof productionGoodsMovementFailureRevision.$inferSelect>;
+  currentRevision: number;
+  effectivePayload: StoredPayload;
 }
 
 export interface ProductionGoodsMovementFailureSelection {
@@ -192,8 +201,12 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
-function fingerprint(payload: StoredPayload): string {
+export function fingerprintStoredMovementPayload(payload: StoredPayload): string {
   return createHash('sha256').update(stableJson(payload)).digest('hex');
+}
+
+function fingerprint(payload: StoredPayload): string {
+  return fingerprintStoredMovementPayload(payload);
 }
 
 function canonicalIssueMovementType(): string {
@@ -435,8 +448,8 @@ function summaryOf(row: typeof productionGoodsMovementFailure.$inferSelect): Pro
 }
 
 /**
- * Tenant-scoped listing foundation for a future recovery screen. It performs no writes and
- * does not add a route, transaction alias, or capability.
+ * Internal tenant-scoped listing helper. The user-facing COGI screen uses the separately
+ * authorised production-cogi service so every read is checked against live session scope.
  */
 export async function listProductionGoodsMovementFailures(input: {
   client: string;
@@ -487,19 +500,35 @@ export async function getProductionGoodsMovementFailure(
       eq(productionGoodsMovementFailureAttempt.client, client),
       eq(productionGoodsMovementFailureAttempt.failureId, failureId),
     )).orderBy(asc(productionGoodsMovementFailureAttempt.attemptNumber));
-    return { failure, lines, attempts };
+    const revisions = await tx.select().from(productionGoodsMovementFailureRevision).where(and(
+      eq(productionGoodsMovementFailureRevision.client, client),
+      eq(productionGoodsMovementFailureRevision.failureId, failureId),
+    )).orderBy(asc(productionGoodsMovementFailureRevision.revisionNumber));
+    const latest = revisions[revisions.length - 1];
+    return {
+      failure,
+      lines,
+      attempts,
+      revisions,
+      currentRevision: latest?.revisionNumber ?? 0,
+      effectivePayload: (latest?.correctedPayload ?? failure.originalPayload) as StoredPayload,
+    };
   });
 }
 
 interface ClaimedMovement {
   record: typeof productionGoodsMovementFailure.$inferSelect;
   attemptNumber: number;
+  payloadRevision: number;
   leaseToken: string;
+  attemptedBy: string;
+  authorization?: ProductionCogiAuthorizationContext;
 }
 
 export interface ProductionGoodsMovementClaim {
   failureId: string;
   attemptNumber: number;
+  payloadRevision: number;
   leaseToken: string;
   leaseExpiresAt: Date;
 }
@@ -509,6 +538,7 @@ async function abandonExpiredLeaseInTx(
   row: typeof productionGoodsMovementFailure.$inferSelect,
   changedBy: string,
   now: Date,
+  transactionCode = SOURCE_TRANSACTION,
 ): Promise<void> {
   if (row.status !== 'PROCESSING' || !row.processingLeaseExpiresAt || row.processingLeaseExpiresAt > now) return;
   const token = row.processingToken;
@@ -548,8 +578,8 @@ async function abandonExpiredLeaseInTx(
       objectKey: row.id,
       changeType: 'CHANGE',
       changedBy,
-      transactionCode: SOURCE_TRANSACTION,
-      reason: 'Recovered abandoned automatic movement processing ownership',
+      transactionCode,
+      reason: 'Recovered abandoned movement processing ownership',
       before: { status: 'PROCESSING', processingLeaseExpiresAt: row.processingLeaseExpiresAt },
       after: { status: 'FAILED', failureCode: 'PROCESSING_LEASE_EXPIRED', attemptCount: row.attemptCount },
     });
@@ -579,7 +609,7 @@ async function claimMovement(
   client: string,
   failureId: string,
   attemptedBy: string,
-  options: { now?: Date; leaseMilliseconds?: number } = {},
+  options: { now?: Date; leaseMilliseconds?: number; authorization?: ProductionCogiAuthorizationContext } = {},
 ): Promise<ClaimedMovement | null> {
   const now = options.now ?? new Date();
   const leaseMilliseconds = Math.max(1_000, Math.trunc(options.leaseMilliseconds ?? DEFAULT_LEASE_MS));
@@ -588,14 +618,27 @@ async function claimMovement(
       eq(productionGoodsMovementFailure.client, client),
       eq(productionGoodsMovementFailure.id, failureId),
     )).for('update');
-    if (!row || row.status === 'POSTED' || row.status === 'BLOCKED') return null;
+    if (!row) return null;
+    let actor = attemptedBy;
+    if (options.authorization) {
+      const authority = await requireProductionCogiAuthorityInTx(tx, client, options.authorization);
+      await requireProductionCogiFailureScopeInTx(tx, client, row, authority.restrictions);
+      actor = authority.username;
+    }
+    if (row.status === 'POSTED' || row.status === 'BLOCKED' || row.status === 'DISCARDED') return null;
     if (row.status === 'PROCESSING') {
       if (!row.processingLeaseExpiresAt || row.processingLeaseExpiresAt > now) return null;
-      await abandonExpiredLeaseInTx(tx, row, attemptedBy, now);
-    } else if (row.nextRetryAt && row.nextRetryAt > now) {
+      await abandonExpiredLeaseInTx(tx, row, actor, now, options.authorization ? 'COGI' : SOURCE_TRANSACTION);
+    } else if (!options.authorization && row.nextRetryAt && row.nextRetryAt > now) {
       return null;
     }
 
+    const [latestRevision] = await tx.select({ revisionNumber: productionGoodsMovementFailureRevision.revisionNumber })
+      .from(productionGoodsMovementFailureRevision).where(and(
+        eq(productionGoodsMovementFailureRevision.client, client),
+        eq(productionGoodsMovementFailureRevision.failureId, failureId),
+      )).orderBy(desc(productionGoodsMovementFailureRevision.revisionNumber)).limit(1);
+    const payloadRevision = latestRevision?.revisionNumber ?? 0;
     const token = crypto.randomUUID();
     const attemptNumber = row.attemptCount + 1;
     const expiresAt = new Date(now.getTime() + leaseMilliseconds);
@@ -607,7 +650,7 @@ async function claimMovement(
       nextRetryAt: null,
       processingToken: token,
       processingLeaseExpiresAt: expiresAt,
-      changedBy: attemptedBy,
+      changedBy: actor,
       changedAt: now,
     }).where(and(
       eq(productionGoodsMovementFailure.client, client),
@@ -618,20 +661,21 @@ async function claimMovement(
       client,
       failureId,
       attemptNumber,
+      payloadRevision,
       leaseToken: token,
-      attemptedBy,
+      attemptedBy: actor,
       status: 'PROCESSING',
       startedAt: now,
-      createdBy: attemptedBy,
+      createdBy: actor,
     });
     await recordChange(tx, {
       client,
       objectClass: FAILURE_AUDIT_CLASS,
       objectKey: failureId,
       changeType: 'CHANGE',
-      changedBy: attemptedBy,
-      transactionCode: SOURCE_TRANSACTION,
-      reason: 'Acquired exclusive automatic movement processing ownership',
+      changedBy: actor,
+      transactionCode: options.authorization ? 'COGI' : SOURCE_TRANSACTION,
+      reason: options.authorization ? 'User initiated COGI goods-movement reprocessing' : 'Acquired exclusive automatic movement processing ownership',
       before: { status: beforeStatus, attemptCount: row.attemptCount },
       after: { status: 'PROCESSING', attemptCount: attemptNumber, processingLeaseExpiresAt: expiresAt },
     });
@@ -640,7 +684,14 @@ async function claimMovement(
       eq(productionGoodsMovementFailure.id, failureId),
     ));
     if (!updated) throw new Error(`Movement failure ${failureId} disappeared during claim.`);
-    return { record: updated, attemptNumber, leaseToken: token };
+    return {
+      record: updated,
+      attemptNumber,
+      payloadRevision,
+      leaseToken: token,
+      attemptedBy: actor,
+      ...(options.authorization ? { authorization: options.authorization } : {}),
+    };
   });
 }
 
@@ -660,6 +711,7 @@ export async function claimProductionGoodsMovementFailure(input: {
   return {
     failureId: claim.record.id,
     attemptNumber: claim.attemptNumber,
+    payloadRevision: claim.payloadRevision,
     leaseToken: claim.leaseToken,
     leaseExpiresAt: claim.record.processingLeaseExpiresAt,
   };
@@ -672,17 +724,28 @@ export async function executeClaimedProductionGoodsMovementFailure(input: {
   leaseToken: string;
   attemptedBy: string;
 }): Promise<ProductionGoodsMovementAttemptResult> {
-  const [record] = await withTenant(input.client, (tx) => tx.select().from(productionGoodsMovementFailure).where(and(
-    eq(productionGoodsMovementFailure.client, input.client),
-    eq(productionGoodsMovementFailure.id, input.failureId),
-    eq(productionGoodsMovementFailure.status, 'PROCESSING'),
-    eq(productionGoodsMovementFailure.processingToken, input.leaseToken),
-  )));
-  if (!record) return { outcome: 'LEASE_LOST', failureId: input.failureId };
+  const claimed = await withTenant(input.client, async (tx) => {
+    const [record] = await tx.select().from(productionGoodsMovementFailure).where(and(
+      eq(productionGoodsMovementFailure.client, input.client),
+      eq(productionGoodsMovementFailure.id, input.failureId),
+      eq(productionGoodsMovementFailure.status, 'PROCESSING'),
+      eq(productionGoodsMovementFailure.processingToken, input.leaseToken),
+    ));
+    const [attempt] = await tx.select().from(productionGoodsMovementFailureAttempt).where(and(
+      eq(productionGoodsMovementFailureAttempt.client, input.client),
+      eq(productionGoodsMovementFailureAttempt.failureId, input.failureId),
+      eq(productionGoodsMovementFailureAttempt.leaseToken, input.leaseToken),
+      eq(productionGoodsMovementFailureAttempt.status, 'PROCESSING'),
+    ));
+    return record && attempt ? { record, attempt } : null;
+  });
+  if (!claimed) return { outcome: 'LEASE_LOST', failureId: input.failureId };
   return executeClaimedMovement({
-    record,
-    attemptNumber: record.attemptCount,
+    record: claimed.record,
+    attemptNumber: claimed.attempt.attemptNumber,
+    payloadRevision: claimed.attempt.payloadRevision,
     leaseToken: input.leaseToken,
+    attemptedBy: input.attemptedBy,
   }, input.attemptedBy);
 }
 
@@ -720,6 +783,7 @@ async function finishFailureInTx(
   now: Date,
   failure: { code: string; text: string },
   state: 'FAILED' | 'BLOCKED',
+  transactionCode = SOURCE_TRANSACTION,
 ): Promise<void> {
   const [attempt] = await tx.update(productionGoodsMovementFailureAttempt).set({
     status: state,
@@ -758,8 +822,8 @@ async function finishFailureInTx(
     objectKey: row.id,
     changeType: 'CHANGE',
     changedBy,
-    transactionCode: SOURCE_TRANSACTION,
-    reason: state === 'BLOCKED' ? 'Automatic movement blocked because its source confirmation was cancelled' : 'Automatic movement attempt failed after the posting transaction rolled back',
+    transactionCode,
+    reason: state === 'BLOCKED' ? 'Movement blocked because its source confirmation was cancelled' : 'Movement attempt failed after the posting transaction rolled back',
     before: { status: 'PROCESSING', attemptCount: row.attemptCount },
     after: { status: state, failureCode: failure.code, errorText: failure.text },
   });
@@ -773,6 +837,7 @@ async function finishSuccessInTx(
   now: Date,
   documentNumber: string,
   documentYear: number,
+  transactionCode = SOURCE_TRANSACTION,
 ): Promise<void> {
   const [attempt] = await tx.update(productionGoodsMovementFailureAttempt).set({
     status: 'SUCCEEDED',
@@ -811,8 +876,8 @@ async function finishSuccessInTx(
     objectKey: row.id,
     changeType: 'CHANGE',
     changedBy: attemptedBy,
-    transactionCode: SOURCE_TRANSACTION,
-    reason: `Automatic movement recovery posted material document ${documentNumber}`,
+    transactionCode,
+    reason: `Movement recovery posted material document ${documentNumber}`,
     before: { status: 'PROCESSING', attemptCount: row.attemptCount },
     after: {
       status: 'POSTED',
@@ -823,8 +888,12 @@ async function finishSuccessInTx(
   });
 }
 
-function issueInput(row: typeof productionGoodsMovementFailure.$inferSelect, actor: string): PostGoodsIssueInput {
-  const payload = row.originalPayload as unknown as StoredIssuePayload;
+function issueInput(
+  row: typeof productionGoodsMovementFailure.$inferSelect,
+  actor: string,
+  currentPayload: StoredPayload = row.originalPayload as unknown as StoredPayload,
+): PostGoodsIssueInput {
+  const payload = currentPayload as StoredIssuePayload;
   return {
     client: row.client,
     changedBy: actor,
@@ -849,8 +918,12 @@ function issueInput(row: typeof productionGoodsMovementFailure.$inferSelect, act
   };
 }
 
-function receiptInput(row: typeof productionGoodsMovementFailure.$inferSelect, actor: string): PostProductionReceiptInput {
-  const payload = row.originalPayload as unknown as StoredReceiptPayload;
+function receiptInput(
+  row: typeof productionGoodsMovementFailure.$inferSelect,
+  actor: string,
+  currentPayload: StoredPayload = row.originalPayload as unknown as StoredPayload,
+): PostProductionReceiptInput {
+  const payload = currentPayload as StoredReceiptPayload;
   return {
     client: row.client,
     changedBy: actor,
@@ -875,14 +948,19 @@ async function executeClaimedMovement(
   attemptedBy: string,
 ): Promise<ProductionGoodsMovementAttemptResult> {
   const { record, attemptNumber, leaseToken } = claim;
+  let actor = claim.attemptedBy || attemptedBy;
   try {
     const posted = await withTenant(record.client, async (tx) => {
+      const liveAuthority = claim.authorization
+        ? await requireProductionCogiAuthorityInTx(tx, record.client, claim.authorization)
+        : null;
+      if (liveAuthority) actor = liveAuthority.username;
       // Serialize against other CO11N entries and CO13 cancellation. If cancellation wins
       // this lock, the source is blocked; if this post wins, CO13 sees its standing document.
       await acquireLock(tx, { objectCode: 'PRODUCTION_ORDER', keys: [record.client, record.orderNumber] }, {
         client: record.client,
-        requestedBy: attemptedBy,
-        transactionCode: SOURCE_TRANSACTION,
+        requestedBy: actor,
+        transactionCode: claim.authorization ? 'COGI' : SOURCE_TRANSACTION,
       });
       const [locked] = await tx.select().from(productionGoodsMovementFailure).where(and(
         eq(productionGoodsMovementFailure.client, record.client),
@@ -891,27 +969,40 @@ async function executeClaimedMovement(
       if (!locked || locked.status !== 'PROCESSING' || locked.processingToken !== leaseToken) {
         throw new LostMovementLeaseError();
       }
+      if (liveAuthority) {
+        await requireProductionCogiFailureScopeInTx(tx, record.client, locked, liveAuthority.restrictions);
+      }
       const [cancelled] = await tx.select({ cancellationNumber: productionConfirmationCancellation.cancellationNumber })
         .from(productionConfirmationCancellation).where(and(
           eq(productionConfirmationCancellation.client, record.client),
           eq(productionConfirmationCancellation.confirmationNumber, record.confirmationNumber),
         ));
       if (cancelled) throw new SourceConfirmationCancelledError(record.confirmationNumber);
+      const [latestRevision] = await tx.select().from(productionGoodsMovementFailureRevision).where(and(
+        eq(productionGoodsMovementFailureRevision.client, record.client),
+        eq(productionGoodsMovementFailureRevision.failureId, record.id),
+      )).orderBy(desc(productionGoodsMovementFailureRevision.revisionNumber)).limit(1);
+      const currentRevision = latestRevision?.revisionNumber ?? 0;
+      if (currentRevision !== claim.payloadRevision) {
+        throw new Error('The corrected movement details changed after this retry was claimed. Retry the current revision.');
+      }
+      const effectivePayload = latestRevision?.correctedPayload as StoredPayload | undefined
+        ?? locked.originalPayload as unknown as StoredPayload;
 
       let documentNumber: string;
       let documentYear: number;
       if (record.movementKind === 'ISSUE') {
-        const document: GoodsIssueView = await postGoodsIssue(issueInput(locked, attemptedBy), 'MIGO', { tx });
+        const document: GoodsIssueView = await postGoodsIssue(issueInput(locked, actor, effectivePayload), 'MIGO', { tx });
         documentNumber = document.materialDocumentNumber;
         documentYear = document.documentYear;
       } else {
-        const document: ProductionReceiptView = await postProductionReceipt(receiptInput(locked, attemptedBy), { tx });
+        const document: ProductionReceiptView = await postProductionReceipt(receiptInput(locked, actor, effectivePayload), { tx });
         documentNumber = document.materialDocumentNumber;
         documentYear = document.documentYear;
       }
       // Posting, material document, journal, stock, valuation, reservation/output side effects,
       // success history, and the failure-record transition commit or roll back together.
-      await finishSuccessInTx(tx, locked, leaseToken, attemptedBy, new Date(), documentNumber, documentYear);
+      await finishSuccessInTx(tx, locked, leaseToken, actor, new Date(), documentNumber, documentYear, claim.authorization ? 'COGI' : SOURCE_TRANSACTION);
       return { documentNumber, documentYear };
     });
     return {
@@ -935,7 +1026,7 @@ async function executeClaimedMovement(
         if (!locked || locked.status !== 'PROCESSING' || locked.processingToken !== leaseToken) {
           throw new LostMovementLeaseError();
         }
-        await finishFailureInTx(tx, locked, leaseToken, attemptedBy, new Date(), failure, state);
+        await finishFailureInTx(tx, locked, leaseToken, actor, new Date(), failure, state, claim.authorization ? 'COGI' : SOURCE_TRANSACTION);
       });
     } catch (persistError) {
       if (persistError instanceof LostMovementLeaseError) return { outcome: 'LEASE_LOST', failureId: record.id };
@@ -952,10 +1043,12 @@ export async function attemptProductionGoodsMovementFailure(input: {
   attemptedBy: string;
   now?: Date;
   leaseMilliseconds?: number;
+  authorization?: ProductionCogiAuthorizationContext;
 }): Promise<ProductionGoodsMovementAttemptResult> {
   const claim = await claimMovement(input.client, input.failureId, input.attemptedBy, {
     now: input.now,
     leaseMilliseconds: input.leaseMilliseconds,
+    authorization: input.authorization,
   });
   if (!claim) {
     const [row] = await withTenant(input.client, (tx) => tx.select().from(productionGoodsMovementFailure).where(and(

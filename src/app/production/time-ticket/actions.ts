@@ -110,7 +110,7 @@ export async function enterTimeTicketAction(
         ok: false,
         ticket,
         message: error.message,
-        remedy: 'The confirmation is durable. Do not submit a new request; the saved movement intent is available to a recovery run.',
+        remedy: 'The confirmation is durable. Do not submit a new request; open COGI to review and reprocess the saved movement intent.'
       };
     }
     if (error instanceof TimeTicketError) return { ok: false, message: error.message, remedy: error.remedy };

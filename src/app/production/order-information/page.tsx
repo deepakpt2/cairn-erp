@@ -115,7 +115,7 @@ export default async function OrderInformationPage({
           List production orders or planned orders. Execute reads. It does not change an order, confirm one, or post.
         </p>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-coois-gaps>
-          The operations list reads the snapshot stored on the order. An order with no snapshot is omitted. Sequences other than the copied standard sequence, capacities, automatic goods movements, purchase documents, and cost are not this list. Cancellation is CO13. CO14 is not implemented.
+          The operations list reads the snapshot stored on the order. An order with no snapshot is omitted. Sequences other than the copied standard sequence, capacities, automatic goods movements, purchase documents, and cost are not this list. Confirmation display is CO14; cancellation is CO13.
         </p>
       </header>
       {openError && <p role="status" data-coois-refused className="text-sm text-red-700">{openError}</p>}

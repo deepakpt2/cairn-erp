@@ -9,6 +9,7 @@ describe('CO11N screen contract', () => {
   const form = read('src/app/production/time-ticket/TimeTicketWorkbench.tsx');
   const actions = read('src/app/production/time-ticket/actions.ts');
   const service = read('src/modules/production/time-ticket.ts');
+  const movementService = read('src/modules/production/production-goods-movement-failures.ts');
 
   it('is a time ticket and does not offer an unimplemented control', () => {
     expect(service).toContain("TIME_TICKET_ROUTE = '/production/time-ticket'");
@@ -21,19 +22,20 @@ describe('CO11N screen contract', () => {
     expect(form).not.toContain('name="confirmationNumber"');
   });
 
-  it('posts through the goods-movement services inside its own transaction', () => {
-    // The screen does not open a second unit of work: it hands its transaction to the
-    // services MIGO uses, so a refused movement takes the confirmation with it.
-    expect(service).toContain('postGoodsIssue({');
-    expect(service).toContain("}, 'MIGO', { tx })");
-    // The header states the same truth, and the sentence that denied any movement is gone.
-    expect(page).toContain('A movement follows the marks on the material, and it posts with the confirmation.');
-    expect(page).not.toContain('No goods movement is posted');
-    expect(service).toContain('postProductionReceipt({');
-    expect(service).toContain('}, { tx })');
-    // One key per document, derived from the confirmation's own request key.
-    expect(service).toContain("movementRequestKey(requestKey, 'ISSUE')");
-    expect(service).toContain("movementRequestKey(requestKey, 'RECEIPT')");
+  it('commits durable movement intents with the confirmation and attempts them through MIGO posting services', () => {
+    // The confirmation and immutable intents commit first; each actual posting runs in its own transaction.
+    expect(service).toContain('persistConfirmationMovementIntents(tx, {');
+    expect(service).toContain('processPendingConfirmationMovements({');
+    expect(service).toContain('waitForConfirmationMovementSettlement({');
+    expect(movementService).toContain("postGoodsIssue(issueInput(locked, actor, effectivePayload), 'MIGO', { tx })");
+    expect(movementService).toContain('postProductionReceipt(receiptInput(locked, actor, effectivePayload), { tx })');
+    // The UI states that a refused posting leaves a durable confirmation available to COGI.
+    expect(page).toContain('The confirmation and its movement intents are saved together');
+    expect(page).toContain('available in COGI without rolling back the confirmation');
+    expect(page).not.toContain('it posts with the confirmation');
+    // One idempotency key per movement, derived from the original confirmation request key.
+    expect(movementService).toContain("movementRequestKey(input.confirmationRequestKey, 'ISSUE')");
+    expect(movementService).toContain("movementRequestKey(input.confirmationRequestKey, 'RECEIPT')");
     // It is a time ticket, not a goods-movement screen: no movement fields are offered.
     expect(form).not.toContain('name="movementType"');
     expect(form).not.toContain('name="storageLocation"');
@@ -53,7 +55,7 @@ describe('CO11N screen contract', () => {
     // A replay, a refusal, and a rolled-back movement are three different sentences.
     expect(form).toContain('data-co11n-replay');
     expect(actions).toContain('was already saved for this request');
-    expect(actions).toContain('The confirmation was not saved, because the goods movement it causes was refused.');
+    expect(actions).toContain('The confirmation is durable. Do not submit a new request; open COGI to review and reprocess the saved movement intent.');
     expect(actions).toContain('remedy: error.remedy');
     // The preview is read from the server, and nothing in the panel is computed in the browser.
     expect(form).not.toMatch(/Math\.(round|floor|min|max)\(/);

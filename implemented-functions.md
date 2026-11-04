@@ -201,27 +201,27 @@ table, and a row is kept while the route it names resolves to a page under `src/
 | `CFG.INV.MATERIALRANGE.DEFINE` Define material number ranges | MMNR | Config | `/config/material-number-ranges` |
 | `CFG.INV.MATERIALGROUP.DEFINE` Define material groups | OMSF | Config | `/config/material-groups` |
 
-## Production (37)
+## Production (38)
 
 Thirty-two `PROD.*` codes are registered in `CAPABILITIES` in `scripts/seed.ts` (thirty-three rows, because
-`PROD.MRP.RUN` is entered twice), and five more are demanded by built screens without being registered —
-`PROD.MRP.SETTINGS`, `PROD.WORKCENTER.{CREATE,CHANGE,DISPLAY}` and `PROD.CONFIRM.CANCEL` — the
-"built screens whose code is in one of those and not the other" case the header names (DI-014 in
-`docs/DEFERRED_ISSUES.md`). Route is the screen that demands the code, read from that page's own
-`requireCapability` calls; a screen that demands several codes appears under each. The alias is the search code
-the screen prints beside its capability, or the one its registry description names.
+`PROD.MRP.RUN` is entered twice). Four additional codes are demanded by built screens without a seed registration —
+`PROD.WORKCENTER.{CREATE,CHANGE,DISPLAY}` and `PROD.CONFIRM.CANCEL`. The COGI screen's `PROD.GM.REPROCESS`
+capability is registered by migration `9213_cogi_postprocessing.sql`. Route is the screen that demands the code,
+read from that page's own `requireCapability` calls; a screen that demands several codes appears under each. The
+alias is the search code the screen prints beside its capability, or the one its registry description names.
 
 | Function | Alias | Type | Route |
 |---|---|---|---|
 | `PROD.ORDER.CREATE` Create a production order | CO01 | Transaction | `/production/orders` |
 | `PROD.ORDER.RELEASE` Release a production order | CO01 | Action | `/production/orders` |
 | `PROD.ORDER.CHANGE` Change a production order | CO02 | Transaction | `/production/production-order-change` · `/production/order-information` |
-| `PROD.ORDER.DISPLAY` Display a production order | CO03 | Transaction | `/production/production-order-display` · `/production/order-availability` |
+| `PROD.ORDER.DISPLAY` Display a production order or confirmation | CO03, CO14 | Transaction | `/production/production-order-display` · `/production/confirmation-display` · `/production/order-availability` |
 | `PROD.ORDER.GI` Issue components to a production order | MIGO | Transaction | `/inventory/migo` — 261 is offered there alone, and `MB1A` refuses it by name |
 | `PROD.ORDER.GR` Receive finished goods from a production order | MIGO | Transaction | `/inventory/migo` — movement 101 with R08, `production-receipt.ts` |
 | `PROD.ORDER.SETTLE` Settle a production order | KO88 | Transaction | `/production/order-settlement` · KO88 alias: settles actual costs to configured receivers; WIP (DV-003) and variance categories (DV-004) deferred |
 | `PROD.ORDER.INFO` List production and planned orders | COOIS | Transaction | `/production/order-information` |
 | `PROD.CONFIRM.ENTER` Enter a time ticket | CO11N | Transaction | `/production/time-ticket` · `/production/order-information` |
+| `PROD.GM.REPROCESS` Reprocess failed CO11N goods movements | COGI | Transaction | `/production/cogi` |
 | `PROD.CONFIRM.ORDER` Confirm at header level | CO15 | Transaction | `/production/order-confirmation` · `/production/order-information` |
 | `PROD.CONFIRM.CANCEL` Cancel a confirmation | CO13 | Transaction | `/production/confirmation-cancel` |
 | `PROD.MRP.RUN` Plan a plant | MD01, MD02 | Transaction | `/production/mrp-run` · `/production/single-item-planning` |

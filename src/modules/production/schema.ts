@@ -1374,7 +1374,7 @@ export const productionOrderSetttlementDistributionRule = pgTable('production_or
  * confirmation, before any movement transaction starts. A successful posting
  * transitions it to POSTED; a refused posting is rolled back first, then this
  * row and its attempt are durably marked FAILED. The table is persistence only:
- * it is not a user-facing COGI transaction.
+ * COGI is a separate postprocessing transaction; this table is its durable work item.
  */
 export const productionGoodsMovementFailure = pgTable('production_goods_movement_failure', {
   id: varchar('id', { length: 36 }).primaryKey(),
@@ -1398,7 +1398,7 @@ export const productionGoodsMovementFailure = pgTable('production_goods_movement
   /** SHA-256 of the complete immutable request payload stored below. */
   idempotencyFingerprint: varchar('idempotency_fingerprint', { length: 64 }).notNull(),
   originalPayload: jsonb('original_payload').$type<Record<string, unknown>>().notNull(),
-  /** PENDING | PROCESSING | FAILED | BLOCKED | POSTED. */
+  /** PENDING | PROCESSING | FAILED | BLOCKED | POSTED | DISCARDED. */
   status: varchar('status', { length: 16 }).notNull().default('PENDING'),
   failureCode: varchar('failure_code', { length: 64 }),
   errorText: text('error_text'),
@@ -1409,6 +1409,10 @@ export const productionGoodsMovementFailure = pgTable('production_goods_movement
   processingLeaseExpiresAt: timestamp('processing_lease_expires_at', { withTimezone: true }),
   materialDocumentNumber: varchar('material_document_number', { length: 20 }),
   documentYear: integer('document_year'),
+  /** COGI discard is a retained terminal disposition, never a physical delete. */
+  discardedAt: timestamp('discarded_at', { withTimezone: true }),
+  discardedBy: varchar('discarded_by', { length: 60 }),
+  dispositionReason: varchar('disposition_reason', { length: 200 }),
   ...auditColumns,
 }, (t) => [
   unique('production_gm_failure_client_id_uq').on(t.client, t.id),
@@ -1444,7 +1448,11 @@ export const productionGoodsMovementFailure = pgTable('production_goods_movement
   check('production_gm_failure_source_key_ck', sql`${t.sourceDocumentNumber} = ${t.confirmationNumber}`),
   check('production_gm_failure_operation_ck', sql`${t.operationNumber} ~ '^[A-Z0-9]{4}$'`),
   check('production_gm_failure_movement_ck', sql`(${t.movementKind} = 'ISSUE' and ${t.movementType} = 'PROD_ISSUE_ORDER') or (${t.movementKind} = 'RECEIPT' and ${t.movementType} = 'PROD_RECEIPT_ORDER')`),
-  check('production_gm_failure_status_ck', sql`${t.status} in ('PENDING', 'PROCESSING', 'FAILED', 'BLOCKED', 'POSTED')`),
+  check('production_gm_failure_status_ck', sql`${t.status} in ('PENDING', 'PROCESSING', 'FAILED', 'BLOCKED', 'POSTED', 'DISCARDED')`),
+  check('production_gm_failure_disposition_ck', sql`(
+    (${t.status} = 'DISCARDED' and ${t.discardedAt} is not null and ${t.discardedBy} is not null and char_length(btrim(${t.dispositionReason})) between 1 and 200)
+    or (${t.status} <> 'DISCARDED' and ${t.discardedAt} is null and ${t.discardedBy} is null and ${t.dispositionReason} is null)
+  )`),
   check('production_gm_failure_payload_ck', sql`jsonb_typeof(${t.originalPayload}) = 'object'`),
   check('production_gm_failure_fingerprint_ck', sql`${t.idempotencyFingerprint} ~ '^[0-9a-f]{64}$'`),
   check('production_gm_failure_attempt_count_ck', sql`${t.attemptCount} >= 0 and (${t.status} <> 'PROCESSING' or ${t.attemptCount} > 0)`),
@@ -1505,6 +1513,8 @@ export const productionGoodsMovementFailureAttempt = pgTable('production_goods_m
   client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
   failureId: varchar('failure_id', { length: 36 }).notNull(),
   attemptNumber: integer('attempt_number').notNull(),
+  /** Zero means originalPayload; positive values identify an append-only COGI revision. */
+  payloadRevision: integer('payload_revision').notNull().default(0),
   leaseToken: varchar('lease_token', { length: 36 }).notNull(),
   attemptedBy: varchar('attempted_by', { length: 60 }).notNull(),
   status: varchar('status', { length: 16 }).notNull().default('PROCESSING'),
@@ -1528,9 +1538,34 @@ export const productionGoodsMovementFailureAttempt = pgTable('production_goods_m
     name: 'production_gm_failure_attempt_document_fk',
   }).onDelete('restrict'),
   check('production_gm_failure_attempt_number_ck', sql`${t.attemptNumber} > 0`),
+  check('production_gm_failure_attempt_revision_ck', sql`${t.payloadRevision} >= 0`),
   check('production_gm_failure_attempt_status_ck', sql`${t.status} in ('PROCESSING', 'FAILED', 'BLOCKED', 'SUCCEEDED', 'ABANDONED')`),
   check('production_gm_failure_attempt_finish_ck', sql`(${t.status} = 'PROCESSING' and ${t.finishedAt} is null) or (${t.status} <> 'PROCESSING' and ${t.finishedAt} is not null)`),
   check('production_gm_failure_attempt_error_ck', sql`${t.status} not in ('FAILED', 'BLOCKED', 'ABANDONED') or (${t.failureCode} is not null and ${t.errorText} is not null)`),
   check('production_gm_failure_attempt_document_ck', sql`(${t.status} = 'SUCCEEDED' and ${t.materialDocumentNumber} is not null and ${t.documentYear} is not null) or (${t.status} <> 'SUCCEEDED' and ${t.materialDocumentNumber} is null and ${t.documentYear} is null)`),
   index('production_gm_failure_attempt_history_idx').on(t.client, t.failureId, t.attemptNumber),
+]);
+
+/** Append-only correction snapshots. The original intent stays immutable for audit. */
+export const productionGoodsMovementFailureRevision = pgTable('production_goods_movement_failure_revision', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  failureId: varchar('failure_id', { length: 36 }).notNull(),
+  revisionNumber: integer('revision_number').notNull(),
+  correctedPayload: jsonb('corrected_payload').$type<Record<string, unknown>>().notNull(),
+  payloadFingerprint: varchar('payload_fingerprint', { length: 64 }).notNull(),
+  changeReason: varchar('change_reason', { length: 200 }).notNull(),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.failureId, t.revisionNumber] }),
+  foreignKey({
+    columns: [t.client, t.failureId],
+    foreignColumns: [productionGoodsMovementFailure.client, productionGoodsMovementFailure.id],
+    name: 'production_gm_failure_revision_parent_fk',
+  }).onDelete('restrict'),
+  check('production_gm_failure_revision_number_ck', sql`${t.revisionNumber} > 0`),
+  check('production_gm_failure_revision_payload_ck', sql`jsonb_typeof(${t.correctedPayload}) = 'object'`),
+  check('production_gm_failure_revision_fingerprint_ck', sql`${t.payloadFingerprint} ~ '^[0-9a-f]{64}$'`),
+  check('production_gm_failure_revision_reason_ck', sql`char_length(btrim(${t.changeReason})) between 1 and 200`),
+  index('production_gm_failure_revision_history_idx').on(t.client, t.failureId, t.revisionNumber),
 ]);

@@ -1980,6 +1980,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["confirmation", "order"],
   },
   {
+    id: "/production/confirmation-display",
+    path: "/production/confirmation-display",
+    query: {},
+    code: "PROD.ORDER.DISPLAY",
+    title: "Display production confirmations",
+    area: "production",
+    family: "production-orders",
+    accepts: ["confirmation", "detail", "direction", "operation", "order", "page", "plant", "postingFrom", "postingTo", "recordedFrom", "recordedTo", "run", "sort"],
+  },
+  {
     id: "/production/mrp-run",
     path: "/production/mrp-run",
     query: {},
@@ -2178,6 +2188,16 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["operation", "order"],
+  },
+  {
+    id: "/production/cogi",
+    path: "/production/cogi",
+    query: {},
+    code: "PROD.GM.REPROCESS",
+    title: "Reprocess failed production goods movements",
+    area: "production",
+    family: "production-orders",
+    accepts: ["id", "material", "movement", "operation", "order", "plant", "status"],
   },
   {
     id: "/production/work-center-display",

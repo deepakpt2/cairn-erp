@@ -225,7 +225,8 @@ export default function TimeTicketWorkbench({
                       {failure.status === 'FAILED' && failure.nextRetryAt
                         ? ` Eligible for recovery after ${failure.nextRetryAt.toLocaleString()}.`
                         : ''}
-                      {' '}Recovery record {failure.id}.
+                      {' '}Recovery record {failure.id}.{' '}
+                      <Link href={`/production/cogi?id=${encodeURIComponent(failure.id)}`}>Open COGI record</Link>
                     </li>
                   ))}
                 </ul>
@@ -266,7 +267,7 @@ export default function TimeTicketWorkbench({
                 ? state.ticket.movementFailures.length > 0
                   ? `${state.ticket.movementFailures.length} movement intent${state.ticket.movementFailures.length === 1 ? '' : 's'} remains in durable recovery.`
                   : 'No goods movement was posted with it.'
-                : `${state.ticket.movementsPosted} goods-movement line${state.ticket.movementsPosted === 1 ? '' : 's'} posted with it.`}
+                 : `${state.ticket.movementsPosted} goods-movement line${state.ticket.movementsPosted === 1 ? '' : 's'} posted with this confirmation.`}
               {' '}<Link href={`/production/confirmation-cancel?confirmation=${encodeURIComponent(state.ticket.confirmationNumber)}`}>Cancel is CO13</Link>
             </p>
           )}

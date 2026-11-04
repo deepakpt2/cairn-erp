@@ -84,7 +84,7 @@ const REFUSED: Record<string, string> = {
   operationNumber: 'An operation is confirmed on CO11N. This screen confirms every eligible operation. One operation was not selected.',
   co11n: 'CO11N confirms one operation. This screen confirms the order.',
   co13: 'Cancellation is not this screen. Open CO13. A posted confirmation was not cancelled.',
-  co14: 'CO14 is not implemented. Open the order from CO03.',
+  co14: 'CO14 displays recorded confirmations at /production/confirmation-display. Open a saved confirmation there.',
   cost: 'Activity cost is not calculated. No cost was posted.',
   capacity: 'Capacity is not updated by a confirmation.',
   quality: 'A quality inspection is not stored. None was created.',
@@ -182,7 +182,7 @@ const GAPS = [
   'A header confirmation posts no goods movement. A movement follows the mark on the material and belongs to the operation confirmation on CO11N.',
   'The order status is not changed. Technical completion is a separate CO02 action. A final confirmation blocks another confirmation of each affected operation. It does not complete the order.',
   'Underdelivery tolerance is stored on the material plant and is not executed here. No financial period is applied, because no document is posted.',
-  'CO11N confirms one operation. Cancellation is CO13, not this screen. CO14 is not implemented. A posted confirmation is not edited here.',
+  'CO11N confirms one operation. CO14 displays saved confirmations at /production/confirmation-display. Cancellation is CO13, not this screen; a posted confirmation is not edited here.',
   'Effects follow the stored execution order. The confirmation sequence stays 000000. It is not the execution order, and an earlier operation does not have to be confirmed first.',
 ];
 

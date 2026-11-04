@@ -283,6 +283,8 @@ describe('routing execution-order audit', () => {
              has_table_privilege(current_user, 'production_order_operation_value', 'UPDATE') as value_update,
              has_table_privilege(current_user, 'production_order_operation_value', 'DELETE') as value_delete,
              has_column_privilege(current_user, 'production_order_operation', 'execution_order', 'UPDATE') as column_update,
+             (select pg_get_userbyid(relowner) from pg_class where relname = 'production_order_operation') as operation_owner,
+             (select pg_get_userbyid(relowner) from pg_class where relname = 'production_order_operation_value') as value_owner,
              (select relacl::text from pg_class where relname = 'production_order_operation') as operation_acl,
              (select relacl::text from pg_class where relname = 'production_order_operation_value') as value_acl
     `)) as unknown as Array<Record<string, string | number | boolean>>;
@@ -299,10 +301,14 @@ describe('routing execution-order audit', () => {
     expect(row?.value_update).toBe(false);
     expect(row?.value_delete).toBe(false);
     expect(row?.column_update).toBe(false);
-    expect(String(row?.operation_acl)).toContain('cairn_app=ar/cairn');
+    const owner = String(row?.operation_owner);
+    expect(owner).toBeTruthy();
+    expect(owner).not.toBe('cairn_app');
+    expect(row?.value_owner).toBe(owner);
+    expect(String(row?.operation_acl)).toContain(`cairn_app=ar/${owner}`);
     expect(String(row?.operation_acl)).not.toContain('cairn_app=arw');
-    expect(String(row?.operation_acl)).toContain('cairn=arwdDxtm/cairn');
-    expect(String(row?.value_acl)).toContain('cairn_app=ar/cairn');
+    expect(String(row?.operation_acl)).toContain(`${owner}=arwdDxtm/${owner}`);
+    expect(String(row?.value_acl)).toContain(`cairn_app=ar/${owner}`);
     await expect(withTenant(tenant.client, (tx) => tx.execute(sql`truncate production_order_operation`))).rejects.toThrow(/permission denied|insufficient privilege|must be owner/i);
   });
 

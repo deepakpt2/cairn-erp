@@ -52,7 +52,7 @@ const REFUSED: Record<string, string> = {
   item: 'An order item is not stored. The produced material is the header.',
   productionList: 'A production list is not a separate read model.',
   co13: 'Cancellation is not this list. Open CO13. This list does not cancel a confirmation.',
-  co14: 'CO14 is not implemented. A confirmation is listed here. It is not opened on another screen.',
+  co14: 'CO14 displays recorded confirmations at /production/confirmation-display. Open the saved confirmation by its number.',
   teco: 'Technical completion is filtered as status TECHNICALLY_COMPLETED. It is not a separate list key.',
   closed: 'A closed status is not stored.',
   reducedReading: 'Reduced reading is the reduced flag. A named profile was not applied.',

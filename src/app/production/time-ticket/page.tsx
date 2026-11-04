@@ -62,10 +62,10 @@ export default async function TimeTicketPage({
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
           Confirm one operation of a released production order. A check writes nothing.
           A posted confirmation is not edited here. The order status is not changed.
-          A movement follows the marks on the material, and it posts with the confirmation.
+          Automatic movements follow the material's marks. The confirmation and its movement intents are saved together; a failed posting remains available in COGI without rolling back the confirmation.
         </p>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-co11n-gaps>
-          The operation is the one stored on the order. A later routing edit is not read. A confirmation profile, automatic confirmation, backflush, automatic goods receipt, and personnel are not this screen. Cancellation is CO13. CO14 is not implemented. CO15 confirms the order, not one operation.
+          The operation is the one stored on the order. A later routing edit is not read. A confirmation profile, automatic confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO14 displays recorded confirmations; cancellation is CO13. CO15 confirms the order, not one operation.
         </p>
       </header>
       {openError && <p role="status" data-co11n-refused className="text-sm text-red-700">{openError}</p>}
