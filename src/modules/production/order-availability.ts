@@ -776,7 +776,7 @@ export async function checkOrderAvailability(input: {
         scopeKey: null,
         outcome: 'NO_GROUP',
         committedQuantity: (() => {
-          const event = plan.currentOrderEvents.get(component.itemNumber);
+          const event = currentOrderEvents.get(component.itemNumber);
           return event ? (event.eventKind === 'COMMITTED' ? qty(event.committedQuantity) : 0) : null;
         })(),
         cumulatedAtp: null,
