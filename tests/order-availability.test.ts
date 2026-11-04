@@ -1458,6 +1458,10 @@ describe('CO09 slice 1 order availability check', () => {
       requestKey: `co09-commit-${++key}`,
     });
     expect(replacement.outcome).toBe('COMMITTED');
+    await expect(withTenant(tenant.client, (tx) => tx.execute(sql`
+      delete from production_order_component
+       where client = ${tenant.client} and order_number = ${orderOne} and item_number = 10
+    `))).rejects.toThrow(/append-only/);
     const [headerBeforeChange] = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select version::int as version from production_order
        where client = ${tenant.client} and order_number = ${orderOne}

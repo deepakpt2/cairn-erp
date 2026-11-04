@@ -37,7 +37,7 @@ CREATE TABLE public.production_order_availability_run (
   CONSTRAINT production_order_availability_run_pk PRIMARY KEY (client, request_key),
   CONSTRAINT production_order_availability_run_order_fk
     FOREIGN KEY (client, order_number)
-    REFERENCES public.production_order (client, order_number) ON DELETE RESTRICT,
+    REFERENCES public.production_order (client, order_number) ON DELETE CASCADE,
   CONSTRAINT production_order_availability_run_action_ck
     CHECK (action IN ('COMMIT', 'RESET')),
   CONSTRAINT production_order_availability_run_key_ck
@@ -71,13 +71,13 @@ CREATE TABLE public.production_order_component_commitment_event (
   CONSTRAINT production_order_component_commitment_event_pk PRIMARY KEY (client, event_number),
   CONSTRAINT production_order_component_commitment_event_run_fk
     FOREIGN KEY (client, request_key)
-    REFERENCES public.production_order_availability_run (client, request_key) ON DELETE RESTRICT,
+    REFERENCES public.production_order_availability_run (client, request_key) ON DELETE CASCADE,
   CONSTRAINT production_order_component_commitment_event_component_fk
     FOREIGN KEY (client, order_number, item_number)
-    REFERENCES public.production_order_component (client, order_number, item_number) ON DELETE RESTRICT,
+    REFERENCES public.production_order_component (client, order_number, item_number) ON DELETE CASCADE,
   CONSTRAINT production_order_component_commitment_event_supersedes_fk
     FOREIGN KEY (client, supersedes_event_number)
-    REFERENCES public.production_order_component_commitment_event (client, event_number) ON DELETE RESTRICT,
+    REFERENCES public.production_order_component_commitment_event (client, event_number) ON DELETE CASCADE,
   CONSTRAINT production_order_component_commitment_event_kind_ck
     CHECK (event_kind IN ('COMMITTED', 'RELEASED', 'RESET')),
   CONSTRAINT production_order_component_commitment_event_quantity_ck
@@ -121,8 +121,18 @@ GRANT USAGE, SELECT ON SEQUENCE public.production_order_component_commitment_eve
 CREATE OR REPLACE FUNCTION public.production_order_availability_append_only()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
 AS $$
 BEGIN
+  -- A complete tenant teardown is the one allowed removal boundary. Normal
+  -- deletes (including component removal) stay blocked while the client exists.
+  -- FK cascades run at nested trigger depth only after the client row is gone.
+  IF TG_OP = 'DELETE'
+     AND pg_trigger_depth() > 1
+     AND NOT EXISTS (SELECT 1 FROM public.client c WHERE c.client = OLD.client) THEN
+    RETURN OLD;
+  END IF;
   RAISE EXCEPTION 'CO09 availability runs and commitment events are append-only.'
     USING ERRCODE = '23514';
 END;

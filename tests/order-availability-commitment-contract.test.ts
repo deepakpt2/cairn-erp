@@ -45,6 +45,8 @@ describe('CO09 Slice 2 commitment contract', () => {
     expect(migration).toContain('current_setting(\'cairn.client\', true)');
     expect(migration).toContain('REVOKE UPDATE, DELETE, TRUNCATE');
     expect(migration).toContain('BEFORE UPDATE OR DELETE');
+    expect(migration).toContain('pg_trigger_depth() > 1');
+    expect(migration).toContain('NOT EXISTS (SELECT 1 FROM public.client c WHERE c.client = OLD.client)');
     expect(migration).toContain("event_kind IN ('COMMITTED', 'RELEASED', 'RESET')");
     expect(migration).toContain('committed_quantity > 0');
     expect(migration).toContain("event_kind IN ('RELEASED', 'RESET') AND committed_quantity = 0");
