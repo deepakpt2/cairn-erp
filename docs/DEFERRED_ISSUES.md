@@ -239,9 +239,14 @@ blocked milestone), and given acceptance criteria so the next person can close i
   variance classification; no accumulated counter is introduced.
 * **Update (2026-11-04, first bounded DI-012 slice):** `/production/order-cost-report` and migration
   `9215_production_order_cost_report.sql` implement read-only posted actual reconciliation under
-  `PROD.ORDER.COST.DISPLAY`. Migration validation is authorized only on a newly created dated disposable database;
-  persistent databases remain untouched. The report and links are documented in `implemented-functions.md` and
-  `docs/production-tcode-order.md`. This partial slice does not close DI-012.
+  `PROD.ORDER.COST.DISPLAY`. Migration `9215` was validated on `cairn_migration_test_20261104_di012r9` (338
+  migrations recorded), then dropped after owner and zero-active-session checks; no persistent database was migrated.
+  The browser target passed on the documented server at `f090334`. The full suite at `813e117` completed with 3,706
+  passed and 33 failed across 18 files; the settlement (6) and report contract (5) tests passed. Two report-adjacent
+  documentation consistency assertions were corrected afterward and the 236-test focused docs/contract/browser-target
+  gate passed. The full suite was not rerun after those documentation/test-only corrections and is not recorded as
+  green. The report and links are documented in `implemented-functions.md` and `docs/production-tcode-order.md`.
+  This partial slice does not close DI-012.
 
 ## DI-013 — Production documentation denied behaviour that had shipped — CLOSED
 
