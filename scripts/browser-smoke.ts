@@ -18,7 +18,12 @@ function guardedConnectionUrl(
   assert.equal(url.protocol, 'postgresql:', `${variable} must use PostgreSQL.`);
   assert.equal(url.hostname, '127.0.0.1', `${variable} must use loopback; remote databases are forbidden.`);
   assert.equal(url.port, guard.port, `${variable} must target the isolated ${guard.batch} port.`);
-  assert.equal(url.pathname, `/${guard.database}`, `${variable} must target only the ${guard.batch} disposable database.`);
+  const expectedDatabase = guard.disposable ? process.env.CAIRN_TEST_DB_NAME : guard.database;
+  assert.ok(expectedDatabase, 'CAIRN_TEST_DB_NAME must name the newly created disposable database.');
+  if (guard.disposable) {
+    assert.match(expectedDatabase, /^cairn_migration_test_\d{8}_[a-z0-9][a-z0-9-]{2,31}$/, 'Disposable database name must follow the dated task-run convention.');
+  }
+  assert.equal(url.pathname, `/${expectedDatabase}`, `${variable} must target only the ${guard.batch} database.`);
   assert.equal(decodeURIComponent(url.username), role, `${variable} must use the expected separated role.`);
   assert.ok(url.password.length > 0, `${variable} must include the isolated test password.`);
   assert.equal(url.search, '', `${variable} must not include unreviewed connection parameters.`);
@@ -134,11 +139,15 @@ async function verifyStaticAcceptanceDatabase(target: BrowserTarget) {
 
 async function verifyAcceptanceDatabase(guard: BrowserAcceptanceDatabaseGuard) {
   // Reject a remote/mistargeted URL from its parsed host before opening a socket.
-  const runtimeUrl = guardedConnectionUrl(process.env.DATABASE_URL, 'DATABASE_URL', 'cairn_app', guard);
-  const migrationUrl = guardedConnectionUrl(process.env.MIGRATION_DATABASE_URL, 'MIGRATION_DATABASE_URL', 'cairn', guard);
+  const expectedDatabase = guard.disposable ? process.env.CAIRN_TEST_DB_NAME : guard.database;
+  assert.ok(expectedDatabase, 'CAIRN_TEST_DB_NAME must name the newly created disposable database.');
+  const runtimeRole = guard.runtimeRole ?? 'cairn_app';
+  const migrationRole = guard.migrationRole ?? 'cairn';
+  const runtimeUrl = guardedConnectionUrl(process.env.DATABASE_URL, 'DATABASE_URL', runtimeRole, guard);
+  const migrationUrl = guardedConnectionUrl(process.env.MIGRATION_DATABASE_URL, 'MIGRATION_DATABASE_URL', migrationRole, guard);
   for (const [url, expectedRole, expectedElevated] of [
-    [runtimeUrl, 'cairn_app', false],
-    [migrationUrl, 'cairn', true],
+    [runtimeUrl, runtimeRole, false],
+    [migrationUrl, migrationRole, true],
   ] as const) {
     const connection = postgres(url, { max: 1, prepare: false, connect_timeout: 5, onnotice: () => {} });
     try {
@@ -150,6 +159,7 @@ async function verifyAcceptanceDatabase(guard: BrowserAcceptanceDatabaseGuard) {
         elevated: boolean;
         version_num: number;
         in_recovery: boolean;
+        database_owner: string;
       }>>`
         select current_database() as database_name,
                host(inet_server_addr()) as server_address,
@@ -157,21 +167,24 @@ async function verifyAcceptanceDatabase(guard: BrowserAcceptanceDatabaseGuard) {
                current_user as role_name,
                (r.rolsuper or r.rolbypassrls) as elevated,
                current_setting('server_version_num')::int as version_num,
-               pg_is_in_recovery() as in_recovery
-          from pg_roles r where r.rolname = current_user
+               pg_is_in_recovery() as in_recovery,
+               pg_get_userbyid(d.datdba) as database_owner
+          from pg_roles r cross join pg_database d
+         where r.rolname = current_user and d.datname = current_database()
       `;
-      assert.equal(identity?.database_name, guard.database);
+      assert.equal(identity?.database_name, expectedDatabase);
       assert.equal(identity?.server_address, '127.0.0.1');
       assert.equal(String(identity?.server_port), guard.port);
       assert.equal(identity?.role_name, expectedRole);
       assert.equal(identity?.elevated, expectedElevated);
       assert.equal(Math.floor(Number(identity?.version_num) / 10_000), 17, 'Acceptance requires PostgreSQL 17.');
       assert.equal(identity?.in_recovery, false);
+      if (guard.disposable) assert.equal(identity?.database_owner, guard.ownerRole ?? migrationRole, 'Disposable database must be owned by the task database owner.');
     } finally {
       await connection.end({ timeout: 5 });
     }
   }
-  console.log(`Verified ${guard.batch} database: ${guard.database} on 127.0.0.1:${guard.port}; runtime role restricted, migration role elevated.`);
+  console.log(`Verified ${guard.batch} database: ${expectedDatabase} on 127.0.0.1:${guard.port}; runtime role restricted, migration role elevated.`);
 }
 
 function protectedRouteFor(target: BrowserTarget): string {
@@ -180,6 +193,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'foundation') return '/finance/journal/new';
   if (target.id === 'tenant-creation') return '/config';
   if (target.id === 'co09-availability') return '/production/order-availability';
+  if (target.id === 'production-order-cost-report') return '/production/order-cost-report';
   if (target.id === 'sales-order-to-invoice') return '/sales/orders';
   if (target.id === 'quality-lot-receipt') return '/quality/lots';
   if (target.id === 'people-employee-records') return '/people/employees';

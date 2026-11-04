@@ -19,7 +19,7 @@ const SAME_FAMILY = new Set([
   'contract', 'requisition', 'storageLocation', 'productionVersion',
   'controllingArea', 'costCenter', 'profitCenter', 'asset', 'sub', 'glAccount',
   'chartOfAccounts', 'purchasingOrg', 'purchasingGroup', 'chart', 'account',
-  'selection', 'invoice', 'parked', 'component', 'dateFrom', 'dateTo', 'dateBasis',
+  'selection', 'invoice', 'parked', 'component', 'dateFrom', 'dateTo', 'dateBasis', 'periodFrom', 'periodTo',
   'mrpController', 'orderFrom', 'orderTo', 'companyFrom', 'companyTo',
   'documentDateFrom', 'documentDateTo', 'keyDate', 'salesOrg', 'distributionChannel',
   'division', 'operation', 'movementType', 'req', 'agreementNumber', 'contractNumber',
@@ -48,6 +48,7 @@ export const ALSO: Record<string, readonly string[]> = {
     '/production/boms',
   ],
   'production-orders': [
+    '/production/order-cost-report',
     '/production/order-availability',
     '/production/planned-order-display',
     '/production/stock-requirements',

@@ -4,6 +4,11 @@ export type BrowserAcceptanceDatabaseGuard = {
   database: string;
   port: string;
   batch: string;
+  /** Resolve database from CAIRN_TEST_DB_NAME and require the task's dated disposable-name pattern. */
+  disposable?: boolean;
+  runtimeRole?: string;
+  migrationRole?: string;
+  ownerRole?: string;
 };
 
 /** Each local acceptance target is bound to an explicitly reviewed loopback database and port. */
@@ -119,6 +124,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<GuardedBrowserTargetId, 
   'migo-component-issue': { database: 'cairn_b210', port: '5432', batch: 'SCR-139 local loopback' },
   'co11n-movement': { database: 'cairn_b210', port: '5432', batch: 'B-1002 local loopback' },
   'co09-availability': { database: 'cairn_b210', port: '5432', batch: 'CO09 slice 1 local loopback' },
+  'production-order-cost-report': { database: 'cairn_migration_test_YYYYMMDD_<run-id>', port: '55435', batch: 'DI-012 fresh-ledger browser acceptance', disposable: true, runtimeRole: 'cairn_app', migrationRole: 'cairn_integration_migrator', ownerRole: 'cairn_integration_migrator' },
   'migo-production-receipt': { database: 'cairn_b210', port: '5432', batch: 'SCR-140 local loopback' },
   'migo-transfer-posting': { database: 'cairn_b210', port: '5432', batch: 'SCR-141 local loopback' },
   'physical-inventory': { database: 'cairn_b210', port: '5432', batch: 'SCR-142 local loopback' },

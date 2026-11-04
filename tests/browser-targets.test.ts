@@ -107,6 +107,18 @@ describe('bounded browser target selection', () => {
     expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-151 local loopback' });
     expect(guard?.batch).toMatch(/B-151/);
   });
+  it('binds DI-012 browser acceptance to an explicitly named dated disposable database', () => {
+    const target = TARGETS.find((candidate) => candidate.id === 'production-order-cost-report');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['production-order-cost-report'];
+    expect(target).toMatchObject({ client: 'T999' });
+    expect(guard).toMatchObject({
+      database: 'cairn_migration_test_YYYYMMDD_<run-id>', port: '55435', disposable: true,
+      runtimeRole: 'cairn_app', migrationRole: 'cairn_integration_migrator', ownerRole: 'cairn_integration_migrator',
+    });
+    const runner = readFileSync('scripts/browser-smoke.ts', 'utf8');
+    expect(runner).toContain('CAIRN_TEST_DB_NAME');
+    expect(runner).toMatch(/cairn_migration_test_.*\\d\{8\}/);
+  });
   it('reserves T976 for SCR-021 Sales Organization Company Code assignment', () => {
     const assignment = TARGETS.find((target) => target.id === 'sales-org-company-code');
     expect(assignment).toMatchObject({ client: 'T976' });

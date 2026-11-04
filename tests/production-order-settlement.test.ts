@@ -23,6 +23,7 @@ import {
   settleProductionOrder,
   productionOrderSettlementPosting,
 } from '../src/modules/production/order-settlement';
+import { getProductionOrderCostReport } from '../src/modules/production/order-cost-report';
 
 const ACTOR = 'PROD_SETTLE_TEST';
 const PLANT = 'QO01';
@@ -258,6 +259,25 @@ describe('production order settlement', () => {
     await postCost(place, saved.orderNumber, '1000.00');
     await postCost(place, saved.orderNumber, '500.00');
 
+    const actualsBeforeSettlement = await getProductionOrderCostReport({
+      client: place.client, orderNumber: saved.orderNumber, fiscalYear: 2026, periodFrom: 1, periodTo: 1,
+    });
+    expect(actualsBeforeSettlement.lines).toHaveLength(2);
+    expect(actualsBeforeSettlement.totals).toEqual([expect.objectContaining({
+      companyCode: place.company,
+      documentCurrency: place.currency,
+      localCurrency: place.currency,
+      debitDocument: '1500.0000', creditDocument: '0.0000', netDocument: '1500.0000',
+      debitLocal: '1500.0000', creditLocal: '0.0000', netLocal: '1500.0000',
+    })]);
+    const wrongPeriod = await getProductionOrderCostReport({
+      client: place.client, orderNumber: saved.orderNumber, fiscalYear: 2026, periodFrom: 2, periodTo: 2,
+    });
+    expect(wrongPeriod.lines).toEqual([]);
+    await expect(getProductionOrderCostReport({
+      client: place.client, orderNumber: saved.orderNumber, fiscalYear: 2026, periodFrom: 13, periodTo: 2,
+    })).rejects.toThrow(/Period from must not be after period to/);
+
     await assignProductionOrderTypeSettlementProfile({
       client: place.client, changedBy: ACTOR, orderType: ORDER_TYPE, profileCode: 'SP01',
     });
@@ -269,6 +289,12 @@ describe('production order settlement', () => {
     expect(result.documents.length).toBe(1);
     expect(result.documents[0]?.amount).toBe('1500.0000');
     expect(result.settled).toBe(1);
+    const afterSettlement = await getProductionOrderCostReport({ client: place.client, orderNumber: saved.orderNumber });
+    expect(afterSettlement.lines).toHaveLength(3);
+    expect(afterSettlement.totals[0]).toMatchObject({
+      debitDocument: '1500.0000', creditDocument: '1500.0000', netDocument: '0.0000',
+      debitLocal: '1500.0000', creditLocal: '1500.0000', netLocal: '0.0000',
+    });
 
     // Re-run: nothing to post again.
     const again = await settleProductionOrder({ ...run(place, saved.orderNumber), testRun: false });
@@ -291,6 +317,8 @@ describe('production order settlement', () => {
     const other = await standing('prod-settle-miss');
     const saved = await makeOrder(tenant);
     const foreign = await settleProductionOrder(run(other, saved.orderNumber));
+    await expect(getProductionOrderCostReport({ client: other.client, orderNumber: saved.orderNumber }))
+      .rejects.toThrow(/does not stand in this tenant/);
     expect(foreign.outcome).toBe('INVALID_SELECTION');
     expect(foreign.posted).toBe(false);
     const missing = await settleProductionOrder(run(other, 'PRD0000001'));

@@ -42,7 +42,7 @@ const REFUSED: Record<string, string> = {
   operation: 'An operation is not a search key. Stored operations are listed on the order. A missing snapshot is not stored as a search.',
   sequence: 'Only the copied standard sequence is stored. An alternative or parallel sequence is not a search key.',
   availability: 'Component availability is not checked on this display.',
-  cost: 'Cost is not carried on the production order.',
+  cost: 'A cost amount is not stored on the production order. Read posted actual journal lines in the production-order cost report; no activity-rate estimate is assumed.',
   confirmation: 'A confirmation number is not the key of this display. Confirmations that stand are listed with the order.',
   teco: 'Technical completion is a CO02 action, not a display key. Filter the list by status if that is what is needed.',
   closed: 'A closed status is not stored.',

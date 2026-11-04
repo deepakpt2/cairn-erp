@@ -30,6 +30,7 @@ import { deactivateSalesOrg, saveSalesOrgDefinition } from '../../src/modules/fo
 import { assignSalesOrgDistributionChannel, unassignSalesOrgDistributionChannel } from '../../src/modules/foundation/sales-org-distribution-channel-assignment';
 import { deactivateDivision, saveDivisionDefinition } from '../../src/modules/foundation/distribution-channel-division-maintenance';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
+import { productionOrderCostReport } from './production-order-cost-report';
 import { peopleEmployeeRecords } from './people-employee-records';
 import { peopleOrganization } from './people-organization';
 import { peopleAssignments } from './people-assignments';
@@ -318,6 +319,22 @@ export async function onboard(ctx: BrowserContext) {
   await page.locator('[name="password"]').fill(PASSWORD);
   await page.getByRole('button', { name: 'Create tenant', exact: true }).click();
   await page.waitForURL(/\/signin\?/, { waitUntil: 'commit' });
+  if (ctx.target.id === 'production-order-cost-report') {
+    const roles = await withTenant(CLIENT, async (tx) => tx.execute(sql`
+      select ur.role_code
+        from app_user u
+        join user_role ur on ur.client = u.client and ur.user_id = u.id
+       where u.client = ${CLIENT} and u.username = 'browser.admin'
+    `)) as unknown as Array<{ role_code: string }>;
+    assert.ok(roles.length, 'the onboarding account must have a role for browser authorization setup');
+    await withTenant(CLIENT, async (tx) => {
+      for (const { role_code } of roles) await tx.execute(sql`
+        insert into role_capability (client, role_code, capability_code, created_by)
+        values (${CLIENT}, ${role_code}, 'PROD.ORDER.COST.DISPLAY', 'BROWSER_ACCEPTANCE')
+        on conflict (client, role_code, capability_code) do nothing
+      `);
+    });
+  }
   await page.locator('[name="password"]').fill(PASSWORD);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(/\/config$/, { waitUntil: 'commit' });
@@ -5121,6 +5138,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'document-display': documentDisplayFb03,
   'journal-document-display': journalDocumentDisplay,
   'production-order-create': productionOrderCreate,
+  'production-order-cost-report': productionOrderCostReport,
   'migo-component-issue': migoComponentIssue,
   'co11n-movement': co11nMovement,
   'co09-availability': co09Availability,

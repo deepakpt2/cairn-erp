@@ -78,6 +78,12 @@ export default async function ProductionOrderDisplayPage({
         Display reads the order. It does not change, release, or post.
         <Link className="ml-2" href="/production/production-order-change">Change is a different screen.</Link>
       </p>
+      {document && (
+        <p className="mt-2 text-sm">
+          <Link href={`/production/order-cost-report?order=${encodeURIComponent(document.orderNumber)}`}>Read posted production-order costs</Link>
+          {' '}The cost report has its own capability check and makes no estimate from plan rates.
+        </p>
+      )}
       {openError && <p role="status" data-co03-refused className="mt-3 text-sm text-danger">{openError}</p>}
       <form className="mt-4 grid gap-2 sm:grid-cols-4" method="get">
         <input className="input" name="order" defaultValue={orderNumber} maxLength={12} placeholder="Production order" />

@@ -2180,6 +2180,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["order"],
   },
   {
+    id: "/production/order-cost-report",
+    path: "/production/order-cost-report",
+    query: {},
+    code: "PROD.ORDER.COST.DISPLAY",
+    title: "Production order cost report",
+    area: "production",
+    family: "production-orders",
+    accepts: ["fiscalYear", "order", "periodFrom", "periodTo"],
+  },
+  {
     id: "/production/time-ticket",
     path: "/production/time-ticket",
     query: {},
