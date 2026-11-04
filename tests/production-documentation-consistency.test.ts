@@ -109,8 +109,9 @@ describe('the wiring doc describes the application that exists', () => {
   });
 
   it('describes CO09 as the read-only overview it is, with the refusals the module makes', () => {
-    expect(flat(wiring)).toContain('writes no commitment, no reservation and no re-check on release');
-    expect(orderAvailability).toContain('No reset and no collective check over a worklist');
+    expect(flat(wiring)).toContain('The check itself writes nothing; separate reason-required per-component commit/reset actions append history');
+    expect(orderAvailability).toContain('append-only commit/reset actions implemented in order-availability-commitment.ts');
+    expect(orderAvailability).toContain('No collective check over a worklist');
     expect(orderAvailability).toContain('One order is checked per run');
     expect(flat(wiring)).toContain('docs/co09-availability-audit.md');
   });

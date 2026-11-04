@@ -24,7 +24,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-009 | The settlement masters' action layer has no authorization test | Low | Settlement configuration | OPEN |
 | DI-010 | One settlement rule per order, and the rule screen takes no session of its own | Low | Settlement rules | DEFERRED BY DECISION (D-11, D-12) |
 | DI-011 | Read-only actions behind a claim gate: swept on one screen only | Low | Change lock / UI | OPEN |
-| DI-012 | The order has no money basis, so variance, WIP and settlement cannot be built | High | PP / CO | OPEN — needs schema authorization |
+| DI-012 | The order has no money basis, so variance, WIP and settlement cannot be built | High | PP / CO | OPEN — read-only posted-actual report is the first implemented slice; WIP, variance, and activity costing remain open |
 | DI-013 | Production documentation denied behaviour that had shipped | Medium | Documentation | CLOSED by this commit |
 | DI-014 | Five production screens gate on capability codes the registry does not hold | Medium | Authorization / PP | OPEN — needs a registry decision |
 | DI-015 | Sixteen browser acceptance targets cannot reach the assertion they were written to make | Medium | Test harness / browser targets | OPEN — 21 files repaired by this commit |
@@ -227,19 +227,21 @@ blocked milestone), and given acceptance criteria so the next person can close i
   `production_order_component`/`production_order` **derived in a view**, not a stored counter, plus a report".
 * **Impact:** a manufacturing month cannot be closed from this module alone; a controller reconciles consumption
   against output outside it.
-* **Why deferred:** the increment needs a migration (a view, and per §27.010 of the project log its own grant
-  declaration) and new persisted surface. The checkpoint brief's §4 forbids schema or migration changes without
-  explicit authorization, and the settlement-ownership work that this queue came out of is complete and verified
-  for its own scope.
-* **Acceptance criteria:** owner authorizes one migration; then a derived read-only projection of
-  `work_center_costing` × activity rates × confirmed quantities plus the receipt valuation basis, a report that
-  reads it, `PROD.ORDER.SETTLE` still refusing per order until variance and settlement land (step 4), and no
-  accumulated counter anywhere — matching `confirmation-movements.ts:10-13`'s "derived, never accumulated here".
-* **Update (Pass 38, documentation):** the claim is now stated where a reader will meet it first, so nobody builds
-  a settlement screen on the assumption that one exists: `PROD.ORDER.SETTLE` is described as registered-and-inert in
-  `src/modules/inventory/production-orders.ts`, in `implemented-functions.md`'s production table, and in step 12 of
-  `docs/production-tcode-order.md`. No money basis was invented here, and none of this closes the entry: the
-  migration decision above is still outstanding.
+* **Why deferred:** the owner authorized only the first bounded slice: a read-only report of already-posted journal
+  actuals through an invoker-security view. This does not authorize valuation from plan rates, activity-cost posting,
+  WIP, variance categorization, stored totals, or changes to MIGO/CO15. The larger cost-basis policy still needs
+  separate business rules.
+* **Acceptance criteria for the full issue:** the first slice must reconcile assigned posted/reversed journal lines
+  exactly by company, account, posting period, and document/local currency; display debit, credit, and net separately;
+  enforce an exact-grant-only capability and tenant scope; and write nothing on report execution. Material-document
+  lines remain source/drilldown evidence and must not be counted twice. Confirmation quantities stay unvalued unless a
+  later activity-cost policy is approved. Subsequent work needs an approved target/standard cost basis before WIP or
+  variance classification; no accumulated counter is introduced.
+* **Update (2026-11-04, first bounded DI-012 slice):** `/production/order-cost-report` and migration
+  `9215_production_order_cost_report.sql` implement read-only posted actual reconciliation under
+  `PROD.ORDER.COST.DISPLAY`. Migration validation is authorized only on a newly created dated disposable database;
+  persistent databases remain untouched. The report and links are documented in `implemented-functions.md` and
+  `docs/production-tcode-order.md`. This partial slice does not close DI-012.
 
 ## DI-013 — Production documentation denied behaviour that had shipped — CLOSED
 

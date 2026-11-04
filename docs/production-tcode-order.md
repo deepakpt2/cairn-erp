@@ -93,17 +93,19 @@ The steps are kept in this order, and each carries what was delivered against it
     settles actual costs collected on the order — journal lines that cite it — to configured receivers through
     `postJournalEntry`. A settlement rule must be stored first (`/production/settlement-rules`); no receiver or
     percentage is assumed. Cost estimates, WIP calculation (DV-003), and variance categorization (DV-004) remain
-    deferred under `docs/DEFERRED_ISSUES.md` DI-012.
+    deferred under `docs/DEFERRED_ISSUES.md` DI-012. The first bounded DI-012 slice is the separate read-only
+    posted-actual report at `/production/order-cost-report` (PROD.ORDER.COST.DISPLAY); it reconciles assigned journal
+    debits, credits, and net by company and currency without estimating activity costs or calculating WIP/variance.
 
 ## Not in this sequence
 
 These are real, and they are not the next wire.
 
 - `CO09` availability: a read-only overview is delivered at `/production/order-availability` — the elements and
-  the per-component answer for one order per run. It writes no commitment, no reservation and no re-check on
-  release, and it refuses a reset and a collective check by name (`order-availability.ts`). The gap matrix and the
-  refusal set are `docs/co09-availability-audit.md`; that screen is under active work, so read the module and the
-  audit rather than this list.
+  per-component answer for one order per run. The check itself writes nothing; separate reason-required per-component
+  commit/reset actions append history without posting or reserving physical stock. A collective worklist check and
+  cross-order redistribution remain out of scope (`order-availability.ts` and
+  `order-availability-commitment.ts`). The gap matrix is `docs/co09-availability-audit.md`.
 - Mass release and printing are not required to make one order flow. The order information system is not a gap:
   `/production/order-information` lists orders, confirmations and the documents they caused.
 - Process-order transactions are a different module. They are not this list.

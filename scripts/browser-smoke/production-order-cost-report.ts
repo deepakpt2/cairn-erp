@@ -126,9 +126,9 @@ export async function productionOrderCostReport(ctx: Context) {
   await report.waitFor();
   assert.equal(await report.locator('[data-cost-report-line]').count(), 2, 'period one displays its two order-assigned journal lines');
   const totals = await report.locator('[data-cost-report-totals]').innerText();
-  assert.match(totals, /250(?:\.00)?\s+KWD/, 'period one debit total');
-  assert.match(totals, /40(?:\.00)?\s+KWD/, 'period one credit total');
-  assert.match(totals, /210(?:\.00)?\s+KWD/, 'period one net total');
+  assert.match(totals, /250(?:\.0{2,4})?\s+KWD/, 'period one debit total');
+  assert.match(totals, /40(?:\.0{2,4})?\s+KWD/, 'period one credit total');
+  assert.match(totals, /210(?:\.0{2,4})?\s+KWD/, 'period one net total');
   assert.match(await report.innerText(), /2026-01-15/);
   assert.match(await report.innerText(), /Assigned debit/);
   assert.match(await report.innerText(), /Assigned credit/);
@@ -140,9 +140,9 @@ export async function productionOrderCostReport(ctx: Context) {
   await allPeriods.waitFor();
   assert.equal(await allPeriods.locator('[data-cost-report-line]').count(), 3, 'both periods display all three assigned journal lines');
   const allTotals = await allPeriods.locator('[data-cost-report-totals]').innerText();
-  assert.match(allTotals, /270(?:\.00)?\s+KWD/, 'all-period debit total includes period two');
-  assert.match(allTotals, /60(?:\.00)?\s+KWD/, 'all-period credit total');
-  assert.match(allTotals, /210(?:\.00)?\s+KWD/, 'all-period net total');
+  assert.match(allTotals, /270(?:\.0{2,4})?\s+KWD/, 'all-period debit total includes period two');
+  assert.match(allTotals, /60(?:\.0{2,4})?\s+KWD/, 'all-period credit total');
+  assert.match(allTotals, /210(?:\.0{2,4})?\s+KWD/, 'all-period net total');
 
   const after = await withTenant(client, async (tx) => {
     const [counts] = await tx.execute(sql`

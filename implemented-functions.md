@@ -201,12 +201,13 @@ table, and a row is kept while the route it names resolves to a page under `src/
 | `CFG.INV.MATERIALRANGE.DEFINE` Define material number ranges | MMNR | Config | `/config/material-number-ranges` |
 | `CFG.INV.MATERIALGROUP.DEFINE` Define material groups | OMSF | Config | `/config/material-groups` |
 
-## Production (38)
+## Production (39)
 
 Thirty-two `PROD.*` codes are registered in `CAPABILITIES` in `scripts/seed.ts` (thirty-three rows, because
 `PROD.MRP.RUN` is entered twice). Four additional codes are demanded by built screens without a seed registration —
 `PROD.WORKCENTER.{CREATE,CHANGE,DISPLAY}` and `PROD.CONFIRM.CANCEL`. The COGI screen's `PROD.GM.REPROCESS`
-capability is registered by migration `9213_cogi_postprocessing.sql`. Route is the screen that demands the code,
+and the read-only cost report's `PROD.ORDER.COST.DISPLAY` capabilities are registered by migrations
+`9213_cogi_postprocessing.sql` and `9215_production_order_cost_report.sql`. Route is the screen that demands the code,
 read from that page's own `requireCapability` calls; a screen that demands several codes appears under each. The
 alias is the search code the screen prints beside its capability, or the one its registry description names.
 
@@ -219,6 +220,7 @@ alias is the search code the screen prints beside its capability, or the one its
 | `PROD.ORDER.GI` Issue components to a production order | MIGO | Transaction | `/inventory/migo` — 261 is offered there alone, and `MB1A` refuses it by name |
 | `PROD.ORDER.GR` Receive finished goods from a production order | MIGO | Transaction | `/inventory/migo` — movement 101 with R08, `production-receipt.ts` |
 | `PROD.ORDER.SETTLE` Settle a production order | KO88 | Transaction | `/production/order-settlement` · KO88 alias: settles actual costs to configured receivers; WIP (DV-003) and variance categories (DV-004) deferred |
+| `PROD.ORDER.COST.DISPLAY` Display posted production-order actuals | — | Report | `/production/order-cost-report` — journal debits, credits, and net by company/document/local currency; no plan-rate estimate, WIP, variance, or posting |
 | `PROD.ORDER.INFO` List production and planned orders | COOIS | Transaction | `/production/order-information` |
 | `PROD.CONFIRM.ENTER` Enter a time ticket | CO11N | Transaction | `/production/time-ticket` · `/production/order-information` |
 | `PROD.GM.REPROCESS` Reprocess failed CO11N goods movements | COGI | Transaction | `/production/cogi` |
@@ -251,10 +253,12 @@ alias is the search code the screen prints beside its capability, or the one its
 | `PROD.VERSION.LOCK` Lock or unlock a version | — | Action | `/production/production-versions` |
 | `PROD.VERSION.DELETE` Delete or flag an unused version | — | Action | `/production/production-versions` |
 
-Two lines carry a decision rather than a screen. `PROD.ORDER.SETTLE` (alias KO88) settles actual costs collected
-on a production order to configured receivers at `/production/order-settlement`. A settlement rule must be stored
-first; no receiver or percentage is assumed. Cost estimates, WIP calculation (DV-003), and variance categorization
-(DV-004) remain deferred under `docs/DEFERRED_ISSUES.md` DI-012. The two goods movements of an order are not new
+The read-only `PROD.ORDER.COST.DISPLAY` report reconciles posted/reversed journal lines assigned to one order;
+its debit, credit, and net totals keep company, document currency, and local currency separate. It does not value
+confirmation quantities, use plan rates, or calculate WIP or variance. `PROD.ORDER.SETTLE` (alias KO88) settles
+actual costs collected on a production order to configured receivers at `/production/order-settlement`. A settlement
+rule must be stored first; no receiver or percentage is assumed. Cost estimates, WIP calculation (DV-003), and
+variance categorization (DV-004) remain deferred under `docs/DEFERRED_ISSUES.md` DI-012. The two goods movements of an order are not new
 transactions: they are the 261 issue and the 101 + R08 receipt on MIGO, which is why `MB1A` refuses a 261 by name
 and names the screen that posts it.
 
