@@ -415,6 +415,19 @@ describe('CO09 slice 1 order availability check', () => {
            and c.material_number = b.component_material and b.client = ${tenant.client}
            and b.material_number = 'FG-CO09' and b.plant = ${PLANT} and b.usage = 'P' and b.alternative = '01'
       `);
+      // The remaining fixture lines stand for configured stock components whose saved
+      // eligibility facts are explicit. They are not inferred from the current BOM.
+      await tx.execute(sql`
+        update production_order_component
+           set bom_item_category = 'S', bom_stock_relevant = 'X', bom_phantom = ' ', bom_bulk_material = ' '
+         where client = ${tenant.client} and order_number = ${orderOne}
+           and item_number in (50, 60, 70, 80, 90, 100)
+      `);
+      await tx.execute(sql`
+        update production_order_component
+           set bom_item_category = 'S', bom_stock_relevant = 'X', bom_phantom = ' ', bom_bulk_material = ' '
+         where client = ${tenant.client} and order_number = ${orderThree} and item_number = 10
+      `);
       // The other two orders consume the same component on days of their own, later than the
       // checked line, so the figures each order is answered with do not depend on who inside a
       // day the list cannot order.
@@ -559,8 +572,9 @@ describe('CO09 slice 1 order availability check', () => {
     await withTenant(tenant.client, async (tx) => {
       await tx.execute(sql`
         insert into production_order_component
-          (client, order_number, item_number, material_number, plant, required_quantity, unit_of_measure, requirement_date, created_by)
-        values (${tenant.client}, ${orderOne}, 120, 'C-OK', ${PLANT}, 10, 'KG', ${REQ}, ${ACTOR})
+          (client, order_number, item_number, material_number, plant, required_quantity, unit_of_measure,
+           requirement_date, bom_item_category, bom_stock_relevant, bom_phantom, bom_bulk_material, created_by)
+        values (${tenant.client}, ${orderOne}, 120, 'C-OK', ${PLANT}, 10, 'KG', ${REQ}, 'S', 'X', ' ', ' ', ${ACTOR})
       `);
     });
     try {
@@ -646,10 +660,11 @@ describe('CO09 slice 1 order availability check', () => {
       // order's plant, to show that neither plant is quietly substituted for the other.
       await tx.execute(sql`
         insert into production_order_component
-          (client, order_number, item_number, material_number, plant, required_quantity, unit_of_measure, requirement_date, created_by)
+          (client, order_number, item_number, material_number, plant, required_quantity, unit_of_measure,
+           requirement_date, bom_item_category, bom_stock_relevant, bom_phantom, bom_bulk_material, created_by)
         values
-          (${tenant.client}, ${orderOne}, 130, 'C-OK', ${OTHER_PLANT}, 10, 'KG', ${REQ}, ${ACTOR}),
-          (${tenant.client}, ${orderOne}, 140, 'C-NOP', ${OTHER_PLANT}, 4, 'KG', ${REQ}, ${ACTOR})
+          (${tenant.client}, ${orderOne}, 130, 'C-OK', ${OTHER_PLANT}, 10, 'KG', ${REQ}, 'S', 'X', ' ', ' ', ${ACTOR}),
+          (${tenant.client}, ${orderOne}, 140, 'C-NOP', ${OTHER_PLANT}, 4, 'KG', ${REQ}, 'S', 'X', ' ', ' ', ${ACTOR})
       `);
     });
     try {
@@ -958,17 +973,32 @@ describe('CO09 slice 1 order availability check', () => {
   });
 
   it('answers the released order through business function 2', async () => {
-    await releaseProductionOrder({ client: tenant.client, orderNumber: orderTwo, releasedBy: ACTOR });
-    const result = await run(orderTwo);
-    expect(result.businessFunction).toBe('2');
-    expect(result.orderStatus).toBe('RELEASED');
-    expect(result.checkingRule).toBe(RULE);
-    expect(result.message).toBeNull();
-    const row = component(result, '10');
-    // 2 units on 2026-06-12, covered by what the 10 units of the first order leave there.
-    expect(row.requiredQuantity).toBe(2);
-    expect(row.outcome).toBe('AVAILABLE');
-    expect(row.committedQuantity).toBeNull();
+    // This check explicitly supplies saved eligibility facts for the fixture line; the
+    // following legacy/manual-line test clears them and proves that absence is refused.
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      update production_order_component
+         set bom_item_category = 'S', bom_stock_relevant = 'X', bom_phantom = ' ', bom_bulk_material = ' '
+       where client = ${tenant.client} and order_number = ${orderTwo} and item_number = 10
+    `));
+    try {
+      await releaseProductionOrder({ client: tenant.client, orderNumber: orderTwo, releasedBy: ACTOR });
+      const result = await run(orderTwo);
+      expect(result.businessFunction).toBe('2');
+      expect(result.orderStatus).toBe('RELEASED');
+      expect(result.checkingRule).toBe(RULE);
+      expect(result.message).toBeNull();
+      const row = component(result, '10');
+      // 2 units on 2026-06-12, covered by what the 10 units of the first order leave there.
+      expect(row.requiredQuantity).toBe(2);
+      expect(row.outcome).toBe('AVAILABLE');
+      expect(row.committedQuantity).toBeNull();
+    } finally {
+      await withTenant(tenant.client, (tx) => tx.execute(sql`
+        update production_order_component
+           set bom_item_category = null, bom_stock_relevant = null, bom_phantom = null, bom_bulk_material = null
+         where client = ${tenant.client} and order_number = ${orderTwo} and item_number = 10
+      `));
+    }
   });
 
   it('reports the no-check indicator as not checked rather than as covered', async () => {
