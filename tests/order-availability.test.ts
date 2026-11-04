@@ -246,6 +246,7 @@ describe('CO09 slice 1 order availability check', () => {
     await material('C-NOSCOPE', 'KG', 'REQUIREMENTS', '0');
     await material('C-GNOP', 'KG', 'REQUIREMENTS', '0');
     await material('C-UOM', 'PC', 'REQUIREMENTS', '0');
+    await material('C-LOCK', 'KG', 'REQUIREMENTS', '0');
 
     // The configuration, through the services that maintain it. A rule that no screen
     // can create is not used here.
@@ -254,7 +255,7 @@ describe('CO09 slice 1 order availability check', () => {
     await saveCheckingGroup({ client: tenant.client, changedBy: ACTOR, mode: 'CREATE', checkingGroup: GROUP_NOCHECK, description: 'Not checked', noCheck: 'X', version: 0, reason: 'CO09 fixture' });
     await saveCheckingGroup({ client: tenant.client, changedBy: ACTOR, mode: 'CREATE', checkingGroup: GROUP_NOSCOPE, description: 'No scope pair', noCheck: ' ', version: 0, reason: 'CO09 fixture' });
     await setScope();
-    for (const materialNumber of ['C-OK', 'C-PH', 'C-BULK', 'C-DELL', 'C-BARE', 'C-NOMRP', 'C-UOM']) {
+    for (const materialNumber of ['C-OK', 'C-PH', 'C-BULK', 'C-DELL', 'C-BARE', 'C-NOMRP', 'C-UOM', 'C-LOCK']) {
       const { assignments } = await listAvailabilityCheck(tenant.client);
       const current = assignments.find((row) => row.materialNumber === materialNumber && row.plant === PLANT);
       await assignCheckingGroup({
@@ -1517,5 +1518,59 @@ describe('CO09 slice 1 order availability check', () => {
     expect(history[0]?.supersedesEventNumber).toBe(history[1]?.eventNumber);
     expect(history[1]?.supersedesEventNumber).toBe(history[2]?.eventNumber);
     expect(history.map((event) => event.committedQuantity)).toEqual(['0.000', '10.000', '10.000']);
+  });
+
+  it('serializes competing commitments for the same plant/material against the shared ATP', async () => {
+    await setScope({ dependentRequirements: ' ' });
+    const firstOrder = await createProductionOrder({
+      client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-CO09', plant: PLANT,
+      orderQuantity: 1, scheduledStart: '2026-06-02', scheduledFinish: '2026-06-20', orderType: TYPE_ORDER,
+      requestKey: `co09-lock-${++key}`, components: [{ materialNumber: 'C-LOCK', plant: PLANT, requiredQuantity: 5 }],
+    });
+    const secondOrder = await createProductionOrder({
+      client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-CO09', plant: PLANT,
+      orderQuantity: 1, scheduledStart: '2026-06-02', scheduledFinish: '2026-06-20', orderType: TYPE_ORDER,
+      requestKey: `co09-lock-${++key}`, components: [{ materialNumber: 'C-LOCK', plant: PLANT, requiredQuantity: 5 }],
+    });
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update production_order_component
+           set requirement_date = ${REQ}, bom_item_category = 'S', bom_stock_relevant = 'X',
+               bom_phantom = ' ', bom_bulk_material = ' '
+         where client = ${tenant.client} and order_number in (${firstOrder.orderNumber}, ${secondOrder.orderNumber})
+      `);
+      await tx.execute(sql`
+        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
+        values (${tenant.client}, 'C-LOCK', ${PLANT}, 'SL90', 'UNRESTRICTED', 5, ${ACTOR})
+      `);
+    });
+    const capabilities = [
+      ORDER_AVAILABILITY_ORDER_CAPABILITY,
+      ORDER_AVAILABILITY_ELEMENTS_CAPABILITY,
+      PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY,
+    ];
+    const outcomes = await Promise.all([
+      commitOrderComponentAvailability({
+        client: tenant.client, changedBy: ACTOR, capabilities,
+        requestKey: `co09-lock-commit-${++key}`, orderNumber: firstOrder.orderNumber, itemNumber: '10', today: TODAY,
+      }),
+      commitOrderComponentAvailability({
+        client: tenant.client, changedBy: ACTOR, capabilities,
+        requestKey: `co09-lock-commit-${++key}`, orderNumber: secondOrder.orderNumber, itemNumber: '10', today: TODAY,
+      }),
+    ]);
+    expect(outcomes.map((result) => result.outcome).sort()).toEqual(['COMMITTED', 'RELEASED']);
+    expect(outcomes.map((result) => result.committedQuantity).sort((a, b) => a - b)).toEqual([0, 5]);
+    const events = await withTenant(tenant.client, (tx) => tx.select({
+      orderNumber: productionOrderComponentCommitmentEvent.orderNumber,
+      eventKind: productionOrderComponentCommitmentEvent.eventKind,
+      committedQuantity: productionOrderComponentCommitmentEvent.committedQuantity,
+    }).from(productionOrderComponentCommitmentEvent).where(and(
+      eq(productionOrderComponentCommitmentEvent.client, tenant.client),
+      eq(productionOrderComponentCommitmentEvent.materialNumber, 'C-LOCK'),
+    )));
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.eventKind).sort()).toEqual(['COMMITTED', 'RELEASED']);
+    expect(events.map((event) => event.committedQuantity).sort()).toEqual(['0.000', '5.000']);
   });
 });
