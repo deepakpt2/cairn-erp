@@ -94,6 +94,11 @@ describe('trusted walkthrough provisioning contract', () => {
     expect(freshness).toContain('businessDataTables');
     expect(freshness).toContain("row.table_name === 'audit_access_log'");
     expect(freshness).toContain('information_schema.columns');
+    expect(freshness).toContain('new Date(createdAt.getTime() + 60_000).toISOString()');
+    expect(freshness).toContain('"created_at" > ${baselineCutoff}::timestamptz');
+    expect(freshness).toContain('"changed_at" > ${baselineCutoff}::timestamptz');
+    expect(freshness).not.toContain('"created_at" > ${baselineCutoff}`');
+    expect(freshness).not.toContain('"changed_at" > ${baselineCutoff}`');
     expect(freshness).toContain('Global reference tables have no `client` column');
     expect(freshness).not.toContain('cairn_integration_guard');
   });

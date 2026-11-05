@@ -60,7 +60,9 @@ export async function assertFreshWalkthroughTenant(client: string, expectedUsern
 }
 
 async function assertOnboardingOnlyTenantRows(tx: Tx, client: string, createdAt: Date, createdBy: string): Promise<void> {
-  const baselineCutoff = new Date(createdAt.getTime() + 60_000);
+  // Raw Drizzle SQL parameters are text unless explicitly typed; bind an ISO
+  // string and cast it in SQL instead of passing a JS Date to the driver.
+  const baselineCutoff = new Date(createdAt.getTime() + 60_000).toISOString();
   const rows = await tx.execute(sql`
     select table_name,
            bool_or(column_name = 'created_at') as has_created_at,
@@ -121,13 +123,13 @@ async function assertOnboardingOnlyTenantRows(tx: Tx, client: string, createdAt:
       continue;
     }
     const provenanceChecks = [];
-    if (row.has_created_at) provenanceChecks.push(sql`"created_at" > ${baselineCutoff}`);
+    if (row.has_created_at) provenanceChecks.push(sql`"created_at" > ${baselineCutoff}::timestamptz`);
     if (row.has_created_by) provenanceChecks.push(sql`"created_by" IS DISTINCT FROM ${createdBy}`);
     if (row.table_name === 'app_user') {
       // Normal sign-in updates only last_login_at and the technical AUTH audit fields.
       if (row.has_changed_by) provenanceChecks.push(sql`("changed_by" IS NOT NULL AND "changed_by" NOT IN (${createdBy}, 'AUTH'))`);
     } else {
-      if (row.has_changed_at) provenanceChecks.push(sql`"changed_at" > ${baselineCutoff}`);
+      if (row.has_changed_at) provenanceChecks.push(sql`"changed_at" > ${baselineCutoff}::timestamptz`);
       if (row.has_changed_by) provenanceChecks.push(sql`("changed_by" IS NOT NULL AND "changed_by" IS DISTINCT FROM ${createdBy})`);
     }
     const conditions = [sql`"client" = ${client}`];
