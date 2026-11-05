@@ -7,7 +7,7 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: cairn
+      POSTGRES_DB: ${CAIRN_DATABASE_NAME:-cairn}
       POSTGRES_USER: cairn
       POSTGRES_PASSWORD: ${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD in .env}
       CAIRN_APP_DB_PASSWORD: ${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD in .env}
@@ -40,8 +40,8 @@ services:
       - ./walkthrough-seed.ts:/app/walkthrough-seed.ts:ro
     environment:
       CAIRN_ENV: production
-      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/cairn
-      MIGRATION_DATABASE_URL: postgresql://cairn:${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}@cairn-postgres:5432/cairn
+      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
+      MIGRATION_DATABASE_URL: postgresql://cairn:${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
     depends_on:
       db:
         condition: service_healthy
@@ -61,7 +61,7 @@ services:
       CAIRN_PROVISIONING_TOKEN: ${CAIRN_PROVISIONING_TOKEN:-}
       # Deployment-secret JSON; supplied only to the app, never the migration job.
       CAIRN_BANK_DATA_KEYRING_JSON: ${CAIRN_BANK_DATA_KEYRING_JSON:-}
-      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/cairn
+      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
       HOSTNAME: 0.0.0.0
       PORT: "3000"
     depends_on:

@@ -22,7 +22,8 @@ case "$CAIRN_APP_DB_PASSWORD" in
 esac
 
 psql --no-password --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
-  --set=ON_ERROR_STOP=1 --set=app_password="$CAIRN_APP_DB_PASSWORD" <<'SQL'
+  --set=ON_ERROR_STOP=1 --set=app_password="$CAIRN_APP_DB_PASSWORD" \
+  --set=db_name="$POSTGRES_DB" <<'SQL'
 CREATE ROLE cairn_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD :'app_password';
-GRANT CONNECT ON DATABASE cairn TO cairn_app;
+GRANT CONNECT ON DATABASE :"db_name" TO cairn_app;
 SQL

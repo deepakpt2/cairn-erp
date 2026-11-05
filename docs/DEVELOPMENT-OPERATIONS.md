@@ -276,8 +276,11 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 
 ### Required Environment Variables (`.env`)
 
+`CAIRN_DATABASE_NAME` is used consistently by the PostgreSQL service and the app/migration connection URLs. It defaults to `cairn`; for a walkthrough, set it to a fresh disposable name matching `cairn_migration_test_YYYYMMDD_<run-id>` before the first database-volume initialization. Changing this variable does not rename or create a database in an existing volume; provision the intended database explicitly and keep the app and migration URLs aligned.
+
 | Variable | Purpose | Example generation |
 |----------|---------|-------------------|
+| `CAIRN_DATABASE_NAME` | Database created on a fresh volume and used by app/migration URLs | `cairn` or a fresh `cairn_migration_test_YYYYMMDD_<run-id>` |
 | `CAIRN_OWNER_DB_PASSWORD` | PostgreSQL superuser password (`POSTGRES_PASSWORD`) | `openssl rand -hex 32` |
 | `CAIRN_APP_DB_PASSWORD` | Application role password, embedded in `DATABASE_URL` | `openssl rand -hex 32` |
 
