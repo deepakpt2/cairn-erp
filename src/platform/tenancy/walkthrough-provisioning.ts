@@ -85,6 +85,15 @@ async function assertOnboardingOnlyTenantRows(tx: Tx, client: string, createdAt:
 
   // Change items inherit provenance from their parent change_document, which is checked below.
   const childAuditTables = new Set(['change_document_item']);
+  // Detail tables delivered with their parent that carry no audit columns of their own: a
+  // restricting foreign key ties every row to a parent row, and that parent table is audited
+  // and checked on its own provenance below. A row here cannot outlive an onboarding parent,
+  // so the parent's verdict stands for the child; a later-written parent is still refused.
+  const unauditedChildTables = new Map([
+    ['closing_task_template_dependency', 'closing_task_template'],
+    ['industry_text', 'industry'],
+  ]);
+  const scannedTables = new Set(rows.map((row) => row.table_name));
   const structureTables = new Set([
     'company_code', 'credit_control_area', 'controlling_area', 'controlling_area_company',
     'plant', 'storage_location', 'purchasing_org', 'purchasing_org_plant', 'sales_org',
@@ -101,6 +110,13 @@ async function assertOnboardingOnlyTenantRows(tx: Tx, client: string, createdAt:
 
   for (const row of rows) {
     if (childAuditTables.has(row.table_name) || row.table_name === 'user_session') continue;
+    const unauditedChildParent = unauditedChildTables.get(row.table_name);
+    if (unauditedChildParent && !(row.has_created_at || row.has_created_by || row.has_changed_at || row.has_changed_by)) {
+      // Fail closed: only inherit the parent's verdict when the parent is itself scanned.
+      if (scannedTables.has(unauditedChildParent)) continue;
+      conflicts.push(row.table_name);
+      continue;
+    }
     if (!/^[a-z_][a-z0-9_]*$/.test(row.table_name)) {
       conflicts.push('unrecognized tenant table');
       continue;

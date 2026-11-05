@@ -99,6 +99,13 @@ describe('trusted walkthrough provisioning contract', () => {
     expect(freshness).toContain('"changed_at" > ${baselineCutoff}::timestamptz');
     expect(freshness).not.toContain('"created_at" > ${baselineCutoff}`');
     expect(freshness).not.toContain('"changed_at" > ${baselineCutoff}`');
+    // Delivered detail tables without audit columns inherit their audited parent's verdict
+    // instead of being refused on sight, and only while that parent is part of the same scan.
+    expect(freshness).toContain("['industry_text', 'industry']");
+    expect(freshness).toContain("['closing_task_template_dependency', 'closing_task_template']");
+    expect(freshness).toContain('const scannedTables = new Set(rows.map((row) => row.table_name));');
+    expect(freshness).toContain('if (scannedTables.has(unauditedChildParent)) continue;');
+    expect(freshness).toContain('!(row.has_created_at || row.has_created_by || row.has_changed_at || row.has_changed_by)');
     expect(freshness).toContain('Global reference tables have no `client` column');
     expect(freshness).not.toContain('cairn_integration_guard');
   });
