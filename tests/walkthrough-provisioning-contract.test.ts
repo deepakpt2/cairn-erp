@@ -127,6 +127,27 @@ describe('trusted walkthrough provisioning contract', () => {
     expect(seed).toContain('refusing to repair or adopt partial rows');
   });
 
+  it('records the standard-package configuration activities inside the same package guard the seed relies on', () => {
+    const helper = seed.indexOf('async function ensureStandardPackage');
+    const helperEnd = seed.indexOf('\n}\n', helper);
+    const mark = seed.indexOf('markActivityComplete(tx, tenant, activityCode, ACTOR)', helper);
+    expect(seed).toContain('WALKTHROUGH_PACKAGE_ACTIVITIES');
+    for (const code of [
+      'CFG.FIN.COA.DEFINE', 'CFG.FIN.FYV.DEFINE', 'CFG.FIN.PPV.DEFINE', 'CFG.FIN.DOCTYPE.DEFINE',
+      'CFG.PROC.PURGROUP.DEFINE', 'CFG.ORG.DISTCHANNEL.DEFINE', 'CFG.ORG.DIVISION.DEFINE', 'CFG.FIN.EXRATE.MAINTAIN',
+    ]) {
+      expect(seed).toContain(`'${code}'`);
+    }
+    expect(helper).toBeGreaterThan(-1);
+    // The marks ride in the same transaction as the package check, on both the fresh-install
+    // and the resumed path, so a tenant onboarded as `empty` is not left with configuration
+    // services refusing to write.
+    expect(mark).toBeGreaterThan(helper);
+    expect(mark).toBeLessThan(helperEnd);
+    expect(seed).toContain('ensureStandardPackage(tx, tenant, false)');
+    expect(seed).toContain('ensureStandardPackage(tx, tenant, true)');
+  });
+
   it('keeps normal self-grant and live-session authorization unchanged while limiting the bootstrap to two scopes', () => {
     expect(scopes).toContain('if (actor.userId === targetUserId)');
     expect(scopes).toContain('await requireAdministrator(tx, client, actor)');

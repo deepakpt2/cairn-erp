@@ -41,6 +41,7 @@ import {
   assertWalkthroughScopeSet, WALKTHROUGH_INSTALL_OBJECT_CLASS, WALKTHROUGH_INSTALL_OPERATION, WALKTHROUGH_INSTALL_REASON,
 } from './src/platform/tenancy/walkthrough-install-guard';
 import { assertFreshWalkthroughTenant } from './src/platform/tenancy/walkthrough-provisioning';
+import { markActivityComplete } from './src/platform/tenancy';
 import { provisionWalkthroughFirstAdminScopesInTransaction } from './src/modules/platform/organisation-scope-admin';
 import { seedDevelopmentMaterials } from './src/modules/inventory/development-fixture';
 import { getMaterialDetail, saveMaterialView } from './src/modules/inventory/materials';
@@ -983,6 +984,25 @@ async function completeWalkthroughCheckpoint(tenant: string, checkpoint: Walkthr
   });
 }
 
+/**
+ * The configuration activities the standard package satisfies: the chart of accounts, the
+ * fiscal year and posting period variants, the document types, the purchasing groups, the
+ * distribution channels and divisions, and the exchange rates. Onboarding with the standard
+ * package marks these complete; a tenant onboarded as `empty` receives the same rows from
+ * the seed's own package activation, and configuration services such as account
+ * determination refuse to write until the matching activity stands completed.
+ */
+const WALKTHROUGH_PACKAGE_ACTIVITIES = [
+  'CFG.FIN.COA.DEFINE',
+  'CFG.FIN.FYV.DEFINE',
+  'CFG.FIN.PPV.DEFINE',
+  'CFG.FIN.DOCTYPE.DEFINE',
+  'CFG.PROC.PURGROUP.DEFINE',
+  'CFG.ORG.DISTCHANNEL.DEFINE',
+  'CFG.ORG.DIVISION.DEFINE',
+  'CFG.FIN.EXRATE.MAINTAIN',
+] as const;
+
 async function ensureStandardPackage(tx: Tx, tenant: string, allowApply: boolean): Promise<void> {
   const markers = await tx.select({ id: changeDocument.id }).from(changeDocument).where(and(
     eq(changeDocument.client, tenant),
@@ -1000,6 +1020,12 @@ async function ensureStandardPackage(tx: Tx, tenant: string, allowApply: boolean
       eq(changeDocument.objectKey, STANDARD_PACKAGE_VERSION),
     ));
     if (written.length !== 1) throw new Error('Standard accounting/configuration package did not leave exactly one auditable version checkpoint.');
+  }
+  // The package now stands, so the activities it satisfied stand completed. Recorded through
+  // the same helper onboarding uses, inside the caller's transaction, and only for activities
+  // whose configuration the package actually delivered.
+  for (const activityCode of WALKTHROUGH_PACKAGE_ACTIVITIES) {
+    await markActivityComplete(tx, tenant, activityCode, ACTOR);
   }
 }
 
