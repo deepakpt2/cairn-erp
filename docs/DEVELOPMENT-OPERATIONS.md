@@ -445,11 +445,11 @@ Use the actual task-created disposable database name and the normal application 
 - No cleanup is performed by the seed. Drop only the task-created disposable database after checking ownership and active sessions; never run `docker compose down -v` against a persistent/owner stack.
 
 ### Verification status (2026-11-05)
-The local source implementation has focused contract tests for disposable-target safety, first-admin/scope conflicts, replay identity, the CLI-only boundary, and the rollback-safe setup/checkpoint sequence. `npm run test:walkthrough:contract` passes locally. A targeted TypeScript check for the changed walkthrough and authorization files passes. Full repository typecheck was attempted but the sandbox ran out of memory; no database or business E2E acceptance was run.
+The local source implementation has focused contract tests for disposable-target safety, first-admin/scope conflicts, replay identity, the CLI-only boundary, and the rollback-safe setup/checkpoint sequence. On commit `984e0b9cdef9a4ed8a10e59bcd97a2dc62770771`, `npm run test:walkthrough:contract` passed (21 tests) and the targeted TypeScript check for the changed walkthrough and authorization files passed. Full repository typecheck was attempted but the sandbox ran out of memory; no database or business E2E acceptance was run.
 
 The documented test-box SSH preflight was attempted three times and could not reliably capture remote status/stash output. Per the runbook, remote retries stopped. No remote database was accessed, seeded, or tested; remote working-tree cleanliness is unknown. Therefore stock/valuation, balanced-journal, inventory-to-G/L, GR/IR, and AP/AR acceptance remain unverified on the designated test box. Do not represent the scenario as database-verified until it is run on a fresh task-created disposable database using the documented test-box procedure.
 
-Docker availability and the image/container execution were not verified in this task. No commit or push was performed.
+Docker availability and the image/container execution were not verified in this task. The implementation was committed as `984e0b9cdef9a4ed8a10e59bcd97a2dc62770771` and pushed to `origin/development`; the local and remote development refs matched after push.
 
 ## 8. Verified State (As of 2026-10-30)
 
