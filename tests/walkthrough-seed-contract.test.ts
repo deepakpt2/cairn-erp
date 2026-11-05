@@ -27,7 +27,8 @@ describe('manual walkthrough seed safety contract', () => {
     expect(seed).toContain('refusing to modify or replay it');
   });
 
-  it('authenticates through the normal application endpoint, validates a persisted session and scopes, and never fabricates authorization state', () => {
+  it('authenticates the real first administrator, provisions exact persisted scopes through the audited domain service, and then verifies them', () => {
+    const scopes = readFileSync('src/modules/platform/organisation-scope-admin.ts', 'utf8');
     expect(seed).toContain("required('CAIRN_SEED_ORIGIN')");
     expect(seed).toContain("required('CAIRN_SEED_USERNAME')");
     expect(seed).toContain("required('CAIRN_SEED_PASSWORD')");
@@ -37,7 +38,14 @@ describe('manual walkthrough seed safety contract', () => {
     expect(seed).toContain("'FIN.AR.CLEAR'");
     expect(seed).toContain("'PROD.MRP.RUN'");
     expect(seed).toContain('!companyGranted || !plantGranted');
-    expect(seed).toContain('/platform/users/access');
+    expect(seed).toContain('provisionWalkthroughFirstAdminScopesInTransaction');
+    expect(seed).toContain('assertWalkthroughScopes(tenant, auth, checkpoint)');
+    expect(scopes).toContain("scopeType: 'COMPANY_CODE', scopeValue: '1000'");
+    expect(scopes).toContain("scopeType: 'PLANT', scopeValue: '1000'");
+    expect(scopes).toContain('WALKTHROUGH_INSTALL_REASON');
+    expect(scopes).toContain('auditCorrelationId: input.correlationId');
+    expect(scopes).toContain('if (actor.userId === targetUserId)');
+    expect(scopes).toContain('assertWalkthroughSeedRuntime');
     expect(seed).toContain('authorization: { userId: auth.session.user.userId, sessionId: auth.session.sessionId! }');
     expect(seed).toContain("'/api/auth/signout'");
     expect(seed).not.toContain('createSession(');
@@ -92,10 +100,13 @@ describe('manual walkthrough seed safety contract', () => {
 
   it('preflights active CCA 0001 and the company mapping before the first setup write', () => {
     const gate = seed.indexOf('await preflightCreditConfiguration(tenant, summary)');
-    const firstSetupWrite = seed.indexOf('await applyStandardStructure(');
+    const firstSetupWrite = seed.indexOf('await ensureStandardPackage(tx, tenant, true)');
     expect(gate).toBeGreaterThan(-1);
     expect(firstSetupWrite).toBeGreaterThan(-1);
     expect(gate).toBeLessThan(firstSetupWrite);
+    expect(seed).toContain('applyStandardStructureInTransaction(tx,');
+    expect(seed).toContain('assertStandardWalkthroughStructure(tx, tenant)');
+    expect(seed).toContain('writeWalkthroughCheckpoint(tx,');
     expect(seed).toContain('walkthroughCreditPrerequisiteError({');
     expect(seed).toContain('eq(creditControlArea.creditControlArea, \'0001\')');
     expect(seed).toContain('summary.checks.creditControlArea');

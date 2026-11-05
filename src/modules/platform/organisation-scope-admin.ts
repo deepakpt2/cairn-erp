@@ -10,8 +10,10 @@ import { z } from 'zod';
 import { recordChange } from '../../platform/change';
 import { hasCapability, loadCapabilities } from '../../platform/auth/session';
 import { withTenant, type Tx } from '../../platform/db/client';
-import { auditAccessLog, appUser, authOrgRestriction } from '../../platform/tables/security';
+import { auditAccessLog, appUser, authOrgRestriction, role, userRole } from '../../platform/tables/security';
+import { client as tenantTable } from '../../platform/tables/tenancy';
 import { companyCode, plant } from '../foundation/schema';
+import { assertWalkthroughSeedRuntime, WALKTHROUGH_INSTALL_OPERATION, WALKTHROUGH_INSTALL_REASON } from '../../platform/tenancy/walkthrough-install-guard';
 import type { UserView } from './user-admin';
 
 export const ORGANISATION_SCOPE_ADMIN_CAPABILITY = 'CFG.PLT.USER.MAINTAIN';
@@ -195,6 +197,8 @@ async function auditScopeChange(
     scopeValue: string;
     companyCode?: string | null;
     action: 'GRANTED' | 'REVOKED';
+    reason?: string;
+    correlationId?: string;
   },
 ) {
   const values = {
@@ -211,6 +215,8 @@ async function auditScopeChange(
     changeType: input.action === 'GRANTED' ? 'CREATE' : 'DELETE',
     changedBy: input.actorUsername,
     transactionCode: TRANSACTION_CODE,
+    reason: input.reason,
+    correlationId: input.correlationId,
     before: input.action === 'REVOKED' ? values : undefined,
     after: input.action === 'GRANTED' ? values : undefined,
     fieldLabels: {
@@ -233,7 +239,7 @@ async function auditScopeChange(
     transactionCode: TRANSACTION_CODE,
     objectType: OBJECT_CLASS,
     objectKey: input.assignmentId,
-    detail: `${input.actorUsername} (${input.actorUserId}) ${input.action.toLowerCase()} ${scopeLabel} ${input.action === 'GRANTED' ? 'to' : 'from'} ${input.targetUsername} (${input.targetUserId})`,
+    detail: `${input.actorUsername} (${input.actorUserId}) ${input.action.toLowerCase()} ${scopeLabel} ${input.action === 'GRANTED' ? 'to' : 'from'} ${input.targetUsername} (${input.targetUserId})${input.reason ? `; ${input.reason} [${input.correlationId ?? 'no correlation'}]` : ''}`,
   });
 }
 
@@ -247,6 +253,8 @@ async function insertScope(
     scopeType: ManagedScopeType;
     scopeValue: string;
     companyCode?: string | null;
+    auditReason?: string;
+    auditCorrelationId?: string;
   },
 ) {
   const existing = await tx.select({ id: authOrgRestriction.id }).from(authOrgRestriction).where(and(
@@ -279,6 +287,8 @@ async function insertScope(
     scopeValue: input.scopeValue,
     companyCode: input.companyCode,
     action: 'GRANTED',
+    reason: input.auditReason,
+    correlationId: input.auditCorrelationId,
   });
   const master = await masterLabel(tx, input.client, input.scopeType, input.scopeValue);
   return {
@@ -291,6 +301,89 @@ async function insertScope(
     masterName: master.name,
     masterStatus: statusOf(master.active),
   };
+}
+
+/**
+ * Trusted one-time self-scope bootstrap for the first administrator of the
+ * development walkthrough tenant. It is deliberately separate from the ordinary
+ * self-grant-protected admin APIs above and below, and fails outside the seed CLI.
+ */
+export async function provisionWalkthroughFirstAdminScopesInTransaction(
+  tx: Tx,
+  input: {
+    client: string;
+    database: string;
+    actor: OrganisationScopeActor;
+    username: string;
+    correlationId: string;
+  },
+): Promise<{ companyScopeId: string; plantScopeId: string }> {
+  assertWalkthroughSeedRuntime({ client: input.client, database: input.database, username: input.username });
+  const { client, actor } = validateActorAndTenant(input.client, input.actor);
+  if (input.correlationId !== `${WALKTHROUGH_INSTALL_OPERATION}:${client}` || input.correlationId.length > 64) {
+    throw new OrganisationScopeAdminError('The exact bounded walkthrough installation correlation ID is required.');
+  }
+
+  await requireAdministrator(tx, client, actor);
+  const { administrator, target } = await lockAdministratorAndTarget(tx, client, actor.userId, actor.userId);
+  if (administrator.username !== input.username || target.username !== input.username) {
+    throw new OrganisationScopeAdminError('The authenticated walkthrough user does not match the requested first administrator.');
+  }
+
+  const tenantRows = await tx.select({
+    status: tenantTable.status,
+    name: tenantTable.name,
+    legalName: tenantTable.legalName,
+    country: tenantTable.country,
+    currency: tenantTable.currency,
+    timezone: tenantTable.timezone,
+    isDevelopment: tenantTable.isDevelopment,
+  }).from(tenantTable).where(eq(tenantTable.client, client)).for('share');
+  const tenant = tenantRows[0];
+  if (!tenant || tenant.status !== 'ACTIVE' || !tenant.isDevelopment || tenant.name !== 'Walkthrough Company' ||
+      tenant.legalName !== 'Walkthrough Company LLC' || tenant.country !== 'AE' || tenant.currency !== 'AED' ||
+      tenant.timezone !== 'Asia/Dubai') {
+    throw new OrganisationScopeAdminError('The trusted provisioning target is not the supported development walkthrough tenant.');
+  }
+
+  const users = await tx.select({ id: appUser.id }).from(appUser).where(eq(appUser.client, client)).for('share');
+  if (users.length !== 1 || users[0]?.id !== actor.userId) {
+    throw new OrganisationScopeAdminError('Trusted walkthrough provisioning requires the real sole first administrator; no other user may exist.');
+  }
+  const assignments = await tx.select({ roleCode: userRole.roleCode }).from(userRole)
+    .where(and(eq(userRole.client, client), eq(userRole.userId, actor.userId)));
+  const [administratorRole] = await tx.select({ isActive: role.isActive, isSystemRole: role.isSystemRole })
+    .from(role).where(and(eq(role.client, client), eq(role.code, 'ADMINISTRATOR'))).for('share');
+  if (assignments.length !== 1 || assignments[0]?.roleCode !== 'ADMINISTRATOR' ||
+      !administratorRole?.isActive || !administratorRole.isSystemRole) {
+    throw new OrganisationScopeAdminError('Trusted walkthrough provisioning requires only the active system ADMINISTRATOR role, not platform authority or broad additional roles.');
+  }
+
+  await lockUserScopes(tx, client, actor.userId);
+  const existingScopes = await tx.select({ id: authOrgRestriction.id }).from(authOrgRestriction)
+    .where(eq(authOrgRestriction.client, client)).for('share');
+  if (existingScopes.length) {
+    throw new OrganisationScopeAdminError('Organisation scopes already exist; refusing to adopt or expand pre-existing authorization.');
+  }
+
+  const [company] = await tx.select({ companyCode: companyCode.companyCode, isActive: companyCode.isActive })
+    .from(companyCode).where(and(eq(companyCode.client, client), eq(companyCode.companyCode, '1000'))).for('share');
+  const [plantMaster] = await tx.select({ plant: plant.plant, companyCode: plant.companyCode, isActive: plant.isActive })
+    .from(plant).where(and(eq(plant.client, client), eq(plant.plant, '1000'))).for('share');
+  if (!company?.isActive || !plantMaster?.isActive || plantMaster.companyCode !== '1000') {
+    throw new OrganisationScopeAdminError('The required active Company Code 1000 and Plant 1000 assignment is missing or conflicting.');
+  }
+
+  const audit = { auditReason: WALKTHROUGH_INSTALL_REASON, auditCorrelationId: input.correlationId };
+  const companyScope = await insertScope(tx, {
+    client, actorUserId: actor.userId, actorUsername: administrator.username, target,
+    scopeType: 'COMPANY_CODE', scopeValue: '1000', ...audit,
+  });
+  const plantScope = await insertScope(tx, {
+    client, actorUserId: actor.userId, actorUsername: administrator.username, target,
+    scopeType: 'PLANT', scopeValue: '1000', companyCode: '1000', ...audit,
+  });
+  return { companyScopeId: companyScope.id, plantScopeId: plantScope.id };
 }
 
 export async function getOrganisationScopeAdminOverview(

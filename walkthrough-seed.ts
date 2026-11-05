@@ -1,31 +1,47 @@
 /**
  * CAIRN-7 §30 — manual, development-only walkthrough seed.
  *
- * The seed is intentionally not a tenant-provisioning path. Create a fresh development
- * tenant through the normal owner/onboarding flow, then invoke this script explicitly.
- * It uses the application role, tenant-scoped transactions, audited setup services and
- * ordinary document-posting services. It never uses migration credentials, inserts a
- * tenant/user, deletes data, updates a mismatching record, or auto-approves a pending PO.
+ * The seed never creates tenants or users. Start from the single tenant and real first
+ * administrator created through normal development onboarding, then invoke this CLI.
+ * Its trusted, one-time setup prepares the standard package and enterprise structure,
+ * and grants only Company Code 1000 and Plant 1000 through the normal audited scope
+ * domain service. The walkthrough then uses ordinary posting services and a live
+ * application session; it never uses migration credentials, deletes data, updates a
+ * mismatching record, or auto-approves a pending PO.
  *
  * Required: CAIRN_ENV=development, DATABASE_URL (cairn_app), CAIRN_SEED_DATABASE,
  * CAIRN_SEED_TENANT, CAIRN_SEED_DATE (YYYY-MM-DD), CAIRN_SEED_ORIGIN,
  * CAIRN_SEED_USERNAME and CAIRN_SEED_PASSWORD. Repeat with the SAME date.
  */
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { validateTarget } from './src/platform/db/target-guard';
-import { assertApplicationRole, closeDb, withTenant } from './src/platform/db/client';
+import { assertApplicationRole, closeDb, withTenant, type Tx } from './src/platform/db/client';
 import {
   hasCapability, loadOrgRestrictions, parseSessionCookie, resolveSession, SESSION_COOKIE,
   type SessionContext,
 } from './src/platform/auth/session';
 import { client as tenantTable } from './src/platform/tables/tenancy';
-import { companyCode, creditControlArea, storageLocation as storageLocationTable } from './src/modules/foundation/schema';
+import {
+  companyCode, creditControlArea, storageLocation as storageLocationTable, controllingArea,
+  controllingAreaCompany, plant as plantTable, purchasingOrg, purchasingOrgPlant, salesArea,
+  salesOrg, salesOrgText, salesOrgDistributionChannel, salesOrgDivision,
+} from './src/modules/foundation/schema';
 import {
   readWalkthroughCreditPrerequisiteSnapshot,
   walkthroughCreditPrerequisiteError,
 } from './src/modules/finance/walkthrough-credit-preflight';
-import { applyStandardStructure } from './src/platform/tenancy/standard-structure';
+import { applyStandardStructureInTransaction } from './src/platform/tenancy/standard-structure';
+import { applyStandardPackage, STANDARD_PACKAGE_VERSION } from './src/modules/foundation/standard-config';
+import { recordChange } from './src/platform/change';
+import { changeDocument, changeDocumentItem } from './src/platform/tables/audit-trail';
+import { appUser, authOrgRestriction, role, userRole } from './src/platform/tables/security';
+import {
+  assertWalkthroughCheckpointActor, assertWalkthroughCheckpointRequest, assertWalkthroughDatabaseTarget,
+  assertWalkthroughScopeSet, WALKTHROUGH_INSTALL_OBJECT_CLASS, WALKTHROUGH_INSTALL_OPERATION, WALKTHROUGH_INSTALL_REASON,
+} from './src/platform/tenancy/walkthrough-install-guard';
+import { assertFreshWalkthroughTenant } from './src/platform/tenancy/walkthrough-provisioning';
+import { provisionWalkthroughFirstAdminScopesInTransaction } from './src/modules/platform/organisation-scope-admin';
 import { seedDevelopmentMaterials } from './src/modules/inventory/development-fixture';
 import { getMaterialDetail, saveMaterialView } from './src/modules/inventory/materials';
 import { getStorageLocationVersion, saveStorageLocation } from './src/modules/foundation/storage-location-maintenance';
@@ -163,17 +179,12 @@ async function authenticateWalkthroughUser(tenant: string): Promise<WalkthroughA
       'SALES.BILLING.CREATE', 'SALES.GI.POST',
     ];
     const missing = requiredCapabilities.filter((capability) => !hasCapability(session.user.capabilities, capability));
-    const restrictions = await withTenant(tenant, (tx) => loadOrgRestrictions(tx, tenant, session.user.userId));
-    const companyGranted = restrictions.some((row) => row.scopeType === 'COMPANY_CODE' && row.scopeValue.trim() === COMPANY);
-    const plantGranted = restrictions.some((row) => row.scopeType === 'PLANT' && row.scopeValue.trim() === PLANT);
-    if (missing.length || !companyGranted || !plantGranted) {
-      const needs = [
-        ...missing.map((capability) => `capability ${capability}`),
-        ...(!companyGranted ? [`company code ${COMPANY}`] : []),
-        ...(!plantGranted ? [`plant ${PLANT}`] : []),
-      ];
-      throw new Error(`Authenticated user ${session.user.username} lacks ${needs.join(', ')}. Assign the required role and company/plant scopes through /platform/users/access, then sign in again.`);
+    if (missing.length) {
+      throw new Error(`Authenticated first administrator ${session.user.username} lacks required scenario capabilities: ${missing.join(', ')}.`);
     }
+    // Fresh first admins intentionally have no organisation scopes yet. The trusted
+    // provisioning transaction below grants only Company Code 1000 and Plant 1000;
+    // the persisted records are re-read and audited before any business operation.
     return { origin, cookieHeader, session };
   } catch (error) {
     await revokeCookieSession(origin, cookieHeader).catch(() => undefined);
@@ -759,17 +770,254 @@ async function preflightCreditConfiguration(tenant: string, summary: Walkthrough
     : `standard structure will create CCA 0001 in ${CURRENCY} and map new company code ${COMPANY}`;
 }
 
+type WalkthroughCheckpointState = 'PROVISIONED' | 'COMPLETE';
+interface WalkthroughCheckpoint {
+  operation: string;
+  state: WalkthroughCheckpointState;
+  client: string;
+  database: string;
+  asOf: string;
+  actorUserId: string;
+  username: string;
+  companyScopeId: string;
+  plantScopeId: string;
+}
+
+function installationCorrelationId(tenant: string) {
+  return `${WALKTHROUGH_INSTALL_OPERATION}:${tenant}`;
+}
+
+function installationObjectKey(tenant: string) {
+  return `${tenant}:${WALKTHROUGH_INSTALL_OPERATION}`;
+}
+
+async function readWalkthroughCheckpoint(tenant: string): Promise<WalkthroughCheckpoint | null> {
+  return withTenant(tenant, async (tx) => {
+    const documents = await tx.select().from(changeDocument).where(and(
+      eq(changeDocument.client, tenant),
+      eq(changeDocument.objectClass, WALKTHROUGH_INSTALL_OBJECT_CLASS),
+      eq(changeDocument.objectKey, installationObjectKey(tenant)),
+    )).orderBy(asc(changeDocument.changedAt)).limit(3);
+    if (documents.length === 0) return null;
+    if (documents.length > 2 || documents[0]?.changeType !== 'CREATE' ||
+        (documents[1] && documents[1].changeType !== 'CHANGE')) {
+      throw new Error('Walkthrough installation checkpoint history is ambiguous or malformed; refusing recovery.');
+    }
+    const snapshot: Record<string, string> = {};
+    for (const document of documents) {
+      const items = await tx.select().from(changeDocumentItem).where(and(
+        eq(changeDocumentItem.client, tenant), eq(changeDocumentItem.changeDocumentId, document.id),
+      ));
+      for (const item of items) {
+        if (item.newValue === null) delete snapshot[item.fieldName];
+        else snapshot[item.fieldName] = item.newValue;
+      }
+    }
+    const checkpoint = snapshot as unknown as WalkthroughCheckpoint;
+    if (!['PROVISIONED', 'COMPLETE'].includes(checkpoint.state) || checkpoint.operation !== WALKTHROUGH_INSTALL_OPERATION ||
+        checkpoint.client !== tenant || !checkpoint.database || !checkpoint.asOf || !checkpoint.actorUserId ||
+        !checkpoint.username || !checkpoint.companyScopeId || !checkpoint.plantScopeId) {
+      throw new Error('Walkthrough installation checkpoint is incomplete; refusing to guess whether setup can be resumed.');
+    }
+    if (documents.length === 1 && checkpoint.state !== 'PROVISIONED') {
+      throw new Error('Walkthrough installation checkpoint has an invalid initial state.');
+    }
+    if (documents.length === 2 && checkpoint.state !== 'COMPLETE') {
+      throw new Error('Walkthrough installation checkpoint transition is incomplete or out of order.');
+    }
+    for (const document of documents) {
+      if (document.changedBy !== checkpoint.username || document.reason !== WALKTHROUGH_INSTALL_REASON ||
+          document.correlationId !== installationCorrelationId(tenant)) {
+        throw new Error('Walkthrough installation checkpoint audit provenance is inconsistent; refusing recovery.');
+      }
+    }
+    return checkpoint;
+  });
+}
+
+async function assertWalkthroughScopes(tenant: string, auth: WalkthroughAuth, checkpoint: WalkthroughCheckpoint): Promise<void> {
+  assertWalkthroughCheckpointActor(checkpoint, { userId: auth.session.user.userId, username: auth.session.user.username });
+  const firstAdminStillEligible = await withTenant(tenant, async (tx) => {
+    const users = await tx.select({ id: appUser.id, username: appUser.username, isActive: appUser.isActive, isLocked: appUser.isLocked, mustChangePassword: appUser.mustChangePassword })
+      .from(appUser).where(eq(appUser.client, tenant));
+    const assignments = await tx.select({ userId: userRole.userId, roleCode: userRole.roleCode }).from(userRole).where(eq(userRole.client, tenant));
+    const [administratorRole] = await tx.select({ isActive: role.isActive, isSystemRole: role.isSystemRole }).from(role)
+      .where(and(eq(role.client, tenant), eq(role.code, 'ADMINISTRATOR')));
+    return users.length === 1 && users[0]?.id === checkpoint.actorUserId && users[0]?.username === checkpoint.username &&
+      users[0]?.isActive && !users[0]?.isLocked && !users[0]?.mustChangePassword && assignments.length === 1 &&
+      assignments[0]?.userId === checkpoint.actorUserId && assignments[0]?.roleCode === 'ADMINISTRATOR' &&
+      administratorRole?.isActive && administratorRole.isSystemRole;
+  });
+  if (!firstAdminStillEligible) throw new Error('The checkpoint no longer has the sole eligible first administrator with only the initial ADMINISTRATOR role.');
+  const rows = await withTenant(tenant, async (tx) => await tx.select().from(authOrgRestriction)
+    .where(eq(authOrgRestriction.client, tenant)));
+  assertWalkthroughScopeSet(rows, checkpoint.actorUserId, checkpoint.username, checkpoint.companyScopeId, checkpoint.plantScopeId);
+  const auditIsValid = await withTenant(tenant, async (tx) => {
+    for (const row of rows) {
+      const docs = await tx.select().from(changeDocument).where(and(
+        eq(changeDocument.client, tenant),
+        eq(changeDocument.objectClass, 'auth_org_restriction'),
+        eq(changeDocument.objectKey, row.id),
+      ));
+      if (!docs.some((doc) => doc.changedBy === checkpoint.username && doc.reason === WALKTHROUGH_INSTALL_REASON &&
+          doc.correlationId === installationCorrelationId(tenant) && doc.changeType === 'CREATE')) return false;
+    }
+    return true;
+  });
+  if (!auditIsValid) throw new Error('The Company/Plant grant is missing its expected domain change audit; refusing to continue.');
+  const restrictions = await withTenant(tenant, (tx) => loadOrgRestrictions(tx, tenant, checkpoint.actorUserId));
+  const companyGranted = restrictions.some((row) => row.scopeType === 'COMPANY_CODE' && row.scopeValue.trim() === COMPANY);
+  const plantGranted = restrictions.some((row) => row.scopeType === 'PLANT' && row.scopeValue.trim() === PLANT);
+  if (!companyGranted || !plantGranted) throw new Error('The authenticated first administrator does not resolve to both required persisted scopes.');
+}
+
+async function assertStandardWalkthroughStructure(tx: Tx, tenant: string): Promise<void> {
+  const [company] = await tx.select().from(companyCode).where(and(
+    eq(companyCode.client, tenant), eq(companyCode.companyCode, COMPANY),
+  ));
+  const [cca] = await tx.select().from(creditControlArea).where(and(
+    eq(creditControlArea.client, tenant), eq(creditControlArea.creditControlArea, '0001'),
+  ));
+  const [area] = await tx.select().from(controllingArea).where(and(
+    eq(controllingArea.client, tenant), eq(controllingArea.controllingArea, 'A000'),
+  ));
+  const controllingLinks = await tx.select().from(controllingAreaCompany).where(and(
+    eq(controllingAreaCompany.client, tenant), eq(controllingAreaCompany.controllingArea, 'A000'), eq(controllingAreaCompany.companyCode, COMPANY),
+  ));
+  const [mainPlant] = await tx.select().from(plantTable).where(and(
+    eq(plantTable.client, tenant), eq(plantTable.plant, PLANT),
+  ));
+  const locations = await tx.select().from(storageLocationTable).where(and(
+    eq(storageLocationTable.client, tenant), eq(storageLocationTable.plant, PLANT),
+  ));
+  const [purchasing] = await tx.select().from(purchasingOrg).where(and(
+    eq(purchasingOrg.client, tenant), eq(purchasingOrg.purchasingOrg, '1000'),
+  ));
+  const purchasingLinks = await tx.select().from(purchasingOrgPlant).where(and(
+    eq(purchasingOrgPlant.client, tenant), eq(purchasingOrgPlant.purchasingOrg, '1000'), eq(purchasingOrgPlant.plant, PLANT),
+  ));
+  const [sales] = await tx.select().from(salesOrg).where(and(
+    eq(salesOrg.client, tenant), eq(salesOrg.salesOrg, '1000'),
+  ));
+  const salesTexts = await tx.select().from(salesOrgText).where(and(
+    eq(salesOrgText.client, tenant), eq(salesOrgText.salesOrg, '1000'), eq(salesOrgText.languageKey, 'E'),
+  ));
+  const channelLinks = await tx.select().from(salesOrgDistributionChannel).where(and(
+    eq(salesOrgDistributionChannel.client, tenant), eq(salesOrgDistributionChannel.salesOrg, '1000'), eq(salesOrgDistributionChannel.distributionChannel, '01'),
+  ));
+  const divisionLinks = await tx.select().from(salesOrgDivision).where(and(
+    eq(salesOrgDivision.client, tenant), eq(salesOrgDivision.salesOrg, '1000'), eq(salesOrgDivision.division, '01'),
+  ));
+  const salesAreas = await tx.select().from(salesArea).where(and(
+    eq(salesArea.client, tenant), eq(salesArea.salesOrg, '1000'), eq(salesArea.distributionChannel, '01'), eq(salesArea.division, '01'),
+  ));
+  const locationKeys = new Set(locations.map((row) => row.storageLocation.trim()));
+  const expectedLocations = ['0001', '0002', '0003', '0099'];
+  if (!company?.isActive || company.name !== 'Walkthrough Company' || company.country !== COUNTRY || company.currency !== CURRENCY ||
+      company.chartOfAccounts !== CHART || company.fiscalYearVariant !== FYV || company.postingPeriodVariant !== PPV || company.creditControlArea !== '0001' ||
+      !cca?.isActive || cca.currency !== CURRENCY || !area?.isActive || area.currency !== CURRENCY || area.fiscalYearVariant !== FYV ||
+      controllingLinks.length !== 1 || !mainPlant?.isActive || mainPlant.companyCode !== COMPANY ||
+      expectedLocations.some((key) => !locationKeys.has(key)) || locations.length !== expectedLocations.length ||
+      !purchasing?.isActive || purchasing.companyCode !== COMPANY || purchasingLinks.length !== 1 ||
+      !sales?.isActive || sales.companyCode !== COMPANY || sales.currency !== CURRENCY ||
+      salesTexts.length !== 1 || salesTexts[0]?.name !== 'Standard Sales' || channelLinks.length !== 1 || divisionLinks.length !== 1 || salesAreas.length !== 1) {
+    throw new Error('Standard walkthrough organisational structure is incomplete or conflicting; refusing to repair or adopt partial rows.');
+  }
+}
+
+async function writeWalkthroughCheckpoint(tx: Tx, input: {
+  tenant: string; database: string; asOf: string; actorUserId: string; username: string;
+  companyScopeId: string; plantScopeId: string;
+}): Promise<void> {
+  await recordChange(tx, {
+    client: input.tenant,
+    objectClass: WALKTHROUGH_INSTALL_OBJECT_CLASS,
+    objectKey: installationObjectKey(input.tenant),
+    changeType: 'CREATE',
+    changedBy: input.username,
+    transactionCode: 'WALKTHROUGH.SEED',
+    reason: WALKTHROUGH_INSTALL_REASON,
+    correlationId: installationCorrelationId(input.tenant),
+    after: {
+      operation: WALKTHROUGH_INSTALL_OPERATION,
+      state: 'PROVISIONED',
+      client: input.tenant,
+      database: input.database,
+      asOf: input.asOf,
+      actorUserId: input.actorUserId,
+      username: input.username,
+      companyScopeId: input.companyScopeId,
+      plantScopeId: input.plantScopeId,
+    },
+    fieldLabels: { state: 'Installation State', asOf: 'Seed Date', actorUserId: 'First Administrator User ID', companyScopeId: 'Company Code Scope Record', plantScopeId: 'Plant Scope Record' },
+    securityRelevantFields: ['actorUserId', 'companyScopeId', 'plantScopeId'],
+  });
+}
+
+async function completeWalkthroughCheckpoint(tenant: string, checkpoint: WalkthroughCheckpoint, summary: WalkthroughSummary): Promise<void> {
+  if (checkpoint.state === 'COMPLETE') return;
+  const requiredChecks = ['stockReconciliation', 'stockValuation', 'inventoryGl', 'grir', 'subledger', 'accounting', 'openItems'];
+  const missing = requiredChecks.filter((key) => !summary.checks[key]);
+  if (missing.length) throw new Error(`Walkthrough completion checkpoint cannot be written; reconciliation evidence is missing: ${missing.join(', ')}.`);
+  await withTenant(tenant, async (tx) => {
+    await recordChange(tx, {
+      client: tenant,
+      objectClass: WALKTHROUGH_INSTALL_OBJECT_CLASS,
+      objectKey: installationObjectKey(tenant),
+      changeType: 'CHANGE',
+      changedBy: checkpoint.username,
+      transactionCode: 'WALKTHROUGH.SEED',
+      reason: WALKTHROUGH_INSTALL_REASON,
+      correlationId: installationCorrelationId(tenant),
+      before: { state: 'PROVISIONED' },
+      after: {
+        state: 'COMPLETE',
+        stockReconciliation: summary.checks.stockReconciliation,
+        inventoryGl: summary.checks.inventoryGl,
+        grir: summary.checks.grir,
+        apAr: summary.checks.openItems,
+        accounting: summary.checks.accounting,
+      },
+      fieldLabels: { state: 'Installation State', stockReconciliation: 'Stock Reconciliation', inventoryGl: 'Inventory to G/L', grir: 'GR/IR', apAr: 'AP/AR', accounting: 'Balanced Journals' },
+    });
+  });
+}
+
+async function ensureStandardPackage(tx: Tx, tenant: string, allowApply: boolean): Promise<void> {
+  const markers = await tx.select({ id: changeDocument.id }).from(changeDocument).where(and(
+    eq(changeDocument.client, tenant),
+    eq(changeDocument.objectClass, 'standard_config_package'),
+    eq(changeDocument.objectKey, STANDARD_PACKAGE_VERSION),
+  ));
+  if (markers.length > 1) throw new Error(`More than one ${STANDARD_PACKAGE_VERSION} package checkpoint exists; refusing to guess which configuration is authoritative.`);
+  if (markers.length === 0) {
+    if (!allowApply) throw new Error(`The ${STANDARD_PACKAGE_VERSION} standard package checkpoint is missing after walkthrough provisioning; refusing to repair partial installation state.`);
+    const result = await applyStandardPackage(tx, { client: tenant, currency: CURRENCY, activatedBy: ACTOR });
+    if (result.version !== STANDARD_PACKAGE_VERSION) throw new Error(`Unexpected standard package version ${result.version}.`);
+    const written = await tx.select({ id: changeDocument.id }).from(changeDocument).where(and(
+      eq(changeDocument.client, tenant),
+      eq(changeDocument.objectClass, 'standard_config_package'),
+      eq(changeDocument.objectKey, STANDARD_PACKAGE_VERSION),
+    ));
+    if (written.length !== 1) throw new Error('Standard accounting/configuration package did not leave exactly one auditable version checkpoint.');
+  }
+}
+
 async function run(tenant: string, database: string, asOf: string): Promise<WalkthroughSummary> {
   const summary: WalkthroughSummary = { tenant, database, asOf, created: [], skipped: [], updated: 0, failed: 0, checks: {} };
   let auth: WalkthroughAuth | undefined;
   try {
+    let checkpoint: WalkthroughCheckpoint | null = null;
     if (process.env.CAIRN_ENV !== 'development') throw new Error('The walkthrough seed is development-only; CAIRN_ENV must be development.');
     if (!dateIsValid(asOf)) throw new Error('CAIRN_SEED_DATE must be a real ISO date (YYYY-MM-DD).');
     if (tenant === '0100') throw new Error('Tenant 0100 is protected from walkthrough seeding. Choose a separate development tenant.');
-    await assertApplicationRole();
+
+    // Pure target policy must run before assertApplicationRole, validateTarget, or any pooled/direct DB connection.
+    assertWalkthroughDatabaseTarget(database, process.env.DATABASE_URL);
     const target = await validateTarget(database, undefined, process.env.DATABASE_URL);
     if (target.protected) throw new Error(`Database ${database} is protected by the target guard.`);
     if (target.database !== database) throw new Error(`Validated database ${target.database} does not match CAIRN_SEED_DATABASE.`);
+    await assertApplicationRole();
 
     const roleRows = await withTenant(tenant, async (tx) => await tx.execute(sql`
       select current_user as role, current_setting('cairn.client', true) as tenant_context
@@ -785,35 +1033,54 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
       throw new Error(`Tenant ${tenant} must already be an active development tenant named Walkthrough Company LLC, country AE, currency AED, timezone Asia/Dubai. Provision it through the normal owner/onboarding flow; this seed does not create users or tenants.`);
     }
 
+    checkpoint = await readWalkthroughCheckpoint(tenant);
+    if (checkpoint) {
+      assertWalkthroughCheckpointRequest(checkpoint, { operation: WALKTHROUGH_INSTALL_OPERATION, client: tenant, database, asOf });
+    } else {
+      await assertFreshWalkthroughTenant(tenant, required('CAIRN_SEED_USERNAME'));
+    }
+
+    // Read-only accounting prerequisite check precedes every installation/setup write.
+    await preflightCreditConfiguration(tenant, summary);
     auth = await authenticateWalkthroughUser(tenant);
     ACTOR = auth.session.user.username;
-    summary.checks.authentication = `Normal /api/auth/signin session for ${ACTOR}; required posting capabilities and company/plant scopes verified.`;
 
-    // Must precede applyStandardStructure and every later setup mutation: existing company codes are a
-    // deliberate no-op there, and the seed must not discover a missing CCA only after partner writes.
-    await preflightCreditConfiguration(tenant, summary);
-
-    const structure = await applyStandardStructure({ client: tenant, companyName: 'Walkthrough Company', country: COUNTRY,
-      currency: CURRENCY, chartOfAccounts: CHART, fiscalYearVariant: FYV, postingPeriodVariant: PPV, changedBy: ACTOR });
-    const companies = await withTenant(tenant, (tx) => tx.select().from(companyCode).where(and(
-      eq(companyCode.client, tenant), eq(companyCode.companyCode, COMPANY))));
-    const company = companies[0];
-    if (!company || !company.isActive || company.country !== COUNTRY || company.currency !== CURRENCY || company.chartOfAccounts !== CHART ||
-        company.fiscalYearVariant !== FYV || company.postingPeriodVariant !== PPV || company.creditControlArea !== '0001') {
-      throw new Error('Company code 1000 does not match the walkthrough configuration, including CCA 0001; refusing to modify it.');
+    let structureCreated = false;
+    if (checkpoint) {
+      await withTenant(tenant, async (tx) => {
+        await ensureStandardPackage(tx, tenant, false);
+        await assertStandardWalkthroughStructure(tx, tenant);
+      });
+    } else {
+      const installed = await withTenant(tenant, async (tx) => {
+        await ensureStandardPackage(tx, tenant, true);
+        const structure = await applyStandardStructureInTransaction(tx, {
+          client: tenant, companyName: 'Walkthrough Company', country: COUNTRY, currency: CURRENCY,
+          chartOfAccounts: CHART, fiscalYearVariant: FYV, postingPeriodVariant: PPV, changedBy: ACTOR,
+        });
+        await assertStandardWalkthroughStructure(tx, tenant);
+        const scopes = await provisionWalkthroughFirstAdminScopesInTransaction(tx, {
+          client: tenant, database,
+          actor: { userId: auth!.session.user.userId, sessionId: auth!.session.sessionId! },
+          username: ACTOR, correlationId: installationCorrelationId(tenant),
+        });
+        await writeWalkthroughCheckpoint(tx, {
+          tenant, database, asOf, actorUserId: auth!.session.user.userId, username: ACTOR,
+          companyScopeId: scopes.companyScopeId, plantScopeId: scopes.plantScopeId,
+        });
+        return { structureCreated: structure.created, scopes };
+      });
+      structureCreated = installed.structureCreated;
+      checkpoint = {
+        operation: WALKTHROUGH_INSTALL_OPERATION, state: 'PROVISIONED', client: tenant, database, asOf,
+        actorUserId: auth.session.user.userId, username: ACTOR,
+        companyScopeId: installed.scopes.companyScopeId, plantScopeId: installed.scopes.plantScopeId,
+      };
     }
-    const areaRows = await withTenant(tenant, (tx) => tx.select({
-      isActive: creditControlArea.isActive,
-      currency: creditControlArea.currency,
-    }).from(creditControlArea).where(and(
-      eq(creditControlArea.client, tenant), eq(creditControlArea.creditControlArea, '0001'),
-    )));
-    const area = areaRows[0];
-    if (!area || !area.isActive || area.currency !== CURRENCY) {
-      throw new Error('Credit control area 0001 is not active in AED after standard-structure validation; refusing to continue.');
-    }
-    summary.checks.creditControlArea = `active CCA 0001 in ${area.currency}; company code ${COMPANY} is mapped to it`;
-    record(summary, `enterprise structure ${COMPANY}/${PLANT}`, structure.created);
+    await assertWalkthroughScopes(tenant, auth, checkpoint);
+    summary.checks.authentication = `Normal /api/auth/signin session for ${ACTOR}; required posting capabilities and exactly the audited Company Code 1000 / Plant 1000 scopes verified.`;
+    summary.checks.creditControlArea = 'active CCA 0001 in AED; Company Code 1000 mapped to it';
+    record(summary, `enterprise structure ${COMPANY}/${PLANT}`, structureCreated);
 
     const base = await withTenant(tenant, async (tx) => {
       const start = await derivePosition(tx, tenant, FYV, asOf);
@@ -1197,6 +1464,9 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     summary.checks.openItems = 'supplier and customer open items are zero after payment/clearing; customer and vendor subledgers tie to G/L';
     summary.checks.payments = `supplier payment ${apPayment.paymentNumber} cleared ${vendorClearing.clearedItems.length} AP items; customer partial receipt ${arPayment.paymentNumber} and clearing ${arClearing.clearingDocumentNumber} left zero AR items`;
     summary.checks.transferReversal = `transfer ${transfer.materialDocumentNumber} reversed by ${reversal.materialDocumentNumber}; 2 KG raw steel restored to ${STORAGE}, zero in ${TRANSFER_STORAGE}`;
+    if (!checkpoint) throw new Error('Walkthrough installation checkpoint is missing after provisioning.');
+    await completeWalkthroughCheckpoint(tenant, checkpoint, summary);
+    summary.checks.installationCheckpoint = checkpoint.state === 'COMPLETE' ? 'Complete checkpoint already verified on same-date replay.' : 'Complete checkpoint written after reconciliation.';
     return summary;
   } catch (error) {
     summary.failed += 1;
