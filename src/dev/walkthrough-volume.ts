@@ -66,11 +66,14 @@ import { createEmployee, createRecord, listEmployees } from '../modules/people/e
 import { defineRecordType, getRecordType } from '../modules/people/record-types';
 import { defineJob, defineOrgUnit, definePosition, listJobs, listOrgUnits, listPositions } from '../modules/people/org-structure';
 import { assignmentsOf, assignPosition } from '../modules/people/assignment';
-import { decideAbsence, defineTimeType, getTimeRecording, recordTime, requestAbsence, setLeaveQuota, TIME_ENTER_CAPABILITY } from '../modules/people/time-leave';
+import {
+  decideAbsence, defineTimeType, getTimeRecording, listTimeTypes, recordTime, requestAbsence, setLeaveQuota,
+  TIME_ENTER_CAPABILITY,
+} from '../modules/people/time-leave';
 import { definePayComponent, listPayComponents, savePayComponentMapping } from '../modules/people/pay-components';
 import {
   ASSIGNMENT_CAPABILITY, EMPLOYEE_CAPABILITY, ORG_UNIT_CAPABILITY, PAY_COMPONENT_CAPABILITY,
-  POSITION_CAPABILITY, RECORD_CAPABILITY,
+  POSITION_CAPABILITY, RECORD_CAPABILITY, RECORD_TYPE_CAPABILITY,
 } from '../modules/people/schema';
 
 /* ── Scenario size ──────────────────────────────────────────────────────────── */
@@ -89,6 +92,16 @@ const POSITION_COUNT = 12;
 
 /** Purchase lots are whole multiples of this, so five per cent tax is exact to the fil. */
 const LOT = 20;
+
+/**
+ * Leave quotas, in days, for the volume time types that reduce a quota. Every type an
+ * absence can use needs one: approving an absence against a type with no quota row is
+ * refused, whatever the entitlement of another type says.
+ */
+const QUOTAS = [
+  { timeTypeCode: 'ANNLV', entitlement: '25.00' },
+  { timeTypeCode: 'SICKL', entitlement: '10.00' },
+] as const;
 
 /* ── Deterministic master data ──────────────────────────────────────────────── */
 
@@ -843,13 +856,13 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
   const units = await listOrgUnits(ctx.tenant);
   const unitCodes = new Set(units.map((row) => row.code));
   for (let i = 0; i < ORG_UNIT_COUNT; i += 1) {
-    const code = `OU-V${pad(i)}`;
+    const code = `OUV${pad(i)}`;
     if (unitCodes.has(code)) {
       ctx.record(`volume org unit ${code}`, false);
       continue;
     }
     await defineOrgUnit({ client: ctx.tenant, code, name: `Volume unit ${pad(i)}`,
-      description: 'Volume organisational unit', parentCode: i === 0 ? undefined : 'OU-V01',
+      description: 'Volume organisational unit', parentCode: i === 0 ? undefined : 'OUV01',
       changedBy: ctx.actor }, [ORG_UNIT_CAPABILITY]);
     counts.orgUnits += 1;
     ctx.record(`volume org unit ${code}`, true);
@@ -858,7 +871,7 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
   const jobs = await listJobs(ctx.tenant);
   const jobCodes = new Set(jobs.map((row) => row.code));
   for (let i = 0; i < 4; i += 1) {
-    const code = `JOB-V${pad(i)}`;
+    const code = `JOBV${pad(i)}`;
     if (jobCodes.has(code)) {
       ctx.record(`volume job ${code}`, false);
       continue;
@@ -872,12 +885,12 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
   const positionCodes = new Set(positions.map((row) => row.code));
   const positionNumbers: string[] = [];
   for (let i = 0; i < POSITION_COUNT; i += 1) {
-    const code = `POS-V${pad(i)}`;
+    const code = `POSV${pad(i)}`;
     if (positionCodes.has(code)) {
       ctx.record(`volume position ${code}`, false);
     } else {
       await definePosition({ client: ctx.tenant, code, title: `Volume position ${pad(i)}`,
-        jobCode: `JOB-V${pad(i % 4)}`, orgUnitCode: `OU-V${pad(i % ORG_UNIT_COUNT)}`,
+        jobCode: `JOBV${pad(i % 4)}`, orgUnitCode: `OUV${pad(i % ORG_UNIT_COUNT)}`,
         description: 'Volume position', changedBy: ctx.actor }, [POSITION_CAPABILITY]);
       counts.positions += 1;
       ctx.record(`volume position ${code}`, true);
@@ -889,7 +902,7 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
   const standing = new Set(employees.map((row) => row.personnelNumber));
 
   for (let i = 0; i < EMPLOYEE_COUNT; i += 1) {
-    const personnelNumber = `EMP-V${pad(i)}`;
+    const personnelNumber = `EMPV${pad(i)}`;
 
     if (standing.has(personnelNumber)) {
       ctx.record(`volume employee ${personnelNumber}`, false);
@@ -923,21 +936,27 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
     { code: 'SICKL', name: 'Sick leave', typeKind: 'ABSENCE' as const, reducesQuota: true },
     { code: 'OVERT', name: 'Overtime', typeKind: 'OVERTIME' as const, reducesQuota: false },
   ];
+  const standingTypes = new Set((await listTimeTypes(ctx.tenant)).map((row) => row.code));
   for (const timeType of timeTypes) {
-    try {
-      await defineTimeType({ client: ctx.tenant, code: timeType.code, name: timeType.name,
-        description: 'Volume time type', typeKind: timeType.typeKind, reducesQuota: timeType.reducesQuota,
-        changedBy: ctx.actor }, [TIME_ENTER_CAPABILITY]);
-      ctx.record(`volume time type ${timeType.code}`, true);
-    } catch {
+    if (standingTypes.has(timeType.code)) {
       ctx.record(`volume time type ${timeType.code}`, false);
+      continue;
     }
+    await defineTimeType({ client: ctx.tenant, code: timeType.code, name: timeType.name,
+      description: 'Volume time type', typeKind: timeType.typeKind, reducesQuota: timeType.reducesQuota,
+      changedBy: ctx.actor }, [TIME_ENTER_CAPABILITY]);
+    ctx.record(`volume time type ${timeType.code}`, true);
   }
 
   for (let i = 0; i < EMPLOYEE_COUNT; i += 1) {
-    const personnelNumber = `EMP-V${pad(i)}`;
-    await setLeaveQuota({ client: ctx.tenant, personnelNumber, timeTypeCode: 'ANNLV',
-      year: ctx.dates.po.slice(0, 4), entitlement: '25.00', changedBy: ctx.actor }, [TIME_ENTER_CAPABILITY]);
+    const personnelNumber = `EMPV${pad(i)}`;
+    // Both absence types need a quota of their own: approving an absence that reduces
+    // quota is refused outright when no quota row stands for that type and year.
+    for (const quota of QUOTAS) {
+      await setLeaveQuota({ client: ctx.tenant, personnelNumber, timeTypeCode: quota.timeTypeCode,
+        year: ctx.dates.po.slice(0, 4), entitlement: quota.entitlement, changedBy: ctx.actor },
+        [TIME_ENTER_CAPABILITY]);
+    }
 
     if (i % 3 === 0) {
       const timeTypeCode = i % 6 === 0 ? 'SICKL' : 'ANNLV';
@@ -993,7 +1012,7 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
 }
 
 async function ensureCostCenter(ctx: VolumeContext): Promise<string> {
-  const code = 'CC-V01';
+  const code = 'CCV01';
   const existing = await listCostCenters(ctx.tenant, ctx.controllingArea);
   if (existing.some((row) => row.costCenter === code)) return code;
   await saveCostCenter({ client: ctx.tenant, changedBy: ctx.actor, mode: 'CREATE',
@@ -1011,7 +1030,7 @@ async function ensureRecordType(ctx: VolumeContext): Promise<void> {
     fields: [
       { code: 'TITLE', label: 'Job title', valueKind: 'TEXT', isRequired: false, displayOrder: 1 },
       { code: 'GRADE', label: 'Grade', valueKind: 'TEXT', isRequired: false, displayOrder: 2 },
-    ] });
+    ] }, [RECORD_TYPE_CAPABILITY]);
 }
 
 /* ── Invariants ─────────────────────────────────────────────────────────────── */
