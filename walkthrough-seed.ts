@@ -88,6 +88,7 @@ import { getVendorClearing } from './src/modules/finance/vendor-clearing';
 import { getReceivables, postIncomingPayment } from './src/modules/finance/incoming-payment';
 import { clearCustomerItems, getCustomerClearing } from './src/modules/finance/customer-clearing';
 import { getTransferDocument, postTransfer, reverseTransfer, transferStockAt } from './src/modules/inventory/transfer-posting';
+import { runWalkthroughVolume } from './src/dev/walkthrough-volume';
 
 const COMPANY = '1000';
 const PLANT = '1000';
@@ -110,7 +111,8 @@ const VENDOR_TAX = 'V05';
 let ACTOR = '';
 const REQUEST_PREFIX = 'wk-walkthrough';
 const OUT_OF_SCOPE = [
-  'HR/payroll, quality inspection, fixed-asset accounting, projects, and maintenance are not fabricated by this scenario.',
+  'The volume phase adds masters, documents, quality inspection and HR master/time data. Payroll results and postings are not fabricated: pay components and their G/L mapping stand, but the amount paid comes from an imported payroll result or a future rule engine, and AE statutory logic is never guessed.',
+  'Fixed-asset accounting, projects, and maintenance are not fabricated by this scenario.',
   'Automated payment runs, bank-statement ingestion/reconciliation and electronic bank interfaces are outside this walkthrough; individual AP/AR payments and customer open-item clearing are exercised.',
 ] as const;
 
@@ -1484,6 +1486,38 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     if (!moneyEqual(stockAt(STORAGE), 2, 0.0005) || !moneyEqual(stockAt(TRANSFER_STORAGE), 0, 0.0005)) {
       throw new Error(`The transfer reversal did not restore the expected storage-location quantities: ${JSON.stringify(transferStock)}.`);
     }
+
+    // Volume runs after the reconciled single-document walkthrough and before the
+    // checks below, so every tie-out has to hold for the whole tenant, not just for
+    // the one order the walkthrough follows. It touches no walkthrough material.
+    const volume = await runWalkthroughVolume({
+      tenant,
+      actor: ACTOR,
+      authorization: { userId: auth!.session.user.userId, sessionId: auth!.session.sessionId! },
+      company: COMPANY,
+      plant: PLANT,
+      storage: STORAGE,
+      purchasingOrg: PURCHASING_ORG,
+      purchasingGroup: PURCHASING_GROUP,
+      salesOrg: SALES_ORG,
+      channel: CHANNEL,
+      division: DIVISION,
+      chart: CHART,
+      currency: CURRENCY,
+      taxCode: VENDOR_TAX,
+      creditControlArea: '0001',
+      controllingArea: 'A000',
+      requestPrefix: REQUEST_PREFIX,
+      dates,
+      record: (label, created) => record(summary, label, created),
+    });
+    summary.checks.volume = `${volume.materials} materials, ${volume.suppliers} suppliers, ${volume.customers} customers, ` +
+      `${volume.purchaseOrders} purchase orders, ${volume.goodsReceipts} goods receipts, ${volume.supplierInvoices} supplier invoices, ` +
+      `${volume.inspectionLots} inspection lots with ${volume.inspectionResults} recorded results and accepted usage decisions, ` +
+      `${volume.productionOrders} production orders, ${volume.salesOrders} sales orders, ${volume.deliveries} deliveries, ` +
+      `${volume.billingDocuments} billing documents, ${volume.employees} employees in ${volume.orgUnits} org units on ${volume.positions} positions, ` +
+      `${volume.absences} approved absences, ${volume.timeRecordings} time recordings, ${volume.payComponents} pay components; ` +
+      'every volume component closes at purchased less consumed, every finished good at zero after sale, and every volume partner at zero open items';
 
     await runChecks(tenant, base.fiscalYear, summary);
     summary.checks.lifecycle = 'PO → GR → supplier invoice → AP payment/clearing; safety-stock MRP → planned order change/conversion → released production order → 261 issue → output receipt; sales order → delivery pick → goods issue → billing/invoice → partial AR receipt → DI-020 credit memo → customer clearing; 311 storage transfer → reversal';
