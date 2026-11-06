@@ -31,9 +31,9 @@ const REFUSED: Record<string, string> = {
   export: 'An export is not this display.',
   revision: 'There is no revision stack. The change history is the record.',
   approval: 'This display does not release a purchase order.',
-  deliveryCompleted: 'A delivery-completed indicator is not stored. The quantities are derived.',
+  deliveryCompleted: 'This display does not search on the delivery-completed indicator. Open the order to see it.',
   finalInvoice: 'A final-invoice indicator is not stored. The quantities are derived.',
-  goodsReceiptIndicator: 'A goods-receipt indicator is not stored. The quantities are derived.',
+  goodsReceiptIndicator: 'This display does not search on the goods-receipt indicator. Open the order to see it.',
   invoiceReceiptIndicator: 'An invoice-receipt indicator is not stored. The quantities are derived.',
   deliveryCost: 'A delivery cost is not this display.',
   consignment: 'Consignment is not this display.',
@@ -101,6 +101,12 @@ export interface DisplayedItem {
   requisitionItem: number | null;
   infoRecordNumber: string | null;
   sourceNumber: string | null;
+  /** How far a receipt may run, as the order snapshotted it at the time it was saved. */
+  overdeliveryTolerance: string;
+  underdeliveryTolerance: string;
+  unlimitedOverdelivery: boolean;
+  deliveryCompleted: boolean;
+  goodsReceiptIndicator: boolean;
   receivedQuantity: string;
   invoicedQuantity: string;
   remainingToDeliver: string;
@@ -348,6 +354,9 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
              i.quantity::text as quantity, i.unit, i.net_price::text as net_price, i.price_unit::text as price_unit,
              i.net_value::text as net_value, i.tax_code, i.marked_for_deletion, i.account_assignment_category,
              i.requisition_number, i.requisition_item, i.info_record_number, i.source_number,
+             i.overdelivery_tolerance::text as overdelivery_tolerance,
+             i.underdelivery_tolerance::text as underdelivery_tolerance,
+             i.unlimited_overdelivery, i.delivery_completed, i.goods_receipt_indicator,
              coalesce(gr.delivered, 0)::text as received, coalesce(ir.invoiced, 0)::text as invoiced,
              m.base_unit, c.numerator, c.denominator
         from purchase_order_item i
@@ -493,6 +502,11 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
       requisitionItem: row.requisition_item == null ? null : Number(row.requisition_item),
       infoRecordNumber: row.info_record_number == null ? null : text(row.info_record_number),
       sourceNumber: row.source_number == null ? null : text(row.source_number),
+      overdeliveryTolerance: qty(text(row.overdelivery_tolerance)),
+      underdeliveryTolerance: qty(text(row.underdelivery_tolerance)),
+      unlimitedOverdelivery: row.unlimited_overdelivery === true,
+      deliveryCompleted: row.delivery_completed === true,
+      goodsReceiptIndicator: row.goods_receipt_indicator === true,
       receivedQuantity: qty(received),
       invoicedQuantity: qty(invoiced),
       remainingToDeliver: sub(quantity, received),

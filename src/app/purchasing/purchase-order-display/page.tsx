@@ -123,6 +123,15 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
                   ? t('poDisplay.conversionStored', { unit: item.unit, base: item.conversion.baseUnit, numerator: String(item.conversion.numerator), denominator: String(item.conversion.denominator) })
                   : t('poDisplay.conversionMissing', { unit: item.unit, base: item.conversion.baseUnit })}
           </p>
+          <p className="mt-1 text-xs text-ink-soft" data-po-delivery-control={item.itemNumber}>
+            {item.unlimitedOverdelivery
+              ? t('poDisplay.unlimitedOverdelivery')
+              : t('poDisplay.tolerances', { over: item.overdeliveryTolerance, under: item.underdeliveryTolerance })}
+            {' · '}
+            {item.deliveryCompleted ? t('poDisplay.deliveryCompleted') : t('poDisplay.deliveryOpen')}
+            {' · '}
+            {item.goodsReceiptIndicator ? t('poDisplay.grExpected') : t('poDisplay.grNotExpected')}
+          </p>
           <p className="mt-1 text-xs text-ink-soft">
             {item.requisitionNumber
               ? <Link className="underline" href={`/purchasing/requisitions?req=${encodeURIComponent(item.requisitionNumber)}`} data-po-requisition={item.itemNumber}>{item.requisitionNumber} / {item.requisitionItem}</Link>
