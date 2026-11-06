@@ -112,7 +112,11 @@ export const purchaseOrder = pgTable('purchase_order', {
   currency: varchar('currency', { length: 5 }).notNull(),
   documentDate: date('document_date', { mode: 'string' }).notNull(),
   releaseStatus: varchar('release_status', { length: 16 }).notNull().default('UNRELEASED'),
-  ...auditColumns,
+    /** ME21N's Delivery/Invoice tab: how the goods are delivered, and on what terms they are paid. */
+  paymentTermsCode: varchar('payment_terms_code', { length: 12 }),
+  incotermsCode: varchar('incoterms_code', { length: 3 }),
+  incotermsLocation: varchar('incoterms_location', { length: 160 }),
+...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.orderNumber] }),
   check('po_release_status_ck', sql`${t.releaseStatus} in ('UNRELEASED', 'RELEASED')`),

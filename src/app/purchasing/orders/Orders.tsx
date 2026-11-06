@@ -110,14 +110,30 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
 
 const INITIAL: OrderActionState = { ok: false };
 
-export default function Orders({ documents, choices, selected, canCreate, viewOnly = false, lockMessage = null, releases, selectedRelease, canRelease, draft = null, callOff = null }: {
-  documents: OrderDocument[];
+/** ME21N carries delivery and invoicing terms on one header tab. */
+const HEADER_TABS = [
+  { key: 'ORG', label: 'Org. data' },
+  { key: 'DELIVERY_INVOICE', label: 'Delivery / Invoice' },
+] as const;
+
+/** Item detail, as ME21N splits it: what the grid cannot carry without scrolling. */
+const ITEM_TABS = [
+  { key: 'SCHEDULE', label: 'Delivery schedule' },
+  { key: 'DELIVERY', label: 'Delivery' },
+  { key: 'INVOICE', label: 'Invoice' },
+  { key: 'ACCOUNT', label: 'Account assignment' },
+  { key: 'SOURCE', label: 'Source' },
+] as const;
+
+type HeaderTab = typeof HEADER_TABS[number]['key'];
+type ItemTab = typeof ITEM_TABS[number]['key'];
+
+export default function Orders({ choices, selected, canCreate, viewOnly = false, lockMessage = null, selectedRelease, canRelease, draft = null, callOff = null }: {
   choices: OrderChoices;
   selected: OrderDocument | null;
   canCreate: boolean;
   viewOnly?: boolean;
   lockMessage?: string | null;
-  releases: Record<string, DocumentReleaseState>;
   selectedRelease: DocumentReleaseState | null;
   canRelease: boolean;
   callOff?: { contractNumber: string; contractItem: string } | null;
@@ -158,7 +174,25 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
     purchasingGroup: selected?.purchasingGroup ?? draft?.purchasingGroup ?? '',
     companyCode: selected?.companyCode ?? draft?.companyCode ?? '',
     currency: selected?.currency ?? draft?.currency ?? '',
+    paymentTermsCode: selected?.paymentTermsCode ?? '',
+    incotermsCode: selected?.incotermsCode ?? '',
+    incotermsLocation: selected?.incotermsLocation ?? '',
   });
+  const [headerTab, setHeaderTab] = useState<HeaderTab>('ORG');
+  const [itemTab, setItemTab] = useState<ItemTab>('SCHEDULE');
+  const [activeItem, setActiveItem] = useState(0);
+
+  /** ME21N defaults the Delivery/Invoice fields from the vendor master. */
+  function pickSupplier(supplierNumber: string) {
+    const supplier = choices.suppliers.find((s) => s.partnerNumber === supplierNumber);
+    setHeader({
+      ...header,
+      supplierNumber,
+      paymentTermsCode: supplier?.paymentTermsCode ?? '',
+      incotermsCode: supplier?.incotermsCode ?? '',
+      incotermsLocation: supplier?.incotermsLocation ?? '',
+    });
+  }
   const [items, setItems] = useState<ItemRow[]>(
     selected
       ? selected.items.map(itemFromDocument)
@@ -230,61 +264,19 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
     });
   }
 
-  const itemFields: Array<{ key: 'material' | 'text' | 'quantity' | 'unit' | 'netPrice' | 'priceUnit' | 'taxCode' | 'requisitionNumber' | 'requisitionItem' | 'quotationNumber' | 'quotationItem'; label: string; width: string }> = [
+  // The grid carries what a buyer judges at a glance; everything else stands on a tab.
+  const itemFields: Array<{ key: 'material' | 'text' | 'quantity' | 'unit' | 'netPrice' | 'priceUnit'; label: string; width: string }> = [
     { key: 'material', label: 'Material', width: 'w-32' },
     { key: 'text', label: 'Short text', width: 'w-44' },
     { key: 'quantity', label: 'Order quantity', width: 'w-28' },
     { key: 'unit', label: 'Order unit', width: 'w-16' },
     { key: 'netPrice', label: 'Net price', width: 'w-28' },
     { key: 'priceUnit', label: 'Price unit', width: 'w-20' },
-    { key: 'taxCode', label: 'Tax code', width: 'w-20' },
-    { key: 'requisitionNumber', label: 'Requisition', width: 'w-32' },
-    { key: 'requisitionItem', label: 'Req. item', width: 'w-20' },
-    { key: 'quotationNumber', label: 'Quotation', width: 'w-32' },
-    { key: 'quotationItem', label: 'Quot. item', width: 'w-20' },
   ];
+  const active = Math.min(activeItem, Math.max(0, items.length - 1));
 
   return (
     <div className="space-y-4">
-      <section aria-labelledby="po-overview" className="border border-line bg-surface p-4">
-        <h2 id="po-overview" className="text-sm font-semibold">Purchase orders</h2>
-        {documents.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-soft">No purchase orders stand yet. Create the first below.</p>
-        ) : (
-          <table className="grid-table mt-2 text-sm">
-            <thead>
-              <tr className="text-left">
-                <th>Order</th>
-                <th>Supplier</th>
-                <th>Date</th>
-                <th>Currency</th>
-                <th>Items</th>
-                <th>Release</th>
-              </tr>
-            </thead>
-            <tbody>
-              {documents.map((doc) => (
-                <tr key={doc.orderNumber}>
-                  <td>
-                    <a className="underline" href={`/purchasing/orders?order=${doc.orderNumber}`}>{doc.orderNumber}</a>
-                  </td>
-                  <td>{doc.supplierName || doc.supplierNumber}</td>
-                  <td>{doc.documentDate}</td>
-                  <td>{doc.currency}</td>
-                  <td>{doc.items.length}</td>
-                  <td>
-                    {releases[doc.orderNumber]
-                      ? releases[doc.orderNumber].status === 'RELEASED'
-                        ? 'Released'
-                        : `Pending · step ${releases[doc.orderNumber].currentStep} of ${releases[doc.orderNumber].steps.length}`
-                      : 'Not required'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
 
       {selected && selectedRelease && (
         <section aria-labelledby="po-release" className="border border-line bg-surface p-4">
@@ -355,6 +347,20 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
           <input type="hidden" name="orderNumber" value={selected?.orderNumber ?? ''} />
           <fieldset disabled={viewOnly} className="min-w-0">
 
+          <nav aria-label="Purchase order header" className="mt-3 flex flex-wrap gap-1 border-b border-line pb-2">
+            {HEADER_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setHeaderTab(tab.key)}
+                className={`border px-3 py-2 text-sm ${tab.key === headerTab ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-ink-soft'}`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+
+          {headerTab === 'ORG' && (
           <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Supplier</span>
@@ -363,7 +369,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                 className="input min-w-0 flex-1"
                 value={header.supplierNumber}
                 context={{ purchasingOrg: header.purchasingOrg }}
-                onChange={(supplierNumber) => setHeader({ ...header, supplierNumber })}
+                onChange={(supplierNumber) => pickSupplier(supplierNumber)}
               />
             </label>
             <label className="block">
@@ -414,20 +420,57 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
               />
             </label>
           </div>
+          )}
+
+          {headerTab === 'DELIVERY_INVOICE' && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Payment terms</span>
+                <select
+                  className="input w-full"
+                  value={header.paymentTermsCode}
+                  onChange={(event) => setHeader({ ...header, paymentTermsCode: event.target.value })}
+                >
+                  <option value="">— supplier default —</option>
+                  {choices.paymentTerms.map((term) => (
+                    <option key={term.code} value={term.code}>{term.code} · {term.description}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Incoterms</span>
+                <select
+                  className="input w-full"
+                  value={header.incotermsCode}
+                  onChange={(event) => setHeader({ ...header, incotermsCode: event.target.value })}
+                >
+                  <option value="">— supplier default —</option>
+                  {choices.incoterms.map((code) => (
+                    <option key={code} value={code}>{code}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Incoterms location</span>
+                <input
+                  className="input w-full"
+                  maxLength={160}
+                  value={header.incotermsLocation}
+                  placeholder="Named place"
+                  onChange={(event) => setHeader({ ...header, incotermsLocation: event.target.value })}
+                />
+              </label>
+            </div>
+          )}
 
           <div className="mt-3 overflow-x-auto">
-            <table className="grid-table min-w-[68.75rem] text-sm">
+            <table className="grid-table text-sm">
               <thead>
                 <tr className="text-left">
                   <th>Item</th>
                   {itemFields.map((field) => (
                     <th key={field.key}>{field.label}</th>
                   ))}
-                  <th>Plant</th>
-                  <th>Storage location</th>
-                  <th>Batch</th>
-                  <th>Contract</th>
-                  <th>Item</th>
                   <th>Net value</th>
                   {selected && <th>Marked for deletion</th>}
                 </tr>
@@ -436,7 +479,12 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                 {items.map((item, index) => {
                   const value = Number(item.quantity) * Number(item.netPrice) / Math.max(1, Number(item.priceUnit) || 1);
                   return (
-                    <tr key={index} className="align-top">
+                    <tr
+                      key={index}
+                      onClick={() => setActiveItem(index)}
+                      aria-selected={index === active}
+                      className={`cursor-pointer align-top ${index === active ? 'bg-sunken' : ''}`}
+                    >
                       <td className="text-ink-faint">{String(item.itemNumber ?? (index + 1) * 10).padStart(5, '0')}</td>
                       {itemFields.map((field) => (
                         <td key={field.key}>
@@ -456,14 +504,6 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                               value={item.unit}
                               onChange={(unit) => patch(index, { unit })}
                             />
-                          ) : field.key === 'taxCode' ? (
-                            <ConstrainedField
-                              kind="tax"
-                              className={`input ${field.width}`}
-                              value={item.taxCode}
-                              context={{ companyCode: header.companyCode }}
-                              onChange={(taxCode) => patch(index, { taxCode })}
-                            />
                           ) : (
                             <input
                               className={`input ${field.width}`}
@@ -473,55 +513,6 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                           )}
                         </td>
                       ))}
-                      <td>
-                        <select
-                          className="input w-36"
-                          value={item.plant}
-                          onChange={(event) => patch(index, { plant: event.target.value, storageLocation: '' })}
-                        >
-                          <option value="">—</option>
-                          {choices.plants.map((p) => (
-                            <option key={p.plant} value={p.plant}>{p.plant} · {p.name}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          className="input w-32"
-                          value={item.storageLocation}
-                          onChange={(event) => patch(index, { storageLocation: event.target.value })}
-                        >
-                          <option value="">—</option>
-                          {choices.storageLocations.filter((sl) => sl.plant === item.plant).map((sl) => (
-                            <option key={sl.storageLocation} value={sl.storageLocation}>{sl.storageLocation} · {sl.name}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          className="input w-28"
-                          maxLength={10}
-                          value={item.batch}
-                          placeholder="Batch"
-                          onChange={(event) => patch(index, { batch: event.target.value })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="input w-28"
-                          value={item.contractNumber}
-                          placeholder="Contract"
-                          onChange={(event) => patch(index, { contractNumber: event.target.value })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="input w-16"
-                          value={item.contractItem}
-                          placeholder="Item"
-                          onChange={(event) => patch(index, { contractItem: event.target.value })}
-                        />
-                      </td>
                       <td className="num">{item.quantity && item.netPrice ? value.toFixed(2) : ''}</td>
                       {selected && (
                         <td>
@@ -547,101 +538,296 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
             Add item
           </button>
 
-          {items.map((item, index) => (
-            <fieldset key={index} className="mt-4 border border-line p-3">
-              <legend className="px-1 text-xs font-medium uppercase tracking-wide text-ink-faint">
-                Item {String(item.itemNumber ?? (index + 1) * 10).padStart(5, '0')} · Schedule lines and account assignment
-              </legend>
-              <div className="space-y-2">
-                {item.scheduleLines.map((line, lineIndex) => (
-                  <div key={lineIndex} className="grid gap-3 sm:grid-cols-2">
-                    <input
-                      className="input w-full"
-                      type="date"
-                      value={line.deliveryDate}
-                      onChange={(event) => {
-                        const lines = item.scheduleLines.slice();
-                        lines[lineIndex] = { ...lines[lineIndex], deliveryDate: event.target.value };
-                        patch(index, { scheduleLines: lines });
-                      }}
-                    />
-                    <input
-                      className="input w-full"
-                      placeholder="Scheduled quantity"
-                      value={line.quantity}
-                      onChange={(event) => {
-                        const lines = item.scheduleLines.slice();
-                        lines[lineIndex] = { ...lines[lineIndex], quantity: event.target.value };
-                        patch(index, { scheduleLines: lines });
-                      }}
-                    />
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="btn btn-default min-h-11 sm:min-h-8"
-                  onClick={() => patch(index, {
-                    scheduleLines: [...item.scheduleLines, { deliveryDate: '', quantity: '' }],
-                  })}
-                >
-                  Add schedule line
-                </button>
-              </div>
+          <nav aria-label="Purchase order item detail" className="mt-4 flex flex-wrap gap-1 border-b border-line pb-2">
+            {ITEM_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setItemTab(tab.key)}
+                className={`border px-3 py-2 text-sm ${tab.key === itemTab ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-ink-soft'}`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
 
-              <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
-                <label className="inline-flex items-center gap-2">
-                  <input type="radio" name={`assignment-${index}`} checked={item.assignment === 'STOCK'}
-                    onChange={() => patch(index, { assignment: 'STOCK' })} />
-                  Stock (no account assignment)
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input type="radio" name={`assignment-${index}`} checked={item.assignment === 'COST_CENTER'}
-                    onChange={() => patch(index, { assignment: 'COST_CENTER' })} />
-                  Cost centre
-                </label>
-              </div>
-              {item.assignment === 'COST_CENTER' && (
-                <div className="mt-3 space-y-2">
-                  {item.assignments.map((row, rowIndex) => (
-                    <div key={rowIndex} className="grid gap-3 sm:grid-cols-3">
-                      <input className="input w-full" placeholder="Cost centre" value={row.costCenter}
-                        onChange={(event) => {
-                          const rows = item.assignments.slice();
-                          rows[rowIndex] = { ...rows[rowIndex], costCenter: event.target.value };
-                          patch(index, { assignments: rows });
-                        }} />
-                      <input className="input w-full" placeholder="G/L account" value={row.glAccount}
-                        onChange={(event) => {
-                          const rows = item.assignments.slice();
-                          rows[rowIndex] = { ...rows[rowIndex], glAccount: event.target.value };
-                          patch(index, { assignments: rows });
-                        }} />
-                      <input className="input w-full" placeholder="Distribution %" value={row.percentage}
-                        onChange={(event) => {
-                          const rows = item.assignments.slice();
-                          rows[rowIndex] = { ...rows[rowIndex], percentage: event.target.value };
-                          patch(index, { assignments: rows });
-                        }} />
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    className="btn btn-default min-h-11 sm:min-h-8"
-                    onClick={() => patch(index, {
-                      assignments: [...item.assignments, { glAccount: '', costCenter: '', percentage: '0' }],
-                    })}
-                  >
-                    Add assignment row
-                  </button>
+          {items[active] && (
+            <section aria-label={`Item ${String(items[active].itemNumber ?? (active + 1) * 10).padStart(5, '0')} detail`} className="mt-2 border border-line p-3">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-faint">
+                Item {String(items[active].itemNumber ?? (active + 1) * 10).padStart(5, '0')}
+                {' · '}
+                {ITEM_TABS.find((tab) => tab.key === itemTab)?.label}
+              </p>
+
+              {itemTab === 'SCHEDULE' && (() => {
+                const item = items[active];
+                const scheduled = item.scheduleLines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
+                return (
+                  <div className="space-y-2">
+                    <table className="grid-table text-sm">
+                      <thead>
+                        <tr className="text-left">
+                          <th>Delivery date</th>
+                          <th>Scheduled quantity</th>
+                          <th>Order quantity</th>
+                          {item.scheduleLines.length > 1 && <th><span className="sr-only">Remove</span></th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {item.scheduleLines.map((line, lineIndex) => (
+                          <tr key={lineIndex}>
+                            <td>
+                              <input
+                                className="input w-44"
+                                type="date"
+                                value={line.deliveryDate}
+                                onChange={(event) => {
+                                  const lines = item.scheduleLines.slice();
+                                  lines[lineIndex] = { ...lines[lineIndex], deliveryDate: event.target.value };
+                                  patch(active, { scheduleLines: lines });
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className="input w-32"
+                                inputMode="decimal"
+                                placeholder="Scheduled quantity"
+                                value={line.quantity}
+                                onChange={(event) => {
+                                  const lines = item.scheduleLines.slice();
+                                  lines[lineIndex] = { ...lines[lineIndex], quantity: event.target.value };
+                                  patch(active, { scheduleLines: lines });
+                                }}
+                              />
+                            </td>
+                            <td className="num text-ink-soft">{item.quantity}</td>
+                            {item.scheduleLines.length > 1 && (
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn btn-default min-h-11 sm:min-h-8"
+                                  onClick={() => patch(active, {
+                                    scheduleLines: item.scheduleLines.filter((_, i) => i !== lineIndex),
+                                  })}
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <th>Scheduled</th>
+                          <td className="num">{scheduled.toFixed(3)}</td>
+                          <td className="num text-ink-soft">{item.quantity}</td>
+                          {item.scheduleLines.length > 1 && <td />}
+                        </tr>
+                      </tfoot>
+                    </table>
+                    <button
+                      type="button"
+                      className="btn btn-default min-h-11 sm:min-h-8"
+                      onClick={() => patch(active, {
+                        scheduleLines: [...item.scheduleLines, { deliveryDate: '', quantity: '' }],
+                      })}
+                    >
+                      Add schedule line
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {itemTab === 'DELIVERY' && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Plant</span>
+                    <select
+                      className="input w-full"
+                      value={items[active].plant}
+                      onChange={(event) => patch(active, { plant: event.target.value, storageLocation: '' })}
+                    >
+                      <option value="">—</option>
+                      {choices.plants.map((plant) => (
+                        <option key={plant.plant} value={plant.plant}>{plant.plant} · {plant.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Storage location</span>
+                    <select
+                      className="input w-full"
+                      value={items[active].storageLocation}
+                      onChange={(event) => patch(active, { storageLocation: event.target.value })}
+                    >
+                      <option value="">—</option>
+                      {choices.storageLocations.filter((sl) => sl.plant === items[active].plant).map((sl) => (
+                        <option key={sl.storageLocation} value={sl.storageLocation}>{sl.storageLocation} · {sl.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Batch</span>
+                    <input
+                      className="input w-full"
+                      maxLength={10}
+                      value={items[active].batch}
+                      placeholder="Batch"
+                      onChange={(event) => patch(active, { batch: event.target.value })}
+                    />
+                  </label>
                 </div>
               )}
-            </fieldset>
-          ))}
+
+              {itemTab === 'INVOICE' && (
+                <div className="max-w-xs">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Tax code</span>
+                    <ConstrainedField
+                      kind="tax"
+                      className="input w-full"
+                      value={items[active].taxCode}
+                      context={{ companyCode: header.companyCode }}
+                      onChange={(taxCode) => patch(active, { taxCode })}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {itemTab === 'ACCOUNT' && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-4 text-sm">
+                    <label className="inline-flex items-center gap-2">
+                      <input type="radio" name="assignment" checked={items[active].assignment === 'STOCK'}
+                        onChange={() => patch(active, { assignment: 'STOCK' })} />
+                      Stock (no account assignment)
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="radio" name="assignment" checked={items[active].assignment === 'COST_CENTER'}
+                        onChange={() => patch(active, { assignment: 'COST_CENTER' })} />
+                      Cost centre
+                    </label>
+                  </div>
+                  {items[active].assignment === 'COST_CENTER' && (
+                    <div className="space-y-2">
+                      <table className="grid-table text-sm">
+                        <thead>
+                          <tr className="text-left">
+                            <th>G/L account</th>
+                            <th>Cost centre</th>
+                            <th>Distribution %</th>
+                            {items[active].assignments.length > 1 && <th><span className="sr-only">Remove</span></th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items[active].assignments.map((row, rowIndex) => (
+                            <tr key={rowIndex}>
+                              <td>
+                                <input className="input w-40" placeholder="G/L account" value={row.glAccount}
+                                  onChange={(event) => {
+                                    const rows = items[active].assignments.slice();
+                                    rows[rowIndex] = { ...rows[rowIndex], glAccount: event.target.value };
+                                    patch(active, { assignments: rows });
+                                  }} />
+                              </td>
+                              <td>
+                                <input className="input w-40" placeholder="Cost centre" value={row.costCenter}
+                                  onChange={(event) => {
+                                    const rows = items[active].assignments.slice();
+                                    rows[rowIndex] = { ...rows[rowIndex], costCenter: event.target.value };
+                                    patch(active, { assignments: rows });
+                                  }} />
+                              </td>
+                              <td>
+                                <input className="input w-28" inputMode="decimal" placeholder="Distribution %" value={row.percentage}
+                                  onChange={(event) => {
+                                    const rows = items[active].assignments.slice();
+                                    rows[rowIndex] = { ...rows[rowIndex], percentage: event.target.value };
+                                    patch(active, { assignments: rows });
+                                  }} />
+                              </td>
+                              {items[active].assignments.length > 1 && (
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-default min-h-11 sm:min-h-8"
+                                    onClick={() => patch(active, {
+                                      assignments: items[active].assignments.filter((_, i) => i !== rowIndex),
+                                    })}
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <button
+                        type="button"
+                        className="btn btn-default min-h-11 sm:min-h-8"
+                        onClick={() => patch(active, {
+                          assignments: [...items[active].assignments, { glAccount: '', costCenter: '', percentage: '0' }],
+                        })}
+                      >
+                        Add assignment row
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {itemTab === 'SOURCE' && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Requisition</span>
+                    <input className="input w-full" value={items[active].requisitionNumber} placeholder="Requisition"
+                      onChange={(event) => patch(active, { requisitionNumber: event.target.value })} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Req. item</span>
+                    <input className="input w-full" value={items[active].requisitionItem} placeholder="Item"
+                      onChange={(event) => patch(active, { requisitionItem: event.target.value })} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Quotation</span>
+                    <input className="input w-full" value={items[active].quotationNumber} placeholder="Quotation"
+                      onChange={(event) => patch(active, { quotationNumber: event.target.value })} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Quot. item</span>
+                    <input className="input w-full" value={items[active].quotationItem} placeholder="Item"
+                      onChange={(event) => patch(active, { quotationItem: event.target.value })} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Contract</span>
+                    <input className="input w-full" value={items[active].contractNumber} placeholder="Contract"
+                      onChange={(event) => patch(active, { contractNumber: event.target.value })} />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Contract item</span>
+                    <input className="input w-full" value={items[active].contractItem} placeholder="Item"
+                      onChange={(event) => patch(active, { contractItem: event.target.value })} />
+                  </label>
+                </div>
+              )}
+            </section>
+          )}
 
           {state.message && (
             <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
               {state.message}
               {state.remedy ? ` ${state.remedy}` : ''}
+              {state.ok && state.orderNumber ? (
+                <>
+                  {' '}
+                  <a className="underline" href={`/purchasing/orders?order=${encodeURIComponent(state.orderNumber)}`}>
+                    Open purchase order {state.orderNumber}
+                  </a>
+                </>
+              ) : null}
             </p>
           )}
           {state.warnings?.map((warning) => (

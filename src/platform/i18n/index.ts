@@ -2114,6 +2114,7 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'purchaseOrder.list': 'Purchase order list',
   'incomingPayment.title': 'Post Incoming Payment',
   'incomingPayment.subtitle':
     'A customer receipt allocated against the open receivables it settles: ' +

@@ -35,7 +35,9 @@ import {
   assertPurchasingOrgForPlant,
   PurchasingOrgPlantAuthorizationError,
 } from '../foundation/purchasing-org-plant';
+import { DELIVERY_TERMS } from '../foundation/supplier-purchasing';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
+import { paymentTerms } from '../foundation/payment-terms-schema';
 import { glAccount } from '../finance/schema';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
@@ -118,6 +120,10 @@ const documentInput = z.object({
   purchasingGroup: z.string().trim().min(1).max(3),
   companyCode: z.string().trim().min(1).max(10),
   currency: z.string().trim().max(5).optional().default(''),
+  /** Blank defers to the supplier's purchasing data, as ME21N defaults from the vendor master. */
+  paymentTermsCode: z.string().trim().max(12).optional().default(''),
+  incotermsCode: z.string().trim().max(3).optional().default(''),
+  incotermsLocation: z.string().trim().max(160).optional().default(''),
   items: z.array(itemInput).min(1, 'a purchase order needs at least one item'),
 });
 
@@ -165,6 +171,9 @@ export interface OrderDocument {
   companyCode: string;
   currency: string;
   documentDate: string;
+  paymentTermsCode: string | null;
+  incotermsCode: string | null;
+  incotermsLocation: string | null;
   releaseStatus: string;
   createdBy: string;
   items: OrderItemRow[];
@@ -659,6 +668,9 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
     companyCode: header.companyCode,
     currency: header.currency,
     documentDate: header.documentDate,
+    paymentTermsCode: header.paymentTermsCode,
+    incotermsCode: header.incotermsCode,
+    incotermsLocation: header.incotermsLocation,
     releaseStatus: header.releaseStatus,
     createdBy: header.createdBy,
     items: items.map((item) => ({
@@ -700,20 +712,6 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
   };
 }
 
-export async function listOrders(client: string): Promise<OrderDocument[]> {
-  return withTenant(client, async (tx) => {
-    const headers = await tx.select().from(purchaseOrder)
-      .where(eq(purchaseOrder.client, client))
-      .orderBy(asc(purchaseOrder.orderNumber));
-    const docs: OrderDocument[] = [];
-    for (const header of headers.slice(-100)) {
-      const doc = await loadDocument(tx, client, header.orderNumber);
-      if (doc) docs.push(doc);
-    }
-    return docs.reverse();
-  });
-}
-
 export async function getOrder(client: string, orderNumber: string): Promise<OrderDocument | null> {
   return withTenant(client, (tx) => loadDocument(tx, client, orderNumber));
 }
@@ -722,7 +720,12 @@ async function judgeHeader(
   tx: Tx,
   client: string,
   input: z.infer<typeof documentInput>,
-): Promise<{ currency: string }> {
+): Promise<{
+  currency: string;
+  paymentTermsCode: string | null;
+  incotermsCode: string | null;
+  incotermsLocation: string | null;
+}> {
   const [partner] = await tx.select().from(businessPartner)
     .where(and(eq(businessPartner.client, client), eq(businessPartner.partnerNumber, input.supplierNumber)));
   if (!partner) throw new PurchaseOrderError(`Supplier ${input.supplierNumber} does not exist.`, 'Pick a standing business partner with supplier purchasing data.');
@@ -747,7 +750,20 @@ async function judgeHeader(
   const [company] = await tx.select().from(companyCode)
     .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, input.companyCode)));
   if (!company) throw new PurchaseOrderError(`Company code ${input.companyCode} does not exist.`);
-  return { currency: input.currency || supplierOrg.orderCurrency || company.currency };
+  // ME21N defaults the Delivery/Invoice fields from the vendor master; a buyer's entry wins.
+  const paymentTermsCode = input.paymentTermsCode || supplierOrg.paymentTermsCode;
+  if (paymentTermsCode) {
+    const [terms] = await tx.select().from(paymentTerms).where(and(
+      eq(paymentTerms.client, client), eq(paymentTerms.termsCode, paymentTermsCode),
+    ));
+    if (!terms) throw new PurchaseOrderError(`Payment terms ${paymentTermsCode} do not stand for this client.`);
+  }
+  return {
+    currency: input.currency || supplierOrg.orderCurrency || company.currency,
+    paymentTermsCode: paymentTermsCode || null,
+    incotermsCode: input.incotermsCode || supplierOrg.incotermsCode || null,
+    incotermsLocation: input.incotermsLocation || supplierOrg.incotermsLocation || null,
+  };
 }
 
 async function writeInfoUpdates(
@@ -867,7 +883,7 @@ export async function createOrder(
   const documentDate = today();
 
   const orderNumber = await withTenant(input.client, async (tx) => {
-    const { currency } = await judgeHeader(tx, input.client, input);
+    const { currency, paymentTermsCode, incotermsCode, incotermsLocation } = await judgeHeader(tx, input.client, input);
     let drawn: Awaited<ReturnType<typeof allocateNumber>>;
     try {
       drawn = await allocateNumber(tx, {
@@ -891,6 +907,9 @@ export async function createOrder(
       companyCode: input.companyCode,
       currency,
       documentDate,
+      paymentTermsCode,
+      incotermsCode,
+      incotermsLocation,
       releaseStatus: 'UNRELEASED',
       createdBy: input.changedBy,
     });
@@ -941,13 +960,16 @@ export async function changeOrder(
       throw error;
     }
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/purchase-order/${raw.orderNumber}`}, 0))`);
-    const { currency } = await judgeHeader(tx, input.client, input);
+    const { currency, paymentTermsCode, incotermsCode, incotermsLocation } = await judgeHeader(tx, input.client, input);
     await tx.update(purchaseOrder).set({
       supplierNumber: input.supplierNumber,
       purchasingOrg: input.purchasingOrg,
       purchasingGroup: input.purchasingGroup,
       companyCode: input.companyCode,
       currency,
+      paymentTermsCode,
+      incotermsCode,
+      incotermsLocation,
       changedBy: input.changedBy,
       changedAt: new Date(),
     }).where(and(eq(purchaseOrder.client, input.client), eq(purchaseOrder.orderNumber, raw.orderNumber)));
@@ -982,13 +1004,24 @@ export async function changeOrder(
 }
 
 export interface OrderChoices {
-  suppliers: Array<{ partnerNumber: string; name: string; purchasingOrg: string; orderCurrency: string | null }>;
+  suppliers: Array<{
+    partnerNumber: string;
+    name: string;
+    purchasingOrg: string;
+    orderCurrency: string | null;
+    /** The supplier's own defaults, offered to the header when nothing has been entered. */
+    paymentTermsCode: string | null;
+    incotermsCode: string | null;
+    incotermsLocation: string | null;
+  }>;
   purchasingOrgs: Array<{ purchasingOrg: string; name: string }>;
   purchasingGroups: Array<{ purchasingGroup: string; name: string }>;
   companies: Array<{ companyCode: string; name: string; currency: string }>;
   plants: Array<{ plant: string; name: string; companyCode: string | null }>;
   storageLocations: Array<{ plant: string; storageLocation: string; name: string }>;
   units: string[];
+  paymentTerms: Array<{ code: string; description: string }>;
+  incoterms: string[];
 }
 
 export async function orderChoices(client: string): Promise<OrderChoices> {
@@ -1001,12 +1034,18 @@ export async function orderChoices(client: string): Promise<OrderChoices> {
     const plantRows = await tx.select().from(plant).where(eq(plant.client, client));
     const slRows = await tx.select().from(storageLocation).where(eq(storageLocation.client, client));
     const unitRows = await tx.select().from(unitOfMeasure).orderBy(asc(unitOfMeasure.code));
+    const termsRows = await tx.select().from(paymentTerms).where(and(
+      eq(paymentTerms.client, client), eq(paymentTerms.isActive, true),
+    )).orderBy(asc(paymentTerms.termsCode));
     return {
       suppliers: supplierRows.filter((s) => !s.isBlocked).map((s) => ({
         partnerNumber: s.partnerNumber,
         name: partners.find((p) => p.partnerNumber === s.partnerNumber)?.name ?? '',
         purchasingOrg: s.purchasingOrg,
         orderCurrency: s.orderCurrency,
+        paymentTermsCode: s.paymentTermsCode,
+        incotermsCode: s.incotermsCode,
+        incotermsLocation: s.incotermsLocation,
       })),
       purchasingOrgs: orgRows.filter((o) => o.isActive).map((o) => ({ purchasingOrg: o.purchasingOrg, name: o.name })),
       purchasingGroups: groupRows.filter((g) => g.isActive).map((g) => ({
@@ -1018,6 +1057,8 @@ export async function orderChoices(client: string): Promise<OrderChoices> {
         plant: s.plant, storageLocation: s.storageLocation, name: s.name,
       })),
       units: unitRows.map((u) => u.code),
+      paymentTerms: termsRows.map((t) => ({ code: t.termsCode, description: t.description })),
+      incoterms: [...DELIVERY_TERMS],
     };
   });
 }

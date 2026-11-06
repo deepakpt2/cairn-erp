@@ -3,12 +3,11 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
-import { PO_CREATE_CAPABILITY, getOrder, listOrders, orderChoices } from '@/modules/purchasing/orders';
+import { PO_CREATE_CAPABILITY, getOrder, orderChoices } from '@/modules/purchasing/orders';
 import { orderDraftFromQuotation, orderDraftFromRequisition } from '@/modules/purchasing/follow-on';
 import {
   RELEASE_CAPABILITIES,
   getDocumentRelease,
-  listDocumentReleases,
 } from '@/modules/purchasing/release';
 import Orders from './Orders';
 import { ChangeLock } from '@/ui/lock/ChangeLock';
@@ -34,11 +33,7 @@ export default async function PurchaseOrdersPage({ searchParams }: {
       : params.quotation
         ? await orderDraftFromQuotation(client, params.quotation.trim())
         : null;
-  const [documents, choices, releases] = await Promise.all([
-    listOrders(client),
-    orderChoices(client),
-    listDocumentReleases(client, 'PURCHASE_ORDER'),
-  ]);
+  const choices = await orderChoices(client);
   const selected = params.order ? await getOrder(client, params.order) : null;
   const selectedRelease = selected
     ? await getDocumentRelease(client, 'PURCHASE_ORDER', selected.orderNumber)
@@ -58,9 +53,14 @@ export default async function PurchaseOrdersPage({ searchParams }: {
         <span className="code text-ink-faint">PROC.PO.CREATE · ME21N</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('purchaseOrder.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/purchasing/purchase-order-list" className="btn btn-default min-h-11 sm:min-h-8">
+              {t('purchaseOrder.list')}
+            </Link>
+            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
+              {t('nav.launchpad')}
+            </Link>
+          </div>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchaseOrder.subtitle')}</p>
       </header>
@@ -69,13 +69,11 @@ export default async function PurchaseOrdersPage({ searchParams }: {
         <ChangeLock lockObject="PURCHASE_ORDER" argument={selected.orderNumber} />
       )}
       <Orders
-        documents={documents}
         choices={choices}
         selected={selected}
         canCreate={canChange}
         viewOnly={changeLock?.mode === 'DISPLAY'}
         lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
-        releases={Object.fromEntries(releases)}
         selectedRelease={selectedRelease}
         canRelease={can(session, RELEASE_CAPABILITIES.PURCHASE_ORDER)}
         draft={draft}

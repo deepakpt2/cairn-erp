@@ -100,6 +100,9 @@ export async function saveOrderAction(
       purchasingGroup?: string;
       companyCode?: string;
       currency?: string;
+      paymentTermsCode?: string;
+      incotermsCode?: string;
+      incotermsLocation?: string;
       items?: unknown[];
     };
     const base = {
@@ -111,6 +114,9 @@ export async function saveOrderAction(
       purchasingGroup: input.purchasingGroup ?? '',
       companyCode: input.companyCode ?? '',
       currency: input.currency ?? '',
+      paymentTermsCode: input.paymentTermsCode ?? '',
+      incotermsCode: input.incotermsCode ?? '',
+      incotermsLocation: input.incotermsLocation ?? '',
       items: (input.items ?? []) as never[],
     };
     const editing = typeof orderNumber === 'string' && orderNumber;
