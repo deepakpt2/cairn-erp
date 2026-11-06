@@ -87,6 +87,11 @@ async function appliedSoFar(
       eq(journalEntryLine.businessPartner, partner),
       eq(journalEntryLine.lineText, lineText),
       eq(journalEntry.status, 'POSTED'),
+      // A reversal carries its original's line text with the opposite sign. Counting
+      // it would say the advance had been applied *minus* the amount, so spending it
+      // twice were nearly allowed: the original stands reversed and is already gone
+      // from this sum. A reversal is the undoing of an application, never one itself.
+      sql`${journalEntry.reversalOf} is null`,
     ));
   return round2(rows.reduce((s, r) => {
     const signed = creditSide
