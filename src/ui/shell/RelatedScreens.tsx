@@ -26,23 +26,31 @@ function ScreenLinkChip({ link }: { link: RelatedLink }) {
  * The strip is navigation only. Following a link does not post, confirm, or
  * start a run. The destination still asks before it writes.
  */
-export function RelatedScreens() {
+export function RelatedScreens({ visibleScreenIds }: { visibleScreenIds: readonly string[] }) {
   const pathname = usePathname() || '/';
   const search = useSearchParams();
   if (pathname === '/signin') return null;
 
   const { links, more, indexHref } = relatedLinks(pathname, new URLSearchParams(search.toString()));
 
+  // Only what this reader can use. Both lists are filtered, so the strip cannot
+  // offer a screen through the "more" list that it withheld from the front.
+  const visible = new Set(visibleScreenIds);
+  const offered = links.filter((link) => visible.has(link.screen.id));
+  const alsoOffered = more.filter((link) => visible.has(link.screen.id));
+  // Nothing to offer is not an empty strip; it is no strip at all.
+  if (offered.length === 0 && alsoOffered.length === 0) return null;
+
   return (
     <nav aria-label={t('nav.related')} data-screen-links className="border-b border-line bg-paper px-3 py-1.5 sm:px-4">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-2xs uppercase tracking-wide text-ink-faint">{t('nav.related')}</span>
-        {links.map((link) => <ScreenLinkChip key={link.screen.id} link={link} />)}
-        {more.length > 0 && (
+        {offered.map((link) => <ScreenLinkChip key={link.screen.id} link={link} />)}
+        {alsoOffered.length > 0 && (
           <details className="border border-line bg-surface">
             <summary className="cursor-pointer px-2 py-1 text-xs text-ink-soft">{t('nav.moreScreens')}</summary>
             <div className="flex max-w-3xl flex-wrap gap-1.5 p-2">
-              {more.map((link) => <ScreenLinkChip key={link.screen.id} link={link} />)}
+              {alsoOffered.map((link) => <ScreenLinkChip key={link.screen.id} link={link} />)}
             </div>
           </details>
         )}

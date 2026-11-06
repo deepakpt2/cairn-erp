@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import './globals.css';
 import { CommandBar } from '@/ui/shell/CommandBar';
-import { RelatedScreens } from '@/ui/shell/RelatedScreens';
+import { RelatedScreensAccess } from '@/ui/shell/RelatedScreensAccess';
 import { StatusBar } from '@/ui/shell/StatusBar';
 import { SessionBar } from '@/ui/shell/SessionBar';
 import { ScrollToTop } from '@/ui/shell/ScrollToTop';
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <CommandBar />
           <SessionBar />
           <Suspense fallback={null}>
-            <RelatedScreens />
+            <RelatedScreensAccess />
           </Suspense>
           <main className="flex-1">{children}</main>
           <ScrollToTop />
