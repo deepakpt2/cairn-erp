@@ -17,7 +17,8 @@ import {
   saveBatchSearchProcedureStep,
 } from '../src/modules/inventory/batch-search-procedure';
 import { deleteBatchStrategyType, saveBatchStrategyType } from '../src/modules/inventory/batch-strategy-type';
-import { GoodsIssueError, postGoodsIssue } from '../src/modules/inventory/goods-issue';
+import { GoodsIssueError } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'OMCY_TEST';

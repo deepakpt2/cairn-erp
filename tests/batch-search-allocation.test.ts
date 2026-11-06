@@ -17,7 +17,8 @@ import {
 } from '../src/modules/inventory/batch-search-allocation';
 import { deleteBatchSearchProcedure, saveBatchSearchProcedure } from '../src/modules/inventory/batch-search-procedure';
 import { deleteMovementType } from '../src/modules/inventory/movement-type-configuration';
-import { GoodsIssueError, postGoodsIssue } from '../src/modules/inventory/goods-issue';
+import { GoodsIssueError } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'OMCG_TEST';

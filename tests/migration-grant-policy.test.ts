@@ -32,7 +32,7 @@ import { closeDb } from './helpers';
 
 const MIGRATION_DIR = join(process.cwd(), 'drizzle');
 const RUNTIME_ROLE = 'cairn_app';
-const OWNER_ROLE = 'cairn';
+const OWNER_ROLE = 'cairn_integration_migrator';
 
 /**
  * The tables the policy protects today. This is a floor, not a census: the
@@ -135,6 +135,37 @@ export function createdTables(text: string): string[] {
   ];
 }
 
+/** Serial columns need a separate runtime sequence grant; table grants do not cover it. */
+function serialColumns(text: string): Array<{ column: string; sequence: string }> {
+  const body = stripComments(text);
+  const found: Array<{ column: string; sequence: string }> = [];
+  const tables = /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s*\(([\s\S]*?)\)\s*;/gi;
+  let table: RegExpExecArray | null;
+  while ((table = tables.exec(body)) !== null) {
+    const tableName = table[1]!.toLowerCase();
+    const columns = /\b([a-z_][a-z0-9_]*)\s+(?:(?:big|small)?serial)\b/gi;
+    let column: RegExpExecArray | null;
+    while ((column = columns.exec(table[2]!)) !== null) {
+      // PostgreSQL's implicit serial sequence is named <table>_<column>_seq.
+      const sequence = `${tableName}_${column[1]!.toLowerCase()}_seq`.slice(0, 63);
+      found.push({ column: column[1]!.toLowerCase(), sequence });
+    }
+  }
+  return found;
+}
+
+/** Runtime sequences with an explicit USAGE/ALL grant in this migration. */
+function grantedRuntimeSequences(text: string): Set<string> {
+  const grants = new Set<string>();
+  const body = stripComments(text);
+  const pattern = /\bgrant\s+([^;]+?)\s+on\s+sequence\s+(?:public\.)?([a-z_][a-z0-9_]*)\s+to\s+cairn_app\b/gi;
+  let grant: RegExpExecArray | null;
+  while ((grant = pattern.exec(body)) !== null) {
+    if (/\busage\b|\ball\b/i.test(grant[1]!)) grants.add(grant[2]!.toLowerCase());
+  }
+  return grants;
+}
+
 /**
  * A table created from here on must declare its runtime permissions, and must
  * not rely on a table grant to cover a sequence.
@@ -160,8 +191,11 @@ export function auditMigrationGrantPolicy(text: string): string[] {
 
   // A `serial` column owns a sequence, and a table grant never covers it.
   // Identity columns are exempt: PostgreSQL checks the table, not the sequence.
-  const serials = matches(/\b([a-z_][a-z0-9_]*)\s+(?:big|small)?serial\b/gi, body);
-  for (const column of serials) {
+  // An explicit USAGE/ALL grant to cairn_app on that exact implicit sequence is
+  // sufficient, so warn only when the migration leaves the sequence ungranted.
+  const runtimeSequences = grantedRuntimeSequences(text);
+  for (const { column, sequence } of serialColumns(text)) {
+    if (runtimeSequences.has(sequence)) continue;
     problems.push(
       `${column}: uses a serial column. Its implicit sequence is not covered by the table grant, ` +
         `so the runtime role cannot insert. Use "integer generated always as identity", or grant ` +
@@ -482,6 +516,8 @@ grant update, delete on table public.widget_ledger to cairn_app;`;
 );
 grant update, delete on table public.widget_counter to cairn_app;`;
     expect(auditMigrationGrantPolicy(serialTable).join('\n')).toMatch(/serial column/);
+    const serialWithSequenceGrant = `${serialTable}\ngrant usage, select on sequence public.widget_counter_widget_id_seq to cairn_app;`;
+    expect(auditMigrationGrantPolicy(serialWithSequenceGrant)).toEqual([]);
 
     const broadened = `alter default privileges in schema public
   grant update, delete on tables to cairn_app;`;
@@ -612,6 +648,6 @@ end $$;
     // the ledger, and it does not invalidate an applied file.
     expect(result.applied, `unexpected pending migrations: ${result.applied.join(', ')}`).toEqual([]);
     expect(result.skipped.length).toBeGreaterThan(0);
-    expect(OWNER_ROLE).toBe('cairn');
+    expect(OWNER_ROLE).toBe('cairn_integration_migrator');
   });
 });

@@ -40,6 +40,7 @@ import {
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const PASSWORD = 'change-lock-7';
+const MIGRATION_ROLE = 'cairn_integration_migrator';
 
 /**
  * Fixed seeds rather than `testClientId` guesses: these two keys are the ones that
@@ -328,7 +329,7 @@ describe('a session that is not live never reaches change', () => {
     const owner = directSql(ownerUrl);
     try {
       const [identity] = await owner.unsafe<Array<{ current_user: string }>>('select current_user');
-      if (identity?.current_user !== 'cairn') throw new Error('Deleted-session fixture requires the migration role.');
+      if (identity?.current_user !== MIGRATION_ROLE) throw new Error('Deleted-session fixture requires the migration role.');
       await owner.unsafe(
         'delete from user_session where client = $1 and token_hash = $2',
         [tenant.client, tokenHash(real.token)],

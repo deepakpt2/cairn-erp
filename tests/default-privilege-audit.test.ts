@@ -40,6 +40,9 @@ const MUTABLE_TABLES = [
   'consolidation_execution',
 ];
 
+const RUNTIME_ROLE = 'cairn_app';
+const MIGRATION_ROLE = 'cairn_integration_migrator';
+
 describe('default privileges and append-only grants', () => {
   afterAll(closeDb);
 
@@ -105,16 +108,16 @@ describe('default privileges and append-only grants', () => {
     const probe = `default_privilege_probe_${Date.now()}`;
     try {
       const role = await owner<{ current_user: string }[]>`select current_user`;
-      expect(role[0]?.current_user).toBe('cairn');
+      expect(role[0]?.current_user).toBe(MIGRATION_ROLE);
       const defaults = await owner<{ defaclacl: string | null }[]>`
         select d.defaclacl::text as defaclacl
           from pg_default_acl d
           join pg_roles r on r.oid = d.defaclrole
           join pg_namespace n on n.oid = d.defaclnamespace
-         where r.rolname = 'cairn' and n.nspname = 'public' and d.defaclobjtype = 'r'
+         where r.rolname = ${MIGRATION_ROLE} and n.nspname = 'public' and d.defaclobjtype = 'r'
       `;
       expect(defaults).toHaveLength(1);
-      expect(defaults[0]?.defaclacl).toBe('{cairn_app=ar/cairn}');
+      expect(defaults[0]?.defaclacl).toBe(`{${RUNTIME_ROLE}=ar/${MIGRATION_ROLE}}`);
       await owner.unsafe(`create table public.${probe} (id integer primary key, note text)`);
       const created = await owner<{ relacl: string | null }[]>`
         select c.relacl::text as relacl
@@ -124,7 +127,9 @@ describe('default privileges and append-only grants', () => {
       `;
       // The owner entry is always materialised; the runtime entry must be
       // select and insert only.
-      expect(created[0]?.relacl).toBe('{cairn=arwdDxtm/cairn,cairn_app=ar/cairn}');
+      expect(created[0]?.relacl).toBe(
+        `{${MIGRATION_ROLE}=arwdDxtm/${MIGRATION_ROLE},${RUNTIME_ROLE}=ar/${MIGRATION_ROLE}}`,
+      );
       await owner.unsafe(`alter table public.${probe} add column extra text`);
       const app = await owner<{ can_insert: boolean; can_update: boolean; can_delete: boolean }[]>`
         select has_table_privilege('cairn_app', ${`public.${probe}`}, 'INSERT') as can_insert,
@@ -147,11 +152,12 @@ describe('default privileges and append-only grants', () => {
     try {
       const [role] = await owner<{ current_user: string; superuser: boolean }[]>`
         select current_user, rolsuper from pg_roles where rolname = current_user`;
-      expect(role?.current_user).toBe('cairn');
+      expect(role?.current_user).toBe(MIGRATION_ROLE);
+      expect(role?.superuser).toBe(false);
       const ownerRights = await owner<{ can_update: boolean; can_delete: boolean; can_truncate: boolean }[]>`
-        select has_table_privilege('cairn', 'public.production_order_operation', 'UPDATE') as can_update,
-               has_table_privilege('cairn', 'public.production_order_operation', 'DELETE') as can_delete,
-               has_table_privilege('cairn', 'public.production_order_operation', 'TRUNCATE') as can_truncate
+        select has_table_privilege(${MIGRATION_ROLE}, 'public.production_order_operation', 'UPDATE') as can_update,
+               has_table_privilege(${MIGRATION_ROLE}, 'public.production_order_operation', 'DELETE') as can_delete,
+               has_table_privilege(${MIGRATION_ROLE}, 'public.production_order_operation', 'TRUNCATE') as can_truncate
       `;
       expect(ownerRights[0]?.can_update).toBe(true);
       expect(ownerRights[0]?.can_delete).toBe(true);
