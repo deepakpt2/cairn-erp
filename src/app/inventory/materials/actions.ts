@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireSession, requireCapability, AuthzError } from '@/platform/auth/current';
 import { MaterialError, saveMaterialView, setMaterialDeletionFlag, type MaterialInput } from '@/modules/inventory/materials';
-import { MATERIAL_VIEW_CAPABILITY, MATERIAL_VIEWS } from '@/modules/inventory/constants';
+import { MATERIAL_VIEW_CAPABILITY, MATERIAL_VIEWS, isMaterialPanelView } from '@/modules/inventory/constants';
 import { t } from '@/platform/i18n';
 import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
@@ -15,6 +15,9 @@ export async function saveMaterialAction(_previous: MaterialState, form: FormDat
   try {
     const view = MATERIAL_VIEWS.find((v) => v === read('view'));
     if (!view) throw new MaterialError('This material view is not implemented.');
+    // Deletion flags and shelf life carry their own panels and their own save actions;
+    // nothing posted from them belongs in the shared material form.
+    if (isMaterialPanelView(view)) throw new MaterialError('This view is saved by its own action.');
     await requireCapability(MATERIAL_VIEW_CAPABILITY[view], session);
     if (read('existing') === '1') {
       await assertChangeForSession(session, { lockObject: 'MATERIAL', argument: read('materialNumber') });

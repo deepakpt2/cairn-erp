@@ -74,7 +74,7 @@ export default function DeletionFlags({
 
   return (
     <section aria-labelledby="material-deletion-title" className="panel space-y-3 p-4">
-      <h2 id="material-deletion-title" className="text-base font-semibold">
+      <h2 id="material-deletion-title" className="panel-title">
         {t('material.deletion')}
       </h2>
       <p className="max-w-3xl text-sm text-ink-soft">{t('material.deletionNote')}</p>

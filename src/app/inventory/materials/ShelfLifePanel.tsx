@@ -1,4 +1,5 @@
 import { saveMaterialShelfLifeAction } from './shelf-life-action';
+import { t } from '@/platform/i18n';
 import type { MaterialShelfLife } from '@/modules/inventory/material-shelf-life';
 
 /** Client-level shelf-life settings. Saving does not post and does not change a batch date. */
@@ -8,7 +9,7 @@ export default function ShelfLifePanel({ current, canMaintain }: {
 }) {
   return (
     <section className="panel space-y-3 p-4">
-      <h2 className="text-sm font-medium">Shelf life data</h2>
+      <h2 className="panel-title">{t('material.shelfLife')}</h2>
       <p className="text-sm text-ink-soft">
         These fields are for the material, not for one plant. They are not copied to a batch.
         A save does not post and does not change a stored expiration date. OMJ5 is not this screen.
