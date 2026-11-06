@@ -130,25 +130,25 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
             <div><dt className="text-ink-faint">Customer reference</dt><dd>{selected.purchaseOrderReference ?? '—'}</dd></div>
           </dl>
 
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs text-ink-faint">
-                <th className="py-1">Item</th><th>Material</th><th>Plant</th><th className="text-right">Quantity</th>
+                <th>Item</th><th>Material</th><th>Plant</th><th className="text-right">Quantity</th>
                 <th>Unit</th><th className="text-right">Price</th><th className="text-right">Net</th>
                 <th className="text-right">Tax</th><th>Priced from</th><th>Status</th>
               </tr>
             </thead>
             <tbody>
               {selected.lines.map((line) => (
-                <tr key={line.lineNumber} className="border-t border-line">
-                  <td className="py-1">{line.lineNumber}</td>
+                <tr key={line.lineNumber}>
+                  <td>{line.lineNumber}</td>
                   <td>{line.materialNumber}</td>
                   <td>{line.plant}</td>
-                  <td className="text-right">{Number(line.orderQuantity).toFixed(3)}</td>
+                  <td className="text-right num">{Number(line.orderQuantity).toFixed(3)}</td>
                   <td>{line.quantityUnit.trim()}</td>
-                  <td className="text-right">{Number(line.netPrice).toFixed(4)} / {line.priceUnit}</td>
-                  <td className="text-right">{Number(line.netAmount).toFixed(2)}</td>
-                  <td className="text-right">{Number(line.taxAmount).toFixed(2)}</td>
+                  <td className="text-right num">{Number(line.netPrice).toFixed(4)} / {line.priceUnit}</td>
+                  <td className="text-right num">{Number(line.netAmount).toFixed(2)}</td>
+                  <td className="text-right num">{Number(line.taxAmount).toFixed(2)}</td>
                   <td className="code">{line.conditionNumber}</td>
                   <td>{line.status}{line.rejectionReason ? ` (${line.rejectionReason})` : ''}</td>
                 </tr>
@@ -226,19 +226,19 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
 
       <section className="panel p-4" aria-label="Sales orders">
         <h2 className="text-lg font-semibold">Sales orders</h2>
-        <table className="mt-2 w-full text-sm">
+        <table className="grid-table mt-2 text-sm">
           <thead>
             <tr className="text-left text-xs text-ink-faint">
-              <th className="py-1">Order</th><th>Customer</th><th>Date</th><th>Status</th>
+              <th>Order</th><th>Customer</th><th>Date</th><th>Status</th>
               <th className="text-right">Gross value</th><th>Credit</th>
             </tr>
           </thead>
           <tbody>
             {documents.length === 0 ? (
-              <tr><td colSpan={6} className="py-3 text-ink-soft">No sales order stands in this tenant yet.</td></tr>
+              <tr><td colSpan={6} className="text-ink-soft">No sales order stands in this tenant yet.</td></tr>
             ) : documents.map((row) => (
-              <tr key={row.orderNumber} className="border-t border-line">
-                <td className="py-1">
+              <tr key={row.orderNumber}>
+                <td>
                   <Link className="link" href={`/sales/orders?order=${row.orderNumber}`}>{row.orderNumber}</Link>
                 </td>
                 <td>{row.customerNumber}</td>

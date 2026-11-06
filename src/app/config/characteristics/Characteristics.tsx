@@ -139,42 +139,42 @@ export default function Characteristics({ rows, canMaintain }: {
         </p>
       )}
 
-      <section aria-labelledby="characteristic-grid" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="characteristic-grid" className="border border-line bg-surface p-4">
         <h2 id="characteristic-grid" className="text-sm font-semibold">Characteristics</h2>
         {rows.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No characteristics stand yet. Define the first below.</p>
         ) : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-2">Characteristic</th>
-                <th className="px-2 py-2">Description</th>
-                <th className="px-2 py-2">Format</th>
-                <th className="px-2 py-2">Length</th>
-                <th className="px-2 py-2">Assignment</th>
-                <th className="px-2 py-2">Values</th>
-                <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Classes</th>
-                {canMaintain && <th className="px-2 py-2">Actions</th>}
+              <tr className="text-left">
+                <th>Characteristic</th>
+                <th>Description</th>
+                <th>Format</th>
+                <th>Length</th>
+                <th>Assignment</th>
+                <th>Values</th>
+                <th>Status</th>
+                <th>Classes</th>
+                {canMaintain && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.characteristicName} className="border-b border-line/60">
-                  <td className="px-2 py-2">{row.characteristicName}</td>
-                  <td className="px-2 py-2">{row.description}</td>
-                  <td className="px-2 py-2">{row.dataFormat}</td>
-                  <td className="px-2 py-2">{row.valueLength}{row.decimalPlaces > 0 ? `.${row.decimalPlaces}` : ''}</td>
-                  <td className="px-2 py-2">{row.valueAssignment === 'MULTIPLE' ? 'Multiple' : 'Single'}</td>
-                  <td className="px-2 py-2">{row.values.join(', ') || '—'}</td>
-                  <td className="px-2 py-2">{row.lifecycleStatus}</td>
-                  <td className="px-2 py-2">
+                <tr key={row.characteristicName}>
+                  <td>{row.characteristicName}</td>
+                  <td>{row.description}</td>
+                  <td>{row.dataFormat}</td>
+                  <td>{row.valueLength}{row.decimalPlaces > 0 ? `.${row.decimalPlaces}` : ''}</td>
+                  <td>{row.valueAssignment === 'MULTIPLE' ? 'Multiple' : 'Single'}</td>
+                  <td>{row.values.join(', ') || '—'}</td>
+                  <td>{row.lifecycleStatus}</td>
+                  <td>
                     {row.whereUsed.length === 0
                       ? '—'
                       : row.whereUsed.map((use) => `${use.classType} ${use.className}`).join(', ')}
                   </td>
                   {canMaintain && (
-                    <td className="px-2 py-2">
+                    <td>
                       <div className="flex flex-wrap gap-2">
                         <button type="button" className="btn btn-default min-h-11 sm:min-h-8"
                           onClick={() => setEditor(editorFromRow(row))}>Change</button>
@@ -202,7 +202,7 @@ export default function Characteristics({ rows, canMaintain }: {
       </section>
 
       {canMaintain && (
-        <section aria-labelledby="characteristic-editor" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="characteristic-editor" className="border border-line bg-surface p-4">
           <h2 id="characteristic-editor" className="text-sm font-semibold">
             {editor.mode === 'CREATE' ? 'New characteristic' : `Change ${editor.characteristicName}`}
           </h2>
@@ -277,7 +277,7 @@ export default function Characteristics({ rows, canMaintain }: {
               ))}
             </div>
 
-            <fieldset className="mt-4 rounded-card border border-line p-3">
+            <fieldset className="mt-4 border border-line p-3">
               <legend className="px-1 text-xs font-medium uppercase tracking-wide text-ink-faint">Allowed values</legend>
               <div className="space-y-2">
                 {editor.values.map((value, index) => (

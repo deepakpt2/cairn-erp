@@ -42,7 +42,7 @@ export default function UomShell({
 
   return (
     <>
-      <section aria-labelledby="uom-define" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="uom-define" className="border border-line bg-surface p-4">
         <h2 id="uom-define" className="text-sm font-semibold">{t('uom.defineHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('uom.defineHint')}</p>
         <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -88,7 +88,7 @@ export default function UomShell({
         </form>
       </section>
 
-      <section aria-labelledby="uom-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="uom-list" className="border border-line bg-surface p-4">
         <h2 id="uom-list" className="text-sm font-semibold">{t('uom.listHeader')}</h2>
         <p role="status" className={`mt-2 text-sm ${removal.ok ? 'text-ink' : 'text-red-700'}`}>
           {removal.message}
@@ -96,32 +96,31 @@ export default function UomShell({
         {rows.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">{t('uom.empty')}</p>
         ) : (
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('uom.material')}</th>
-                <th className="py-1">{t('uom.description')}</th>
-                <th className="py-1">{t('uom.baseUnit')}</th>
-                <th className="py-1">{t('uom.alternativeUnit')}</th>
-                <th className="py-1 text-right">{t('uom.ratio')}</th>
-                <th className="py-1" />
+                <th>{t('uom.material')}</th>
+                <th>{t('uom.description')}</th>
+                <th>{t('uom.baseUnit')}</th>
+                <th>{t('uom.alternativeUnit')}</th>
+                <th className="text-right">{t('uom.ratio')}</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr
                   key={`${row.materialNumber}/${row.alternativeUnit}`}
-                  className="border-t border-line"
                   data-conversion={`${row.materialNumber}/${row.alternativeUnit}`}
                 >
-                  <td className="py-1 code">{row.materialNumber}</td>
-                  <td className="py-1">{row.materialDescription}</td>
-                  <td className="py-1 code">{row.baseUnit}</td>
-                  <td className="py-1 code" data-alternative-unit={row.alternativeUnit}>{row.alternativeUnit}</td>
-                  <td className="py-1 text-right tabular" data-ratio={row.factor}>
+                  <td className="code">{row.materialNumber}</td>
+                  <td>{row.materialDescription}</td>
+                  <td className="code">{row.baseUnit}</td>
+                  <td className="code" data-alternative-unit={row.alternativeUnit}>{row.alternativeUnit}</td>
+                  <td className="text-right tabular" data-ratio={row.factor}>
                     1 {row.alternativeUnit} = {row.numerator}/{row.denominator} {row.baseUnit}
                   </td>
-                  <td className="py-1 text-right">
+                  <td className="text-right">
                     <RemoveConversion row={row} action={removeAction} canMaintain={canMaintain} pending={removing} />
                   </td>
                 </tr>

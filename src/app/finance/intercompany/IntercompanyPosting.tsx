@@ -27,7 +27,7 @@ export function IntercompanyPosting({ companies, pairs, canPost, today }: {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
   return (
-    <section aria-labelledby="ic-post" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="ic-post" className="border border-line bg-surface p-4">
       <h2 id="ic-post" className="text-sm font-semibold">{t('icPost.section')}</h2>
       {state.message && (
         <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -74,26 +74,26 @@ export function IntercompanyPosting({ companies, pairs, canPost, today }: {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
+          <table className="grid-table text-left text-sm">
             <thead>
               <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                <th className="px-2 py-2">{t('icPost.account')}</th>
-                <th className="px-2 py-2">{t('icPost.dc')}</th>
-                <th className="px-2 py-2">{t('icPost.amount')}</th>
-                <th className="px-2 py-2">{t('icPost.costCenter')}</th>
+                <th>{t('icPost.account')}</th>
+                <th>{t('icPost.dc')}</th>
+                <th>{t('icPost.amount')}</th>
+                <th>{t('icPost.costCenter')}</th>
               </tr>
             </thead>
             <tbody>
               {lines.map((line) => (
-                <tr key={line.key} className="border-t border-line">
-                  <td className="px-2 py-2">
+                <tr key={line.key}>
+                  <td>
                     <input
                       name="glAccount" className="input w-32" maxLength={10} value={line.glAccount}
                       onChange={(e) => update(line.key, { glAccount: e.target.value })}
                       aria-label={`G/L account line ${line.key}`} required
                     />
                   </td>
-                  <td className="px-2 py-2">
+                  <td>
                     <select
                       name="debitCredit" className="input w-20" value={line.debitCredit}
                       onChange={(e) => update(line.key, { debitCredit: e.target.value })}
@@ -103,14 +103,14 @@ export function IntercompanyPosting({ companies, pairs, canPost, today }: {
                       <option value="H">H</option>
                     </select>
                   </td>
-                  <td className="px-2 py-2">
+                  <td>
                     <input
                       name="amount" className="input w-32" inputMode="decimal" value={line.amount}
                       onChange={(e) => update(line.key, { amount: e.target.value })}
                       aria-label={`Amount line ${line.key}`} required
                     />
                   </td>
-                  <td className="px-2 py-2">
+                  <td>
                     <input
                       name="costCenter" className="input w-32" maxLength={20} value={line.costCenter}
                       onChange={(e) => update(line.key, { costCenter: e.target.value })}

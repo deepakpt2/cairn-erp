@@ -40,28 +40,28 @@ function Notice({ state }: { state: ParkedInvoiceActionState }) {
         <p data-parked-invoice-no-post className="mt-1">{t('parkedInvoice.noPost')}</p>
       )}
       {preview && preview.lines.length > 0 && (
-        <table className="mt-3 w-full text-sm" data-parked-invoice-match>
+        <table className="grid-table mt-3 text-sm" data-parked-invoice-match>
           <thead>
             <tr className="text-left text-ink-soft">
-              <th className="py-1 pr-3">{t('parkedInvoice.item')}</th>
-              <th className="py-1 pr-3">{t('parkedInvoice.quantity')}</th>
-              <th className="py-1 pr-3">{t('parkedInvoice.received')}</th>
-              <th className="py-1 pr-3">{t('parkedInvoice.invoiced')}</th>
-              <th className="py-1 pr-3">{t('parkedInvoice.invoiceable')}</th>
-              <th className="py-1 pr-3">{t('parkedInvoice.net')}</th>
-              <th className="py-1">Expected</th>
+              <th>{t('parkedInvoice.item')}</th>
+              <th>{t('parkedInvoice.quantity')}</th>
+              <th>{t('parkedInvoice.received')}</th>
+              <th>{t('parkedInvoice.invoiced')}</th>
+              <th>{t('parkedInvoice.invoiceable')}</th>
+              <th>{t('parkedInvoice.net')}</th>
+              <th>Expected</th>
             </tr>
           </thead>
           <tbody>
             {preview.lines.map((line) => (
               <tr key={line.itemNumber}>
-                <td className="py-1 pr-3">{line.itemNumber}</td>
-                <td className="py-1 pr-3">{line.quantity}</td>
-                <td className="py-1 pr-3">{line.received}</td>
-                <td className="py-1 pr-3" data-parked-invoiced={line.itemNumber}>{line.invoiced}</td>
-                <td className="py-1 pr-3">{line.invoiceable}</td>
-                <td className="py-1 pr-3">{line.netAmount}</td>
-                <td className="py-1">{line.expectedAmount}</td>
+                <td>{line.itemNumber}</td>
+                <td>{line.quantity}</td>
+                <td>{line.received}</td>
+                <td data-parked-invoiced={line.itemNumber}>{line.invoiced}</td>
+                <td>{line.invoiceable}</td>
+                <td>{line.netAmount}</td>
+                <td>{line.expectedAmount}</td>
               </tr>
             ))}
           </tbody>
@@ -115,7 +115,7 @@ export default function ParkedInvoice({
 
   return (
     <>
-      <section aria-labelledby="parked-invoice-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="parked-invoice-lookup" className="border border-line bg-surface p-4">
         <h2 id="parked-invoice-lookup" className="text-sm font-semibold">{t('parkedInvoice.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <Field label={t('parkedInvoice.order')}>
@@ -147,7 +147,7 @@ export default function ParkedInvoice({
       </section>
 
       {opened && (
-        <section aria-labelledby="parked-invoice-maintain" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="parked-invoice-maintain" className="border border-line bg-surface p-4">
           <h2 id="parked-invoice-maintain" className="text-sm font-semibold">
             {standing ? standing.parkedNumber : opened.orderNumber}
           </h2>
@@ -201,28 +201,28 @@ export default function ParkedInvoice({
               </Field>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">{t('parkedInvoice.item')}</th>
-                    <th className="px-2 py-2">{t('parkedInvoice.received')}</th>
-                    <th className="px-2 py-2">{t('parkedInvoice.invoiced')}</th>
-                    <th className="px-2 py-2">{t('parkedInvoice.invoiceable')}</th>
-                    <th className="px-2 py-2">{t('parkedInvoice.quantity')}</th>
-                    <th className="px-2 py-2">{t('parkedInvoice.net')}</th>
-                    <th className="px-2 py-2">{t('parkedInvoice.tax')}</th>
+                    <th>{t('parkedInvoice.item')}</th>
+                    <th>{t('parkedInvoice.received')}</th>
+                    <th>{t('parkedInvoice.invoiced')}</th>
+                    <th>{t('parkedInvoice.invoiceable')}</th>
+                    <th>{t('parkedInvoice.quantity')}</th>
+                    <th>{t('parkedInvoice.net')}</th>
+                    <th>{t('parkedInvoice.tax')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {opened.items.map((item) => {
                     const saved = savedLine(item.itemNumber);
                     return (
-                      <tr key={item.itemNumber} className="border-t border-line" data-parked-line={item.itemNumber}>
-                        <td className="px-2 py-2">{item.itemNumber} · {item.materialNumber ?? item.shortText}</td>
-                        <td className="px-2 py-2" data-received={item.itemNumber}>{item.received}</td>
-                        <td className="px-2 py-2" data-invoiced={item.itemNumber}>{item.invoiced}</td>
-                        <td className="px-2 py-2" data-invoiceable={item.itemNumber}>{item.invoiceable}</td>
-                        <td className="px-2 py-2">
+                      <tr key={item.itemNumber} data-parked-line={item.itemNumber}>
+                        <td>{item.itemNumber} · {item.materialNumber ?? item.shortText}</td>
+                        <td data-received={item.itemNumber}>{item.received}</td>
+                        <td data-invoiced={item.itemNumber}>{item.invoiced}</td>
+                        <td data-invoiceable={item.itemNumber}>{item.invoiceable}</td>
+                        <td>
                           {item.eligible ? (
                             <input name={`qty-${item.itemNumber}`} className="input w-24" defaultValue={saved?.quantity ?? (item.invoiceable > 0 ? String(item.invoiceable) : '')} />
                           ) : (
@@ -238,12 +238,12 @@ export default function ParkedInvoice({
                             </>
                           )}
                         </td>
-                        <td className="px-2 py-2">
+                        <td>
                           {item.eligible && (
                             <input name={`amt-${item.itemNumber}`} className="input w-28" defaultValue={saved?.netAmount ?? ''} />
                           )}
                         </td>
-                        <td className="px-2 py-2">
+                        <td>
                           {item.eligible && (
                             <select name={`tax-${item.itemNumber}`} className="input w-28" defaultValue={saved?.taxCode ?? item.taxCode}>
                               <option value="">—</option>

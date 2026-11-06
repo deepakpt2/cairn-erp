@@ -105,41 +105,41 @@ export default function Users({ client, users, query, status, canCreate, canMain
         </div>
 
         <div className="overflow-x-auto rounded border border-line">
-          <table className="w-full min-w-[850px] text-left text-sm">
+          <table className="grid-table min-w-[850px] text-left text-sm">
             <thead className="border-b border-line bg-row text-xs uppercase text-ink-soft">
               <tr>
-                <th scope="col" className="p-2">Account</th>
-                <th scope="col" className="p-2">Roles</th>
-                <th scope="col" className="p-2">Employee record</th>
-                <th scope="col" className="p-2">State</th>
-                <th scope="col" className="p-2">Last sign-in</th>
-                <th scope="col" className="p-2 text-right">Details</th>
+                <th scope="col">Account</th>
+                <th scope="col">Roles</th>
+                <th scope="col">Employee record</th>
+                <th scope="col">State</th>
+                <th scope="col">Last sign-in</th>
+                <th scope="col" className="text-right">Details</th>
               </tr>
             </thead>
             <tbody>
               {users.map((row) => (
-                <tr key={row.id} className="border-b border-faint align-top hover:bg-row">
-                  <td className="p-2">
+                <tr key={row.id} className="border-faint align-top hover:bg-row">
+                  <td>
                     <div className="font-medium">{row.username}</div>
                     <div className="text-xs text-ink-soft">{row.fullName}</div>
                     <div className="text-xs text-ink-faint">{row.email ?? 'No email on file'}</div>
                   </td>
-                  <td className="p-2">
+                  <td>
                     {row.roles.length ? <ul className="space-y-1">{row.roles.map((role) => <li key={role.code}><span className="code">{role.code}</span><span className="ml-1 text-xs text-ink-soft">{role.name}</span></li>)}</ul> : <span className="text-ink-faint">No current role</span>}
                   </td>
-                  <td className="p-2">{row.hasEmployeeRecord ? 'Linked separately' : 'No linked employee'}</td>
-                  <td className="p-2">
+                  <td>{row.hasEmployeeRecord ? 'Linked separately' : 'No linked employee'}</td>
+                  <td>
                     <div>{row.isActive ? 'Active' : 'Inactive'}</div>
                     <div className={row.isLocked ? 'text-danger' : 'text-ink-faint'}>{row.isLocked ? 'Locked' : 'Unlocked'}</div>
                     {row.mustChangePassword && <div className="text-xs text-warn">Password change required</div>}
                   </td>
-                  <td className="p-2 text-xs">{formatDate(row.lastLoginAt)}</td>
-                  <td className="p-2 text-right">
+                  <td className="text-xs">{formatDate(row.lastLoginAt)}</td>
+                  <td className="text-right">
                     <Link className="btn btn-default min-h-8" href={`/platform/users/${encodeURIComponent(row.username)}`}>Open</Link>
                   </td>
                 </tr>
               ))}
-              {!users.length && <tr><td colSpan={6} className="p-5 text-center text-ink-faint">No application accounts match these filters.</td></tr>}
+              {!users.length && <tr><td colSpan={6} className="text-center text-ink-faint">No application accounts match these filters.</td></tr>}
             </tbody>
           </table>
         </div>

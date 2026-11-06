@@ -138,19 +138,19 @@ export default function MaterialDocumentOutput({ result, selection, slip, route 
           </p>
 
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="py-1">{t('mb90.columnDocument')}</th>
-                  <th className="py-1">{t('mb90.columnYear')}</th>
-                  <th className="py-1">{t('mb90.columnOutput')}</th>
-                  <th className="py-1">{t('mb90.columnMedium')}</th>
-                  <th className="py-1">{t('mb90.columnDispatch')}</th>
-                  <th className="py-1">{t('mb90.columnStatus')}</th>
-                  <th className="py-1 text-right">{t('mb90.columnSends')}</th>
-                  <th className="py-1">{t('mb90.columnRecipient')}</th>
-                  <th className="py-1">{t('mb90.columnLast')}</th>
-                  <th className="py-1">{t('mb90.columnActions')}</th>
+                  <th>{t('mb90.columnDocument')}</th>
+                  <th>{t('mb90.columnYear')}</th>
+                  <th>{t('mb90.columnOutput')}</th>
+                  <th>{t('mb90.columnMedium')}</th>
+                  <th>{t('mb90.columnDispatch')}</th>
+                  <th>{t('mb90.columnStatus')}</th>
+                  <th className="text-right">{t('mb90.columnSends')}</th>
+                  <th>{t('mb90.columnRecipient')}</th>
+                  <th>{t('mb90.columnLast')}</th>
+                  <th>{t('mb90.columnActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -162,22 +162,22 @@ export default function MaterialDocumentOutput({ result, selection, slip, route 
                     data-medium={row.transmissionMedium}
                     data-status={row.status}
                     data-sends={row.sendCount}
-                    className="border-t border-line align-top"
+                    className="align-top"
                   >
-                    <td className="py-1"><span className="code">{row.documentNumber}</span></td>
-                    <td className="py-1">{row.documentYear}</td>
-                    <td className="py-1">{row.outputType} <span className="text-ink-soft">{row.outputTypeDescription}</span></td>
-                    <td className="py-1">{row.transmissionMedium} <span className="text-ink-faint">({MEDIUM_ALIAS[row.transmissionMedium] ?? '?'})</span></td>
-                    <td className="py-1">{row.dispatchTime} <span className="text-ink-faint">({DISPATCH_ALIAS[row.dispatchTime] ?? '?'})</span></td>
-                    <td className="py-1">
+                    <td><span className="code">{row.documentNumber}</span></td>
+                    <td>{row.documentYear}</td>
+                    <td>{row.outputType} <span className="text-ink-soft">{row.outputTypeDescription}</span></td>
+                    <td>{row.transmissionMedium} <span className="text-ink-faint">({MEDIUM_ALIAS[row.transmissionMedium] ?? '?'})</span></td>
+                    <td>{row.dispatchTime} <span className="text-ink-faint">({DISPATCH_ALIAS[row.dispatchTime] ?? '?'})</span></td>
+                    <td>
                       <span data-status-code={row.statusCode}>{row.status}</span>
                       <span className="ms-1 text-ink-faint">({row.statusCode})</span>
                       {row.errorText ? <div className="text-xs text-red-700">{row.errorText}</div> : null}
                     </td>
-                    <td className="py-1 text-right tabular-nums">{row.sendCount}</td>
-                    <td className="py-1">{row.recipient ?? '—'}</td>
-                    <td className="py-1 code text-xs">{row.lastProcessedAt ?? '—'}</td>
-                    <td className="py-1">
+                    <td className="text-right tabular-nums">{row.sendCount}</td>
+                    <td>{row.recipient ?? '—'}</td>
+                    <td className="code text-xs">{row.lastProcessedAt ?? '—'}</td>
+                    <td>
                       <div className="flex flex-wrap items-center gap-2">
                         <form action={oneAction}>
                           <input type="hidden" name="documentNumber" value={row.documentNumber} />

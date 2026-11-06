@@ -48,11 +48,11 @@ export default async function ChangeAssetPage({ searchParams }: {
       </header>
 
       {!canChange ? (
-        <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft shadow-card">
+        <p className="border border-line bg-surface p-4 text-sm text-ink-soft">
           You do not hold the asset change capability.
         </p>
       ) : !asset ? (
-        <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft shadow-card">
+        <p className="border border-line bg-surface p-4 text-sm text-ink-soft">
           No asset stands under this key. Choose one from the asset list.
         </p>
       ) : changeLock?.mode === 'DISPLAY' ? (

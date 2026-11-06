@@ -33,7 +33,7 @@ export default function OrderConfirmationWorkbench({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-card border border-line bg-surface p-4 text-sm shadow-card" data-co15-order={loaded.orderNumber}>
+      <section className="border border-line bg-surface p-4 text-sm" data-co15-order={loaded.orderNumber}>
         <p>{loaded.orderNumber} · {loaded.materialNumber} {loaded.materialDescription}</p>
         <p>Plant {loaded.plant}. Quantity {loaded.orderQuantity} {loaded.unit}. Status {loaded.status}. Record version {loaded.version}.</p>
         <p>Previously confirmed at header {loaded.previouslyConfirmed} {loaded.unit}. Remaining {loaded.remainingQuantity} {loaded.unit}. Scrap {loaded.previouslyScrapped}. Rework {loaded.previouslyReworked}.</p>
@@ -44,7 +44,7 @@ export default function OrderConfirmationWorkbench({
       </section>
 
       {loaded.operations.length > 0 && (
-        <table className="w-full text-sm" data-co15-operations>
+        <table className="grid-table text-sm" data-co15-operations>
           <thead>
             <tr className="text-left text-ink-faint">
               <th>Execution order</th>
@@ -57,8 +57,8 @@ export default function OrderConfirmationWorkbench({
           <tbody>
             {loaded.operations.map((row) => (
               <tr key={row.operationNumber} data-co15-operation={row.operationNumber}>
-                <td className="py-1">{row.executionOrder}</td>
-                <td className="py-1">{row.operationNumber} {row.shortText ?? ''}</td>
+                <td>{row.executionOrder}</td>
+                <td>{row.operationNumber} {row.shortText ?? ''}</td>
                 <td>{row.workCenter ?? '—'}</td>
                 <td>{row.yieldQuantity} {loaded.unit}</td>
                 <td>{loaded.eligible.includes(row.operationNumber) ? 'Eligible' : row.blockingReason}{row.cancellationNote ? ` ${row.cancellationNote}` : ''}</td>
@@ -68,7 +68,7 @@ export default function OrderConfirmationWorkbench({
         </table>
       )}
 
-      <form action={action} className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <form action={action} className="border border-line bg-surface p-4">
         <input type="hidden" name="requestKey" value={requestKey} />
         <input type="hidden" name="orderNumber" value={loaded.orderNumber} />
         <input type="hidden" name="productionVersion" value={loaded.productionVersion ?? ''} />

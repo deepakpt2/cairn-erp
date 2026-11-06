@@ -37,7 +37,7 @@ export function RetainedEarnings({ rows, charts, canMaintain }: {
 }) {
   return (
     <>
-      <section aria-labelledby="re-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="re-list" className="border border-line bg-surface p-4">
         <h2 id="re-list" className="text-sm font-semibold">Configured retained earnings accounts</h2>
         {rows.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">
@@ -45,22 +45,22 @@ export function RetainedEarnings({ rows, charts, canMaintain }: {
           </p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Chart of Accounts</th><th className="px-2 py-2">Indicator</th>
-                  <th className="px-2 py-2">Retained Earnings Account</th><th className="px-2 py-2">Account Name</th>
-                  <th className="px-2 py-2">P&amp;L Accounts</th>
+                  <th>Chart of Accounts</th><th>Indicator</th>
+                  <th>Retained Earnings Account</th><th>Account Name</th>
+                  <th>P&amp;L Accounts</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={`${row.chartOfAccounts}|${row.indicator}`} className="border-t border-line">
-                    <td className="code px-2 py-2">{row.chartOfAccounts}</td>
-                    <td className="code px-2 py-2">{row.indicator}</td>
-                    <td className="code px-2 py-2">{row.glAccount}</td>
-                    <td className="px-2 py-2">{row.accountName}</td>
-                    <td className="tabular px-2 py-2">{row.plAccounts}</td>
+                  <tr key={`${row.chartOfAccounts}|${row.indicator}`}>
+                    <td className="code">{row.chartOfAccounts}</td>
+                    <td className="code">{row.indicator}</td>
+                    <td className="code">{row.glAccount}</td>
+                    <td>{row.accountName}</td>
+                    <td className="tabular">{row.plAccounts}</td>
                   </tr>
                 ))}
               </tbody>
@@ -91,7 +91,7 @@ function MaintainDetermination({ rows, charts }: {
   const lock = useChangeLock('RETAINED_EARNINGS', determinationArgument(chart, indicator), ACTIVITY, engaged && existing);
   const blocked = existing && lock?.mode === 'DISPLAY';
   return (
-    <section aria-labelledby="re-maintain" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="re-maintain" className="border border-line bg-surface p-4">
       <h2 id="re-maintain" className="text-sm font-semibold">Maintain an indicator</h2>
       <form action={maintain} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" onFocus={() => setEngaged(true)} onSubmit={(event) => { if (existing && lock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
         <label className="block">
@@ -135,7 +135,7 @@ function DeleteDetermination() {
   const lock = useChangeLock('RETAINED_EARNINGS', determinationArgument(chart, indicator), ACTIVITY, engaged && ready);
   const held = !ready || lock?.mode === 'CHANGE';
   return (
-    <section aria-labelledby="re-delete" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="re-delete" className="border border-line bg-surface p-4">
       <h2 id="re-delete" className="text-sm font-semibold">Delete an indicator</h2>
       <form action={remove} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" onFocus={() => setEngaged(true)} onSubmit={(event) => { if (lock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
         <label className="block">

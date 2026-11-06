@@ -89,13 +89,13 @@ export default function CostCenterReportShell({ canUse, areas, selection, result
                 <td>
                   <span style={{ paddingInlineStart: `${row.depth * 1.25}rem` }}>{row.label}</span>
                 </td>
-                <td className="text-end">{row.actual.toFixed(2)}</td>
-                <td className="text-end">{row.plan === null ? '—' : row.plan.toFixed(2)}</td>
-                <td className="text-end">{row.variance === null ? '—' : row.variance.toFixed(2)}</td>
-                <td className="text-end">{row.variancePercent === null ? '—' : `${row.variancePercent.toFixed(1)}%`}</td>
+                <td className="text-end num">{row.actual.toFixed(2)}</td>
+                <td className="text-end num">{row.plan === null ? '—' : row.plan.toFixed(2)}</td>
+                <td className="text-end num">{row.variance === null ? '—' : row.variance.toFixed(2)}</td>
+                <td className="text-end num">{row.variancePercent === null ? '—' : `${row.variancePercent.toFixed(1)}%`}</td>
                 <td>{row.status === null ? '—' : row.status === 'ON_PLAN' ? 'On plan' : row.status === 'FAVORABLE' ? 'Favorable' : 'Unfavorable'}</td>
-                <td className="text-end">{row.actualYtd.toFixed(2)}</td>
-                <td className="text-end">{row.planYtd === null ? '—' : row.planYtd.toFixed(2)}</td>
+                <td className="text-end num">{row.actualYtd.toFixed(2)}</td>
+                <td className="text-end num">{row.planYtd === null ? '—' : row.planYtd.toFixed(2)}</td>
                 <td>{result?.currency ?? ''}</td>
                 <td>
                   {row.kind !== 'GROUP' && row.costCenter ? (
@@ -140,8 +140,8 @@ export default function CostCenterReportShell({ canUse, areas, selection, result
                   <td>{activity.costCenter}</td>
                   <td>{activity.activityType}</td>
                   <td className="text-end">{activity.plannedQuantity}</td>
-                  <td className="text-end">{activity.fixedPrice.toFixed(2)}</td>
-                  <td className="text-end">{activity.variablePrice.toFixed(2)}</td>
+                  <td className="text-end num">{activity.fixedPrice.toFixed(2)}</td>
+                  <td className="text-end num">{activity.variablePrice.toFixed(2)}</td>
                   <td className="text-end">{activity.priceUnit}</td>
                 </tr>
               ))}

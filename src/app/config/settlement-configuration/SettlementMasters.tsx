@@ -235,29 +235,29 @@ function AllocationStructures({ structures, canMaintain }: { structures: Structu
       title="Allocation structures"
       hint="Where an account settles to. Every order that reads a profile of this structure shares these rows."
     >
-      <table className="w-full text-sm">
+      <table className="grid-table text-sm">
         <thead>
-          <tr className="border-b border-line text-start text-xs text-ink-faint">
-            <th className="py-2 text-start">Structure</th>
-            <th className="py-2 text-start">Description</th>
-            <th className="py-2 text-end">Assignments</th>
-            <th className="py-2 text-end">Profiles</th>
-            <th className="py-2 text-end">Order types</th>
-            <th className="py-2" />
+          <tr className="text-start text-xs text-ink-faint">
+            <th className="text-start">Structure</th>
+            <th className="text-start">Description</th>
+            <th className="text-end">Assignments</th>
+            <th className="text-end">Profiles</th>
+            <th className="text-end">Order types</th>
+            <th />
           </tr>
         </thead>
         <tbody>
           {structures.length === 0 && (
-            <tr><td colSpan={6} className="py-3 text-ink-faint">No allocation structure is defined yet.</td></tr>
+            <tr><td colSpan={6} className="text-ink-faint">No allocation structure is defined yet.</td></tr>
           )}
           {structures.map((row) => (
             <tr key={row.structureCode} className={`border-b border-line ${selected === row.structureCode ? 'bg-sunken' : ''}`}>
-              <td className="py-2"><Code value={row.structureCode} /></td>
-              <td className="py-2">{row.description}</td>
-              <td className="py-2 text-end tabular">{row.assignments.length}</td>
-              <td className="py-2 text-end tabular">{row.profiles}</td>
-              <td className="py-2 text-end tabular">{row.orderTypes}</td>
-              <td className="py-2 text-end">
+              <td><Code value={row.structureCode} /></td>
+              <td>{row.description}</td>
+              <td className="text-end tabular">{row.assignments.length}</td>
+              <td className="text-end tabular">{row.profiles}</td>
+              <td className="text-end tabular">{row.orderTypes}</td>
+              <td className="text-end">
                 {canMaintain && (
                   <button
                     type="button"
@@ -593,31 +593,31 @@ function SettlementProfiles({
 
   return (
     <Panel title="Settlement profiles" hint="What an order of a type settles against: its document type, its allowed methods, and its allocation structure.">
-      <table className="w-full text-sm">
+      <table className="grid-table text-sm">
         <thead>
-          <tr className="border-b border-line text-start text-xs text-ink-faint">
-            <th className="py-2 text-start">Profile</th>
-            <th className="py-2 text-start">Description</th>
-            <th className="py-2 text-start">Structure</th>
-            <th className="py-2 text-start">Document type</th>
-            <th className="py-2 text-start">Methods</th>
-            <th className="py-2 text-start">Order types</th>
-            <th className="py-2" />
+          <tr className="text-start text-xs text-ink-faint">
+            <th className="text-start">Profile</th>
+            <th className="text-start">Description</th>
+            <th className="text-start">Structure</th>
+            <th className="text-start">Document type</th>
+            <th className="text-start">Methods</th>
+            <th className="text-start">Order types</th>
+            <th />
           </tr>
         </thead>
         <tbody>
-          {profiles.length === 0 && <tr><td colSpan={7} className="py-3 text-ink-faint">No settlement profile is defined yet.</td></tr>}
+          {profiles.length === 0 && <tr><td colSpan={7} className="text-ink-faint">No settlement profile is defined yet.</td></tr>}
           {profiles.map((row) => (
             <tr key={row.profileCode} className={`border-b border-line ${selected === row.profileCode ? 'bg-sunken' : ''}`}>
-              <td className="py-2"><Code value={row.profileCode} />{!row.isActive && <span className="ms-2 chip chip-neutral">inactive</span>}</td>
-              <td className="py-2">{row.description}</td>
-              <td className="py-2"><Code value={row.allocationStructure} /></td>
-              <td className="py-2"><Code value={row.documentType} /></td>
-              <td className="py-2 text-xs">
+              <td><Code value={row.profileCode} />{!row.isActive && <span className="ms-2 chip chip-neutral">inactive</span>}</td>
+              <td>{row.description}</td>
+              <td><Code value={row.allocationStructure} /></td>
+              <td><Code value={row.documentType} /></td>
+              <td className="text-xs">
                 {[row.percentageAllowed && 'percentage', row.equivalenceAllowed && 'equivalence', row.amountAllowed && 'amount'].filter(Boolean).join(', ')}
               </td>
-              <td className="py-2 text-xs">{row.orderTypes.length > 0 ? row.orderTypes.join(', ') : '—'}</td>
-              <td className="py-2 text-end">
+              <td className="text-xs">{row.orderTypes.length > 0 ? row.orderTypes.join(', ') : '—'}</td>
+              <td className="text-end">
                 {canMaintain && (
                   <button
                     type="button"
@@ -671,31 +671,31 @@ function OrderTypeAssignments({
 
   return (
     <Panel title="Order type settlement profile" hint="Which profile every order of a type reads. A rule of one order never changes this row.">
-      <table className="w-full text-sm">
+      <table className="grid-table text-sm">
         <thead>
-          <tr className="border-b border-line text-start text-xs text-ink-faint">
-            <th className="py-2 text-start">Order type</th>
-            <th className="py-2 text-start">Description</th>
-            <th className="py-2 text-start">Profile</th>
-            <th className="py-2 text-end">Orders</th>
-            <th className="py-2 text-end">With rules</th>
-            <th className="py-2 text-end">Settled</th>
-            <th className="py-2" />
+          <tr className="text-start text-xs text-ink-faint">
+            <th className="text-start">Order type</th>
+            <th className="text-start">Description</th>
+            <th className="text-start">Profile</th>
+            <th className="text-end">Orders</th>
+            <th className="text-end">With rules</th>
+            <th className="text-end">Settled</th>
+            <th />
           </tr>
         </thead>
         <tbody>
           {orderTypes.length === 0 && (
-            <tr><td colSpan={7} className="py-3 text-ink-faint">No internal order type is defined, or your user may not maintain this screen.</td></tr>
+            <tr><td colSpan={7} className="text-ink-faint">No internal order type is defined, or your user may not maintain this screen.</td></tr>
           )}
           {orderTypes.map((row) => (
             <tr key={row.orderType} className={`border-b border-line ${selected === row.orderType ? 'bg-sunken' : ''}`}>
-              <td className="py-2"><Code value={row.orderType} /></td>
-              <td className="py-2">{row.description}</td>
-              <td className="py-2">{row.profileCode ? <Code value={row.profileCode} /> : <span className="text-ink-faint">not assigned</span>}</td>
-              <td className="py-2 text-end tabular">{row.orders}</td>
-              <td className="py-2 text-end tabular">{row.ordersWithRules}</td>
-              <td className="py-2 text-end tabular">{row.ordersWithSettlementDocuments}</td>
-              <td className="py-2 text-end">
+              <td><Code value={row.orderType} /></td>
+              <td>{row.description}</td>
+              <td>{row.profileCode ? <Code value={row.profileCode} /> : <span className="text-ink-faint">not assigned</span>}</td>
+              <td className="text-end tabular">{row.orders}</td>
+              <td className="text-end tabular">{row.ordersWithRules}</td>
+              <td className="text-end tabular">{row.ordersWithSettlementDocuments}</td>
+              <td className="text-end">
                 {canMaintain && (
                   <button
                     type="button"

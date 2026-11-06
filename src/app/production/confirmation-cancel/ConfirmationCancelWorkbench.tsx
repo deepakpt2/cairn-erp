@@ -38,7 +38,7 @@ export default function ConfirmationCancelWorkbench({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-card border border-line bg-surface p-4 text-sm shadow-card" data-co13-confirmation={detail.confirmationNumber}>
+      <section className="border border-line bg-surface p-4 text-sm" data-co13-confirmation={detail.confirmationNumber}>
         <p>Confirmation {detail.confirmationNumber} · {detail.confirmationType} · {detail.confirmationLevel === 'HEADER' ? 'header' : `operation ${detail.operationNumber}`}</p>
         <p>Order {detail.orderNumber} · {detail.materialNumber} {detail.materialDescription} · plant {detail.plant}</p>
         <p>Posting date {detail.postingDate}. Entered by {detail.createdBy} at {detail.createdAt}. Those values are not changed here.</p>
@@ -76,7 +76,7 @@ export default function ConfirmationCancelWorkbench({
         </p>
       </section>
 
-      <form action={action} className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <form action={action} className="border border-line bg-surface p-4">
         <input type="hidden" name="requestKey" value={requestKey} />
         <input type="hidden" name="confirmationNumber" value={detail.confirmationNumber} />
         <label className="block text-sm">

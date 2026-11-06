@@ -64,20 +64,20 @@ export default function ProductionCogiWorkbench({ detail }: { detail: Production
       </div>
 
       <div className="overflow-x-auto rounded border border-line">
-        <table className="w-full min-w-[780px] text-left text-sm">
+        <table className="grid-table min-w-[780px] text-left text-sm">
           <thead className="bg-surface-2 text-xs uppercase text-ink-faint">
-            <tr><th className="p-2">Line</th><th className="p-2">Material</th><th className="p-2">Original CO11N snapshot</th><th className="p-2">Effective posting details</th><th className="p-2">Reservation / special stock</th></tr>
+            <tr><th>Line</th><th>Material</th><th>Original CO11N snapshot</th><th>Effective posting details</th><th>Reservation / special stock</th></tr>
           </thead>
           <tbody>
             {detail.lines.map((line, index) => {
               const current = effectiveLines[index] as { quantity: number | string; storageLocation: string | null; batch: string | null; entryUnit?: string | null } | undefined;
               return (
-                <tr key={line.lineNumber} className="border-t border-line align-top">
-                  <td className="p-2">{line.lineNumber}</td>
-                  <td className="p-2">{line.materialNumber}<br />{line.plant}{line.productionOrderItem ? ` · item ${line.productionOrderItem}` : ''}</td>
-                  <td className="p-2">{line.quantity} {line.unit}<br />SLoc {line.storageLocation ?? '—'}<br />Batch {line.batchNumber || '—'}</td>
-                  <td className="p-2">{current ? <>{quantity(current.quantity)} {current.entryUnit ?? line.unit}<br />SLoc {current.storageLocation ?? '—'}<br />Batch {current.batch ?? '—'}</> : 'Stored source details unavailable'}</td>
-                  <td className="p-2">Reservation {line.reservationNumber ? `${line.reservationNumber}/${line.reservationItem ?? ''}` : '—'}<br />Special stock {line.specialStockType ? `${line.specialStockType} · ${line.specialStockNumber ?? ''}` : '—'}</td>
+                <tr key={line.lineNumber} className="align-top">
+                  <td>{line.lineNumber}</td>
+                  <td>{line.materialNumber}<br />{line.plant}{line.productionOrderItem ? ` · item ${line.productionOrderItem}` : ''}</td>
+                  <td>{line.quantity} {line.unit}<br />SLoc {line.storageLocation ?? '—'}<br />Batch {line.batchNumber || '—'}</td>
+                  <td>{current ? <>{quantity(current.quantity)} {current.entryUnit ?? line.unit}<br />SLoc {current.storageLocation ?? '—'}<br />Batch {current.batch ?? '—'}</> : 'Stored source details unavailable'}</td>
+                  <td>Reservation {line.reservationNumber ? `${line.reservationNumber}/${line.reservationItem ?? ''}` : '—'}<br />Special stock {line.specialStockType ? `${line.specialStockType} · ${line.specialStockNumber ?? ''}` : '—'}</td>
                 </tr>
               );
             })}

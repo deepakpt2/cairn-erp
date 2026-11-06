@@ -73,32 +73,32 @@ export default function ShelfLifeListShell({ canUse, selection, result, reportEr
           </p>
           {result.warnings.map((warning) => <p key={warning} className="text-sm text-ink-soft">{warning}</p>)}
           {result.rows.length === 0 ? <p className="mt-2 text-sm">{t('mb5m.noRows')}</p> : (
-            <table className="mt-2 w-full text-sm">
+            <table className="grid-table mt-2 text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-ink-soft">
-                  <th className="py-2 pr-3">{t('mb5m.materialFrom')}</th>
-                  <th className="py-2 pr-3">{t('mb5m.plantFrom')}</th>
-                  <th className="py-2 pr-3">{t('mb5m.locationFrom')}</th>
-                  <th className="py-2 pr-3">{t('mb5m.batchFrom')}</th>
-                  <th className="py-2 pr-3">{t('mb5m.manufacture')}</th>
-                  <th className="py-2 pr-3">{t('mb5m.expiration')}</th>
-                  <th className="py-2 pr-3">{t('mb5m.remaining')}</th>
-                  <th className="py-2 pr-3">{t('mb5m.quantity')}</th>
-                  <th className="py-2">{t('mb5m.open')}</th>
+                <tr className="text-left text-ink-soft">
+                  <th>{t('mb5m.materialFrom')}</th>
+                  <th>{t('mb5m.plantFrom')}</th>
+                  <th>{t('mb5m.locationFrom')}</th>
+                  <th>{t('mb5m.batchFrom')}</th>
+                  <th>{t('mb5m.manufacture')}</th>
+                  <th>{t('mb5m.expiration')}</th>
+                  <th>{t('mb5m.remaining')}</th>
+                  <th>{t('mb5m.quantity')}</th>
+                  <th>{t('mb5m.open')}</th>
                 </tr>
               </thead>
               <tbody>
                 {result.rows.map((row) => (
-                  <tr key={`${row.materialNumber}-${row.plant}-${row.storageLocation}-${row.batch}`} className="border-b border-line">
-                    <td className="py-2 pr-3"><span className="code">{row.materialNumber}</span> {row.materialDescription}</td>
-                    <td className="code py-2 pr-3">{row.plant}</td>
-                    <td className="code py-2 pr-3">{row.storageLocation || '—'}</td>
-                    <td className="code py-2 pr-3">{row.batch}</td>
-                    <td className="code py-2 pr-3">{row.manufactureDate ?? '—'}</td>
-                    <td className="code py-2 pr-3">{row.expirationDate ?? '—'}{row.comparedExpiration !== row.expirationDate ? ` / ${row.comparedExpiration}` : ''}</td>
-                    <td className="py-2 pr-3">{row.displayRemaining} · {row.classification}</td>
-                    <td className="code py-2 pr-3">{row.unrestrictedQuantity} {row.baseUnit}</td>
-                    <td className="py-2">
+                  <tr key={`${row.materialNumber}-${row.plant}-${row.storageLocation}-${row.batch}`}>
+                    <td><span className="code">{row.materialNumber}</span> {row.materialDescription}</td>
+                    <td className="code">{row.plant}</td>
+                    <td className="code">{row.storageLocation || '—'}</td>
+                    <td className="code">{row.batch}</td>
+                    <td className="code">{row.manufactureDate ?? '—'}</td>
+                    <td className="code">{row.expirationDate ?? '—'}{row.comparedExpiration !== row.expirationDate ? ` / ${row.comparedExpiration}` : ''}</td>
+                    <td>{row.displayRemaining} · {row.classification}</td>
+                    <td className="code">{row.unrestrictedQuantity} {row.baseUnit}</td>
+                    <td>
                       <Link className="underline" href={row.batchHref}>MSC3N</Link>
                       {' · '}
                       <Link className="underline" href={row.materialHref}>MM03</Link>

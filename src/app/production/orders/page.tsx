@@ -48,7 +48,7 @@ export default async function ProductionOrdersPage({ searchParams }: {
       </header>
 
       {existing && (
-        <section aria-labelledby="order-existing" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="order-existing" className="border border-line bg-surface p-4">
           <h2 id="order-existing" className="text-sm font-semibold">
             {t('co01.order')} <span className="code" data-order-number={existing.orderNumber}>{existing.orderNumber}</span>
           </h2>
@@ -70,24 +70,24 @@ export default async function ProductionOrdersPage({ searchParams }: {
             {' · '}
             <Link href={`/production/production-order-change?order=${encodeURIComponent(existing.orderNumber)}`}>Change</Link>
           </p>
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('co01.columnItem')}</th>
-                <th className="py-1">{t('co01.columnMaterial')}</th>
-                <th className="py-1">{t('co01.columnPlant')}</th>
-                <th className="py-1">{t('co01.columnLocation')}</th>
-                <th className="py-1 text-right">{t('co01.columnQuantity')}</th>
+                <th>{t('co01.columnItem')}</th>
+                <th>{t('co01.columnMaterial')}</th>
+                <th>{t('co01.columnPlant')}</th>
+                <th>{t('co01.columnLocation')}</th>
+                <th className="text-right">{t('co01.columnQuantity')}</th>
               </tr>
             </thead>
             <tbody>
               {existing.components.map((c) => (
-                <tr key={c.itemNumber} className="border-t border-line" data-item={c.itemNumber} data-bom-item={c.bomItem ?? ''}>
-                  <td className="py-1">{c.itemNumber}</td>
-                  <td className="py-1">{c.materialNumber} · {c.materialDescription ?? '—'}</td>
-                  <td className="py-1">{c.plant}</td>
-                  <td className="py-1">{c.storageLocation ?? '—'}</td>
-                  <td className="py-1 text-right tabular">{c.requiredQuantity} {c.unit}</td>
+                <tr key={c.itemNumber} data-item={c.itemNumber} data-bom-item={c.bomItem ?? ''}>
+                  <td>{c.itemNumber}</td>
+                  <td>{c.materialNumber} · {c.materialDescription ?? '—'}</td>
+                  <td>{c.plant}</td>
+                  <td>{c.storageLocation ?? '—'}</td>
+                  <td className="text-right tabular">{c.requiredQuantity} {c.unit}</td>
                 </tr>
               ))}
             </tbody>

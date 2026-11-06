@@ -38,7 +38,7 @@ export default function AcquireForm({ preview: initialPreview, canAcquire, today
   const preview = simState.preview ?? initialPreview;
   return (
     <>
-      <section aria-labelledby="aq-entry" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="aq-entry" className="border border-line bg-surface p-4">
         <h2 id="aq-entry" className="text-sm font-semibold">Acquisition details</h2>
         <form className="mt-3">
           <input type="hidden" name="requestKey" value={requestKey} />
@@ -96,29 +96,29 @@ export default function AcquireForm({ preview: initialPreview, canAcquire, today
         </form>
       </section>
 
-      <section aria-labelledby="aq-preview" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="aq-preview" className="border border-line bg-surface p-4">
         <h2 id="aq-preview" className="text-sm font-semibold">Simulation preview</h2>
         {!preview ? (
           <p className="mt-2 text-sm text-ink-soft">Simulate to preview the determined posting before anything is written.</p>
         ) : (
           <div className="mt-2 text-sm">
             <p>{preview.assetDescription} · Class {preview.assetClass} · Capitalization {preview.capitalizationDate}</p>
-            <table className="mt-2 min-w-full text-left">
+            <table className="grid-table mt-2 text-left">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Account</th><th className="px-2 py-2">Debit</th><th className="px-2 py-2">Credit</th>
+                  <th>Account</th><th>Debit</th><th>Credit</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-t border-line">
-                  <td className="px-2 py-2">{preview.reconAccount} (asset)</td>
-                  <td className="px-2 py-2">{preview.debitAmount.toFixed(2)} {preview.currency}</td>
-                  <td className="px-2 py-2">—</td>
+                <tr>
+                  <td>{preview.reconAccount} (asset)</td>
+                  <td className="num">{preview.debitAmount.toFixed(2)} {preview.currency}</td>
+                  <td>—</td>
                 </tr>
-                <tr className="border-t border-line">
-                  <td className="px-2 py-2">{preview.offsetAccount} (offsetting)</td>
-                  <td className="px-2 py-2">—</td>
-                  <td className="px-2 py-2">{preview.creditAmount.toFixed(2)} {preview.currency}</td>
+                <tr>
+                  <td>{preview.offsetAccount} (offsetting)</td>
+                  <td>—</td>
+                  <td className="num">{preview.creditAmount.toFixed(2)} {preview.currency}</td>
                 </tr>
               </tbody>
             </table>
@@ -129,7 +129,7 @@ export default function AcquireForm({ preview: initialPreview, canAcquire, today
         )}
       </section>
 
-      <section aria-labelledby="aq-reverse" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="aq-reverse" className="border border-line bg-surface p-4">
         <h2 id="aq-reverse" className="text-sm font-semibold">Reverse an acquisition</h2>
         {reverseState.message && (
           <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>

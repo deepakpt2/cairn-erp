@@ -36,7 +36,7 @@ export default function SingleLevelWorkbench({
 
   return (
     <div className="space-y-4">
-      <form action={action} className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <form action={action} className="border border-line bg-surface p-4">
         <input type="hidden" name="requestKey" value={requestKey} />
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block text-sm">
@@ -96,7 +96,7 @@ export default function SingleLevelWorkbench({
       </form>
 
       {shown && (
-        <section className="rounded-card border border-line bg-surface p-4 shadow-card" data-md03-run={shown.runNumber}>
+        <section className="border border-line bg-surface p-4" data-md03-run={shown.runNumber}>
           <h2 className="text-sm font-semibold">{t('md01.run')} {shown.runNumber}</h2>
           <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-4">
             <div><dt className="text-ink-soft">{t('md01.status')}</dt><dd>{shown.status}</dd></div>
@@ -104,7 +104,7 @@ export default function SingleLevelWorkbench({
             <div><dt className="text-ink-soft">{t('md01.processingKey')}</dt><dd>{shown.processingKey}</dd></div>
             <div><dt className="text-ink-soft">{t('md01.created')}</dt><dd>{shown.proposalsCreated}</dd></div>
           </dl>
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-ink-faint">
                 <th>{t('md01.materials')}</th>
@@ -115,7 +115,7 @@ export default function SingleLevelWorkbench({
             <tbody>
               {shown.materials.map((row) => (
                 <tr key={`${row.plant}/${row.materialNumber}`} data-md03-material={row.materialNumber}>
-                  <td className="py-1">
+                  <td>
                     <Link href={`/production/stock-requirements?material=${encodeURIComponent(row.materialNumber)}&plant=${encodeURIComponent(row.plant)}`}>
                       {row.materialNumber}
                     </Link>
@@ -127,7 +127,7 @@ export default function SingleLevelWorkbench({
             </tbody>
           </table>
           {shown.proposals.length > 0 && (
-            <table className="mt-3 w-full text-sm" data-md03-proposals>
+            <table className="grid-table mt-3 text-sm" data-md03-proposals>
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>{t('md01.proposals')}</th>
@@ -138,7 +138,7 @@ export default function SingleLevelWorkbench({
               <tbody>
                 {shown.proposals.map((row) => (
                   <tr key={row.lineNumber}>
-                    <td className="py-1">
+                    <td>
                       {row.proposalType === 'PLANNED_ORDER' && row.documentNumber ? (
                         <Link href={`/production/planned-order-display?order=${encodeURIComponent(row.documentNumber)}`}>
                           {row.documentNumber}
@@ -154,7 +154,7 @@ export default function SingleLevelWorkbench({
             </table>
           )}
           {shown.dependents.length > 0 && (
-            <table className="mt-3 w-full text-sm" data-md03-dependents>
+            <table className="grid-table mt-3 text-sm" data-md03-dependents>
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>{t('md02.dependents')}</th>
@@ -165,7 +165,7 @@ export default function SingleLevelWorkbench({
               <tbody>
                 {shown.dependents.map((row) => (
                   <tr key={`${row.componentMaterial}/${row.requirementDate}`}>
-                    <td className="py-1">{row.componentMaterial}</td>
+                    <td>{row.componentMaterial}</td>
                     <td>{row.quantity} {row.unit}</td>
                     <td>{row.requirementDate}</td>
                   </tr>

@@ -30,30 +30,30 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function Ratings({ ratings, preferred }: { ratings: QuotaRating[]; preferred?: string | null }) {
   if (ratings.length === 0) return null;
   return (
-    <table className="mt-3 w-full text-sm" data-quota-ratings>
+    <table className="grid-table mt-3 text-sm" data-quota-ratings>
       <thead>
         <tr className="text-left text-ink-soft">
-          <th className="py-1 pr-3">{t('quotaArrangement.item')}</th>
-          <th className="py-1 pr-3">{t('quotaArrangement.supplier')}</th>
-          <th className="py-1 pr-3">{t('quotaArrangement.purchasingOrg')}</th>
-          <th className="py-1 pr-3">{t('quotaArrangement.quota')}</th>
-          <th className="py-1 pr-3">{t('quotaArrangement.base')}</th>
-          <th className="py-1 pr-3">{t('quotaArrangement.allocated')}</th>
-          <th className="py-1 pr-3">{t('quotaArrangement.rating')}</th>
-          <th className="py-1">{t('quotaArrangement.eligible')}</th>
+          <th>{t('quotaArrangement.item')}</th>
+          <th>{t('quotaArrangement.supplier')}</th>
+          <th>{t('quotaArrangement.purchasingOrg')}</th>
+          <th>{t('quotaArrangement.quota')}</th>
+          <th>{t('quotaArrangement.base')}</th>
+          <th>{t('quotaArrangement.allocated')}</th>
+          <th>{t('quotaArrangement.rating')}</th>
+          <th>{t('quotaArrangement.eligible')}</th>
         </tr>
       </thead>
       <tbody>
         {ratings.map((row) => (
           <tr key={row.itemNumber} data-quota-rating={row.itemNumber} data-quota-preferred={preferred === row.itemNumber ? 'yes' : 'no'}>
-            <td className="py-1 pr-3">{row.itemNumber}</td>
-            <td className="py-1 pr-3">{row.partnerNumber}</td>
-            <td className="py-1 pr-3">{row.purchasingOrg}</td>
-            <td className="py-1 pr-3">{row.quota}</td>
-            <td className="py-1 pr-3">{row.baseQuantity}</td>
-            <td className="py-1 pr-3">{row.allocatedQuantity}</td>
-            <td className="py-1 pr-3">{row.rating}</td>
-            <td className="py-1">{row.eligible ? t('quotaArrangement.yes') : row.reason}</td>
+            <td>{row.itemNumber}</td>
+            <td>{row.partnerNumber}</td>
+            <td>{row.purchasingOrg}</td>
+            <td>{row.quota}</td>
+            <td>{row.baseQuantity}</td>
+            <td>{row.allocatedQuantity}</td>
+            <td>{row.rating}</td>
+            <td>{row.eligible ? t('quotaArrangement.yes') : row.reason}</td>
           </tr>
         ))}
       </tbody>
@@ -122,7 +122,7 @@ export default function QuotaWorkbench({
 
   return (
     <>
-      <section aria-labelledby="quota-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="quota-lookup" className="border border-line bg-surface p-4">
         <h2 id="quota-lookup" className="text-sm font-semibold">{t('quotaArrangement.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <Field label={t('quotaArrangement.number')}>
@@ -158,36 +158,36 @@ export default function QuotaWorkbench({
       </section>
 
       {arrangements.length > 0 && (
-        <section aria-labelledby="quota-standing" data-quota-standing className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="quota-standing" data-quota-standing className="border border-line bg-surface p-4">
           <h2 id="quota-standing" className="text-sm font-semibold">
             {arrangements[0].materialNumber} · {arrangements[0].plant}
           </h2>
           <p className="mt-1 text-xs text-ink-soft">{t('quotaArrangement.standingHint')}</p>
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-ink-soft">
-                <th className="py-1 pr-3">{t('quotaArrangement.number')}</th>
-                <th className="py-1 pr-3">{t('quotaArrangement.validFrom')}</th>
-                <th className="py-1 pr-3">{t('quotaArrangement.validTo')}</th>
-                <th className="py-1 pr-3">{t('quotaArrangement.item')}</th>
-                <th className="py-1 pr-3">{t('quotaArrangement.supplier')}</th>
-                <th className="py-1 pr-3">{t('quotaArrangement.quota')}</th>
-                <th className="py-1">{t('quotaArrangement.base')}</th>
+                <th>{t('quotaArrangement.number')}</th>
+                <th>{t('quotaArrangement.validFrom')}</th>
+                <th>{t('quotaArrangement.validTo')}</th>
+                <th>{t('quotaArrangement.item')}</th>
+                <th>{t('quotaArrangement.supplier')}</th>
+                <th>{t('quotaArrangement.quota')}</th>
+                <th>{t('quotaArrangement.base')}</th>
               </tr>
             </thead>
             <tbody>
               {arrangements.flatMap((arrangement) => arrangement.items.map((item) => (
                 <tr key={`${arrangement.quotaNumber}-${item.itemNumber}`} data-quota-item={item.itemNumber}>
-                  <td className="py-1 pr-3">
+                  <td>
                     <Link href={`${ROUTE}?quota=${arrangement.quotaNumber}`} className="underline">{arrangement.quotaNumber}</Link>
                     {arrangement.markedForDeletion ? ` · ${t('quotaArrangement.inactive')}` : ''}
                   </td>
-                  <td className="py-1 pr-3">{arrangement.validFrom}</td>
-                  <td className="py-1 pr-3">{arrangement.validTo}</td>
-                  <td className="py-1 pr-3">{item.itemNumber}{item.markedForDeletion ? ` · ${t('quotaArrangement.inactive')}` : ''}</td>
-                  <td className="py-1 pr-3">{item.partnerNumber} · {item.purchasingOrg}</td>
-                  <td className="py-1 pr-3">{item.quota}</td>
-                  <td className="py-1">{item.quotaBaseQuantity}</td>
+                  <td>{arrangement.validFrom}</td>
+                  <td>{arrangement.validTo}</td>
+                  <td>{item.itemNumber}{item.markedForDeletion ? ` · ${t('quotaArrangement.inactive')}` : ''}</td>
+                  <td>{item.partnerNumber} · {item.purchasingOrg}</td>
+                  <td>{item.quota}</td>
+                  <td>{item.quotaBaseQuantity}</td>
                 </tr>
               )))}
             </tbody>
@@ -196,7 +196,7 @@ export default function QuotaWorkbench({
       )}
 
       {opened && (
-        <section aria-labelledby="quota-change" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="quota-change" className="border border-line bg-surface p-4">
           <h2 id="quota-change" className="text-sm font-semibold">{opened.quotaNumber}</h2>
           <p className="mt-1 text-sm text-ink-soft" data-quota-identity>
             {opened.materialNumber} · {opened.plant}
@@ -284,7 +284,7 @@ export default function QuotaWorkbench({
       )}
 
       {opened && (
-        <section aria-labelledby="quota-rate" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="quota-rate" className="border border-line bg-surface p-4">
           <h2 id="quota-rate" className="text-sm font-semibold">{t('quotaArrangement.rateTitle')}</h2>
           <p className="mt-1 text-xs text-ink-soft">{t('quotaArrangement.rateHint')}</p>
           <form action={rateAction} className="mt-3 flex flex-wrap items-end gap-3">
@@ -301,7 +301,7 @@ export default function QuotaWorkbench({
         </section>
       )}
 
-      <section aria-labelledby="quota-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="quota-create" className="border border-line bg-surface p-4">
         <h2 id="quota-create" className="text-sm font-semibold">{t('quotaArrangement.createTitle')}</h2>
         <p className="mt-1 text-xs text-ink-soft">{t('quotaArrangement.createHint')}</p>
         <form action={createAction} className="mt-3 space-y-3">

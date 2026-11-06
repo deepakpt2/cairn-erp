@@ -135,7 +135,7 @@ export default function InfoRecordWorkbench({
 
   return (
     <>
-      <section aria-labelledby="info-record-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="info-record-lookup" className="border border-line bg-surface p-4">
         <h2 id="info-record-lookup" className="text-sm font-semibold">{t('infoRecord.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <Field label={t('infoRecord.number')}>
@@ -177,7 +177,7 @@ export default function InfoRecordWorkbench({
       </section>
 
       {record && (
-        <section aria-labelledby="info-record-standing" data-info-record-standing className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="info-record-standing" data-info-record-standing className="border border-line bg-surface p-4">
           <h2 id="info-record-standing" className="text-sm font-semibold">{record.infoRecordNumber}</h2>
           <p className="mt-1 text-sm text-ink-soft">
             {record.partnerNumber} {record.partnerName} · {record.materialNumber} {record.materialDescription}
@@ -226,7 +226,7 @@ export default function InfoRecordWorkbench({
                   {' · '}{t('infoRecord.minimum')}: {segment.minimumOrderQuantity ?? '—'} {segment.minimumOrderUnit ?? ''}
                   {' · '}{t('infoRecord.orderUnit')}: {segment.orderUnit ?? '—'}
                 </p>
-                <table className="mt-2 w-full text-sm">
+                <table className="grid-table mt-2 text-sm">
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                       <th>{t('infoRecord.price')}</th>
@@ -238,7 +238,7 @@ export default function InfoRecordWorkbench({
                   <tbody>
                     {segment.prices.map((price) => (
                       <tr key={price.priceSequence} data-info-record-price={price.priceSequence}>
-                        <td className="py-1">{price.priceSequence}</td>
+                        <td>{price.priceSequence}</td>
                         <td>{price.amount} {price.currency} / {price.priceUnit} {price.priceUnitOfMeasure}</td>
                         <td>{price.validFrom} – {price.validTo}</td>
                         <td>{price.markedForDeletion ? t('infoRecord.inactive') : t('infoRecord.active')}</td>
@@ -334,7 +334,7 @@ export default function InfoRecordWorkbench({
         </section>
       )}
 
-      <section aria-labelledby="info-record-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="info-record-create" className="border border-line bg-surface p-4">
         <h2 id="info-record-create" className="text-sm font-semibold">
           {record ? t('infoRecord.addSegment', { number: record.infoRecordNumber }) : t('infoRecord.createTitle')}
         </h2>

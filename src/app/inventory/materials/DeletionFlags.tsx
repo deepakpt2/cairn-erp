@@ -79,32 +79,32 @@ export default function DeletionFlags({
       </h2>
       <p className="max-w-3xl text-sm text-ink-soft">{t('material.deletionNote')}</p>
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+        <table className="grid-table text-left text-sm">
           <thead>
-            <tr className="border-b border-line text-ink-soft">
-              <th className="py-2 pe-3">Scope</th>
-              <th className="py-2 pe-3">{t('material.status')}</th>
-              <th className="py-2 pe-3">Stock</th>
-              {canMaintain && <th className="py-2">Actions</th>}
+            <tr className="text-ink-soft">
+              <th className="pe-3">Scope</th>
+              <th className="pe-3">{t('material.status')}</th>
+              <th className="pe-3">Stock</th>
+              {canMaintain && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-line/60">
-              <td className="py-2 pe-3 font-medium">{t('material.deletionClient')}</td>
-              <td className="py-2 pe-3">
+            <tr>
+              <td className="pe-3 font-medium">{t('material.deletionClient')}</td>
+              <td className="pe-3">
                 {clientFlagged ? t('material.flagged') : t('material.notFlagged')}
               </td>
-              <td className="py-2 pe-3">{clientStock}</td>
-              {canMaintain && <td className="py-2">{act('CLIENT', '', !clientFlagged, clientStock)}</td>}
+              <td className="pe-3">{clientStock}</td>
+              {canMaintain && <td>{act('CLIENT', '', !clientFlagged, clientStock)}</td>}
             </tr>
             {plants.map((row) => {
               const effective = row.flagged || clientFlagged;
               return (
-                <tr key={row.plant} className="border-b border-line/60">
-                  <td className="py-2 pe-3 font-medium">
+                <tr key={row.plant}>
+                  <td className="pe-3 font-medium">
                     {t('material.deletionPlant', { plant: row.plant })}
                   </td>
-                  <td className="py-2 pe-3">
+                  <td className="pe-3">
                     {effective ? t('material.flagged') : t('material.notFlagged')}
                     {clientFlagged && !row.flagged && (
                       <span className="block text-xs text-ink-soft">
@@ -112,9 +112,9 @@ export default function DeletionFlags({
                       </span>
                     )}
                   </td>
-                  <td className="py-2 pe-3">{row.stock}</td>
+                  <td className="pe-3">{row.stock}</td>
                   {canMaintain && (
-                    <td className="py-2">{act('PLANT', row.plant, !row.flagged, row.stock)}</td>
+                    <td>{act('PLANT', row.plant, !row.flagged, row.stock)}</td>
                   )}
                 </tr>
               );

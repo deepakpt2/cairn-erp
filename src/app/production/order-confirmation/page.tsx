@@ -103,7 +103,7 @@ export default async function OrderConfirmationPage({
         <button className="btn" type="submit">Open</button>
       </form>
       {listed && (
-        <table className="w-full text-sm" data-co15-orders>
+        <table className="grid-table text-sm" data-co15-orders>
           <thead>
             <tr className="text-left text-ink-faint">
               <th>Order</th>
@@ -115,7 +115,7 @@ export default async function OrderConfirmationPage({
           <tbody>
             {listed.rows.map((row) => (
               <tr key={row.orderNumber}>
-                <td className="py-1">
+                <td>
                   <Link href={`/production/order-confirmation?order=${encodeURIComponent(row.orderNumber)}`}>{row.orderNumber}</Link>
                 </td>
                 <td>{row.materialNumber} {row.materialDescription}</td>

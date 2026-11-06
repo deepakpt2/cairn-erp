@@ -58,7 +58,7 @@ export default function CountWorkbench({
 
   return (
     <>
-      <section aria-labelledby="count-status" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="count-status" className="border border-line bg-surface p-4">
         <h2 id="count-status" className="text-sm font-semibold">{t('mi04.statusTitle')}</h2>
         <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex justify-between gap-3 border-b border-line/60 py-1">
@@ -95,7 +95,7 @@ export default function CountWorkbench({
         )}
       </section>
 
-      <section aria-labelledby="count-grid" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="count-grid" className="border border-line bg-surface p-4">
         <h2 id="count-grid" className="text-sm font-semibold">{t('mi04.gridTitle')}</h2>
         <form action={action}>
           <input type="hidden" name="documentNumber" value={document.documentNumber} />
@@ -117,19 +117,19 @@ export default function CountWorkbench({
           </div>
 
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="py-1 pr-2">{t('mi04.columnItem')}</th>
-                  <th className="py-1 pr-2">{t('mi04.columnMaterial')}</th>
-                  <th className="py-1 pr-2">{t('mi04.columnStockType')}</th>
-                  <th className="py-1 pr-2 text-right">{t('mi04.columnBook')}</th>
-                  <th className="py-1 pr-2">{t('mi04.columnCounted')}</th>
-                  <th className="py-1 pr-2">{t('mi04.columnUnit')}</th>
-                  <th className="py-1 pr-2">{t('mi04.columnZero')}</th>
-                  <th className="py-1 pr-2">{t('mi04.columnDate')}</th>
-                  <th className="py-1 pr-2 text-right">{t('mi04.columnDifference')}</th>
-                  <th className="py-1 pr-2">{t('mi04.columnCountStatus')}</th>
+                  <th>{t('mi04.columnItem')}</th>
+                  <th>{t('mi04.columnMaterial')}</th>
+                  <th>{t('mi04.columnStockType')}</th>
+                  <th className="text-right">{t('mi04.columnBook')}</th>
+                  <th>{t('mi04.columnCounted')}</th>
+                  <th>{t('mi04.columnUnit')}</th>
+                  <th>{t('mi04.columnZero')}</th>
+                  <th>{t('mi04.columnDate')}</th>
+                  <th className="text-right">{t('mi04.columnDifference')}</th>
+                  <th>{t('mi04.columnCountStatus')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -138,21 +138,21 @@ export default function CountWorkbench({
                   const isCounted = item.countStatus === 'COUNTED';
                   const zero = zeroed[item.itemNumber] ?? item.zeroCount;
                   return (
-                    <tr key={item.itemNumber} data-count-line={item.itemNumber} className="border-t border-line align-top">
-                      <td className="py-1 pr-2">
+                    <tr key={item.itemNumber} data-count-line={item.itemNumber} className="align-top">
+                      <td>
                         {item.itemNumber}
                         <input type="hidden" name={`item-${n}`} value={item.itemNumber} />
                         <input type="hidden" name={`version-${n}`} value={item.version} />
                       </td>
-                      <td className="py-1 pr-2">
+                      <td>
                         {item.materialNumber}
                         <span className="block text-xs text-ink-faint">{item.description}{item.batch ? ` · Batch ${item.batch}` : ''}</span>
                       </td>
-                      <td className="py-1 pr-2">{item.stockType}</td>
-                      <td className="py-1 pr-2 text-right tabular-nums" data-count-book>
+                      <td>{item.stockType}</td>
+                      <td className="text-right tabular-nums" data-count-book>
                         {Number(item.bookQuantity).toFixed(3)} {item.bookUnit}
                       </td>
-                      <td className="py-1 pr-2">
+                      <td>
                         <input
                           name={`quantity-${n}`}
                           type="number"
@@ -164,7 +164,7 @@ export default function CountWorkbench({
                           aria-label={`${t('mi04.columnCounted')} ${item.itemNumber}`}
                         />
                       </td>
-                      <td className="py-1 pr-2">
+                      <td>
                         <input
                           name={`unit-${n}`}
                           className="input w-16"
@@ -173,7 +173,7 @@ export default function CountWorkbench({
                           aria-label={`${t('mi04.columnUnit')} ${item.itemNumber}`}
                         />
                       </td>
-                      <td className="py-1 pr-2">
+                      <td>
                         <input
                           type="checkbox"
                           name={`zero-${n}`}
@@ -186,7 +186,7 @@ export default function CountWorkbench({
                           aria-label={`${t('mi04.columnZero')} ${item.itemNumber}`}
                         />
                       </td>
-                      <td className="py-1 pr-2">
+                      <td>
                         <input
                           type="date"
                           name={`date-${n}`}
@@ -196,10 +196,10 @@ export default function CountWorkbench({
                           aria-label={`${t('mi04.columnDate')} ${item.itemNumber}`}
                         />
                       </td>
-                      <td className="py-1 pr-2 text-right tabular-nums" data-count-difference>
+                      <td className="text-right tabular-nums" data-count-difference>
                         {item.differenceQuantity === null ? '—' : Number(item.differenceQuantity).toFixed(3)}
                       </td>
-                      <td className="py-1 pr-2">
+                      <td>
                         <span data-count-line-status>{item.countStatus}</span>
                         {item.zeroCount && <span className="block text-xs text-ink-faint">{t('mi04.zeroRecorded')}</span>}
                       </td>
@@ -229,7 +229,7 @@ export default function CountWorkbench({
         )}
       </section>
 
-      <section aria-labelledby="count-corrections" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="count-corrections" className="border border-line bg-surface p-4">
         <h2 id="count-corrections" className="text-sm font-semibold">{t('mi04.correctionsTitle')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('mi04.correctionsHint')}</p>
         {clearState.message && (
@@ -261,29 +261,29 @@ export default function CountWorkbench({
         {history.length > 0 && (
           <div className="mt-4" data-count-history>
             <h3 className="text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mi04.historyTitle')}</h3>
-            <table className="mt-2 w-full text-sm">
+            <table className="grid-table mt-2 text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="py-1">{t('mi04.columnItem')}</th>
-                  <th className="py-1">{t('mi04.historyWhen')}</th>
-                  <th className="py-1">{t('mi04.historyWho')}</th>
-                  <th className="py-1">{t('mi04.historyField')}</th>
-                  <th className="py-1">{t('mi04.historyFrom')}</th>
-                  <th className="py-1">{t('mi04.historyTo')}</th>
-                  <th className="py-1">{t('mi04.historyReason')}</th>
+                  <th>{t('mi04.columnItem')}</th>
+                  <th>{t('mi04.historyWhen')}</th>
+                  <th>{t('mi04.historyWho')}</th>
+                  <th>{t('mi04.historyField')}</th>
+                  <th>{t('mi04.historyFrom')}</th>
+                  <th>{t('mi04.historyTo')}</th>
+                  <th>{t('mi04.historyReason')}</th>
                 </tr>
               </thead>
               <tbody>
                 {history.flatMap((entry) => entry.fields.map((field, index) => (
-                  <tr key={`${entry.itemNumber}-${entry.changedAt.toISOString()}-${field.field}`} className="border-t border-line">
-                    <td className="py-1">{entry.itemNumber}</td>
-                    <td className="py-1">{entry.changedAt.toISOString().slice(0, 16).replace('T', ' ')}</td>
-                    <td className="py-1">{entry.changedBy}</td>
-                    <td className="py-1">{field.fieldLabel}</td>
-                    <td className="py-1 tabular-nums">{field.oldValue ?? '—'}</td>
-                    <td className="py-1 tabular-nums">{field.newValue ?? '—'}</td>
+                  <tr key={`${entry.itemNumber}-${entry.changedAt.toISOString()}-${field.field}`}>
+                    <td>{entry.itemNumber}</td>
+                    <td>{entry.changedAt.toISOString().slice(0, 16).replace('T', ' ')}</td>
+                    <td>{entry.changedBy}</td>
+                    <td>{field.fieldLabel}</td>
+                    <td className="tabular-nums">{field.oldValue ?? '—'}</td>
+                    <td className="tabular-nums">{field.newValue ?? '—'}</td>
                     {/* The reason belongs to the change, not to each field it touched. */}
-                    <td className="py-1">{index === 0 ? (entry.reason ?? '—') : ''}</td>
+                    <td>{index === 0 ? (entry.reason ?? '—') : ''}</td>
                   </tr>
                 )))}
               </tbody>

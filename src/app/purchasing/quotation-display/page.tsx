@@ -46,7 +46,7 @@ function QuotationView({
   canMaintain: boolean;
 }) {
   return (
-    <section aria-labelledby="quotation-display" className="rounded-card border border-line bg-surface p-4 shadow-card" data-quotation-display>
+    <section aria-labelledby="quotation-display" className="border border-line bg-surface p-4" data-quotation-display>
       <h2 id="quotation-display" className="text-sm font-semibold" data-quotation-number>{quotation.quotationNumber}</h2>
       <p className="mt-1 text-sm" data-quotation-identity>
         <span data-quotation-request>{quotation.rfqNumber}</span>
@@ -90,58 +90,58 @@ function QuotationView({
           </Link>
         )}
       </div>
-      <table className="mt-4 w-full text-sm" data-quotation-lines>
+      <table className="grid-table mt-4 text-sm" data-quotation-lines>
         <thead>
           <tr className="text-left text-ink-soft">
-            <th className="py-1 pr-3">{t('quotationDisplay.item')}</th>
-            <th className="py-1 pr-3">{t('quotationDisplay.asked')}</th>
-            <th className="py-1 pr-3">{t('quotationDisplay.offered')}</th>
-            <th className="py-1 pr-3">{t('quotationDisplay.netPrice')}</th>
-            <th className="py-1 pr-3">{t('quotationDisplay.priceUnit')}</th>
-            <th className="py-1 pr-3">{t('quotationDisplay.perUnit')}</th>
-            <th className="py-1">{t('quotationDisplay.delivery')}</th>
+            <th>{t('quotationDisplay.item')}</th>
+            <th>{t('quotationDisplay.asked')}</th>
+            <th>{t('quotationDisplay.offered')}</th>
+            <th>{t('quotationDisplay.netPrice')}</th>
+            <th>{t('quotationDisplay.priceUnit')}</th>
+            <th>{t('quotationDisplay.perUnit')}</th>
+            <th>{t('quotationDisplay.delivery')}</th>
           </tr>
         </thead>
         <tbody>
           {quotation.lines.map((line) => (
             <tr key={line.itemNumber} data-quotation-line={line.itemNumber}>
-              <td className="py-1 pr-3">{line.itemNumber} · {line.shortText}</td>
-              <td className="py-1 pr-3" data-quotation-asked={line.itemNumber}>{line.askedQuantity} {line.askedUnit} · {line.askedDelivery}</td>
-              <td className="py-1 pr-3">
+              <td>{line.itemNumber} · {line.shortText}</td>
+              <td data-quotation-asked={line.itemNumber}>{line.askedQuantity} {line.askedUnit} · {line.askedDelivery}</td>
+              <td>
                 {line.offer
                   ? <span data-quotation-offered={line.itemNumber}>{line.offer.quantity} {line.offer.unit}</span>
                   : <span data-quotation-unquoted={line.itemNumber}>{t('quotationDisplay.lineAbsent', { item: String(line.itemNumber) })}</span>}
               </td>
-              <td className="py-1 pr-3">{line.offer ? line.offer.netPrice : t('quotationDisplay.notProvided')}</td>
-              <td className="py-1 pr-3">{line.offer ? line.offer.priceUnit : t('quotationDisplay.notProvided')}</td>
-              <td className="py-1 pr-3">
+              <td>{line.offer ? line.offer.netPrice : t('quotationDisplay.notProvided')}</td>
+              <td>{line.offer ? line.offer.priceUnit : t('quotationDisplay.notProvided')}</td>
+              <td>
                 {line.offer
                   ? <span data-quotation-per-unit={line.itemNumber}>{line.offer.pricePerUnit}</span>
                   : t('quotationDisplay.notProvided')}
               </td>
-              <td className="py-1">{line.offer ? `${line.offer.deliveryDate}${line.offer.remark ? ` · ${line.offer.remark}` : ''}` : t('quotationDisplay.notProvided')}</td>
+              <td>{line.offer ? `${line.offer.deliveryDate}${line.offer.remark ? ` · ${line.offer.remark}` : ''}` : t('quotationDisplay.notProvided')}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="mt-2 text-xs text-ink-soft" data-quotation-calculated>{t('quotationDisplay.calculated')}</p>
       <h3 className="mt-4 text-sm font-semibold">{t('quotationDisplay.changes')}</h3>
-      <table className="mt-2 w-full text-sm" data-quotation-history>
+      <table className="grid-table mt-2 text-sm" data-quotation-history>
         <thead>
           <tr className="text-left text-ink-soft">
-            <th className="py-1 pr-3">{t('quotationDisplay.changeField')}</th>
-            <th className="py-1 pr-3">{t('quotationDisplay.oldValue')}</th>
-            <th className="py-1 pr-3">{t('quotationDisplay.newValue')}</th>
-            <th className="py-1">{t('quotationDisplay.changedBy')}</th>
+            <th>{t('quotationDisplay.changeField')}</th>
+            <th>{t('quotationDisplay.oldValue')}</th>
+            <th>{t('quotationDisplay.newValue')}</th>
+            <th>{t('quotationDisplay.changedBy')}</th>
           </tr>
         </thead>
         <tbody>
           {quotation.changes.map((row, index) => (
             <tr key={`${row.changedAt}-${row.fieldName ?? index}`}>
-              <td className="py-1 pr-3">{row.fieldName ?? row.changeType}</td>
-              <td className="py-1 pr-3">{row.oldValue ?? t('quotationDisplay.notProvided')}</td>
-              <td className="py-1 pr-3">{row.newValue ?? t('quotationDisplay.notProvided')}</td>
-              <td className="py-1">{row.changedBy}{row.reason ? ` · ${row.reason}` : ''}</td>
+              <td>{row.fieldName ?? row.changeType}</td>
+              <td>{row.oldValue ?? t('quotationDisplay.notProvided')}</td>
+              <td>{row.newValue ?? t('quotationDisplay.notProvided')}</td>
+              <td>{row.changedBy}{row.reason ? ` · ${row.reason}` : ''}</td>
             </tr>
           ))}
         </tbody>
@@ -189,7 +189,7 @@ export default async function PurchasingQuotationDisplayPage({ searchParams }: {
       )}
 
       {canDisplay && (
-        <section aria-labelledby="quotation-display-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="quotation-display-lookup" className="border border-line bg-surface p-4">
           <h2 id="quotation-display-lookup" className="text-sm font-semibold">{t('quotationDisplay.lookupTitle')}</h2>
           <form method="get" action={QUOTATION_DISPLAY_ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
             <Field label={t('quotationDisplay.quotation')}>

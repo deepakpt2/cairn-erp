@@ -140,7 +140,7 @@ export default function PostingWorkbench({
 
   return (
     <>
-      <section aria-labelledby="posting-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="posting-lookup" className="border border-line bg-surface p-4">
         <h2 id="posting-lookup" className="text-sm font-semibold">{t('diffpost.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
@@ -164,7 +164,7 @@ export default function PostingWorkbench({
       {canPost && !canReverse && <p className="text-sm text-ink-soft">{t('diffpost.reverseMissing')}</p>}
 
       {document && (
-        <section aria-labelledby="posting-document" data-posting-document className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="posting-document" data-posting-document className="border border-line bg-surface p-4">
           <h2 id="posting-document" className="text-sm font-semibold">
             {document.documentNumber} · {document.fiscalYear}
           </h2>
@@ -183,23 +183,23 @@ export default function PostingWorkbench({
             <input type="hidden" name="fiscalYear" value={document.fiscalYear} />
             <input type="hidden" name="requestKey" value={requestKey} />
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="grid-table text-sm">
                 <thead>
-                  <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="py-1 pr-2">{t('diffpost.select')}</th>
-                    <th className="py-1 pr-2">{t('diffpost.columnItem')}</th>
-                    <th className="py-1 pr-2">{t('diffpost.columnMaterial')}</th>
-                    <th className="py-1 pr-2">{t('diffpost.columnStockType')}</th>
-                    <th className="py-1 pr-2">{t('diffpost.columnDifference')}</th>
-                    <th className="py-1 pr-2">{t('diffpost.columnDirection')}</th>
-                    <th className="py-1 pr-2">{t('diffpost.columnQuantity')}</th>
-                    <th className="py-1 pr-2">{t('diffpost.columnReason')}</th>
+                  <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                    <th>{t('diffpost.select')}</th>
+                    <th>{t('diffpost.columnItem')}</th>
+                    <th>{t('diffpost.columnMaterial')}</th>
+                    <th>{t('diffpost.columnStockType')}</th>
+                    <th>{t('diffpost.columnDifference')}</th>
+                    <th>{t('diffpost.columnDirection')}</th>
+                    <th>{t('diffpost.columnQuantity')}</th>
+                    <th>{t('diffpost.columnReason')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {document.lines.map((line) => (
-                    <tr key={line.itemNumber} data-posting-line={line.itemNumber} className="border-b border-line/60">
-                      <td className="py-1 pr-2">
+                    <tr key={line.itemNumber} data-posting-line={line.itemNumber}>
+                      <td>
                         <input
                           type="checkbox"
                           name="item"
@@ -214,15 +214,15 @@ export default function PostingWorkbench({
                           aria-label={`${t('diffpost.select')} ${line.itemNumber}`}
                         />
                       </td>
-                      <td className="py-1 pr-2">{line.itemNumber}</td>
-                      <td className="py-1 pr-2">{line.materialNumber}{line.batch ? ` · ${line.batch}` : ''}</td>
-                      <td className="py-1 pr-2">{line.stockType}</td>
-                      <td className="py-1 pr-2 tabular-nums" data-posting-difference>{line.difference || '—'}</td>
-                      <td className="py-1 pr-2" data-posting-direction={line.direction}>
+                      <td>{line.itemNumber}</td>
+                      <td>{line.materialNumber}{line.batch ? ` · ${line.batch}` : ''}</td>
+                      <td>{line.stockType}</td>
+                      <td className="tabular-nums" data-posting-difference>{line.difference || '—'}</td>
+                      <td data-posting-direction={line.direction}>
                         {line.direction === 'SHORTAGE' ? t('diffpost.shortage') : t('diffpost.surplus')}
                       </td>
-                      <td className="py-1 pr-2 tabular-nums">{line.eligible ? line.quantity : '—'}</td>
-                      <td className="py-1 pr-2 text-ink-soft" data-posting-reason>{line.reason ?? (line.eligible ? t('diffpost.eligible') : '')}</td>
+                      <td className="tabular-nums">{line.eligible ? line.quantity : '—'}</td>
+                      <td className="text-ink-soft" data-posting-reason>{line.reason ?? (line.eligible ? t('diffpost.eligible') : '')}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -281,7 +281,7 @@ export default function PostingWorkbench({
           </form>
 
           {checkState.message && (
-            <div data-posting-preview className="mt-3 rounded-card border border-line bg-canvas p-3">
+            <div data-posting-preview className="mt-3 border border-line bg-canvas p-3">
               <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-red-700'}`}>
                 {checkState.message}{checkState.remedy ? ` ${checkState.remedy}` : ''}
               </p>
@@ -295,28 +295,28 @@ export default function PostingWorkbench({
                     {t('diffpost.period')}: {checkState.preview.materialPeriod}
                   </p>
                   <p className="text-xs text-ink-faint">{t('diffpost.estimateNote')}</p>
-                  <table className="mt-2 w-full text-sm">
+                  <table className="grid-table mt-2 text-sm">
                     <thead>
-                      <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
-                        <th className="py-1 pr-2">{t('diffpost.columnItem')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.movement')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.columnQuantity')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.amount')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.inventoryAccount')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.offsetAccount')}</th>
+                      <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                        <th>{t('diffpost.columnItem')}</th>
+                        <th>{t('diffpost.movement')}</th>
+                        <th>{t('diffpost.columnQuantity')}</th>
+                        <th>{t('diffpost.amount')}</th>
+                        <th>{t('diffpost.inventoryAccount')}</th>
+                        <th>{t('diffpost.offsetAccount')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {checkState.preview.lines.map((line) => (
-                        <tr key={line.itemNumber} data-posting-preview-line={line.itemNumber} className="border-b border-line/60">
-                          <td className="py-1 pr-2">{line.itemNumber}</td>
-                          <td className="py-1 pr-2" data-posting-movement>{line.movementType}</td>
-                          <td className="py-1 pr-2 tabular-nums">{line.quantity}</td>
-                          <td className="py-1 pr-2 tabular-nums" data-posting-amount>
+                        <tr key={line.itemNumber} data-posting-preview-line={line.itemNumber}>
+                          <td>{line.itemNumber}</td>
+                          <td data-posting-movement>{line.movementType}</td>
+                          <td className="tabular-nums">{line.quantity}</td>
+                          <td className="tabular-nums" data-posting-amount>
                             {line.postingValue === null ? '—' : `${line.postingValue} ${line.currency ?? ''}`}
                           </td>
-                          <td className="py-1 pr-2">{line.inventoryAccount ?? '—'}</td>
-                          <td className="py-1 pr-2">{line.offsetAccount ?? '—'}</td>
+                          <td>{line.inventoryAccount ?? '—'}</td>
+                          <td>{line.offsetAccount ?? '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -335,7 +335,7 @@ export default function PostingWorkbench({
       )}
 
       {document && (
-        <section aria-labelledby="posting-history" data-posting-history className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="posting-history" data-posting-history className="border border-line bg-surface p-4">
           <h2 id="posting-history" className="text-sm font-semibold">{t('diffpost.historyTitle')}</h2>
           {history.length === 0 ? (
             <p className="mt-2 text-sm text-ink-soft">{t('diffpost.noHistory')}</p>
@@ -346,24 +346,24 @@ export default function PostingWorkbench({
               return (
                 <div key={number} className="mt-3 border-t border-line/60 pt-3" data-posting-history-document={number}>
                   <p className="text-sm font-medium">{number}</p>
-                  <table className="mt-1 w-full text-sm">
+                  <table className="grid-table mt-1 text-sm">
                     <thead>
                       <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                        <th className="py-1 pr-2">{t('diffpost.columnItem')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.columnPosted')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.columnReversed')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.columnJournal')}</th>
-                        <th className="py-1 pr-2">{t('diffpost.postingDate')}</th>
+                        <th>{t('diffpost.columnItem')}</th>
+                        <th>{t('diffpost.columnPosted')}</th>
+                        <th>{t('diffpost.columnReversed')}</th>
+                        <th>{t('diffpost.columnJournal')}</th>
+                        <th>{t('diffpost.postingDate')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((row) => (
                         <tr key={`${number}-${row.itemNumber}`}>
-                          <td className="py-1 pr-2">{row.itemNumber}</td>
-                          <td className="py-1 pr-2 tabular-nums">{row.postedDifference}</td>
-                          <td className="py-1 pr-2 tabular-nums">{row.reversedQuantity}</td>
-                          <td className="py-1 pr-2">{row.journalDocumentNumber ?? '—'}</td>
-                          <td className="py-1 pr-2">{row.postingDate}</td>
+                          <td>{row.itemNumber}</td>
+                          <td className="tabular-nums">{row.postedDifference}</td>
+                          <td className="tabular-nums">{row.reversedQuantity}</td>
+                          <td>{row.journalDocumentNumber ?? '—'}</td>
+                          <td>{row.postingDate}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -75,7 +75,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
 
   return (
     <>
-      <section aria-labelledby="glc-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="glc-selection" className="border border-line bg-surface p-4">
         <h2 id="glc-selection" className="text-sm font-semibold">Selection</h2>
         <form method="get" action="/finance/gl-clearing" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
@@ -115,7 +115,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
       </section>
 
       {view && (
-        <section aria-labelledby="glc-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="glc-items" className="border border-line bg-surface p-4">
           <h2 id="glc-items" className="text-sm font-semibold">Open items</h2>
           {items.length === 0 ? (
             <p className="mt-2 text-sm text-ink-soft">No open items stand for this account and company.</p>
@@ -125,38 +125,38 @@ export default function GlClearing({ view, loadError, canClear, today }: {
               <input type="hidden" name="glAccount" value={view.glAccount} />
               <input type="hidden" name="requestKey" value={requestKey} />
               <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="grid-table text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Select</th><th className="px-2 py-2">Document</th>
-                      <th className="px-2 py-2">Posting date</th><th className="px-2 py-2">Type</th>
-                      <th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Reference</th>
-                      <th className="px-2 py-2">D/C</th><th className="px-2 py-2">Currency</th>
-                      <th className="px-2 py-2">Amount</th><th className="px-2 py-2">Applied</th>
-                      <th className="px-2 py-2">Remaining</th><th className="px-2 py-2">Settlement</th>
+                      <th>Select</th><th>Document</th>
+                      <th>Posting date</th><th>Type</th>
+                      <th>Assignment</th><th>Reference</th>
+                      <th>D/C</th><th>Currency</th>
+                      <th>Amount</th><th>Applied</th>
+                      <th>Remaining</th><th>Settlement</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => (
-                      <tr key={itemKey(item)} className="border-t border-line">
-                        <td className="px-2 py-2">
+                      <tr key={itemKey(item)}>
+                        <td>
                           <input
                             type="checkbox" name="item" value={itemKey(item)}
                             checked={selected.has(itemKey(item))}
                             onChange={() => toggle(itemKey(item))}
                           />
                         </td>
-                        <td className="px-2 py-2">{item.documentNumber}</td>
-                        <td className="px-2 py-2">{item.postingDate}</td>
-                        <td className="px-2 py-2">{item.documentType}</td>
-                        <td className="px-2 py-2">{item.assignment}</td>
-                        <td className="px-2 py-2">{item.reference}</td>
-                        <td className="px-2 py-2">{item.debitCredit}</td>
-                        <td className="px-2 py-2">{item.currency}</td>
-                        <td className="px-2 py-2">{Number(item.amount).toFixed(2)}</td>
-                        <td className="px-2 py-2">{item.applied.toFixed(2)}</td>
-                        <td className="px-2 py-2">{item.remaining.toFixed(2)}</td>
-                        <td className="px-2 py-2">
+                        <td>{item.documentNumber}</td>
+                        <td>{item.postingDate}</td>
+                        <td>{item.documentType}</td>
+                        <td>{item.assignment}</td>
+                        <td>{item.reference}</td>
+                        <td>{item.debitCredit}</td>
+                        <td>{item.currency}</td>
+                        <td className="num">{Number(item.amount).toFixed(2)}</td>
+                        <td className="num">{item.applied.toFixed(2)}</td>
+                        <td className="num">{item.remaining.toFixed(2)}</td>
+                        <td>
                           <input
                             name={`settlement:${itemKey(item)}`}
                             className="input w-28"
@@ -267,7 +267,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
       )}
 
       {view && (
-        <section aria-labelledby="glc-history" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="glc-history" className="border border-line bg-surface p-4">
           <h2 id="glc-history" className="text-sm font-semibold">Cleared history</h2>
           {view.clearedItems.length === 0 ? (
             <p className="mt-2 text-sm text-ink-soft">
@@ -275,20 +275,20 @@ export default function GlClearing({ view, loadError, canClear, today }: {
             </p>
           ) : (
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Document</th><th className="px-2 py-2">Amount</th>
-                    <th className="px-2 py-2">Cleared by</th><th className="px-2 py-2">Clearing date</th>
+                    <th>Document</th><th>Amount</th>
+                    <th>Cleared by</th><th>Clearing date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {view.clearedItems.map((item) => (
-                    <tr key={itemKey(item)} className="border-t border-line">
-                      <td className="px-2 py-2">{item.documentNumber}</td>
-                      <td className="px-2 py-2">{item.amount} {item.currency}</td>
-                      <td className="px-2 py-2">{item.clearingDocument}</td>
-                      <td className="px-2 py-2">{item.clearingDate}</td>
+                    <tr key={itemKey(item)}>
+                      <td>{item.documentNumber}</td>
+                      <td>{item.amount} {item.currency}</td>
+                      <td>{item.clearingDocument}</td>
+                      <td>{item.clearingDate}</td>
                     </tr>
                   ))}
                 </tbody>

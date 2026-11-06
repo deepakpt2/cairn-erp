@@ -40,7 +40,7 @@ function ComparisonView({
   canMaintain: boolean;
 }) {
   return (
-    <section aria-labelledby="quotation-comparison" className="rounded-card border border-line bg-surface p-4 shadow-card" data-quotation-comparison>
+    <section aria-labelledby="quotation-comparison" className="border border-line bg-surface p-4" data-quotation-comparison>
       <h2 id="quotation-comparison" className="text-sm font-semibold" data-comparison-event>{comparison.eventNumber}</h2>
       <p className="mt-1 text-sm" data-comparison-identity>
         {comparison.purchasingOrg}
@@ -62,22 +62,22 @@ function ComparisonView({
             {item.itemNumber} · {item.shortText} · {item.quantity} {item.unit} · {item.plant}
             {item.materialNumber ? ` · ${item.materialNumber}` : ''}
           </h3>
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-ink-soft">
-                <th className="py-1 pr-3">{t('quotationComparison.supplier')}</th>
-                <th className="py-1 pr-3">{t('quotationComparison.offered')}</th>
-                <th className="py-1 pr-3">{t('quotationComparison.netPrice')}</th>
-                <th className="py-1 pr-3">{t('quotationComparison.compared')}</th>
-                <th className="py-1 pr-3">{t('quotationComparison.extended')}</th>
-                <th className="py-1 pr-3">{t('quotationComparison.rank')}</th>
-                <th className="py-1">{t('quotationComparison.reason')}</th>
+                <th>{t('quotationComparison.supplier')}</th>
+                <th>{t('quotationComparison.offered')}</th>
+                <th>{t('quotationComparison.netPrice')}</th>
+                <th>{t('quotationComparison.compared')}</th>
+                <th>{t('quotationComparison.extended')}</th>
+                <th>{t('quotationComparison.rank')}</th>
+                <th>{t('quotationComparison.reason')}</th>
               </tr>
             </thead>
             <tbody>
               {item.bids.map((bid) => (
                 <tr key={bid.partnerNumber} data-comparison-bid={`${item.itemNumber}-${bid.partnerNumber}`}>
-                  <td className="py-1 pr-3">
+                  <td>
                     {bid.partnerNumber}{bid.partnerName ? ` · ${bid.partnerName}` : ''}
                     {canDisplay && bid.quotationNumber && (
                       <>
@@ -96,14 +96,14 @@ function ComparisonView({
                       </>
                     )}
                   </td>
-                  <td className="py-1 pr-3">{bid.offer ? `${bid.offer.quantity} ${bid.offer.unit}` : t('quotationComparison.notProvided')}</td>
-                  <td className="py-1 pr-3" data-comparison-net={item.itemNumber}>{bid.offer ? `${bid.offer.netPrice} / ${bid.offer.priceUnit}` : t('quotationComparison.notProvided')}</td>
-                  <td className="py-1 pr-3" data-comparison-price={`${item.itemNumber}-${bid.partnerNumber}`}>{bid.offer?.comparableUnitPrice ?? t('quotationComparison.notProvided')}</td>
-                  <td className="py-1 pr-3">{bid.offer?.extendedCost ?? t('quotationComparison.notProvided')}</td>
-                  <td className="py-1 pr-3" data-comparison-rank={`${item.itemNumber}-${bid.partnerNumber}`}>
+                  <td>{bid.offer ? `${bid.offer.quantity} ${bid.offer.unit}` : t('quotationComparison.notProvided')}</td>
+                  <td data-comparison-net={item.itemNumber}>{bid.offer ? `${bid.offer.netPrice} / ${bid.offer.priceUnit}` : t('quotationComparison.notProvided')}</td>
+                  <td data-comparison-price={`${item.itemNumber}-${bid.partnerNumber}`}>{bid.offer?.comparableUnitPrice ?? t('quotationComparison.notProvided')}</td>
+                  <td>{bid.offer?.extendedCost ?? t('quotationComparison.notProvided')}</td>
+                  <td data-comparison-rank={`${item.itemNumber}-${bid.partnerNumber}`}>
                     {bid.rank ?? t('quotationComparison.notRanked')}{bid.tie ? ` · ${t('quotationComparison.tie')}` : ''}
                   </td>
-                  <td className="py-1" data-comparison-reason={`${item.itemNumber}-${bid.partnerNumber}`}>{bid.reason ?? (bid.offer?.quantityDiffers ? t('quotationComparison.quantityDiffers') : '')}</td>
+                  <td data-comparison-reason={`${item.itemNumber}-${bid.partnerNumber}`}>{bid.reason ?? (bid.offer?.quantityDiffers ? t('quotationComparison.quantityDiffers') : '')}</td>
                 </tr>
               ))}
             </tbody>
@@ -168,7 +168,7 @@ export default async function PurchasingQuotationComparisonPage({ searchParams }
       {!canCompare && <p className="text-sm text-red-700" role="alert">{t('quotationComparison.capabilityMissing')}</p>}
 
       {canCompare && (
-        <section aria-labelledby="quotation-comparison-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="quotation-comparison-lookup" className="border border-line bg-surface p-4">
           <h2 id="quotation-comparison-lookup" className="text-sm font-semibold">{t('quotationComparison.lookupTitle')}</h2>
           <form method="get" action={QUOTATION_COMPARISON_ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
             <Field label={t('quotationComparison.event')}>

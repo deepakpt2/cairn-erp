@@ -156,10 +156,10 @@ export default function RequisitionListShell({ canUse, selection, result, listEr
                 </td>
                 <td className="code">{row.materialNumber}</td>
                 <td>{row.shortText}</td>
-                <td className="text-end">{row.quantity.toFixed(3)}</td>
+                <td className="text-end num">{row.quantity.toFixed(3)}</td>
                 <td>{row.unit}</td>
-                <td className="text-end">{row.orderedQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.openQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.orderedQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.openQuantity.toFixed(3)}</td>
                 <td>{row.requisitionDate}</td>
                 <td>{row.deliveryDate}</td>
                 <td className="code">{row.plant}</td>
@@ -167,7 +167,7 @@ export default function RequisitionListShell({ canUse, selection, result, listEr
                 <td className="code">{row.purchasingOrgs.join(', ')}</td>
                 <td>{row.accountAssignmentCategory}</td>
                 <td className="code">{row.requisitioner}</td>
-                <td className="text-end">{row.estimatedPrice === null ? '' : row.estimatedPrice.toFixed(2)}</td>
+                <td className="text-end num">{row.estimatedPrice === null ? '' : row.estimatedPrice.toFixed(2)}</td>
                 <td className="code">{row.currency}</td>
                 <td>
                   {row.status}

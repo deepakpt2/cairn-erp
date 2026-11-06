@@ -40,7 +40,7 @@ export default function Reversal({ document, canPost, displayOnly = false, today
 
   return (
     <>
-      <section aria-labelledby="reversal-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="reversal-lookup" className="border border-line bg-surface p-4">
         <h2 id="reversal-lookup" className="text-sm font-semibold">{t('mbst.lookup')}</h2>
         <form method="get" action="/inventory/reversal" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -59,7 +59,7 @@ export default function Reversal({ document, canPost, displayOnly = false, today
       </section>
 
       {document && (
-        <section aria-labelledby="reversal-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="reversal-document" className="border border-line bg-surface p-4">
           <h2 id="reversal-document" className="text-sm font-semibold">
             {t('mbst.document')} {document.materialDocumentNumber}
           </h2>
@@ -84,20 +84,20 @@ export default function Reversal({ document, canPost, displayOnly = false, today
             <form action={action} className="mt-3">
               <input type="hidden" name="materialDocumentNumber" value={document.materialDocumentNumber} />
               <input type="hidden" name="requestKey" value={requestKey} />
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mbst.select')}</th>
-                <th className="py-1">{t('mbst.columnLine')}</th>
-                <th className="py-1">{t('mbst.columnSide')}</th>
-                <th className="py-1">{t('mbst.columnMovement')}</th>
-                <th className="py-1">{t('mbst.columnMaterial')}</th>
-                <th className="py-1">{t('mbst.columnPlant')}</th>
-                <th className="py-1">{t('mbst.columnLocation')}</th>
-                <th className="py-1">{t('mbst.columnBatch')}</th>
-                <th className="py-1 text-right">{t('mbst.columnQuantity')}</th>
-                <th className="py-1 text-right">{t('mbst.columnReversed')}</th>
-                <th className="py-1 text-right">{t('mbst.columnOpen')}</th>
+                <th>{t('mbst.select')}</th>
+                <th>{t('mbst.columnLine')}</th>
+                <th>{t('mbst.columnSide')}</th>
+                <th>{t('mbst.columnMovement')}</th>
+                <th>{t('mbst.columnMaterial')}</th>
+                <th>{t('mbst.columnPlant')}</th>
+                <th>{t('mbst.columnLocation')}</th>
+                <th>{t('mbst.columnBatch')}</th>
+                <th className="text-right">{t('mbst.columnQuantity')}</th>
+                <th className="text-right">{t('mbst.columnReversed')}</th>
+                <th className="text-right">{t('mbst.columnOpen')}</th>
               </tr>
             </thead>
             <tbody>
@@ -107,9 +107,8 @@ export default function Reversal({ document, canPost, displayOnly = false, today
                   data-line={line.lineNumber}
                   data-side={line.lineDirection}
                   data-remaining={line.remainingQuantity}
-                  className="border-t border-line"
                 >
-                  <td className="py-1">
+                  <td>
                     <input
                       type="checkbox"
                       name="lines"
@@ -119,16 +118,16 @@ export default function Reversal({ document, canPost, displayOnly = false, today
                       aria-label={`${t('mbst.select')} ${line.lineNumber}`}
                     />
                   </td>
-                  <td className="py-1">{line.lineNumber}</td>
-                  <td className="py-1">{line.lineDirection === 'ISSUE' ? t('mbst.issue') : t('mbst.receipt')}</td>
-                  <td className="py-1">{line.movementType}</td>
-                  <td className="py-1">{line.materialNumber}</td>
-                  <td className="py-1">{line.plant}</td>
-                  <td className="py-1">{line.storageLocation}</td>
-                  <td className="code py-1" data-batch={line.batch}>{line.batch || '—'}</td>
-                  <td className="py-1 text-right tabular-nums">{Number(line.quantity).toFixed(3)}</td>
-                  <td className="py-1 text-right tabular-nums">{line.reversedQuantity}</td>
-                  <td className="py-1 text-right tabular-nums">{line.remainingQuantity}</td>
+                  <td>{line.lineNumber}</td>
+                  <td>{line.lineDirection === 'ISSUE' ? t('mbst.issue') : t('mbst.receipt')}</td>
+                  <td>{line.movementType}</td>
+                  <td>{line.materialNumber}</td>
+                  <td>{line.plant}</td>
+                  <td>{line.storageLocation}</td>
+                  <td className="code" data-batch={line.batch}>{line.batch || '—'}</td>
+                  <td className="text-right tabular-nums num">{Number(line.quantity).toFixed(3)}</td>
+                  <td className="text-right tabular-nums">{line.reversedQuantity}</td>
+                  <td className="text-right tabular-nums">{line.remainingQuantity}</td>
                 </tr>
               ))}
             </tbody>

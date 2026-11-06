@@ -157,15 +157,15 @@ function RecordRow({
         </span>
         <span className="text-xs text-ink-faint">written by {record.createdBy}</span>
       </div>
-      <table className="mt-2 w-full text-xs">
+      <table className="grid-table mt-2 text-xs">
         <tbody>
           {record.values.length === 0 ? (
-            <tr><td className="py-1 text-ink-soft">This record holds no answer.</td></tr>
+            <tr><td className="text-ink-soft">This record holds no answer.</td></tr>
           ) : record.values.map((value) => (
             <tr key={value.fieldCode}>
-              <td className="py-1 pr-2 text-ink-soft">{value.label}</td>
-              <td className="py-1 font-medium">{value.value}</td>
-              <td className="py-1 text-right text-ink-faint">{value.valueKind}</td>
+              <td className="text-ink-soft">{value.label}</td>
+              <td className="font-medium">{value.value}</td>
+              <td className="text-right text-ink-faint">{value.valueKind}</td>
             </tr>
           ))}
         </tbody>

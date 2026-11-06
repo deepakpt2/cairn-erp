@@ -156,9 +156,9 @@ export default function StockRequirementsShell({ canUse, selection, result, repo
                 <td title={row.elementLabel} data-demand={row.elementType === 'DEPENDENT_REQUIREMENT' ? 'active' : row.elementType === 'PRODUCTION_COMPONENT' ? 'replaced' : ''}>{elementLabel(row.elementType)}</td>
                 <td className="code">{row.documentNumber}</td>
                 <td className="text-end">{row.documentItem}</td>
-                <td className="text-end">{row.direction === 'RECEIPT' ? row.quantity.toFixed(3) : ''}</td>
-                <td className="text-end">{row.direction === 'REQUIREMENT' ? row.quantity.toFixed(3) : ''}</td>
-                <td className="text-end font-semibold">{row.projectedBalance.toFixed(3)}</td>
+                <td className="text-end num">{row.direction === 'RECEIPT' ? row.quantity.toFixed(3) : ''}</td>
+                <td className="text-end num">{row.direction === 'REQUIREMENT' ? row.quantity.toFixed(3) : ''}</td>
+                <td className="text-end font-semibold num">{row.projectedBalance.toFixed(3)}</td>
                 <td>{result.baseUnit}</td>
                 <td className="space-x-2 text-xs">
                   {row.exceptions.map((code) => (

@@ -229,7 +229,7 @@ function BranchRow({
             : 'bg-surface'
       }
     >
-      <td colSpan={7} className="px-2 py-0">
+      <td colSpan={7}>
         <div
           className="flex items-stretch gap-2"
           style={{ paddingInlineStart: `${(depth - 1) * INDENT}px` }}

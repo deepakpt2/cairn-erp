@@ -85,24 +85,24 @@ export default async function BatchClassPage({
 
       <ClassForm canMaintain={canMaintain} editing={editing} creating={creating} displayOnly={displayOnly} choices={choices} />
 
-      <table className="w-full border border-line bg-white text-sm">
+      <table className="grid-table border border-line bg-white text-sm">
         <thead>
-          <tr className="border-b border-line text-left">
-            <th className="p-2">Type</th>
-            <th className="p-2">Class</th>
-            <th className="p-2">Description</th>
-            <th className="p-2">Characteristics</th>
-            <th className="p-2"> </th>
+          <tr className="text-left">
+            <th>Type</th>
+            <th>Class</th>
+            <th>Description</th>
+            <th>Characteristics</th>
+            <th> </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={`${row.classType}/${row.className}`} className="border-b border-line">
-              <td className="code p-2">{row.classType}{row.currentType ? '' : ' · other level'}</td>
-              <td className="code p-2">{row.className}</td>
-              <td className="p-2">{row.description}</td>
-              <td className="code p-2">{row.assignments.map((item) => `${item.position} ${item.characteristicName}`).join(', ') || '—'}</td>
-              <td className="p-2">
+            <tr key={`${row.classType}/${row.className}`}>
+              <td className="code">{row.classType}{row.currentType ? '' : ' · other level'}</td>
+              <td className="code">{row.className}</td>
+              <td>{row.description}</td>
+              <td className="code">{row.assignments.map((item) => `${item.position} ${item.characteristicName}`).join(', ') || '—'}</td>
+              <td>
                 <Link href={`/inventory/batch-classes?type=${row.classType}&class=${row.className}&mode=display`} className="underline">Display</Link>
                 {canMaintain && row.currentType && (
                   <>
@@ -116,7 +116,7 @@ export default async function BatchClassPage({
             </tr>
           ))}
           {rows.length === 0 && (
-            <tr><td className="p-2 text-ink-soft" colSpan={5}>No batch class stands. Opening this screen did not create one.</td></tr>
+            <tr><td className="text-ink-soft" colSpan={5}>No batch class stands. Opening this screen did not create one.</td></tr>
           )}
         </tbody>
       </table>

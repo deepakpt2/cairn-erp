@@ -51,7 +51,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
 
   return (
     <>
-      <section aria-labelledby="iv-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="iv-header" className="border border-line bg-surface p-4">
         <h2 id="iv-header" className="text-sm font-semibold">Invoice header</h2>
         <form method="get" action="/purchasing/invoice-verification" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -78,7 +78,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
       </section>
 
       {order && (
-        <section aria-labelledby="iv-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="iv-items" className="border border-line bg-surface p-4">
           <h2 id="iv-items" className="text-sm font-semibold">Invoice for order {order.orderNumber}</h2>
           <p className="mt-1 text-sm text-ink-soft">
             Supplier {order.supplierNumber} · company {order.companyCode} · currency {order.currency}.
@@ -111,28 +111,28 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
               </label>
             </div>
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Item</th><th className="px-2 py-2">Material</th>
-                    <th className="px-2 py-2">Ordered</th><th className="px-2 py-2">Received</th>
-                    <th className="px-2 py-2">Invoiced</th><th className="px-2 py-2">Invoiceable</th>
-                    <th className="px-2 py-2">Quantity</th><th className="px-2 py-2">Net amount (excl. tax)</th>
-                    <th className="px-2 py-2">Tax code</th>
+                    <th>Item</th><th>Material</th>
+                    <th>Ordered</th><th>Received</th>
+                    <th>Invoiced</th><th>Invoiceable</th>
+                    <th>Quantity</th><th>Net amount (excl. tax)</th>
+                    <th>Tax code</th>
                   </tr>
                 </thead>
                 <tbody>
                   {order.items.map((item) => {
                     const expected = money((item.invoiceable * Number(item.netPrice)) / Number(item.priceUnit));
                     return (
-                      <tr key={item.itemNumber} className="border-t border-line">
-                        <td className="px-2 py-2">{item.itemNumber}</td>
-                        <td className="px-2 py-2">{item.materialNumber ?? item.shortText}</td>
-                        <td className="px-2 py-2">{item.ordered} {item.unit}</td>
-                        <td className="px-2 py-2">{item.received}</td>
-                        <td className="px-2 py-2">{item.invoiced}</td>
-                        <td className="px-2 py-2">{item.invoiceable}</td>
-                        <td className="px-2 py-2">
+                      <tr key={item.itemNumber}>
+                        <td>{item.itemNumber}</td>
+                        <td>{item.materialNumber ?? item.shortText}</td>
+                        <td>{item.ordered} {item.unit}</td>
+                        <td>{item.received}</td>
+                        <td>{item.invoiced}</td>
+                        <td>{item.invoiceable}</td>
+                        <td>
                           {item.eligible ? (
                             <input
                               type="number" step="0.001" min="0" name={`qty-${item.itemNumber}`} className="input w-24"
@@ -143,7 +143,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                             <span className="text-ink-faint">{item.refusal}</span>
                           )}
                         </td>
-                        <td className="px-2 py-2">
+                        <td>
                           {item.eligible && (
                             <input
                               type="number" step="0.01" min="0" name={`amt-${item.itemNumber}`} className="input w-28"
@@ -152,7 +152,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                             />
                           )}
                         </td>
-                        <td className="px-2 py-2">
+                        <td>
                           {item.eligible && (
                             <select
                               name={`tax-${item.itemNumber}`} className="input w-24"
@@ -186,7 +186,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
       )}
 
       {invoice && (
-        <section aria-labelledby="iv-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="iv-document" className="border border-line bg-surface p-4">
           <h2 id="iv-document" className="text-sm font-semibold">Invoice {invoice.invoiceNumber}</h2>
           <p className="mt-1 text-sm text-ink-soft">
             Supplier {invoice.supplierNumber} · reference {invoice.supplierReference} · gross {invoice.grossAmount} {invoice.currency}
@@ -196,26 +196,26 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
             {invoice.cancelledBy ? ` · cancelled by ${invoice.cancelledBy}` : ''}
           </p>
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Line</th><th className="px-2 py-2">Order item</th>
-                  <th className="px-2 py-2">Material</th><th className="px-2 py-2">Quantity</th>
-                  <th className="px-2 py-2">Net</th><th className="px-2 py-2">Expected</th>
-                  <th className="px-2 py-2">Variance</th><th className="px-2 py-2">Tax</th>
+                  <th>Line</th><th>Order item</th>
+                  <th>Material</th><th>Quantity</th>
+                  <th>Net</th><th>Expected</th>
+                  <th>Variance</th><th>Tax</th>
                 </tr>
               </thead>
               <tbody>
                 {invoice.items.map((item) => (
-                  <tr key={item.lineNumber} className="border-t border-line">
-                    <td className="px-2 py-2">{item.lineNumber}</td>
-                    <td className="px-2 py-2">{item.purchaseOrderItem}</td>
-                    <td className="px-2 py-2">{item.materialNumber}</td>
-                    <td className="px-2 py-2">{item.quantity}</td>
-                    <td className="px-2 py-2">{item.netAmount}</td>
-                    <td className="px-2 py-2">{item.expectedAmount}</td>
-                    <td className="px-2 py-2">{item.varianceAmount}</td>
-                    <td className="px-2 py-2">{item.taxCode} · {item.taxAmount}</td>
+                  <tr key={item.lineNumber}>
+                    <td>{item.lineNumber}</td>
+                    <td>{item.purchaseOrderItem}</td>
+                    <td>{item.materialNumber}</td>
+                    <td>{item.quantity}</td>
+                    <td>{item.netAmount}</td>
+                    <td>{item.expectedAmount}</td>
+                    <td>{item.varianceAmount}</td>
+                    <td>{item.taxCode} · {item.taxAmount}</td>
                   </tr>
                 ))}
               </tbody>

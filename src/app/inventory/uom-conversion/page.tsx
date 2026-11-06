@@ -50,7 +50,7 @@ export default async function UomConversionPage({
       </header>
 
       {listError && (
-        <p role="alert" className="rounded-card border border-red-300 bg-red-50 p-3 text-sm text-red-800">{listError}</p>
+        <p role="alert" className="border border-red-300 bg-red-50 p-3 text-sm text-red-800">{listError}</p>
       )}
 
       <UomShell canMaintain={can(session, UOM_CAPABILITY)} rows={rows} units={units} />

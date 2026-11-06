@@ -30,30 +30,30 @@ function sameIndicator(row: SpecialGlRow, company: string, accountType: string, 
 export function SpecialGl({ rows, canMaintain }: { rows: SpecialGlRow[]; canMaintain: boolean }) {
   return (
     <>
-      <section aria-labelledby="sgl-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="sgl-list" className="border border-line bg-surface p-4">
         <h2 id="sgl-list" className="text-sm font-semibold">Configured indicators</h2>
         {rows.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No special G/L indicator stands configured.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Company scope</th><th className="px-2 py-2">Account type</th>
-                  <th className="px-2 py-2">Indicator</th><th className="px-2 py-2">Alternative account</th>
-                  <th className="px-2 py-2">Request target</th>
-                  <th className="px-2 py-2">Description</th>
+                  <th>Company scope</th><th>Account type</th>
+                  <th>Indicator</th><th>Alternative account</th>
+                  <th>Request target</th>
+                  <th>Description</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={`${row.companyCode}|${row.accountType}|${row.indicator}`} className="border-t border-line">
-                    <td className="px-2 py-2">{row.companyCode || 'All companies'}</td>
-                    <td className="px-2 py-2">{row.accountType === 'AP' ? 'Vendor (AP)' : 'Customer (AR)'}</td>
-                    <td className="px-2 py-2">{row.indicator}</td>
-                    <td className="px-2 py-2">{row.alternativeReconciliationAccount}</td>
-                    <td className="px-2 py-2">{row.targetSpecialGlIndicator ?? '—'}</td>
-                    <td className="px-2 py-2">{row.description}</td>
+                  <tr key={`${row.companyCode}|${row.accountType}|${row.indicator}`}>
+                    <td>{row.companyCode || 'All companies'}</td>
+                    <td>{row.accountType === 'AP' ? 'Vendor (AP)' : 'Customer (AR)'}</td>
+                    <td>{row.indicator}</td>
+                    <td>{row.alternativeReconciliationAccount}</td>
+                    <td>{row.targetSpecialGlIndicator ?? '—'}</td>
+                    <td>{row.description}</td>
                   </tr>
                 ))}
               </tbody>
@@ -83,7 +83,7 @@ function MaintainIndicator({ rows }: { rows: SpecialGlRow[] }) {
   );
   const blocked = existing && lock?.mode === 'DISPLAY';
   return (
-    <section aria-labelledby="sgl-maintain" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="sgl-maintain" className="border border-line bg-surface p-4">
       <h2 id="sgl-maintain" className="text-sm font-semibold">Maintain an indicator</h2>
       <form action={maintain} onFocus={() => setEngaged(true)} onSubmit={(event) => { if (existing && lock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -146,7 +146,7 @@ function DeleteIndicator() {
   );
   const held = !ready || lock?.mode === 'CHANGE';
   return (
-    <section aria-labelledby="sgl-delete" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="sgl-delete" className="border border-line bg-surface p-4">
       <h2 id="sgl-delete" className="text-sm font-semibold">Delete an indicator</h2>
       <form action={remove} className="mt-4" onFocus={() => setEngaged(true)} onSubmit={(event) => { if (lock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

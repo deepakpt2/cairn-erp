@@ -134,17 +134,17 @@ export default async function BatchCockpitPage({
             {result.truncated ? ` The limit is ${result.limit}. Further matches may stand.` : ' The list is complete for this selection.'}
             {' '}Genealogy is not stored.
           </p>
-          <table className="w-full border border-line bg-white text-sm">
+          <table className="grid-table border border-line bg-white text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="p-2">Material</th>
-                <th className="p-2">Batch</th>
-                <th className="p-2">Plant</th>
-                <th className="p-2">Status</th>
-                <th className="p-2">Expiration</th>
-                <th className="p-2">Unrestricted</th>
-                <th className="p-2">Quality</th>
-                <th className="p-2">Blocked</th>
+              <tr className="text-left">
+                <th>Material</th>
+                <th>Batch</th>
+                <th>Plant</th>
+                <th>Status</th>
+                <th>Expiration</th>
+                <th>Unrestricted</th>
+                <th>Quality</th>
+                <th>Blocked</th>
               </tr>
             </thead>
             <tbody>
@@ -154,20 +154,20 @@ export default async function BatchCockpitPage({
                 next.set('focusBatch', row.batchNumber);
                 if (row.plant) next.set('focusPlant', row.plant);
                 return (
-                  <tr key={`${row.materialNumber}-${row.batchNumber}-${row.plant ?? ''}`} className="border-b border-line">
-                    <td className="p-2">{row.materialNumber}<br /><span className="text-ink-soft">{row.materialDescription}</span></td>
-                    <td className="p-2"><Link className="code underline" href={`${ROUTE}?${next.toString()}`}>{row.batchNumber}</Link></td>
-                    <td className="code p-2">{row.plant ?? '—'}</td>
-                    <td className="p-2">{row.restrictedUse === 'X' ? 'Restricted' : row.restrictedUse === ' ' ? 'Unrestricted' : 'Not stored'}</td>
-                    <td className="p-2">{row.shelfLifeExpirationDate ?? '—'}</td>
-                    <td className="p-2">{row.stock.unrestricted} {row.stock.unit}</td>
-                    <td className="p-2">{row.stock.quality} {row.stock.unit}</td>
-                    <td className="p-2">{row.stock.blocked} {row.stock.unit}</td>
+                  <tr key={`${row.materialNumber}-${row.batchNumber}-${row.plant ?? ''}`}>
+                    <td>{row.materialNumber}<br /><span className="text-ink-soft">{row.materialDescription}</span></td>
+                    <td><Link className="code underline" href={`${ROUTE}?${next.toString()}`}>{row.batchNumber}</Link></td>
+                    <td className="code">{row.plant ?? '—'}</td>
+                    <td>{row.restrictedUse === 'X' ? 'Restricted' : row.restrictedUse === ' ' ? 'Unrestricted' : 'Not stored'}</td>
+                    <td>{row.shelfLifeExpirationDate ?? '—'}</td>
+                    <td>{row.stock.unrestricted} {row.stock.unit}</td>
+                    <td>{row.stock.quality} {row.stock.unit}</td>
+                    <td>{row.stock.blocked} {row.stock.unit}</td>
                   </tr>
                 );
               })}
               {result.rows.length === 0 && (
-                <tr><td className="p-2 text-ink-soft" colSpan={8}>No batch matches. Opening this screen did not create one.</td></tr>
+                <tr><td className="text-ink-soft" colSpan={8}>No batch matches. Opening this screen did not create one.</td></tr>
               )}
             </tbody>
           </table>

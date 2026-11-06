@@ -147,10 +147,10 @@ export default function MaterialDocumentListShell({ canUse, selection, result, l
                 <td>{row.movementDirection}</td>
                 <td className="code">{row.materialNumber}</td>
                 <td>{row.materialDescription}</td>
-                <td className="text-end">{row.entryQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.baseQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.entryQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.baseQuantity.toFixed(3)}</td>
                 <td>{row.baseUnit}</td>
-                <td className="text-end">{row.value.toFixed(2)}</td>
+                <td className="text-end num">{row.value.toFixed(2)}</td>
                 <td className="code">{row.currency}</td>
                 <td className="code">{row.plant}</td>
                 <td className="code">{row.storageLocation}</td>

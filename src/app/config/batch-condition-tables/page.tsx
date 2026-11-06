@@ -82,26 +82,26 @@ export default async function BatchConditionTablePage({
       </form>
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Condition table</th>
-              <th className="p-2">Key fields</th>
-              <th className="p-2">Usage</th>
-              <th className="p-2">Application</th>
-              <th className="p-2">Version</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Condition table</th>
+              <th>Key fields</th>
+              <th>Usage</th>
+              <th>Application</th>
+              <th>Version</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.conditionTable} className="border-b border-line">
-                <td className="code p-2">{row.conditionTable}</td>
-                <td className="code p-2">{row.fields.join(' / ')}</td>
-                <td className="code p-2">{row.usage}</td>
-                <td className="code p-2">{row.application}</td>
-                <td className="p-2">{row.version}</td>
-                <td className="p-2 text-end">
+              <tr key={row.conditionTable}>
+                <td className="code">{row.conditionTable}</td>
+                <td className="code">{row.fields.join(' / ')}</td>
+                <td className="code">{row.usage}</td>
+                <td className="code">{row.application}</td>
+                <td>{row.version}</td>
+                <td className="text-end">
                   <Link href={`${ROUTE}?table=${encodeURIComponent(row.conditionTable)}&history=1`} className="underline">History</Link>
                   {canMaintain && (
                     <>
@@ -114,7 +114,7 @@ export default async function BatchConditionTablePage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-3 text-ink-soft">No condition table stands. None is created by opening this screen.</td>
+                <td colSpan={6} className="text-ink-soft">No condition table stands. None is created by opening this screen.</td>
               </tr>
             )}
           </tbody>

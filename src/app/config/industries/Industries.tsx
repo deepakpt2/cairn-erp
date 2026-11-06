@@ -104,27 +104,27 @@ export default function Industries({
           <p className="text-sm text-ink-faint">No industries stand yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
-                <tr className="border-b border-line text-ink-soft">
-                  <th className="py-2 pe-3">Industry</th>
-                  <th className="py-2 pe-3">Description</th>
-                  <th className="py-2 pe-3">Languages</th>
-                  <th className="py-2 pe-3">Partners</th>
-                  <th className="py-2 pe-3">Status</th>
-                  {canMaintain && <th className="py-2">Actions</th>}
+                <tr className="text-ink-soft">
+                  <th className="pe-3">Industry</th>
+                  <th className="pe-3">Description</th>
+                  <th className="pe-3">Languages</th>
+                  <th className="pe-3">Partners</th>
+                  <th className="pe-3">Status</th>
+                  {canMaintain && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {industries.map((row) => (
-                  <tr key={row.code} className="border-b border-line/60">
-                    <td className="py-2 pe-3 font-medium">{row.code}</td>
-                    <td className="py-2 pe-3">{row.description}</td>
-                    <td className="py-2 pe-3">{Object.keys(row.texts).join(', ')}</td>
-                    <td className="py-2 pe-3">{row.partnerCount}</td>
-                    <td className="py-2 pe-3">{row.isActive ? 'Active' : 'Inactive'}</td>
+                  <tr key={row.code}>
+                    <td className="pe-3 font-medium">{row.code}</td>
+                    <td className="pe-3">{row.description}</td>
+                    <td className="pe-3">{Object.keys(row.texts).join(', ')}</td>
+                    <td className="pe-3">{row.partnerCount}</td>
+                    <td className="pe-3">{row.isActive ? 'Active' : 'Inactive'}</td>
                     {canMaintain && (
-                      <td className="py-2">
+                      <td>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"

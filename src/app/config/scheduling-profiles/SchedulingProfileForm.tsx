@@ -55,27 +55,27 @@ export default function SchedulingProfileForm({
         {profiles.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No profile stands. Opening this screen does not create one.</p>
         ) : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-2">Plant</th>
-                <th className="px-2 py-2">Profile</th>
-                <th className="px-2 py-2">Description</th>
-                <th className="px-2 py-2">Release at creation</th>
-                <th className="px-2 py-2">Batch creation</th>
-                {canMaintain && <th className="px-2 py-2">Action</th>}
+              <tr className="text-left">
+                <th>Plant</th>
+                <th>Profile</th>
+                <th>Description</th>
+                <th>Release at creation</th>
+                <th>Batch creation</th>
+                {canMaintain && <th>Action</th>}
               </tr>
             </thead>
             <tbody>
               {profiles.map((profile) => (
-                <tr key={`${profile.plant}/${profile.profile}`} className="border-b border-line/60">
-                  <td className="px-2 py-2 code">{profile.plant}</td>
-                  <td className="px-2 py-2 code">{profile.profile}</td>
-                  <td className="px-2 py-2">{profile.description}</td>
-                  <td className="px-2 py-2 code">{profile.releaseOnCreate.trim() || '—'}</td>
-                  <td className="px-2 py-2 code">{profile.batchCreation.trim() || '—'}</td>
+                <tr key={`${profile.plant}/${profile.profile}`}>
+                  <td className="code">{profile.plant}</td>
+                  <td className="code">{profile.profile}</td>
+                  <td>{profile.description}</td>
+                  <td className="code">{profile.releaseOnCreate.trim() || '—'}</td>
+                  <td className="code">{profile.batchCreation.trim() || '—'}</td>
                   {canMaintain && (
-                    <td className="px-2 py-2">
+                    <td>
                       <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setEditing(profile)}>
                         Change
                       </button>
@@ -161,22 +161,22 @@ export default function SchedulingProfileForm({
         {assignments.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No material in this list has a profile.</p>
         ) : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-2">Material</th>
-                <th className="px-2 py-2">Plant</th>
-                <th className="px-2 py-2">Profile</th>
-                <th className="px-2 py-2">Version</th>
+              <tr className="text-left">
+                <th>Material</th>
+                <th>Plant</th>
+                <th>Profile</th>
+                <th>Version</th>
               </tr>
             </thead>
             <tbody>
               {assignments.map((assignment) => (
-                <tr key={`${assignment.plant}/${assignment.materialNumber}`} className="border-b border-line/60">
-                  <td className="px-2 py-2 code">{assignment.materialNumber}</td>
-                  <td className="px-2 py-2 code">{assignment.plant}</td>
-                  <td className="px-2 py-2 code">{assignment.profile}</td>
-                  <td className="px-2 py-2">{assignment.version}</td>
+                <tr key={`${assignment.plant}/${assignment.materialNumber}`}>
+                  <td className="code">{assignment.materialNumber}</td>
+                  <td className="code">{assignment.plant}</td>
+                  <td className="code">{assignment.profile}</td>
+                  <td>{assignment.version}</td>
                 </tr>
               ))}
             </tbody>

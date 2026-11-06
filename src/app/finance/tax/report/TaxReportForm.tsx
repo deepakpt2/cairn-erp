@@ -118,7 +118,7 @@ export default function TaxReportForm({ canReport, defaults, result }: {
                 <tr key={`${line.taxCode}-${line.currency}`}>
                   <td className="code">{line.taxCode}</td>
                   <td className="code">{line.accountKey ?? '—'}</td>
-                  <td className="tabular text-end">{line.ratePercent.toFixed(2)}%</td>
+                  <td className="tabular text-end num">{line.ratePercent.toFixed(2)}%</td>
                   <td className="tabular text-end">{line.taxBase === null ? t('taxReport.baseNotDerivable') : money(line.taxBase)}</td>
                   <td className="tabular text-end">{money(line.inputTax)}</td>
                   <td className="tabular text-end">{money(line.outputTax)}</td>

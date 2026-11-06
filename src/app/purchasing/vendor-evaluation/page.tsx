@@ -36,7 +36,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function EvaluationView({ evaluation, canScore }: { evaluation: VendorEvaluation; canScore: boolean }) {
   return (
     <section aria-labelledby="ve-result" className="space-y-4" data-ve-evaluation>
-      <div className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <div className="border border-line bg-surface p-4">
         <h2 id="ve-result" className="text-sm font-semibold" data-ve-supplier>
           {evaluation.supplierNumber}{evaluation.supplierName ? ` · ${evaluation.supplierName}` : ''}
         </h2>
@@ -60,25 +60,25 @@ function EvaluationView({ evaluation, canScore }: { evaluation: VendorEvaluation
         )}
       </div>
 
-      <div className="rounded-card border border-line bg-surface p-4 shadow-card">
-        <table className="w-full text-sm">
+      <div className="border border-line bg-surface p-4">
+        <table className="grid-table text-sm">
           <thead>
             <tr className="text-left text-ink-soft">
-              <th className="py-1 pr-3">{t('vendorEvaluation.criterion')}</th>
-              <th className="py-1 pr-3">{t('vendorEvaluation.method')}</th>
-              <th className="py-1 pr-3">{t('vendorEvaluation.weight')}</th>
-              <th className="py-1 pr-3">{t('vendorEvaluation.score')}</th>
-              <th className="py-1">{t('vendorEvaluation.evidence')}</th>
+              <th>{t('vendorEvaluation.criterion')}</th>
+              <th>{t('vendorEvaluation.method')}</th>
+              <th>{t('vendorEvaluation.weight')}</th>
+              <th>{t('vendorEvaluation.score')}</th>
+              <th>{t('vendorEvaluation.evidence')}</th>
             </tr>
           </thead>
           <tbody>
             {evaluation.criteria.map((row) => (
               <tr key={row.criterionCode} data-ve-criterion={row.criterionCode}>
-                <td className="py-2 pr-3">{row.criterionCode} · {row.description}</td>
-                <td className="py-2 pr-3" data-ve-method={row.criterionCode}>{row.method === 'AUTOMATIC' ? t('vendorEvaluation.automatic') : t('vendorEvaluation.manual')}</td>
-                <td className="py-2 pr-3">{row.weight}</td>
-                <td className="py-2 pr-3" data-ve-score={row.criterionCode}>{row.score ?? '—'}</td>
-                <td className="py-2" data-ve-evidence={row.criterionCode}>{row.evidenceNote}</td>
+                <td>{row.criterionCode} · {row.description}</td>
+                <td data-ve-method={row.criterionCode}>{row.method === 'AUTOMATIC' ? t('vendorEvaluation.automatic') : t('vendorEvaluation.manual')}</td>
+                <td>{row.weight}</td>
+                <td data-ve-score={row.criterionCode}>{row.score ?? '—'}</td>
+                <td data-ve-evidence={row.criterionCode}>{row.evidenceNote}</td>
               </tr>
             ))}
           </tbody>
@@ -154,7 +154,7 @@ export default async function VendorEvaluationPage({ searchParams }: {
 
       {!canEvaluate && <p className="text-sm text-red-700" role="alert">{t('vendorEvaluation.capabilityMissing')}</p>}
 
-      <section aria-labelledby="ve-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ve-selection" className="border border-line bg-surface p-4">
         <h2 id="ve-selection" className="text-sm font-semibold">{t('vendorEvaluation.selection')}</h2>
         <p className="mt-1 text-xs text-ink-soft" data-ve-read-only>{t('vendorEvaluation.readOnly')}</p>
         <form method="get" action={VENDOR_EVALUATION_ROUTE} className="mt-3 space-y-3">

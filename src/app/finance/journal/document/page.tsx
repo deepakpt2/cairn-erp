@@ -73,7 +73,7 @@ export default async function JournalDocumentPage({ searchParams }: {
       </header>
 
       {error && (
-        <p role="alert" className="rounded-card border border-line bg-surface p-4 text-sm text-red-700 shadow-card">{error}</p>
+        <p role="alert" className="border border-line bg-surface p-4 text-sm text-red-700">{error}</p>
       )}
       <DocumentDisplay
         document={document}

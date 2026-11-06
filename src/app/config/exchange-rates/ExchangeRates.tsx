@@ -376,7 +376,7 @@ export function ExchangeRates({
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={canMaintain ? 7 : 6} className="px-4 py-8 text-center text-sm text-ink-soft">
+                  <td colSpan={canMaintain ? 7 : 6} className="text-center text-sm text-ink-soft">
                     {t('exRate.empty')}
                   </td>
                 </tr>

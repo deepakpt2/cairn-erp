@@ -34,7 +34,7 @@ export default function HistoryForm({ canReport, defaults, sheet, exportQuery }:
   const d = defaults;
   return (
     <>
-      <section aria-labelledby="ah-select" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ah-select" className="border border-line bg-surface p-4">
         <h2 id="ah-select" className="text-sm font-semibold">Selection</h2>
         <form className="mt-3" method="GET">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -81,7 +81,7 @@ export default function HistoryForm({ canReport, defaults, sheet, exportQuery }:
         </form>
       </section>
 
-      <section aria-labelledby="ah-grid" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ah-grid" className="border border-line bg-surface p-4">
         <h2 id="ah-grid" className="text-sm font-semibold">Asset history sheet</h2>
         {!sheet ? (
           <p className="mt-2 text-sm text-ink-soft">Execute to build the sheet for the selection.</p>
@@ -95,68 +95,68 @@ export default function HistoryForm({ canReport, defaults, sheet, exportQuery }:
               <p key={w} className="mt-1 text-ink-soft">{w}</p>
             ))}
             <div className="mt-2 overflow-x-auto">
-              <table className="min-w-full text-left">
+              <table className="grid-table text-left">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Asset</th><th className="px-2 py-2">Description</th>
-                    <th className="px-2 py-2">Capitalized</th>
-                    <th className="px-2 py-2">Acq. beginning</th><th className="px-2 py-2">Acquisitions</th>
-                    <th className="px-2 py-2">Retirements</th><th className="px-2 py-2">Acq. ending</th>
-                    <th className="px-2 py-2">Depr. beginning</th><th className="px-2 py-2">Depr. year</th>
-                    <th className="px-2 py-2">Depr. on retirements</th><th className="px-2 py-2">Depr. ending</th>
-                    <th className="px-2 py-2">Net book value</th><th className="px-2 py-2">Curr.</th>
+                    <th>Asset</th><th>Description</th>
+                    <th>Capitalized</th>
+                    <th>Acq. beginning</th><th>Acquisitions</th>
+                    <th>Retirements</th><th>Acq. ending</th>
+                    <th>Depr. beginning</th><th>Depr. year</th>
+                    <th>Depr. on retirements</th><th>Depr. ending</th>
+                    <th>Net book value</th><th>Curr.</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sheet.rows.map((row) => (
-                    <tr key={`${row.companyCode}-${row.assetNumber}-${row.subNumber}`} className="border-t border-line">
-                      <td className="px-2 py-2">
+                    <tr key={`${row.companyCode}-${row.assetNumber}-${row.subNumber}`}>
+                      <td>
                         <Link className="text-teal-800 underline" href={`/finance/assets/change?company=${row.companyCode}&asset=${row.assetNumber}&sub=${row.subNumber}`}>
                           {row.companyCode} · {row.assetClass} · {row.assetNumber}/{row.subNumber}
                         </Link>
                       </td>
-                      <td className="px-2 py-2">{row.description} ({row.status})</td>
-                      <td className="px-2 py-2">{row.capitalizationDate ?? '—'}</td>
-                      <td className="px-2 py-2">{num(row.acquisitionBeginning)}</td>
-                      <td className="px-2 py-2">{num(row.acquisitions)}</td>
-                      <td className="px-2 py-2">{num(row.retirements)}</td>
-                      <td className="px-2 py-2">{num(row.acquisitionEnding)}</td>
-                      <td className="px-2 py-2">{num(row.depreciationBeginning)}</td>
-                      <td className="px-2 py-2">{num(row.depreciationYear)}</td>
-                      <td className="px-2 py-2">{num(row.depreciationOnRetirements)}</td>
-                      <td className="px-2 py-2">{num(row.depreciationEnding)}</td>
-                      <td className="px-2 py-2">{num(row.netBookValue)}</td>
-                      <td className="px-2 py-2">{row.currency}</td>
+                      <td>{row.description} ({row.status})</td>
+                      <td>{row.capitalizationDate ?? '—'}</td>
+                      <td>{num(row.acquisitionBeginning)}</td>
+                      <td>{num(row.acquisitions)}</td>
+                      <td>{num(row.retirements)}</td>
+                      <td>{num(row.acquisitionEnding)}</td>
+                      <td>{num(row.depreciationBeginning)}</td>
+                      <td>{num(row.depreciationYear)}</td>
+                      <td>{num(row.depreciationOnRetirements)}</td>
+                      <td>{num(row.depreciationEnding)}</td>
+                      <td>{num(row.netBookValue)}</td>
+                      <td>{row.currency}</td>
                     </tr>
                   ))}
                   {sheet.classTotals.map((t) => (
-                    <tr key={`class-${t.assetClass}-${t.currency}`} className="border-t border-line bg-slate-50 font-medium">
-                      <td className="px-2 py-2" colSpan={3}>Class {t.assetClass} subtotal</td>
-                      <td className="px-2 py-2">{num(t.acquisitionBeginning)}</td>
-                      <td className="px-2 py-2">{num(t.acquisitions)}</td>
-                      <td className="px-2 py-2">{num(t.retirements)}</td>
-                      <td className="px-2 py-2">{num(t.acquisitionEnding)}</td>
-                      <td className="px-2 py-2">{num(t.depreciationBeginning)}</td>
-                      <td className="px-2 py-2">{num(t.depreciationYear)}</td>
-                      <td className="px-2 py-2">{num(t.depreciationOnRetirements)}</td>
-                      <td className="px-2 py-2">{num(t.depreciationEnding)}</td>
-                      <td className="px-2 py-2">{num(t.netBookValue)}</td>
-                      <td className="px-2 py-2">{t.currency}</td>
+                    <tr key={`class-${t.assetClass}-${t.currency}`} className="bg-slate-50 font-medium">
+                      <td colSpan={3}>Class {t.assetClass} subtotal</td>
+                      <td>{num(t.acquisitionBeginning)}</td>
+                      <td>{num(t.acquisitions)}</td>
+                      <td>{num(t.retirements)}</td>
+                      <td>{num(t.acquisitionEnding)}</td>
+                      <td>{num(t.depreciationBeginning)}</td>
+                      <td>{num(t.depreciationYear)}</td>
+                      <td>{num(t.depreciationOnRetirements)}</td>
+                      <td>{num(t.depreciationEnding)}</td>
+                      <td>{num(t.netBookValue)}</td>
+                      <td>{t.currency}</td>
                     </tr>
                   ))}
                   {sheet.grandTotals.map((t) => (
-                    <tr key={`grand-${t.currency}`} className="border-t-2 border-line font-semibold">
-                      <td className="px-2 py-2" colSpan={3}>Grand total</td>
-                      <td className="px-2 py-2">{num(t.acquisitionBeginning)}</td>
-                      <td className="px-2 py-2">{num(t.acquisitions)}</td>
-                      <td className="px-2 py-2">{num(t.retirements)}</td>
-                      <td className="px-2 py-2">{num(t.acquisitionEnding)}</td>
-                      <td className="px-2 py-2">{num(t.depreciationBeginning)}</td>
-                      <td className="px-2 py-2">{num(t.depreciationYear)}</td>
-                      <td className="px-2 py-2">{num(t.depreciationOnRetirements)}</td>
-                      <td className="px-2 py-2">{num(t.depreciationEnding)}</td>
-                      <td className="px-2 py-2">{num(t.netBookValue)}</td>
-                      <td className="px-2 py-2">{t.currency}</td>
+                    <tr key={`grand-${t.currency}`} className="border-t-2 font-semibold">
+                      <td colSpan={3}>Grand total</td>
+                      <td>{num(t.acquisitionBeginning)}</td>
+                      <td>{num(t.acquisitions)}</td>
+                      <td>{num(t.retirements)}</td>
+                      <td>{num(t.acquisitionEnding)}</td>
+                      <td>{num(t.depreciationBeginning)}</td>
+                      <td>{num(t.depreciationYear)}</td>
+                      <td>{num(t.depreciationOnRetirements)}</td>
+                      <td>{num(t.depreciationEnding)}</td>
+                      <td>{num(t.netBookValue)}</td>
+                      <td>{t.currency}</td>
                     </tr>
                   ))}
                 </tbody>

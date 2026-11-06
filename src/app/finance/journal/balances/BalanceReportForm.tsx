@@ -17,7 +17,7 @@ export default function BalanceReportForm({ selection, report, reportError, canD
   canDisplay: boolean;
 }) {
   return (
-    <section aria-labelledby="gbr-select" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="gbr-select" className="border border-line bg-surface p-4">
       <h2 id="gbr-select" className="text-sm font-semibold">Balance report (ranges)</h2>
       <form method="get" className="mt-3">
         <input type="hidden" name="report" value="1" />
@@ -79,34 +79,34 @@ export default function BalanceReportForm({ selection, report, reportError, canD
             <p key={warning} className="mt-2 border border-amber-300 bg-amber-50 p-2 text-sm">{warning}</p>
           ))}
           <div className="mt-2 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Company</th><th className="px-2 py-2">Ledger</th>
-                  <th className="px-2 py-2">G/L Account</th><th className="px-2 py-2">Account Group</th>
-                  <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Opening Balance</th>
-                  <th className="px-2 py-2">Period Debit</th><th className="px-2 py-2">Period Credit</th>
-                  <th className="px-2 py-2">Net Change</th><th className="px-2 py-2">Closing Balance</th>
-                  <th className="px-2 py-2">Debit Balance</th><th className="px-2 py-2">Credit Balance</th>
-                  <th className="px-2 py-2">Drill</th>
+                  <th>Company</th><th>Ledger</th>
+                  <th>G/L Account</th><th>Account Group</th>
+                  <th>Currency</th><th>Opening Balance</th>
+                  <th>Period Debit</th><th>Period Credit</th>
+                  <th>Net Change</th><th>Closing Balance</th>
+                  <th>Debit Balance</th><th>Credit Balance</th>
+                  <th>Drill</th>
                 </tr>
               </thead>
               <tbody>
                 {report.rows.map((row) => (
-                  <tr key={`${row.companyCode}-${row.glAccount}`} className="border-t border-line">
-                    <td className="px-2 py-2">{row.companyCode}</td>
-                    <td className="px-2 py-2">{report.ledger}</td>
-                    <td className="px-2 py-2">{row.glAccount} — {row.accountName}</td>
-                    <td className="px-2 py-2">{row.accountGroup}</td>
-                    <td className="px-2 py-2">{row.currency}</td>
-                    <td className="px-2 py-2">{row.openingBalance.toFixed(2)}</td>
-                    <td className="px-2 py-2">{row.debitTurnover.toFixed(2)}</td>
-                    <td className="px-2 py-2">{row.creditTurnover.toFixed(2)}</td>
-                    <td className="px-2 py-2">{row.netChange.toFixed(2)}</td>
-                    <td className="px-2 py-2">{row.closingBalance.toFixed(2)}</td>
-                    <td className="px-2 py-2">{row.debitBalance.toFixed(2)}</td>
-                    <td className="px-2 py-2">{row.creditBalance.toFixed(2)}</td>
-                    <td className="px-2 py-2">
+                  <tr key={`${row.companyCode}-${row.glAccount}`}>
+                    <td>{row.companyCode}</td>
+                    <td>{report.ledger}</td>
+                    <td>{row.glAccount} — {row.accountName}</td>
+                    <td>{row.accountGroup}</td>
+                    <td>{row.currency}</td>
+                    <td className="num">{row.openingBalance.toFixed(2)}</td>
+                    <td className="num">{row.debitTurnover.toFixed(2)}</td>
+                    <td className="num">{row.creditTurnover.toFixed(2)}</td>
+                    <td className="num">{row.netChange.toFixed(2)}</td>
+                    <td className="num">{row.closingBalance.toFixed(2)}</td>
+                    <td className="num">{row.debitBalance.toFixed(2)}</td>
+                    <td className="num">{row.creditBalance.toFixed(2)}</td>
+                    <td>
                       <Link className="text-accent hover:underline"
                         href={`/finance/journal/items?accountFrom=${row.glAccount}&companyCodes=${row.companyCode}&fiscalYear=${report.fiscalYear}${report.periodFrom === report.periodTo ? `&postingPeriod=${report.periodFrom}` : ''}`}>
                         Line items
@@ -121,29 +121,29 @@ export default function BalanceReportForm({ selection, report, reportError, canD
             <div className="mt-3">
               <h3 className="text-sm font-semibold">Account group subtotals</h3>
               <div className="mt-1 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="grid-table text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Company</th><th className="px-2 py-2">Account Group</th><th className="px-2 py-2">Currency</th>
-                      <th className="px-2 py-2">Accounts</th><th className="px-2 py-2">Period Debit</th>
-                      <th className="px-2 py-2">Period Credit</th><th className="px-2 py-2">Net Change</th>
-                      <th className="px-2 py-2">Closing Balance</th><th className="px-2 py-2">Debit Balance</th>
-                      <th className="px-2 py-2">Credit Balance</th>
+                      <th>Company</th><th>Account Group</th><th>Currency</th>
+                      <th>Accounts</th><th>Period Debit</th>
+                      <th>Period Credit</th><th>Net Change</th>
+                      <th>Closing Balance</th><th>Debit Balance</th>
+                      <th>Credit Balance</th>
                     </tr>
                   </thead>
                   <tbody>
                     {report.subtotals.map((subtotal) => (
-                      <tr key={`${subtotal.companyCode}-${subtotal.accountGroup}-${subtotal.currency}`} className="border-t border-line">
-                        <td className="px-2 py-2">{subtotal.companyCode}</td>
-                        <td className="px-2 py-2">{subtotal.accountGroup}</td>
-                        <td className="px-2 py-2">{subtotal.currency}</td>
-                        <td className="px-2 py-2">{subtotal.accountCount}</td>
-                        <td className="px-2 py-2">{subtotal.debitTurnover.toFixed(2)}</td>
-                        <td className="px-2 py-2">{subtotal.creditTurnover.toFixed(2)}</td>
-                        <td className="px-2 py-2">{subtotal.netChange.toFixed(2)}</td>
-                        <td className="px-2 py-2">{subtotal.closingBalance.toFixed(2)}</td>
-                        <td className="px-2 py-2">{subtotal.debitBalance.toFixed(2)}</td>
-                        <td className="px-2 py-2">{subtotal.creditBalance.toFixed(2)}</td>
+                      <tr key={`${subtotal.companyCode}-${subtotal.accountGroup}-${subtotal.currency}`}>
+                        <td>{subtotal.companyCode}</td>
+                        <td>{subtotal.accountGroup}</td>
+                        <td>{subtotal.currency}</td>
+                        <td>{subtotal.accountCount}</td>
+                        <td className="num">{subtotal.debitTurnover.toFixed(2)}</td>
+                        <td className="num">{subtotal.creditTurnover.toFixed(2)}</td>
+                        <td className="num">{subtotal.netChange.toFixed(2)}</td>
+                        <td className="num">{subtotal.closingBalance.toFixed(2)}</td>
+                        <td className="num">{subtotal.debitBalance.toFixed(2)}</td>
+                        <td className="num">{subtotal.creditBalance.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -154,20 +154,20 @@ export default function BalanceReportForm({ selection, report, reportError, canD
         </>
       ) : (
         <div className="mt-3 overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
+          <table className="grid-table text-left text-sm">
             <thead>
               <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                <th className="px-2 py-2">Company</th><th className="px-2 py-2">Ledger</th>
-                <th className="px-2 py-2">G/L Account</th><th className="px-2 py-2">Account Group</th>
-                <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Opening Balance</th>
-                <th className="px-2 py-2">Period Debit</th><th className="px-2 py-2">Period Credit</th>
-                <th className="px-2 py-2">Net Change</th><th className="px-2 py-2">Closing Balance</th>
-                <th className="px-2 py-2">Debit Balance</th><th className="px-2 py-2">Credit Balance</th>
+                <th>Company</th><th>Ledger</th>
+                <th>G/L Account</th><th>Account Group</th>
+                <th>Currency</th><th>Opening Balance</th>
+                <th>Period Debit</th><th>Period Credit</th>
+                <th>Net Change</th><th>Closing Balance</th>
+                <th>Debit Balance</th><th>Credit Balance</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-t border-line">
-                <td colSpan={12} className="px-2 py-2 text-ink-soft">Enter a selection and execute to read balances across accounts.</td>
+              <tr>
+                <td colSpan={12} className="text-ink-soft">Enter a selection and execute to read balances across accounts.</td>
               </tr>
             </tbody>
           </table>

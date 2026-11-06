@@ -30,7 +30,7 @@ export default function ReconcileShell({
 
   return (
     <>
-      <section aria-labelledby="reconcile-scope" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="reconcile-scope" className="border border-line bg-surface p-4">
         <h2 id="reconcile-scope" className="text-sm font-semibold">{t('recon.scopeHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('recon.scopeHint')}</p>
         <form method="get" className="mt-3 flex flex-wrap items-end gap-3">
@@ -43,11 +43,11 @@ export default function ReconcileShell({
       </section>
 
       {reportError && (
-        <p role="alert" className="rounded-card border border-red-300 bg-red-50 p-3 text-sm text-red-800">{reportError}</p>
+        <p role="alert" className="border border-red-300 bg-red-50 p-3 text-sm text-red-800">{reportError}</p>
       )}
 
       {result && (
-        <section aria-labelledby="reconcile-report" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="reconcile-report" className="border border-line bg-surface p-4">
           <h2 id="reconcile-report" className="text-sm font-semibold">{t('recon.reportHeader')}</h2>
           <p
             role="status"
@@ -65,32 +65,32 @@ export default function ReconcileShell({
           </p>
 
           {result.drift.length > 0 && (
-            <table className="mt-3 w-full text-sm">
+            <table className="grid-table mt-3 text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="py-1">{t('recon.material')}</th>
-                  <th className="py-1">{t('recon.plant')}</th>
-                  <th className="py-1">{t('recon.location')}</th>
-                  <th className="py-1">{t('recon.stockType')}</th>
-                  <th className="py-1 text-right">{t('recon.ledger')}</th>
-                  <th className="py-1 text-right">{t('recon.projection')}</th>
-                  <th className="py-1 text-right">{t('recon.difference')}</th>
-                  <th className="py-1" />
+                  <th>{t('recon.material')}</th>
+                  <th>{t('recon.plant')}</th>
+                  <th>{t('recon.location')}</th>
+                  <th>{t('recon.stockType')}</th>
+                  <th className="text-right">{t('recon.ledger')}</th>
+                  <th className="text-right">{t('recon.projection')}</th>
+                  <th className="text-right">{t('recon.difference')}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {result.drift.map((row) => {
                   const key = `${row.materialNumber}/${row.plant}/${row.storageLocation ?? '-'}/${row.stockType}`;
                   return (
-                    <tr key={key} className="border-t border-line" data-drift={key}>
-                      <td className="py-1 code">{row.materialNumber}</td>
-                      <td className="py-1 code">{row.plant}</td>
-                      <td className="py-1 code">{row.storageLocation ?? '—'}</td>
-                      <td className="py-1 code">{row.stockType}</td>
-                      <td className="py-1 text-right tabular">{row.ledgerQuantity}</td>
-                      <td className="py-1 text-right tabular">{row.projectedQuantity}</td>
-                      <td className="py-1 text-right tabular" data-difference={row.difference}>{row.difference}</td>
-                      <td className="py-1 text-right">
+                    <tr key={key} data-drift={key}>
+                      <td className="code">{row.materialNumber}</td>
+                      <td className="code">{row.plant}</td>
+                      <td className="code">{row.storageLocation ?? '—'}</td>
+                      <td className="code">{row.stockType}</td>
+                      <td className="text-right tabular">{row.ledgerQuantity}</td>
+                      <td className="text-right tabular">{row.projectedQuantity}</td>
+                      <td className="text-right tabular" data-difference={row.difference}>{row.difference}</td>
+                      <td className="text-right">
                         <form action={action}>
                           <input type="hidden" name="materialNumber" value={row.materialNumber} />
                           <input type="hidden" name="plant" value={row.plant} />

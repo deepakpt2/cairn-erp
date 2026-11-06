@@ -358,24 +358,24 @@ function TimeTypeList({ timeTypes }: { timeTypes: TimeTypeView[] }) {
   return (
     <section className="mt-4 border panel p-3">
       <h2 className="text-sm font-semibold mb-2">Time types</h2>
-      <table className="w-full text-left text-sm border-collapse">
+      <table className="grid-table text-left text-sm border-collapse">
         <thead>
-          <tr className="border-b">
-            <th className="pb-2 text-ink-soft">Code</th>
-            <th className="pb-2 text-ink-soft">Name</th>
-            <th className="pb-2 text-ink-soft">Kind</th>
-            <th className="pb-2 text-ink-soft">Reduces quota</th>
-            <th className="pb-2 text-ink-soft">Valid</th>
+          <tr>
+            <th className="text-ink-soft">Code</th>
+            <th className="text-ink-soft">Name</th>
+            <th className="text-ink-soft">Kind</th>
+            <th className="text-ink-soft">Reduces quota</th>
+            <th className="text-ink-soft">Valid</th>
           </tr>
         </thead>
         <tbody>
           {timeTypes.map((t) => (
-            <tr key={t.code} className="border-b hover:bg-tint">
-              <td className="py-2 font-mono">{t.code}</td>
-              <td className="py-2">{t.name}</td>
-              <td className="py-2">{textLabel(t.typeKind)}</td>
-              <td className="py-2">{t.reducesQuota ? 'yes' : 'no'}</td>
-              <td className="py-2">{t.isValid ? 'yes' : 'retired'}</td>
+            <tr key={t.code} className="hover:bg-tint">
+              <td className="font-mono">{t.code}</td>
+              <td>{t.name}</td>
+              <td>{textLabel(t.typeKind)}</td>
+              <td>{t.reducesQuota ? 'yes' : 'no'}</td>
+              <td>{t.isValid ? 'yes' : 'retired'}</td>
             </tr>
           ))}
         </tbody>
@@ -398,26 +398,26 @@ function AbsenceList({ absences }: { absences: AbsenceView[] }) {
   return (
     <section className="mt-4 border panel p-3">
       <h2 className="text-sm font-semibold mb-2">Absences</h2>
-      <table className="w-full text-left text-sm border-collapse">
+      <table className="grid-table text-left text-sm border-collapse">
         <thead>
-          <tr className="border-b">
-            <th className="pb-2 text-ink-soft">Personnel</th>
-            <th className="pb-2 text-ink-soft">Type</th>
-            <th className="pb-2 text-ink-soft">From</th>
-            <th className="pb-2 text-ink-soft">To</th>
-            <th className="pb-2 text-ink-soft">Status</th>
-            <th className="pb-2 text-ink-soft">Reason</th>
+          <tr>
+            <th className="text-ink-soft">Personnel</th>
+            <th className="text-ink-soft">Type</th>
+            <th className="text-ink-soft">From</th>
+            <th className="text-ink-soft">To</th>
+            <th className="text-ink-soft">Status</th>
+            <th className="text-ink-soft">Reason</th>
           </tr>
         </thead>
         <tbody>
           {absences.map((a) => (
-            <tr key={`${a.personnelNumber}/${a.timeTypeCode}/${a.validFrom}`} className="border-b hover:bg-tint">
-              <td className="py-2 font-mono">{a.personnelNumber}</td>
-              <td className="py-2">{a.timeTypeCode}</td>
-              <td className="py-2">{a.validFrom}</td>
-              <td className="py-2">{a.validTo ?? 'open'}</td>
-              <td className="py-2">{a.status}</td>
-              <td className="py-2 text-ink-soft">{a.reason ?? '—'}</td>
+            <tr key={`${a.personnelNumber}/${a.timeTypeCode}/${a.validFrom}`} className="hover:bg-tint">
+              <td className="font-mono">{a.personnelNumber}</td>
+              <td>{a.timeTypeCode}</td>
+              <td>{a.validFrom}</td>
+              <td>{a.validTo ?? 'open'}</td>
+              <td>{a.status}</td>
+              <td className="text-ink-soft">{a.reason ?? '—'}</td>
             </tr>
           ))}
         </tbody>

@@ -75,26 +75,26 @@ export default async function InitialBatchStatusPage({
       </form>
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Type</th>
-              <th className="p-2">Description</th>
-              <th className="p-2">Initial status</th>
-              <th className="p-2">Changed by</th>
-              <th className="p-2">Changed at</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Type</th>
+              <th>Description</th>
+              <th>Initial status</th>
+              <th>Changed by</th>
+              <th>Changed at</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {types.map((row) => (
-              <tr key={row.materialType} className="border-b border-line">
-                <td className="code p-2">{row.materialType}</td>
-                <td className="p-2">{row.name}{row.active ? '' : ' · inactive'}</td>
-                <td className="code p-2">{row.initialStatus ?? 'blank'}</td>
-                <td className="p-2">{row.changedBy ?? '—'}</td>
-                <td className="p-2">{when(row.changedAt)}</td>
-                <td className="p-2 text-end">
+              <tr key={row.materialType}>
+                <td className="code">{row.materialType}</td>
+                <td>{row.name}{row.active ? '' : ' · inactive'}</td>
+                <td className="code">{row.initialStatus ?? 'blank'}</td>
+                <td>{row.changedBy ?? '—'}</td>
+                <td>{when(row.changedAt)}</td>
+                <td className="text-end">
                   <Link href={`${ROUTE}?type=${encodeURIComponent(row.materialType)}&history=1`} className="underline">History</Link>
                   {canMaintain && (
                     <>
@@ -106,7 +106,7 @@ export default async function InitialBatchStatusPage({
               </tr>
             ))}
             {types.length === 0 && (
-              <tr><td colSpan={6} className="p-3 text-ink-soft">No material type matches. Opening this screen did not create one.</td></tr>
+              <tr><td colSpan={6} className="text-ink-soft">No material type matches. Opening this screen did not create one.</td></tr>
             )}
           </tbody>
         </table>

@@ -49,35 +49,35 @@ export default async function PhysicalInventoryPage({ searchParams }: {
         today={today}
       />
 
-      <section aria-labelledby="count-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="count-list" className="border border-line bg-surface p-4">
         <h2 id="count-list" className="text-sm font-semibold">{t('mi01.listHeader')}</h2>
         {documents.length === 0 ? (
           <p className="mt-1 text-sm text-ink-soft">{t('mi01.listEmpty')}</p>
         ) : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mi01.document')}</th>
-                <th className="py-1">{t('mi01.fiscalYear')}</th>
-                <th className="py-1">{t('mi01.plant')}</th>
-                <th className="py-1">{t('mi01.storageLocation')}</th>
-                <th className="py-1">{t('mi01.plannedCountDate')}</th>
-                <th className="py-1">{t('mi01.blocked')}</th>
-                <th className="py-1">{t('mi01.status')}</th>
-                <th className="py-1">{t('mi01.actions')}</th>
+                <th>{t('mi01.document')}</th>
+                <th>{t('mi01.fiscalYear')}</th>
+                <th>{t('mi01.plant')}</th>
+                <th>{t('mi01.storageLocation')}</th>
+                <th>{t('mi01.plannedCountDate')}</th>
+                <th>{t('mi01.blocked')}</th>
+                <th>{t('mi01.status')}</th>
+                <th>{t('mi01.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {documents.map((document) => (
-                <tr key={`${document.inventoryDocumentNumber}/${document.fiscalYear}`} className="border-t border-line" data-document={document.inventoryDocumentNumber}>
-                  <td className="py-1 code">{document.inventoryDocumentNumber}</td>
-                  <td className="py-1 tabular">{document.fiscalYear}</td>
-                  <td className="py-1">{document.plant}</td>
-                  <td className="py-1">{document.storageLocation ?? t('mi01.wholePlant')}</td>
-                  <td className="py-1 tabular">{document.plannedCountDate}</td>
-                  <td className="py-1">{document.postingBlock ? t('mi01.blocked') : '—'}</td>
-                  <td className="py-1" data-status={document.status}>{document.status}</td>
-                  <td className="py-1">
+                <tr key={`${document.inventoryDocumentNumber}/${document.fiscalYear}`} data-document={document.inventoryDocumentNumber}>
+                  <td className="code">{document.inventoryDocumentNumber}</td>
+                  <td className="tabular">{document.fiscalYear}</td>
+                  <td>{document.plant}</td>
+                  <td>{document.storageLocation ?? t('mi01.wholePlant')}</td>
+                  <td className="tabular">{document.plannedCountDate}</td>
+                  <td>{document.postingBlock ? t('mi01.blocked') : '—'}</td>
+                  <td data-status={document.status}>{document.status}</td>
+                  <td>
                     {document.status === 'CREATED' && can(session, PHYSICAL_INVENTORY_CANCEL_CAPABILITY) && (
                       <CancelListed number={document.inventoryDocumentNumber} year={document.fiscalYear} />
                     )}

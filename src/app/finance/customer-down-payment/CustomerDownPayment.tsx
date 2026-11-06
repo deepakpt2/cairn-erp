@@ -25,7 +25,7 @@ export default function CustomerDownPayment({ canEnter, today }: {
 
   return (
     <>
-      <section aria-labelledby="cdp-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cdp-header" className="border border-line bg-surface p-4">
         <h2 id="cdp-header" className="text-sm font-semibold">Header and bank data</h2>
         <form action={action}>
           <input type="hidden" name="requestKey" value="" />
@@ -99,7 +99,7 @@ export default function CustomerDownPayment({ canEnter, today }: {
         </form>
       </section>
 
-      <section aria-labelledby="cdp-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cdp-result" className="border border-line bg-surface p-4">
         <h2 id="cdp-result" className="text-sm font-semibold">Down payment</h2>
         <Message state={state} />
         <p className="mt-2 text-sm text-ink-soft">

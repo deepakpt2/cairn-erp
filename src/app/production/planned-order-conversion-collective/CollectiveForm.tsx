@@ -17,7 +17,7 @@ export default function CollectiveForm({ rows }: { rows: ConversionPreview[] }) 
   return (
     <form action={action} className="mt-4 space-y-3 text-sm">
       <input type="hidden" name="correlationId" value={correlationId} />
-      <table className="w-full text-sm">
+      <table className="grid-table text-sm">
         <thead>
           <tr className="text-left text-ink-faint">
             <th>Select</th>

@@ -116,40 +116,40 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
 
   const itemRows = (view: VendorAgeingView, items: AgeingItem[]) => (
     <div className="mt-2 overflow-x-auto">
-      <table className="min-w-full text-left text-sm">
+      <table className="grid-table text-left text-sm">
         <thead>
           <tr className="text-xs uppercase tracking-wide text-ink-faint">
-            <th className="px-2 py-2">Document</th><th className="px-2 py-2">Fiscal year</th>
-            <th className="px-2 py-2">Line</th><th className="px-2 py-2">Type</th>
-            <th className="px-2 py-2">Posting date</th><th className="px-2 py-2">Document date</th>
-            <th className="px-2 py-2">Baseline date</th><th className="px-2 py-2">Terms</th>
-            <th className="px-2 py-2">Due date</th><th className="px-2 py-2">Days overdue</th>
-            <th className="px-2 py-2">Bucket</th><th className="px-2 py-2">Spec. G/L</th>
-            <th className="px-2 py-2">Original amount</th><th className="px-2 py-2">Remaining amount</th>
-            <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Clearing</th>
-            <th className="px-2 py-2">Document display</th>
+            <th>Document</th><th>Fiscal year</th>
+            <th>Line</th><th>Type</th>
+            <th>Posting date</th><th>Document date</th>
+            <th>Baseline date</th><th>Terms</th>
+            <th>Due date</th><th>Days overdue</th>
+            <th>Bucket</th><th>Spec. G/L</th>
+            <th>Original amount</th><th>Remaining amount</th>
+            <th>Currency</th><th>Clearing</th>
+            <th>Document display</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={`${item.documentNumber}-${item.fiscalYear}-${item.lineNumber}`} className="border-t border-line">
-              <td className="px-2 py-2">{item.documentNumber}</td>
-              <td className="px-2 py-2">{item.fiscalYear}</td>
-              <td className="px-2 py-2">{item.lineNumber}</td>
-              <td className="px-2 py-2">{item.documentType}</td>
-              <td className="px-2 py-2">{item.postingDate}</td>
-              <td className="px-2 py-2">{item.documentDate}</td>
-              <td className="px-2 py-2">{item.baselineDate ?? '—'}</td>
-              <td className="px-2 py-2">{item.paymentTerms ?? '—'}</td>
-              <td className="px-2 py-2">{item.dueDate}</td>
-              <td className="px-2 py-2">{item.daysOverdue}</td>
-              <td className="px-2 py-2">{bucketLabel(view, item.bucket)}</td>
-              <td className="px-2 py-2">{item.specialGlIndicator ?? '—'}</td>
-              <td className="px-2 py-2">{fmt(Number(item.documentAmount))}</td>
-              <td className="px-2 py-2">{fmt(item.signed)}</td>
-              <td className="px-2 py-2">{item.currency}</td>
-              <td className="px-2 py-2">{item.clearingDocument ? `${item.clearingDocument} · ${item.clearingDate ?? ''}` : '—'}</td>
-              <td className="px-2 py-2">
+            <tr key={`${item.documentNumber}-${item.fiscalYear}-${item.lineNumber}`}>
+              <td>{item.documentNumber}</td>
+              <td>{item.fiscalYear}</td>
+              <td>{item.lineNumber}</td>
+              <td>{item.documentType}</td>
+              <td>{item.postingDate}</td>
+              <td>{item.documentDate}</td>
+              <td>{item.baselineDate ?? '—'}</td>
+              <td>{item.paymentTerms ?? '—'}</td>
+              <td>{item.dueDate}</td>
+              <td>{item.daysOverdue}</td>
+              <td>{bucketLabel(view, item.bucket)}</td>
+              <td>{item.specialGlIndicator ?? '—'}</td>
+              <td>{fmt(Number(item.documentAmount))}</td>
+              <td>{fmt(item.signed)}</td>
+              <td>{item.currency}</td>
+              <td>{item.clearingDocument ? `${item.clearingDocument} · ${item.clearingDate ?? ''}` : '—'}</td>
+              <td>
                 <Link className="underline" href={`/finance/journal/document?document=${encodeURIComponent(item.documentNumber)}&company=${view.companyCode}&year=${item.fiscalYear}`}>
                   Display
                 </Link>
@@ -174,7 +174,7 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('vendorAgeing.subtitle')}</p>
       </header>
 
-      <section aria-labelledby="va-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="va-selection" className="border border-line bg-surface p-4">
         <h2 id="va-selection" className="text-sm font-semibold">Selection</h2>
         <form method="get" action={ROUTE} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -249,7 +249,7 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
       </section>
 
       {views.length === 0 && (
-        <section aria-labelledby="va-grid" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="va-grid" className="border border-line bg-surface p-4">
           <h2 id="va-grid" className="text-sm font-semibold">Ageing</h2>
           <p className="mt-2 text-sm text-ink-soft">No ageing stands loaded. Choose company codes, suppliers and a key date.</p>
         </section>
@@ -260,7 +260,7 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
           ? itemSort(view.items.filter((i) => i.supplier === params.supplier))
           : [];
         return (
-          <section key={view.companyCode} aria-labelledby={`va-grid-${view.companyCode}`} className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <section key={view.companyCode} aria-labelledby={`va-grid-${view.companyCode}`} className="border border-line bg-surface p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 id={`va-grid-${view.companyCode}`} className="text-sm font-semibold">
                 Ageing — company {view.companyCode} ({view.currency})
@@ -276,33 +276,33 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
               <p className="mt-2 text-sm text-ink-soft">No items stand open as of the key date.</p>
             ) : (
               <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="grid-table text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Supplier</th><th className="px-2 py-2">Name</th>
-                      <th className="px-2 py-2">Items</th>
-                      {[0, 1, 2, 3, 4].map((i) => <th key={i} className="px-2 py-2">{bucketLabel(view, i)}</th>)}
-                      <th className="px-2 py-2">Total</th><th className="px-2 py-2">Currency</th>
+                      <th>Supplier</th><th>Name</th>
+                      <th>Items</th>
+                      {[0, 1, 2, 3, 4].map((i) => <th key={i}>{bucketLabel(view, i)}</th>)}
+                      <th>Total</th><th>Currency</th>
                     </tr>
                   </thead>
                   <tbody>
                     {view.suppliers.map((row) => (
-                      <tr key={row.supplier} className="border-t border-line">
-                        <td className="px-2 py-2">
+                      <tr key={row.supplier}>
+                        <td>
                           <Link href={drillHref(view, row.supplier)} className="underline">{row.supplier}</Link>
                         </td>
-                        <td className="px-2 py-2">{nameOf.get(row.supplier) ?? ''}</td>
-                        <td className="px-2 py-2">{view.items.filter((i) => i.supplier === row.supplier).length}</td>
-                        {row.buckets.map((v, i) => <td key={i} className="px-2 py-2">{fmt(v)}</td>)}
-                        <td className="px-2 py-2">{fmt(row.total)}</td>
-                        <td className="px-2 py-2">{view.currency}</td>
+                        <td>{nameOf.get(row.supplier) ?? ''}</td>
+                        <td>{view.items.filter((i) => i.supplier === row.supplier).length}</td>
+                        {row.buckets.map((v, i) => <td key={i}>{fmt(v)}</td>)}
+                        <td>{fmt(row.total)}</td>
+                        <td>{view.currency}</td>
                       </tr>
                     ))}
-                    <tr className="border-t border-line font-semibold">
-                      <td className="px-2 py-2" colSpan={3}>Company total</td>
-                      {view.totals.map((v, i) => <td key={i} className="px-2 py-2">{fmt(v)}</td>)}
-                      <td className="px-2 py-2">{fmt(view.grandTotal)}</td>
-                      <td className="px-2 py-2">{view.currency}</td>
+                    <tr className="font-semibold">
+                      <td colSpan={3}>Company total</td>
+                      {view.totals.map((v, i) => <td key={i}>{fmt(v)}</td>)}
+                      <td>{fmt(view.grandTotal)}</td>
+                      <td>{view.currency}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -313,28 +313,28 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
 
             {level === 'DOCUMENT' && view.items.length > 0 && (
               <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="grid-table text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Supplier</th><th className="px-2 py-2">Document</th>
-                      <th className="px-2 py-2">Fiscal year</th><th className="px-2 py-2">Lines</th>
-                      <th className="px-2 py-2">Due date</th><th className="px-2 py-2">Days overdue</th>
-                      <th className="px-2 py-2">Remaining amount</th><th className="px-2 py-2">Currency</th>
+                      <th>Supplier</th><th>Document</th>
+                      <th>Fiscal year</th><th>Lines</th>
+                      <th>Due date</th><th>Days overdue</th>
+                      <th>Remaining amount</th><th>Currency</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[...new Map(view.items.map((i) => [`${i.supplier}|${i.documentNumber}|${i.fiscalYear}`, i])).values()].map((first) => {
                       const lines = view.items.filter((i) => i.supplier === first.supplier && i.documentNumber === first.documentNumber && i.fiscalYear === first.fiscalYear);
                       return (
-                        <tr key={`${first.supplier}-${first.documentNumber}-${first.fiscalYear}`} className="border-t border-line">
-                          <td className="px-2 py-2">{first.supplier}</td>
-                          <td className="px-2 py-2">{first.documentNumber}</td>
-                          <td className="px-2 py-2">{first.fiscalYear}</td>
-                          <td className="px-2 py-2">{lines.length}</td>
-                          <td className="px-2 py-2">{first.dueDate}</td>
-                          <td className="px-2 py-2">{first.daysOverdue}</td>
-                          <td className="px-2 py-2">{fmt(lines.reduce((s, i) => s + i.signed, 0))}</td>
-                          <td className="px-2 py-2">{first.currency}</td>
+                        <tr key={`${first.supplier}-${first.documentNumber}-${first.fiscalYear}`}>
+                          <td>{first.supplier}</td>
+                          <td>{first.documentNumber}</td>
+                          <td>{first.fiscalYear}</td>
+                          <td>{lines.length}</td>
+                          <td>{first.dueDate}</td>
+                          <td>{first.daysOverdue}</td>
+                          <td>{fmt(lines.reduce((s, i) => s + i.signed, 0))}</td>
+                          <td>{first.currency}</td>
                         </tr>
                       );
                     })}

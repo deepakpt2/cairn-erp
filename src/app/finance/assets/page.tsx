@@ -46,30 +46,30 @@ export default async function AssetsPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('assetChange.subtitle')}</p>
       </header>
 
-      <section aria-labelledby="fa-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="fa-list" className="border border-line bg-surface p-4">
         <h2 id="fa-list" className="text-sm font-semibold">Assets</h2>
         {assets.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No assets stand in this tenant.</p>
         ) : (
           <div className="mt-2 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Asset</th><th className="px-2 py-2">Company</th>
-                  <th className="px-2 py-2">Class</th><th className="px-2 py-2">Description</th>
-                  <th className="px-2 py-2">Capitalized</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Change</th>
+                  <th>Asset</th><th>Company</th>
+                  <th>Class</th><th>Description</th>
+                  <th>Capitalized</th><th>Status</th><th>Change</th>
                 </tr>
               </thead>
               <tbody>
                 {assets.map((asset) => (
-                  <tr key={`${asset.companyCode}-${asset.assetNumber}-${asset.subNumber}`} className="border-t border-line">
-                    <td className="px-2 py-2">{asset.assetNumber}/{asset.subNumber}</td>
-                    <td className="px-2 py-2">{asset.companyCode}</td>
-                    <td className="px-2 py-2">{asset.assetClass}</td>
-                    <td className="px-2 py-2">{asset.description1}</td>
-                    <td className="px-2 py-2">{asset.capitalizationDate ?? '—'}</td>
-                    <td className="px-2 py-2">{asset.status}</td>
-                    <td className="px-2 py-2">
+                  <tr key={`${asset.companyCode}-${asset.assetNumber}-${asset.subNumber}`}>
+                    <td>{asset.assetNumber}/{asset.subNumber}</td>
+                    <td>{asset.companyCode}</td>
+                    <td>{asset.assetClass}</td>
+                    <td>{asset.description1}</td>
+                    <td>{asset.capitalizationDate ?? '—'}</td>
+                    <td>{asset.status}</td>
+                    <td>
                       <Link className="text-accent hover:underline"
                         href={`/finance/assets/change?company=${asset.companyCode}&asset=${encodeURIComponent(asset.assetNumber)}&sub=${asset.subNumber}`}>
                         Change

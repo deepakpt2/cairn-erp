@@ -37,24 +37,24 @@ function Notice({ state }: { state: RfqActionState }) {
         <p className="mt-1">{t('requestForQuotation.currency', { currency: state.currency })}</p>
       )}
       {state.lines && state.lines.length > 0 && (
-        <table className="mt-3 w-full text-sm" data-rfq-preview-lines>
+        <table className="grid-table mt-3 text-sm" data-rfq-preview-lines>
           <thead>
             <tr className="text-left text-ink-soft">
-              <th className="py-1 pr-3">{t('requestForQuotation.item')}</th>
-              <th className="py-1 pr-3">{t('requestForQuotation.shortText')}</th>
-              <th className="py-1 pr-3">{t('requestForQuotation.quantity')}</th>
-              <th className="py-1 pr-3">{t('requestForQuotation.unit')}</th>
-              <th className="py-1">{t('requestForQuotation.plant')}</th>
+              <th>{t('requestForQuotation.item')}</th>
+              <th>{t('requestForQuotation.shortText')}</th>
+              <th>{t('requestForQuotation.quantity')}</th>
+              <th>{t('requestForQuotation.unit')}</th>
+              <th>{t('requestForQuotation.plant')}</th>
             </tr>
           </thead>
           <tbody>
             {state.lines.map((line) => (
               <tr key={line.itemNumber}>
-                <td className="py-1 pr-3">{line.itemNumber}</td>
-                <td className="py-1 pr-3">{line.shortText}</td>
-                <td className="py-1 pr-3">{line.quantity}</td>
-                <td className="py-1 pr-3">{line.unit}</td>
-                <td className="py-1">{line.plant}</td>
+                <td>{line.itemNumber}</td>
+                <td>{line.shortText}</td>
+                <td>{line.quantity}</td>
+                <td>{line.unit}</td>
+                <td>{line.plant}</td>
               </tr>
             ))}
           </tbody>
@@ -161,7 +161,7 @@ function ChangeRequest({
   // would remount away the result the user is waiting to read.
   const formKey = `${request.rfqNumber}:${request.changedAt ?? ''}:${opened.changedAt ?? ''}`;
   return (
-    <section aria-labelledby="rfq-change" data-rfq-change className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="rfq-change" data-rfq-change className="border border-line bg-surface p-4">
       <h2 id="rfq-change" className="text-sm font-semibold">{t('requestForQuotation.changeTitle')}</h2>
       {lockMessage && <p role="status" className="mt-2 border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{lockMessage}</p>}
       <p className="mt-1 text-xs text-ink-soft">{t('requestForQuotation.changeHint')}</p>
@@ -266,7 +266,7 @@ export default function RequestForQuotation({
 
   return (
     <>
-      <section aria-labelledby="rfq-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="rfq-lookup" className="border border-line bg-surface p-4">
         <h2 id="rfq-lookup" className="text-sm font-semibold">{t('requestForQuotation.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <Field label={t('requestForQuotation.event')}>
@@ -294,35 +294,35 @@ export default function RequestForQuotation({
       </section>
 
       {opened && (
-        <section aria-labelledby="rfq-standing" data-rfq-standing className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="rfq-standing" data-rfq-standing className="border border-line bg-surface p-4">
           <h2 id="rfq-standing" className="text-sm font-semibold">{opened.eventNumber}</h2>
           <p className="mt-1 text-sm text-ink-soft" data-rfq-identity>
             {opened.purchasingOrg} · {opened.purchasingGroup} · {opened.rfqDate} · {opened.quotationDeadline} · {opened.currency}
             {opened.collectiveNumber ? ` · ${opened.collectiveNumber}` : ''}
           </p>
           <p className="mt-1 text-xs text-ink-soft">{t('requestForQuotation.standingHint')}</p>
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-ink-soft">
-                <th className="py-1 pr-3">{t('requestForQuotation.item')}</th>
-                <th className="py-1 pr-3">{t('requestForQuotation.shortText')}</th>
-                <th className="py-1 pr-3">{t('requestForQuotation.quantity')}</th>
-                <th className="py-1 pr-3">{t('requestForQuotation.unit')}</th>
-                <th className="py-1 pr-3">{t('requestForQuotation.plant')}</th>
-                <th className="py-1 pr-3">{t('requestForQuotation.deliveryDate')}</th>
-                <th className="py-1">{t('requestForQuotation.requisition')}</th>
+                <th>{t('requestForQuotation.item')}</th>
+                <th>{t('requestForQuotation.shortText')}</th>
+                <th>{t('requestForQuotation.quantity')}</th>
+                <th>{t('requestForQuotation.unit')}</th>
+                <th>{t('requestForQuotation.plant')}</th>
+                <th>{t('requestForQuotation.deliveryDate')}</th>
+                <th>{t('requestForQuotation.requisition')}</th>
               </tr>
             </thead>
             <tbody>
               {opened.lines.map((line) => (
                 <tr key={line.itemNumber} data-rfq-line={line.itemNumber}>
-                  <td className="py-1 pr-3">{line.itemNumber}</td>
-                  <td className="py-1 pr-3">{line.shortText}</td>
-                  <td className="py-1 pr-3">{line.quantity}</td>
-                  <td className="py-1 pr-3">{line.unit}</td>
-                  <td className="py-1 pr-3">{line.plant}</td>
-                  <td className="py-1 pr-3">{line.deliveryDate}</td>
-                  <td className="py-1">{line.requisitionNumber ? `${line.requisitionNumber} / ${line.requisitionItem}` : ''}</td>
+                  <td>{line.itemNumber}</td>
+                  <td>{line.shortText}</td>
+                  <td>{line.quantity}</td>
+                  <td>{line.unit}</td>
+                  <td>{line.plant}</td>
+                  <td>{line.deliveryDate}</td>
+                  <td>{line.requisitionNumber ? `${line.requisitionNumber} / ${line.requisitionItem}` : ''}</td>
                 </tr>
               ))}
             </tbody>
@@ -352,7 +352,7 @@ export default function RequestForQuotation({
         <ChangeRequest key={selected.rfqNumber} opened={opened} request={selected} canMaintain={canMaintain} lockMessage={lockMessage} />
       )}
 
-      <section aria-labelledby="rfq-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="rfq-create" className="border border-line bg-surface p-4">
         <h2 id="rfq-create" className="text-sm font-semibold">{t('requestForQuotation.createTitle')}</h2>
         <p className="mt-1 text-xs text-ink-soft">{t('requestForQuotation.createHint')}</p>
         <form action={createAction} className="mt-3 space-y-3">

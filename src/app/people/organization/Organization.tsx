@@ -395,16 +395,16 @@ export default function Organization(props: Props) {
               {positions.length === 0 ? (
                 <p className="mt-2 text-sm text-ink-soft">No position stands{query ? ` matching ${query}` : ''}.</p>
               ) : (
-                <table className="mt-2 w-full text-xs">
-                  <thead><tr className="text-left text-ink-faint"><th className="py-1">Code</th><th>Title</th><th>Unit</th><th>Reports to</th><th className="text-right">Today</th></tr></thead>
+                <table className="grid-table mt-2 text-xs">
+                  <thead><tr className="text-left text-ink-faint"><th>Code</th><th>Title</th><th>Unit</th><th>Reports to</th><th className="text-right">Today</th></tr></thead>
                   <tbody>
                     {positions.map((row) => (
-                      <tr key={row.code} className="border-t border-line">
-                        <td className="py-1 pr-2"><Link className="link code" href={`/people/organization?position=${row.code}`}>{row.code}</Link></td>
-                        <td className="py-1 pr-2">{row.title}{!row.isValid ? ' · retired' : ''}</td>
-                        <td className="py-1 pr-2 text-ink-soft">{row.orgUnitCode ?? '—'}</td>
-                        <td className="py-1 pr-2 text-ink-soft">{row.superiorCode ?? '—'}</td>
-                        <td className="py-1 text-right">{row.incumbents}</td>
+                      <tr key={row.code}>
+                        <td><Link className="link code" href={`/people/organization?position=${row.code}`}>{row.code}</Link></td>
+                        <td>{row.title}{!row.isValid ? ' · retired' : ''}</td>
+                        <td className="text-ink-soft">{row.orgUnitCode ?? '—'}</td>
+                        <td className="text-ink-soft">{row.superiorCode ?? '—'}</td>
+                        <td className="text-right">{row.incumbents}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -472,13 +472,13 @@ export default function Organization(props: Props) {
                 {selectedUnit.positionList.length === 0 ? (
                   <p className="text-xs text-ink-soft">None — the unit holds no position.</p>
                 ) : (
-                  <table className="mt-1 w-full text-xs">
+                  <table className="grid-table mt-1 text-xs">
                     <tbody>
                       {selectedUnit.positionList.map((row) => (
-                        <tr key={row.code} className="border-t border-line">
-                          <td className="py-1 pr-2"><Link className="link code" href={`/people/organization?position=${row.code}`}>{row.code}</Link></td>
-                          <td className="py-1 pr-2">{row.title}</td>
-                          <td className="py-1 text-right text-ink-soft">
+                        <tr key={row.code}>
+                          <td><Link className="link code" href={`/people/organization?position=${row.code}`}>{row.code}</Link></td>
+                          <td>{row.title}</td>
+                          <td className="text-right text-ink-soft">
                             {row.incumbents === 0
                               ? <Link className="link" href={`/people/assignments?position=${row.code}`}>nobody today</Link>
                               : <Link className="link" href={`/people/assignments?position=${row.code}`}>{row.incumbents} assigned</Link>}

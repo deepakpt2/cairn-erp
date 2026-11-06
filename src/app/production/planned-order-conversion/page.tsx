@@ -118,7 +118,7 @@ export default async function PlannedOrderConversionPage({
           {preview.blockedReason && <p className="text-danger">{preview.blockedReason}</p>}
           {preview.warnings.map((warning) => <p key={warning}>{warning}</p>)}
           {preview.components.length > 0 && (
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>Item</th>

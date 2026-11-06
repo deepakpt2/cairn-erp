@@ -15,12 +15,12 @@ const INITIAL: ReservationActionState = { ok: false, message: '' };
 function ReservationLine({ line, onCompany }: { line: number; onCompany: (company: string) => void }) {
   const [plant, setPlant] = useState('');
   return (
-    <tr className="border-t border-line">
-      <td className="py-1">{line}</td>
-      <td className="py-1">
+    <tr>
+      <td>{line}</td>
+      <td>
         <ConstrainedField kind="material-issue" name={`material-${line}`} context={{ plant }} placeholder="MAT-…" />
       </td>
-      <td className="py-1">
+      <td>
         <ConstrainedField
           kind="plant"
           name={`plant-${line}`}
@@ -32,13 +32,13 @@ function ReservationLine({ line, onCompany }: { line: number; onCompany: (compan
           }}
         />
       </td>
-      <td className="py-1">
+      <td>
         <input name={`quantity-${line}`} type="number" step="0.001" min="0.001" className="input w-full text-right" />
       </td>
-      <td className="py-1">
+      <td>
         <ConstrainedField kind="storage-location" name={`sloc-${line}`} context={{ plant }} />
       </td>
-      <td className="py-1 text-center">
+      <td className="text-center">
         <input type="checkbox" name={`allowed-${line}`} defaultChecked aria-label={`${t('mb21.columnAllowed')} ${line}`} />
       </td>
     </tr>
@@ -64,7 +64,7 @@ export default function Reservations({ reservation, scenarios, canPost, canChang
 
   return (
     <>
-      <section aria-labelledby="reservation-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="reservation-lookup" className="border border-line bg-surface p-4">
         <h2 id="reservation-lookup" className="text-sm font-semibold">{t('mb21.lookup')}</h2>
         <form method="get" action="/inventory/reservations" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
@@ -75,7 +75,7 @@ export default function Reservations({ reservation, scenarios, canPost, canChang
         </form>
       </section>
 
-      <section aria-labelledby="reservation-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="reservation-create" className="border border-line bg-surface p-4">
         <h2 id="reservation-create" className="text-sm font-semibold">{t('mb21.create')}</h2>
         {createState.message && (
           <p role="status" className={`mt-2 text-sm ${createState.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -103,15 +103,15 @@ export default function Reservations({ reservation, scenarios, canPost, canChang
             </label>
           </div>
 
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mb21.columnLine')}</th>
-                <th className="py-1">{t('mb21.columnMaterial')}</th>
-                <th className="py-1">{t('mb21.columnPlant')}</th>
-                <th className="py-1 text-right">{t('mb21.columnQuantity')}</th>
-                <th className="py-1">{t('mb21.columnLocation')}</th>
-                <th className="py-1">{t('mb21.columnAllowed')}</th>
+                <th>{t('mb21.columnLine')}</th>
+                <th>{t('mb21.columnMaterial')}</th>
+                <th>{t('mb21.columnPlant')}</th>
+                <th className="text-right">{t('mb21.columnQuantity')}</th>
+                <th>{t('mb21.columnLocation')}</th>
+                <th>{t('mb21.columnAllowed')}</th>
               </tr>
             </thead>
             <tbody>
@@ -131,7 +131,7 @@ export default function Reservations({ reservation, scenarios, canPost, canChang
       </section>
 
       {reservation && (
-        <section aria-labelledby="reservation-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="reservation-document" className="border border-line bg-surface p-4">
           <h2 id="reservation-document" className="text-sm font-semibold">
             {t('mb21.reservation')} {reservation.reservationNumber}
           </h2>
@@ -153,34 +153,34 @@ export default function Reservations({ reservation, scenarios, canPost, canChang
             </p>
           )}
 
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mb21.columnLine')}</th>
-                <th className="py-1">{t('mb21.columnMaterial')}</th>
-                <th className="py-1">{t('mb21.columnPlant')}</th>
-                <th className="py-1">{t('mb21.columnLocation')}</th>
-                <th className="py-1 text-right">{t('mb21.columnRequired')}</th>
-                <th className="py-1 text-right">{t('mb21.columnWithdrawn')}</th>
-                <th className="py-1 text-right">{t('mb21.columnOpen')}</th>
-                <th className="py-1">{t('mb21.columnState')}</th>
-                <th className="py-1">{t('mb21.columnActions')}</th>
+                <th>{t('mb21.columnLine')}</th>
+                <th>{t('mb21.columnMaterial')}</th>
+                <th>{t('mb21.columnPlant')}</th>
+                <th>{t('mb21.columnLocation')}</th>
+                <th className="text-right">{t('mb21.columnRequired')}</th>
+                <th className="text-right">{t('mb21.columnWithdrawn')}</th>
+                <th className="text-right">{t('mb21.columnOpen')}</th>
+                <th>{t('mb21.columnState')}</th>
+                <th>{t('mb21.columnActions')}</th>
               </tr>
             </thead>
             <tbody>
               {reservation.items.map((item) => (
-                <tr key={item.itemNumber} data-item={item.itemNumber} data-open={item.openQuantity} data-completed={item.isCompleted} className="border-t border-line">
-                  <td className="py-1">{item.itemNumber}</td>
-                  <td className="py-1">{item.materialNumber}</td>
-                  <td className="py-1">{item.plant}</td>
-                  <td className="py-1">{item.storageLocation ?? '—'}</td>
-                  <td className="py-1 text-right tabular-nums">{Number(item.requiredQuantity).toFixed(3)} {item.unit}</td>
-                  <td className="py-1 text-right tabular-nums">{Number(item.withdrawnQuantity).toFixed(3)}</td>
-                  <td className="py-1 text-right tabular-nums">{Number(item.openQuantity).toFixed(3)}</td>
-                  <td className="py-1">
+                <tr key={item.itemNumber} data-item={item.itemNumber} data-open={item.openQuantity} data-completed={item.isCompleted}>
+                  <td>{item.itemNumber}</td>
+                  <td>{item.materialNumber}</td>
+                  <td>{item.plant}</td>
+                  <td>{item.storageLocation ?? '—'}</td>
+                  <td className="text-right tabular-nums num">{Number(item.requiredQuantity).toFixed(3)} {item.unit}</td>
+                  <td className="text-right tabular-nums num">{Number(item.withdrawnQuantity).toFixed(3)}</td>
+                  <td className="text-right tabular-nums num">{Number(item.openQuantity).toFixed(3)}</td>
+                  <td>
                     {item.isCompleted ? t('mb21.completed') : item.movementAllowed ? t('mb21.open') : t('mb21.forbidden')}
                   </td>
-                  <td className="py-1">
+                  <td>
                     {!item.isCompleted && (
                       canChange ? (
                       <div className="flex flex-wrap items-center gap-2">

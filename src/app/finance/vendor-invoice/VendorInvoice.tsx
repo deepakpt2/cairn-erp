@@ -44,7 +44,7 @@ export default function VendorInvoice({ invoice, taxes, canPost, today }: {
 
   return (
     <>
-      <section aria-labelledby="vi-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="vi-header" className="border border-line bg-surface p-4">
         <h2 id="vi-header" className="text-sm font-semibold">Header</h2>
         <form method="get" action="/finance/vendor-invoice" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
@@ -56,7 +56,7 @@ export default function VendorInvoice({ invoice, taxes, canPost, today }: {
         <Message state={cancelState} />
       </section>
 
-      <section aria-labelledby="vi-lines" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="vi-lines" className="border border-line bg-surface p-4">
         <h2 id="vi-lines" className="text-sm font-semibold">Invoice</h2>
         <Message state={postState} />
         <form action={postAction}>
@@ -97,38 +97,38 @@ export default function VendorInvoice({ invoice, taxes, canPost, today }: {
             </label>
           </div>
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">G/L account</th><th className="px-2 py-2">Net amount (tax excluded)</th>
-                  <th className="px-2 py-2">Tax code</th><th className="px-2 py-2">Cost centre</th>
-                  <th className="px-2 py-2">Profit centre</th><th className="px-2 py-2">Text</th>
+                  <th>G/L account</th><th>Net amount (tax excluded)</th>
+                  <th>Tax code</th><th>Cost centre</th>
+                  <th>Profit centre</th><th>Text</th>
                 </tr>
               </thead>
               <tbody>
                 {lines.map((line, i) => (
-                  <tr key={i} className="border-t border-line">
-                    <td className="px-2 py-2">
+                  <tr key={i}>
+                    <td>
                       <ConstrainedField kind="gl" name={`gl-${i + 1}`} placeholder="400000" context={{ companyCode }}
                         value={line.gl} onChange={(gl) => setLine(i, { gl })} />
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       <input name={`net-${i + 1}`} className="input w-full" placeholder="0.00"
                         value={line.net} onChange={(e) => setLine(i, { net: e.target.value })} />
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       <ConstrainedField kind="tax" name={`tax-${i + 1}`} context={{ companyCode }} onLoaded={setTaxRows}
                         value={line.tax} onChange={(tax) => setLine(i, { tax })} />
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       <ConstrainedField kind="cost-center" name={`cc-${i + 1}`} context={{ companyCode }}
                         value={line.cc} onChange={(cc) => setLine(i, { cc })} />
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       <ConstrainedField kind="profit-center" name={`pc-${i + 1}`}
                         value={line.pc} onChange={(pc) => setLine(i, { pc })} />
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       <input name={`text-${i + 1}`} className="input w-full"
                         value={line.text} onChange={(e) => setLine(i, { text: e.target.value })} />
                     </td>
@@ -153,7 +153,7 @@ export default function VendorInvoice({ invoice, taxes, canPost, today }: {
       </section>
 
       {invoice && (
-        <section aria-labelledby="vi-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="vi-document" className="border border-line bg-surface p-4">
           <h2 id="vi-document" className="text-sm font-semibold">Posted document</h2>
           <Message state={cancelState} />
           <p className="mt-2 text-sm">

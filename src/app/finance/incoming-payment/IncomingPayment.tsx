@@ -52,7 +52,7 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
 
   return (
     <>
-      <section aria-labelledby="ip-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ip-header" className="border border-line bg-surface p-4">
         <h2 id="ip-header" className="text-sm font-semibold">Header and bank data</h2>
         <form method="get" action="/finance/incoming-payment" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
@@ -75,7 +75,7 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
       </section>
 
       {view && (
-        <section aria-labelledby="ip-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="ip-items" className="border border-line bg-surface p-4">
           <h2 id="ip-items" className="text-sm font-semibold">Open items</h2>
           {items.length === 0 ? (
             <p className="mt-2 text-sm text-ink-soft">No open items stand for this customer and company.</p>
@@ -121,32 +121,32 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
                 </label>
               </div>
               <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="grid-table text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Select</th><th className="px-2 py-2">Document</th>
-                      <th className="px-2 py-2">Posting date</th><th className="px-2 py-2">Due date</th>
-                      <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Outstanding</th>
-                      <th className="px-2 py-2">Applied</th><th className="px-2 py-2">Discount</th>
-                      <th className="px-2 py-2">Outcome</th>
+                      <th>Select</th><th>Document</th>
+                      <th>Posting date</th><th>Due date</th>
+                      <th>Currency</th><th>Outstanding</th>
+                      <th>Applied</th><th>Discount</th>
+                      <th>Outcome</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => (
-                      <tr key={itemKey(item)} className="border-t border-line">
-                        <td className="px-2 py-2">
+                      <tr key={itemKey(item)}>
+                        <td>
                           <input
                             type="checkbox" name="item" value={itemKey(item)}
                             checked={selected.has(itemKey(item))}
                             onChange={() => toggle(itemKey(item))}
                           />
                         </td>
-                        <td className="px-2 py-2">{item.documentNumber}</td>
-                        <td className="px-2 py-2">{item.postingDate}</td>
-                        <td className="px-2 py-2">{item.dueDate}</td>
-                        <td className="px-2 py-2">{item.currency}</td>
-                        <td className="px-2 py-2">{item.amount}</td>
-                        <td className="px-2 py-2">
+                        <td>{item.documentNumber}</td>
+                        <td>{item.postingDate}</td>
+                        <td>{item.dueDate}</td>
+                        <td>{item.currency}</td>
+                        <td>{item.amount}</td>
+                        <td>
                           <input
                             name={`applied-${itemKey(item)}`} className="input w-24"
                             placeholder={item.signed.toFixed(2)}
@@ -154,14 +154,14 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
                             onChange={(e) => setApplied((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
                           />
                         </td>
-                        <td className="px-2 py-2">
+                        <td>
                           <input
                             name={`discount-${itemKey(item)}`} className="input w-20" placeholder="0.00"
                             value={discounts[itemKey(item)] ?? ''}
                             onChange={(e) => setDiscounts((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
                           />
                         </td>
-                        <td className="px-2 py-2">
+                        <td>
                           <select name={`outcome-${itemKey(item)}`} className="input w-28" defaultValue="RESIDUAL">
                             <option value="RESIDUAL">Residual</option>
                             <option value="PARTIAL">Partial</option>
@@ -195,7 +195,7 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
         </section>
       )}
 
-      <section aria-labelledby="ip-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ip-result" className="border border-line bg-surface p-4">
         <h2 id="ip-result" className="text-sm font-semibold">Payment</h2>
         <Message state={state} />
         <p className="mt-2 text-sm text-ink-soft">

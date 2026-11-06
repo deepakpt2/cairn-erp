@@ -58,26 +58,26 @@ export default async function BatchConversionPage() {
 
       <ConversionForm canMaintain={canMaintain} snapshot={snapshot} />
 
-      <table className="w-full border border-line bg-white text-sm">
+      <table className="grid-table border border-line bg-white text-sm">
         <thead>
-          <tr className="border-b border-line text-left">
-            <th className="p-2">When</th>
-            <th className="p-2">Proposal</th>
-            <th className="p-2">Result</th>
-            <th className="p-2">Conflicts</th>
+          <tr className="text-left">
+            <th>When</th>
+            <th>Proposal</th>
+            <th>Result</th>
+            <th>Conflicts</th>
           </tr>
         </thead>
         <tbody>
           {snapshot.checks.map((row) => (
-            <tr key={row.checkId} className="border-b border-line">
-              <td className="p-2">{when(row.startedAt)}</td>
-              <td className="code p-2">{row.sourceLevel} to {row.targetLevel} · status {row.sourceStatus.trim() || 'blank'} to {row.targetStatus.trim() || 'blank'}</td>
-              <td className="p-2">{row.result}</td>
-              <td className="p-2">{row.conflictCount}. {row.summary}</td>
+            <tr key={row.checkId}>
+              <td>{when(row.startedAt)}</td>
+              <td className="code">{row.sourceLevel} to {row.targetLevel} · status {row.sourceStatus.trim() || 'blank'} to {row.targetStatus.trim() || 'blank'}</td>
+              <td>{row.result}</td>
+              <td>{row.conflictCount}. {row.summary}</td>
             </tr>
           ))}
           {snapshot.checks.length === 0 && (
-            <tr><td className="p-2 text-ink-soft" colSpan={4}>No conversion check stands. Opening this screen did not create one.</td></tr>
+            <tr><td className="text-ink-soft" colSpan={4}>No conversion check stands. Opening this screen did not create one.</td></tr>
           )}
         </tbody>
       </table>

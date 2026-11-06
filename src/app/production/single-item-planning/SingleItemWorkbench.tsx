@@ -36,7 +36,7 @@ export default function SingleItemWorkbench({
 
   return (
     <div className="space-y-4">
-      <form action={action} className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <form action={action} className="border border-line bg-surface p-4">
         <input type="hidden" name="requestKey" value={requestKey} />
         <input type="hidden" name="planningMode" value="1" />
         <input type="hidden" name="schedulingMode" value="BASIC" />
@@ -91,7 +91,7 @@ export default function SingleItemWorkbench({
       </form>
 
       {shown && (
-        <section className="rounded-card border border-line bg-surface p-4 shadow-card" data-md02-run={shown.runNumber}>
+        <section className="border border-line bg-surface p-4" data-md02-run={shown.runNumber}>
           <h2 className="text-sm font-semibold">{t('md01.run')} {shown.runNumber}</h2>
           <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-4">
             <div><dt className="text-ink-soft">{t('md01.status')}</dt><dd>{shown.status}</dd></div>
@@ -99,7 +99,7 @@ export default function SingleItemWorkbench({
             <div><dt className="text-ink-soft">{t('md01.created')}</dt><dd>{shown.proposalsCreated}</dd></div>
             <div><dt className="text-ink-soft">{t('md01.retained')}</dt><dd>{shown.proposalsRetained}</dd></div>
           </dl>
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-ink-faint">
                 <th>{t('md02.level')}</th>
@@ -111,7 +111,7 @@ export default function SingleItemWorkbench({
             <tbody>
               {shown.materials.map((row) => (
                 <tr key={`${row.plant}/${row.materialNumber}`}>
-                  <td className="py-1">{row.bomLevel}</td>
+                  <td>{row.bomLevel}</td>
                   <td>
                     <Link href={`/production/stock-requirements?material=${encodeURIComponent(row.materialNumber)}&plant=${encodeURIComponent(row.plant)}`}>
                       {row.materialNumber}
@@ -124,7 +124,7 @@ export default function SingleItemWorkbench({
             </tbody>
           </table>
           {shown.dependents.length > 0 && (
-            <table className="mt-3 w-full text-sm" data-md02-dependents>
+            <table className="grid-table mt-3 text-sm" data-md02-dependents>
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>{t('md02.dependents')}</th>
@@ -135,7 +135,7 @@ export default function SingleItemWorkbench({
               <tbody>
                 {shown.dependents.map((row) => (
                   <tr key={`${row.parentOrderNumber ?? 'preview'}/${row.componentMaterial}/${row.requirementDate}`}>
-                    <td className="py-1">{row.componentMaterial}</td>
+                    <td>{row.componentMaterial}</td>
                     <td>{row.quantity} {row.unit}</td>
                     <td>{row.requirementDate}</td>
                   </tr>
@@ -144,7 +144,7 @@ export default function SingleItemWorkbench({
             </table>
           )}
           {shown.proposals.length > 0 && (
-            <table className="mt-3 w-full text-sm">
+            <table className="grid-table mt-3 text-sm">
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>{t('md01.proposals')}</th>
@@ -155,7 +155,7 @@ export default function SingleItemWorkbench({
               <tbody>
                 {shown.proposals.map((row) => (
                   <tr key={row.lineNumber}>
-                    <td className="py-1">{row.materialNumber} {row.proposalType} {row.documentNumber ?? '—'}</td>
+                    <td>{row.materialNumber} {row.proposalType} {row.documentNumber ?? '—'}</td>
                     <td>{row.action} {row.quantity}</td>
                     <td>{row.status}</td>
                   </tr>

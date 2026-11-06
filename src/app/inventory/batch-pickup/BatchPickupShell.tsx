@@ -50,32 +50,32 @@ export default function BatchPickupShell({ canUse, selection, result, reportErro
           {result.rows.length === 0 ? (
             <p className="text-sm">{t('mb5c.noRows')}</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-ink-soft">
-                  <th className="py-2 pr-3">{t('mb5c.material')}</th>
-                  <th className="py-2 pr-3">{t('mb5c.batch')}</th>
-                  <th className="py-2 pr-3">{t('mb5c.plant')}</th>
-                  <th className="py-2 pr-3">{t('mb5c.documents')}</th>
-                  <th className="py-2 pr-3">{t('mb5c.lastPosting')}</th>
-                  <th className="py-2 pr-3">{t('mb5c.shelfLife')}</th>
-                  <th className="py-2">{t('mb5c.restricted')}</th>
+                <tr className="text-left text-ink-soft">
+                  <th>{t('mb5c.material')}</th>
+                  <th>{t('mb5c.batch')}</th>
+                  <th>{t('mb5c.plant')}</th>
+                  <th>{t('mb5c.documents')}</th>
+                  <th>{t('mb5c.lastPosting')}</th>
+                  <th>{t('mb5c.shelfLife')}</th>
+                  <th>{t('mb5c.restricted')}</th>
                 </tr>
               </thead>
               <tbody>
                 {result.rows.map((row) => (
-                  <tr key={`${row.materialNumber}-${row.batch}-${row.plant}`} className="border-b border-line" data-batch={row.batch}>
-                    <td className="py-2 pr-3"><span className="code">{row.materialNumber}</span> {row.materialDescription}</td>
-                    <td className="py-2 pr-3">
+                  <tr key={`${row.materialNumber}-${row.batch}-${row.plant}`} data-batch={row.batch}>
+                    <td><span className="code">{row.materialNumber}</span> {row.materialDescription}</td>
+                    <td>
                       <Link className="code underline" href={`/inventory/batch-pickup?material=${encodeURIComponent(row.materialNumber)}&plant=${encodeURIComponent(row.plant)}&batch=${encodeURIComponent(row.batch)}`}>
                         {row.batch}
                       </Link>
                     </td>
-                    <td className="code py-2 pr-3">{row.plant}</td>
-                    <td className="code py-2 pr-3">{row.documentCount}</td>
-                    <td className="code py-2 pr-3">{row.lastPostingDate}</td>
-                    <td className="code py-2 pr-3">{row.shelfLifeExpirationDate ?? '—'}</td>
-                    <td className="code py-2">{row.restrictedUse === 'X' ? 'X' : '—'}</td>
+                    <td className="code">{row.plant}</td>
+                    <td className="code">{row.documentCount}</td>
+                    <td className="code">{row.lastPostingDate}</td>
+                    <td className="code">{row.shelfLifeExpirationDate ?? '—'}</td>
+                    <td className="code">{row.restrictedUse === 'X' ? 'X' : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -95,32 +95,32 @@ export default function BatchPickupShell({ canUse, selection, result, reportErro
               <Link className="underline" href={`/inventory/batch-cockpit?material=${encodeURIComponent(selection.material ?? '')}&batch=${encodeURIComponent(selection.batch)}`}>BMBC</Link>
             </p>
           ) : null}
-          <table className="w-full text-sm">
+          <table className="grid-table text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-ink-soft">
-                <th className="py-2 pr-3">{t('mb5c.document')}</th>
-                <th className="py-2 pr-3">{t('mb5c.line')}</th>
-                <th className="py-2 pr-3">{t('mb5c.lastPosting')}</th>
-                <th className="py-2 pr-3">{t('mb5c.movement')}</th>
-                <th className="py-2 pr-3">{t('mb5c.direction')}</th>
-                <th className="py-2 pr-3">{t('mb5c.quantity')}</th>
-                <th className="py-2">{t('mb5c.reference')}</th>
+              <tr className="text-left text-ink-soft">
+                <th>{t('mb5c.document')}</th>
+                <th>{t('mb5c.line')}</th>
+                <th>{t('mb5c.lastPosting')}</th>
+                <th>{t('mb5c.movement')}</th>
+                <th>{t('mb5c.direction')}</th>
+                <th>{t('mb5c.quantity')}</th>
+                <th>{t('mb5c.reference')}</th>
               </tr>
             </thead>
             <tbody>
               {result.uses.map((use) => (
-                <tr key={`${use.materialDocumentNumber}-${use.lineNumber}`} className="border-b border-line">
-                  <td className="code py-2 pr-3">
+                <tr key={`${use.materialDocumentNumber}-${use.lineNumber}`}>
+                  <td className="code">
                     <Link className="underline" href={`/inventory/material-documents?document=${encodeURIComponent(use.materialDocumentNumber)}`}>
                       {use.materialDocumentNumber}
                     </Link>
                   </td>
-                  <td className="code py-2 pr-3">{use.lineNumber}</td>
-                  <td className="code py-2 pr-3">{use.postingDate}</td>
-                  <td className="code py-2 pr-3">{use.movementType}</td>
-                  <td className="py-2 pr-3">{use.direction}</td>
-                  <td className="code py-2 pr-3">{use.quantity} {use.unit}</td>
-                  <td className="code py-2">{use.purchaseOrderNumber ?? use.productionOrderNumber ?? '—'}</td>
+                  <td className="code">{use.lineNumber}</td>
+                  <td className="code">{use.postingDate}</td>
+                  <td className="code">{use.movementType}</td>
+                  <td>{use.direction}</td>
+                  <td className="code">{use.quantity} {use.unit}</td>
+                  <td className="code">{use.purchaseOrderNumber ?? use.productionOrderNumber ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

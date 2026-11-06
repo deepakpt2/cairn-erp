@@ -139,8 +139,8 @@ export default function BalanceSheetShell({ canUse, companies, versions, selecti
                 <tr className="font-semibold">
                   <td>{t('bs.totalTurnover')}</td>
                   <td />
-                  <td className="tabular text-end">{result.totalDebitTurnover.toFixed(2)}</td>
-                  <td className="tabular text-end">{result.totalCreditTurnover.toFixed(2)}</td>
+                  <td className="tabular text-end num">{result.totalDebitTurnover.toFixed(2)}</td>
+                  <td className="tabular text-end num">{result.totalCreditTurnover.toFixed(2)}</td>
                   <td colSpan={5} />
                 </tr>
               </>
@@ -161,7 +161,7 @@ export default function BalanceSheetShell({ canUse, companies, versions, selecti
               {result.unassigned.map((account) => (
                 <tr key={account.accountNumber}>
                   <td className="code">{account.accountNumber} — {account.accountName}</td>
-                  <td className="tabular text-end">{account.balance.toFixed(2)} {result.currency}</td>
+                  <td className="tabular text-end num">{account.balance.toFixed(2)} {result.currency}</td>
                 </tr>
               ))}
             </tbody>
@@ -182,13 +182,13 @@ function NodeRows({ node, currency, company, year }: {
     <>
       <tr className={node.depth === 0 ? 'bg-sunken font-semibold' : 'font-medium'}>
         <td style={{ paddingLeft: `${0.75 + node.depth * 1.25}rem` }}>{node.description} <span className="code text-ink-faint">({node.node})</span></td>
-        <td className="tabular text-end">{node.openingBalance.toFixed(2)}</td>
-        <td className="tabular text-end">{node.debitTurnover.toFixed(2)}</td>
-        <td className="tabular text-end">{node.creditTurnover.toFixed(2)}</td>
-        <td className="tabular text-end">{node.balance.toFixed(2)}</td>
-        <td className="tabular text-end">{node.comparativeBalance === null ? '—' : node.comparativeBalance.toFixed(2)}</td>
-        <td className="tabular text-end">{node.variance === null ? '—' : node.variance.toFixed(2)}</td>
-        <td className="tabular text-end">{node.variancePercent === null ? '—' : `${node.variancePercent.toFixed(1)}%`}</td>
+        <td className="tabular text-end num">{node.openingBalance.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.debitTurnover.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.creditTurnover.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.balance.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.comparativeBalance === null ? '—' : node.comparativeBalance.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.variance === null ? '—' : node.variance.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.variancePercent === null ? '—' : `${node.variancePercent.toFixed(1)}%`}</td>
         <td className="code">{currency}</td>
       </tr>
       {node.accounts.map((account) => (
@@ -208,11 +208,11 @@ function NodeRows({ node, currency, company, year }: {
               {t('bs.lineItems')}
             </Link>
           </td>
-          <td className="tabular text-end">{account.openingBalance.toFixed(2)}</td>
-          <td className="tabular text-end">{account.debitTurnover.toFixed(2)}</td>
-          <td className="tabular text-end">{account.creditTurnover.toFixed(2)}</td>
-          <td className="tabular text-end">{account.balance.toFixed(2)} {currency}</td>
-          <td className="tabular text-end">{account.comparativeBalance === null ? '—' : account.comparativeBalance.toFixed(2)}</td>
+          <td className="tabular text-end num">{account.openingBalance.toFixed(2)}</td>
+          <td className="tabular text-end num">{account.debitTurnover.toFixed(2)}</td>
+          <td className="tabular text-end num">{account.creditTurnover.toFixed(2)}</td>
+          <td className="tabular text-end num">{account.balance.toFixed(2)} {currency}</td>
+          <td className="tabular text-end num">{account.comparativeBalance === null ? '—' : account.comparativeBalance.toFixed(2)}</td>
           <td colSpan={3} />
         </tr>
       ))}

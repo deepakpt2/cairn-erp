@@ -240,21 +240,21 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
           {visibleOrganisations.length === 0 && <p role="status" className="px-4 py-8 text-center text-sm text-ink-soft">{search ? t('salesOrg.noSearchResults') : t('salesOrg.empty')}</p>}
         </div>
         <div className="hidden overflow-x-auto sm:block">
-          <table className="min-w-full border-collapse text-sm" aria-label={t('salesOrg.tableHeading')}>
+          <table className="grid-table border-collapse text-sm" aria-label={t('salesOrg.tableHeading')}>
             <thead className="bg-[#eef1f4] text-[#33414c]"><tr className="border-y border-[#c4ccd2]">
-              <th className="w-36 border-r border-[#cbd1d6] px-2 py-2 text-left">{t('salesOrg.codeShort')}</th>
-              <th className="px-3 py-2 text-left">{t('salesOrg.name')}</th>
-              <th className="w-32 px-3 py-2 text-end">{t('common.actions')}</th>
+              <th className="w-36 border-r border-[#cbd1d6] text-left">{t('salesOrg.codeShort')}</th>
+              <th className="text-left">{t('salesOrg.name')}</th>
+              <th className="w-32 text-end">{t('common.actions')}</th>
             </tr></thead>
             <tbody>
               {visibleOrganisations.map((item) => (
-                <tr key={item.salesOrg} className="border-b border-[#d6dce1] hover:bg-[#f8fbfd]">
-                  <td className="border-r border-[#e1e5e8] px-2 py-2 font-mono"><Link className="text-accent underline" href={detailHref(item.salesOrg.trim())}>{item.salesOrg.trim()}</Link>{!item.isActive && <span className="ms-2 text-xs text-ink-faint">{t('salesOrg.inactive')}</span>}</td>
-                  <td className="px-3 py-2">{item.displayName}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-end"><Link className="text-accent underline" href={detailHref(item.salesOrg.trim())}>{t('salesOrg.open')}</Link>{canMaintain && item.isActive && <Link className="ms-3 text-accent underline" href={copyHref(item.salesOrg.trim())}>{t('salesOrg.copy')}</Link>}</td>
+                <tr key={item.salesOrg} className="border-[#d6dce1] hover:bg-[#f8fbfd]">
+                  <td className="border-r border-[#e1e5e8] font-mono"><Link className="text-accent underline" href={detailHref(item.salesOrg.trim())}>{item.salesOrg.trim()}</Link>{!item.isActive && <span className="ms-2 text-xs text-ink-faint">{t('salesOrg.inactive')}</span>}</td>
+                  <td>{item.displayName}</td>
+                  <td className="whitespace-nowrap text-end"><Link className="text-accent underline" href={detailHref(item.salesOrg.trim())}>{t('salesOrg.open')}</Link>{canMaintain && item.isActive && <Link className="ms-3 text-accent underline" href={copyHref(item.salesOrg.trim())}>{t('salesOrg.copy')}</Link>}</td>
                 </tr>
               ))}
-              {visibleOrganisations.length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-sm text-ink-soft">{search ? t('salesOrg.noSearchResults') : t('salesOrg.empty')}</td></tr>}
+              {visibleOrganisations.length === 0 && <tr><td colSpan={3} className="text-center text-sm text-ink-soft">{search ? t('salesOrg.noSearchResults') : t('salesOrg.empty')}</td></tr>}
             </tbody>
           </table>
         </div>

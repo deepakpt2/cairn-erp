@@ -128,23 +128,23 @@ function SelectedBilling({
         </div>
       ) : null}
 
-      <table className="mt-3 w-full text-sm">
+      <table className="grid-table mt-3 text-sm">
         <thead>
           <tr className="text-left text-xs text-ink-faint">
-            <th className="py-1">Item</th><th>Delivery item</th><th>Order item</th><th>Material</th>
+            <th>Item</th><th>Delivery item</th><th>Order item</th><th>Material</th>
             <th className="text-right">Quantity</th><th className="text-right">Price</th>
             <th className="text-right">Net</th><th>Tax</th><th className="text-right">Tax amount</th><th>Priced from</th>
           </tr>
         </thead>
         <tbody>
           {selected.lines.map((line) => (
-            <tr key={line.lineNumber} className="border-t border-line">
-              <td className="py-1">{line.lineNumber}</td>
+            <tr key={line.lineNumber}>
+              <td>{line.lineNumber}</td>
               <td>{line.deliveryLineNumber}</td>
               <td>{line.orderLineNumber}</td>
               <td>{line.materialNumber}</td>
-              <td className="text-right">{Number(line.billingQuantity).toFixed(3)}</td>
-              <td className="text-right">{Number(line.netPrice).toFixed(4)} / {line.priceUnit}</td>
+              <td className="text-right num">{Number(line.billingQuantity).toFixed(3)}</td>
+              <td className="text-right num">{Number(line.netPrice).toFixed(4)} / {line.priceUnit}</td>
               <td className="text-right">{money(line.netAmount)}</td>
               <td>{line.taxCode ?? '—'}</td>
               <td className="text-right">{money(line.taxAmount)}</td>
@@ -157,17 +157,17 @@ function SelectedBilling({
       {flow.length ? (
         <details className="mt-3" open>
           <summary className="text-sm text-ink-soft">Document flow</summary>
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs text-ink-faint">
-                <th className="py-1">Order</th><th>Delivery</th><th>Material document</th>
+                <th>Order</th><th>Delivery</th><th>Material document</th>
                 <th>Billing</th><th>Invoice</th><th>Delivery status</th><th>Issue stands</th>
               </tr>
             </thead>
             <tbody>
               {flow.map((row) => (
-                <tr key={row.deliveryNumber ?? row.orderNumber} className="border-t border-line">
-                  <td className="py-1">{row.orderNumber}</td>
+                <tr key={row.deliveryNumber ?? row.orderNumber}>
+                  <td>{row.orderNumber}</td>
                   <td>{row.deliveryNumber ?? '—'}</td>
                   <td>{row.materialDocumentNumber ?? '—'}</td>
                   <td>{row.billingNumber ?? '—'}</td>
@@ -217,17 +217,17 @@ export default function Billing(props: Props) {
         {props.documents.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No billing document stands for this filter yet.</p>
         ) : (
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs text-ink-faint">
-                <th className="py-1">Billing</th><th>Delivery</th><th>Order</th><th>Customer</th>
+                <th>Billing</th><th>Delivery</th><th>Order</th><th>Customer</th>
                 <th>Date</th><th className="text-right">Gross</th><th>Invoice</th><th>Status</th>
               </tr>
             </thead>
             <tbody>
               {props.documents.map((row) => (
-                <tr key={row.billingNumber} className="border-t border-line">
-                  <td className="py-1">
+                <tr key={row.billingNumber}>
+                  <td>
                     <Link className="link" href={`/sales/billing?billing=${row.billingNumber}`}>{row.billingNumber}</Link>
                   </td>
                   <td><Link className="link" href={`/sales/delivery?delivery=${row.deliveryNumber}`}>{row.deliveryNumber}</Link></td>

@@ -108,7 +108,7 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
               <p data-cost-report-empty className="text-sm text-ink-soft">No posted journal lines cite this order in the selected period.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-cost-report-totals>
+                <table className="grid-table text-sm" data-cost-report-totals>
                   <thead><tr className="text-left text-ink-faint"><th>Company</th><th>Document currency</th><th>Debits</th><th>Credits</th><th>Net</th><th>Local currency</th><th>Local debits</th><th>Local credits</th><th>Local net</th></tr></thead>
                   <tbody>{report.totals.map((total) => (
                     <tr key={`${total.companyCode}-${total.documentCurrency}-${total.localCurrency}`}>
@@ -131,7 +131,7 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
             <section className="space-y-2">
               <h2 className="text-lg font-semibold">Journal lines ({report.lines.length})</h2>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm" data-cost-report-lines>
+                <table className="grid-table text-sm" data-cost-report-lines>
                   <thead><tr className="text-left text-ink-faint"><th>Posting date / period</th><th>Document</th><th>Status</th><th>Origin</th><th>G/L</th><th>Dr/Cr</th><th>Document amount</th><th>Local amount</th><th>Material / plant</th><th>Text</th></tr></thead>
                   <tbody>{report.lines.map((line) => (
                     <tr key={`${line.documentNumber}-${line.fiscalYear}-${line.lineNumber}`} data-cost-report-line={`${line.documentNumber}/${line.lineNumber}`}>

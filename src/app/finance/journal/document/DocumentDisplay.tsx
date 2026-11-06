@@ -2,8 +2,10 @@ import Link from 'next/link';
 
 import type { JournalDocumentView } from '@/modules/finance/document-display';
 
-const inputCls = 'input w-full';
-const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint';
+const inputCls = 'field-input';
+const labelCls = 'field-label';
+
+const ACCOUNT_TYPE_LEGEND = 'Account type: S G/L · D supplier · K customer';
 
 export default function DocumentDisplay({ document, parkedNumber, notFound, mismatch, canDisplay, canFlow }: {
   document: JournalDocumentView | null;
@@ -13,21 +15,25 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
   canDisplay: boolean;
   canFlow: boolean;
 }) {
+  // Where the document was posted in the local currency, the two sets of totals
+  // are the same figures. Printing them twice reads as a fault in the screen,
+  // so the totals say which currencies they cover once, in the hint below.
+  const sameCurrency = document ? document.documentCurrency === document.localCurrency : false;
   return (
     <>
-      <section aria-labelledby="dd-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
-        <h2 id="dd-lookup" className="text-sm font-semibold">Document key</h2>
+      <section aria-labelledby="dd-lookup" className="panel p-4">
+        <h2 id="dd-lookup" className="section-head">Document key</h2>
         <form method="get" className="mt-3">
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="block">
+            <label>
               <span className={labelCls}>Document number</span>
               <input name="document" className={inputCls} placeholder="JE-000001" required />
             </label>
-            <label className="block">
+            <label>
               <span className={labelCls}>Company code</span>
               <input name="company" className={inputCls} placeholder="1000" />
             </label>
-            <label className="block">
+            <label>
               <span className={labelCls}>Fiscal year</span>
               <input name="year" className={inputCls} placeholder="2026" required />
             </label>
@@ -35,12 +41,11 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
           <button type="submit" className="btn btn-primary mt-3 min-h-11 sm:min-h-8" disabled={!canDisplay}>
             Display
           </button>
-          <p className="mt-2 text-sm text-ink-soft">
-            The number and the fiscal year identify the document; the company code, when
-            given, must agree with the one it was posted in.
-          </p>
+          {/* How a document is identified, as a hint rather than a paragraph:
+              it is read once, next to the fields it explains. */}
+          <p className="field-hint">The number and the fiscal year identify the document.</p>
           {!canDisplay && (
-            <p className="mt-2 text-sm text-ink-soft">You do not hold the document display capability.</p>
+            <p className="field-hint">You do not hold the document display capability.</p>
           )}
         </form>
         {mismatch && (
@@ -64,9 +69,10 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
 
       {document && (
         <>
-          <section aria-labelledby="dd-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
-            <h2 id="dd-header" className="text-sm font-semibold">
+          <section aria-labelledby="dd-header" className="panel p-4">
+            <h2 id="dd-header" className="section-head">
               Document {document.displayNumber || document.documentNumber}
+              <span className="count">{document.status}</span>
             </h2>
             <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
               <div><dt className={labelCls}>Company code</dt><dd>{document.companyCode}</dd></div>
@@ -84,56 +90,88 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
             </dl>
           </section>
 
-          <section aria-labelledby="dd-lines" className="rounded-card border border-line bg-surface p-4 shadow-card">
-            <h2 id="dd-lines" className="text-sm font-semibold">Line items</h2>
+          <section aria-labelledby="dd-lines" className="panel p-4">
+            <h2 id="dd-lines" className="section-head">
+              Line items
+              <span className="count">{document.lines.length} lines</span>
+            </h2>
             <div className="mt-2 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table">
                 <thead>
-                  <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Line</th><th className="px-2 py-2">Acct type</th><th className="px-2 py-2">Account</th>
-                    <th className="px-2 py-2">D/C</th><th className="px-2 py-2">Document amount</th>
-                    <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Local amount</th>
-                    <th className="px-2 py-2">Partner</th><th className="px-2 py-2">Cost centre</th>
-                    <th className="px-2 py-2">Profit centre</th><th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Tax</th>
-                    <th className="px-2 py-2">Clearing</th><th className="px-2 py-2">Text</th>
+                  <tr>
+                    <th>Line</th>
+                    <th title={ACCOUNT_TYPE_LEGEND}>Acct type</th>
+                    <th>Account</th>
+                    <th>D/C</th>
+                    <th>Document amount</th>
+                    <th>Currency</th>
+                    <th>Local amount</th>
+                    <th>Partner</th>
+                    <th>Cost centre</th>
+                    <th>Profit centre</th>
+                    <th>Assignment</th>
+                    <th>Tax</th>
+                    <th>Clearing</th>
+                    <th>Text</th>
                   </tr>
                 </thead>
                 <tbody>
                   {document.lines.map((line) => (
-                    <tr key={line.lineNumber} className="border-t border-line" data-account-type={line.accountType}>
-                      <td className="px-2 py-2">{line.lineNumber}</td>
-                      <td className="px-2 py-2 code">{line.accountType}</td>
-                      <td className="px-2 py-2">{line.glAccount}</td>
-                      <td className="px-2 py-2">{line.debitCredit}</td>
-                      <td className="px-2 py-2">{line.amountDocument.toFixed(2)}</td>
-                      <td className="px-2 py-2">{line.currency}</td>
-                      <td className="px-2 py-2">{line.amountLocal.toFixed(2)}</td>
-                      <td className="px-2 py-2">{line.businessPartner ?? '—'}</td>
-                      <td className="px-2 py-2">{line.costCenter ?? '—'}</td>
-                      <td className="px-2 py-2">{line.profitCenter ?? '—'}</td>
-                      <td className="px-2 py-2">{line.assignment ?? '—'}</td>
-                      <td className="px-2 py-2">{line.taxCode ?? '—'}</td>
-                      <td className="px-2 py-2">{line.clearingDocument ?? '—'}</td>
-                      <td className="px-2 py-2">{line.lineText ?? '—'}</td>
+                    <tr key={line.lineNumber} data-account-type={line.accountType}>
+                      <td>{line.lineNumber}</td>
+                      <td className="code">{line.accountType}</td>
+                      <td>{line.glAccount}</td>
+                      <td>{line.debitCredit}</td>
+                      <td className="num">{line.amountDocument.toFixed(2)}</td>
+                      <td>{line.currency}</td>
+                      <td className="num">{line.amountLocal.toFixed(2)}</td>
+                      <td>{line.businessPartner ?? '—'}</td>
+                      <td>{line.costCenter ?? '—'}</td>
+                      <td>{line.profitCenter ?? '—'}</td>
+                      <td>{line.assignment ?? '—'}</td>
+                      <td>{line.taxCode ?? '—'}</td>
+                      <td>{line.clearingDocument ?? '—'}</td>
+                      <td>{line.lineText ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
+                {/* Totals are data: they belong in the table, beneath the
+                    columns they total, rather than in a sentence under it. */}
+                <tfoot>
+                  <tr>
+                    <td colSpan={4}>Debit</td>
+                    <td className="num">{document.debitDocument.toFixed(2)}</td>
+                    <td>{document.documentCurrency}</td>
+                    <td className="num">{document.debitLocal.toFixed(2)}</td>
+                    <td colSpan={7} />
+                  </tr>
+                  <tr>
+                    <td colSpan={4}>Credit</td>
+                    <td className="num">{document.creditDocument.toFixed(2)}</td>
+                    <td>{document.documentCurrency}</td>
+                    <td className="num">{document.creditLocal.toFixed(2)}</td>
+                    <td colSpan={7} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
-            <p className="mt-2 text-sm text-ink-soft">
-              Totals in {document.documentCurrency}: debits {document.debitDocument.toFixed(2)},
-              credits {document.creditDocument.toFixed(2)}. In {document.localCurrency}:
-              debits {document.debitLocal.toFixed(2)}, credits {document.creditLocal.toFixed(2)}.
-              Stored amounts stand as posted; nothing is recalculated here. Account type
-              is derived: S for a G/L line, D where the partner stands as a supplier in
-              this company, K where it stands as a customer.
+            <p className="field-hint">
+              {sameCurrency
+                ? `Totals in ${document.documentCurrency}. `
+                : `Totals: document ${document.documentCurrency}, local ${document.localCurrency}. `}
+              Amounts stand as posted; nothing is recalculated here. {ACCOUNT_TYPE_LEGEND}.
             </p>
           </section>
 
-          <section aria-labelledby="dd-flow" className="rounded-card border border-line bg-surface p-4 shadow-card">
-            <h2 id="dd-flow" className="text-sm font-semibold">Document flow</h2>
+          <section aria-labelledby="dd-flow" className="panel p-4">
+            <h2 id="dd-flow" className="section-head">
+              Document flow
+              {canFlow && document.flow.length > 0 && (
+                <span className="count">{document.flow.length} linked</span>
+              )}
+            </h2>
             {!canFlow ? (
-              <p className="mt-2 text-sm text-ink-soft">
+              <p className="mt-2 field-hint">
                 The flow around the document needs the document flow capability; this
                 display shows the document alone.
               </p>
@@ -143,7 +181,7 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
               <ul className="mt-2 space-y-1 text-sm">
                 {document.flow.map((link, i) => (
                   <li key={i}>
-                    <span className="text-ink-faint">{link.kind.replaceAll('_', ' ')}: </span>
+                    <span className="text-ink-soft">{link.kind.replaceAll('_', ' ')}: </span>
                     {link.href ? (
                       <Link className="text-accent hover:underline" href={link.href}>{link.label}</Link>
                     ) : (
@@ -155,8 +193,13 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
             )}
           </section>
 
-          <section aria-labelledby="dd-history" className="rounded-card border border-line bg-surface p-4 shadow-card">
-            <h2 id="dd-history" className="text-sm font-semibold">Change history</h2>
+          <section aria-labelledby="dd-history" className="panel p-4">
+            <h2 id="dd-history" className="section-head">
+              Change history
+              {document.history.length > 0 && (
+                <span className="count">{document.history.length} changes</span>
+              )}
+            </h2>
             {document.history.length === 0 ? (
               <p className="mt-2 text-sm text-ink-soft">No change documents stand retained for this document.</p>
             ) : (

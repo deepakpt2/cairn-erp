@@ -106,23 +106,23 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
         </div>
 
         <div className="hidden overflow-x-auto sm:block">
-          <table className="min-w-full border-collapse text-sm" aria-label={t('distributionChannel.title')}>
-            <thead className="bg-sunken text-ink-soft"><tr className="border-y border-line">
-              <th className="w-40 border-r border-line px-3 py-2 text-left">{t('distributionChannel.code')}</th>
-              <th className="px-3 py-2 text-left">{t('orgDefinition.name')}</th>
-              <th className="w-28 px-3 py-2 text-left">{t('orgDefinition.status')}</th>
-              <th className="w-44 px-3 py-2 text-end">{t('common.actions')}</th>
+          <table className="grid-table border-collapse text-sm" aria-label={t('distributionChannel.title')}>
+            <thead className="bg-sunken text-ink-soft"><tr className="border-y">
+              <th className="w-40 border-r border-line text-left">{t('distributionChannel.code')}</th>
+              <th className="text-left">{t('orgDefinition.name')}</th>
+              <th className="w-28 text-left">{t('orgDefinition.status')}</th>
+              <th className="w-44 text-end">{t('common.actions')}</th>
             </tr></thead>
             <tbody>
               {visibleEntries.map((entry) => (
-                <tr key={entry.distributionChannel} className="border-b border-line hover:bg-sunken">
-                  <td className="border-r border-line px-3 py-2 font-mono"><Link className="text-accent underline" href={detailHref(entry.distributionChannel)}>{entry.distributionChannel}</Link></td>
-                  <td className="px-3 py-2">{entry.name}</td>
-                  <td className="px-3 py-2"><span className={`chip ${entry.isActive ? 'chip-ok' : 'chip-neutral'}`}>{t(entry.isActive ? 'orgDefinition.active' : 'orgDefinition.inactive')}</span></td>
-                  <td className="whitespace-nowrap px-3 py-2 text-end"><Link className="text-accent underline" href={detailHref(entry.distributionChannel)}>{t('orgDefinition.open')}</Link>{canMaintain && entry.isActive && <Link className="ms-3 text-accent underline" href={copyHref(entry.distributionChannel)}>{t('orgDefinition.copy')}</Link>}</td>
+                <tr key={entry.distributionChannel} className="hover:bg-sunken">
+                  <td className="border-r border-line font-mono"><Link className="text-accent underline" href={detailHref(entry.distributionChannel)}>{entry.distributionChannel}</Link></td>
+                  <td>{entry.name}</td>
+                  <td><span className={`chip ${entry.isActive ? 'chip-ok' : 'chip-neutral'}`}>{t(entry.isActive ? 'orgDefinition.active' : 'orgDefinition.inactive')}</span></td>
+                  <td className="whitespace-nowrap text-end"><Link className="text-accent underline" href={detailHref(entry.distributionChannel)}>{t('orgDefinition.open')}</Link>{canMaintain && entry.isActive && <Link className="ms-3 text-accent underline" href={copyHref(entry.distributionChannel)}>{t('orgDefinition.copy')}</Link>}</td>
                 </tr>
               ))}
-              {visibleEntries.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-ink-soft">{search ? t('orgDefinition.noSearchResults') : t('distributionChannel.empty')}</td></tr>}
+              {visibleEntries.length === 0 && <tr><td colSpan={4} className="text-center text-sm text-ink-soft">{search ? t('orgDefinition.noSearchResults') : t('distributionChannel.empty')}</td></tr>}
             </tbody>
           </table>
         </div>

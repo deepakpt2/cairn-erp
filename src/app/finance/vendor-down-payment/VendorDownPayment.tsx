@@ -25,7 +25,7 @@ export default function VendorDownPayment({ canEnter, today }: {
 
   return (
     <>
-      <section aria-labelledby="vdp-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="vdp-header" className="border border-line bg-surface p-4">
         <h2 id="vdp-header" className="text-sm font-semibold">Header and bank data</h2>
         <form action={action}>
           <input type="hidden" name="requestKey" value="" />
@@ -99,7 +99,7 @@ export default function VendorDownPayment({ canEnter, today }: {
         </form>
       </section>
 
-      <section aria-labelledby="vdp-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="vdp-result" className="border border-line bg-surface p-4">
         <h2 id="vdp-result" className="text-sm font-semibold">Down payment</h2>
         <Message state={state} />
         <p className="mt-2 text-sm text-ink-soft">

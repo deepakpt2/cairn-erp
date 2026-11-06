@@ -106,7 +106,7 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mi04.subtitle')}</p>
       </header>
 
-      <section aria-labelledby="count-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="count-lookup" className="border border-line bg-surface p-4">
         <h2 id="count-lookup" className="text-sm font-semibold">{t('mi04.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">

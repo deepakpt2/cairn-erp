@@ -80,26 +80,26 @@ export default async function BatchSearchAllocationPage({
       </form>
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Movement type</th>
-              <th className="p-2">Special stock</th>
-              <th className="p-2">Search procedure</th>
-              <th className="p-2">Transfer procedure</th>
-              <th className="p-2">Check</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Movement type</th>
+              <th>Special stock</th>
+              <th>Search procedure</th>
+              <th>Transfer procedure</th>
+              <th>Check</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.movementType} className="border-b border-line">
-                <td className="code p-2">{row.movementType}</td>
-                <td className="p-2">Own stock</td>
-                <td className="code p-2">{row.searchProcedure}</td>
-                <td className="code p-2">{row.transferProcedure || '—'}</td>
-                <td className="code p-2">{row.checkBatch === 'X' ? 'X' : '—'}</td>
-                <td className="p-2 text-end">
+              <tr key={row.movementType}>
+                <td className="code">{row.movementType}</td>
+                <td>Own stock</td>
+                <td className="code">{row.searchProcedure}</td>
+                <td className="code">{row.transferProcedure || '—'}</td>
+                <td className="code">{row.checkBatch === 'X' ? 'X' : '—'}</td>
+                <td className="text-end">
                   <Link href={`${ROUTE}?movement=${encodeURIComponent(row.movementType)}&history=1`} className="underline">History</Link>
                   {canMaintain && (
                     <>
@@ -112,7 +112,7 @@ export default async function BatchSearchAllocationPage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-3 text-ink-soft">No allocation stands. None is created by opening this screen.</td>
+                <td colSpan={6} className="text-ink-soft">No allocation stands. None is created by opening this screen.</td>
               </tr>
             )}
           </tbody>

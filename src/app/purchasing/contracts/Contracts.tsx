@@ -138,38 +138,38 @@ export default function Contracts({
 
       <section className="overflow-x-auto">
         <h2 className="mb-2 text-sm font-semibold">Outline agreements · ME3N</h2>
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b text-left">
-              <th className="px-2 py-2">Contract</th>
-              <th className="px-2 py-2">Type</th>
-              <th className="px-2 py-2">Category</th>
-              <th className="px-2 py-2">Supplier</th>
-              <th className="px-2 py-2">Validity</th>
-              <th className="px-2 py-2">Target value</th>
-              <th className="px-2 py-2">Called-off value</th>
-              <th className="px-2 py-2">Remaining value</th>
-              <th className="px-2 py-2">Release</th>
+            <tr className="text-left">
+              <th>Contract</th>
+              <th>Type</th>
+              <th>Category</th>
+              <th>Supplier</th>
+              <th>Validity</th>
+              <th>Target value</th>
+              <th>Called-off value</th>
+              <th>Remaining value</th>
+              <th>Release</th>
             </tr>
           </thead>
           <tbody>
             {documents.map((row) => (
-              <tr key={row.contractNumber} className="border-b">
-                <td className="px-2 py-2">
+              <tr key={row.contractNumber}>
+                <td>
                   <Link className="underline" href={`/purchasing/contracts?contract=${encodeURIComponent(row.contractNumber)}`}>{row.contractNumber}</Link>
                 </td>
-                <td className="px-2 py-2">{row.documentType}</td>
-                <td className="px-2 py-2">{row.category}</td>
-                <td className="px-2 py-2">{row.supplierNumber}</td>
-                <td className="px-2 py-2">{row.validityStart} – {row.validityEnd}</td>
-                <td className="px-2 py-2">{row.targetValue ?? '—'}</td>
-                <td className="px-2 py-2">{row.calledOffValue}</td>
-                <td className="px-2 py-2">{row.remainingValue ?? '—'}</td>
-                <td className="px-2 py-2">{row.releaseStatus}</td>
+                <td>{row.documentType}</td>
+                <td>{row.category}</td>
+                <td>{row.supplierNumber}</td>
+                <td>{row.validityStart} – {row.validityEnd}</td>
+                <td>{row.targetValue ?? '—'}</td>
+                <td>{row.calledOffValue}</td>
+                <td>{row.remainingValue ?? '—'}</td>
+                <td>{row.releaseStatus}</td>
               </tr>
             ))}
             {documents.length === 0 && (
-              <tr><td className="px-2 py-3 text-ink-soft" colSpan={9}>No contracts stand.</td></tr>
+              <tr><td className="text-ink-soft" colSpan={9}>No contracts stand.</td></tr>
             )}
           </tbody>
         </table>
@@ -186,28 +186,28 @@ export default function Contracts({
             {selected.category} contract. Called-off value {selected.calledOffValue} {selected.currency}. Remaining value {selected.remainingValue ?? 'not a value commitment'}. Release {selected.releaseStatus}.
             Goods receipt and invoice figures below are display only. They are not the remaining commitment, and this screen does not post them.
           </p>
-          <table className="w-full">
+          <table className="grid-table">
             <thead>
-              <tr className="border-b text-left">
-                <th className="px-2 py-2">Item</th>
-                <th className="px-2 py-2">Text</th>
-                <th className="px-2 py-2">Target qty</th>
-                <th className="px-2 py-2">Called-off qty</th>
-                <th className="px-2 py-2">Remaining qty</th>
-                <th className="px-2 py-2">Goods receipt</th>
-                <th className="px-2 py-2">Invoice value</th>
+              <tr className="text-left">
+                <th>Item</th>
+                <th>Text</th>
+                <th>Target qty</th>
+                <th>Called-off qty</th>
+                <th>Remaining qty</th>
+                <th>Goods receipt</th>
+                <th>Invoice value</th>
               </tr>
             </thead>
             <tbody>
               {selected.items.map((item) => (
-                <tr key={item.itemNumber} className="border-b">
-                  <td className="px-2 py-2">{item.itemNumber}</td>
-                  <td className="px-2 py-2">{item.shortText}</td>
-                  <td className="px-2 py-2">{item.targetQuantity ?? '—'} {item.unit ?? ''}</td>
-                  <td className="px-2 py-2">{item.calledOffQuantity}</td>
-                  <td className="px-2 py-2">{item.remainingQuantity ?? '—'}</td>
-                  <td className="px-2 py-2">{item.goodsReceiptQuantity}</td>
-                  <td className="px-2 py-2">{item.invoiceValue}</td>
+                <tr key={item.itemNumber}>
+                  <td>{item.itemNumber}</td>
+                  <td>{item.shortText}</td>
+                  <td>{item.targetQuantity ?? '—'} {item.unit ?? ''}</td>
+                  <td>{item.calledOffQuantity}</td>
+                  <td>{item.remainingQuantity ?? '—'}</td>
+                  <td>{item.goodsReceiptQuantity}</td>
+                  <td>{item.invoiceValue}</td>
                 </tr>
               ))}
             </tbody>
@@ -292,26 +292,26 @@ export default function Contracts({
               </label>
             )}
           </div>
-          <table className="w-full text-sm">
+          <table className="grid-table text-sm">
             <thead>
-              <tr className="border-b text-left">
-                <th className="px-2 py-2">Material</th>
-                <th className="px-2 py-2">Text</th>
-                <th className="px-2 py-2">Target qty</th>
-                <th className="px-2 py-2">Unit</th>
-                <th className="px-2 py-2">Net price</th>
-                <th className="px-2 py-2">Plant</th>
+              <tr className="text-left">
+                <th>Material</th>
+                <th>Text</th>
+                <th>Target qty</th>
+                <th>Unit</th>
+                <th>Net price</th>
+                <th>Plant</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item, index) => (
                 <tr key={item.itemNumber ?? `new-${index}`}>
-                  <td className="px-1 py-1"><input className="input w-28" value={item.material} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, material: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1"><input className="input w-40" value={item.text} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, text: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1"><input className="input w-24" value={item.targetQuantity} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, targetQuantity: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1"><input className="input w-16" value={item.unit} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, unit: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1"><input className="input w-24" value={item.netPrice} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, netPrice: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1">
+                  <td><input className="input w-28" value={item.material} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, material: event.target.value } : row))} /></td>
+                  <td><input className="input w-40" value={item.text} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, text: event.target.value } : row))} /></td>
+                  <td><input className="input w-24" value={item.targetQuantity} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, targetQuantity: event.target.value } : row))} /></td>
+                  <td><input className="input w-16" value={item.unit} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, unit: event.target.value } : row))} /></td>
+                  <td><input className="input w-24" value={item.netPrice} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, netPrice: event.target.value } : row))} /></td>
+                  <td>
                     <select className="input w-28" value={item.plant} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, plant: event.target.value } : row))}>
                       <option value="">None</option>
                       {choices.plants.map((site) => <option key={site.plant} value={site.plant}>{site.plant}</option>)}

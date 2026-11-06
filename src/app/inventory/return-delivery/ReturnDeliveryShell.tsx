@@ -56,7 +56,7 @@ export default function ReturnDeliveryShell({
 
   return (
     <>
-      <section aria-labelledby="return-reference" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="return-reference" className="border border-line bg-surface p-4">
         <h2 id="return-reference" className="text-sm font-semibold">{t('mbrl.referenceHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('mbrl.referenceHint')}</p>
         <p role="status" className={`mt-2 text-sm ${reference.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -78,7 +78,7 @@ export default function ReturnDeliveryShell({
       </section>
 
       {document && (
-        <section aria-labelledby="return-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="return-items" className="border border-line bg-surface p-4">
           <h2 id="return-items" className="text-sm font-semibold">
             {t('mbrl.itemsHeader')} <span className="code" data-reference-document={document.documentNumber}>{document.documentNumber}</span>
           </h2>
@@ -98,38 +98,37 @@ export default function ReturnDeliveryShell({
             <input type="hidden" name="documentYear" value={document.documentYear} />
             <input type="hidden" name="requestKey" value={requestKey} />
 
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="py-1">{t('mbrl.columnLine')}</th>
-                  <th className="py-1">{t('mbrl.columnMaterial')}</th>
-                  <th className="py-1">{t('mbrl.columnOrder')}</th>
-                  <th className="py-1">{t('mbrl.columnPlant')}</th>
-                  <th className="py-1">{t('mbrl.columnLocation')}</th>
-                  <th className="py-1 text-right">{t('mbrl.columnOriginal')}</th>
-                  <th className="py-1 text-right">{t('mbrl.columnReturned')}</th>
-                  <th className="py-1 text-right">{t('mbrl.columnRemaining')}</th>
-                  <th className="py-1 text-right">{t('mbrl.columnReturn')}</th>
-                  <th className="py-1">{t('mbrl.columnUnit')}</th>
+                  <th>{t('mbrl.columnLine')}</th>
+                  <th>{t('mbrl.columnMaterial')}</th>
+                  <th>{t('mbrl.columnOrder')}</th>
+                  <th>{t('mbrl.columnPlant')}</th>
+                  <th>{t('mbrl.columnLocation')}</th>
+                  <th className="text-right">{t('mbrl.columnOriginal')}</th>
+                  <th className="text-right">{t('mbrl.columnReturned')}</th>
+                  <th className="text-right">{t('mbrl.columnRemaining')}</th>
+                  <th className="text-right">{t('mbrl.columnReturn')}</th>
+                  <th>{t('mbrl.columnUnit')}</th>
                 </tr>
               </thead>
               <tbody>
                 {document.items.map((item) => (
                   <tr
                     key={item.lineNumber}
-                    className="border-t border-line"
                     data-item={item.lineNumber}
                     data-eligible={item.eligible ? 'true' : 'false'}
                   >
-                    <td className="py-1">{item.lineNumber}</td>
-                    <td className="py-1 code">{item.materialNumber}{item.batch ? ` · Batch ${item.batch}` : ''}</td>
-                    <td className="py-1 code">{item.purchaseOrderNumber ?? '—'}{item.purchaseOrderItem ? `/${item.purchaseOrderItem}` : ''}</td>
-                    <td className="py-1 code">{item.plant}</td>
-                    <td className="py-1 code">{item.storageLocation ?? '—'}</td>
-                    <td className="py-1 text-right tabular">{item.originalQuantity.toFixed(3)}</td>
-                    <td className="py-1 text-right tabular">{item.previouslyReturned.toFixed(3)}</td>
-                    <td className="py-1 text-right tabular" data-remaining={item.lineNumber}>{item.remaining.toFixed(3)}</td>
-                    <td className="py-1 text-right">
+                    <td>{item.lineNumber}</td>
+                    <td className="code">{item.materialNumber}{item.batch ? ` · Batch ${item.batch}` : ''}</td>
+                    <td className="code">{item.purchaseOrderNumber ?? '—'}{item.purchaseOrderItem ? `/${item.purchaseOrderItem}` : ''}</td>
+                    <td className="code">{item.plant}</td>
+                    <td className="code">{item.storageLocation ?? '—'}</td>
+                    <td className="text-right tabular num">{item.originalQuantity.toFixed(3)}</td>
+                    <td className="text-right tabular num">{item.previouslyReturned.toFixed(3)}</td>
+                    <td className="text-right tabular num" data-remaining={item.lineNumber}>{item.remaining.toFixed(3)}</td>
+                    <td className="text-right">
                       <input type="hidden" name={`originalLine-${item.lineNumber}`} value={item.lineNumber} />
                       <input
                         name={`quantity-${item.lineNumber}`}
@@ -139,7 +138,7 @@ export default function ReturnDeliveryShell({
                         aria-label={`${t('mbrl.columnReturn')} ${item.lineNumber}`}
                       />
                     </td>
-                    <td className="py-1">
+                    <td>
                       <input
                         name={`unit-${item.lineNumber}`}
                         className="input w-16 uppercase"
@@ -193,7 +192,7 @@ export default function ReturnDeliveryShell({
         </section>
       )}
 
-      <section aria-labelledby="return-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="return-result" className="border border-line bg-surface p-4">
         <h2 id="return-result" className="text-sm font-semibold">{t('mbrl.resultHeader')}</h2>
         <p role="status" className={`mt-2 text-sm ${posted.ok ? 'text-ink' : 'text-red-700'}`}>
           {posted.message}{posted.remedy ? ` ${posted.remedy}` : ''}
@@ -219,24 +218,24 @@ export default function ReturnDeliveryShell({
                 </Link>
               ) : '—'}
             </p>
-            <table className="mt-2 w-full text-sm">
+            <table className="grid-table mt-2 text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="py-1">{t('mbrl.columnLine')}</th>
-                  <th className="py-1">{t('mbrl.columnMaterial')}</th>
-                  <th className="py-1">{t('mbrl.columnLocation')}</th>
-                  <th className="py-1 text-right">{t('mbrl.columnReturn')}</th>
-                  <th className="py-1 text-right">{t('mbrl.columnValue')}</th>
+                  <th>{t('mbrl.columnLine')}</th>
+                  <th>{t('mbrl.columnMaterial')}</th>
+                  <th>{t('mbrl.columnLocation')}</th>
+                  <th className="text-right">{t('mbrl.columnReturn')}</th>
+                  <th className="text-right">{t('mbrl.columnValue')}</th>
                 </tr>
               </thead>
               <tbody>
                 {posted.posted.lines.map((line) => (
-                  <tr key={line.lineNumber} className="border-t border-line" data-line={line.materialNumber}>
-                    <td className="py-1">{line.lineNumber}</td>
-                    <td className="py-1">{line.materialNumber}{line.batch ? ` · Batch ${line.batch}` : ''}</td>
-                    <td className="py-1">{line.storageLocation ?? '—'}</td>
-                    <td className="py-1 text-right tabular">{line.quantity} {line.unit}</td>
-                    <td className="py-1 text-right tabular">{line.value}</td>
+                  <tr key={line.lineNumber} data-line={line.materialNumber}>
+                    <td>{line.lineNumber}</td>
+                    <td>{line.materialNumber}{line.batch ? ` · Batch ${line.batch}` : ''}</td>
+                    <td>{line.storageLocation ?? '—'}</td>
+                    <td className="text-right tabular">{line.quantity} {line.unit}</td>
+                    <td className="text-right tabular">{line.value}</td>
                   </tr>
                 ))}
               </tbody>

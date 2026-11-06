@@ -53,7 +53,7 @@ export default function DepreciateForm({ canRun, today, runs, selectedRunId, sel
   const logItems = result?.items ?? selectedItems;
   return (
     <>
-      <section aria-labelledby="dp-entry" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="dp-entry" className="border border-line bg-surface p-4">
         <h2 id="dp-entry" className="text-sm font-semibold">Run parameters</h2>
         <form className="mt-3">
           <input type="hidden" name="runType" value={runType} />
@@ -127,7 +127,7 @@ export default function DepreciateForm({ canRun, today, runs, selectedRunId, sel
         </form>
       </section>
 
-      <section aria-labelledby="dp-log" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="dp-log" className="border border-line bg-surface p-4">
         <h2 id="dp-log" className="text-sm font-semibold">Execution log</h2>
         {result && (
           <p className="mt-2 text-sm">
@@ -146,26 +146,26 @@ export default function DepreciateForm({ canRun, today, runs, selectedRunId, sel
           <p className="mt-2 text-sm text-ink-soft">Execute a run to see its asset-level log.</p>
         ) : (
           <div className="mt-2 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Asset</th><th className="px-2 py-2">Area</th>
-                  <th className="px-2 py-2">Key</th><th className="px-2 py-2">Calculated</th>
-                  <th className="px-2 py-2">Previously posted</th><th className="px-2 py-2">Adjustment</th>
-                  <th className="px-2 py-2">Status</th><th className="px-2 py-2">Note</th>
+                  <th>Asset</th><th>Area</th>
+                  <th>Key</th><th>Calculated</th>
+                  <th>Previously posted</th><th>Adjustment</th>
+                  <th>Status</th><th>Note</th>
                 </tr>
               </thead>
               <tbody>
                 {logItems.map((item) => (
-                  <tr key={`${item.assetNumber}-${item.subNumber}-${item.areaCode}`} className="border-t border-line">
-                    <td className="px-2 py-2">{item.assetNumber}/{item.subNumber}</td>
-                    <td className="px-2 py-2">{item.areaCode}</td>
-                    <td className="px-2 py-2">{item.depreciationKey}</td>
-                    <td className="px-2 py-2">{item.calculatedAmount.toFixed(2)} {item.currency}</td>
-                    <td className="px-2 py-2">{item.previouslyPostedAmount.toFixed(2)}</td>
-                    <td className="px-2 py-2">{item.adjustmentAmount.toFixed(2)}</td>
-                    <td className="px-2 py-2">{item.status}</td>
-                    <td className="px-2 py-2">{item.message ?? item.documentNumber ?? ''}</td>
+                  <tr key={`${item.assetNumber}-${item.subNumber}-${item.areaCode}`}>
+                    <td>{item.assetNumber}/{item.subNumber}</td>
+                    <td>{item.areaCode}</td>
+                    <td>{item.depreciationKey}</td>
+                    <td className="num">{item.calculatedAmount.toFixed(2)} {item.currency}</td>
+                    <td className="num">{item.previouslyPostedAmount.toFixed(2)}</td>
+                    <td className="num">{item.adjustmentAmount.toFixed(2)}</td>
+                    <td>{item.status}</td>
+                    <td>{item.message ?? item.documentNumber ?? ''}</td>
                   </tr>
                 ))}
               </tbody>
@@ -174,40 +174,40 @@ export default function DepreciateForm({ canRun, today, runs, selectedRunId, sel
         )}
       </section>
 
-      <section aria-labelledby="dp-runs" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="dp-runs" className="border border-line bg-surface p-4">
         <h2 id="dp-runs" className="text-sm font-semibold">Recent runs</h2>
         {runs.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No runs stand yet.</p>
         ) : (
           <div className="mt-2 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Run</th><th className="px-2 py-2">Company</th>
-                  <th className="px-2 py-2">Year/period</th><th className="px-2 py-2">Type</th>
-                  <th className="px-2 py-2">Status</th><th className="px-2 py-2">Calculated</th>
-                  <th className="px-2 py-2">Posted</th><th className="px-2 py-2">Document</th>
-                  <th className="px-2 py-2">Log</th>
+                  <th>Run</th><th>Company</th>
+                  <th>Year/period</th><th>Type</th>
+                  <th>Status</th><th>Calculated</th>
+                  <th>Posted</th><th>Document</th>
+                  <th>Log</th>
                 </tr>
               </thead>
               <tbody>
                 {runs.map((run) => (
-                  <tr key={run.runId} className="border-t border-line">
-                    <td className="px-2 py-2">{run.runId.slice(0, 8)}…</td>
-                    <td className="px-2 py-2">{run.companyCode}</td>
-                    <td className="px-2 py-2">{run.fiscalYear}/{String(run.postingPeriod).padStart(2, '0')}</td>
-                    <td className="px-2 py-2">{run.runType}{run.isTestRun ? ' (test)' : ''}</td>
-                    <td className="px-2 py-2">{run.status}</td>
-                    <td className="px-2 py-2">{run.totalCalculated.toFixed(2)}</td>
-                    <td className="px-2 py-2">{run.totalPosted.toFixed(2)} {run.currency}</td>
-                    <td className="px-2 py-2">
+                  <tr key={run.runId}>
+                    <td>{run.runId.slice(0, 8)}…</td>
+                    <td>{run.companyCode}</td>
+                    <td>{run.fiscalYear}/{String(run.postingPeriod).padStart(2, '0')}</td>
+                    <td>{run.runType}{run.isTestRun ? ' (test)' : ''}</td>
+                    <td>{run.status}</td>
+                    <td className="num">{run.totalCalculated.toFixed(2)}</td>
+                    <td className="num">{run.totalPosted.toFixed(2)} {run.currency}</td>
+                    <td>
                       {run.documentNumber ? (
                         <Link className="text-teal-800 underline" href={`/finance/journal/document?document=${run.documentNumber}`}>
                           {run.documentNumber}
                         </Link>
                       ) : '—'}
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       <Link className="text-teal-800 underline" href={`/finance/assets/depreciate?run=${run.runId}`}>
                         {selectedRunId === run.runId ? 'Shown' : 'View log'}
                       </Link>

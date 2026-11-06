@@ -33,7 +33,7 @@ export default function MrpRunWorkbench({
 
   return (
     <div className="space-y-4">
-      <form action={action} className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <form action={action} className="border border-line bg-surface p-4">
         <input type="hidden" name="requestKey" value={requestKey} />
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block text-sm">
@@ -94,7 +94,7 @@ export default function MrpRunWorkbench({
       </form>
 
       {shown && (
-        <section aria-labelledby="mrp-result" className="rounded-card border border-line bg-surface p-4 shadow-card" data-mrp-run={shown.runNumber}>
+        <section aria-labelledby="mrp-result" className="border border-line bg-surface p-4" data-mrp-run={shown.runNumber}>
           <h2 id="mrp-result" className="text-sm font-semibold">{t('md01.run')} {shown.runNumber}</h2>
           <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-4">
             <div><dt className="text-ink-soft">{t('md01.status')}</dt><dd data-mrp-status>{shown.status}</dd></div>
@@ -105,7 +105,7 @@ export default function MrpRunWorkbench({
           {shown.materials[0] && (
             <p className="mt-2 text-sm" data-mrp-company>{t('md01.companyCode')} {shown.materials[0].companyCode}</p>
           )}
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-ink-faint">
                 <th>{t('md01.materials')}</th>
@@ -116,7 +116,7 @@ export default function MrpRunWorkbench({
             <tbody>
               {shown.materials.map((row) => (
                 <tr key={`${row.plant}/${row.materialNumber}`} data-mrp-material={row.materialNumber}>
-                  <td className="py-1">
+                  <td>
                     <Link href={`/production/stock-requirements?material=${encodeURIComponent(row.materialNumber)}&plant=${encodeURIComponent(row.plant)}`}>
                       {row.materialNumber}
                     </Link>
@@ -129,7 +129,7 @@ export default function MrpRunWorkbench({
             </tbody>
           </table>
           {shown.dependents.length > 0 && (
-            <table className="mt-3 w-full text-sm" data-mrp-dependents>
+            <table className="grid-table mt-3 text-sm" data-mrp-dependents>
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>{t('md01.dependents')}</th>
@@ -140,7 +140,7 @@ export default function MrpRunWorkbench({
               <tbody>
                 {shown.dependents.map((row) => (
                   <tr key={`${row.parentOrderNumber ?? row.parentMaterial}/${row.componentMaterial}/${row.requirementDate}`} data-mrp-dependent={row.componentMaterial}>
-                    <td className="py-1">{row.parentMaterial} {row.parentOrderNumber ?? '—'}</td>
+                    <td>{row.parentMaterial} {row.parentOrderNumber ?? '—'}</td>
                     <td>{row.componentMaterial} {row.quantity} {row.unit}</td>
                     <td>{row.requirementDate}</td>
                   </tr>
@@ -158,7 +158,7 @@ export default function MrpRunWorkbench({
             </ul>
           )}
           {shown.proposals.length > 0 && (
-            <table className="mt-3 w-full text-sm" data-mrp-proposals>
+            <table className="grid-table mt-3 text-sm" data-mrp-proposals>
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>{t('md01.proposals')}</th>
@@ -169,7 +169,7 @@ export default function MrpRunWorkbench({
               <tbody>
                 {shown.proposals.map((row) => (
                   <tr key={row.lineNumber} data-mrp-proposal={row.documentNumber ?? row.lineNumber}>
-                    <td className="py-1">{row.proposalType} {row.documentNumber ?? '—'}</td>
+                    <td>{row.proposalType} {row.documentNumber ?? '—'}</td>
                     <td>{row.action} {row.quantity}</td>
                     <td>{row.status}</td>
                   </tr>

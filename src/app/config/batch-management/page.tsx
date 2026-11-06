@@ -38,22 +38,22 @@ export default async function BatchManagementImgPage() {
 
       <section className="border border-line bg-white p-4">
         <h2 className="text-sm font-semibold">Batch management</h2>
-        <table className="mt-2 w-full text-sm">
+        <table className="grid-table mt-2 text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="px-2 py-2">Transaction</th>
-              <th className="px-2 py-2">Activity</th>
-              <th className="px-2 py-2">What it does</th>
+            <tr className="text-left">
+              <th>Transaction</th>
+              <th>Activity</th>
+              <th>What it does</th>
             </tr>
           </thead>
           <tbody>
             {BATCH_IMG_NODES.map((node) => (
-              <tr key={node.tcode} className="border-b border-line/60">
-                <td className="px-2 py-2">
+              <tr key={node.tcode}>
+                <td>
                   <Link href={node.route} className="code">{node.tcode}</Link>
                 </td>
-                <td className="px-2 py-2">{node.title}</td>
-                <td className="px-2 py-2 text-ink-soft">{node.note}</td>
+                <td>{node.title}</td>
+                <td className="text-ink-soft">{node.note}</td>
               </tr>
             ))}
           </tbody>
@@ -63,15 +63,15 @@ export default async function BatchManagementImgPage() {
       <section className="border border-line bg-white p-4">
         <h2 className="text-sm font-semibold">Related transactions</h2>
         <p className="mt-1 text-sm text-ink-soft">These are not IMG activities. The routes already exist.</p>
-        <table className="mt-2 w-full text-sm">
+        <table className="grid-table mt-2 text-sm">
           <tbody>
             {RELATED_BATCH_NODES.map((node) => (
-              <tr key={node.tcode} className="border-b border-line/60">
-                <td className="px-2 py-2">
+              <tr key={node.tcode}>
+                <td>
                   <Link href={node.route} className="code">{node.tcode}</Link>
                 </td>
-                <td className="px-2 py-2">{node.title}</td>
-                <td className="px-2 py-2 text-ink-soft">{node.note}</td>
+                <td>{node.title}</td>
+                <td className="text-ink-soft">{node.note}</td>
               </tr>
             ))}
           </tbody>
@@ -80,15 +80,15 @@ export default async function BatchManagementImgPage() {
 
       <section className="border border-line bg-white p-4">
         <h2 className="text-sm font-semibold">Not this screen</h2>
-        <table className="mt-2 w-full text-sm">
+        <table className="grid-table mt-2 text-sm">
           <tbody>
             {NOT_OCHA.map((node) => (
-              <tr key={node.tcode} className="border-b border-line/60">
-                <td className="px-2 py-2">
+              <tr key={node.tcode}>
+                <td>
                   <Link href={node.route} className="code">{node.tcode}</Link>
                 </td>
-                <td className="px-2 py-2">{node.title}</td>
-                <td className="px-2 py-2 text-ink-soft">{node.note}</td>
+                <td>{node.title}</td>
+                <td className="text-ink-soft">{node.note}</td>
               </tr>
             ))}
           </tbody>

@@ -59,6 +59,18 @@
     @apply text-sm font-semibold tracking-tight text-ink;
   }
 
+  /* A section heading on a rule, with room for a count on the right. Sizing
+     alone did not separate a heading from the body text it headed, because
+     both were 12.5px. */
+  .section-head {
+    @apply flex items-baseline justify-between gap-3 border-b border-line-strong
+           pb-1.5 text-sm font-semibold text-ink;
+  }
+
+  .section-head .count {
+    @apply text-2xs font-normal normal-case tracking-normal text-ink-soft;
+  }
+
   /* ---- The command bar — the most familiar behaviour we keep (§19.1) ------ */
 
   .command-bar {
@@ -74,6 +86,11 @@
 
   .grid-table {
     @apply w-full border-collapse text-sm;
+    /* Numbers must align in columns — a hard requirement (§19.2). It held for
+       inputs and the .tabular/.numeric helpers, but not for the cells where
+       amounts are actually read, so the columns ragged. Applies to the whole
+       table: every figure in it lines up, not only the ones marked up. */
+    font-variant-numeric: tabular-nums;
   }
 
   .grid-table thead th {
@@ -82,7 +99,7 @@
   }
 
   .grid-table tbody td {
-    @apply border-b border-line px-2 py-1 align-top;
+    @apply border-b border-line px-2 py-1.5 align-top;
   }
 
   .grid-table tbody tr:hover {
@@ -93,19 +110,36 @@
     @apply border-b-0;
   }
 
+  /* Totals are data, so they stand in the table rather than in a sentence
+     underneath it: set apart by a stronger rule and the sunken band. */
+  .grid-table tfoot td {
+    @apply border-t border-line-strong bg-sunken px-2 py-1.5 font-semibold text-ink;
+  }
+
+  /* Money, quantities and counts: the right-hand edge, figures aligned. */
+  .num {
+    @apply whitespace-nowrap text-end tabular-nums;
+  }
+
   /* ---- Fields ------------------------------------------------------------- */
 
   .field-label {
     @apply mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-ink-soft;
   }
 
-  .field-input {
+  .field-input,
+  /* .input is the older name, still carried by more than a thousand fields.
+     It was never defined, so those fields rendered with no border and no
+     padding at all. Aliased here rather than renamed at every call site. */
+  .input {
     @apply w-full border border-line-strong bg-surface px-2 py-1.5 text-base text-ink
            placeholder:text-ink-faint disabled:bg-sunken disabled:text-ink-faint;
   }
 
+  /* Hints carry the explanations that used to sit in the body as prose. They
+     are read, so they get the contrast of ink-soft, not ink-faint. */
   .field-hint {
-    @apply mt-0.5 text-2xs text-ink-faint;
+    @apply mt-0.5 text-2xs text-ink-soft;
   }
 
   /* ---- Buttons ------------------------------------------------------------ */

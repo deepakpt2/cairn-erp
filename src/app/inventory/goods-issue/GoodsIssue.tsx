@@ -13,10 +13,10 @@ function IssueLine({ n, chargesCostCentre }: { n: number; chargesCostCentre: boo
   const [plant, setPlant] = useState('');
   const [company, setCompany] = useState('');
   return (
-    <tr className="border-t border-line">
-      <td className="py-1">{n}</td>
-      <td className="py-1"><ConstrainedField kind="material-issue" name={`material-${n}`} context={{ plant }} placeholder="MAT-…" /></td>
-      <td className="py-1">
+    <tr>
+      <td>{n}</td>
+      <td><ConstrainedField kind="material-issue" name={`material-${n}`} context={{ plant }} placeholder="MAT-…" /></td>
+      <td>
         <ConstrainedField
           kind="plant"
           name={`plant-${n}`}
@@ -28,15 +28,15 @@ function IssueLine({ n, chargesCostCentre }: { n: number; chargesCostCentre: boo
           }}
         />
       </td>
-      <td className="py-1"><ConstrainedField kind="storage-location" name={`sloc-${n}`} context={{ plant }} /></td>
-      <td className="py-1"><input name={`batch-${n}`} maxLength={10} className="input w-24" placeholder="Batch" /></td>
-      <td className="py-1">
+      <td><ConstrainedField kind="storage-location" name={`sloc-${n}`} context={{ plant }} /></td>
+      <td><input name={`batch-${n}`} maxLength={10} className="input w-24" placeholder="Batch" /></td>
+      <td>
         <input name={`quantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
       </td>
-      <td className="py-1">
+      <td>
         <ConstrainedField kind="cost-center" name={`costCenter-${n}`} context={{ companyCode: company }} disabled={!chargesCostCentre} placeholder={chargesCostCentre ? 'CC1100' : '—'} />
       </td>
-      <td className="py-1">
+      <td>
         <div className="flex gap-1">
           <input name={`reservation-${n}`} className="input w-28" placeholder="RSV-…" />
           <input name={`reservationItem-${n}`} className="input w-14" placeholder="10" aria-label={`${t('mb1a.columnReservation')} ${t('mb1a.columnLine')} ${n}`} />
@@ -58,7 +58,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
 
   return (
     <>
-      <section aria-labelledby="issue-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="issue-header" className="border border-line bg-surface p-4">
         <h2 id="issue-header" className="text-sm font-semibold">{t('mb1a.header')}</h2>
         <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}
@@ -93,17 +93,17 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
             </label>
           </div>
 
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mb1a.columnLine')}</th>
-                <th className="py-1">{t('mb1a.columnMaterial')}</th>
-                <th className="py-1">{t('mb1a.columnPlant')}</th>
-                <th className="py-1">{t('mb1a.columnLocation')}</th>
-                <th className="py-1">Batch</th>
-                <th className="py-1 text-right">{t('mb1a.columnQuantity')}</th>
-                <th className="py-1">{t('mb1a.columnCostCenter')}</th>
-                <th className="py-1">{t('mb1a.columnReservation')}</th>
+                <th>{t('mb1a.columnLine')}</th>
+                <th>{t('mb1a.columnMaterial')}</th>
+                <th>{t('mb1a.columnPlant')}</th>
+                <th>{t('mb1a.columnLocation')}</th>
+                <th>Batch</th>
+                <th className="text-right">{t('mb1a.columnQuantity')}</th>
+                <th>{t('mb1a.columnCostCenter')}</th>
+                <th>{t('mb1a.columnReservation')}</th>
               </tr>
             </thead>
             <tbody>
@@ -123,7 +123,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
       </section>
 
       {state.document && (
-        <section aria-labelledby="issue-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="issue-document" className="border border-line bg-surface p-4">
           <h2 id="issue-document" className="text-sm font-semibold">
             {t('mb1a.document')} {state.document.materialDocumentNumber}
           </h2>
@@ -140,30 +140,30 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
             ) : '—'}
             {' · '}{t('mb1a.value')} {state.document.totalValue}
           </p>
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mb1a.columnLine')}</th>
-                <th className="py-1">{t('mb1a.columnMaterial')}</th>
-                <th className="py-1">{t('mb1a.columnPlant')}</th>
-                <th className="py-1">{t('mb1a.columnLocation')}</th>
-                <th className="py-1 text-right">{t('mb1a.columnQuantity')}</th>
-                <th className="py-1 text-right">{t('mb1a.columnValue')}</th>
-                <th className="py-1">{t('mb1a.columnCostCenter')}</th>
-                <th className="py-1">{t('mb1a.columnReservation')}</th>
+                <th>{t('mb1a.columnLine')}</th>
+                <th>{t('mb1a.columnMaterial')}</th>
+                <th>{t('mb1a.columnPlant')}</th>
+                <th>{t('mb1a.columnLocation')}</th>
+                <th className="text-right">{t('mb1a.columnQuantity')}</th>
+                <th className="text-right">{t('mb1a.columnValue')}</th>
+                <th>{t('mb1a.columnCostCenter')}</th>
+                <th>{t('mb1a.columnReservation')}</th>
               </tr>
             </thead>
             <tbody>
               {state.document.lines.map((line) => (
-                <tr key={line.lineNumber} data-line={line.lineNumber} data-reservation-open={line.reservationOpenAfter ?? ''} className="border-t border-line">
-                  <td className="py-1">{line.lineNumber}</td>
-                  <td className="py-1"><span className="code">{line.materialNumber}</span></td>
-                  <td className="py-1">{line.plant}</td>
-                  <td className="py-1">{line.storageLocation ?? '—'}</td>
-                  <td className="py-1 text-right tabular-nums">{line.quantity} {line.unit}</td>
-                  <td className="py-1 text-right tabular-nums">{line.value}</td>
-                  <td className="py-1">{line.costCenter ?? '—'}</td>
-                  <td className="py-1">
+                <tr key={line.lineNumber} data-line={line.lineNumber} data-reservation-open={line.reservationOpenAfter ?? ''}>
+                  <td>{line.lineNumber}</td>
+                  <td><span className="code">{line.materialNumber}</span></td>
+                  <td>{line.plant}</td>
+                  <td>{line.storageLocation ?? '—'}</td>
+                  <td className="text-right tabular-nums">{line.quantity} {line.unit}</td>
+                  <td className="text-right tabular-nums">{line.value}</td>
+                  <td>{line.costCenter ?? '—'}</td>
+                  <td>
                     {line.reservationNumber ? (
                       <>
                         {line.reservationNumber} / {line.reservationItem}

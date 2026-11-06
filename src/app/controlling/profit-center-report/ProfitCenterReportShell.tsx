@@ -131,9 +131,9 @@ export default function ProfitCenterReportShell({ canUse, areas, selection, resu
                 <td>{line.profitCenterName ? `${line.profitCenter} — ${line.profitCenterName}` : line.profitCenter}</td>
                 <td className="code">{line.glAccount}</td>
                 <td>{line.debitCredit}</td>
-                <td className="text-end">{line.amountDocument.toFixed(2)}</td>
+                <td className="text-end num">{line.amountDocument.toFixed(2)}</td>
                 <td>{line.documentCurrency}</td>
-                <td className="text-end">{line.amountLocal.toFixed(2)}</td>
+                <td className="text-end num">{line.amountLocal.toFixed(2)}</td>
                 <td>{line.localCurrency}</td>
                 <td>{line.assignment}</td>
                 <td>{line.reference}</td>
@@ -165,9 +165,9 @@ export default function ProfitCenterReportShell({ canUse, areas, selection, resu
                 <tr key={`${total.profitCenter}|${total.glAccount}|${total.documentCurrency}|${total.localCurrency}`}>
                   <td>{total.profitCenter}</td>
                   <td className="code">{total.glAccount}</td>
-                  <td className="text-end">{total.amountDocument.toFixed(2)}</td>
+                  <td className="text-end num">{total.amountDocument.toFixed(2)}</td>
                   <td>{total.documentCurrency}</td>
-                  <td className="text-end">{total.amountLocal.toFixed(2)}</td>
+                  <td className="text-end num">{total.amountLocal.toFixed(2)}</td>
                   <td>{total.localCurrency}</td>
                 </tr>
               ))}

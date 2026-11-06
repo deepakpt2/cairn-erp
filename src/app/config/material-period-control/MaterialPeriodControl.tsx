@@ -113,22 +113,22 @@ export default function MaterialPeriodControl({
           <p className="text-sm text-ink-faint">No company codes stand yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
-                <tr className="border-b border-line text-ink-soft">
-                  <th className="py-2 pe-3">Company code</th>
-                  <th className="py-2 pe-3">Current period</th>
-                  <th className="py-2 pe-3">Previous period</th>
-                  <th className="py-2 pe-3">Backposting to previous</th>
-                  <th className="py-2 pe-3">Disallow after change</th>
-                  <th className="py-2 pe-3">Last changed by</th>
-                  {canMaintain && <th className="py-2">Actions</th>}
+                <tr className="text-ink-soft">
+                  <th className="pe-3">Company code</th>
+                  <th className="pe-3">Current period</th>
+                  <th className="pe-3">Previous period</th>
+                  <th className="pe-3">Backposting to previous</th>
+                  <th className="pe-3">Disallow after change</th>
+                  <th className="pe-3">Last changed by</th>
+                  {canMaintain && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.companyCode} className="border-b border-line/60">
-                    <td className="py-2 pe-3 font-medium">
+                  <tr key={row.companyCode}>
+                    <td className="pe-3 font-medium">
                       {row.companyCode}
                       <span className="block text-xs font-normal text-ink-soft">
                         {row.companyName}
@@ -136,17 +136,17 @@ export default function MaterialPeriodControl({
                     </td>
                     {row.initialized ? (
                       <>
-                        <td className="py-2 pe-3">{period(row.currentYear, row.currentPeriod)}</td>
-                        <td className="py-2 pe-3">
+                        <td className="pe-3">{period(row.currentYear, row.currentPeriod)}</td>
+                        <td className="pe-3">
                           {period(row.previousYear, row.previousPeriod)}
                         </td>
-                        <td className="py-2 pe-3">{row.allowBackposting ? 'Allowed' : 'No'}</td>
-                        <td className="py-2 pe-3">
+                        <td className="pe-3">{row.allowBackposting ? 'Allowed' : 'No'}</td>
+                        <td className="pe-3">
                           {row.disallowBackpostingAfterChange ? 'Yes' : 'No'}
                         </td>
-                        <td className="py-2 pe-3">{row.lastChangedBy ?? '—'}</td>
+                        <td className="pe-3">{row.lastChangedBy ?? '—'}</td>
                         {canMaintain && (
-                          <td className="py-2">
+                          <td>
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
@@ -168,11 +168,11 @@ export default function MaterialPeriodControl({
                       </>
                     ) : (
                       <>
-                        <td className="py-2 pe-3 text-ink-faint" colSpan={5}>
+                        <td className="pe-3 text-ink-faint" colSpan={5}>
                           Not initialized
                         </td>
                         {canMaintain && (
-                          <td className="py-2">
+                          <td>
                             <button
                               type="button"
                               className="btn btn-default"

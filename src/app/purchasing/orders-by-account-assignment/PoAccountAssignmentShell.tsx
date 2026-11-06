@@ -122,7 +122,7 @@ export default function PoAccountAssignmentShell({ canUse, selection, result, re
                     </Link>
                   </td>
                   <td className="text-end">{group.lineCount}</td>
-                  <td className="text-end font-semibold">{group.assignedValue.toFixed(2)}</td>
+                  <td className="text-end font-semibold num">{group.assignedValue.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -181,11 +181,11 @@ export default function PoAccountAssignmentShell({ canUse, selection, result, re
                 <td className="code">{row.materialNumber}</td>
                 <td>{row.materialDescription}</td>
                 <td className="code">{row.plant}</td>
-                <td className="text-end">{row.quantity.toFixed(3)}</td>
+                <td className="text-end num">{row.quantity.toFixed(3)}</td>
                 <td>{row.unit}</td>
-                <td className="text-end">{row.netValue.toFixed(2)}</td>
-                <td className="text-end">{row.distributionPercentage.toFixed(2)}</td>
-                <td className="text-end font-semibold">{row.assignedValue.toFixed(2)}</td>
+                <td className="text-end num">{row.netValue.toFixed(2)}</td>
+                <td className="text-end num">{row.distributionPercentage.toFixed(2)}</td>
+                <td className="text-end font-semibold num">{row.assignedValue.toFixed(2)}</td>
                 <td className="code">{row.currency}</td>
                 <td className="code">{row.deliveryDate}</td>
                 <td className="code">{row.releaseStatus}</td>

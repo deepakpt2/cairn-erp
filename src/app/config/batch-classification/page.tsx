@@ -76,26 +76,26 @@ export default async function BatchClassificationPage({
       </form>
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Movement type</th>
-              <th className="p-2">Description</th>
-              <th className="p-2">Classification</th>
-              <th className="p-2">Changed by</th>
-              <th className="p-2">Changed at</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Movement type</th>
+              <th>Description</th>
+              <th>Classification</th>
+              <th>Changed by</th>
+              <th>Changed at</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.movementType} className="border-b border-line">
-                <td className="code p-2">{row.movementType}</td>
-                <td className="p-2">{row.description}</td>
-                <td className="code p-2">{row.classification === ' ' ? 'blank' : row.classification}</td>
-                <td className="p-2">{row.changedBy ?? '—'}</td>
-                <td className="p-2">{when(row.changedAt)}</td>
-                <td className="p-2 text-end">
+              <tr key={row.movementType}>
+                <td className="code">{row.movementType}</td>
+                <td>{row.description}</td>
+                <td className="code">{row.classification === ' ' ? 'blank' : row.classification}</td>
+                <td>{row.changedBy ?? '—'}</td>
+                <td>{when(row.changedAt)}</td>
+                <td className="text-end">
                   <Link href={`${ROUTE}?type=${encodeURIComponent(row.movementType)}&history=1`} className="underline">History</Link>
                   {canMaintain && (
                     <>
@@ -107,7 +107,7 @@ export default async function BatchClassificationPage({
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="p-3 text-ink-soft">No movement type matches. Opening this screen did not create one.</td></tr>
+              <tr><td colSpan={6} className="text-ink-soft">No movement type matches. Opening this screen did not create one.</td></tr>
             )}
           </tbody>
         </table>

@@ -32,7 +32,7 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
   );
 
   return (
-    <section aria-labelledby="ac-form" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="ac-form" className="border border-line bg-surface p-4">
       <h2 id="ac-form" className="text-sm font-semibold">Create asset</h2>
       <div role="tablist" aria-label="Asset master data" className="mt-3 flex flex-wrap gap-2">
         {tabBtn('general', 'General')}

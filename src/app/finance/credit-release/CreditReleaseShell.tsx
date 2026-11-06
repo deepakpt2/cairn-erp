@@ -232,9 +232,9 @@ export default function CreditReleaseShell({ canUse, canOverride, determinations
                     </Link>
                   </td>
                   <td className="code">{d.creditControlArea}</td>
-                  <td className="tabular text-end">{d.orderValue.toFixed(2)} {d.orderCurrency}</td>
-                  <td className="tabular text-end">{d.currentExposure.toFixed(2)} / {d.currentLimit === null ? '—' : d.currentLimit.toFixed(2)}</td>
-                  <td className="tabular text-end">{d.utilizationPercent === null ? '—' : `${d.utilizationPercent.toFixed(1)}%`}</td>
+                  <td className="tabular text-end num">{d.orderValue.toFixed(2)} {d.orderCurrency}</td>
+                  <td className="tabular text-end num">{d.currentExposure.toFixed(2)} / {d.currentLimit === null ? '—' : d.currentLimit.toFixed(2)}</td>
+                  <td className="tabular text-end num">{d.utilizationPercent === null ? '—' : `${d.utilizationPercent.toFixed(1)}%`}</td>
                   <td>{d.status}{d.override ? ` (${t('release.overrideMark')})` : ''}</td>
                   <td className="code">{d.reason}</td>
                   <td className="code">{d.releasedBy ?? '—'}</td>

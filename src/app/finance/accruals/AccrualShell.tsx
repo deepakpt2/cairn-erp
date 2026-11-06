@@ -195,7 +195,7 @@ export default function AccrualShell({ canPost, companies, types, reasons, due }
                 <td>{doc.postingDate}</td>
                 <td>{doc.reversalDate}</td>
                 <td className="code">{doc.reversalReason}</td>
-                <td className="tabular text-end">{doc.totalAmount.toFixed(2)} {doc.currency}</td>
+                <td className="tabular text-end num">{doc.totalAmount.toFixed(2)} {doc.currency}</td>
                 <td>{doc.reversalStatus}</td>
                 <td className="code">{doc.reversalDocumentNumber ?? '—'}</td>
                 <td>

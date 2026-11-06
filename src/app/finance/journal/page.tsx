@@ -225,7 +225,7 @@ export default async function JournalPage({
                   <td className="tabular text-ink-soft">{row.posting_date}</td>
                   <td className="tabular text-ink-soft">{row.posting_period}</td>
                   <td className="text-ink-soft">{row.header_text ?? '—'}</td>
-                  <td className="tabular text-end">{Number(row.total).toFixed(2)}</td>
+                  <td className="tabular text-end num">{Number(row.total).toFixed(2)}</td>
                   <td>
                     <span className={`chip ${row.status === 'POSTED' ? 'chip-ok' : 'chip-warn'}`}>
                       {row.status}

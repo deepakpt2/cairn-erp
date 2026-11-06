@@ -44,30 +44,30 @@ export default async function BatchNumberRangesPage({
       )}
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Interval</th>
-              <th className="p-2">From</th>
-              <th className="p-2">To</th>
-              <th className="p-2">Current status</th>
-              <th className="p-2">Next, not reserved</th>
-              <th className="p-2">External</th>
-              <th className="p-2">Status</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Interval</th>
+              <th>From</th>
+              <th>To</th>
+              <th>Current status</th>
+              <th>Next, not reserved</th>
+              <th>External</th>
+              <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {current.intervals.map((row) => (
-              <tr key={row.interval} className="border-b border-line">
-                <td className="code p-2">{row.interval}</td>
-                <td className="code p-2">{row.fromNumber}</td>
-                <td className="code p-2">{row.toNumber}</td>
-                <td className="code p-2">{row.currentDisplay ?? 'nothing issued'}</td>
-                <td className="code p-2">{row.external ? 'not allocated' : (row.nextDisplay ?? 'exhausted')}</td>
-                <td className="code p-2">{row.external ? 'X' : 'blank'}</td>
-                <td className="p-2">{row.status}{row.exhausted ? ', exhausted' : ''}</td>
-                <td className="p-2 text-end">
+              <tr key={row.interval}>
+                <td className="code">{row.interval}</td>
+                <td className="code">{row.fromNumber}</td>
+                <td className="code">{row.toNumber}</td>
+                <td className="code">{row.currentDisplay ?? 'nothing issued'}</td>
+                <td className="code">{row.external ? 'not allocated' : (row.nextDisplay ?? 'exhausted')}</td>
+                <td className="code">{row.external ? 'X' : 'blank'}</td>
+                <td>{row.status}{row.exhausted ? ', exhausted' : ''}</td>
+                <td className="text-end">
                   {canMaintain && (
                     <>
                       <Link href={`${ROUTE}?edit=${row.interval}`} className="me-3 underline">Change</Link>
@@ -78,7 +78,7 @@ export default async function BatchNumberRangesPage({
               </tr>
             ))}
             {current.intervals.length === 0 && (
-              <tr><td colSpan={8} className="p-3 text-ink-soft">No interval stands. Opening this screen did not create 01.</td></tr>
+              <tr><td colSpan={8} className="text-ink-soft">No interval stands. Opening this screen did not create 01.</td></tr>
             )}
           </tbody>
         </table>

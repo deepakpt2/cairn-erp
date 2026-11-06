@@ -117,7 +117,7 @@ export default async function InvoiceOverviewPage({ searchParams }: {
 
       {!canList && <p className="text-sm text-red-700" role="alert">{t('invoiceOverview.capabilityMissing')}</p>}
 
-      <section aria-labelledby="invoice-overview-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="invoice-overview-selection" className="border border-line bg-surface p-4">
         <h2 id="invoice-overview-selection" className="text-sm font-semibold">{t('invoiceOverview.selection')}</h2>
         <p className="mt-1 text-xs text-ink-soft" data-invoice-overview-no-post>{t('invoiceOverview.noPost')}</p>
         <form method="get" action={INVOICE_OVERVIEW_ROUTE} className="mt-3 space-y-3">
@@ -203,7 +203,7 @@ export default async function InvoiceOverviewPage({ searchParams }: {
       {listError && <p role="alert" className="text-sm text-red-700" data-invoice-overview-error>{listError}</p>}
 
       {result && (
-        <section aria-labelledby="invoice-overview-list" className="rounded-card border border-line bg-surface p-4 shadow-card" data-invoice-overview>
+        <section aria-labelledby="invoice-overview-list" className="border border-line bg-surface p-4" data-invoice-overview>
           <h2 id="invoice-overview-list" className="text-sm font-semibold">{t('invoiceOverview.list')}</h2>
           <p className="mt-1 text-xs text-ink-soft" data-invoice-overview-nothing-written>{t('invoiceOverview.nothingWritten')}</p>
           <p className="mt-1 text-xs text-ink-soft" data-invoice-overview-year>{t('invoiceOverview.yearNote')}</p>
@@ -212,28 +212,28 @@ export default async function InvoiceOverviewPage({ searchParams }: {
           {result.rows.length === 0 && <p className="mt-3 text-sm" data-invoice-overview-empty>{t('invoiceOverview.empty')}</p>}
           {result.rows.length > 0 && (
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">{t('invoiceOverview.document')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.lifecycle')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.category')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.company')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.vendor')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.reference')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.order')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.documentDate')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.postingDate')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.gross')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.companyAmount')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.payment')}</th>
-                    <th className="px-2 py-2">{t('invoiceOverview.journal')}</th>
+                    <th>{t('invoiceOverview.document')}</th>
+                    <th>{t('invoiceOverview.lifecycle')}</th>
+                    <th>{t('invoiceOverview.category')}</th>
+                    <th>{t('invoiceOverview.company')}</th>
+                    <th>{t('invoiceOverview.vendor')}</th>
+                    <th>{t('invoiceOverview.reference')}</th>
+                    <th>{t('invoiceOverview.order')}</th>
+                    <th>{t('invoiceOverview.documentDate')}</th>
+                    <th>{t('invoiceOverview.postingDate')}</th>
+                    <th>{t('invoiceOverview.gross')}</th>
+                    <th>{t('invoiceOverview.companyAmount')}</th>
+                    <th>{t('invoiceOverview.payment')}</th>
+                    <th>{t('invoiceOverview.journal')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.rows.map((row) => (
-                    <tr key={`${row.lifecycle}-${row.documentNumber}`} className="border-t border-line" data-invoice-overview-row={row.documentNumber}>
-                      <td className="px-2 py-2">
+                    <tr key={`${row.lifecycle}-${row.documentNumber}`} data-invoice-overview-row={row.documentNumber}>
+                      <td>
                         <Link href={`${INVOICE_OVERVIEW_ROUTE}?document=${encodeURIComponent(row.documentNumber)}&companyFrom=${encodeURIComponent(row.companyCode)}&fiscalYear=${row.fiscalYear}`} className="underline">
                           {row.documentNumber}
                         </Link>
@@ -241,18 +241,18 @@ export default async function InvoiceOverviewPage({ searchParams }: {
                         {row.cancellationOf && <span className="block text-xs" data-cancellation-of={row.documentNumber}>{t('invoiceOverview.cancels', { number: row.cancellationOf })}</span>}
                         {row.cancelledBy && <span className="block text-xs" data-cancelled-by={row.documentNumber}>{t('invoiceOverview.cancelledBy', { number: row.cancelledBy })}</span>}
                       </td>
-                      <td className="px-2 py-2" data-lifecycle={row.documentNumber}>{row.lifecycle}</td>
-                      <td className="px-2 py-2">{row.category ?? '—'}</td>
-                      <td className="px-2 py-2">{row.companyCode}</td>
-                      <td className="px-2 py-2">{row.supplierNumber}{row.supplierName ? ` · ${row.supplierName}` : ''}</td>
-                      <td className="px-2 py-2">{row.reference}</td>
-                      <td className="px-2 py-2">{row.purchaseOrderNumber}{row.purchasingOrg ? ` · ${row.purchasingOrg}` : ''}</td>
-                      <td className="px-2 py-2">{row.documentDate}</td>
-                      <td className="px-2 py-2" data-posting-date={row.documentNumber}>{row.postingDate ?? '—'}</td>
-                      <td className="px-2 py-2">{row.grossAmount} {row.currency}</td>
-                      <td className="px-2 py-2" data-company-amount={row.documentNumber}>{money(row.companyCurrencyAmount)}{row.companyCurrency ? ` ${row.companyCurrency}` : ''}</td>
-                      <td className="px-2 py-2" data-payment-state={row.documentNumber}>{row.paymentState}</td>
-                      <td className="px-2 py-2" data-journal={row.documentNumber}>
+                      <td data-lifecycle={row.documentNumber}>{row.lifecycle}</td>
+                      <td>{row.category ?? '—'}</td>
+                      <td>{row.companyCode}</td>
+                      <td>{row.supplierNumber}{row.supplierName ? ` · ${row.supplierName}` : ''}</td>
+                      <td>{row.reference}</td>
+                      <td>{row.purchaseOrderNumber}{row.purchasingOrg ? ` · ${row.purchasingOrg}` : ''}</td>
+                      <td>{row.documentDate}</td>
+                      <td data-posting-date={row.documentNumber}>{row.postingDate ?? '—'}</td>
+                      <td>{row.grossAmount} {row.currency}</td>
+                      <td data-company-amount={row.documentNumber}>{money(row.companyCurrencyAmount)}{row.companyCurrency ? ` ${row.companyCurrency}` : ''}</td>
+                      <td data-payment-state={row.documentNumber}>{row.paymentState}</td>
+                      <td data-journal={row.documentNumber}>
                         {row.journalHref ? <Link href={row.journalHref} className="underline">{row.journalDocumentNumber}</Link> : '—'}
                       </td>
                     </tr>
@@ -274,7 +274,7 @@ export default async function InvoiceOverviewPage({ searchParams }: {
       )}
 
       {detail && (
-        <section aria-labelledby="invoice-overview-detail" className="rounded-card border border-line bg-surface p-4 shadow-card" data-invoice-overview-detail>
+        <section aria-labelledby="invoice-overview-detail" className="border border-line bg-surface p-4" data-invoice-overview-detail>
           <h2 id="invoice-overview-detail" className="text-sm font-semibold">{detail.row.documentNumber}</h2>
           <p className="mt-1 text-sm" data-invoice-overview-identity>
             {detail.row.lifecycle} · {detail.row.companyCode} · {detail.row.supplierNumber} · {detail.row.currency}
@@ -289,22 +289,22 @@ export default async function InvoiceOverviewPage({ searchParams }: {
               </Link>
             </p>
           )}
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-ink-soft">
-                <th className="py-1 pr-3">{t('invoiceOverview.line')}</th>
-                <th className="py-1 pr-3">{t('invoiceOverview.quantity')}</th>
-                <th className="py-1 pr-3">{t('invoiceOverview.net')}</th>
-                <th className="py-1">{t('invoiceOverview.tax')}</th>
+                <th>{t('invoiceOverview.line')}</th>
+                <th>{t('invoiceOverview.quantity')}</th>
+                <th>{t('invoiceOverview.net')}</th>
+                <th>{t('invoiceOverview.tax')}</th>
               </tr>
             </thead>
             <tbody>
               {detail.lines.map((line) => (
                 <tr key={line.lineNumber} data-invoice-overview-line={line.lineNumber}>
-                  <td className="py-1 pr-3">{line.lineNumber}</td>
-                  <td className="py-1 pr-3">{line.quantity}</td>
-                  <td className="py-1 pr-3">{line.netAmount}</td>
-                  <td className="py-1">{line.taxAmount}</td>
+                  <td>{line.lineNumber}</td>
+                  <td>{line.quantity}</td>
+                  <td>{line.netAmount}</td>
+                  <td>{line.taxAmount}</td>
                 </tr>
               ))}
             </tbody>

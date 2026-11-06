@@ -328,23 +328,23 @@ export function PurchasingGroupsGrid({
           {t('purchasingGroup.tableHeading')}
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[75rem] w-full border-collapse text-sm" aria-label={t('purchasingGroup.tableHeading')}>
+          <table className="grid-table min-w-[75rem] border-collapse text-sm" aria-label={t('purchasingGroup.tableHeading')}>
             <thead className="bg-[#eef1f4] text-[#33414c]">
               <tr className="border-y border-[#c4ccd2]">
-                <th className="w-9 px-1 py-2" aria-label={t('purchasingGroup.select')} />
-                <th className="w-[3.25rem] min-w-[3.25rem] border-r border-[#cbd1d6] px-1 py-2 text-left"><span className="block w-[2rem] truncate" title={t('purchasingGroup.code')}>{t('purchasingGroup.code')}</span></th>
-                <th className="w-[10.5rem] min-w-[10.5rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.description')}</th>
-                <th className="w-[11.0625rem] min-w-[11.0625rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.telNoPurchGroup')}</th>
-                <th className="w-[12.1875rem] min-w-[12.1875rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.faxNumber')}</th>
-                <th className="w-[12.8125rem] min-w-[12.8125rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.telephone')}</th>
-                <th className="w-[9.25rem] min-w-[9.25rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.extension')}</th>
-                <th className="min-w-[13.75rem] px-2 py-2 text-left">{t('purchasingGroup.emailAddress')}</th>
+                <th className="w-9" aria-label={t('purchasingGroup.select')} />
+                <th className="w-[3.25rem] min-w-[3.25rem] border-r border-[#cbd1d6] text-left"><span className="block w-[2rem] truncate" title={t('purchasingGroup.code')}>{t('purchasingGroup.code')}</span></th>
+                <th className="w-[10.5rem] min-w-[10.5rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.description')}</th>
+                <th className="w-[11.0625rem] min-w-[11.0625rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.telNoPurchGroup')}</th>
+                <th className="w-[12.1875rem] min-w-[12.1875rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.faxNumber')}</th>
+                <th className="w-[12.8125rem] min-w-[12.8125rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.telephone')}</th>
+                <th className="w-[9.25rem] min-w-[9.25rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.extension')}</th>
+                <th className="min-w-[13.75rem] text-left">{t('purchasingGroup.emailAddress')}</th>
               </tr>
             </thead>
             <tbody>
               {visibleRows.map((row) => (
                 <tr key={row.id} className={`border-b border-[#d6dce1] ${row.deleted ? 'bg-red-50 text-slate-500 line-through' : 'hover:bg-[#f8fbfd]'}`}>
-                  <td className="border-r border-[#e1e5e8] px-1 py-1 text-center">
+                  <td className="border-r border-[#e1e5e8] text-center">
                     <input
                       type="checkbox"
                       aria-label={t('purchasingGroup.selectRow', { code: row.purchasingGroup || t('purchasingGroup.newRow') })}
@@ -353,7 +353,7 @@ export function PurchasingGroupsGrid({
                       onChange={(event) => updateRow(row.id, { selected: event.currentTarget.checked })}
                     />
                   </td>
-                  <td className="border-r border-[#e1e5e8] px-1 py-1">
+                  <td className="border-r border-[#e1e5e8]">
                     <input
                       className="w-full border-0 bg-transparent px-1 py-1 font-mono text-sm focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500"
                       aria-label={t('purchasingGroup.code')}
@@ -365,28 +365,28 @@ export function PurchasingGroupsGrid({
                       onChange={(event) => updateRow(row.id, { purchasingGroup: event.currentTarget.value.toUpperCase() })}
                     />
                   </td>
-                  <td className="border-r border-[#e1e5e8] px-1 py-1">
+                  <td className="border-r border-[#e1e5e8]">
                     <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.descriptionFull')} value={row.name} maxLength={120} required={!row.deleted} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { name: event.currentTarget.value })} />
                   </td>
-                  <td className="border-r border-[#e1e5e8] px-1 py-1">
+                  <td className="border-r border-[#e1e5e8]">
                     <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.telNoPurchGroup')} value={row.telNoPurchGroup} maxLength={12} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telNoPurchGroup: event.currentTarget.value })} />
                   </td>
-                  <td className="border-r border-[#e1e5e8] px-1 py-1">
+                  <td className="border-r border-[#e1e5e8]">
                     <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.faxNumber')} value={row.faxNumber} maxLength={31} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { faxNumber: event.currentTarget.value })} />
                   </td>
-                  <td className="border-r border-[#e1e5e8] px-1 py-1">
+                  <td className="border-r border-[#e1e5e8]">
                     <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.telephone')} value={row.telephone} maxLength={30} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telephone: event.currentTarget.value })} />
                   </td>
-                  <td className="border-r border-[#e1e5e8] px-1 py-1">
+                  <td className="border-r border-[#e1e5e8]">
                     <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.extension')} value={row.extension} maxLength={10} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { extension: event.currentTarget.value })} />
                   </td>
-                  <td className="px-1 py-1">
+                  <td>
                     <input type="text" inputMode="email" className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.emailAddress')} value={row.emailAddress} maxLength={241} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { emailAddress: event.currentTarget.value })} />
                   </td>
                 </tr>
               ))}
               {visibleRows.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-ink-soft">{rows.length === 0 ? t('purchasingGroup.empty') : t('purchasingGroup.noSearchResults')}</td></tr>
+                <tr><td colSpan={8} className="text-center text-sm text-ink-soft">{rows.length === 0 ? t('purchasingGroup.empty') : t('purchasingGroup.noSearchResults')}</td></tr>
               )}
             </tbody>
           </table>

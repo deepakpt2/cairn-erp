@@ -115,26 +115,26 @@ export default async function BatchSearchStrategyPage({
       )}
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Record</th>
-              <th className="p-2">Strategy type</th>
-              <th className="p-2">Table</th>
-              <th className="p-2">Key</th>
-              <th className="p-2">Validity</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Record</th>
+              <th>Strategy type</th>
+              <th>Table</th>
+              <th>Key</th>
+              <th>Validity</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.recordNumber} className="border-b border-line">
-                <td className="code p-2">{row.recordNumber}</td>
-                <td className="code p-2">{row.strategyType}</td>
-                <td className="code p-2">{row.conditionTable}</td>
-                <td className="p-2">{row.keys.map((key) => `${key.title} ${key.value}`).join(', ')}</td>
-                <td className="p-2">{row.validFrom} to {row.validTo}{row.validTo < today ? ' · expired' : ''}</td>
-                <td className="p-2 text-end">
+              <tr key={row.recordNumber}>
+                <td className="code">{row.recordNumber}</td>
+                <td className="code">{row.strategyType}</td>
+                <td className="code">{row.conditionTable}</td>
+                <td>{row.keys.map((key) => `${key.title} ${key.value}`).join(', ')}</td>
+                <td>{row.validFrom} to {row.validTo}{row.validTo < today ? ' · expired' : ''}</td>
+                <td className="text-end">
                   <Link href={`${ROUTE}?record=${encodeURIComponent(row.recordNumber)}&history=1`} className="underline">Display</Link>
                   {canMaintain && (
                     <>
@@ -147,7 +147,7 @@ export default async function BatchSearchStrategyPage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-3 text-ink-soft">No search strategy stands. None is created by opening this screen.</td>
+                <td colSpan={6} className="text-ink-soft">No search strategy stands. None is created by opening this screen.</td>
               </tr>
             )}
           </tbody>

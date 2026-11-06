@@ -66,7 +66,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
 
   return (
     <>
-      <section aria-labelledby="cdpc-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cdpc-header" className="border border-line bg-surface p-4">
         <h2 id="cdpc-header" className="text-sm font-semibold">Selection criteria</h2>
         <form method="get" action="/finance/customer-down-payment-clearing" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
@@ -95,7 +95,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
       </section>
 
       {view && (
-        <section aria-labelledby="cdpc-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="cdpc-items" className="border border-line bg-surface p-4">
           <h2 id="cdpc-items" className="text-sm font-semibold">Allocation</h2>
           <form action={action}>
             <input type="hidden" name="allocations" value={JSON.stringify(rows)} />
@@ -131,25 +131,25 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
               <p className="mt-2 text-sm text-ink-soft">No down payments stand open under this indicator.</p>
             ) : (
               <div className="mt-2 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="grid-table text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Document</th><th className="px-2 py-2">Posting date</th>
-                      <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Advance</th>
-                      <th className="px-2 py-2">Applied</th><th className="px-2 py-2">Remaining</th>
-                      <th className="px-2 py-2">Allocated here</th>
+                      <th>Document</th><th>Posting date</th>
+                      <th>Currency</th><th>Advance</th>
+                      <th>Applied</th><th>Remaining</th>
+                      <th>Allocated here</th>
                     </tr>
                   </thead>
                   <tbody>
                     {downPayments.map((item) => (
-                      <tr key={itemKey(item)} className="border-t border-line">
-                        <td className="px-2 py-2">{item.documentNumber}</td>
-                        <td className="px-2 py-2">{item.postingDate}</td>
-                        <td className="px-2 py-2">{item.currency}</td>
-                        <td className="px-2 py-2">{item.amount.toFixed(2)}</td>
-                        <td className="px-2 py-2">{item.applied.toFixed(2)}</td>
-                        <td className="px-2 py-2">{item.remaining.toFixed(2)}</td>
-                        <td className="px-2 py-2">{allocatedFor('dp', itemKey(item)).toFixed(2)}</td>
+                      <tr key={itemKey(item)}>
+                        <td>{item.documentNumber}</td>
+                        <td>{item.postingDate}</td>
+                        <td>{item.currency}</td>
+                        <td className="num">{item.amount.toFixed(2)}</td>
+                        <td className="num">{item.applied.toFixed(2)}</td>
+                        <td className="num">{item.remaining.toFixed(2)}</td>
+                        <td className="num">{allocatedFor('dp', itemKey(item)).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -162,26 +162,26 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
               <p className="mt-2 text-sm text-ink-soft">No customer invoices stand open.</p>
             ) : (
               <div className="mt-2 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="grid-table text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Document</th><th className="px-2 py-2">Posting date</th>
-                      <th className="px-2 py-2">Due date</th><th className="px-2 py-2">Currency</th>
-                      <th className="px-2 py-2">Receivable</th><th className="px-2 py-2">Applied</th>
-                      <th className="px-2 py-2">Remaining</th><th className="px-2 py-2">Allocated here</th>
+                      <th>Document</th><th>Posting date</th>
+                      <th>Due date</th><th>Currency</th>
+                      <th>Receivable</th><th>Applied</th>
+                      <th>Remaining</th><th>Allocated here</th>
                     </tr>
                   </thead>
                   <tbody>
                     {invoices.map((item) => (
-                      <tr key={itemKey(item)} className="border-t border-line">
-                        <td className="px-2 py-2">{item.documentNumber}</td>
-                        <td className="px-2 py-2">{item.postingDate}</td>
-                        <td className="px-2 py-2">{item.dueDate}</td>
-                        <td className="px-2 py-2">{item.currency}</td>
-                        <td className="px-2 py-2">{item.amount.toFixed(2)}</td>
-                        <td className="px-2 py-2">{item.applied.toFixed(2)}</td>
-                        <td className="px-2 py-2">{item.remaining.toFixed(2)}</td>
-                        <td className="px-2 py-2">{allocatedFor('inv', itemKey(item)).toFixed(2)}</td>
+                      <tr key={itemKey(item)}>
+                        <td>{item.documentNumber}</td>
+                        <td>{item.postingDate}</td>
+                        <td>{item.dueDate}</td>
+                        <td>{item.currency}</td>
+                        <td className="num">{item.amount.toFixed(2)}</td>
+                        <td className="num">{item.applied.toFixed(2)}</td>
+                        <td className="num">{item.remaining.toFixed(2)}</td>
+                        <td className="num">{allocatedFor('inv', itemKey(item)).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -274,7 +274,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
         </section>
       )}
 
-      <section aria-labelledby="cdpc-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cdpc-result" className="border border-line bg-surface p-4">
         <h2 id="cdpc-result" className="text-sm font-semibold">Clearing</h2>
         <Message state={state} />
         <p className="mt-2 text-sm text-ink-soft">

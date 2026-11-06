@@ -57,33 +57,33 @@ export default function NumberRangeObjects({
           <p className="text-sm text-ink-faint">No objects stand yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
-                <tr className="border-b border-line text-ink-soft">
-                  <th className="py-2 pe-3">Object</th>
-                  <th className="py-2 pe-3">Description</th>
-                  <th className="py-2 pe-3">Number length</th>
-                  <th className="py-2 pe-3">Warning at</th>
-                  <th className="py-2 pe-3">Year relevance</th>
-                  <th className="py-2 pe-3">Subobject</th>
-                  <th className="py-2 pe-3">Intervals</th>
-                  {canMaintain && <th className="py-2">Actions</th>}
+                <tr className="text-ink-soft">
+                  <th className="pe-3">Object</th>
+                  <th className="pe-3">Description</th>
+                  <th className="pe-3">Number length</th>
+                  <th className="pe-3">Warning at</th>
+                  <th className="pe-3">Year relevance</th>
+                  <th className="pe-3">Subobject</th>
+                  <th className="pe-3">Intervals</th>
+                  {canMaintain && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {objects.map((row) => (
-                  <tr key={row.objectCode} className="border-b border-line/60">
-                    <td className="py-2 pe-3 font-medium">{row.objectCode}</td>
-                    <td className="py-2 pe-3">{row.description}</td>
-                    <td className="py-2 pe-3">{row.numberLength}</td>
-                    <td className="py-2 pe-3">
+                  <tr key={row.objectCode}>
+                    <td className="pe-3 font-medium">{row.objectCode}</td>
+                    <td className="pe-3">{row.description}</td>
+                    <td className="pe-3">{row.numberLength}</td>
+                    <td className="pe-3">
                       {row.warningPercent ? `${row.warningPercent}%` : '—'}
                     </td>
-                    <td className="py-2 pe-3">{row.yearRelevant ? 'Per fiscal year' : 'All years'}</td>
-                    <td className="py-2 pe-3">{row.subobjectHint ?? '—'}</td>
-                    <td className="py-2 pe-3">{row.intervalCount}</td>
+                    <td className="pe-3">{row.yearRelevant ? 'Per fiscal year' : 'All years'}</td>
+                    <td className="pe-3">{row.subobjectHint ?? '—'}</td>
+                    <td className="pe-3">{row.intervalCount}</td>
                     {canMaintain && (
-                      <td className="py-2">
+                      <td>
                         <button
                           type="button"
                           className="btn btn-default"

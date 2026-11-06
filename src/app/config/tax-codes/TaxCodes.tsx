@@ -325,7 +325,7 @@ export function TaxCodes({
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={canMaintain ? 8 : 7} className="px-4 py-8 text-center text-sm text-ink-soft">
+                  <td colSpan={canMaintain ? 8 : 7} className="text-center text-sm text-ink-soft">
                     {t('taxCode.empty')}
                   </td>
                 </tr>

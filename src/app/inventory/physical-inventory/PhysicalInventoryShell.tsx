@@ -32,7 +32,7 @@ export default function PhysicalInventoryShell({
 
   return (
     <>
-      <section aria-labelledby="count-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="count-header" className="border border-line bg-surface p-4">
         <h2 id="count-header" className="text-sm font-semibold">{t('mi01.header')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('mi01.headerHint')}</p>
         <p role="status" className={`mt-2 text-sm ${createState.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -60,22 +60,22 @@ export default function PhysicalInventoryShell({
           </div>
           <p className="mt-2 text-xs text-ink-soft">{t('mi01.postingBlockHint')}</p>
 
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mi01.columnLine')}</th>
-                <th className="py-1">{t('mi01.columnMaterial')}</th>
-                <th className="py-1">{t('mi01.columnBatch')}</th>
+                <th>{t('mi01.columnLine')}</th>
+                <th>{t('mi01.columnMaterial')}</th>
+                <th>{t('mi01.columnBatch')}</th>
               </tr>
             </thead>
             <tbody>
               {LINES.map((n) => (
-                <tr key={n} className="border-t border-line" data-count-line={n}>
-                  <td className="py-1">{n}</td>
-                  <td className="py-1">
+                <tr key={n} data-count-line={n}>
+                  <td>{n}</td>
+                  <td>
                     <input name={`material-${n}`} className="input w-full" placeholder="MAT-…" />
                   </td>
-                  <td className="py-1">
+                  <td>
                     <input name={`batch-${n}`} maxLength={10} className="input w-28" placeholder="Batch" />
                   </td>
                 </tr>
@@ -93,7 +93,7 @@ export default function PhysicalInventoryShell({
       </section>
 
       {createState.document && (
-        <section aria-labelledby="count-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="count-result" className="border border-line bg-surface p-4">
           <h2 id="count-result" className="text-sm font-semibold">
             {t('mi01.document')}{' '}
             <span className="code" data-inventory-document={createState.document.inventoryDocumentNumber}>
@@ -110,22 +110,22 @@ export default function PhysicalInventoryShell({
               {createState.document.postingBlock ? t('mi01.blocked') : t('mi01.notBlocked')}
             </span>
           </p>
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mi01.columnLine')}</th>
-                <th className="py-1">{t('mi01.columnMaterial')}</th>
-                <th className="py-1">{t('mi01.columnBatch')}</th>
-                <th className="py-1 text-right">{t('mi01.columnStock')}</th>
+                <th>{t('mi01.columnLine')}</th>
+                <th>{t('mi01.columnMaterial')}</th>
+                <th>{t('mi01.columnBatch')}</th>
+                <th className="text-right">{t('mi01.columnStock')}</th>
               </tr>
             </thead>
             <tbody>
               {createState.document.items.map((item) => (
-                <tr key={item.itemNumber} className="border-t border-line" data-item={item.itemNumber}>
-                  <td className="py-1">{item.itemNumber}</td>
-                  <td className="py-1">{item.materialNumber} · {item.description}</td>
-                  <td className="py-1" data-batch={item.batch}>{item.batch || '—'}</td>
-                  <td className="py-1 text-right tabular" data-stock={item.materialNumber}>
+                <tr key={item.itemNumber} data-item={item.itemNumber}>
+                  <td>{item.itemNumber}</td>
+                  <td>{item.materialNumber} · {item.description}</td>
+                  <td data-batch={item.batch}>{item.batch || '—'}</td>
+                  <td className="text-right tabular" data-stock={item.materialNumber}>
                     {item.stockQuantity} {item.unit}
                   </td>
                 </tr>

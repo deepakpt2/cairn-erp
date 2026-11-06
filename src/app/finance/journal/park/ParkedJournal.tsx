@@ -68,7 +68,7 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
 
   return (
     <>
-      <section aria-labelledby="pj-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="pj-header" className="border border-line bg-surface p-4">
         <h2 id="pj-header" className="text-sm font-semibold">
           {editing ? `Edit parked document ${editing.parkedNumber}` : 'Park a document'}
         </h2>
@@ -182,7 +182,7 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
         </form>
       </section>
 
-      <section aria-labelledby="pj-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="pj-list" className="border border-line bg-surface p-4">
         <h2 id="pj-list" className="text-sm font-semibold">Parked documents</h2>
         <Message state={completeState} />
         <Message state={postState} />
@@ -191,29 +191,29 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
           <p className="mt-2 text-sm text-ink-soft">No documents stand parked.</p>
         ) : (
           <div className="mt-2 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Parked document</th><th className="px-2 py-2">Company</th>
-                  <th className="px-2 py-2">Type</th><th className="px-2 py-2">Posting date</th>
-                  <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Debits</th>
-                  <th className="px-2 py-2">Credits</th><th className="px-2 py-2">Status</th>
-                  <th className="px-2 py-2">Posted as</th><th className="px-2 py-2">Actions</th>
+                  <th>Parked document</th><th>Company</th>
+                  <th>Type</th><th>Posting date</th>
+                  <th>Currency</th><th>Debits</th>
+                  <th>Credits</th><th>Status</th>
+                  <th>Posted as</th><th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {parked.map((doc) => (
-                  <tr key={doc.parkedNumber} className="border-t border-line">
-                    <td className="px-2 py-2">{doc.parkedNumber}</td>
-                    <td className="px-2 py-2">{doc.companyCode}</td>
-                    <td className="px-2 py-2">{doc.documentType}</td>
-                    <td className="px-2 py-2">{doc.postingDate}</td>
-                    <td className="px-2 py-2">{doc.currency}</td>
-                    <td className="px-2 py-2">{doc.totalDebit.toFixed(2)}</td>
-                    <td className="px-2 py-2">{doc.totalCredit.toFixed(2)}</td>
-                    <td className="px-2 py-2">{doc.status}</td>
-                    <td className="px-2 py-2">{doc.postedDocumentNumber ?? '—'}</td>
-                    <td className="px-2 py-2">
+                  <tr key={doc.parkedNumber}>
+                    <td>{doc.parkedNumber}</td>
+                    <td>{doc.companyCode}</td>
+                    <td>{doc.documentType}</td>
+                    <td>{doc.postingDate}</td>
+                    <td>{doc.currency}</td>
+                    <td className="num">{doc.totalDebit.toFixed(2)}</td>
+                    <td className="num">{doc.totalCredit.toFixed(2)}</td>
+                    <td>{doc.status}</td>
+                    <td>{doc.postedDocumentNumber ?? '—'}</td>
+                    <td>
                       {(doc.status === 'PARKED' || doc.status === 'COMPLETED') && (
                         <span className="flex flex-wrap items-center gap-2">
                           <Link href={`/finance/journal/park?edit=${doc.parkedNumber}`}>Edit</Link>

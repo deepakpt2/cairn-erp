@@ -54,26 +54,26 @@ export default function ScheduleForm({ document, itemNumber }: {
         {item.shortText}. Target {item.targetQuantity} {item.unit}. Scheduled {item.scheduledQuantity}. Remaining {item.remainingQuantity}. The item unit is {item.unit}. A goods receipt is not linked to these lines.
       </p>
       <input type="hidden" name="payload" value={payload()} />
-      <table className="w-full text-sm">
+      <table className="grid-table text-sm">
         <thead>
-          <tr className="border-b text-left">
-            <th className="px-2 py-2">Line</th>
-            <th className="px-2 py-2">Delivery date</th>
-            <th className="px-2 py-2">Quantity</th>
-            <th className="px-2 py-2">Cancel</th>
+          <tr className="text-left">
+            <th>Line</th>
+            <th>Delivery date</th>
+            <th>Quantity</th>
+            <th>Cancel</th>
           </tr>
         </thead>
         <tbody>
           {lines.map((line, index) => (
             <tr key={line.lineNumber ?? `new-${index}`}>
-              <td className="px-2 py-1">{line.lineNumber ?? 'New'}</td>
-              <td className="px-2 py-1">
+              <td>{line.lineNumber ?? 'New'}</td>
+              <td>
                 <input aria-label="Delivery date" className="input" type="date" value={line.deliveryDate} onChange={(event) => setLines(lines.map((row, i) => i === index ? { ...row, deliveryDate: event.target.value } : row))} />
               </td>
-              <td className="px-2 py-1">
+              <td>
                 <input aria-label="Scheduled quantity" className="input w-28" value={line.quantity} onChange={(event) => setLines(lines.map((row, i) => i === index ? { ...row, quantity: event.target.value } : row))} />
               </td>
-              <td className="px-2 py-1">
+              <td>
                 <input aria-label="Cancel line" type="checkbox" checked={line.markedForDeletion} onChange={(event) => setLines(lines.map((row, i) => i === index ? { ...row, markedForDeletion: event.target.checked } : row))} />
               </td>
             </tr>

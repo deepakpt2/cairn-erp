@@ -253,18 +253,18 @@ function ComponentRow({ row, plant, orderNumber, horizonEnd, today, canCommit, c
         <td className="code">{row.checkingGroup ?? '—'}</td>
         <td className="code">{row.checkingRule ?? '—'}</td>
         <td className="code">{row.scopeKey ?? '—'}</td>
-        <td className="text-end">{row.requiredQuantity.toFixed(3)} {row.unit}</td>
+        <td className="text-end num">{row.requiredQuantity.toFixed(3)} {row.unit}</td>
         <td className="code">{row.requirementDate ?? t('co09.undated')}</td>
-        <td className="text-end" data-co09-committed-cell data-co09-committed={row.committedQuantity === null ? '' : row.committedQuantity.toFixed(3)}>
+        <td className="text-end num" data-co09-committed-cell data-co09-committed={row.committedQuantity === null ? '' : row.committedQuantity.toFixed(3)}>
           {row.committedQuantity === null ? '—' : `${row.committedQuantity.toFixed(3)} ${row.unit}`}
         </td>
-        <td className="text-end" data-co09-atp={row.cumulatedAtp === null ? '' : row.cumulatedAtp.toFixed(3)}>
+        <td className="text-end num" data-co09-atp={row.cumulatedAtp === null ? '' : row.cumulatedAtp.toFixed(3)}>
           {row.cumulatedAtp === null ? '—' : row.cumulatedAtp.toFixed(3)}
         </td>
-        <td className="text-end" data-co09-covered={row.coveredQuantity === null ? '' : row.coveredQuantity.toFixed(3)}>
+        <td className="text-end num" data-co09-covered={row.coveredQuantity === null ? '' : row.coveredQuantity.toFixed(3)}>
           {row.coveredQuantity === null ? '—' : row.coveredQuantity.toFixed(3)}
         </td>
-        <td className="text-end font-semibold" data-co09-shortage={row.shortageQuantity === null ? '' : row.shortageQuantity.toFixed(3)}>
+        <td className="text-end font-semibold num" data-co09-shortage={row.shortageQuantity === null ? '' : row.shortageQuantity.toFixed(3)}>
           {row.shortageQuantity === null ? '—' : row.shortageQuantity.toFixed(3)}
         </td>
         <td className="code">{row.earliestFullCoverageDate ?? '—'}</td>
@@ -342,9 +342,9 @@ function ComponentRow({ row, plant, orderNumber, horizonEnd, today, canCommit, c
                     <td title={element.elementLabel}>{element.elementType === 'CO09_COMMITMENT' ? t('co09.commitmentElement') : element.elementType}</td>
                     <td className="code">{element.documentNumber}</td>
                     <td className="text-end">{element.documentItem}</td>
-                    <td className="text-end">{element.direction === 'RECEIPT' ? element.quantity.toFixed(3) : ''}</td>
-                    <td className="text-end">{element.direction === 'REQUIREMENT' ? element.quantity.toFixed(3) : ''}</td>
-                    <td className="text-end font-semibold">{element.cumulated.toFixed(3)}</td>
+                    <td className="text-end num">{element.direction === 'RECEIPT' ? element.quantity.toFixed(3) : ''}</td>
+                    <td className="text-end num">{element.direction === 'REQUIREMENT' ? element.quantity.toFixed(3) : ''}</td>
+                    <td className="text-end font-semibold num">{element.cumulated.toFixed(3)}</td>
                     <td className="text-xs text-ink-faint">
                       {element.ownDemand ? t('co09.ownDemand') : t('co09.inScope')}
                     </td>

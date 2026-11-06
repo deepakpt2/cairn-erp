@@ -199,7 +199,7 @@ function SuggestField({
         <ul
           id={listId}
           role="listbox"
-          className="fixed z-40 max-h-60 overflow-y-auto border border-line bg-white shadow-card"
+          className="fixed z-40 max-h-60 overflow-y-auto border border-line bg-white"
           style={{ top: place.top, left: place.left, width: place.width }}
         >
           {rows.length === 0 && (

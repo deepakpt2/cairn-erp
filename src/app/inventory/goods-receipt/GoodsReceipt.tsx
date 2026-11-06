@@ -29,7 +29,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
 
   return (
     <>
-      <section aria-labelledby="gr-operation" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="gr-operation" className="border border-line bg-surface p-4">
         <h2 id="gr-operation" className="text-sm font-semibold">Operation and reference</h2>
         <form method="get" action="/inventory/goods-receipt" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -64,7 +64,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
       </section>
 
       {order && (
-        <section aria-labelledby="gr-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="gr-items" className="border border-line bg-surface p-4">
           <h2 id="gr-items" className="text-sm font-semibold">Goods receipt for order {order.orderNumber}</h2>
           <p className="mt-1 text-sm text-ink-soft">
             Supplier {order.supplierNumber} · company {order.companyCode} · currency {order.currency}
@@ -93,25 +93,25 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
               </label>
             </div>
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Item</th><th className="px-2 py-2">Material</th>
-                    <th className="px-2 py-2">Plant</th><th className="px-2 py-2">Ordered</th>
-                    <th className="px-2 py-2">Received</th><th className="px-2 py-2">Remaining</th>
-                    <th className="px-2 py-2">Receipt quantity</th><th className="px-2 py-2">Storage location</th><th className="px-2 py-2">Batch</th>
+                    <th>Item</th><th>Material</th>
+                    <th>Plant</th><th>Ordered</th>
+                    <th>Received</th><th>Remaining</th>
+                    <th>Receipt quantity</th><th>Storage location</th><th>Batch</th>
                   </tr>
                 </thead>
                 <tbody>
                   {order.items.map((item) => (
-                    <tr key={item.itemNumber} className="border-t border-line">
-                      <td className="px-2 py-2">{item.itemNumber}</td>
-                      <td className="px-2 py-2">{item.materialNumber ?? item.shortText}</td>
-                      <td className="px-2 py-2">{item.plant}</td>
-                      <td className="px-2 py-2">{item.ordered} {item.unit}</td>
-                      <td className="px-2 py-2">{item.received}</td>
-                      <td className="px-2 py-2">{item.remaining}</td>
-                      <td className="px-2 py-2">
+                    <tr key={item.itemNumber}>
+                      <td>{item.itemNumber}</td>
+                      <td>{item.materialNumber ?? item.shortText}</td>
+                      <td>{item.plant}</td>
+                      <td>{item.ordered} {item.unit}</td>
+                      <td>{item.received}</td>
+                      <td>{item.remaining}</td>
+                      <td>
                         {item.eligible ? (
                           <input
                             type="number" step="0.001" min="0" name={`qty-${item.itemNumber}`}
@@ -122,12 +122,12 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
                           <span className="text-ink-faint">{item.refusal}</span>
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td>
                         {item.eligible && (
                           <input name={`sloc-${item.itemNumber}`} className="input w-24" defaultValue={item.proposedStorageLocation ?? item.storageLocation ?? ''} />
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td>
                         {item.eligible && (
                           <input name={`batch-${item.itemNumber}`} maxLength={10} className="input w-28" placeholder="Batch" defaultValue={item.batch} />
                         )}
@@ -147,7 +147,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
       )}
 
       {document && (
-        <section aria-labelledby="gr-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="gr-document" className="border border-line bg-surface p-4">
           <h2 id="gr-document" className="text-sm font-semibold">Material document {document.materialDocumentNumber}</h2>
           <p className="mt-1 text-sm text-ink-soft">
             Posting date {document.postingDate} · status {document.status}
@@ -155,25 +155,25 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
             {document.reversedBy ? ` · reversed by ${document.reversedBy}` : ''}
           </p>
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Line</th><th className="px-2 py-2">Movement</th>
-                  <th className="px-2 py-2">Material</th><th className="px-2 py-2">Plant</th>
-                  <th className="px-2 py-2">Quantity</th><th className="px-2 py-2">Value</th>
-                  <th className="px-2 py-2">Order item</th>
+                  <th>Line</th><th>Movement</th>
+                  <th>Material</th><th>Plant</th>
+                  <th>Quantity</th><th>Value</th>
+                  <th>Order item</th>
                 </tr>
               </thead>
               <tbody>
                 {document.lines.map((line) => (
-                  <tr key={line.lineNumber} className="border-t border-line">
-                    <td className="px-2 py-2">{line.lineNumber}</td>
-                    <td className="px-2 py-2">{line.movementType}</td>
-                    <td className="px-2 py-2">{line.materialNumber}</td>
-                    <td className="px-2 py-2">{line.plant}</td>
-                    <td className="px-2 py-2">{line.quantity} {line.unit}</td>
-                    <td className="px-2 py-2">{line.value}</td>
-                    <td className="px-2 py-2">{line.purchaseOrderNumber} / {line.purchaseOrderItem}</td>
+                  <tr key={line.lineNumber}>
+                    <td>{line.lineNumber}</td>
+                    <td>{line.movementType}</td>
+                    <td>{line.materialNumber}</td>
+                    <td>{line.plant}</td>
+                    <td>{line.quantity} {line.unit}</td>
+                    <td>{line.value}</td>
+                    <td>{line.purchaseOrderNumber} / {line.purchaseOrderItem}</td>
                   </tr>
                 ))}
               </tbody>

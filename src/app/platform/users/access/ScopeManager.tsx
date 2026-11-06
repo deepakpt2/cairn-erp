@@ -77,7 +77,7 @@ export default function ScopeManager({ query, users, companies, plants, selected
           <button className="btn btn-default" type="submit">Search</button>
         </form>
         <div className="overflow-x-auto">
-          <table className="grid-table w-full text-left text-sm">
+          <table className="grid-table text-left text-sm">
             <thead><tr><th>User</th><th>Status</th><th>Last sign-in</th><th /></tr></thead>
             <tbody>
               {users.map((user) => (
@@ -109,7 +109,7 @@ export default function ScopeManager({ query, users, companies, plants, selected
             <p className="text-sm text-ink-soft">Company and plant scopes do not change this user's roles or administration permissions.</p>
             {isSelf ? <p className="rounded border border-warn p-2 text-sm text-warn">Self-assignment is prohibited. Ask another central administrator to grant access to your account.</p> : null}
             <div className="overflow-x-auto">
-              <table className="grid-table w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead><tr><th>Scope</th><th>Master record</th><th>Company</th><th>Master status</th><th>Granted by</th><th>Granted on</th><th /></tr></thead>
                 <tbody>
                   {selected.assignments.map((item) => (

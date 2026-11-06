@@ -27,18 +27,18 @@ const LINES = [1, 2, 3, 4];
 function StockLine({ n }: { n: number }) {
   const [plant, setPlant] = useState('');
   return (
-    <tr className="border-t border-line" data-migo-line={n}>
-      <td className="py-1">{n}</td>
-      <td className="py-1"><ConstrainedField kind="material-stock" name={`material-${n}`} context={{ plant }} placeholder="MAT-…" /></td>
-      <td className="py-1"><ConstrainedField kind="plant" name={`plant-${n}`} value={plant} onChange={setPlant} /></td>
-      <td className="py-1"><ConstrainedField kind="storage-location" name={`sloc-${n}`} context={{ plant }} /></td>
-      <td className="py-1">
+    <tr data-migo-line={n}>
+      <td>{n}</td>
+      <td><ConstrainedField kind="material-stock" name={`material-${n}`} context={{ plant }} placeholder="MAT-…" /></td>
+      <td><ConstrainedField kind="plant" name={`plant-${n}`} value={plant} onChange={setPlant} /></td>
+      <td><ConstrainedField kind="storage-location" name={`sloc-${n}`} context={{ plant }} /></td>
+      <td>
         <input name={`quantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
       </td>
-      <td className="py-1">
+      <td>
         <ConstrainedField kind="unit" name={`unit-${n}`} uppercase maxLength={6} />
       </td>
-      <td className="py-1">
+      <td>
         <input name={`orderItem-${n}`} className="input w-20" placeholder="10" aria-label={`${t('migo.columnItem')} ${n}`} />
       </td>
     </tr>
@@ -70,7 +70,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
 
   return (
     <>
-      <section aria-labelledby="movement-select" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="movement-select" className="border border-line bg-surface p-4">
         <h2 id="movement-select" className="text-sm font-semibold">{t('migo.selectHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('migo.selectHint')}</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -105,7 +105,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
         </div>
 
         {cell && (
-          <div className="mt-3 rounded-card border border-line bg-surface p-3 text-sm" data-cell={cell.kind}>
+          <div className="mt-3 border border-line bg-surface p-3 text-sm" data-cell={cell.kind}>
             <p className="font-medium">{cell.title}</p>
             {cell.kind === 'POST_HERE' && (
               <p className="mt-1 text-ink-soft">{t('migo.postsHere')} · {cell.movement}</p>
@@ -129,7 +129,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
       </section>
 
       {cell?.kind === 'POST_HERE' && cell.form === 'REVERSE' && (
-        <section aria-labelledby="movement-reversal" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="movement-reversal" className="border border-line bg-surface p-4">
           <h2 id="movement-reversal" className="text-sm font-semibold">{t('migo.reversalHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('migo.reversalHint')}</p>
           <p role="status" className={`mt-2 text-sm ${reversal.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -165,7 +165,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
             </div>
           </form>
           {reversal.document && (
-            <section aria-labelledby="movement-reversal-result" className="mt-3 rounded-card border border-line bg-surface p-3">
+            <section aria-labelledby="movement-reversal-result" className="mt-3 border border-line bg-surface p-3">
               <h3 id="movement-reversal-result" className="text-sm font-semibold">
                 {t('migo.document')}{' '}
                 <span className="code" data-reversal-document={reversal.document.materialDocumentNumber}>
@@ -182,7 +182,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
       )}
 
       {cell?.kind === 'POST_HERE' && cell.form === 'TRANSFER' && (
-        <section aria-labelledby="movement-transfer" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="movement-transfer" className="border border-line bg-surface p-4">
           <h2 id="movement-transfer" className="text-sm font-semibold">{t('migo.transferHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('migo.transferHint')}</p>
           <p role="status" className={`mt-2 text-sm ${transfer.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -252,7 +252,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
           </form>
 
           {transfer.document && (
-            <section aria-labelledby="movement-transfer-result" className="mt-3 rounded-card border border-line bg-surface p-3">
+            <section aria-labelledby="movement-transfer-result" className="mt-3 border border-line bg-surface p-3">
               <h3 id="movement-transfer-result" className="text-sm font-semibold">
                 {t('migo.document')}{' '}
                 <span className="code" data-transfer-document={transfer.document.materialDocumentNumber}>{transfer.document.materialDocumentNumber}</span>
@@ -275,26 +275,26 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                   {t('migo.openDocument')}
                 </Link>
               </p>
-              <table className="mt-2 w-full text-sm">
+              <table className="grid-table mt-2 text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="py-1">{t('migo.columnLine')}</th>
-                    <th className="py-1">{t('migo.columnMaterial')}</th>
-                    <th className="py-1">{t('migo.columnPlant')}</th>
-                    <th className="py-1">{t('migo.columnLocation')}</th>
-                    <th className="py-1 text-right">{t('migo.columnQuantity')}</th>
-                    <th className="py-1 text-right">{t('migo.columnValue')}</th>
+                    <th>{t('migo.columnLine')}</th>
+                    <th>{t('migo.columnMaterial')}</th>
+                    <th>{t('migo.columnPlant')}</th>
+                    <th>{t('migo.columnLocation')}</th>
+                    <th className="text-right">{t('migo.columnQuantity')}</th>
+                    <th className="text-right">{t('migo.columnValue')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {transfer.document.lines.map((line) => (
-                    <tr key={line.lineNumber} className="border-t border-line" data-line={line.materialNumber}>
-                      <td className="py-1">{line.lineNumber}</td>
-                      <td className="py-1">{line.materialNumber}</td>
-                      <td className="py-1">{line.plant}</td>
-                      <td className="py-1">{line.storageLocation ?? '—'}</td>
-                      <td className="py-1 text-right tabular">{line.quantity} {line.unit}</td>
-                      <td className="py-1 text-right tabular">{line.value}</td>
+                    <tr key={line.lineNumber} data-line={line.materialNumber}>
+                      <td>{line.lineNumber}</td>
+                      <td>{line.materialNumber}</td>
+                      <td>{line.plant}</td>
+                      <td>{line.storageLocation ?? '—'}</td>
+                      <td className="text-right tabular">{line.quantity} {line.unit}</td>
+                      <td className="text-right tabular">{line.value}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -305,7 +305,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
       )}
 
       {cell?.kind === 'POST_HERE' && cell.form === 'RECEIPT' && (
-        <section aria-labelledby="movement-receipt" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="movement-receipt" className="border border-line bg-surface p-4">
           <h2 id="movement-receipt" className="text-sm font-semibold">{t('migo.receiptHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('migo.receiptHint')}</p>
           <p role="status" className={`mt-2 text-sm ${receipt.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -359,7 +359,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
           </form>
 
           {receipt.document && (
-            <section aria-labelledby="movement-receipt-result" className="mt-3 rounded-card border border-line bg-surface p-3">
+            <section aria-labelledby="movement-receipt-result" className="mt-3 border border-line bg-surface p-3">
               <h3 id="movement-receipt-result" className="text-sm font-semibold">
                 {t('migo.document')} <span className="code" data-receipt-document={receipt.document.materialDocumentNumber}>{receipt.document.materialDocumentNumber}</span>
               </h3>
@@ -387,24 +387,24 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                 / {receipt.document.orderQuantity} · {t('migo.columnOrderOpen')}{' '}
                 <span data-order-open={receipt.document.lines[0]?.orderOpenAfter ?? ''}>{receipt.document.lines[0]?.orderOpenAfter ?? '—'}</span>
               </p>
-              <table className="mt-2 w-full text-sm">
+              <table className="grid-table mt-2 text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="py-1">{t('migo.columnLine')}</th>
-                    <th className="py-1">{t('migo.columnMaterial')}</th>
-                    <th className="py-1">{t('migo.columnLocation')}</th>
-                    <th className="py-1 text-right">{t('migo.columnQuantity')}</th>
-                    <th className="py-1 text-right">{t('migo.columnValue')}</th>
+                    <th>{t('migo.columnLine')}</th>
+                    <th>{t('migo.columnMaterial')}</th>
+                    <th>{t('migo.columnLocation')}</th>
+                    <th className="text-right">{t('migo.columnQuantity')}</th>
+                    <th className="text-right">{t('migo.columnValue')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {receipt.document.lines.map((line) => (
-                    <tr key={line.lineNumber} className="border-t border-line" data-line={line.materialNumber}>
-                      <td className="py-1">{line.lineNumber}</td>
-                      <td className="py-1">{line.materialNumber}</td>
-                      <td className="py-1">{line.storageLocation ?? '—'}</td>
-                      <td className="py-1 text-right tabular">{line.quantity} {line.unit}</td>
-                      <td className="py-1 text-right tabular">{line.value}</td>
+                    <tr key={line.lineNumber} data-line={line.materialNumber}>
+                      <td>{line.lineNumber}</td>
+                      <td>{line.materialNumber}</td>
+                      <td>{line.storageLocation ?? '—'}</td>
+                      <td className="text-right tabular">{line.quantity} {line.unit}</td>
+                      <td className="text-right tabular">{line.value}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -415,7 +415,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
       )}
 
       {cell?.kind === 'POST_HERE' && cell.form === 'ISSUE' && (
-        <section aria-labelledby="movement-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="movement-items" className="border border-line bg-surface p-4">
           <h2 id="movement-items" className="text-sm font-semibold">{t('migo.itemsHeader')}</h2>
           <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
             {state.message}{state.remedy ? ` ${state.remedy}` : ''}
@@ -443,16 +443,16 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
               </label>
             </div>
 
-            <table className="mt-3 w-full text-sm">
+            <table className="grid-table mt-3 text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="py-1">{t('migo.columnLine')}</th>
-                  <th className="py-1">{t('migo.columnMaterial')}</th>
-                  <th className="py-1">{t('migo.columnPlant')}</th>
-                  <th className="py-1">{t('migo.columnLocation')}</th>
-                  <th className="py-1 text-right">{t('migo.columnQuantity')}</th>
-                  <th className="py-1">{t('migo.entryUnit')}</th>
-                  <th className="py-1">{t('migo.columnItem')}</th>
+                  <th>{t('migo.columnLine')}</th>
+                  <th>{t('migo.columnMaterial')}</th>
+                  <th>{t('migo.columnPlant')}</th>
+                  <th>{t('migo.columnLocation')}</th>
+                  <th className="text-right">{t('migo.columnQuantity')}</th>
+                  <th>{t('migo.entryUnit')}</th>
+                  <th>{t('migo.columnItem')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -469,7 +469,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
           </form>
 
           {state.document && (
-            <section aria-labelledby="movement-result" className="mt-3 rounded-card border border-line bg-surface p-3">
+            <section aria-labelledby="movement-result" className="mt-3 border border-line bg-surface p-3">
               <h3 id="movement-result" className="text-sm font-semibold">
                 {t('migo.document')} <span className="code" data-material-document={state.document.materialDocumentNumber}>{state.document.materialDocumentNumber}</span>
               </h3>
@@ -491,24 +491,24 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                   {t('migo.openDocument')}
                 </Link>
               </p>
-              <table className="mt-2 w-full text-sm">
+              <table className="grid-table mt-2 text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="py-1">{t('migo.columnLine')}</th>
-                    <th className="py-1">{t('migo.columnMaterial')}</th>
-                    <th className="py-1">{t('migo.columnQuantity')}</th>
-                    <th className="py-1">{t('migo.columnValue')}</th>
-                    <th className="py-1">{t('migo.columnOrderOpen')}</th>
+                    <th>{t('migo.columnLine')}</th>
+                    <th>{t('migo.columnMaterial')}</th>
+                    <th>{t('migo.columnQuantity')}</th>
+                    <th>{t('migo.columnValue')}</th>
+                    <th>{t('migo.columnOrderOpen')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {state.document.lines.map((line) => (
-                    <tr key={line.materialNumber + line.quantity} className="border-t border-line" data-line={line.materialNumber}>
-                      <td className="py-1">{line.materialNumber}</td>
-                      <td className="py-1">{line.plant}</td>
-                      <td className="py-1 text-right tabular">{line.quantity} {line.unit}</td>
-                      <td className="py-1 text-right tabular">{line.value}</td>
-                      <td className="py-1 tabular" data-order-open={line.orderOpenAfter ?? ''}>{line.orderOpenAfter ?? '—'}</td>
+                    <tr key={line.materialNumber + line.quantity} data-line={line.materialNumber}>
+                      <td>{line.materialNumber}</td>
+                      <td>{line.plant}</td>
+                      <td className="text-right tabular">{line.quantity} {line.unit}</td>
+                      <td className="text-right tabular">{line.value}</td>
+                      <td className="tabular" data-order-open={line.orderOpenAfter ?? ''}>{line.orderOpenAfter ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>

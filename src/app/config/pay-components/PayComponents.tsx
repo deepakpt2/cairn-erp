@@ -118,30 +118,30 @@ export default function PayComponents(props: Props) {
             move through, and a payroll result would have nothing to cite.
           </p>
         ) : (
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead className="text-left text-xs text-ink-faint">
               <tr>
-                <th className="py-1 pr-2 font-medium">Code</th>
-                <th className="py-1 pr-2 font-medium">Name</th>
-                <th className="py-1 pr-2 font-medium">Kind</th>
-                <th className="py-1 pr-2 font-medium">Net pay</th>
-                <th className="py-1 pr-2 font-medium">Mappings</th>
-                <th className="py-1 pr-2 font-medium">Validity</th>
+                <th className="font-medium">Code</th>
+                <th className="font-medium">Name</th>
+                <th className="font-medium">Kind</th>
+                <th className="font-medium">Net pay</th>
+                <th className="font-medium">Mappings</th>
+                <th className="font-medium">Validity</th>
               </tr>
             </thead>
             <tbody>
               {components.map((row) => (
-                <tr key={row.code} className="border-t border-line">
-                  <td className="py-1 pr-2">
+                <tr key={row.code}>
+                  <td>
                     <Link className="link" href={`/config/pay-components?component=${row.code}`}>
                       {row.code}
                     </Link>
                   </td>
-                  <td className="py-1 pr-2">{row.name}</td>
-                  <td className="py-1 pr-2">{KIND_NAMES[row.componentKind]}</td>
-                  <td className="py-1 pr-2">{row.affectsNetPay ? 'changes it' : 'does not'}</td>
-                  <td className="py-1 pr-2">{row.mappings}</td>
-                  <td className="py-1 pr-2">{row.isValid ? 'valid' : 'retired'}</td>
+                  <td>{row.name}</td>
+                  <td>{KIND_NAMES[row.componentKind]}</td>
+                  <td>{row.affectsNetPay ? 'changes it' : 'does not'}</td>
+                  <td>{row.mappings}</td>
+                  <td>{row.isValid ? 'valid' : 'retired'}</td>
                 </tr>
               ))}
             </tbody>
@@ -171,20 +171,20 @@ export default function PayComponents(props: Props) {
                 No chart has mapped this component yet, so nothing could be posted for it.
               </p>
             ) : (
-              <table className="mt-3 w-full text-sm">
+              <table className="grid-table mt-3 text-sm">
                 <thead className="text-left text-xs text-ink-faint">
                   <tr>
-                    <th className="py-1 pr-2 font-medium">Chart</th>
-                    <th className="py-1 pr-2 font-medium">Debit</th>
-                    <th className="py-1 pr-2 font-medium">Credit</th>
-                    <th className="py-1 pr-2 font-medium">Charged</th>
-                    <th className="py-1 pr-2 font-medium">Changed by</th>
+                    <th className="font-medium">Chart</th>
+                    <th className="font-medium">Debit</th>
+                    <th className="font-medium">Credit</th>
+                    <th className="font-medium">Charged</th>
+                    <th className="font-medium">Changed by</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selected.mappings.map((row) => (
-                    <tr key={row.chartOfAccounts} className="border-t border-line">
-                      <td className="py-1 pr-2">
+                    <tr key={row.chartOfAccounts}>
+                      <td>
                         <Link
                           className="link"
                           href={`/config/pay-components?component=${selected.code}&chart=${row.chartOfAccounts}`}
@@ -192,10 +192,10 @@ export default function PayComponents(props: Props) {
                           {row.chartOfAccounts}
                         </Link>
                       </td>
-                      <td className="py-1 pr-2">{account(row, 'debitAccount', 'debitAccountName')}</td>
-                      <td className="py-1 pr-2">{account(row, 'creditAccount', 'creditAccountName')}</td>
-                      <td className="py-1 pr-2">{charge(row)}</td>
-                      <td className="py-1 pr-2">{row.changedBy ?? row.createdBy}</td>
+                      <td>{account(row, 'debitAccount', 'debitAccountName')}</td>
+                      <td>{account(row, 'creditAccount', 'creditAccountName')}</td>
+                      <td>{charge(row)}</td>
+                      <td>{row.changedBy ?? row.createdBy}</td>
                     </tr>
                   ))}
                 </tbody>

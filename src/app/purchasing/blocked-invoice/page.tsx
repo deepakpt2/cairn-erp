@@ -103,7 +103,7 @@ export default async function BlockedInvoicePage({ searchParams }: {
 
       {!canRelease && <p className="text-sm text-red-700" role="alert">{t('blockedInvoice.capabilityMissing')}</p>}
 
-      <section aria-labelledby="blocked-invoice-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="blocked-invoice-selection" className="border border-line bg-surface p-4">
         <h2 id="blocked-invoice-selection" className="text-sm font-semibold">{t('blockedInvoice.selection')}</h2>
         <p className="mt-1 text-xs text-ink-soft" data-blocked-invoice-no-post>{t('blockedInvoice.noPost')}</p>
         <form method="get" action={BLOCKED_INVOICE_ROUTE} className="mt-3 space-y-3">
@@ -140,7 +140,7 @@ export default async function BlockedInvoicePage({ searchParams }: {
       </section>
 
       {canPlace && (
-        <section aria-labelledby="blocked-invoice-place" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="blocked-invoice-place" className="border border-line bg-surface p-4">
           <h2 id="blocked-invoice-place" className="text-sm font-semibold">{t('blockedInvoice.place')}</h2>
           <p className="mt-1 text-xs text-ink-soft">{t('blockedInvoice.placeNote')}</p>
           <div className="mt-3">
@@ -158,42 +158,42 @@ export default async function BlockedInvoicePage({ searchParams }: {
         </section>
       )}
 
-      <section aria-labelledby="blocked-invoice-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="blocked-invoice-list" className="border border-line bg-surface p-4">
         <h2 id="blocked-invoice-list" className="text-sm font-semibold">{t('blockedInvoice.holds')}</h2>
         <p className="mt-1 text-xs text-ink-soft" data-blocked-invoice-manual-only>{t('blockedInvoice.manualOnly')}</p>
         {asked && !listError && rows.length === 0 && <p className="mt-3 text-sm text-ink-soft" data-blocked-invoice-empty>{t('blockedInvoice.empty')}</p>}
         {rows.length > 0 && (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[64rem] text-left text-sm">
+            <table className="grid-table min-w-[64rem] text-left text-sm">
               <thead className="text-xs text-ink-soft">
                 <tr>
-                  <th className="py-2 pr-3">{t('blockedInvoice.invoice')}</th>
-                  <th className="py-2 pr-3">{t('blockedInvoice.vendor')}</th>
-                  <th className="py-2 pr-3">{t('blockedInvoice.reason')}</th>
-                  <th className="py-2 pr-3">{t('blockedInvoice.source')}</th>
-                  <th className="py-2 pr-3">{t('blockedInvoice.payment')}</th>
-                  <th className="py-2 pr-3">{t('blockedInvoice.gross')}</th>
-                  <th className="py-2 pr-3">{t('blockedInvoice.journal')}</th>
-                  <th className="py-2">{t('blockedInvoice.release')}</th>
+                  <th>{t('blockedInvoice.invoice')}</th>
+                  <th>{t('blockedInvoice.vendor')}</th>
+                  <th>{t('blockedInvoice.reason')}</th>
+                  <th>{t('blockedInvoice.source')}</th>
+                  <th>{t('blockedInvoice.payment')}</th>
+                  <th>{t('blockedInvoice.gross')}</th>
+                  <th>{t('blockedInvoice.journal')}</th>
+                  <th>{t('blockedInvoice.release')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.invoiceNumber} className="border-t border-line align-top" data-blocked-invoice-row={row.invoiceNumber}>
-                    <td className="py-2 pr-3">
+                  <tr key={row.invoiceNumber} className="align-top" data-blocked-invoice-row={row.invoiceNumber}>
+                    <td>
                       <div className="font-medium">{row.invoiceNumber}</div>
                       <div className="text-xs text-ink-soft">{row.companyCode} · {row.fiscalYear}</div>
                     </td>
-                    <td className="py-2 pr-3">{row.supplierNumber}<div className="text-xs text-ink-soft">{row.supplierName}</div></td>
-                    <td className="py-2 pr-3">
+                    <td>{row.supplierNumber}<div className="text-xs text-ink-soft">{row.supplierName}</div></td>
+                    <td>
                       <div>{t('blockedInvoice.manual')}</div>
                       <div className="text-xs text-ink-soft">{row.active ? t('blockedInvoice.active') : t('blockedInvoice.released')} · {row.comment}</div>
                     </td>
-                    <td className="py-2 pr-3">{row.createdBy}</td>
-                    <td className="py-2 pr-3">{row.paymentState === 'OPEN' ? t('blockedInvoice.open') : row.paymentState === 'PAID' ? t('blockedInvoice.paid') : t('blockedInvoice.inProposal')}{row.proposalRun ? ` ${row.proposalRun}` : ''}</td>
-                    <td className="py-2 pr-3">{row.grossAmount} {row.currency}</td>
-                    <td className="py-2 pr-3" data-blocked-invoice-journal={row.invoiceNumber}>{row.journalDocumentNumber ?? '—'}</td>
-                    <td className="py-2">
+                    <td>{row.createdBy}</td>
+                    <td>{row.paymentState === 'OPEN' ? t('blockedInvoice.open') : row.paymentState === 'PAID' ? t('blockedInvoice.paid') : t('blockedInvoice.inProposal')}{row.proposalRun ? ` ${row.proposalRun}` : ''}</td>
+                    <td>{row.grossAmount} {row.currency}</td>
+                    <td data-blocked-invoice-journal={row.invoiceNumber}>{row.journalDocumentNumber ?? '—'}</td>
+                    <td>
                       {row.active && row.paymentState === 'OPEN' && canRelease ? (
                         <ReleaseHoldForm
                           invoiceNumber={row.invoiceNumber}
@@ -218,7 +218,7 @@ export default async function BlockedInvoicePage({ searchParams }: {
       </section>
 
       {events.length > 0 && (
-        <section aria-labelledby="blocked-invoice-events" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="blocked-invoice-events" className="border border-line bg-surface p-4">
           <h2 id="blocked-invoice-events" className="text-sm font-semibold" data-blocked-invoice-events>{t('blockedInvoice.events')}</h2>
           <ul className="mt-3 space-y-2 text-sm">
             {events.map((event) => (

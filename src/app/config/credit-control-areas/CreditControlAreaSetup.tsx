@@ -39,7 +39,7 @@ export function CreditControlAreaSetup({ companies, defaults }: { companies: Com
 
   if (companies.length === 0) {
     return (
-      <section className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section className="border border-line bg-surface p-4">
         <h2 className="text-sm font-semibold">Initial setup</h2>
         <p className="mt-2 text-sm text-ink-soft">There are no active, unassigned Company Codes to configure.</p>
       </section>
@@ -47,7 +47,7 @@ export function CreditControlAreaSetup({ companies, defaults }: { companies: Com
   }
 
   return (
-    <section aria-labelledby="cca-setup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="cca-setup" className="border border-line bg-surface p-4">
       <h2 id="cca-setup" className="text-sm font-semibold">Create and initially assign</h2>
       <p className="mt-1 text-sm text-ink-soft">
         This is an initial setup only. The area is created active; its currency is taken from the selected Company Code.

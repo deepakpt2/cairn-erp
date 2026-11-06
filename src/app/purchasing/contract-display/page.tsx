@@ -95,30 +95,30 @@ export default async function PurchaseContractDisplayPage({ searchParams }: {
           <p>
             Valid {document.validityStart} – {document.validityEnd}. Target {document.targetValue ?? '—'}. Called-off {document.calledOffValue}. Remaining {document.remainingValue ?? 'not a value commitment'}. Release {document.releaseStatus}.
           </p>
-          <table className="w-full">
+          <table className="grid-table">
             <thead>
-              <tr className="border-b text-left">
-                <th className="px-2 py-2">Item</th>
-                <th className="px-2 py-2">Text</th>
-                <th className="px-2 py-2">Target qty</th>
-                <th className="px-2 py-2">Price</th>
-                <th className="px-2 py-2">Called-off</th>
-                <th className="px-2 py-2">Remaining</th>
-                <th className="px-2 py-2">Goods receipt</th>
-                <th className="px-2 py-2">Invoice</th>
+              <tr className="text-left">
+                <th>Item</th>
+                <th>Text</th>
+                <th>Target qty</th>
+                <th>Price</th>
+                <th>Called-off</th>
+                <th>Remaining</th>
+                <th>Goods receipt</th>
+                <th>Invoice</th>
               </tr>
             </thead>
             <tbody>
               {document.items.map((item) => (
-                <tr key={item.itemNumber} className="border-b">
-                  <td className="px-2 py-2">{item.itemNumber}</td>
-                  <td className="px-2 py-2">{item.shortText}</td>
-                  <td className="px-2 py-2">{item.targetQuantity ?? '—'}</td>
-                  <td className="px-2 py-2">{item.netPrice}</td>
-                  <td className="px-2 py-2">{item.calledOffQuantity}</td>
-                  <td className="px-2 py-2">{item.remainingQuantity ?? '—'}</td>
-                  <td className="px-2 py-2">{item.goodsReceiptQuantity}</td>
-                  <td className="px-2 py-2">{item.invoiceValue}</td>
+                <tr key={item.itemNumber}>
+                  <td>{item.itemNumber}</td>
+                  <td>{item.shortText}</td>
+                  <td>{item.targetQuantity ?? '—'}</td>
+                  <td>{item.netPrice}</td>
+                  <td>{item.calledOffQuantity}</td>
+                  <td>{item.remainingQuantity ?? '—'}</td>
+                  <td>{item.goodsReceiptQuantity}</td>
+                  <td>{item.invoiceValue}</td>
                 </tr>
               ))}
             </tbody>
@@ -142,26 +142,26 @@ export default async function PurchaseContractDisplayPage({ searchParams }: {
       )}
 
       {!document && opened.rows.length > 0 && (
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b text-left">
-              <th className="px-2 py-2">Contract</th>
-              <th className="px-2 py-2">Type</th>
-              <th className="px-2 py-2">Supplier</th>
-              <th className="px-2 py-2">Validity</th>
-              <th className="px-2 py-2">Release</th>
+            <tr className="text-left">
+              <th>Contract</th>
+              <th>Type</th>
+              <th>Supplier</th>
+              <th>Validity</th>
+              <th>Release</th>
             </tr>
           </thead>
           <tbody>
             {opened.rows.map((row) => (
-              <tr key={row.contractNumber} className="border-b">
-                <td className="px-2 py-2">
+              <tr key={row.contractNumber}>
+                <td>
                   <Link className="underline" href={`${CONTRACT_DISPLAY_ROUTE}?contract=${encodeURIComponent(row.contractNumber)}`}>{row.contractNumber}</Link>
                 </td>
-                <td className="px-2 py-2">{row.documentType}</td>
-                <td className="px-2 py-2">{row.supplierNumber}</td>
-                <td className="px-2 py-2">{row.validityStart} – {row.validityEnd}</td>
-                <td className="px-2 py-2">{row.releaseStatus}</td>
+                <td>{row.documentType}</td>
+                <td>{row.supplierNumber}</td>
+                <td>{row.validityStart} – {row.validityEnd}</td>
+                <td>{row.releaseStatus}</td>
               </tr>
             ))}
           </tbody>

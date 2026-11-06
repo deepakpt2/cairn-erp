@@ -50,29 +50,29 @@ export default function CheckingControlForm({
         {controls.length === 0 ? (
           <p className="mt-2 text-sm">No checking control stands.</p>
         ) : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-2">Plant</th>
-                <th className="px-2 py-2">Type</th>
-                <th className="px-2 py-2">Function</th>
-                <th className="px-2 py-2">No check</th>
-                <th className="px-2 py-2">Rule</th>
-                <th className="px-2 py-2">Check on save</th>
-                {canMaintain && <th className="px-2 py-2">Action</th>}
+              <tr className="text-left">
+                <th>Plant</th>
+                <th>Type</th>
+                <th>Function</th>
+                <th>No check</th>
+                <th>Rule</th>
+                <th>Check on save</th>
+                {canMaintain && <th>Action</th>}
               </tr>
             </thead>
             <tbody>
               {controls.map((row) => (
-                <tr key={`${row.plant}/${row.orderType}/${row.businessFunction}`} className="border-b border-line/60">
-                  <td className="px-2 py-2 code">{row.plant}</td>
-                  <td className="px-2 py-2 code">{row.orderType}</td>
-                  <td className="px-2 py-2">{functionLabel(row.businessFunction)}</td>
-                  <td className="px-2 py-2 code">{indicatorLabel(row.noCheck)}</td>
-                  <td className="px-2 py-2 code">{row.checkingRule ?? '—'}</td>
-                  <td className="px-2 py-2 code">{indicatorLabel(row.checkOnSave)}</td>
+                <tr key={`${row.plant}/${row.orderType}/${row.businessFunction}`}>
+                  <td className="code">{row.plant}</td>
+                  <td className="code">{row.orderType}</td>
+                  <td>{functionLabel(row.businessFunction)}</td>
+                  <td className="code">{indicatorLabel(row.noCheck)}</td>
+                  <td className="code">{row.checkingRule ?? '—'}</td>
+                  <td className="code">{indicatorLabel(row.checkOnSave)}</td>
                   {canMaintain && (
-                    <td className="px-2 py-2">
+                    <td>
                       <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setEditing(row)}>Change</button>
                     </td>
                   )}

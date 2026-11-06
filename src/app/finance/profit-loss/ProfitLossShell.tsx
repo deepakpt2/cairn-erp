@@ -134,7 +134,7 @@ export default function ProfitLossShell({ canUse, companies, versions, selection
               {result.unassigned.map((account) => (
                 <tr key={account.accountNumber}>
                   <td className="code">{account.accountNumber} — {account.accountName}</td>
-                  <td className="tabular text-end">{account.periodMovement.toFixed(2)} {result.currency}</td>
+                  <td className="tabular text-end num">{account.periodMovement.toFixed(2)} {result.currency}</td>
                 </tr>
               ))}
             </tbody>
@@ -155,11 +155,11 @@ function NodeRows({ node, currency, company, year }: {
     <>
       <tr className={node.depth === 0 ? 'bg-sunken font-semibold' : 'font-medium'}>
         <td style={{ paddingLeft: `${0.75 + node.depth * 1.25}rem` }}>{node.description} <span className="code text-ink-faint">({node.node})</span></td>
-        <td className="tabular text-end">{node.periodMovement.toFixed(2)}</td>
-        <td className="tabular text-end">{node.yearToDateMovement.toFixed(2)}</td>
-        <td className="tabular text-end">{node.comparativeMovement === null ? '—' : node.comparativeMovement.toFixed(2)}</td>
-        <td className="tabular text-end">{node.variance === null ? '—' : node.variance.toFixed(2)}</td>
-        <td className="tabular text-end">{node.variancePercent === null ? '—' : `${node.variancePercent.toFixed(1)}%`}</td>
+        <td className="tabular text-end num">{node.periodMovement.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.yearToDateMovement.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.comparativeMovement === null ? '—' : node.comparativeMovement.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.variance === null ? '—' : node.variance.toFixed(2)}</td>
+        <td className="tabular text-end num">{node.variancePercent === null ? '—' : `${node.variancePercent.toFixed(1)}%`}</td>
         <td className="code">{currency}</td>
       </tr>
       {node.accounts.map((account) => (
@@ -179,9 +179,9 @@ function NodeRows({ node, currency, company, year }: {
               {t('pl.lineItems')}
             </Link>
           </td>
-          <td className="tabular text-end">{account.periodMovement.toFixed(2)}</td>
-          <td className="tabular text-end">{account.yearToDateMovement.toFixed(2)}</td>
-          <td className="tabular text-end">{account.comparativeMovement === null ? '—' : account.comparativeMovement.toFixed(2)}</td>
+          <td className="tabular text-end num">{account.periodMovement.toFixed(2)}</td>
+          <td className="tabular text-end num">{account.yearToDateMovement.toFixed(2)}</td>
+          <td className="tabular text-end num">{account.comparativeMovement === null ? '—' : account.comparativeMovement.toFixed(2)}</td>
           <td colSpan={3} />
         </tr>
       ))}

@@ -69,23 +69,23 @@ export default function AvailabilityCheckForm({
         {current.groups.length === 0 ? (
           <p className="mt-2 text-sm">No checking group stands.</p>
         ) : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-2">Group</th>
-                <th className="px-2 py-2">Description</th>
-                <th className="px-2 py-2">No check</th>
-                {canMaintain && <th className="px-2 py-2">Action</th>}
+              <tr className="text-left">
+                <th>Group</th>
+                <th>Description</th>
+                <th>No check</th>
+                {canMaintain && <th>Action</th>}
               </tr>
             </thead>
             <tbody>
               {current.groups.map((row) => (
-                <tr key={row.checkingGroup} className="border-b border-line/60">
-                  <td className="px-2 py-2 code">{row.checkingGroup}</td>
-                  <td className="px-2 py-2">{row.description}</td>
-                  <td className="px-2 py-2 code">{mark(row.noCheck)}</td>
+                <tr key={row.checkingGroup}>
+                  <td className="code">{row.checkingGroup}</td>
+                  <td>{row.description}</td>
+                  <td className="code">{mark(row.noCheck)}</td>
                   {canMaintain && (
-                    <td className="px-2 py-2">
+                    <td>
                       <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setGroup(row)}>Change</button>
                     </td>
                   )}
@@ -127,21 +127,21 @@ export default function AvailabilityCheckForm({
         <h2 className="text-sm font-semibold">Checking rules</h2>
         <p className="mt-1 text-sm text-ink-soft">A rule is not assigned to a material and is not bound to order creation, conversion, or MRP.</p>
         {current.rules.length === 0 ? <p className="mt-2 text-sm">No checking rule stands.</p> : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-2">Rule</th>
-                <th className="px-2 py-2">Description</th>
-                {canMaintain && <th className="px-2 py-2">Action</th>}
+              <tr className="text-left">
+                <th>Rule</th>
+                <th>Description</th>
+                {canMaintain && <th>Action</th>}
               </tr>
             </thead>
             <tbody>
               {current.rules.map((row) => (
-                <tr key={row.checkingRule} className="border-b border-line/60">
-                  <td className="px-2 py-2 code">{row.checkingRule}</td>
-                  <td className="px-2 py-2">{row.description}</td>
+                <tr key={row.checkingRule}>
+                  <td className="code">{row.checkingRule}</td>
+                  <td>{row.description}</td>
                   {canMaintain && (
-                    <td className="px-2 py-2">
+                    <td>
                       <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setRule(row)}>Change</button>
                     </td>
                   )}
@@ -178,22 +178,22 @@ export default function AvailabilityCheckForm({
       <section className="border border-line bg-white p-4">
         <h2 className="text-sm font-semibold">Material plant assignment</h2>
         <p className="mt-1 text-sm text-ink-soft">Null stays not assigned. This does not create a plant view and does not change MRP data.</p>
-        <table className="mt-2 w-full text-sm">
+        <table className="grid-table mt-2 text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="px-2 py-2">Material</th>
-              <th className="px-2 py-2">Plant</th>
-              <th className="px-2 py-2">Checking group</th>
-              <th className="px-2 py-2">Version</th>
+            <tr className="text-left">
+              <th>Material</th>
+              <th>Plant</th>
+              <th>Checking group</th>
+              <th>Version</th>
             </tr>
           </thead>
           <tbody>
             {current.assignments.map((row) => (
-              <tr key={`${row.plant}/${row.materialNumber}`} className="border-b border-line/60">
-                <td className="px-2 py-2 code">{row.materialNumber}</td>
-                <td className="px-2 py-2 code">{row.plant}</td>
-                <td className="px-2 py-2 code">{row.checkingGroup ?? 'not assigned'}</td>
-                <td className="px-2 py-2 code">{row.version}</td>
+              <tr key={`${row.plant}/${row.materialNumber}`}>
+                <td className="code">{row.materialNumber}</td>
+                <td className="code">{row.plant}</td>
+                <td className="code">{row.checkingGroup ?? 'not assigned'}</td>
+                <td className="code">{row.version}</td>
               </tr>
             ))}
           </tbody>
@@ -220,29 +220,29 @@ export default function AvailabilityCheckForm({
         <h2 className="text-sm font-semibold">Scope of check</h2>
         <p className="mt-1 text-sm text-ink-soft">The key is the group and the rule. A saved scope is not an ATP balance.</p>
         {current.scopes.length === 0 ? <p className="mt-2 text-sm">No scope stands.</p> : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-2">Group</th>
-                <th className="px-2 py-2">Rule</th>
-                <th className="px-2 py-2">Safety</th>
-                <th className="px-2 py-2">Quality</th>
-                <th className="px-2 py-2">Blocked</th>
-                <th className="px-2 py-2">Reservations</th>
-                {canMaintain && <th className="px-2 py-2">Action</th>}
+              <tr className="text-left">
+                <th>Group</th>
+                <th>Rule</th>
+                <th>Safety</th>
+                <th>Quality</th>
+                <th>Blocked</th>
+                <th>Reservations</th>
+                {canMaintain && <th>Action</th>}
               </tr>
             </thead>
             <tbody>
               {current.scopes.map((row) => (
-                <tr key={`${row.checkingGroup}/${row.checkingRule}`} className="border-b border-line/60">
-                  <td className="px-2 py-2 code">{row.checkingGroup}</td>
-                  <td className="px-2 py-2 code">{row.checkingRule}</td>
-                  <td className="px-2 py-2 code">{mark(row.includeSafetyStock)}</td>
-                  <td className="px-2 py-2 code">{mark(row.includeQualityStock)}</td>
-                  <td className="px-2 py-2 code">{mark(row.includeBlockedStock)}</td>
-                  <td className="px-2 py-2 code">{mark(row.reservations)}</td>
+                <tr key={`${row.checkingGroup}/${row.checkingRule}`}>
+                  <td className="code">{row.checkingGroup}</td>
+                  <td className="code">{row.checkingRule}</td>
+                  <td className="code">{mark(row.includeSafetyStock)}</td>
+                  <td className="code">{mark(row.includeQualityStock)}</td>
+                  <td className="code">{mark(row.includeBlockedStock)}</td>
+                  <td className="code">{mark(row.reservations)}</td>
                   {canMaintain && (
-                    <td className="px-2 py-2">
+                    <td>
                       <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setScope(row)}>Change</button>
                     </td>
                   )}

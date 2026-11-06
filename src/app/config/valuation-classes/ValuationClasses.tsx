@@ -165,30 +165,30 @@ export default function ValuationClasses({
           )}
         </div>
         <div className="overflow-x-auto border border-line">
-          <table className="w-full text-sm">
+          <table className="grid-table text-sm">
             <thead className="bg-paper text-left text-ink-soft">
               <tr>
-                <th className="px-3 py-2 font-medium">Reference</th>
-                <th className="px-3 py-2 font-medium">Description</th>
-                <th className="px-3 py-2 font-medium">Active</th>
-                <th className="px-3 py-2 font-medium">Version</th>
-                <th className="px-3 py-2 font-medium">Types</th>
-                <th className="px-3 py-2 font-medium">Classes</th>
+                <th className="font-medium">Reference</th>
+                <th className="font-medium">Description</th>
+                <th className="font-medium">Active</th>
+                <th className="font-medium">Version</th>
+                <th className="font-medium">Types</th>
+                <th className="font-medium">Classes</th>
               </tr>
             </thead>
             <tbody>
               {references.map((row) => (
-                <tr key={row.reference} className="border-t border-line">
-                  <td className="px-3 py-2">
+                <tr key={row.reference}>
+                  <td>
                     <button type="button" className="code text-left underline" onClick={() => { setReferenceMode('CHANGE'); setSelectedReference(row.reference); setRequestKey(crypto.randomUUID()); }}>
                       {row.reference}
                     </button>
                   </td>
-                  <td className="px-3 py-2">{row.name}</td>
-                  <td className="px-3 py-2">{row.isActive ? 'Yes' : 'No'}</td>
-                  <td className="px-3 py-2">{row.version}</td>
-                  <td className="px-3 py-2">{row.typeCount}</td>
-                  <td className="px-3 py-2">{row.classCount}</td>
+                  <td>{row.name}</td>
+                  <td>{row.isActive ? 'Yes' : 'No'}</td>
+                  <td>{row.version}</td>
+                  <td>{row.typeCount}</td>
+                  <td>{row.classCount}</td>
                 </tr>
               ))}
             </tbody>
@@ -250,32 +250,32 @@ export default function ValuationClasses({
           )}
         </div>
         <div className="overflow-x-auto border border-line">
-          <table className="w-full text-sm">
+          <table className="grid-table text-sm">
             <thead className="bg-paper text-left text-ink-soft">
               <tr>
-                <th className="px-3 py-2 font-medium">Class</th>
-                <th className="px-3 py-2 font-medium">Description</th>
-                <th className="px-3 py-2 font-medium">References</th>
-                <th className="px-3 py-2 font-medium">Types</th>
-                <th className="px-3 py-2 font-medium">Active</th>
-                <th className="px-3 py-2 font-medium">Version</th>
-                <th className="px-3 py-2 font-medium">Materials</th>
+                <th className="font-medium">Class</th>
+                <th className="font-medium">Description</th>
+                <th className="font-medium">References</th>
+                <th className="font-medium">Types</th>
+                <th className="font-medium">Active</th>
+                <th className="font-medium">Version</th>
+                <th className="font-medium">Materials</th>
               </tr>
             </thead>
             <tbody>
               {classes.map((row) => (
-                <tr key={row.valuationClass} className="border-t border-line">
-                  <td className="px-3 py-2">
+                <tr key={row.valuationClass}>
+                  <td>
                     <button type="button" className="code text-left underline" onClick={() => { setClassMode('CHANGE'); setSelectedClass(row.valuationClass); setRequestKey(crypto.randomUUID()); }}>
                       {row.valuationClass}
                     </button>
                   </td>
-                  <td className="px-3 py-2">{row.name}</td>
-                  <td className="px-3 py-2">{row.references.join(', ') || '—'}</td>
-                  <td className="px-3 py-2">{row.allowedMaterialTypes || 'Every type on the references'}</td>
-                  <td className="px-3 py-2">{row.isActive ? 'Yes' : 'No'}</td>
-                  <td className="px-3 py-2">{row.version}</td>
-                  <td className="px-3 py-2">{row.materialCount}</td>
+                  <td>{row.name}</td>
+                  <td>{row.references.join(', ') || '—'}</td>
+                  <td>{row.allowedMaterialTypes || 'Every type on the references'}</td>
+                  <td>{row.isActive ? 'Yes' : 'No'}</td>
+                  <td>{row.version}</td>
+                  <td>{row.materialCount}</td>
                 </tr>
               ))}
             </tbody>
@@ -368,26 +368,26 @@ export default function ValuationClasses({
         <h2 id="type-references" className="text-base font-semibold">Material type assignment</h2>
         <p className="text-sm text-ink-soft">Each material type names one account category reference. Changing it does not rewrite a material valuation class.</p>
         <div className="overflow-x-auto border border-line">
-          <table className="w-full text-sm">
+          <table className="grid-table text-sm">
             <thead className="bg-paper text-left text-ink-soft">
               <tr>
-                <th className="px-3 py-2 font-medium">Material type</th>
-                <th className="px-3 py-2 font-medium">Description</th>
-                <th className="px-3 py-2 font-medium">Reference</th>
-                <th className="px-3 py-2 font-medium">Materials</th>
+                <th className="font-medium">Material type</th>
+                <th className="font-medium">Description</th>
+                <th className="font-medium">Reference</th>
+                <th className="font-medium">Materials</th>
               </tr>
             </thead>
             <tbody>
               {types.map((row) => (
-                <tr key={row.materialType} className="border-t border-line">
-                  <td className="px-3 py-2">
+                <tr key={row.materialType}>
+                  <td>
                     <button type="button" className="code text-left underline" onClick={() => { setSelectedType(row.materialType); setRequestKey(crypto.randomUUID()); }}>
                       {row.materialType}
                     </button>
                   </td>
-                  <td className="px-3 py-2">{row.name}</td>
-                  <td className="px-3 py-2">{row.accountCategoryReference}{row.referenceActive ? '' : ' (inactive)'}</td>
-                  <td className="px-3 py-2">{row.materialCount}</td>
+                  <td>{row.name}</td>
+                  <td>{row.accountCategoryReference}{row.referenceActive ? '' : ' (inactive)'}</td>
+                  <td>{row.materialCount}</td>
                 </tr>
               ))}
             </tbody>

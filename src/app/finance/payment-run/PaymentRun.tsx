@@ -42,7 +42,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
 
   return (
     <>
-      <section aria-labelledby="pr-status" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="pr-status" className="border border-line bg-surface p-4">
         <h2 id="pr-status" className="text-sm font-semibold">Status</h2>
         <form method="get" action="/finance/payment-run" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
@@ -82,7 +82,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
         )}
       </section>
 
-      <section aria-labelledby="pr-parameters" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="pr-parameters" className="border border-line bg-surface p-4">
         <h2 id="pr-parameters" className="text-sm font-semibold">Parameters</h2>
         <Message state={createState} />
         <form action={createAction}>
@@ -139,29 +139,29 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
       </section>
 
       {run && (run.status === 'PROPOSAL' || run.status === 'EXECUTED') && (
-        <section aria-labelledby="pr-proposal" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="pr-proposal" className="border border-line bg-surface p-4">
           <h2 id="pr-proposal" className="text-sm font-semibold">Proposal</h2>
           {run.proposal.length === 0 ? (
             <p className="mt-2 text-sm text-ink-soft">The proposal is empty: no open items match the selection.</p>
           ) : (
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Supplier</th><th className="px-2 py-2">Invoice</th>
-                    <th className="px-2 py-2">Due</th><th className="px-2 py-2">Amount</th>
-                    <th className="px-2 py-2">Method</th><th className="px-2 py-2">Exception</th>
+                    <th>Supplier</th><th>Invoice</th>
+                    <th>Due</th><th>Amount</th>
+                    <th>Method</th><th>Exception</th>
                   </tr>
                 </thead>
                 <tbody>
                   {run.proposal.map((item) => (
-                    <tr key={item.itemNumber} className="border-t border-line">
-                      <td className="px-2 py-2">{item.accountId}</td>
-                      <td className="px-2 py-2">{item.invoiceNumber ?? item.journalDocumentNumber}</td>
-                      <td className="px-2 py-2">{item.dueDate}</td>
-                      <td className="px-2 py-2">{item.amount} {item.currency}</td>
-                      <td className="px-2 py-2">{item.paymentMethod ?? '—'}</td>
-                      <td className="px-2 py-2">{item.exceptionText ?? '—'}</td>
+                    <tr key={item.itemNumber}>
+                      <td>{item.accountId}</td>
+                      <td>{item.invoiceNumber ?? item.journalDocumentNumber}</td>
+                      <td>{item.dueDate}</td>
+                      <td>{item.amount} {item.currency}</td>
+                      <td>{item.paymentMethod ?? '—'}</td>
+                      <td>{item.exceptionText ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -201,22 +201,22 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
           )}
           {run.payments.length > 0 && (
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Supplier</th><th className="px-2 py-2">Invoice</th>
-                    <th className="px-2 py-2">Amount</th><th className="px-2 py-2">Journal</th>
-                    <th className="px-2 py-2">Bank</th>
+                    <th>Supplier</th><th>Invoice</th>
+                    <th>Amount</th><th>Journal</th>
+                    <th>Bank</th>
                   </tr>
                 </thead>
                 <tbody>
                   {run.payments.map((p) => (
-                    <tr key={p.itemNumber} className="border-t border-line">
-                      <td className="px-2 py-2">{p.accountId}</td>
-                      <td className="px-2 py-2">{p.invoiceNumber ?? '—'}</td>
-                      <td className="px-2 py-2">{p.amount} {p.currency}</td>
-                      <td className="px-2 py-2">{p.journalDocumentNumber}</td>
-                      <td className="px-2 py-2">{p.houseBankKey}/{p.bankAccountId}</td>
+                    <tr key={p.itemNumber}>
+                      <td>{p.accountId}</td>
+                      <td>{p.invoiceNumber ?? '—'}</td>
+                      <td>{p.amount} {p.currency}</td>
+                      <td>{p.journalDocumentNumber}</td>
+                      <td>{p.houseBankKey}/{p.bankAccountId}</td>
                     </tr>
                   ))}
                 </tbody>

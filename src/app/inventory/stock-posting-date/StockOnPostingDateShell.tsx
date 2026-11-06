@@ -144,14 +144,14 @@ export default function StockOnPostingDateShell({ canUse, selection, result, rep
                 <td className="code">{row.stockType}</td>
                 <td className="code">{row.batch || '—'}</td>
                 <td>{row.baseUnit}</td>
-                <td className="text-end">{row.openingQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.openingValue.toFixed(2)}</td>
-                <td className="text-end">{row.receiptQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.receiptValue.toFixed(2)}</td>
-                <td className="text-end">{row.issueQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.issueValue.toFixed(2)}</td>
-                <td className="text-end font-semibold">{row.closingQuantity.toFixed(3)}</td>
-                <td className="text-end font-semibold">{row.closingValue.toFixed(2)}</td>
+                <td className="text-end num">{row.openingQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.openingValue.toFixed(2)}</td>
+                <td className="text-end num">{row.receiptQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.receiptValue.toFixed(2)}</td>
+                <td className="text-end num">{row.issueQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.issueValue.toFixed(2)}</td>
+                <td className="text-end font-semibold num">{row.closingQuantity.toFixed(3)}</td>
+                <td className="text-end font-semibold num">{row.closingValue.toFixed(2)}</td>
                 <td className="code"><Link href={row.drillDown}>{t('stockDate.display')}</Link></td>
               </tr>
             ))}

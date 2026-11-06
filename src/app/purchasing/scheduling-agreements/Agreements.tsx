@@ -129,34 +129,34 @@ export default function Agreements({
 
       <section className="overflow-x-auto">
         <h2 className="mb-2 text-sm font-semibold">Scheduling agreements · ME3L</h2>
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b text-left">
-              <th className="px-2 py-2">Agreement</th>
-              <th className="px-2 py-2">Type</th>
-              <th className="px-2 py-2">Supplier</th>
-              <th className="px-2 py-2">Validity</th>
-              <th className="px-2 py-2">Target qty</th>
-              <th className="px-2 py-2">Scheduled qty</th>
-              <th className="px-2 py-2">Release</th>
+            <tr className="text-left">
+              <th>Agreement</th>
+              <th>Type</th>
+              <th>Supplier</th>
+              <th>Validity</th>
+              <th>Target qty</th>
+              <th>Scheduled qty</th>
+              <th>Release</th>
             </tr>
           </thead>
           <tbody>
             {documents.map((row) => (
-              <tr key={row.agreementNumber} className="border-b">
-                <td className="px-2 py-2">
+              <tr key={row.agreementNumber}>
+                <td>
                   <Link className="underline" href={`/purchasing/scheduling-agreements?agreement=${encodeURIComponent(row.agreementNumber)}`}>{row.agreementNumber}</Link>
                 </td>
-                <td className="px-2 py-2">{row.documentType}</td>
-                <td className="px-2 py-2">{row.supplierNumber}</td>
-                <td className="px-2 py-2">{row.validityStart} – {row.validityEnd}</td>
-                <td className="px-2 py-2">{row.targetQuantity}</td>
-                <td className="px-2 py-2">{row.scheduledQuantity}</td>
-                <td className="px-2 py-2">{row.releaseStatus}</td>
+                <td>{row.documentType}</td>
+                <td>{row.supplierNumber}</td>
+                <td>{row.validityStart} – {row.validityEnd}</td>
+                <td>{row.targetQuantity}</td>
+                <td>{row.scheduledQuantity}</td>
+                <td>{row.releaseStatus}</td>
               </tr>
             ))}
             {documents.length === 0 && (
-              <tr><td className="px-2 py-3 text-ink-soft" colSpan={7}>No scheduling agreements stand.</td></tr>
+              <tr><td className="text-ink-soft" colSpan={7}>No scheduling agreements stand.</td></tr>
             )}
           </tbody>
         </table>
@@ -175,26 +175,26 @@ export default function Agreements({
           <p>
             Target and scheduled quantity are separate. A scheduled quantity is a delivery schedule line. It is not a goods receipt. This screen does not create a schedule line.
           </p>
-          <table className="w-full">
+          <table className="grid-table">
             <thead>
-              <tr className="border-b text-left">
-                <th className="px-2 py-2">Item</th>
-                <th className="px-2 py-2">Text</th>
-                <th className="px-2 py-2">Target</th>
-                <th className="px-2 py-2">Scheduled</th>
-                <th className="px-2 py-2">Remaining</th>
-                <th className="px-2 py-2">Price</th>
+              <tr className="text-left">
+                <th>Item</th>
+                <th>Text</th>
+                <th>Target</th>
+                <th>Scheduled</th>
+                <th>Remaining</th>
+                <th>Price</th>
               </tr>
             </thead>
             <tbody>
               {selected.items.map((item) => (
-                <tr key={item.itemNumber} className="border-b">
-                  <td className="px-2 py-2">{item.itemNumber}</td>
-                  <td className="px-2 py-2">{item.shortText}</td>
-                  <td className="px-2 py-2">{item.targetQuantity} {item.unit}</td>
-                  <td className="px-2 py-2">{item.scheduledQuantity}</td>
-                  <td className="px-2 py-2">{item.remainingQuantity}</td>
-                  <td className="px-2 py-2">{item.netPrice}</td>
+                <tr key={item.itemNumber}>
+                  <td>{item.itemNumber}</td>
+                  <td>{item.shortText}</td>
+                  <td>{item.targetQuantity} {item.unit}</td>
+                  <td>{item.scheduledQuantity}</td>
+                  <td>{item.remainingQuantity}</td>
+                  <td>{item.netPrice}</td>
                 </tr>
               ))}
             </tbody>
@@ -267,26 +267,26 @@ export default function Agreements({
               <input className="input mt-1 w-full" type="date" value={header.validityEnd} onChange={(event) => setHeader({ ...header, validityEnd: event.target.value })} />
             </label>
           </div>
-          <table className="w-full text-sm">
+          <table className="grid-table text-sm">
             <thead>
-              <tr className="border-b text-left">
-                <th className="px-2 py-2">Material</th>
-                <th className="px-2 py-2">Text</th>
-                <th className="px-2 py-2">Target qty</th>
-                <th className="px-2 py-2">Unit</th>
-                <th className="px-2 py-2">Net price</th>
-                <th className="px-2 py-2">Plant</th>
+              <tr className="text-left">
+                <th>Material</th>
+                <th>Text</th>
+                <th>Target qty</th>
+                <th>Unit</th>
+                <th>Net price</th>
+                <th>Plant</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item, index) => (
                 <tr key={item.itemNumber ?? `new-${index}`}>
-                  <td className="px-1 py-1"><input aria-label="Material" className="input w-28" value={item.material} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, material: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1"><input aria-label="Text" className="input w-40" value={item.text} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, text: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1"><input aria-label="Target quantity" className="input w-24" value={item.targetQuantity} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, targetQuantity: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1"><input aria-label="Unit" className="input w-16" value={item.unit} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, unit: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1"><input aria-label="Net price" className="input w-24" value={item.netPrice} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, netPrice: event.target.value } : row))} /></td>
-                  <td className="px-1 py-1">
+                  <td><input aria-label="Material" className="input w-28" value={item.material} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, material: event.target.value } : row))} /></td>
+                  <td><input aria-label="Text" className="input w-40" value={item.text} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, text: event.target.value } : row))} /></td>
+                  <td><input aria-label="Target quantity" className="input w-24" value={item.targetQuantity} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, targetQuantity: event.target.value } : row))} /></td>
+                  <td><input aria-label="Unit" className="input w-16" value={item.unit} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, unit: event.target.value } : row))} /></td>
+                  <td><input aria-label="Net price" className="input w-24" value={item.netPrice} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, netPrice: event.target.value } : row))} /></td>
+                  <td>
                     <select aria-label="Plant" className="input w-28" value={item.plant} onChange={(event) => setItems(items.map((row, i) => i === index ? { ...row, plant: event.target.value } : row))}>
                       <option value="">None</option>
                       {choices.plants.map((site) => <option key={site.plant} value={site.plant}>{site.plant}</option>)}

@@ -86,7 +86,7 @@ export default function DifferenceList({
 
   return (
     <>
-      <section aria-labelledby="difference-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="difference-selection" className="border border-line bg-surface p-4">
         <h2 id="difference-selection" className="text-sm font-semibold">{t('mi20.selection')}</h2>
         <form method="get" action={ROUTE} className="mt-3 space-y-3">
           <input type="hidden" name="executed" value="1" />
@@ -153,7 +153,7 @@ export default function DifferenceList({
       </section>
 
       {document && (
-        <section aria-labelledby="difference-document" data-difference-document className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="difference-document" data-difference-document className="border border-line bg-surface p-4">
           <h2 id="difference-document" className="text-sm font-semibold">
             {t('mi20.displayTitle')} {document.documentNumber} · {document.fiscalYear}
           </h2>
@@ -184,7 +184,7 @@ export default function DifferenceList({
       )}
 
       {comparison.length > 0 && (
-        <section aria-labelledby="difference-comparison" data-recount-comparison className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="difference-comparison" data-recount-comparison className="border border-line bg-surface p-4">
           <h2 id="difference-comparison" className="text-sm font-semibold">{t('mi20.comparisonTitle')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('mi20.comparisonHint')}</p>
           {comparison.map((group) => (
@@ -197,32 +197,32 @@ export default function DifferenceList({
                 {' · '}{group.reason}
               </p>
               <div className="mt-2 overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="grid-table text-sm">
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="py-1 pr-2">{t('mi20.columnItem')}</th>
-                      <th className="py-1 pr-2">{t('mi20.columnMaterial')}</th>
-                      <th className="py-1 pr-2">{t('mi20.columnStockType')}</th>
-                      <th className="py-1 pr-2">{t('mi20.columnOriginal')}</th>
-                      <th className="py-1 pr-2">{t('mi20.columnRecount')}</th>
-                      <th className="py-1 pr-2">{t('mi20.columnCounter')}</th>
-                      <th className="py-1 pr-2">{t('mi20.columnMaterialDocument')}</th>
+                      <th>{t('mi20.columnItem')}</th>
+                      <th>{t('mi20.columnMaterial')}</th>
+                      <th>{t('mi20.columnStockType')}</th>
+                      <th>{t('mi20.columnOriginal')}</th>
+                      <th>{t('mi20.columnRecount')}</th>
+                      <th>{t('mi20.columnCounter')}</th>
+                      <th>{t('mi20.columnMaterialDocument')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {group.items.map((item) => (
-                      <tr key={item.recountItemNumber} data-recount-comparison-line={item.originalItemNumber} className="border-b border-line/60">
-                        <td className="py-1 pr-2">{item.originalItemNumber}</td>
-                        <td className="py-1 pr-2">{item.materialNumber}</td>
-                        <td className="py-1 pr-2">{item.stockType}</td>
-                        <td className="py-1 pr-2 tabular-nums" data-recount-original>
+                      <tr key={item.recountItemNumber} data-recount-comparison-line={item.originalItemNumber}>
+                        <td>{item.originalItemNumber}</td>
+                        <td>{item.materialNumber}</td>
+                        <td>{item.stockType}</td>
+                        <td className="tabular-nums" data-recount-original>
                           {item.originalBook || '—'} / {item.originalCounted || '—'} / {item.originalDifference || '—'}
                         </td>
-                        <td className="py-1 pr-2 tabular-nums" data-recount-side>
+                        <td className="tabular-nums" data-recount-side>
                           {item.recountBook || '—'} / {item.recountCounted || '—'} / {item.recountDifference || '—'}
                         </td>
-                        <td className="py-1 pr-2">{item.recountCounter || '—'} {item.recountCountDate}</td>
-                        <td className="py-1 pr-2">{item.materialDocumentNumber || '—'}</td>
+                        <td>{item.recountCounter || '—'} {item.recountCountDate}</td>
+                        <td>{item.materialDocumentNumber || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -233,7 +233,7 @@ export default function DifferenceList({
         </section>
       )}
 
-      <section aria-labelledby="difference-grid" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="difference-grid" className="border border-line bg-surface p-4">
         <h2 id="difference-grid" className="text-sm font-semibold">{t('mi20.title')}</h2>
         {excludedOtherCurrency > 0 && (
           <p className="mt-2 text-sm text-ink-soft" data-difference-other-currency>{t('mi20.excludedOther', { count: excludedOtherCurrency })}</p>
@@ -245,49 +245,49 @@ export default function DifferenceList({
           <p className="mt-3 text-sm text-ink-soft" data-difference-empty>{t('mi20.empty')}</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="py-1 pr-2">{t('mi20.columnDocument')}</th>
-                  <th className="py-1 pr-2">{t('mi20.columnItem')}</th>
-                  <th className="py-1 pr-2">{t('mi20.columnMaterial')}</th>
-                  <th className="py-1 pr-2">{t('mi20.columnStockType')}</th>
-                  <th className="py-1 pr-2 text-right">{t('mi20.columnBook')}</th>
-                  <th className="py-1 pr-2 text-right">{t('mi20.columnCounted')}</th>
-                  <th className="py-1 pr-2 text-right">{t('mi20.columnDifference')}</th>
-                  <th className="py-1 pr-2">{t('mi20.columnDirection')}</th>
-                  <th className="py-1 pr-2 text-right">{t('mi20.columnMonetary')}</th>
-                  <th className="py-1 pr-2">{t('mi20.columnStatus')}</th>
-                  <th className="py-1 pr-2">{t('mi20.columnCountDate')}</th>
-                  <th className="py-1 pr-2">{t('mi20.columnPosting')}</th>
+                  <th>{t('mi20.columnDocument')}</th>
+                  <th>{t('mi20.columnItem')}</th>
+                  <th>{t('mi20.columnMaterial')}</th>
+                  <th>{t('mi20.columnStockType')}</th>
+                  <th className="text-right">{t('mi20.columnBook')}</th>
+                  <th className="text-right">{t('mi20.columnCounted')}</th>
+                  <th className="text-right">{t('mi20.columnDifference')}</th>
+                  <th>{t('mi20.columnDirection')}</th>
+                  <th className="text-right">{t('mi20.columnMonetary')}</th>
+                  <th>{t('mi20.columnStatus')}</th>
+                  <th>{t('mi20.columnCountDate')}</th>
+                  <th>{t('mi20.columnPosting')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={`${row.documentNumber}/${row.itemNumber}`} data-difference-row={row.itemNumber} className="border-t border-line align-top">
-                    <td className="py-1 pr-2">
+                  <tr key={`${row.documentNumber}/${row.itemNumber}`} data-difference-row={row.itemNumber} className="align-top">
+                    <td>
                       <Link className="link" href={queryOf(selection, { doc: row.documentNumber, year: String(row.fiscalYear) })}>
                         {row.documentNumber}
                       </Link>
                       <span className="block text-xs text-ink-faint">{row.plant}{row.storageLocation ? ` / ${row.storageLocation}` : ''}</span>
                     </td>
-                    <td className="py-1 pr-2">{row.itemNumber}</td>
-                    <td className="py-1 pr-2">
+                    <td>{row.itemNumber}</td>
+                    <td>
                       {row.materialNumber}
                       <span className="block text-xs text-ink-faint">{row.description}{row.batch ? ` · Batch ${row.batch}` : ''}</span>
                     </td>
-                    <td className="py-1 pr-2">{row.stockType}</td>
-                    <td className="py-1 pr-2 text-right tabular-nums" data-difference-book>
+                    <td>{row.stockType}</td>
+                    <td className="text-right tabular-nums" data-difference-book>
                       {row.bookQuantity ?? '—'} {row.bookUnit ?? ''}
                     </td>
-                    <td className="py-1 pr-2 text-right tabular-nums">
+                    <td className="text-right tabular-nums">
                       {row.baseQuantity ?? '—'} {row.baseUnit}
                     </td>
-                    <td className="py-1 pr-2 text-right tabular-nums" data-difference-quantity>{row.differenceQuantity ?? '—'}</td>
-                    <td className="py-1 pr-2" data-difference-direction={row.direction}>
+                    <td className="text-right tabular-nums" data-difference-quantity>{row.differenceQuantity ?? '—'}</td>
+                    <td data-difference-direction={row.direction}>
                       {row.direction === 'SHORTAGE' ? t('mi20.shortage') : row.direction === 'SURPLUS' ? t('mi20.surplus') : t('mi20.none')}
                     </td>
-                    <td className="py-1 pr-2 text-right tabular-nums" data-difference-monetary>
+                    <td className="text-right tabular-nums" data-difference-monetary>
                       {row.monetaryDifference === null
                         ? t('mi20.unavailable')
                         : `${row.monetaryDifference} ${row.currency ?? ''}`}
@@ -296,13 +296,13 @@ export default function DifferenceList({
                         <span className="block text-xs text-ink-faint">{t('mi20.currentPrice')}</span>
                       )}
                     </td>
-                    <td className="py-1 pr-2" data-difference-label>{t(LABEL_KEY[row.label])}</td>
-                    <td className="py-1 pr-2">
+                    <td data-difference-label>{t(LABEL_KEY[row.label])}</td>
+                    <td>
                       {row.countDate ?? '—'}
                       <span className="block text-xs text-ink-faint">{row.plannedCountDate}</span>
                       {row.counterName && <span className="block text-xs text-ink-faint">{row.counterName}</span>}
                     </td>
-                    <td className="py-1 pr-2" data-difference-posting="none">{t('mi20.notPosted')}</td>
+                    <td data-difference-posting="none">{t('mi20.notPosted')}</td>
                   </tr>
                 ))}
               </tbody>

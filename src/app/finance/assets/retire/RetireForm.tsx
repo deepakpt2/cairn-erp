@@ -63,7 +63,7 @@ export default function RetireForm({ canRetire, today, assets }: {
   );
   return (
     <>
-      <section aria-labelledby="rt-select" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="rt-select" className="border border-line bg-surface p-4">
         <h2 id="rt-select" className="text-sm font-semibold">Select asset</h2>
         <label className="mt-3 block"><span className={labelCls}>Standing assets and book values</span>
           <select className={inputCls} defaultValue="" onChange={pickAsset}>
@@ -84,7 +84,7 @@ export default function RetireForm({ canRetire, today, assets }: {
         )}
       </section>
 
-      <section aria-labelledby="rt-entry" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="rt-entry" className="border border-line bg-surface p-4">
         <h2 id="rt-entry" className="text-sm font-semibold">Retirement details</h2>
         <form className="mt-3">
           <input type="hidden" name="requestKey" value={requestKey} />
@@ -162,7 +162,7 @@ export default function RetireForm({ canRetire, today, assets }: {
         </form>
       </section>
 
-      <section aria-labelledby="rt-preview" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="rt-preview" className="border border-line bg-surface p-4">
         <h2 id="rt-preview" className="text-sm font-semibold">Simulation preview</h2>
         {!preview ? (
           <p className="mt-2 text-sm text-ink-soft">Simulate to preview the determined posting before anything is written.</p>
@@ -172,31 +172,31 @@ export default function RetireForm({ canRetire, today, assets }: {
               {preview.assetDescription} · Class {preview.assetClass} · Acquired {preview.acquiredValue.toFixed(2)} ·
               already retired {preview.alreadyRetiredValue.toFixed(2)} · accumulated depreciation {preview.accumulatedDepreciation.toFixed(2)} {preview.currency}
             </p>
-            <table className="mt-2 min-w-full text-left">
+            <table className="grid-table mt-2 text-left">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Account</th><th className="px-2 py-2">Debit</th><th className="px-2 py-2">Credit</th>
+                  <th>Account</th><th>Debit</th><th>Credit</th>
                 </tr>
               </thead>
               <tbody>
                 {preview.depreciationReversed > 0 && (
-                  <tr className="border-t border-line">
-                    <td className="px-2 py-2">{preview.accumAccount} (accumulated depreciation)</td>
-                    <td className="px-2 py-2">{preview.depreciationReversed.toFixed(2)} {preview.currency}</td>
-                    <td className="px-2 py-2">—</td>
+                  <tr>
+                    <td>{preview.accumAccount} (accumulated depreciation)</td>
+                    <td className="num">{preview.depreciationReversed.toFixed(2)} {preview.currency}</td>
+                    <td>—</td>
                   </tr>
                 )}
                 {preview.lossAmount > 0 && (
-                  <tr className="border-t border-line">
-                    <td className="px-2 py-2">{preview.lossAccount} (loss on retirement)</td>
-                    <td className="px-2 py-2">{preview.lossAmount.toFixed(2)} {preview.currency}</td>
-                    <td className="px-2 py-2">—</td>
+                  <tr>
+                    <td>{preview.lossAccount} (loss on retirement)</td>
+                    <td className="num">{preview.lossAmount.toFixed(2)} {preview.currency}</td>
+                    <td>—</td>
                   </tr>
                 )}
-                <tr className="border-t border-line">
-                  <td className="px-2 py-2">{preview.reconAccount} (asset)</td>
-                  <td className="px-2 py-2">—</td>
-                  <td className="px-2 py-2">{preview.retiredAcquisitionValue.toFixed(2)} {preview.currency}</td>
+                <tr>
+                  <td>{preview.reconAccount} (asset)</td>
+                  <td>—</td>
+                  <td className="num">{preview.retiredAcquisitionValue.toFixed(2)} {preview.currency}</td>
                 </tr>
               </tbody>
             </table>
@@ -211,7 +211,7 @@ export default function RetireForm({ canRetire, today, assets }: {
         )}
       </section>
 
-      <section aria-labelledby="rt-reverse" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="rt-reverse" className="border border-line bg-surface p-4">
         <h2 id="rt-reverse" className="text-sm font-semibold">Reverse a retirement</h2>
         {reverseState.message && (
           <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>

@@ -91,26 +91,26 @@ export default async function SchedulingAgreementDisplayPage({ searchParams }: {
             {document.documentType} · {document.supplierNumber} · {document.companyCode} · {document.currency} · Release {document.releaseStatus}
           </p>
           <p>Valid {document.validityStart} – {document.validityEnd}.</p>
-          <table className="w-full">
+          <table className="grid-table">
             <thead>
-              <tr className="border-b text-left">
-                <th className="px-2 py-2">Item</th>
-                <th className="px-2 py-2">Text</th>
-                <th className="px-2 py-2">Target</th>
-                <th className="px-2 py-2">Price</th>
-                <th className="px-2 py-2">Scheduled</th>
-                <th className="px-2 py-2">Remaining</th>
+              <tr className="text-left">
+                <th>Item</th>
+                <th>Text</th>
+                <th>Target</th>
+                <th>Price</th>
+                <th>Scheduled</th>
+                <th>Remaining</th>
               </tr>
             </thead>
             <tbody>
               {document.items.map((item) => (
-                <tr key={item.itemNumber} className="border-b">
-                  <td className="px-2 py-2">{item.itemNumber}</td>
-                  <td className="px-2 py-2">{item.shortText}</td>
-                  <td className="px-2 py-2">{item.targetQuantity} {item.unit}</td>
-                  <td className="px-2 py-2">{item.netPrice}</td>
-                  <td className="px-2 py-2">{item.scheduledQuantity}</td>
-                  <td className="px-2 py-2">{item.remainingQuantity}</td>
+                <tr key={item.itemNumber}>
+                  <td>{item.itemNumber}</td>
+                  <td>{item.shortText}</td>
+                  <td>{item.targetQuantity} {item.unit}</td>
+                  <td>{item.netPrice}</td>
+                  <td>{item.scheduledQuantity}</td>
+                  <td>{item.remainingQuantity}</td>
                 </tr>
               ))}
             </tbody>
@@ -136,26 +136,26 @@ export default async function SchedulingAgreementDisplayPage({ searchParams }: {
         </section>
       )}
       {!document && opened.rows.length > 0 && (
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b text-left">
-              <th className="px-2 py-2">Agreement</th>
-              <th className="px-2 py-2">Type</th>
-              <th className="px-2 py-2">Supplier</th>
-              <th className="px-2 py-2">Validity</th>
-              <th className="px-2 py-2">Release</th>
+            <tr className="text-left">
+              <th>Agreement</th>
+              <th>Type</th>
+              <th>Supplier</th>
+              <th>Validity</th>
+              <th>Release</th>
             </tr>
           </thead>
           <tbody>
             {opened.rows.map((row) => (
-              <tr key={row.agreementNumber} className="border-b">
-                <td className="px-2 py-2">
+              <tr key={row.agreementNumber}>
+                <td>
                   <Link className="underline" href={`${SCHEDULING_AGREEMENT_DISPLAY_ROUTE}?agreement=${encodeURIComponent(row.agreementNumber)}`}>{row.agreementNumber}</Link>
                 </td>
-                <td className="px-2 py-2">{row.documentType}</td>
-                <td className="px-2 py-2">{row.supplierNumber}</td>
-                <td className="px-2 py-2">{row.validityStart} – {row.validityEnd}</td>
-                <td className="px-2 py-2">{row.releaseStatus}</td>
+                <td>{row.documentType}</td>
+                <td>{row.supplierNumber}</td>
+                <td>{row.validityStart} – {row.validityEnd}</td>
+                <td>{row.releaseStatus}</td>
               </tr>
             ))}
           </tbody>

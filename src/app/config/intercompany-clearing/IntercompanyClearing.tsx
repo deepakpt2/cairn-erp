@@ -24,7 +24,7 @@ export function IntercompanyClearing({ pairs, companies, canMaintain }: {
 
   return (
     <>
-      <section aria-labelledby="icc-pairs" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="icc-pairs" className="border border-line bg-surface p-4">
         <h2 id="icc-pairs" className="text-sm font-semibold">{t('icCfg.pairs')}</h2>
         {state.message && (
           <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -35,26 +35,26 @@ export function IntercompanyClearing({ pairs, companies, canMaintain }: {
           <p className="mt-2 text-sm text-ink-soft">{t('icCfg.none')}</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">{t('icCfg.sending')}</th>
-                  <th className="px-2 py-2">{t('icCfg.receiving')}</th>
-                  <th className="px-2 py-2">{t('icCfg.sendingGl')}</th>
-                  <th className="px-2 py-2">{t('icCfg.receivingGl')}</th>
-                  <th className="px-2 py-2">{t('icCfg.currency')}</th>
-                  <th className="px-2 py-2" />
+                  <th>{t('icCfg.sending')}</th>
+                  <th>{t('icCfg.receiving')}</th>
+                  <th>{t('icCfg.sendingGl')}</th>
+                  <th>{t('icCfg.receivingGl')}</th>
+                  <th>{t('icCfg.currency')}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {pairs.map((pair) => (
-                  <tr key={`${pair.sendingCompanyCode}-${pair.receivingCompanyCode}`} className="border-t border-line">
-                    <td className="px-2 py-2">{pair.sendingCompanyCode}</td>
-                    <td className="px-2 py-2">{pair.receivingCompanyCode}</td>
-                    <td className="px-2 py-2">{pair.sendingClearingGl ?? t('icCfg.companyAccount')}</td>
-                    <td className="px-2 py-2">{pair.receivingClearingGl ?? t('icCfg.companyAccount')}</td>
-                    <td className="px-2 py-2">{pair.defaultCurrency ?? t('icCfg.companyCurrency')}</td>
-                    <td className="px-2 py-2">
+                  <tr key={`${pair.sendingCompanyCode}-${pair.receivingCompanyCode}`}>
+                    <td>{pair.sendingCompanyCode}</td>
+                    <td>{pair.receivingCompanyCode}</td>
+                    <td>{pair.sendingClearingGl ?? t('icCfg.companyAccount')}</td>
+                    <td>{pair.receivingClearingGl ?? t('icCfg.companyAccount')}</td>
+                    <td>{pair.defaultCurrency ?? t('icCfg.companyCurrency')}</td>
+                    <td>
                       <DeletePair pair={pair} action={deleteAction} canMaintain={canMaintain} deleting={deleting} />
                     </td>
                   </tr>
@@ -125,7 +125,7 @@ function DefinePair({
   const lock = useChangeLock('INTERCOMPANY_PAIR', `${sending}/${receiving}`, ACTIVITY, engaged && existing);
   const blocked = existing && lock?.mode === 'DISPLAY';
   return (
-    <section aria-labelledby="icc-new" className="rounded-card border border-line bg-surface p-4 shadow-card">
+    <section aria-labelledby="icc-new" className="border border-line bg-surface p-4">
       <h2 id="icc-new" className="text-sm font-semibold">{t('icCfg.define')}</h2>
       <form action={action} className="mt-3 flex flex-wrap items-end gap-3" onFocus={() => setEngaged(true)} onSubmit={(event) => { if (existing && lock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
         <label className="block">

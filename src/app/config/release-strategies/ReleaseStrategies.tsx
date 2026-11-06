@@ -137,7 +137,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
         </p>
       )}
 
-      <section aria-labelledby="release-grid" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="release-grid" className="border border-line bg-surface p-4">
         <h2 id="release-grid" className="text-sm font-semibold">Release groups and strategies</h2>
         {data.groups.length === 0 && data.strategies.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No release strategies stand yet. Define the first below.</p>
@@ -163,20 +163,20 @@ export default function ReleaseStrategies({ data, canMaintain }: {
                     </>
                   )}
                 </p>
-                <table className="mt-1 w-full text-sm">
+                <table className="grid-table mt-1 text-sm">
                   <tbody>
                     {data.strategies.filter((s) => s.groupCode === group.groupCode).map((strategy) => (
-                      <tr key={strategy.strategyCode} className="border-b border-line/60">
-                        <td className="px-2 py-2">{strategy.strategyCode}</td>
-                        <td className="px-2 py-2">{strategy.description}</td>
-                        <td className="px-2 py-2">{strategy.classType} / {strategy.className}</td>
-                        <td className="px-2 py-2">
+                      <tr key={strategy.strategyCode}>
+                        <td>{strategy.strategyCode}</td>
+                        <td>{strategy.description}</td>
+                        <td>{strategy.classType} / {strategy.className}</td>
+                        <td>
                           {strategy.criteria.map((c) => `${c.characteristicName} ${c.operator} ${c.valueFrom}`).join('; ') || '—'}
                         </td>
-                        <td className="px-2 py-2">{strategy.steps.join(' → ') || '—'}</td>
-                        <td className="px-2 py-2">{strategy.lifecycleStatus}</td>
+                        <td>{strategy.steps.join(' → ') || '—'}</td>
+                        <td>{strategy.lifecycleStatus}</td>
                         {canMaintain && (
-                          <td className="px-2 py-2">
+                          <td>
                             <div className="flex flex-wrap gap-2">
                               <button type="button" className="btn btn-default min-h-11 sm:min-h-8"
                                 onClick={() => setStrategyEditor({
@@ -213,7 +213,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
 
       {canMaintain && (
         <>
-          <section aria-labelledby="release-group-editor" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <section aria-labelledby="release-group-editor" className="border border-line bg-surface p-4">
             <h2 id="release-group-editor" className="text-sm font-semibold">
               {groupEditor.mode === 'CREATE' ? 'New release group' : `Change group ${groupEditor.groupCode}`}
             </h2>
@@ -240,7 +240,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
                     onChange={(event) => setGroupEditor({ ...groupEditor, description: event.target.value })} />
                 </label>
               </div>
-              <fieldset className="mt-4 rounded-card border border-line p-3">
+              <fieldset className="mt-4 border border-line p-3">
                 <legend className="px-1 text-xs font-medium uppercase tracking-wide text-ink-faint">Release codes</legend>
                 <div className="space-y-2">
                   {groupEditor.codes.map((row, index) => (
@@ -282,7 +282,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
             </form>
           </section>
 
-          <section aria-labelledby="release-editor" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <section aria-labelledby="release-editor" className="border border-line bg-surface p-4">
             <h2 id="release-editor" className="text-sm font-semibold">
               {strategyEditor.mode === 'CREATE' ? 'New release strategy' : `Change strategy ${strategyEditor.strategyCode}`}
             </h2>
@@ -331,7 +331,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
                 </label>
               </div>
 
-              <fieldset className="mt-4 rounded-card border border-line p-3">
+              <fieldset className="mt-4 border border-line p-3">
                 <legend className="px-1 text-xs font-medium uppercase tracking-wide text-ink-faint">Criteria</legend>
                 <div className="space-y-2">
                   {strategyEditor.criteria.map((row, index) => (
@@ -381,7 +381,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
                 </button>
               </fieldset>
 
-              <fieldset className="mt-4 rounded-card border border-line p-3">
+              <fieldset className="mt-4 border border-line p-3">
                 <legend className="px-1 text-xs font-medium uppercase tracking-wide text-ink-faint">Release codes in sequence</legend>
                 <div className="space-y-2">
                   {strategyEditor.steps.map((code, index) => (

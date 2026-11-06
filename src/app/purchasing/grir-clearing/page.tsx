@@ -91,7 +91,7 @@ export default async function GrIrClearingPage({ searchParams }: {
 
       {!canView && <p className="text-sm text-red-700" role="alert">{t('grirClearing.capabilityMissing')}</p>}
 
-      <section aria-labelledby="grir-clearing-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="grir-clearing-selection" className="border border-line bg-surface p-4">
         <h2 id="grir-clearing-selection" className="text-sm font-semibold">{t('grirClearing.selection')}</h2>
         <p className="mt-1 text-xs text-ink-soft" data-grir-check-writes-nothing>{t('grirClearing.checkWritesNothing')}</p>
         <form method="get" action={GRIR_CLEARING_ROUTE} className="mt-3 space-y-3">
@@ -133,44 +133,44 @@ export default async function GrIrClearingPage({ searchParams }: {
         {listError && <p className="mt-3 text-sm text-red-700" role="alert" data-grir-error>{listError}</p>}
       </section>
 
-      <section aria-labelledby="grir-clearing-residuals" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="grir-clearing-residuals" className="border border-line bg-surface p-4">
         <h2 id="grir-clearing-residuals" className="text-sm font-semibold">{t('grirClearing.residuals')}</h2>
         <p className="mt-1 text-xs text-ink-soft" data-grir-no-stock>{t('grirClearing.noStock')}</p>
         {rows.length === 0 ? (
           <p className="mt-3 text-sm text-ink-soft" data-grir-empty>{t('grirClearing.empty')}</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
                 <tr className="text-left text-ink-soft">
-                  <th className="px-2 py-2">{t('grirClearing.order')}</th>
-                  <th className="px-2 py-2">{t('grirClearing.material')}</th>
-                  <th className="px-2 py-2">{t('grirClearing.quantities')}</th>
-                  <th className="px-2 py-2">{t('grirClearing.residual')}</th>
-                  <th className="px-2 py-2">{t('grirClearing.accounts')}</th>
-                  <th className="px-2 py-2">{t('grirClearing.clear')}</th>
+                  <th>{t('grirClearing.order')}</th>
+                  <th>{t('grirClearing.material')}</th>
+                  <th>{t('grirClearing.quantities')}</th>
+                  <th>{t('grirClearing.residual')}</th>
+                  <th>{t('grirClearing.accounts')}</th>
+                  <th>{t('grirClearing.clear')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={`${row.orderNumber}-${row.itemNumber}`} className="border-t border-line align-top" data-grir-row={row.orderNumber} data-grir-item={row.itemNumber}>
-                    <td className="px-2 py-2">
+                  <tr key={`${row.orderNumber}-${row.itemNumber}`} className="align-top" data-grir-row={row.orderNumber} data-grir-item={row.itemNumber}>
+                    <td>
                       {row.orderNumber} / {row.itemNumber}
                       <div className="text-ink-soft">{row.companyCode} · {row.plant} · {row.supplier}</div>
                     </td>
-                    <td className="px-2 py-2">{row.materialNumber ?? '—'}<div className="text-ink-soft">{row.shortText}</div></td>
-                    <td className="px-2 py-2">
+                    <td>{row.materialNumber ?? '—'}<div className="text-ink-soft">{row.shortText}</div></td>
+                    <td>
                       {row.receivedQuantity} / {row.invoicedQuantity} {row.unit}
                       <div className="text-ink-soft">{t('grirClearing.openQuantity')} {row.openQuantity}</div>
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       {row.remaining.toFixed(2)} {row.currency}
                       <div className="text-ink-soft">{row.surplus === 'DELIVERY' ? t('grirClearing.delivery') : t('grirClearing.invoice')} · {row.category === 'QUANTITY' ? t('grirClearing.quantityResidual') : t('grirClearing.valueResidual')}</div>
                       {row.furtherActivity && <div className="text-ink-soft" data-grir-further>{row.furtherActivity}</div>}
                       {row.refusal && <div className="text-red-700" data-grir-refusal>{row.refusal}</div>}
                     </td>
-                    <td className="px-2 py-2">{row.grIrAccount ?? '—'} / {row.offsetAccount ?? '—'}</td>
-                    <td className="px-2 py-2">
+                    <td>{row.grIrAccount ?? '—'} / {row.offsetAccount ?? '—'}</td>
+                    <td>
                       {canPost && row.eligible ? (
                         <ClearResidualForm
                           orderNumber={row.orderNumber}
@@ -201,7 +201,7 @@ export default async function GrIrClearingPage({ searchParams }: {
         )}
       </section>
 
-      <section aria-labelledby="grir-clearing-posted" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="grir-clearing-posted" className="border border-line bg-surface p-4">
         <h2 id="grir-clearing-posted" className="text-sm font-semibold">{t('grirClearing.posted')}</h2>
         {posted.length === 0 ? (
           <p className="mt-3 text-sm text-ink-soft" data-grir-posted-empty>{t('grirClearing.noPosting')}</p>

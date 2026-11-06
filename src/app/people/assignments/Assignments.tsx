@@ -236,32 +236,32 @@ export default function Assignments(props: Props) {
             Nothing here is overwritten. A closed row keeps exactly what it said when it was written, which is
             what a report of a past date reads.
           </p>
-          <table className="mt-2 w-full text-xs">
+          <table className="grid-table mt-2 text-xs">
             <thead>
               <tr className="text-left text-ink-faint">
-                <th className="py-1">From</th><th>To</th><th>Position</th><th>Unit</th><th>Cost centre</th><th>Written by</th>
+                <th>From</th><th>To</th><th>Position</th><th>Unit</th><th>Cost centre</th><th>Written by</th>
               </tr>
             </thead>
             <tbody>
               {history.map((row) => (
-                <tr key={row.validFrom} className="border-t border-line align-top">
-                  <td className="py-1 pr-2">{row.validFrom}</td>
-                  <td className="py-1 pr-2">{row.validTo ?? <span className="text-ink-soft">open</span>}</td>
-                  <td className="py-1 pr-2">
+                <tr key={row.validFrom} className="align-top">
+                  <td>{row.validFrom}</td>
+                  <td>{row.validTo ?? <span className="text-ink-soft">open</span>}</td>
+                  <td>
                     <span className="code">{row.positionCode}</span>
                     {row.positionTitle ? ` · ${row.positionTitle}` : ''}
                   </td>
-                  <td className="py-1 pr-2 text-ink-soft">
+                  <td className="text-ink-soft">
                     {row.orgUnitCode
                       ? <Link className="link" href={`/people/organization?unit=${row.orgUnitCode}`}>{row.orgUnitCode}</Link>
                       : '—'}
                   </td>
-                  <td className="py-1 pr-2">
+                  <td>
                     <span className="code">{row.costCenter}</span>
                     {row.costCenterName ? <span className="text-ink-soft"> · {row.costCenterName}</span> : null}
                     <span className="text-ink-faint"> · {row.controllingArea}</span>
                   </td>
-                  <td className="py-1 text-ink-faint">{row.createdBy}</td>
+                  <td className="text-ink-faint">{row.createdBy}</td>
                 </tr>
               ))}
             </tbody>
@@ -280,28 +280,28 @@ export default function Assignments(props: Props) {
         {assignments.length === 0 ? (
           <p className="mt-1 text-xs text-ink-soft">Nothing matches. Start one below, or clear the search.</p>
         ) : (
-          <table className="mt-2 w-full text-xs">
+          <table className="grid-table mt-2 text-xs">
             <thead>
               <tr className="text-left text-ink-faint">
-                <th className="py-1">Employee</th><th>Position</th><th>Cost centre</th><th className="py-1">Span</th>
+                <th>Employee</th><th>Position</th><th>Cost centre</th><th>Span</th>
               </tr>
             </thead>
             <tbody>
               {assignments.map((row) => (
-                <tr key={`${row.personnelNumber}/${row.validFrom}`} className="border-t border-line align-top">
-                  <td className="py-1 pr-2">
+                <tr key={`${row.personnelNumber}/${row.validFrom}`} className="align-top">
+                  <td>
                     <Link className="link" href={`/people/assignments?employee=${row.personnelNumber}`}>
                       <span className="code">{row.personnelNumber}</span>
                     </Link>
                     <span className="text-ink-soft"> · {row.employeeName}</span>
                   </td>
-                  <td className="py-1 pr-2">
+                  <td>
                     <span className="code">{row.positionCode}</span>
                     {row.positionTitle ? <span className="text-ink-soft"> · {row.positionTitle}</span> : null}
                     {row.orgUnitCode ? <span className="text-ink-faint"> · {row.orgUnitCode}</span> : null}
                   </td>
-                  <td className="py-1 pr-2"><span className="code">{row.costCenter}</span><span className="text-ink-faint"> · {row.controllingArea}</span></td>
-                  <td className="py-1">
+                  <td><span className="code">{row.costCenter}</span><span className="text-ink-faint"> · {row.controllingArea}</span></td>
+                  <td>
                     {row.validFrom} → {row.validTo ?? 'open'}
                     {row.isCurrent ? <span className="ml-1 text-ink-faint">standing</span> : null}
                   </td>

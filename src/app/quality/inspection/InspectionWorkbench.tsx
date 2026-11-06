@@ -237,18 +237,18 @@ export default function InspectionWorkbench({
           </fieldset></form>
 
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-xs text-ink-faint">
-                  <th className="py-1">Code</th><th>Description</th><th>Type</th>
+                <tr className="text-left text-xs text-ink-faint">
+                  <th>Code</th><th>Description</th><th>Type</th>
                   <th className="text-right">Tolerance +</th><th className="text-right">Tolerance −</th>
                   <th>Unit</th>
                 </tr>
               </thead>
               <tbody>
                 {characteristics.map((c) => (
-                  <tr key={c.characteristicCode} className="border-t border-line align-top">
-                    <td className="py-1">{c.characteristicCode}</td>
+                  <tr key={c.characteristicCode} className="align-top">
+                    <td>{c.characteristicCode}</td>
                     <td>{c.description}</td>
                     <td>{c.characteristicType}</td>
                     <td className="text-right">{c.tolerancePlus ?? '—'}</td>
@@ -326,10 +326,10 @@ export default function InspectionWorkbench({
           </fieldset></form>
 
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-xs text-ink-faint">
-                  <th className="py-1">Characteristic</th><th>Description</th><th>Type</th>
+                <tr className="text-left text-xs text-ink-faint">
+                  <th>Characteristic</th><th>Description</th><th>Type</th>
                   <th className="text-right">Value</th><th>Unit</th>
                   <th>Status</th><th>Recorded</th>
                 </tr>
@@ -338,8 +338,8 @@ export default function InspectionWorkbench({
                 {characteristics.map((c) => {
                   const r = lotsResultsByCharacteristic.get(c.characteristicCode);
                   return (
-                    <tr key={c.characteristicCode} className="border-t border-line align-top">
-                      <td className="py-1">{c.characteristicCode}</td>
+                    <tr key={c.characteristicCode} className="align-top">
+                      <td>{c.characteristicCode}</td>
                       <td>{c.description}</td>
                       <td>{c.characteristicType}</td>
                       <td className="text-right">{r ? r.resultValue : '—'}</td>

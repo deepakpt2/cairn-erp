@@ -27,7 +27,7 @@ export default function VendorDownPaymentRequest({ requests, canEnter, today }: 
 
   return (
     <>
-      <section aria-labelledby="vdpr-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="vdpr-header" className="border border-line bg-surface p-4">
         <h2 id="vdpr-header" className="text-sm font-semibold">Request details</h2>
         <form action={action}>
           <input type="hidden" name="requestKey" value="" />
@@ -89,35 +89,35 @@ export default function VendorDownPaymentRequest({ requests, canEnter, today }: 
         </form>
       </section>
 
-      <section aria-labelledby="vdpr-open" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="vdpr-open" className="border border-line bg-surface p-4">
         <h2 id="vdpr-open" className="text-sm font-semibold">Open requests</h2>
         <Message state={state} />
         {requests.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No down-payment requests stand open.</p>
         ) : (
           <div className="mt-2 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Request</th><th className="px-2 py-2">Vendor</th>
-                  <th className="px-2 py-2">Due date</th><th className="px-2 py-2">Currency</th>
-                  <th className="px-2 py-2">Requested</th><th className="px-2 py-2">Fulfilled</th>
-                  <th className="px-2 py-2">Remaining</th><th className="px-2 py-2">Target</th>
-                  <th className="px-2 py-2">Status</th>
+                  <th>Request</th><th>Vendor</th>
+                  <th>Due date</th><th>Currency</th>
+                  <th>Requested</th><th>Fulfilled</th>
+                  <th>Remaining</th><th>Target</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {requests.map((r) => (
-                  <tr key={r.requestNumber} className="border-t border-line">
-                    <td className="px-2 py-2">{r.requestNumber}</td>
-                    <td className="px-2 py-2">{r.vendor}</td>
-                    <td className="px-2 py-2">{r.dueDate}</td>
-                    <td className="px-2 py-2">{r.currency}</td>
-                    <td className="px-2 py-2">{r.requestedAmount.toFixed(2)}</td>
-                    <td className="px-2 py-2">{r.fulfilledAmount.toFixed(2)}</td>
-                    <td className="px-2 py-2">{r.remainingAmount.toFixed(2)}</td>
-                    <td className="px-2 py-2">{r.targetIndicator}</td>
-                    <td className="px-2 py-2">{r.status}</td>
+                  <tr key={r.requestNumber}>
+                    <td>{r.requestNumber}</td>
+                    <td>{r.vendor}</td>
+                    <td>{r.dueDate}</td>
+                    <td>{r.currency}</td>
+                    <td className="num">{r.requestedAmount.toFixed(2)}</td>
+                    <td className="num">{r.fulfilledAmount.toFixed(2)}</td>
+                    <td className="num">{r.remainingAmount.toFixed(2)}</td>
+                    <td>{r.targetIndicator}</td>
+                    <td>{r.status}</td>
                   </tr>
                 ))}
               </tbody>

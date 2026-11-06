@@ -75,30 +75,30 @@ export default function AssignPlant({
           <p className="text-sm text-ink-soft">No purchasing organisation is assigned to a plant.</p>
         ) : (
           <div className="overflow-x-auto border border-line">
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead className="bg-paper text-left text-ink-soft">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Purchasing organisation</th>
-                  <th className="px-3 py-2 font-medium">Plant</th>
-                  <th className="px-3 py-2 font-medium">Plant company code</th>
-                  <th className="px-3 py-2 font-medium">Cited</th>
+                  <th className="font-medium">Purchasing organisation</th>
+                  <th className="font-medium">Plant</th>
+                  <th className="font-medium">Plant company code</th>
+                  <th className="font-medium">Cited</th>
                 </tr>
               </thead>
               <tbody>
                 {assignments.map((item) => (
-                  <tr key={`${item.purchasingOrg}/${item.plant}`} className="border-t border-line">
-                    <td className="px-3 py-2">
+                  <tr key={`${item.purchasingOrg}/${item.plant}`}>
+                    <td>
                       <button type="button" className="code text-left underline" onClick={() => setSelected(`${item.purchasingOrg}/${item.plant}`)}>
                         {item.purchasingOrg}
                       </button>
                       <span className="ms-2 text-ink-soft">{item.purchasingOrgName}</span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td>
                       <span className="code">{item.plant}</span>
                       <span className="ms-2 text-ink-soft">{item.plantName}</span>
                     </td>
-                    <td className="px-3 py-2">{item.plantCompanyCode ?? '—'}</td>
-                    <td className="px-3 py-2">{item.citations.purchaseOrders + item.citations.requestsForQuotation + item.citations.sourceList + item.citations.infoRecords + item.citations.quotas || 'No'}</td>
+                    <td>{item.plantCompanyCode ?? '—'}</td>
+                    <td>{item.citations.purchaseOrders + item.citations.requestsForQuotation + item.citations.sourceList + item.citations.infoRecords + item.citations.quotas || 'No'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -227,34 +227,34 @@ export function ControllingAreaCompanyAssignmentUI({
             </div>
 
             <div className="hidden overflow-x-auto sm:block">
-              <table className="min-w-[57.5rem] w-full border-collapse text-sm" aria-label={t('controllingArea.assignmentListTitle')}>
+              <table className="grid-table min-w-[57.5rem] border-collapse text-sm" aria-label={t('controllingArea.assignmentListTitle')}>
                 <thead className="bg-[#eef1f4] text-[#33414c]">
                   <tr className="border-y border-[#c4ccd2]">
-                    <th className="w-36 border-r border-[#cbd1d6] px-3 py-2 text-left">{t('controllingArea.code')}</th>
-                    <th className="w-44 px-3 py-2 text-left">{t('controllingArea.assignmentControl')}</th>
-                    <th className="w-36 border-r border-[#cbd1d6] px-3 py-2 text-left">{t('cc.code')}</th>
-                    <th className="min-w-48 px-3 py-2 text-left">{t('controllingArea.assignmentOperationalChart')}</th>
-                    <th className="w-40 px-3 py-2 text-left">{t('controllingArea.fiscalYearVariant')}</th>
-                    <th className="w-36 px-3 py-2 text-left">{t('controllingArea.assignmentCurrency')}</th>
-                    <th className="w-32 px-3 py-2 text-right">{t('controllingArea.assignmentActions')}</th>
+                    <th className="w-36 border-r border-[#cbd1d6] text-left">{t('controllingArea.code')}</th>
+                    <th className="w-44 text-left">{t('controllingArea.assignmentControl')}</th>
+                    <th className="w-36 border-r border-[#cbd1d6] text-left">{t('cc.code')}</th>
+                    <th className="min-w-48 text-left">{t('controllingArea.assignmentOperationalChart')}</th>
+                    <th className="w-40 text-left">{t('controllingArea.fiscalYearVariant')}</th>
+                    <th className="w-36 text-left">{t('controllingArea.assignmentCurrency')}</th>
+                    <th className="w-32 text-right">{t('controllingArea.assignmentActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {assignments.map((item) => (
-                    <tr key={`${item.controllingArea}/${item.companyCode}`} className="border-b border-[#d6dce1] hover:bg-[#f8fbfd]">
-                      <td className="border-r border-[#e1e5e8] px-3 py-2">
+                    <tr key={`${item.controllingArea}/${item.companyCode}`} className="border-[#d6dce1] hover:bg-[#f8fbfd]">
+                      <td className="border-r border-[#e1e5e8]">
                         <span className="code font-semibold">{item.controllingArea}</span>
                         <span className="mt-0.5 block text-xs text-ink-soft">{item.controllingAreaName || t('controllingArea.assignmentUnknownArea')}</span>
                       </td>
-                      <td className="px-3 py-2">{t(item.companyCodeScope === 'MULTIPLE' ? 'controllingArea.assignmentScopeMultiple' : 'controllingArea.assignmentScopeSingle')}</td>
-                      <td className="border-r border-[#e1e5e8] px-3 py-2">
+                      <td>{t(item.companyCodeScope === 'MULTIPLE' ? 'controllingArea.assignmentScopeMultiple' : 'controllingArea.assignmentScopeSingle')}</td>
+                      <td className="border-r border-[#e1e5e8]">
                         <span className="code font-semibold">{item.companyCode}</span>
                         <span className="mt-0.5 block text-xs text-ink-soft">{item.companyCodeName || t('controllingArea.assignmentUnknownCompanyCode')}</span>
                       </td>
-                      <td className="px-3 py-2 font-mono">{item.companyCodeChartOfAccounts || '—'}</td>
-                      <td className="px-3 py-2 font-mono">{item.companyCodeFiscalYearVariant || '—'} / {item.controllingAreaFiscalYearVariant || '—'}</td>
-                      <td className="px-3 py-2 font-mono">{item.companyCodeCurrency || '—'} / {item.controllingAreaCurrency || '—'}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="font-mono">{item.companyCodeChartOfAccounts || '—'}</td>
+                      <td className="font-mono">{item.companyCodeFiscalYearVariant || '—'} / {item.controllingAreaFiscalYearVariant || '—'}</td>
+                      <td className="font-mono">{item.companyCodeCurrency || '—'} / {item.controllingAreaCurrency || '—'}</td>
+                      <td className="text-right">
                         <UnassignPair
                           controllingArea={item.controllingArea}
                           companyCode={item.companyCode}

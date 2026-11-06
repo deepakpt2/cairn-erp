@@ -214,19 +214,19 @@ export default async function MaterialDocumentPage({ searchParams }: {
               </Link>
             </div>
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="grid-table text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="py-1">{t('mdDoc.columnItem')}</th>
-                    <th className="py-1">{t('mdDoc.columnMovement')}</th>
-                    <th className="py-1">{t('mdDoc.columnMaterial')}</th>
-                    <th className="py-1">{t('mdDoc.columnPlant')}</th>
-                    <th className="py-1">{t('mdDoc.columnLocation')}</th>
-                    <th className="py-1">{t('mdDoc.columnStockType')}</th>
-                    <th className="py-1">{t('mdDoc.columnBatch')}</th>
-                    <th className="py-1 text-right">{t('mdDoc.columnQuantity')}</th>
-                    <th className="py-1 text-right">{t('mdDoc.columnValue')}</th>
-                    <th className="py-1">{t('mdDoc.columnReference')}</th>
+                    <th>{t('mdDoc.columnItem')}</th>
+                    <th>{t('mdDoc.columnMovement')}</th>
+                    <th>{t('mdDoc.columnMaterial')}</th>
+                    <th>{t('mdDoc.columnPlant')}</th>
+                    <th>{t('mdDoc.columnLocation')}</th>
+                    <th>{t('mdDoc.columnStockType')}</th>
+                    <th>{t('mdDoc.columnBatch')}</th>
+                    <th className="text-right">{t('mdDoc.columnQuantity')}</th>
+                    <th className="text-right">{t('mdDoc.columnValue')}</th>
+                    <th>{t('mdDoc.columnReference')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -237,29 +237,29 @@ export default async function MaterialDocumentPage({ searchParams }: {
                       data-direction={line.lineDirection}
                       className={`border-t border-line ${line.lineNumber === document.selectedItem ? 'bg-surface-muted' : ''}`}
                     >
-                      <td className="py-1">{line.lineNumber}</td>
-                      <td className="py-1">
+                      <td>{line.lineNumber}</td>
+                      <td>
                         <span className="code">{line.movementType}</span>
                         {line.movementDescription ? (
                           <span className="ms-1 text-ink-soft">{line.movementDescription}</span>
                         ) : null}
                         <span className="ms-1 text-ink-faint">({line.lineDirection})</span>
                       </td>
-                      <td className="py-1">
+                      <td>
                         <span className="code">{line.materialNumber}</span>
                         {line.materialDescription ? (
                           <span className="ms-1 text-ink-soft">{line.materialDescription}</span>
                         ) : null}
                       </td>
-                      <td className="py-1">{line.plant}</td>
-                      <td className="py-1">{line.storageLocation ?? '—'}</td>
-                      <td className="py-1">{line.stockType}</td>
-                      <td className="code py-1" data-batch={line.batch}>{line.batch || '—'}</td>
-                      <td className="py-1 text-right tabular-nums">{line.quantity} {line.unit}</td>
-                      <td className="py-1 text-right tabular-nums">
+                      <td>{line.plant}</td>
+                      <td>{line.storageLocation ?? '—'}</td>
+                      <td>{line.stockType}</td>
+                      <td className="code" data-batch={line.batch}>{line.batch || '—'}</td>
+                      <td className="text-right tabular-nums">{line.quantity} {line.unit}</td>
+                      <td className="text-right tabular-nums">
                         {line.value}{line.currency ? ` ${line.currency}` : ''}
                       </td>
-                      <td className="py-1">
+                      <td>
                         {line.purchaseOrderNumber ? (
                           <Link
                             href={`/purchasing/orders?order=${encodeURIComponent(line.purchaseOrderNumber)}`}

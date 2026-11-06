@@ -78,24 +78,24 @@ export default async function DeliveryScheduleDisplayPage({ searchParams }: {
           <p data-schedule-readonly>This display wrote nothing.</p>
           <p>{document.supplierNumber} · {document.purchasingOrg} · {document.companyCode} · Valid {document.validityStart} – {document.validityEnd}. Release {document.releaseStatus}.</p>
           <p>A goods receipt is not linked to these lines. A scheduled quantity is not a receipt.</p>
-          <table className="w-full">
+          <table className="grid-table">
             <thead>
-              <tr className="border-b text-left">
-                <th className="px-2 py-2">Item</th>
-                <th className="px-2 py-2">Line</th>
-                <th className="px-2 py-2">Date</th>
-                <th className="px-2 py-2">Quantity</th>
-                <th className="px-2 py-2">Status</th>
+              <tr className="text-left">
+                <th>Item</th>
+                <th>Line</th>
+                <th>Date</th>
+                <th>Quantity</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {document.scheduleLines.map((line) => (
-                <tr key={`${line.itemNumber}-${line.lineNumber}`} className="border-b">
-                  <td className="px-2 py-2">{line.itemNumber}</td>
-                  <td className="px-2 py-2">{line.lineNumber}</td>
-                  <td className="px-2 py-2">{line.deliveryDate}</td>
-                  <td className="px-2 py-2">{line.quantity} {line.unit ?? ''}</td>
-                  <td className="px-2 py-2">{line.markedForDeletion ? 'Cancelled' : 'Open'}</td>
+                <tr key={`${line.itemNumber}-${line.lineNumber}`}>
+                  <td>{line.itemNumber}</td>
+                  <td>{line.lineNumber}</td>
+                  <td>{line.deliveryDate}</td>
+                  <td>{line.quantity} {line.unit ?? ''}</td>
+                  <td>{line.markedForDeletion ? 'Cancelled' : 'Open'}</td>
                 </tr>
               ))}
             </tbody>

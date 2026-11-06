@@ -76,7 +76,7 @@ async function BalancesShell({ params }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('customerBalances.subtitle')}</p>
       </header>
 
-      <section aria-labelledby="cb-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cb-selection" className="border border-line bg-surface p-4">
         <h2 id="cb-selection" className="text-sm font-semibold">Selection</h2>
         <form method="get" action={ROUTE} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -121,33 +121,33 @@ async function BalancesShell({ params }: {
         )}
       </section>
 
-      <section aria-labelledby="cb-matrix" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cb-matrix" className="border border-line bg-surface p-4">
         <h2 id="cb-matrix" className="text-sm font-semibold">Period balances</h2>
         {!view ? (
           <p className="mt-2 text-sm text-ink-soft">No balances stand loaded. Choose a customer, company and year.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Period</th><th className="px-2 py-2">Opening balance</th>
-                  <th className="px-2 py-2">Debit turnover</th><th className="px-2 py-2">Credit turnover</th>
-                  <th className="px-2 py-2">Closing balance</th><th className="px-2 py-2">Items</th>
+                  <th>Period</th><th>Opening balance</th>
+                  <th>Debit turnover</th><th>Credit turnover</th>
+                  <th>Closing balance</th><th>Items</th>
                 </tr>
               </thead>
               <tbody>
                 {view.periods.map((row) => (
-                  <tr key={row.period} className="border-t border-line">
-                    <td className="px-2 py-2">
+                  <tr key={row.period}>
+                    <td>
                       <Link href={drillHref(row.period)} className="underline">
                         {row.period}{row.special ? ' (special)' : ''}
                       </Link>
                     </td>
-                    <td className="px-2 py-2">{fmt(row.opening)}</td>
-                    <td className="px-2 py-2">{fmt(row.debitTurnover)}</td>
-                    <td className="px-2 py-2">{fmt(row.creditTurnover)}</td>
-                    <td className="px-2 py-2">{fmt(row.closing)}</td>
-                    <td className="px-2 py-2">{row.itemCount}</td>
+                    <td>{fmt(row.opening)}</td>
+                    <td>{fmt(row.debitTurnover)}</td>
+                    <td>{fmt(row.creditTurnover)}</td>
+                    <td>{fmt(row.closing)}</td>
+                    <td>{row.itemCount}</td>
                   </tr>
                 ))}
               </tbody>
@@ -156,7 +156,7 @@ async function BalancesShell({ params }: {
         )}
       </section>
 
-      <section aria-labelledby="cb-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cb-items" className="border border-line bg-surface p-4">
         <h2 id="cb-items" className="text-sm font-semibold">Line items</h2>
         {!view || !view.selectedPeriod ? (
           <p className="mt-2 text-sm text-ink-soft">
@@ -167,26 +167,26 @@ async function BalancesShell({ params }: {
           <p className="mt-2 text-sm text-ink-soft">No line items stand behind period {view.selectedPeriod}.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Document</th><th className="px-2 py-2">Posting date</th>
-                  <th className="px-2 py-2">Type</th><th className="px-2 py-2">D/C</th>
-                  <th className="px-2 py-2">Document amount</th><th className="px-2 py-2">Local amount</th>
-                  <th className="px-2 py-2">Cleared by</th><th className="px-2 py-2">Clearing date</th>
+                  <th>Document</th><th>Posting date</th>
+                  <th>Type</th><th>D/C</th>
+                  <th>Document amount</th><th>Local amount</th>
+                  <th>Cleared by</th><th>Clearing date</th>
                 </tr>
               </thead>
               <tbody>
                 {view.items.map((item) => (
-                  <tr key={`${item.documentNumber}-${item.lineNumber}`} className="border-t border-line">
-                    <td className="px-2 py-2">{item.documentNumber}</td>
-                    <td className="px-2 py-2">{item.postingDate}</td>
-                    <td className="px-2 py-2">{item.documentType}</td>
-                    <td className="px-2 py-2">{item.debitCredit}</td>
-                    <td className="px-2 py-2">{item.documentAmount} {item.documentCurrency}</td>
-                    <td className="px-2 py-2">{item.localAmount}</td>
-                    <td className="px-2 py-2">{item.clearingDocument ?? '—'}</td>
-                    <td className="px-2 py-2">{item.clearingDate ?? '—'}</td>
+                  <tr key={`${item.documentNumber}-${item.lineNumber}`}>
+                    <td>{item.documentNumber}</td>
+                    <td>{item.postingDate}</td>
+                    <td>{item.documentType}</td>
+                    <td>{item.debitCredit}</td>
+                    <td>{item.documentAmount} {item.documentCurrency}</td>
+                    <td>{item.localAmount}</td>
+                    <td>{item.clearingDocument ?? '—'}</td>
+                    <td>{item.clearingDate ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

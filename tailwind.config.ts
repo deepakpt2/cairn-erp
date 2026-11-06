@@ -19,7 +19,9 @@ export default {
         'line-strong': '#CFC9BE',
         ink: '#1B1917',
         'ink-soft': '#5E5852',
-        'ink-faint': '#8C857C',
+        // Was #8C857C: 3.65:1 on surface and 3.35:1 on paper, below the 4.5:1
+        // threshold for normal text. Darkened to 5.37:1 and 4.93:1.
+        'ink-faint': '#6F6A62',
         accent: {
           DEFAULT: '#0E5C55',
           hover: '#0A4A44',

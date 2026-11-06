@@ -96,8 +96,8 @@ export default function CarryforwardShell({ canUse, companies, runs, results }: 
                 <td>{run.testRun ? t('carry.testRunYes') : t('carry.testRunNo')}</td>
                 <td>{run.status}</td>
                 <td className="tabular text-end">{run.accountsProcessed}</td>
-                <td className="tabular text-end">{run.balancesCarried.toFixed(2)}</td>
-                <td className="tabular text-end">{run.plTransferred.toFixed(2)}</td>
+                <td className="tabular text-end num">{run.balancesCarried.toFixed(2)}</td>
+                <td className="tabular text-end num">{run.plTransferred.toFixed(2)}</td>
                 <td className="tabular text-end">{run.errors}</td>
               </tr>
             ))}
@@ -125,8 +125,8 @@ export default function CarryforwardShell({ canUse, companies, runs, results }: 
                 <td className="code">{r.companyCode}</td>
                 <td className="code">{r.accountNumber}{r.profitCenter ? ` / ${r.profitCenter}` : ''}</td>
                 <td>{r.accountCategory}</td>
-                <td className="tabular text-end">{r.sourceClosingBalance.toFixed(2)} {r.currency}</td>
-                <td className="tabular text-end">{r.targetOpeningBalance.toFixed(2)} {r.currency}</td>
+                <td className="tabular text-end num">{r.sourceClosingBalance.toFixed(2)} {r.currency}</td>
+                <td className="tabular text-end num">{r.targetOpeningBalance.toFixed(2)} {r.currency}</td>
                 <td className="code">{r.transferDocumentNumber ?? '—'}</td>
                 <td>{r.status}{r.detail ? <span className="block text-2xs text-ink-faint">{r.detail}</span> : null}</td>
               </tr>

@@ -81,9 +81,9 @@ export default function SubledgerTieShell({ canUse, companies, selection, result
                   {row.kind === 'ACCOUNT' ? row.accountNumber : <span style={{ paddingInlineStart: '1.25rem' }}>{row.businessPartner}</span>}
                 </td>
                 <td>{row.kind === 'ACCOUNT' ? row.reconciliationType : ''}</td>
-                <td className="text-end">{row.kind === 'ACCOUNT' ? row.glTotal.toFixed(2) : ''}</td>
-                <td className="text-end">{row.subledgerTotal.toFixed(2)}</td>
-                <td className="text-end">{row.difference === null ? '—' : row.difference.toFixed(2)}</td>
+                <td className="text-end num">{row.kind === 'ACCOUNT' ? row.glTotal.toFixed(2) : ''}</td>
+                <td className="text-end num">{row.subledgerTotal.toFixed(2)}</td>
+                <td className="text-end num">{row.difference === null ? '—' : row.difference.toFixed(2)}</td>
                 <td>{row.status === null ? '' : row.status === 'TIED' ? 'Tied' : 'Exception'}</td>
                 <td className="text-end">{row.lineCount}</td>
                 <td>{result?.currency ?? ''}</td>

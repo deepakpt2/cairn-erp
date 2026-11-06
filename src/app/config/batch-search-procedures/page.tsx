@@ -74,26 +74,26 @@ export default async function BatchSearchProcedurePage({
       </form>
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Search procedure</th>
-              <th className="p-2">Description</th>
-              <th className="p-2">Usage</th>
-              <th className="p-2">Application</th>
-              <th className="p-2">Version</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Search procedure</th>
+              <th>Description</th>
+              <th>Usage</th>
+              <th>Application</th>
+              <th>Version</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.searchProcedure} className="border-b border-line">
-                <td className="code p-2">{row.searchProcedure}</td>
-                <td className="p-2">{row.description}</td>
-                <td className="code p-2">{row.usage}</td>
-                <td className="code p-2">{row.application}</td>
-                <td className="p-2">{row.version}</td>
-                <td className="p-2 text-end">
+              <tr key={row.searchProcedure}>
+                <td className="code">{row.searchProcedure}</td>
+                <td>{row.description}</td>
+                <td className="code">{row.usage}</td>
+                <td className="code">{row.application}</td>
+                <td>{row.version}</td>
+                <td className="text-end">
                   <Link href={`${ROUTE}?procedure=${encodeURIComponent(row.searchProcedure)}&history=1`} className="underline">History</Link>
                   {canMaintain && (
                     <>
@@ -106,7 +106,7 @@ export default async function BatchSearchProcedurePage({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-3 text-ink-soft">No search procedure stands. None is created by opening this screen.</td>
+                <td colSpan={6} className="text-ink-soft">No search procedure stands. None is created by opening this screen.</td>
               </tr>
             )}
           </tbody>

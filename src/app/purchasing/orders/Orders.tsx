@@ -246,33 +246,33 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
 
   return (
     <div className="space-y-4">
-      <section aria-labelledby="po-overview" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="po-overview" className="border border-line bg-surface p-4">
         <h2 id="po-overview" className="text-sm font-semibold">Purchase orders</h2>
         {documents.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No purchase orders stand yet. Create the first below.</p>
         ) : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
-              <tr className="border-b border-line text-left">
-                <th className="px-2 py-2">Order</th>
-                <th className="px-2 py-2">Supplier</th>
-                <th className="px-2 py-2">Date</th>
-                <th className="px-2 py-2">Currency</th>
-                <th className="px-2 py-2">Items</th>
-                <th className="px-2 py-2">Release</th>
+              <tr className="text-left">
+                <th>Order</th>
+                <th>Supplier</th>
+                <th>Date</th>
+                <th>Currency</th>
+                <th>Items</th>
+                <th>Release</th>
               </tr>
             </thead>
             <tbody>
               {documents.map((doc) => (
-                <tr key={doc.orderNumber} className="border-b border-line/60">
-                  <td className="px-2 py-2">
+                <tr key={doc.orderNumber}>
+                  <td>
                     <a className="underline" href={`/purchasing/orders?order=${doc.orderNumber}`}>{doc.orderNumber}</a>
                   </td>
-                  <td className="px-2 py-2">{doc.supplierName || doc.supplierNumber}</td>
-                  <td className="px-2 py-2">{doc.documentDate}</td>
-                  <td className="px-2 py-2">{doc.currency}</td>
-                  <td className="px-2 py-2">{doc.items.length}</td>
-                  <td className="px-2 py-2">
+                  <td>{doc.supplierName || doc.supplierNumber}</td>
+                  <td>{doc.documentDate}</td>
+                  <td>{doc.currency}</td>
+                  <td>{doc.items.length}</td>
+                  <td>
                     {releases[doc.orderNumber]
                       ? releases[doc.orderNumber].status === 'RELEASED'
                         ? 'Released'
@@ -287,7 +287,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
       </section>
 
       {selected && selectedRelease && (
-        <section aria-labelledby="po-release" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="po-release" className="border border-line bg-surface p-4">
           <h2 id="po-release" className="text-sm font-semibold">Release</h2>
           {selectedRelease.status === 'NOT_REQUIRED' ? (
             <p className="mt-2 text-sm text-ink-soft">
@@ -339,7 +339,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
         </section>
       )}
 
-      <section aria-labelledby="po-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="po-create" className="border border-line bg-surface p-4">
         <h2 id="po-create" className="text-sm font-semibold">
           {selected ? `Purchase order ${selected.orderNumber}` : 'New purchase order'}
         </h2>
@@ -416,30 +416,30 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
           </div>
 
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[68.75rem] text-sm">
+            <table className="grid-table min-w-[68.75rem] text-sm">
               <thead>
-                <tr className="border-b border-line text-left">
-                  <th className="px-2 py-2">Item</th>
+                <tr className="text-left">
+                  <th>Item</th>
                   {itemFields.map((field) => (
-                    <th key={field.key} className="px-2 py-2">{field.label}</th>
+                    <th key={field.key}>{field.label}</th>
                   ))}
-                  <th className="px-2 py-2">Plant</th>
-                  <th className="px-2 py-2">Storage location</th>
-                  <th className="px-2 py-2">Batch</th>
-                  <th className="px-2 py-2">Contract</th>
-                  <th className="px-2 py-2">Item</th>
-                  <th className="px-2 py-2">Net value</th>
-                  {selected && <th className="px-2 py-2">Marked for deletion</th>}
+                  <th>Plant</th>
+                  <th>Storage location</th>
+                  <th>Batch</th>
+                  <th>Contract</th>
+                  <th>Item</th>
+                  <th>Net value</th>
+                  {selected && <th>Marked for deletion</th>}
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, index) => {
                   const value = Number(item.quantity) * Number(item.netPrice) / Math.max(1, Number(item.priceUnit) || 1);
                   return (
-                    <tr key={index} className="border-b border-line/60 align-top">
-                      <td className="px-2 py-2 text-ink-faint">{String(item.itemNumber ?? (index + 1) * 10).padStart(5, '0')}</td>
+                    <tr key={index} className="align-top">
+                      <td className="text-ink-faint">{String(item.itemNumber ?? (index + 1) * 10).padStart(5, '0')}</td>
                       {itemFields.map((field) => (
-                        <td key={field.key} className="px-1 py-1">
+                        <td key={field.key}>
                           {field.key === 'material' ? (
                             <ConstrainedField
                               kind="material-order"
@@ -473,7 +473,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                           )}
                         </td>
                       ))}
-                      <td className="px-1 py-1">
+                      <td>
                         <select
                           className="input w-36"
                           value={item.plant}
@@ -485,7 +485,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                           ))}
                         </select>
                       </td>
-                      <td className="px-1 py-1">
+                      <td>
                         <select
                           className="input w-32"
                           value={item.storageLocation}
@@ -497,7 +497,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                           ))}
                         </select>
                       </td>
-                      <td className="px-1 py-1">
+                      <td>
                         <input
                           className="input w-28"
                           maxLength={10}
@@ -506,7 +506,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                           onChange={(event) => patch(index, { batch: event.target.value })}
                         />
                       </td>
-                      <td className="px-1 py-1">
+                      <td>
                         <input
                           className="input w-28"
                           value={item.contractNumber}
@@ -514,7 +514,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                           onChange={(event) => patch(index, { contractNumber: event.target.value })}
                         />
                       </td>
-                      <td className="px-1 py-1">
+                      <td>
                         <input
                           className="input w-16"
                           value={item.contractItem}
@@ -522,9 +522,9 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                           onChange={(event) => patch(index, { contractItem: event.target.value })}
                         />
                       </td>
-                      <td className="px-2 py-2">{item.quantity && item.netPrice ? value.toFixed(2) : ''}</td>
+                      <td className="num">{item.quantity && item.netPrice ? value.toFixed(2) : ''}</td>
                       {selected && (
-                        <td className="px-1 py-2">
+                        <td>
                           <input
                             type="checkbox"
                             checked={item.markedForDeletion}
@@ -548,7 +548,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
           </button>
 
           {items.map((item, index) => (
-            <fieldset key={index} className="mt-4 rounded-card border border-line p-3">
+            <fieldset key={index} className="mt-4 border border-line p-3">
               <legend className="px-1 text-xs font-medium uppercase tracking-wide text-ink-faint">
                 Item {String(item.itemNumber ?? (index + 1) * 10).padStart(5, '0')} · Schedule lines and account assignment
               </legend>

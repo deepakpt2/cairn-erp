@@ -51,7 +51,7 @@ export default function PriceChange({
 
   return (
     <>
-      <section className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section className="border border-line bg-surface p-4">
         <h2 className="text-sm font-semibold">{t('priceChange.title')}</h2>
         <p className="mt-1 text-xs text-ink-soft">{t('priceChange.subtitle')}</p>
         <form action={saveAction} className="mt-3 space-y-3">
@@ -103,7 +103,7 @@ export default function PriceChange({
       </section>
 
       {future.length > 0 && (
-        <section className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section className="border border-line bg-surface p-4">
           <h2 className="text-sm font-semibold">{t('priceChange.futureList')}</h2>
           <form action={releaseAction} className="mt-3 space-y-3">
             <input type="hidden" name="requestKey" value={`${requestKey}-release`} />

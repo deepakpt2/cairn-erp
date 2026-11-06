@@ -95,12 +95,12 @@ export default async function ClearingResetPage({
       </header>
 
       {!grant && (
-        <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft" role="note">
+        <p className="border border-line bg-surface p-4 text-sm text-ink-soft" role="note">
           The {CLEARING_RESET_CAPABILITY} capability stands required to reset cleared items.
         </p>
       )}
 
-      <section aria-labelledby="cr-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cr-selection" className="border border-line bg-surface p-4">
         <h2 id="cr-selection" className="text-sm font-semibold">Clearing document</h2>
         <form method="get" action={ROUTE} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -123,7 +123,7 @@ export default async function ClearingResetPage({
       </section>
 
       {view && (
-        <section aria-labelledby="cr-review" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="cr-review" className="border border-line bg-surface p-4">
           <h2 id="cr-review" className="text-sm font-semibold">
             Cleared items — {view.documentType} document, posted {view.postingDate}, cleared on {view.clearingDate}
           </h2>
@@ -133,22 +133,22 @@ export default async function ClearingResetPage({
             </p>
           ) : (
             <>
-              <table className="mt-3 w-full text-sm">
+              <table className="grid-table mt-3 text-sm">
                 <thead>
-                  <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="py-1 pr-3">Document</th><th className="py-1 pr-3">Partner</th>
-                    <th className="py-1 pr-3">Account</th><th className="py-1 pr-3">D/C</th>
-                    <th className="py-1 pr-3 text-right">Amount {view.items[0]?.currency}</th>
+                  <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                    <th>Document</th><th>Partner</th>
+                    <th>Account</th><th>D/C</th>
+                    <th className="text-right">Amount {view.items[0]?.currency}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {view.items.map((i) => (
-                    <tr key={`${i.documentNumber}-${i.lineNumber}`} className="border-b border-line/60">
-                      <td className="py-1 pr-3">{i.documentNumber} / {i.lineNumber}</td>
-                      <td className="py-1 pr-3">{i.businessPartner ?? '—'}</td>
-                      <td className="py-1 pr-3">{i.glAccount}</td>
-                      <td className="py-1 pr-3">{i.debitCredit}</td>
-                      <td className="py-1 pr-3 text-right">{Number(i.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <tr key={`${i.documentNumber}-${i.lineNumber}`}>
+                      <td>{i.documentNumber} / {i.lineNumber}</td>
+                      <td>{i.businessPartner ?? '—'}</td>
+                      <td>{i.glAccount}</td>
+                      <td>{i.debitCredit}</td>
+                      <td className="text-right">{Number(i.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -169,7 +169,7 @@ export default async function ClearingResetPage({
         </section>
       )}
 
-      <section aria-labelledby="cr-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cr-result" className="border border-line bg-surface p-4">
         <h2 id="cr-result" className="text-sm font-semibold">Reset</h2>
         {done ? (
           <p className="mt-2 text-sm text-ink-soft">

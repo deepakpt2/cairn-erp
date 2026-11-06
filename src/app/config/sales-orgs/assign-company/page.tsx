@@ -142,24 +142,24 @@ export default async function AssignSalesOrgCompanyCodePage() {
               ))}
             </div>
             <div className="hidden overflow-x-auto sm:block">
-              <table className="min-w-full border-collapse text-sm" aria-label={t('salesOrg.assignmentListTitle')}>
+              <table className="grid-table border-collapse text-sm" aria-label={t('salesOrg.assignmentListTitle')}>
                 <thead className="bg-[#eef1f4] text-[#33414c]"><tr className="border-y border-[#c4ccd2]">
-                  <th className="w-36 border-r border-[#cbd1d6] px-3 py-2 text-left">{t('salesOrg.salesOrgField')}</th>
-                  <th className="px-3 py-2 text-left">{t('salesOrg.name')}</th>
-                  <th className="w-32 px-3 py-2 text-left">{t('salesOrg.status')}</th>
-                  <th className="w-52 px-3 py-2 text-left">{t('salesOrg.assignedCompanyCode')}</th>
+                  <th className="w-36 border-r border-[#cbd1d6] text-left">{t('salesOrg.salesOrgField')}</th>
+                  <th className="text-left">{t('salesOrg.name')}</th>
+                  <th className="w-32 text-left">{t('salesOrg.status')}</th>
+                  <th className="w-52 text-left">{t('salesOrg.assignedCompanyCode')}</th>
                 </tr></thead>
                 <tbody>
                   {salesOrgChoices.map((item) => (
-                    <tr key={item.code} className="border-b border-[#d6dce1] hover:bg-[#f8fbfd]">
-                      <td className="border-r border-[#e1e5e8] px-3 py-2 font-mono">{item.code}</td>
-                      <td className="px-3 py-2">{item.name}</td>
-                      <td className="px-3 py-2">
+                    <tr key={item.code} className="border-[#d6dce1] hover:bg-[#f8fbfd]">
+                      <td className="border-r border-[#e1e5e8] font-mono">{item.code}</td>
+                      <td>{item.name}</td>
+                      <td>
                         <span className={`chip ${item.isActive ? 'chip-ok' : 'chip-neutral'}`}>
                           {t(item.isActive ? 'salesOrg.active' : 'salesOrg.inactive')}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-mono">{item.companyCode || t('salesOrg.unassigned')}</td>
+                      <td className="font-mono">{item.companyCode || t('salesOrg.unassigned')}</td>
                     </tr>
                   ))}
                 </tbody>

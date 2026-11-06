@@ -104,14 +104,14 @@ export default async function PlannedOrderChangePage({
           <p>Plant {document.plant} {document.plantName}. Origin {document.origin === 'MANUAL' ? 'created by hand' : document.origin === 'MRP' ? 'proposed by planning' : document.origin}. Record version {document.version}.</p>
           <p>Not converted. No follow-on document is stored, and this screen does not create one.</p>
           {document.dependents.length > 0 && (
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead>
                 <tr className="text-left text-ink-faint"><th>Component</th><th>Quantity</th><th>Date</th><th>Status</th></tr>
               </thead>
               <tbody>
                 {document.dependents.map((row) => (
                   <tr key={`${row.itemNumber}/${row.componentMaterial}`}>
-                    <td className="py-1">{row.componentMaterial} {row.componentDescription}</td>
+                    <td>{row.componentMaterial} {row.componentDescription}</td>
                     <td>{row.quantity} {row.unit}</td>
                     <td>{row.requirementDate}</td>
                     <td>{row.status}</td>

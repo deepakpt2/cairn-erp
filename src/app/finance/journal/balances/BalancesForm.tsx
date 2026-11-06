@@ -12,7 +12,7 @@ export default function BalancesForm({ view, error, canDisplay }: {
 }) {
   return (
     <>
-      <section aria-labelledby="gb-select" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="gb-select" className="border border-line bg-surface p-4">
         <h2 id="gb-select" className="text-sm font-semibold">Selection</h2>
         <form method="get" className="mt-3">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -46,7 +46,7 @@ export default function BalancesForm({ view, error, canDisplay }: {
         </form>
       </section>
 
-      <section aria-labelledby="gb-results" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="gb-results" className="border border-line bg-surface p-4">
         <h2 id="gb-results" className="text-sm font-semibold">Balances</h2>
         {error ? (
           <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>
@@ -59,26 +59,26 @@ export default function BalancesForm({ view, error, canDisplay }: {
               Opening balance {view.openingBalance.toFixed(2)} — the sum of every earlier year, never period 1 turnover.
             </p>
             <div className="mt-2 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Period</th><th className="px-2 py-2">Opening</th>
-                    <th className="px-2 py-2">Debit turnover</th><th className="px-2 py-2">Credit turnover</th>
-                    <th className="px-2 py-2">Net change</th><th className="px-2 py-2">Closing balance</th>
-                    <th className="px-2 py-2">Items</th><th className="px-2 py-2">Drill</th>
+                    <th>Period</th><th>Opening</th>
+                    <th>Debit turnover</th><th>Credit turnover</th>
+                    <th>Net change</th><th>Closing balance</th>
+                    <th>Items</th><th>Drill</th>
                   </tr>
                 </thead>
                 <tbody>
                   {view.periods.map((row) => (
-                    <tr key={row.period} className="border-t border-line">
-                      <td className="px-2 py-2">{row.special ? `Special ${row.period}` : `Period ${row.period}`}</td>
-                      <td className="px-2 py-2">{row.opening.toFixed(2)}</td>
-                      <td className="px-2 py-2">{row.debitTurnover.toFixed(2)}</td>
-                      <td className="px-2 py-2">{row.creditTurnover.toFixed(2)}</td>
-                      <td className="px-2 py-2">{row.netChange.toFixed(2)}</td>
-                      <td className="px-2 py-2">{row.closing.toFixed(2)}</td>
-                      <td className="px-2 py-2">{row.itemCount}</td>
-                      <td className="px-2 py-2">
+                    <tr key={row.period}>
+                      <td>{row.special ? `Special ${row.period}` : `Period ${row.period}`}</td>
+                      <td className="num">{row.opening.toFixed(2)}</td>
+                      <td className="num">{row.debitTurnover.toFixed(2)}</td>
+                      <td className="num">{row.creditTurnover.toFixed(2)}</td>
+                      <td className="num">{row.netChange.toFixed(2)}</td>
+                      <td className="num">{row.closing.toFixed(2)}</td>
+                      <td>{row.itemCount}</td>
+                      <td>
                         <Link className="text-accent hover:underline"
                           href={`/finance/journal/items?accountFrom=${view.glAccount}&companyCodes=${view.companyCode}&fiscalYear=${view.fiscalYear}&postingPeriod=${row.period}`}>
                           Line items

@@ -91,7 +91,7 @@ export default function SourceListWorkbench({
 
   return (
     <>
-      <section aria-labelledby="source-list-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="source-list-lookup" className="border border-line bg-surface p-4">
         <h2 id="source-list-lookup" className="text-sm font-semibold">{t('sourceList.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <Field label={t('sourceList.number')}>
@@ -130,14 +130,14 @@ export default function SourceListWorkbench({
       </section>
 
       {list && (
-        <section aria-labelledby="source-list-standing" data-source-list-standing className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="source-list-standing" data-source-list-standing className="border border-line bg-surface p-4">
           <h2 id="source-list-standing" className="text-sm font-semibold">{list.materialNumber} · {list.plant}</h2>
           <p className="mt-1 text-sm text-ink-soft" data-source-list-required={list.sourceListRequired ? 'yes' : 'no'}>
             {list.sourceListRequired ? t('sourceList.required') : t('sourceList.notRequired')}
             {' · '}
             {t('sourceList.listVersion', { version: String(list.version) })}
           </p>
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-ink-soft">
                 <th>{t('sourceList.number')}</th>
@@ -168,7 +168,7 @@ export default function SourceListWorkbench({
       )}
 
       {opened && list && (
-        <section aria-labelledby="source-list-change" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="source-list-change" className="border border-line bg-surface p-4">
           <h2 id="source-list-change" className="text-sm font-semibold">{opened.sourceNumber}</h2>
           <p className="mt-1 text-sm text-ink-soft" data-source-list-identity>
             {list.materialNumber} · {list.plant} · {opened.partnerNumber} · {opened.purchasingOrg}
@@ -221,7 +221,7 @@ export default function SourceListWorkbench({
         </section>
       )}
 
-      <section aria-labelledby="source-list-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="source-list-create" className="border border-line bg-surface p-4">
         <h2 id="source-list-create" className="text-sm font-semibold">{t('sourceList.createTitle')}</h2>
         <p className="mt-1 text-xs text-ink-soft">{t('sourceList.createHint')}</p>
         <form action={createAction} className="mt-3 space-y-3">

@@ -123,23 +123,23 @@ export default async function ProductionCogiPage({
       </form>
       {allowed && (
         <section className="overflow-x-auto rounded border border-line" aria-label="COGI goods movement queue">
-          <table className="w-full min-w-[850px] text-left text-sm">
+          <table className="grid-table min-w-[850px] text-left text-sm">
             <thead className="bg-surface text-xs uppercase text-ink-faint">
-              <tr><th className="p-2">Status</th><th className="p-2">Confirmation / order</th><th className="p-2">Movement</th><th className="p-2">Material</th><th className="p-2">Error / attempts</th><th className="p-2">Created</th><th className="p-2">Record</th></tr>
+              <tr><th>Status</th><th>Confirmation / order</th><th>Movement</th><th>Material</th><th>Error / attempts</th><th>Created</th><th>Record</th></tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className="border-t border-line align-top">
-                  <td className="p-2 font-medium">{row.status}</td>
-                  <td className="p-2">{row.confirmationNumber}<br />Order {row.orderNumber} · operation {row.operationNumber}<br />Plant {row.plant}</td>
-                  <td className="p-2">{row.movementKind}<br />SAP {row.sapMovementType}<br /><span className="code">{row.movementType}</span><br />Posting {row.postingDate}</td>
-                  <td className="p-2">{row.firstLine ? <>{row.firstLine.materialNumber}<br />{row.firstLine.quantity} {row.firstLine.unit}{row.firstLine.storageLocation ? ` · SLoc ${row.firstLine.storageLocation}` : ''}{row.firstLine.batchNumber ? ` · Batch ${row.firstLine.batchNumber}` : ''}{row.lineCount > 1 ? <><br />+ {row.lineCount - 1} more line(s)</> : null}</> : 'No normalized lines'}</td>
-                  <td className="p-2"><span className="line-clamp-3">{row.errorText ?? row.failureCode ?? 'No error recorded yet'}</span><br />{row.attemptCount} attempt(s)</td>
-                  <td className="p-2">{row.createdAt.toLocaleString()}</td>
-                  <td className="p-2"><Link className="btn btn-default min-h-9" href={listHref(row.id)}>Inspect</Link></td>
+                <tr key={row.id} className="align-top">
+                  <td className="font-medium">{row.status}</td>
+                  <td>{row.confirmationNumber}<br />Order {row.orderNumber} · operation {row.operationNumber}<br />Plant {row.plant}</td>
+                  <td>{row.movementKind}<br />SAP {row.sapMovementType}<br /><span className="code">{row.movementType}</span><br />Posting {row.postingDate}</td>
+                  <td>{row.firstLine ? <>{row.firstLine.materialNumber}<br />{row.firstLine.quantity} {row.firstLine.unit}{row.firstLine.storageLocation ? ` · SLoc ${row.firstLine.storageLocation}` : ''}{row.firstLine.batchNumber ? ` · Batch ${row.firstLine.batchNumber}` : ''}{row.lineCount > 1 ? <><br />+ {row.lineCount - 1} more line(s)</> : null}</> : 'No normalized lines'}</td>
+                  <td><span className="line-clamp-3">{row.errorText ?? row.failureCode ?? 'No error recorded yet'}</span><br />{row.attemptCount} attempt(s)</td>
+                  <td>{row.createdAt.toLocaleString()}</td>
+                  <td><Link className="btn btn-default min-h-9" href={listHref(row.id)}>Inspect</Link></td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td className="p-4 text-ink-soft" colSpan={7}>No movement records match these filters in your authorized scope.</td></tr>}
+              {rows.length === 0 && <tr><td className="text-ink-soft" colSpan={7}>No movement records match these filters in your authorized scope.</td></tr>}
             </tbody>
           </table>
         </section>

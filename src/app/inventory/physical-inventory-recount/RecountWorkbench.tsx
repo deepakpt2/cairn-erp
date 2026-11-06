@@ -97,7 +97,7 @@ export default function RecountWorkbench({
 
   return (
     <>
-      <section aria-labelledby="recount-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="recount-lookup" className="border border-line bg-surface p-4">
         <h2 id="recount-lookup" className="text-sm font-semibold">{t('recount.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
@@ -120,7 +120,7 @@ export default function RecountWorkbench({
       {!canRecount && <p className="text-sm text-ink-soft">{t('recount.capabilityMissing')}</p>}
 
       {document && (
-        <section aria-labelledby="recount-document" data-recount-document className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="recount-document" data-recount-document className="border border-line bg-surface p-4">
           <h2 id="recount-document" className="text-sm font-semibold">
             {document.documentNumber} · {document.fiscalYear}
           </h2>
@@ -137,24 +137,24 @@ export default function RecountWorkbench({
             <input type="hidden" name="fiscalYear" value={document.fiscalYear} />
             <input type="hidden" name="requestKey" value={requestKey} />
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="grid-table text-sm">
                 <thead>
-                  <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="py-1 pr-2">{t('recount.select')}</th>
-                    <th className="py-1 pr-2">{t('recount.columnItem')}</th>
-                    <th className="py-1 pr-2">{t('recount.columnMaterial')}</th>
-                    <th className="py-1 pr-2">{t('recount.columnStockType')}</th>
-                    <th className="py-1 pr-2">{t('recount.columnBook')}</th>
-                    <th className="py-1 pr-2">{t('recount.columnCounted')}</th>
-                    <th className="py-1 pr-2">{t('recount.columnDifference')}</th>
-                    <th className="py-1 pr-2">{t('recount.columnNow')}</th>
-                    <th className="py-1 pr-2">{t('recount.columnReason')}</th>
+                  <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                    <th>{t('recount.select')}</th>
+                    <th>{t('recount.columnItem')}</th>
+                    <th>{t('recount.columnMaterial')}</th>
+                    <th>{t('recount.columnStockType')}</th>
+                    <th>{t('recount.columnBook')}</th>
+                    <th>{t('recount.columnCounted')}</th>
+                    <th>{t('recount.columnDifference')}</th>
+                    <th>{t('recount.columnNow')}</th>
+                    <th>{t('recount.columnReason')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {document.items.map((line) => (
-                    <tr key={line.itemNumber} data-recount-line={line.itemNumber} className="border-b border-line/60">
-                      <td className="py-1 pr-2">
+                    <tr key={line.itemNumber} data-recount-line={line.itemNumber}>
+                      <td>
                         <input
                           type="checkbox"
                           name="item"
@@ -169,14 +169,14 @@ export default function RecountWorkbench({
                           aria-label={`${t('recount.select')} ${line.itemNumber}`}
                         />
                       </td>
-                      <td className="py-1 pr-2">{line.itemNumber}</td>
-                      <td className="py-1 pr-2">{line.materialNumber}{line.batch ? ` · ${line.batch}` : ''}</td>
-                      <td className="py-1 pr-2" data-recount-stock-type>{line.stockType}</td>
-                      <td className="py-1 pr-2 tabular-nums">{line.bookQuantity || '—'}</td>
-                      <td className="py-1 pr-2 tabular-nums" data-recount-counted>{line.countedQuantity || '—'}</td>
-                      <td className="py-1 pr-2 tabular-nums">{line.difference || '—'}</td>
-                      <td className="py-1 pr-2 tabular-nums" data-recount-book-now>{line.bookQuantityNow}</td>
-                      <td className="py-1 pr-2 text-ink-soft" data-recount-reason>
+                      <td>{line.itemNumber}</td>
+                      <td>{line.materialNumber}{line.batch ? ` · ${line.batch}` : ''}</td>
+                      <td data-recount-stock-type>{line.stockType}</td>
+                      <td className="tabular-nums">{line.bookQuantity || '—'}</td>
+                      <td className="tabular-nums" data-recount-counted>{line.countedQuantity || '—'}</td>
+                      <td className="tabular-nums">{line.difference || '—'}</td>
+                      <td className="tabular-nums" data-recount-book-now>{line.bookQuantityNow}</td>
+                      <td className="text-ink-soft" data-recount-reason>
                         {line.reason ?? (line.eligible ? t('recount.eligible') : '')}
                         {line.recountDocumentNumber && (
                           <>
@@ -242,7 +242,7 @@ export default function RecountWorkbench({
           </form>
 
           {checkState.message && (
-            <div data-recount-preview className="mt-3 rounded-card border border-line bg-canvas p-3">
+            <div data-recount-preview className="mt-3 border border-line bg-canvas p-3">
               <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-red-700'}`}>
                 {checkState.message}{checkState.remedy ? ` ${checkState.remedy}` : ''}
               </p>
@@ -250,24 +250,24 @@ export default function RecountWorkbench({
                 <>
                   <p className="mt-2 text-xs uppercase tracking-wide text-ink-faint">{t('recount.previewTitle')}</p>
                   <p className="mt-1 text-sm text-ink-soft">{t('recount.previewNote')}</p>
-                  <table className="mt-2 w-full text-sm">
+                  <table className="grid-table mt-2 text-sm">
                     <thead>
-                      <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
-                        <th className="py-1 pr-2">{t('recount.columnItem')}</th>
-                        <th className="py-1 pr-2">{t('recount.columnStockType')}</th>
-                        <th className="py-1 pr-2">{t('recount.columnBook')}</th>
-                        <th className="py-1 pr-2">{t('recount.columnCounted')}</th>
-                        <th className="py-1 pr-2">{t('recount.columnNow')}</th>
+                      <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                        <th>{t('recount.columnItem')}</th>
+                        <th>{t('recount.columnStockType')}</th>
+                        <th>{t('recount.columnBook')}</th>
+                        <th>{t('recount.columnCounted')}</th>
+                        <th>{t('recount.columnNow')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {checkState.preview.items.map((item) => (
-                        <tr key={item.itemNumber} className="border-b border-line/60">
-                          <td className="py-1 pr-2">{item.itemNumber}</td>
-                          <td className="py-1 pr-2">{item.stockType}</td>
-                          <td className="py-1 pr-2 tabular-nums">{item.originalBookQuantity}</td>
-                          <td className="py-1 pr-2 tabular-nums">{item.originalCountedQuantity}</td>
-                          <td className="py-1 pr-2 tabular-nums" data-recount-preview-book>{item.bookQuantityNow}</td>
+                        <tr key={item.itemNumber}>
+                          <td>{item.itemNumber}</td>
+                          <td>{item.stockType}</td>
+                          <td className="tabular-nums">{item.originalBookQuantity}</td>
+                          <td className="tabular-nums">{item.originalCountedQuantity}</td>
+                          <td className="tabular-nums" data-recount-preview-book>{item.bookQuantityNow}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -278,7 +278,7 @@ export default function RecountWorkbench({
           )}
 
           {createState.message && (
-            <div data-recount-result className="mt-3 rounded-card border border-line bg-canvas p-3">
+            <div data-recount-result className="mt-3 border border-line bg-canvas p-3">
               <p role="status" className={`text-sm font-medium ${createState.ok ? 'text-ink' : 'text-red-700'}`}>
                 {createState.message}{createState.remedy ? ` ${createState.remedy}` : ''}
               </p>
@@ -298,7 +298,7 @@ export default function RecountWorkbench({
         </section>
       )}
 
-      <section aria-labelledby="recount-cancel" data-recount-cancel className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="recount-cancel" data-recount-cancel className="border border-line bg-surface p-4">
         <h2 id="recount-cancel" className="text-sm font-semibold">{t('recount.cancelTitle')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('recount.cancelHint')}</p>
         <form action={cancelAction} className="mt-3 flex flex-wrap items-end gap-3">

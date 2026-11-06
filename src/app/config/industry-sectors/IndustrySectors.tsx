@@ -104,25 +104,25 @@ export default function IndustrySectors({
           <p className="text-sm text-ink-faint">No industry sectors stand yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
-                <tr className="border-b border-line text-ink-soft">
-                  <th className="py-2 pe-3">Sector</th>
-                  <th className="py-2 pe-3">Name</th>
-                  <th className="py-2 pe-3">Materials</th>
-                  <th className="py-2 pe-3">Status</th>
-                  {canMaintain && <th className="py-2">Actions</th>}
+                <tr className="text-ink-soft">
+                  <th className="pe-3">Sector</th>
+                  <th className="pe-3">Name</th>
+                  <th className="pe-3">Materials</th>
+                  <th className="pe-3">Status</th>
+                  {canMaintain && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {sectors.map((row) => (
-                  <tr key={row.sector} className="border-b border-line/60">
-                    <td className="py-2 pe-3 font-medium">{row.sector}</td>
-                    <td className="py-2 pe-3">{row.name}</td>
-                    <td className="py-2 pe-3">{row.materialCount}</td>
-                    <td className="py-2 pe-3">{row.isActive ? 'Active' : 'Inactive'}</td>
+                  <tr key={row.sector}>
+                    <td className="pe-3 font-medium">{row.sector}</td>
+                    <td className="pe-3">{row.name}</td>
+                    <td className="pe-3">{row.materialCount}</td>
+                    <td className="pe-3">{row.isActive ? 'Active' : 'Inactive'}</td>
                     {canMaintain && (
-                      <td className="py-2">
+                      <td>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"

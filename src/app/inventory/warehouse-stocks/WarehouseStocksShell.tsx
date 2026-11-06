@@ -140,17 +140,17 @@ export default function WarehouseStocksShell({ canUse, selection, result, report
                 <td className="code">{row.storageLocation}</td>
                 <td className="code">{row.batch || '—'}</td>
                 <td>{row.baseUnit}</td>
-                <td className="text-end">{row.unrestrictedQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.qualityInspectionQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.blockedQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.specialQuantity.toFixed(3)}</td>
-                <td className="text-end font-semibold">{row.totalQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.unrestrictedQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.qualityInspectionQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.blockedQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.specialQuantity.toFixed(3)}</td>
+                <td className="text-end font-semibold num">{row.totalQuantity.toFixed(3)}</td>
                 {showValuation ? (
-                  <td className="text-end">{row.price === null ? t('whStock.unknownValue') : row.price.toFixed(4)}</td>
+                  <td className="text-end num">{row.price === null ? t('whStock.unknownValue') : row.price.toFixed(4)}</td>
                 ) : null}
                 {showValuation ? <td className="code">{row.currency ?? ''}</td> : null}
                 {showValuation ? (
-                  <td className="text-end font-semibold">{row.value === null ? t('whStock.unknownValue') : row.value.toFixed(2)}</td>
+                  <td className="text-end font-semibold num">{row.value === null ? t('whStock.unknownValue') : row.value.toFixed(2)}</td>
                 ) : null}
                 <td className="space-x-2 whitespace-nowrap text-xs">
                   {row.movementsDrillDown
@@ -167,11 +167,11 @@ export default function WarehouseStocksShell({ canUse, selection, result, report
             <tfoot>
               <tr>
                 <td colSpan={6} className="font-semibold">{t('whStock.totals')}</td>
-                <td className="text-end">{result!.totals.unrestrictedQuantity.toFixed(3)}</td>
-                <td className="text-end">{result!.totals.qualityInspectionQuantity.toFixed(3)}</td>
-                <td className="text-end">{result!.totals.blockedQuantity.toFixed(3)}</td>
-                <td className="text-end">{result!.totals.specialQuantity.toFixed(3)}</td>
-                <td className="text-end font-semibold">{result!.totals.totalQuantity.toFixed(3)}</td>
+                <td className="text-end num">{result!.totals.unrestrictedQuantity.toFixed(3)}</td>
+                <td className="text-end num">{result!.totals.qualityInspectionQuantity.toFixed(3)}</td>
+                <td className="text-end num">{result!.totals.blockedQuantity.toFixed(3)}</td>
+                <td className="text-end num">{result!.totals.specialQuantity.toFixed(3)}</td>
+                <td className="text-end font-semibold num">{result!.totals.totalQuantity.toFixed(3)}</td>
                 {showValuation ? <td /> : null}
                 {showValuation ? <td /> : null}
                 {showValuation ? (

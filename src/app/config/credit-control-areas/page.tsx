@@ -53,34 +53,34 @@ export default async function CreditControlAreasPage() {
         )}
       </header>
 
-      <section aria-labelledby="cca-records" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="cca-records" className="border border-line bg-surface p-4">
         <h2 id="cca-records" className="text-sm font-semibold">Credit control areas</h2>
         {data.areas.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No credit control areas are defined for this tenant.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Area</th>
-                  <th className="px-2 py-2">Name</th>
-                  <th className="px-2 py-2">Currency</th>
-                  <th className="px-2 py-2">Warning</th>
-                  <th className="px-2 py-2">Status</th>
-                  <th className="px-2 py-2">Company Codes</th>
+                  <th>Area</th>
+                  <th>Name</th>
+                  <th>Currency</th>
+                  <th>Warning</th>
+                  <th>Status</th>
+                  <th>Company Codes</th>
                 </tr>
               </thead>
               <tbody>
                 {data.areas.map((area) => {
                   const mapped = data.companies.filter((company) => company.creditControlArea === area.creditControlArea);
                   return (
-                    <tr key={area.creditControlArea} className="border-t border-line">
-                      <td className="px-2 py-2 font-mono">{area.creditControlArea}</td>
-                      <td className="px-2 py-2">{area.name}</td>
-                      <td className="px-2 py-2">{area.currency}</td>
-                      <td className="px-2 py-2">{area.warningThresholdPercent}%</td>
-                      <td className="px-2 py-2">{area.isActive ? 'Active' : 'Inactive'}</td>
-                      <td className="px-2 py-2">{mapped.length ? mapped.map((company) => company.companyCode).join(', ') : '—'}</td>
+                    <tr key={area.creditControlArea}>
+                      <td className="font-mono">{area.creditControlArea}</td>
+                      <td>{area.name}</td>
+                      <td>{area.currency}</td>
+                      <td>{area.warningThresholdPercent}%</td>
+                      <td>{area.isActive ? 'Active' : 'Inactive'}</td>
+                      <td>{mapped.length ? mapped.map((company) => company.companyCode).join(', ') : '—'}</td>
                     </tr>
                   );
                 })}

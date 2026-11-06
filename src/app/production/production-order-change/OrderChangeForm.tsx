@@ -48,7 +48,7 @@ export default function OrderChangeForm({ order }: { order: ProductionOrderDispl
           <input className="input mt-1" name="finishDate" defaultValue={shown.scheduledFinish} disabled={editsLocked} />
         </label>
         <p>A component requirement date is not moved when the start or finish changes. No scheduling calculation exists. The finish is the receipt date and is separate from component demand.</p>
-        <table className="w-full">
+        <table className="grid-table">
           <thead>
             <tr className="text-left text-ink-faint">
               <th>Item</th>

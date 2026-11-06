@@ -235,18 +235,18 @@ export default function Lots(props: Props) {
               : 'No inspection lot has been opened in this tenant yet.'}
           </p>
         ) : (
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs text-ink-faint">
-                <th className="py-1">Lot</th><th>Document / line</th><th>Material</th><th>Plant</th>
+                <th>Lot</th><th>Document / line</th><th>Material</th><th>Plant</th>
                 <th>Batch</th><th className="text-right">Quantity</th><th>Stock</th>
                 <th>Movement</th><th>State</th><th>Opened by</th>
               </tr>
             </thead>
             <tbody>
               {props.lots.map((row) => (
-                <tr key={row.lotNumber} className="border-t border-line align-top">
-                  <td className="py-1">
+                <tr key={row.lotNumber} className="align-top">
+                  <td>
                     <Link className="link" href={`/quality/lots?lot=${row.lotNumber}`}>{row.lotNumber}</Link>
                   </td>
                   <td>

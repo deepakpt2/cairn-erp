@@ -38,30 +38,30 @@ function Notice({ state }: { state: QuotationActionState }) {
         <p className="mt-1" data-quotation-currency>{preview.currencyNote}</p>
       )}
       {preview && preview.lines.length > 0 && (
-        <table className="mt-3 w-full text-sm" data-quotation-preview>
+        <table className="grid-table mt-3 text-sm" data-quotation-preview>
           <thead>
             <tr className="text-left text-ink-soft">
-              <th className="py-1 pr-3">{t('quotation.item')}</th>
-              <th className="py-1 pr-3">{t('quotation.asked')}</th>
-              <th className="py-1 pr-3">{t('quotation.quantity')}</th>
-              <th className="py-1 pr-3">{t('quotation.unit')}</th>
-              <th className="py-1 pr-3">{t('quotation.netPrice')}</th>
-              <th className="py-1 pr-3">{t('quotation.priceUnit')}</th>
-              <th className="py-1 pr-3">{t('quotation.perUnit')}</th>
-              <th className="py-1">{t('quotation.deliveryDate')}</th>
+              <th>{t('quotation.item')}</th>
+              <th>{t('quotation.asked')}</th>
+              <th>{t('quotation.quantity')}</th>
+              <th>{t('quotation.unit')}</th>
+              <th>{t('quotation.netPrice')}</th>
+              <th>{t('quotation.priceUnit')}</th>
+              <th>{t('quotation.perUnit')}</th>
+              <th>{t('quotation.deliveryDate')}</th>
             </tr>
           </thead>
           <tbody>
             {preview.lines.map((line) => (
               <tr key={line.itemNumber}>
-                <td className="py-1 pr-3">{line.itemNumber}</td>
-                <td className="py-1 pr-3">{line.asked.quantity} · {line.asked.deliveryDate}</td>
-                <td className="py-1 pr-3">{line.before && line.before.quantity !== line.after.quantity ? `${line.before.quantity} → ${line.after.quantity}` : line.after.quantity}</td>
-                <td className="py-1 pr-3">{line.after.unit}</td>
-                <td className="py-1 pr-3">{line.before && line.before.netPrice !== line.after.netPrice ? `${line.before.netPrice} → ${line.after.netPrice}` : line.after.netPrice}</td>
-                <td className="py-1 pr-3">{line.after.priceUnit}</td>
-                <td className="py-1 pr-3" data-quotation-per-unit={line.itemNumber}>{line.after.pricePerUnit}</td>
-                <td className="py-1">{line.before && line.before.deliveryDate !== line.after.deliveryDate ? `${line.before.deliveryDate} → ${line.after.deliveryDate}` : line.after.deliveryDate}</td>
+                <td>{line.itemNumber}</td>
+                <td>{line.asked.quantity} · {line.asked.deliveryDate}</td>
+                <td>{line.before && line.before.quantity !== line.after.quantity ? `${line.before.quantity} → ${line.after.quantity}` : line.after.quantity}</td>
+                <td>{line.after.unit}</td>
+                <td>{line.before && line.before.netPrice !== line.after.netPrice ? `${line.before.netPrice} → ${line.after.netPrice}` : line.after.netPrice}</td>
+                <td>{line.after.priceUnit}</td>
+                <td data-quotation-per-unit={line.itemNumber}>{line.after.pricePerUnit}</td>
+                <td>{line.before && line.before.deliveryDate !== line.after.deliveryDate ? `${line.before.deliveryDate} → ${line.after.deliveryDate}` : line.after.deliveryDate}</td>
               </tr>
             ))}
           </tbody>
@@ -102,7 +102,7 @@ export default function Quotation({
 
   return (
     <>
-      <section aria-labelledby="quotation-lookup" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="quotation-lookup" className="border border-line bg-surface p-4">
         <h2 id="quotation-lookup" className="text-sm font-semibold">{t('quotation.lookupTitle')}</h2>
         <form method="get" action={ROUTE} className="mt-3 flex flex-wrap items-end gap-3">
           <Field label={t('quotation.request')}>
@@ -129,7 +129,7 @@ export default function Quotation({
       </section>
 
       {opened && (
-        <section aria-labelledby="quotation-maintain" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="quotation-maintain" className="border border-line bg-surface p-4">
           <h2 id="quotation-maintain" className="text-sm font-semibold">
             {standing ? standing.quotationNumber : t('quotation.newOffer')}
           </h2>

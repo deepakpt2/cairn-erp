@@ -168,10 +168,10 @@ export default function PurchaseOrderListShell({ canUse, selection, result, list
                 <td>{row.shortText}</td>
                 <td className="code">{row.materialGroup}</td>
                 <td className="code">{row.plant}</td>
-                <td className="text-end">{row.quantity.toFixed(3)}</td>
+                <td className="text-end num">{row.quantity.toFixed(3)}</td>
                 <td>{row.unit}</td>
-                <td className="text-end">{row.netPrice.toFixed(2)} / {row.priceUnit}</td>
-                <td className="text-end">{row.netValue.toFixed(2)}</td>
+                <td className="text-end num">{row.netPrice.toFixed(2)} / {row.priceUnit}</td>
+                <td className="text-end num">{row.netValue.toFixed(2)}</td>
                 <td className="code">{row.currency}</td>
                 <td>{row.deliveryDate}</td>
                 <td>{row.releaseStatus}{row.markedForDeletion ? ' · MFD' : ''}</td>
@@ -180,10 +180,10 @@ export default function PurchaseOrderListShell({ canUse, selection, result, list
                     ? `${row.requisitionNumber} / ${row.requisitionItem ?? ''}${row.requisitionQuantity === null ? '' : ` (${row.requisitionQuantity.toFixed(3)})`}`
                     : ''}
                 </td>
-                <td className="text-end">{row.deliveredQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.invoicedQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.openDeliveryQuantity.toFixed(3)}</td>
-                <td className="text-end">{row.openInvoiceQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.deliveredQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.invoicedQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.openDeliveryQuantity.toFixed(3)}</td>
+                <td className="text-end num">{row.openInvoiceQuantity.toFixed(3)}</td>
                 <td>{row.accountAssignmentCategory}</td>
                 <td>{row.status}</td>
                 <td className="code"><Link href={row.drillDown}>{t('poList.display')}</Link></td>

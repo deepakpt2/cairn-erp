@@ -38,7 +38,7 @@ function stateLabel(state: string): string {
 function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boolean }) {
   return (
     <section aria-labelledby="po-display-document" className="space-y-4" data-po-display>
-      <div className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <div className="border border-line bg-surface p-4">
         <h2 id="po-display-document" className="text-sm font-semibold" data-po-number>{order.orderNumber}</h2>
         <p className="mt-1 text-sm" data-po-identity>
           <span data-po-supplier>{order.supplierNumber}{order.supplierName ? ` · ${order.supplierName}` : ''}</span>
@@ -91,7 +91,7 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
       </div>
 
       {order.items.map((item) => (
-        <section key={item.itemNumber} aria-labelledby={`po-item-${item.itemNumber}`} className="rounded-card border border-line bg-surface p-4 shadow-card" data-po-item={item.itemNumber}>
+        <section key={item.itemNumber} aria-labelledby={`po-item-${item.itemNumber}`} className="border border-line bg-surface p-4" data-po-item={item.itemNumber}>
           <h3 id={`po-item-${item.itemNumber}`} className="text-sm font-semibold">
             {item.itemNumber} · {item.shortText}
           </h3>
@@ -139,20 +139,20 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
           {item.schedules.length === 0 ? (
             <p className="mt-1 text-sm text-ink-soft" data-po-no-schedule={item.itemNumber}>{t('poDisplay.noSchedule')}</p>
           ) : (
-            <table className="mt-2 w-full text-sm">
+            <table className="grid-table mt-2 text-sm">
               <thead>
                 <tr className="text-left text-ink-soft">
-                  <th className="py-1 pr-3">{t('poDisplay.line')}</th>
-                  <th className="py-1 pr-3">{t('poDisplay.deliveryDate')}</th>
-                  <th className="py-1">{t('poDisplay.quantity')}</th>
+                  <th>{t('poDisplay.line')}</th>
+                  <th>{t('poDisplay.deliveryDate')}</th>
+                  <th>{t('poDisplay.quantity')}</th>
                 </tr>
               </thead>
               <tbody>
                 {item.schedules.map((line) => (
                   <tr key={line.lineNumber} data-po-schedule={`${item.itemNumber}-${line.lineNumber}`}>
-                    <td className="py-1 pr-3">{line.lineNumber}</td>
-                    <td className="py-1 pr-3">{line.deliveryDate}</td>
-                    <td className="py-1">{line.quantity}</td>
+                    <td>{line.lineNumber}</td>
+                    <td>{line.deliveryDate}</td>
+                    <td>{line.quantity}</td>
                   </tr>
                 ))}
               </tbody>
@@ -164,24 +164,24 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
           {item.assignments.length === 0 ? (
             <p className="mt-1 text-sm text-ink-soft" data-po-no-assignment={item.itemNumber}>{t('poDisplay.noAssignment')}</p>
           ) : (
-            <table className="mt-2 w-full text-sm">
+            <table className="grid-table mt-2 text-sm">
               <thead>
                 <tr className="text-left text-ink-soft">
-                  <th className="py-1 pr-3">{t('poDisplay.line')}</th>
-                  <th className="py-1 pr-3">{t('poDisplay.costCenter')}</th>
-                  <th className="py-1 pr-3">{t('poDisplay.gl')}</th>
-                  <th className="py-1 pr-3">{t('poDisplay.percent')}</th>
-                  <th className="py-1">{t('poDisplay.share')}</th>
+                  <th>{t('poDisplay.line')}</th>
+                  <th>{t('poDisplay.costCenter')}</th>
+                  <th>{t('poDisplay.gl')}</th>
+                  <th>{t('poDisplay.percent')}</th>
+                  <th>{t('poDisplay.share')}</th>
                 </tr>
               </thead>
               <tbody>
                 {item.assignments.map((line) => (
                   <tr key={line.lineNumber} data-po-assignment={`${item.itemNumber}-${line.lineNumber}`}>
-                    <td className="py-1 pr-3">{line.lineNumber}</td>
-                    <td className="py-1 pr-3">{line.costCenter}</td>
-                    <td className="py-1 pr-3">{line.glAccount}</td>
-                    <td className="py-1 pr-3">{line.distributionPercentage}</td>
-                    <td className="py-1" data-po-share={`${item.itemNumber}-${line.lineNumber}`}>{line.assignedValue}</td>
+                    <td>{line.lineNumber}</td>
+                    <td>{line.costCenter}</td>
+                    <td>{line.glAccount}</td>
+                    <td>{line.distributionPercentage}</td>
+                    <td data-po-share={`${item.itemNumber}-${line.lineNumber}`}>{line.assignedValue}</td>
                   </tr>
                 ))}
               </tbody>
@@ -191,24 +191,24 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
         </section>
       ))}
 
-      <section aria-labelledby="po-display-history" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="po-display-history" className="border border-line bg-surface p-4">
         <h2 id="po-display-history" className="text-sm font-semibold">{t('poDisplay.history')}</h2>
         <p className="mt-1 text-xs text-ink-soft" data-po-history-note>{t('poDisplay.historyNote')}</p>
         {order.historyTruncated && <p className="mt-1 text-sm text-ink-soft">{t('poDisplay.truncated')}</p>}
         <h3 className="mt-3 text-sm font-semibold">{t('poDisplay.goods')}</h3>
         {order.goods.length === 0 ? <p className="mt-1 text-sm text-ink-soft" data-po-no-goods>{t('poDisplay.noGoods')}</p> : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <tbody>
               {order.goods.map((row) => (
                 <tr key={`${row.documentNumber}-${row.lineNumber}`} data-po-goods={row.documentNumber}>
-                  <td className="py-1 pr-3">
+                  <td>
                     <Link className="underline" href={`/inventory/material-documents?document=${encodeURIComponent(row.documentNumber)}&fiscalYear=${row.documentYear}`}>{row.documentNumber}</Link>
                     {' / '}{row.lineNumber} · {row.itemNumber} · {row.direction} · {row.status}
                     {row.reversalOf ? ` · ${t('poDisplay.reversalOf')} ${row.reversalOf}` : ''}
                     {row.reversedBy ? ` · ${t('poDisplay.reversedBy')} ${row.reversedBy}` : ''}
                     {row.returnOf ? ` · ${t('poDisplay.returnOf')} ${row.returnOf}` : ''}
                   </td>
-                  <td className="py-1">{row.entryQuantity} {row.entryUnit} · {row.postingDate}</td>
+                  <td>{row.entryQuantity} {row.entryUnit} · {row.postingDate}</td>
                 </tr>
               ))}
             </tbody>
@@ -216,11 +216,11 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
         )}
         <h3 className="mt-3 text-sm font-semibold">{t('poDisplay.invoices')}</h3>
         {order.invoices.length === 0 ? <p className="mt-1 text-sm text-ink-soft" data-po-no-invoice>{t('poDisplay.noInvoice')}</p> : (
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <tbody>
               {order.invoices.map((row) => (
                 <tr key={`${row.invoiceNumber}-${row.lineNumber}`} data-po-invoice={row.invoiceNumber}>
-                  <td className="py-1 pr-3">
+                  <td>
                     <Link className="underline" href={`/purchasing/invoice-overview?companyFrom=${encodeURIComponent(order.companyCode)}&fiscalYear=${row.fiscalYear}&orderFrom=${encodeURIComponent(order.orderNumber)}&orderTo=${encodeURIComponent(order.orderNumber)}`}>{row.invoiceNumber}</Link>
                     {' · '}{row.category} · {row.status} · {row.itemNumber}
                     {row.cancellationOf ? ` · ${t('poDisplay.cancels')} ${row.cancellationOf}` : ''}
@@ -229,7 +229,7 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
                       ? <> · <Link className="underline" href={`/finance/journal/document?document=${encodeURIComponent(row.journalDocumentNumber)}&company=${encodeURIComponent(order.companyCode)}&year=${row.fiscalYear}`}>{row.journalDocumentNumber}</Link></>
                       : ` · ${t('poDisplay.noJournal')}`}
                   </td>
-                  <td className="py-1">{row.quantity} {row.unit} · {row.netAmount} {row.currency}</td>
+                  <td>{row.quantity} {row.unit} · {row.netAmount} {row.currency}</td>
                 </tr>
               ))}
             </tbody>
@@ -260,14 +260,14 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
         )}
         <h3 className="mt-3 text-sm font-semibold">{t('poDisplay.changes')}</h3>
         {order.changes.length === 0 ? <p className="mt-1 text-sm text-ink-soft" data-po-no-change>{t('poDisplay.noChange')}</p> : (
-          <table className="mt-2 w-full text-sm" data-po-changes>
+          <table className="grid-table mt-2 text-sm" data-po-changes>
             <tbody>
               {order.changes.map((row, index) => (
                 <tr key={`${row.changedAt}-${row.fieldName ?? index}`}>
-                  <td className="py-1 pr-3">{row.fieldName ?? row.changeType}</td>
-                  <td className="py-1 pr-3">{row.oldValue ?? t('poDisplay.notProvided')}</td>
-                  <td className="py-1 pr-3">{row.newValue ?? t('poDisplay.notProvided')}</td>
-                  <td className="py-1">{row.changedBy}{row.reason ? ` · ${row.reason}` : ''}</td>
+                  <td>{row.fieldName ?? row.changeType}</td>
+                  <td>{row.oldValue ?? t('poDisplay.notProvided')}</td>
+                  <td>{row.newValue ?? t('poDisplay.notProvided')}</td>
+                  <td>{row.changedBy}{row.reason ? ` · ${row.reason}` : ''}</td>
                 </tr>
               ))}
             </tbody>
@@ -335,7 +335,7 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
 
       {!canDisplay && <p className="text-sm text-red-700" role="alert">{t('poDisplay.capabilityMissing')}</p>}
 
-      <section aria-labelledby="po-display-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="po-display-selection" className="border border-line bg-surface p-4">
         <h2 id="po-display-selection" className="text-sm font-semibold">{t('poDisplay.selection')}</h2>
         <p className="mt-1 text-xs text-ink-soft" data-po-read-only>{t('poDisplay.readOnly')}</p>
         <form method="get" action={PO_DISPLAY_ROUTE} className="mt-3 space-y-3">
@@ -390,23 +390,23 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
       {opened && <OrderView order={opened} canChange={canChange} />}
 
       {search && (
-        <section aria-labelledby="po-display-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="po-display-list" className="border border-line bg-surface p-4">
           <h2 id="po-display-list" className="text-sm font-semibold">{search.recent ? t('poDisplay.recent') : t('poDisplay.matches')}</h2>
           {search.truncated && <p className="mt-1 text-xs text-ink-soft">{t('poDisplay.searchTruncated')}</p>}
           {search.rows.length === 0 ? (
             <p className="mt-3 text-sm text-ink-soft" data-po-empty>{t('poDisplay.empty')}</p>
           ) : (
-            <table className="mt-3 w-full text-sm">
+            <table className="grid-table mt-3 text-sm">
               <tbody>
                 {search.rows.map((row) => (
                   <tr key={row.orderNumber} data-po-hit={row.orderNumber}>
-                    <td className="py-1 pr-3">
+                    <td>
                       <Link className="underline" href={`${PO_DISPLAY_ROUTE}?order=${encodeURIComponent(row.orderNumber)}`}>{row.orderNumber}</Link>
                     </td>
-                    <td className="py-1 pr-3">{row.supplierNumber}{row.supplierName ? ` · ${row.supplierName}` : ''}</td>
-                    <td className="py-1 pr-3">{row.documentDate}</td>
-                    <td className="py-1 pr-3">{row.releaseStatus}</td>
-                    <td className="py-1">{stateLabel(row.headerState)}</td>
+                    <td>{row.supplierNumber}{row.supplierName ? ` · ${row.supplierName}` : ''}</td>
+                    <td>{row.documentDate}</td>
+                    <td>{row.releaseStatus}</td>
+                    <td>{stateLabel(row.headerState)}</td>
                   </tr>
                 ))}
               </tbody>

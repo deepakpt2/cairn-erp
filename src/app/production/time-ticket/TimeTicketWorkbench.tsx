@@ -29,7 +29,7 @@ export default function TimeTicketWorkbench({
 
   return (
     <div className="space-y-4">
-      <section className="rounded-card border border-line bg-surface p-4 text-sm shadow-card" data-co11n-order={loaded.orderNumber}>
+      <section className="border border-line bg-surface p-4 text-sm" data-co11n-order={loaded.orderNumber}>
         <p>{loaded.orderNumber} · {loaded.materialNumber} {loaded.materialDescription}</p>
         <p>Plant {loaded.plant}. Quantity {loaded.orderQuantity} {loaded.unit}. Status {loaded.status}. Record version {loaded.version}.</p>
         <p>Start {loaded.scheduledStart}. Finish {loaded.scheduledFinish}. Those dates are not rewritten by a confirmation.</p>
@@ -39,7 +39,7 @@ export default function TimeTicketWorkbench({
       </section>
 
       {loaded.operations.length > 0 && (
-        <table className="w-full text-sm" data-co11n-operations>
+        <table className="grid-table text-sm" data-co11n-operations>
           <thead>
             <tr className="text-left text-ink-faint">
               <th>Execution order</th>
@@ -53,8 +53,8 @@ export default function TimeTicketWorkbench({
           <tbody>
             {loaded.operations.map((row) => (
               <tr key={row.operationNumber} data-co11n-operation={row.operationNumber}>
-                <td className="py-1">{row.executionOrder}</td>
-                <td className="py-1">
+                <td>{row.executionOrder}</td>
+                <td>
                   <Link href={`/production/time-ticket?order=${encodeURIComponent(loaded.orderNumber)}&operation=${encodeURIComponent(row.operationNumber)}${loaded.productionVersion ? `&version=${encodeURIComponent(loaded.productionVersion)}` : ''}`}>
                     {row.operationNumber}
                   </Link>
@@ -71,7 +71,7 @@ export default function TimeTicketWorkbench({
       )}
 
       {operation && (
-        <form action={action} className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <form action={action} className="border border-line bg-surface p-4">
           <input type="hidden" name="requestKey" value={requestKey} />
           <input type="hidden" name="orderNumber" value={loaded.orderNumber} />
           <input type="hidden" name="operationNumber" value={operation.operationNumber} />
@@ -130,7 +130,7 @@ export default function TimeTicketWorkbench({
             </label>
           </div>
           {operation.activities.length > 0 ? (
-            <table className="mt-3 w-full text-sm" data-co11n-activities>
+            <table className="grid-table mt-3 text-sm" data-co11n-activities>
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>Activity</th>
@@ -141,7 +141,7 @@ export default function TimeTicketWorkbench({
               <tbody>
                 {operation.activities.map((row) => (
                   <tr key={row.parameter}>
-                    <td className="py-1">{row.parameter} {row.description} {row.required ? '(required)' : ''}</td>
+                    <td>{row.parameter} {row.description} {row.required ? '(required)' : ''}</td>
                     <td>{row.suggested ?? '—'} {row.unit}</td>
                     <td>
                       <input type="hidden" name="activityParameter" value={row.parameter} />
@@ -176,7 +176,7 @@ export default function TimeTicketWorkbench({
                   No goods movement stands behind this confirmation. Stock was not changed.
                 </p>
               ) : state.ticket.movements.length > 0 ? (
-                <table className="mt-1 w-full text-sm">
+                <table className="grid-table mt-1 text-sm">
                   <thead>
                     <tr className="text-left text-ink-faint">
                       <th scope="col">Movement</th>
@@ -190,7 +190,7 @@ export default function TimeTicketWorkbench({
                   <tbody>
                     {state.ticket.movements.map((row) => (
                       <tr key={`${row.kind}-${row.materialNumber}-${row.itemNumber ?? 0}`} data-co11n-movement={row.kind}>
-                        <td className="py-1">
+                        <td>
                           {row.kind === 'ISSUE' ? `Goods issue ${row.movementCode}` : `Goods receipt ${row.movementCode}`}
                           {row.kind === 'ISSUE' && !row.posted && row.requiredQuantity !== null && (
                             <span className="block text-2xs text-ink-soft">

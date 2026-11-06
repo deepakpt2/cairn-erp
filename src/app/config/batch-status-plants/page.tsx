@@ -88,28 +88,28 @@ export default async function PlantBatchStatusPage({
       </form>
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Plant</th>
-              <th className="p-2">Name</th>
-              <th className="p-2">Selected</th>
-              <th className="p-2">Effective</th>
-              <th className="p-2">Changed by</th>
-              <th className="p-2">Changed at</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Plant</th>
+              <th>Name</th>
+              <th>Selected</th>
+              <th>Effective</th>
+              <th>Changed by</th>
+              <th>Changed at</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {plants.map((row) => (
-              <tr key={row.plant} className="border-b border-line">
-                <td className="code p-2">{row.plant}</td>
-                <td className="p-2">{row.plantName}</td>
-                <td className="code p-2">{row.statusActive ?? 'blank'}</td>
-                <td className="p-2">{row.effective ? 'yes' : 'no'}</td>
-                <td className="p-2">{row.changedBy ?? '—'}</td>
-                <td className="p-2">{when(row.changedAt)}</td>
-                <td className="p-2 text-end">
+              <tr key={row.plant}>
+                <td className="code">{row.plant}</td>
+                <td>{row.plantName}</td>
+                <td className="code">{row.statusActive ?? 'blank'}</td>
+                <td>{row.effective ? 'yes' : 'no'}</td>
+                <td>{row.changedBy ?? '—'}</td>
+                <td>{when(row.changedAt)}</td>
+                <td className="text-end">
                   <Link href={`${ROUTE}?plant=${encodeURIComponent(row.plant)}&history=1`} className="underline">History</Link>
                   {canMaintain && current.context.applicable && (
                     <>
@@ -121,7 +121,7 @@ export default async function PlantBatchStatusPage({
               </tr>
             ))}
             {plants.length === 0 && (
-              <tr><td colSpan={7} className="p-3 text-ink-soft">No plant matches. Opening this screen did not create one and did not select one.</td></tr>
+              <tr><td colSpan={7} className="text-ink-soft">No plant matches. Opening this screen did not create one and did not select one.</td></tr>
             )}
           </tbody>
         </table>

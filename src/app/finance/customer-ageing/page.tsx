@@ -76,7 +76,7 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('customerAgeing.subtitle')}</p>
       </header>
 
-      <section aria-labelledby="ca-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ca-selection" className="border border-line bg-surface p-4">
         <h2 id="ca-selection" className="text-sm font-semibold">Selection</h2>
         <form method="get" action={ROUTE} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -120,7 +120,7 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
         )}
       </section>
 
-      <section aria-labelledby="ca-grid" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ca-grid" className="border border-line bg-surface p-4">
         <h2 id="ca-grid" className="text-sm font-semibold">Ageing</h2>
         {!view ? (
           <p className="mt-2 text-sm text-ink-soft">No ageing stands loaded. Choose a company, customers and a key date.</p>
@@ -128,28 +128,28 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
           <p className="mt-2 text-sm text-ink-soft">No items stand open as of the key date.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Customer</th>
-                  {[0, 1, 2, 3, 4].map((i) => <th key={i} className="px-2 py-2">{bucketLabel(i)}</th>)}
-                  <th className="px-2 py-2">Total</th>
+                  <th>Customer</th>
+                  {[0, 1, 2, 3, 4].map((i) => <th key={i}>{bucketLabel(i)}</th>)}
+                  <th>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {view.customers.map((row) => (
-                  <tr key={row.customer} className="border-t border-line">
-                    <td className="px-2 py-2">
+                  <tr key={row.customer}>
+                    <td>
                       <Link href={customerHref(row.customer)} className="underline">{row.customer}</Link>
                     </td>
-                    {row.buckets.map((v, i) => <td key={i} className="px-2 py-2">{fmt(v)}</td>)}
-                    <td className="px-2 py-2">{fmt(row.total)}</td>
+                    {row.buckets.map((v, i) => <td key={i}>{fmt(v)}</td>)}
+                    <td>{fmt(row.total)}</td>
                   </tr>
                 ))}
-                <tr className="border-t border-line font-semibold">
-                  <td className="px-2 py-2">Company total</td>
-                  {view.totals.map((v, i) => <td key={i} className="px-2 py-2">{fmt(v)}</td>)}
-                  <td className="px-2 py-2">{fmt(view.grandTotal)}</td>
+                <tr className="font-semibold">
+                  <td>Company total</td>
+                  {view.totals.map((v, i) => <td key={i}>{fmt(v)}</td>)}
+                  <td>{fmt(view.grandTotal)}</td>
                 </tr>
               </tbody>
             </table>
@@ -162,23 +162,23 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
               <p className="mt-2 text-sm text-ink-soft">No items stand for this customer as of the key date.</p>
             ) : (
               <div className="mt-2 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
+                <table className="grid-table text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Document</th><th className="px-2 py-2">Posting date</th>
-                      <th className="px-2 py-2">Due date</th><th className="px-2 py-2">Days overdue</th>
-                      <th className="px-2 py-2">Bucket</th><th className="px-2 py-2">Amount</th>
+                      <th>Document</th><th>Posting date</th>
+                      <th>Due date</th><th>Days overdue</th>
+                      <th>Bucket</th><th>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
                     {detailItems.map((item) => (
-                      <tr key={`${item.documentNumber}-${item.lineNumber}`} className="border-t border-line">
-                        <td className="px-2 py-2">{item.documentNumber}</td>
-                        <td className="px-2 py-2">{item.postingDate}</td>
-                        <td className="px-2 py-2">{item.dueDate}</td>
-                        <td className="px-2 py-2">{item.daysOverdue}</td>
-                        <td className="px-2 py-2">{bucketLabel(item.bucket)}</td>
-                        <td className="px-2 py-2">{fmt(item.signed)} {item.currency}</td>
+                      <tr key={`${item.documentNumber}-${item.lineNumber}`}>
+                        <td>{item.documentNumber}</td>
+                        <td>{item.postingDate}</td>
+                        <td>{item.dueDate}</td>
+                        <td>{item.daysOverdue}</td>
+                        <td>{bucketLabel(item.bucket)}</td>
+                        <td>{fmt(item.signed)} {item.currency}</td>
                       </tr>
                     ))}
                   </tbody>

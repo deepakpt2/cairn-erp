@@ -40,7 +40,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
 
   return (
     <>
-      <section aria-labelledby="transfer-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="transfer-header" className="border border-line bg-surface p-4">
         <h2 id="transfer-header" className="text-sm font-semibold">{t('mb1b.header')}</h2>
         <form method="get" action="/inventory/transfer-posting" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -78,7 +78,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
         <p className="mt-2 text-sm text-ink-soft">{t('mb1b.movementHint')}</p>
       </section>
 
-      <section aria-labelledby="transfer-item" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="transfer-item" className="border border-line bg-surface p-4">
         <h2 id="transfer-item" className="text-sm font-semibold">{t('mb1b.item')}</h2>
         {postState.message && (
           <p role="status" className={`mt-2 text-sm ${postState.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -163,7 +163,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
         </form>
 
         {checkState.message && (
-          <div data-transfer-preview className="mt-3 rounded-card border border-line bg-canvas p-3">
+          <div data-transfer-preview className="mt-3 border border-line bg-canvas p-3">
             <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-red-700'}`}>
               {checkState.message}{checkState.remedy ? ` ${checkState.remedy}` : ''}
             </p>
@@ -229,24 +229,24 @@ export default function TransferPosting({ document, stock, canPost, today }: {
       </section>
 
       {stock.length > 0 && (
-        <section aria-labelledby="transfer-stock" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="transfer-stock" className="border border-line bg-surface p-4">
           <h2 id="transfer-stock" className="text-sm font-semibold">{t('mb1b.stockOnHand')}</h2>
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mb1b.columnLocation')}</th>
-                <th className="py-1">{t('mb1b.columnStockType')}</th>
-                <th className="py-1">Batch</th>
-                <th className="py-1 text-right">{t('mb1b.columnQuantity')}</th>
+                <th>{t('mb1b.columnLocation')}</th>
+                <th>{t('mb1b.columnStockType')}</th>
+                <th>Batch</th>
+                <th className="text-right">{t('mb1b.columnQuantity')}</th>
               </tr>
             </thead>
             <tbody>
               {stock.map((row) => (
-                <tr key={`${row.storageLocation}/${row.stockType}/${row.batchNumber}`} className="border-t border-line">
-                  <td className="py-1">{row.storageLocation}</td>
-                  <td className="py-1">{row.stockType}</td>
-                  <td className="py-1">{row.batchNumber || '—'}</td>
-                  <td className="py-1 text-right tabular-nums">{Number(row.quantity).toFixed(3)}</td>
+                <tr key={`${row.storageLocation}/${row.stockType}/${row.batchNumber}`}>
+                  <td>{row.storageLocation}</td>
+                  <td>{row.stockType}</td>
+                  <td>{row.batchNumber || '—'}</td>
+                  <td className="text-right tabular-nums num">{Number(row.quantity).toFixed(3)}</td>
                 </tr>
               ))}
             </tbody>
@@ -255,7 +255,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
       )}
 
       {document && (
-        <section aria-labelledby="transfer-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="transfer-document" className="border border-line bg-surface p-4">
           <h2 id="transfer-document" className="text-sm font-semibold">
             {t('mb1b.document')} {document.materialDocumentNumber}
           </h2>
@@ -265,32 +265,32 @@ export default function TransferPosting({ document, stock, canPost, today }: {
             {document.externalReference ? ` · ${t('mb1b.externalReference')} ${document.externalReference}` : ''}
             {document.reversalOf ? ` · ${t('mb1b.reversalOf')} ${document.reversalOf}` : ''}
           </p>
-          <table className="mt-2 w-full text-sm">
+          <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('mb1b.columnLine')}</th>
-                <th className="py-1">{t('mb1b.columnSide')}</th>
-                <th className="py-1">{t('mb1b.columnMovement')}</th>
-                <th className="py-1">{t('mb1b.columnPlant')}</th>
-                <th className="py-1">{t('mb1b.columnLocation')}</th>
-                <th className="py-1">{t('mb1b.columnStockType')}</th>
-                <th className="py-1 text-right">{t('mb1b.columnQuantity')}</th>
-                <th className="py-1 text-right">{t('mb1b.columnValue')}</th>
+                <th>{t('mb1b.columnLine')}</th>
+                <th>{t('mb1b.columnSide')}</th>
+                <th>{t('mb1b.columnMovement')}</th>
+                <th>{t('mb1b.columnPlant')}</th>
+                <th>{t('mb1b.columnLocation')}</th>
+                <th>{t('mb1b.columnStockType')}</th>
+                <th className="text-right">{t('mb1b.columnQuantity')}</th>
+                <th className="text-right">{t('mb1b.columnValue')}</th>
               </tr>
             </thead>
             <tbody>
               {document.lines.map((line) => (
-                <tr key={line.lineNumber} data-line={line.lineNumber} data-side={line.lineDirection} className="border-t border-line">
-                  <td className="py-1">{line.lineNumber}</td>
-                  <td className="py-1">{line.lineDirection === 'ISSUE' ? t('mb1b.issue') : t('mb1b.receipt')}</td>
-                  <td className="py-1">{line.movementType}</td>
-                  <td className="py-1">{line.plant}</td>
-                  <td className="py-1">{line.storageLocation}</td>
-                  <td className="py-1">{line.stockType}</td>
+                <tr key={line.lineNumber} data-line={line.lineNumber} data-side={line.lineDirection}>
+                  <td>{line.lineNumber}</td>
+                  <td>{line.lineDirection === 'ISSUE' ? t('mb1b.issue') : t('mb1b.receipt')}</td>
+                  <td>{line.movementType}</td>
+                  <td>{line.plant}</td>
+                  <td>{line.storageLocation}</td>
+                  <td>{line.stockType}</td>
                   <td className={`py-1 text-right tabular-nums ${line.lineDirection === 'ISSUE' ? 'text-red-700' : ''}`}>
                     {line.lineDirection === 'ISSUE' ? '−' : ''}{Number(line.quantity).toFixed(3)}
                   </td>
-                  <td className="py-1 text-right tabular-nums">{Number(line.value).toFixed(2)}</td>
+                  <td className="text-right tabular-nums num">{Number(line.value).toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>

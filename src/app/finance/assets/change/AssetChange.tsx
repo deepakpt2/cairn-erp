@@ -41,7 +41,7 @@ export default function AssetChange({ asset, today }: { asset: AssetView; today:
 
   return (
     <div className="space-y-4">
-      <section aria-labelledby="fa-general" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="fa-general" className="border border-line bg-surface p-4">
         <h2 id="fa-general" className="text-sm font-semibold">
           Asset {asset.assetNumber}/{asset.subNumber} · Company {asset.companyCode} · Class {asset.assetClass} · {asset.status} · Version {asset.version}
         </h2>
@@ -68,7 +68,7 @@ export default function AssetChange({ asset, today }: { asset: AssetView; today:
         </p>
       </section>
 
-      <section aria-labelledby="fa-assign" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="fa-assign" className="border border-line bg-surface p-4">
         <h2 id="fa-assign" className="text-sm font-semibold">Time-dependent assignments</h2>
         <ul className="mt-2 space-y-1 text-sm">
           {asset.assignments.map((a) => (
@@ -97,7 +97,7 @@ export default function AssetChange({ asset, today }: { asset: AssetView; today:
         </form>
       </section>
 
-      <section aria-labelledby="fa-depr" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="fa-depr" className="border border-line bg-surface p-4">
         <h2 id="fa-depr" className="text-sm font-semibold">Depreciation areas</h2>
         <ul className="mt-2 space-y-1 text-sm">
           {asset.depreciation.map((d) => (
@@ -130,7 +130,7 @@ export default function AssetChange({ asset, today }: { asset: AssetView; today:
         </p>
       </section>
 
-      <section aria-labelledby="fa-deact" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="fa-deact" className="border border-line bg-surface p-4">
         <h2 id="fa-deact" className="text-sm font-semibold">Deactivation</h2>
         <Message state={deactState} />
         <form action={deactivate} className="mt-3 flex flex-wrap items-end gap-3">

@@ -142,21 +142,21 @@ export default function MovementTypes({
           </p>
         ) : (
           <div className="overflow-x-auto border border-line">
-            <table className="w-full text-sm">
+            <table className="grid-table text-sm">
               <thead className="bg-paper text-left text-ink-soft">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Movement type</th>
-                  <th className="px-3 py-2 font-medium">Description</th>
-                  <th className="px-3 py-2 font-medium">Direction</th>
-                  <th className="px-3 py-2 font-medium">Reference</th>
-                  <th className="px-3 py-2 font-medium">Reversal</th>
-                  <th className="px-3 py-2 font-medium">Cited</th>
+                  <th className="font-medium">Movement type</th>
+                  <th className="font-medium">Description</th>
+                  <th className="font-medium">Direction</th>
+                  <th className="font-medium">Reference</th>
+                  <th className="font-medium">Reversal</th>
+                  <th className="font-medium">Cited</th>
                 </tr>
               </thead>
               <tbody>
                 {movements.map((movement) => (
-                  <tr key={movement.movementType} className="border-t border-line">
-                    <td className="px-3 py-2">
+                  <tr key={movement.movementType}>
+                    <td>
                       <button
                         type="button"
                         className="code text-left underline"
@@ -165,11 +165,11 @@ export default function MovementTypes({
                         {movement.movementType}
                       </button>
                     </td>
-                    <td className="px-3 py-2">{movement.description}</td>
-                    <td className="px-3 py-2">{movement.direction}</td>
-                    <td className="px-3 py-2">{movement.referenceCategory}</td>
-                    <td className="px-3 py-2">{movement.reversalMovementType ?? '—'}</td>
-                    <td className="px-3 py-2">{citedByHistory(movement) ? 'History' : cited(movement) ? 'Reversal' : 'No'}</td>
+                    <td>{movement.description}</td>
+                    <td>{movement.direction}</td>
+                    <td>{movement.referenceCategory}</td>
+                    <td>{movement.reversalMovementType ?? '—'}</td>
+                    <td>{citedByHistory(movement) ? 'History' : cited(movement) ? 'Reversal' : 'No'}</td>
                   </tr>
                 ))}
               </tbody>

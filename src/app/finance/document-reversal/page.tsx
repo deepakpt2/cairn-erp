@@ -152,12 +152,12 @@ export default async function DocumentReversalPage({
       <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
 
       {!grant && (
-        <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft" role="note">
+        <p className="border border-line bg-surface p-4 text-sm text-ink-soft" role="note">
           The {DOCUMENT_REVERSE_CAPABILITY} capability stands required to reverse documents.
         </p>
       )}
 
-      <section aria-labelledby="dr-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="dr-selection" className="border border-line bg-surface p-4">
         <h2 id="dr-selection" className="text-sm font-semibold">Accounting document</h2>
         <form method="get" action={ROUTE} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -180,7 +180,7 @@ export default async function DocumentReversalPage({
       </section>
 
       {view && (
-        <section aria-labelledby="dr-review" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="dr-review" className="border border-line bg-surface p-4">
           <h2 id="dr-review" className="text-sm font-semibold">
             {view.documentType} document {view.documentNumber} — {view.status}
           </h2>
@@ -203,26 +203,26 @@ export default async function DocumentReversalPage({
             <p className="mt-2 text-sm text-ink-soft">Reversed by {view.reversedBy}.</p>
           ) : null}
 
-          <table className="mt-4 w-full text-sm">
+          <table className="grid-table mt-4 text-sm">
             <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1 pr-3">Line</th><th className="py-1 pr-3">Account</th>
-                <th className="py-1 pr-3">Partner</th><th className="py-1 pr-3">D/C</th>
-                <th className="py-1 pr-3 text-right">Amount {view.documentCurrency}</th>
-                <th className="py-1 pr-3 text-right">Local {view.localCurrency}</th>
-                <th className="py-1 pr-3">Clearing</th>
+              <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                <th>Line</th><th>Account</th>
+                <th>Partner</th><th>D/C</th>
+                <th className="text-right">Amount {view.documentCurrency}</th>
+                <th className="text-right">Local {view.localCurrency}</th>
+                <th>Clearing</th>
               </tr>
             </thead>
             <tbody>
               {view.lines.map((l) => (
-                <tr key={l.lineNumber} className="border-b border-line/60">
-                  <td className="py-1 pr-3">{l.lineNumber}</td>
-                  <td className="py-1 pr-3">{l.glAccount}</td>
-                  <td className="py-1 pr-3">{l.businessPartner ?? '—'}</td>
-                  <td className="py-1 pr-3">{l.debitCredit}</td>
-                  <td className="py-1 pr-3 text-right">{fmt(l.amountDocument)}</td>
-                  <td className="py-1 pr-3 text-right">{fmt(l.amountLocal)}</td>
-                  <td className="py-1 pr-3">{l.clearingDocument ? `${l.clearingDocument}${l.clearingDate ? ` · ${l.clearingDate}` : ''}` : 'Open'}</td>
+                <tr key={l.lineNumber}>
+                  <td>{l.lineNumber}</td>
+                  <td>{l.glAccount}</td>
+                  <td>{l.businessPartner ?? '—'}</td>
+                  <td>{l.debitCredit}</td>
+                  <td className="text-right">{fmt(l.amountDocument)}</td>
+                  <td className="text-right">{fmt(l.amountLocal)}</td>
+                  <td>{l.clearingDocument ? `${l.clearingDocument}${l.clearingDate ? ` · ${l.clearingDate}` : ''}` : 'Open'}</td>
                 </tr>
               ))}
             </tbody>
@@ -302,7 +302,7 @@ export default async function DocumentReversalPage({
         </section>
       )}
 
-      <section aria-labelledby="dr-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="dr-result" className="border border-line bg-surface p-4">
         <h2 id="dr-result" className="text-sm font-semibold">Reversal</h2>
         {done ? (
           <p className="mt-2 text-sm text-ink-soft">

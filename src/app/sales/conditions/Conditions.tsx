@@ -78,19 +78,19 @@ export default function Conditions({ records, salesAreas, canMaintain }: Props) 
 
       <section className="panel p-4" aria-label="Condition records">
         <h2 className="text-lg font-semibold">Standing prices</h2>
-        <table className="mt-2 w-full text-sm">
+        <table className="grid-table mt-2 text-sm">
           <thead>
             <tr className="text-left text-xs text-ink-faint">
-              <th className="py-1">Record</th><th>Sales area</th><th>Customer</th><th>Material</th>
+              <th>Record</th><th>Sales area</th><th>Customer</th><th>Material</th>
               <th className="text-right">Amount</th><th>Valid from</th><th>Valid to</th><th>Changed by</th>
             </tr>
           </thead>
           <tbody>
             {records.length === 0 ? (
-              <tr><td colSpan={8} className="py-3 text-ink-soft">No condition record stands for that selection.</td></tr>
+              <tr><td colSpan={8} className="text-ink-soft">No condition record stands for that selection.</td></tr>
             ) : records.map((record) => (
-              <tr key={record.conditionNumber} className="border-t border-line">
-                <td className="py-1 code">{record.conditionNumber}</td>
+              <tr key={record.conditionNumber}>
+                <td className="code">{record.conditionNumber}</td>
                 <td>{record.salesOrg}/{record.distributionChannel}/{record.division}</td>
                 <td>{record.customerNumber || 'any'}</td>
                 <td>{record.materialNumber || 'any'}</td>

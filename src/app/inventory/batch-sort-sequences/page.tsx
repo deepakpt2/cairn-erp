@@ -80,24 +80,24 @@ export default async function BatchSortSequencePage({
 
       <SortForm canMaintain={canMaintain} editing={editing} creating={creating} displayOnly={displayOnly} choices={choices} />
 
-      <table className="w-full border border-line bg-white text-sm">
+      <table className="grid-table border border-line bg-white text-sm">
         <thead>
-          <tr className="border-b border-line text-left">
-            <th className="p-2">Sequence</th>
-            <th className="p-2">Description</th>
-            <th className="p-2">Status</th>
-            <th className="p-2">Criteria</th>
-            <th className="p-2"> </th>
+          <tr className="text-left">
+            <th>Sequence</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Criteria</th>
+            <th> </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.sortSequence} className="border-b border-line">
-              <td className="code p-2">{row.sortSequence}</td>
-              <td className="p-2">{row.description}</td>
-              <td className="p-2">{row.status} · {row.statusTitle}</td>
-              <td className="code p-2">{row.criteria.map((item) => `${item.position} ${item.characteristicName} ${item.direction}`).join(', ') || '—'}</td>
-              <td className="p-2">
+            <tr key={row.sortSequence}>
+              <td className="code">{row.sortSequence}</td>
+              <td>{row.description}</td>
+              <td>{row.status} · {row.statusTitle}</td>
+              <td className="code">{row.criteria.map((item) => `${item.position} ${item.characteristicName} ${item.direction}`).join(', ') || '—'}</td>
+              <td>
                 <Link href={`/inventory/batch-sort-sequences?sequence=${row.sortSequence}&mode=display`} className="underline">Display</Link>
                 {canMaintain && (
                   <>
@@ -111,7 +111,7 @@ export default async function BatchSortSequencePage({
             </tr>
           ))}
           {rows.length === 0 && (
-            <tr><td className="p-2 text-ink-soft" colSpan={5}>No sort sequence stands. Opening this screen did not create one.</td></tr>
+            <tr><td className="text-ink-soft" colSpan={5}>No sort sequence stands. Opening this screen did not create one.</td></tr>
           )}
         </tbody>
       </table>

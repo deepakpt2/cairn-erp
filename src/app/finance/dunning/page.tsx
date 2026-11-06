@@ -192,12 +192,12 @@ export default async function DunningPage({
       </header>
 
       {!grant && (
-        <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft" role="note">
+        <p className="border border-line bg-surface p-4 text-sm text-ink-soft" role="note">
           The {DUNNING_CAPABILITY} capability stands required to run dunning.
         </p>
       )}
 
-      <section aria-labelledby="dn-parameters" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="dn-parameters" className="border border-line bg-surface p-4">
         <h2 id="dn-parameters" className="text-sm font-semibold">Run parameters</h2>
         <form method="get" action={ROUTE} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
@@ -248,7 +248,7 @@ export default async function DunningPage({
       </section>
 
       {view && (
-        <section aria-labelledby="dn-proposal" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="dn-proposal" className="border border-line bg-surface p-4">
           <h2 id="dn-proposal" className="text-sm font-semibold">
             Run {view.runId} of {view.runDate} — {view.status}
           </h2>
@@ -262,23 +262,23 @@ export default async function DunningPage({
             <p className="mt-3 text-sm text-ink-soft">No account stands proposed or excluded on this run.</p>
           ) : (
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Company</th><th className="px-2 py-2">Customer</th>
-                    <th className="px-2 py-2">Level</th><th className="px-2 py-2">Overdue</th>
-                    <th className="px-2 py-2">Status</th><th className="px-2 py-2">Exception / act</th>
+                    <th>Company</th><th>Customer</th>
+                    <th>Level</th><th>Overdue</th>
+                    <th>Status</th><th>Exception / act</th>
                   </tr>
                 </thead>
                 <tbody>
                   {view.accounts.map((a) => (
-                    <tr key={`${a.companyCode}|${a.customer}`} className="border-t border-line">
-                      <td className="px-2 py-2">{a.companyCode}</td>
-                      <td className="px-2 py-2">{a.customer}</td>
-                      <td className="px-2 py-2">{a.proposedLevel ?? '—'}</td>
-                      <td className="px-2 py-2">{a.totalOverdue} {a.currency ?? ''}</td>
-                      <td className="px-2 py-2">{a.status}</td>
-                      <td className="px-2 py-2">
+                    <tr key={`${a.companyCode}|${a.customer}`}>
+                      <td>{a.companyCode}</td>
+                      <td>{a.customer}</td>
+                      <td>{a.proposedLevel ?? '—'}</td>
+                      <td>{a.totalOverdue} {a.currency ?? ''}</td>
+                      <td>{a.status}</td>
+                      <td>
                         {a.status === 'PROPOSED' && view.status === 'PROPOSED' && grant ? (
                           <form action={doExclude}>
                             {hiddenParams}
@@ -297,25 +297,25 @@ export default async function DunningPage({
 
           {view.items.length > 0 && (
             <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Customer</th><th className="px-2 py-2">Document</th>
-                    <th className="px-2 py-2">Due date</th><th className="px-2 py-2">Days overdue</th>
-                    <th className="px-2 py-2">Amount</th><th className="px-2 py-2">Level</th>
-                    <th className="px-2 py-2">Status</th>
+                    <th>Customer</th><th>Document</th>
+                    <th>Due date</th><th>Days overdue</th>
+                    <th>Amount</th><th>Level</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {view.items.map((i) => (
-                    <tr key={`${i.companyCode}|${i.customer}|${i.documentNumber}|${i.lineNumber}`} className="border-t border-line">
-                      <td className="px-2 py-2">{i.customer}</td>
-                      <td className="px-2 py-2">{i.documentNumber}</td>
-                      <td className="px-2 py-2">{i.dueDate}</td>
-                      <td className="px-2 py-2">{i.daysOverdue}</td>
-                      <td className="px-2 py-2">{i.overdueAmount} {i.currency}</td>
-                      <td className="px-2 py-2">{i.proposedLevel}</td>
-                      <td className="px-2 py-2">{i.status}</td>
+                    <tr key={`${i.companyCode}|${i.customer}|${i.documentNumber}|${i.lineNumber}`}>
+                      <td>{i.customer}</td>
+                      <td>{i.documentNumber}</td>
+                      <td>{i.dueDate}</td>
+                      <td>{i.daysOverdue}</td>
+                      <td>{i.overdueAmount} {i.currency}</td>
+                      <td>{i.proposedLevel}</td>
+                      <td>{i.status}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -348,7 +348,7 @@ export default async function DunningPage({
         </section>
       )}
 
-      <section aria-labelledby="dn-runs" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="dn-runs" className="border border-line bg-surface p-4">
         <h2 id="dn-runs" className="text-sm font-semibold">Dunning runs</h2>
         {runs.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">
@@ -357,26 +357,26 @@ export default async function DunningPage({
           </p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                  <th className="px-2 py-2">Run</th><th className="px-2 py-2">Dunning date</th>
-                  <th className="px-2 py-2">Status</th><th className="px-2 py-2">Accounts</th>
-                  <th className="px-2 py-2">Notices</th>
+                  <th>Run</th><th>Dunning date</th>
+                  <th>Status</th><th>Accounts</th>
+                  <th>Notices</th>
                 </tr>
               </thead>
               <tbody>
                 {runs.map((r) => (
-                  <tr key={`${r.runDate}|${r.runId}`} className="border-t border-line">
-                    <td className="px-2 py-2">
+                  <tr key={`${r.runDate}|${r.runId}`}>
+                    <td>
                       <Link className="underline" href={`${ROUTE}?runDate=${r.runDate}&runId=${r.runId}&dunningDate=${r.dunningDate}&postedThrough=${r.postedThroughDate}&companyCodes=${r.companies.join(',')}`}>
                         {r.runId} of {r.runDate}
                       </Link>
                     </td>
-                    <td className="px-2 py-2">{r.dunningDate}</td>
-                    <td className="px-2 py-2">{r.status}</td>
-                    <td className="px-2 py-2">{r.accounts.length}</td>
-                    <td className="px-2 py-2">{r.notices.length}</td>
+                    <td>{r.dunningDate}</td>
+                    <td>{r.status}</td>
+                    <td>{r.accounts.length}</td>
+                    <td>{r.notices.length}</td>
                   </tr>
                 ))}
               </tbody>

@@ -121,7 +121,7 @@ export default async function ProductionOrderDisplayPage({
             These are the values stored with the snapshot. Display does not re-read the bill of material, and they are not proof that the current bill of material still matches these components.
           </p>
           {document.gaps.map((gap) => <p key={gap}>{gap}</p>)}
-          <table className="w-full text-sm">
+          <table className="grid-table text-sm">
             <thead>
               <tr className="text-left text-ink-faint">
                 <th>Line</th>
@@ -152,7 +152,7 @@ export default async function ProductionOrderDisplayPage({
             </tbody>
           </table>
           {document.operations.length > 0 ? (
-            <table className="w-full text-sm" data-co03-operations>
+            <table className="grid-table text-sm" data-co03-operations>
               <thead>
                 <tr className="text-left text-ink-faint">
                   <th>Operation</th>

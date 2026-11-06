@@ -19,14 +19,14 @@ function ChildTable({ title, rows }: { title: string; rows: Array<Record<string,
   return (
     <div>
       <p className="mt-2 font-medium">{title}</p>
-      <table className="w-full text-sm">
+      <table className="grid-table text-sm">
         <thead>
           <tr className="text-left text-ink-faint">{columns.map((column) => <th key={column}>{column}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((row, index) => (
             <tr key={index}>
-              {columns.map((column) => <td key={column} className="py-1">{row[column] ?? '—'}</td>)}
+              {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
             </tr>
           ))}
         </tbody>
@@ -77,7 +77,7 @@ export default function OrderInformationResultView({
         {' '}The export is these returned rows, not a second query.
       </p>
       {result.rows.length > 0 && (
-        <table className="w-full text-sm" data-coois-rows>
+        <table className="grid-table text-sm" data-coois-rows>
           <thead>
             <tr className="text-left text-ink-faint">
               {result.columns.map((column) => <th key={column.id}>{column.label}</th>)}
@@ -87,8 +87,8 @@ export default function OrderInformationResultView({
           <tbody>
             {result.rows.map((row, index) => (
               <tr key={`${row.orderNumber ?? row.confirmationNumber ?? row.materialDocumentNumber ?? index}-${index}`}>
-                {result.columns.map((column) => <td key={column.id} className="py-1">{row[column.id] ?? '—'}</td>)}
-                <td className="py-1">
+                {result.columns.map((column) => <td key={column.id}>{row[column.id] ?? '—'}</td>)}
+                <td>
                   {row.orderNumber && result.object === 'PRODUCTION_ORDER' && (
                     <Link href={`/production/production-order-display?order=${encodeURIComponent(row.orderNumber)}`}>CO03</Link>
                   )}
@@ -149,7 +149,7 @@ export default function OrderInformationResultView({
         <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={download} data-coois-export>Export returned rows</button>
       </div>
       {result.notes.map((note) => <p key={note} className="text-sm text-ink-soft">{note}</p>)}
-      <form action={action} className="rounded-card border border-line bg-surface p-4 text-sm shadow-card">
+      <form action={action} className="border border-line bg-surface p-4 text-sm">
         <p>Save the current columns as a private layout. A layout does not store rows, and it does not change an order.</p>
         {result.columns.map((column) => <input key={column.id} type="hidden" name="field" value={column.id} />)}
         <input type="hidden" name="object" value={result.object} />

@@ -79,7 +79,7 @@ export default async function AssignChartOfAccountsPage() {
       </header>
 
       {!canAssign && (
-        <p role="status" className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft">
+        <p role="status" className="border border-line bg-surface p-4 text-sm text-ink-soft">
           {t('auth.readOnly', { authority: ACTIVITY })}
         </p>
       )}
@@ -90,7 +90,7 @@ export default async function AssignChartOfAccountsPage() {
         </p>
       )}
 
-      <section aria-labelledby="coa-assign" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="coa-assign" className="border border-line bg-surface p-4">
         <h2 id="coa-assign" className="text-sm font-semibold">{t('coaAssign.assignHeading')}</h2>
         <div className="mt-3">
           {canAssign ? (
@@ -101,22 +101,22 @@ export default async function AssignChartOfAccountsPage() {
         </div>
       </section>
 
-      <section aria-labelledby="coa-standing" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="coa-standing" className="border border-line bg-surface p-4">
         <h2 id="coa-standing" className="text-sm font-semibold">{t('coaAssign.standingHeading')}</h2>
-        <table className="mt-3 w-full text-sm">
+        <table className="grid-table mt-3 text-sm">
           <thead>
-            <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-faint">
-              <th className="py-1 pr-3">{t('cc.code')}</th>
-              <th className="py-1 pr-3">{t('cc.name')}</th>
-              <th className="py-1 pr-3">{t('cc.coa')}</th>
+            <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+              <th>{t('cc.code')}</th>
+              <th>{t('cc.name')}</th>
+              <th>{t('cc.coa')}</th>
             </tr>
           </thead>
           <tbody>
             {companyRows.map((c) => (
-              <tr key={c.code} className="border-b border-line/60">
-                <td className="code py-1 pr-3 font-semibold">{c.code}</td>
-                <td className="py-1 pr-3">{c.name}</td>
-                <td className="code py-1 pr-3">{c.chartOfAccounts ?? t('cc.unassigned')}</td>
+              <tr key={c.code}>
+                <td className="code font-semibold">{c.code}</td>
+                <td>{c.name}</td>
+                <td className="code">{c.chartOfAccounts ?? t('cc.unassigned')}</td>
               </tr>
             ))}
           </tbody>

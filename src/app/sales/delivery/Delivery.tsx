@@ -199,10 +199,10 @@ function SelectedDelivery({
         </div>
       ) : null}
 
-      <table className="mt-3 w-full text-sm">
+      <table className="grid-table mt-3 text-sm">
         <thead>
           <tr className="text-left text-xs text-ink-faint">
-            <th className="py-1">Item</th><th>Material</th><th className="text-right">Ordered</th>
+            <th>Item</th><th>Material</th><th className="text-right">Ordered</th>
             <th className="text-right">Delivered before</th><th className="text-right">This delivery</th>
             <th className="text-right">Still open</th><th className="text-right">Picked</th>
             <th className="text-right">Issued</th><th>Status</th>
@@ -210,8 +210,8 @@ function SelectedDelivery({
         </thead>
         <tbody>
           {selected.lines.map((line) => (
-            <tr key={line.lineNumber} className="border-t border-line align-top">
-              <td className="py-1">{line.lineNumber}<span className="text-ink-faint"> / {line.orderLineNumber}</span></td>
+            <tr key={line.lineNumber} className="align-top">
+              <td>{line.lineNumber}<span className="text-ink-faint"> / {line.orderLineNumber}</span></td>
               <td>{line.materialNumber}</td>
               <td className="text-right">{quantity(line.orderedQuantity)}</td>
               <td className="text-right">{quantity(line.deliveredBefore)}</td>
@@ -341,24 +341,24 @@ export default function Delivery(props: Props) {
         {props.documents.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No delivery stands for this filter yet.</p>
         ) : (
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs text-ink-faint">
-                <th className="py-1">Delivery</th><th>Order</th><th>Customer</th><th>Plant</th>
+                <th>Delivery</th><th>Order</th><th>Customer</th><th>Plant</th>
                 <th>Date</th><th className="text-right">Value</th><th>Material document</th><th>Status</th><th>Credit</th>
               </tr>
             </thead>
             <tbody>
               {props.documents.map((row) => (
-                <tr key={row.deliveryNumber} className="border-t border-line">
-                  <td className="py-1">
+                <tr key={row.deliveryNumber}>
+                  <td>
                     <Link className="link" href={`/sales/delivery?delivery=${row.deliveryNumber}`}>{row.deliveryNumber}</Link>
                   </td>
                   <td><Link className="link" href={`/sales/orders?order=${row.orderNumber}`}>{row.orderNumber}</Link></td>
                   <td>{row.customerNumber}</td>
                   <td>{row.plant}</td>
                   <td>{row.deliveryDate}</td>
-                  <td className="text-right">{Number(row.value).toFixed(2)}</td>
+                  <td className="text-right num">{Number(row.value).toFixed(2)}</td>
                   <td>{row.materialDocumentNumber ?? '—'}</td>
                   <td>{row.status}</td>
                   <td>{row.blockedForCredit ? 'blocked' : 'clear'}</td>

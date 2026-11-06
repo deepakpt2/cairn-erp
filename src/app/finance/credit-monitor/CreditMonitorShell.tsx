@@ -102,14 +102,14 @@ export default function CreditMonitorShell({ canUse, result, error, filter }: {
                   {row.noCreditRecord && <span className="block text-2xs font-semibold text-signal-error">{t('monitor.noRecord')}</span>}
                 </td>
                 <td className="code">{row.creditControlArea}</td>
-                <td className="tabular text-end">{row.creditLimit === null ? '—' : `${row.creditLimit.toFixed(2)} ${row.creditCurrency}`}</td>
-                <td className="tabular text-end">{row.arExposure.toFixed(2)}</td>
-                <td className="tabular text-end text-ink-faint">{row.orderExposure === null ? t('monitor.unavailable') : row.orderExposure.toFixed(2)}</td>
-                <td className="tabular text-end text-ink-faint">{row.deliveryExposure === null ? t('monitor.unavailable') : row.deliveryExposure.toFixed(2)}</td>
-                <td className="tabular text-end text-ink-faint">{row.billingExposure === null ? t('monitor.unavailable') : row.billingExposure.toFixed(2)}</td>
-                <td className="tabular text-end font-semibold">{row.totalExposure.toFixed(2)}</td>
-                <td className="tabular text-end">{row.availableCredit === null ? '—' : row.availableCredit.toFixed(2)}</td>
-                <td className="tabular text-end">{row.utilizationPercent === null ? '—' : `${row.utilizationPercent.toFixed(1)}%`}</td>
+                <td className="tabular text-end num">{row.creditLimit === null ? '—' : `${row.creditLimit.toFixed(2)} ${row.creditCurrency}`}</td>
+                <td className="tabular text-end num">{row.arExposure.toFixed(2)}</td>
+                <td className="tabular text-end text-ink-faint num">{row.orderExposure === null ? t('monitor.unavailable') : row.orderExposure.toFixed(2)}</td>
+                <td className="tabular text-end text-ink-faint num">{row.deliveryExposure === null ? t('monitor.unavailable') : row.deliveryExposure.toFixed(2)}</td>
+                <td className="tabular text-end text-ink-faint num">{row.billingExposure === null ? t('monitor.unavailable') : row.billingExposure.toFixed(2)}</td>
+                <td className="tabular text-end font-semibold num">{row.totalExposure.toFixed(2)}</td>
+                <td className="tabular text-end num">{row.availableCredit === null ? '—' : row.availableCredit.toFixed(2)}</td>
+                <td className="tabular text-end num">{row.utilizationPercent === null ? '—' : `${row.utilizationPercent.toFixed(1)}%`}</td>
                 <td className="code">{row.riskCategory ?? '—'}</td>
                 <td>{row.isBlocked ? (row.blockReason ?? t('monitor.blocked')) : '—'}{row.limitExpired ? <span className="block text-2xs text-signal-error">{t('monitor.expired')}</span> : null}</td>
               </tr>

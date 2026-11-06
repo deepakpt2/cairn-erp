@@ -77,28 +77,28 @@ export default async function BatchStrategyTypePage({
       </form>
 
       <section className="overflow-x-auto border border-line bg-white">
-        <table className="w-full text-sm">
+        <table className="grid-table text-sm">
           <thead>
-            <tr className="border-b border-line text-left">
-              <th className="p-2">Strategy type</th>
-              <th className="p-2">Description</th>
-              <th className="p-2">Access sequence</th>
-              <th className="p-2">Usage</th>
-              <th className="p-2">Application</th>
-              <th className="p-2">Version</th>
-              <th className="p-2"></th>
+            <tr className="text-left">
+              <th>Strategy type</th>
+              <th>Description</th>
+              <th>Access sequence</th>
+              <th>Usage</th>
+              <th>Application</th>
+              <th>Version</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.strategyType} className="border-b border-line">
-                <td className="code p-2">{row.strategyType}</td>
-                <td className="p-2">{row.description}</td>
-                <td className="code p-2">{row.accessSequence || '—'}</td>
-                <td className="code p-2">{row.usage}</td>
-                <td className="code p-2">{row.application}</td>
-                <td className="p-2">{row.version}</td>
-                <td className="p-2 text-end">
+              <tr key={row.strategyType}>
+                <td className="code">{row.strategyType}</td>
+                <td>{row.description}</td>
+                <td className="code">{row.accessSequence || '—'}</td>
+                <td className="code">{row.usage}</td>
+                <td className="code">{row.application}</td>
+                <td>{row.version}</td>
+                <td className="text-end">
                   <Link href={`${ROUTE}?type=${encodeURIComponent(row.strategyType)}&history=1`} className="underline">History</Link>
                   {canMaintain && (
                     <>
@@ -110,7 +110,7 @@ export default async function BatchStrategyTypePage({
               </tr>
             ))}
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="p-3 text-ink-soft">No strategy type matches. Opening this screen did not create one.</td></tr>
+              <tr><td colSpan={6} className="text-ink-soft">No strategy type matches. Opening this screen did not create one.</td></tr>
             )}
           </tbody>
         </table>

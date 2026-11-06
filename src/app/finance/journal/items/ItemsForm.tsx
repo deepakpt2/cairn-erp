@@ -12,7 +12,7 @@ export default function ItemsForm({ result, error, canList }: {
 }) {
   return (
     <>
-      <section aria-labelledby="ji-select" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ji-select" className="border border-line bg-surface p-4">
         <h2 id="ji-select" className="text-sm font-semibold">Selection</h2>
         <form method="get" className="mt-3">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -94,7 +94,7 @@ export default function ItemsForm({ result, error, canList }: {
         </form>
       </section>
 
-      <section aria-labelledby="ji-results" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="ji-results" className="border border-line bg-surface p-4">
         <h2 id="ji-results" className="text-sm font-semibold">Line items</h2>
         {error ? (
           <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>
@@ -117,47 +117,47 @@ export default function ItemsForm({ result, error, canList }: {
               </a>
             </p>
             <div className="mt-2 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
+              <table className="grid-table text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Company</th><th className="px-2 py-2">Document</th>
-                    <th className="px-2 py-2">Line</th><th className="px-2 py-2">Posting date</th>
-                    <th className="px-2 py-2">Document date</th>
-                    <th className="px-2 py-2">Type</th><th className="px-2 py-2">Account</th>
-                    <th className="px-2 py-2">D/C</th><th className="px-2 py-2">Amount</th>
-                    <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Local amount</th>
-                    <th className="px-2 py-2">Cost centre</th><th className="px-2 py-2">Profit centre</th>
-                    <th className="px-2 py-2">Status</th><th className="px-2 py-2">Clearing</th>
-                    <th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Reference</th>
-                    <th className="px-2 py-2">Text</th>
+                    <th>Company</th><th>Document</th>
+                    <th>Line</th><th>Posting date</th>
+                    <th>Document date</th>
+                    <th>Type</th><th>Account</th>
+                    <th>D/C</th><th>Amount</th>
+                    <th>Currency</th><th>Local amount</th>
+                    <th>Cost centre</th><th>Profit centre</th>
+                    <th>Status</th><th>Clearing</th>
+                    <th>Assignment</th><th>Reference</th>
+                    <th>Text</th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.rows.map((row) => (
-                    <tr key={`${row.documentNumber}-${row.fiscalYear}-${row.lineNumber}`} className="border-t border-line">
-                      <td className="px-2 py-2">{row.companyCode}</td>
-                      <td className="px-2 py-2">
+                    <tr key={`${row.documentNumber}-${row.fiscalYear}-${row.lineNumber}`}>
+                      <td>{row.companyCode}</td>
+                      <td>
                         <Link className="text-accent hover:underline"
                           href={`/finance/journal/document?document=${encodeURIComponent(row.documentNumber)}&company=${row.companyCode}&year=${row.fiscalYear}`}>
                           {row.documentNumber}
                         </Link>
                       </td>
-                      <td className="px-2 py-2">{row.lineNumber}</td>
-                      <td className="px-2 py-2">{row.postingDate}</td>
-                      <td className="px-2 py-2">{row.documentDate}</td>
-                      <td className="px-2 py-2">{row.documentType}</td>
-                      <td className="px-2 py-2">{row.glAccount}</td>
-                      <td className="px-2 py-2">{row.debitCredit}</td>
-                      <td className="px-2 py-2">{row.amountDocument.toFixed(2)}</td>
-                      <td className="px-2 py-2">{row.currency}</td>
-                      <td className="px-2 py-2">{row.amountLocal.toFixed(2)}</td>
-                      <td className="px-2 py-2">{row.costCenter ?? '—'}</td>
-                      <td className="px-2 py-2">{row.profitCenter ?? '—'}</td>
-                      <td className="px-2 py-2">{row.itemStatus ?? '—'}</td>
-                      <td className="px-2 py-2">{row.clearingDocument ?? '—'}</td>
-                      <td className="px-2 py-2">{row.assignment ?? '—'}</td>
-                      <td className="px-2 py-2">{row.reference ?? '—'}</td>
-                      <td className="px-2 py-2">{row.lineText ?? '—'}</td>
+                      <td>{row.lineNumber}</td>
+                      <td>{row.postingDate}</td>
+                      <td>{row.documentDate}</td>
+                      <td>{row.documentType}</td>
+                      <td>{row.glAccount}</td>
+                      <td>{row.debitCredit}</td>
+                      <td className="num">{row.amountDocument.toFixed(2)}</td>
+                      <td>{row.currency}</td>
+                      <td className="num">{row.amountLocal.toFixed(2)}</td>
+                      <td>{row.costCenter ?? '—'}</td>
+                      <td>{row.profitCenter ?? '—'}</td>
+                      <td>{row.itemStatus ?? '—'}</td>
+                      <td>{row.clearingDocument ?? '—'}</td>
+                      <td>{row.assignment ?? '—'}</td>
+                      <td>{row.reference ?? '—'}</td>
+                      <td>{row.lineText ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -167,26 +167,26 @@ export default function ItemsForm({ result, error, canList }: {
               <div className="mt-3">
                 <h3 className="text-sm font-semibold">Subtotals over the displayed lines</h3>
                 <div className="mt-1 overflow-x-auto">
-                  <table className="min-w-full text-left text-sm">
+                  <table className="grid-table text-left text-sm">
                     <thead>
                       <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                        <th className="px-2 py-2">Company</th><th className="px-2 py-2">Account</th>
-                        <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Debits</th>
-                        <th className="px-2 py-2">Credits</th><th className="px-2 py-2">Local currency</th>
-                        <th className="px-2 py-2">Local debits</th><th className="px-2 py-2">Local credits</th>
+                        <th>Company</th><th>Account</th>
+                        <th>Currency</th><th>Debits</th>
+                        <th>Credits</th><th>Local currency</th>
+                        <th>Local debits</th><th>Local credits</th>
                       </tr>
                     </thead>
                     <tbody>
                       {result.subtotals.map((s) => (
-                        <tr key={`${s.companyCode}-${s.glAccount}-${s.currency}`} className="border-t border-line">
-                          <td className="px-2 py-2">{s.companyCode}</td>
-                          <td className="px-2 py-2">{s.glAccount}</td>
-                          <td className="px-2 py-2">{s.currency}</td>
-                          <td className="px-2 py-2">{s.debitDocument.toFixed(2)}</td>
-                          <td className="px-2 py-2">{s.creditDocument.toFixed(2)}</td>
-                          <td className="px-2 py-2">{s.localCurrency}</td>
-                          <td className="px-2 py-2">{s.debitLocal.toFixed(2)}</td>
-                          <td className="px-2 py-2">{s.creditLocal.toFixed(2)}</td>
+                        <tr key={`${s.companyCode}-${s.glAccount}-${s.currency}`}>
+                          <td>{s.companyCode}</td>
+                          <td>{s.glAccount}</td>
+                          <td>{s.currency}</td>
+                          <td className="num">{s.debitDocument.toFixed(2)}</td>
+                          <td className="num">{s.creditDocument.toFixed(2)}</td>
+                          <td>{s.localCurrency}</td>
+                          <td className="num">{s.debitLocal.toFixed(2)}</td>
+                          <td className="num">{s.creditLocal.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>

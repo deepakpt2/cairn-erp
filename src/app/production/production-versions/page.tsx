@@ -138,7 +138,7 @@ export default async function ProductionVersionsPage({ searchParams }: {
         {canCreate && <Link className="btn" href={`${PRODUCTION_VERSION_ROUTE}?create=1&plant=${plant}&material=${materialNumber}`}>Create</Link>}
       </form>
       {plant && (
-        <table className="mt-4 w-full text-sm">
+        <table className="grid-table mt-4 text-sm">
           <thead>
             <tr className="text-left">
               <th>Material</th><th>Version</th><th>Valid</th><th>Lot</th><th>BOM</th><th>Routing</th><th>Check</th><th>Lock</th>

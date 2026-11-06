@@ -227,7 +227,7 @@ export function PostingPeriodVariantAssignments({
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={canMaintain ? 5 : 4} className="px-4 py-8 text-center text-sm text-ink-soft">
+                <td colSpan={canMaintain ? 5 : 4} className="text-center text-sm text-ink-soft">
                   {t('ppvAssign.empty')}
                 </td>
               </tr>

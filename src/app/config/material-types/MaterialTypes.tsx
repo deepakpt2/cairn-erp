@@ -156,45 +156,45 @@ export default function MaterialTypes({
           <p className="text-sm text-ink-faint">No material types stand yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
-                <tr className="border-b border-line text-ink-soft">
-                  <th className="py-2 pe-3">Type</th>
-                  <th className="py-2 pe-3">Description</th>
-                  <th className="py-2 pe-3">Price control</th>
-                  <th className="py-2 pe-3">Ranges (int / ext)</th>
-                  <th className="py-2 pe-3">Account ref.</th>
-                  <th className="py-2 pe-3">Purchase orders (ext / int)</th>
-                  <th className="py-2 pe-3">Configurable</th>
-                  <th className="py-2 pe-3">Materials</th>
-                  <th className="py-2 pe-3">Status</th>
-                  {canMaintain && <th className="py-2">Actions</th>}
+                <tr className="text-ink-soft">
+                  <th className="pe-3">Type</th>
+                  <th className="pe-3">Description</th>
+                  <th className="pe-3">Price control</th>
+                  <th className="pe-3">Ranges (int / ext)</th>
+                  <th className="pe-3">Account ref.</th>
+                  <th className="pe-3">Purchase orders (ext / int)</th>
+                  <th className="pe-3">Configurable</th>
+                  <th className="pe-3">Materials</th>
+                  <th className="pe-3">Status</th>
+                  {canMaintain && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {types.map((row) => (
-                  <tr key={row.materialType} className="border-b border-line/60 align-top">
-                    <td className="py-2 pe-3 font-medium">{row.materialType}</td>
-                    <td className="py-2 pe-3">{row.name}</td>
-                    <td className="py-2 pe-3">
+                  <tr key={row.materialType} className="align-top">
+                    <td className="pe-3 font-medium">{row.materialType}</td>
+                    <td className="pe-3">{row.name}</td>
+                    <td className="pe-3">
                       {PRICE_WORDS[row.defaultPriceControl] ?? row.defaultPriceControl}
                     </td>
-                    <td className="py-2 pe-3">
+                    <td className="pe-3">
                       {row.internalNumberRange ?? '—'} / {row.externalNumberRange ?? '—'}
                       {row.rangeGroup && (
                         <span className="block text-xs text-ink-soft">{row.rangeGroup}</span>
                       )}
                     </td>
-                    <td className="py-2 pe-3">{row.accountCategoryReference}</td>
-                    <td className="py-2 pe-3">
+                    <td className="pe-3">{row.accountCategoryReference}</td>
+                    <td className="pe-3">
                       {PO_WORDS[row.externalPurchaseOrders]} /{' '}
                       {PO_WORDS[row.internalPurchaseOrders]}
                     </td>
-                    <td className="py-2 pe-3">{row.isConfigurable ? 'Yes' : 'No'}</td>
-                    <td className="py-2 pe-3">{row.materialCount}</td>
-                    <td className="py-2 pe-3">{row.isActive ? 'Active' : 'Inactive'}</td>
+                    <td className="pe-3">{row.isConfigurable ? 'Yes' : 'No'}</td>
+                    <td className="pe-3">{row.materialCount}</td>
+                    <td className="pe-3">{row.isActive ? 'Active' : 'Inactive'}</td>
                     {canMaintain && (
-                      <td className="py-2">
+                      <td>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -459,23 +459,23 @@ export default function MaterialTypes({
           <p className="text-sm text-ink-faint">No references stand yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="grid-table text-left text-sm">
               <thead>
-                <tr className="border-b border-line text-ink-soft">
-                  <th className="py-2 pe-3">Reference</th>
-                  <th className="py-2 pe-3">Name</th>
-                  <th className="py-2 pe-3">Types naming it</th>
-                  {canMaintain && <th className="py-2">Actions</th>}
+                <tr className="text-ink-soft">
+                  <th className="pe-3">Reference</th>
+                  <th className="pe-3">Name</th>
+                  <th className="pe-3">Types naming it</th>
+                  {canMaintain && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {references.map((row) => (
-                  <tr key={row.reference} className="border-b border-line/60">
-                    <td className="py-2 pe-3 font-medium">{row.reference}</td>
-                    <td className="py-2 pe-3">{row.name}</td>
-                    <td className="py-2 pe-3">{row.typeCount}</td>
+                  <tr key={row.reference}>
+                    <td className="pe-3 font-medium">{row.reference}</td>
+                    <td className="pe-3">{row.name}</td>
+                    <td className="pe-3">{row.typeCount}</td>
                     {canMaintain && (
-                      <td className="py-2">
+                      <td>
                         <div className="flex gap-2">
                           <button
                             type="button"

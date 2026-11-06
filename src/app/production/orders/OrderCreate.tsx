@@ -28,7 +28,7 @@ export default function OrderCreate({
 
   return (
     <>
-      <section aria-labelledby="order-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <section aria-labelledby="order-create" className="border border-line bg-surface p-4">
         <h2 id="order-create" className="text-sm font-semibold">{t('co01.createHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('co01.createHint')}</p>
         <p role="status" className={`mt-2 text-sm ${created.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -81,26 +81,26 @@ export default function OrderCreate({
               <p className="text-sm">
                 {t('co01.bom')} {created.preview.bomUsage}/{created.preview.bomAlternative}
               </p>
-              <table className="mt-2 w-full text-sm">
+              <table className="grid-table mt-2 text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="py-1">{t('co01.columnItem')}</th>
-                    <th className="py-1">{t('co01.columnBomItem')}</th>
-                    <th className="py-1">{t('co01.columnMaterial')}</th>
-                    <th className="py-1">{t('co01.columnSource')}</th>
-                    <th className="py-1">{t('co01.columnPlant')}</th>
-                    <th className="py-1 text-right">{t('co01.columnQuantity')}</th>
+                    <th>{t('co01.columnItem')}</th>
+                    <th>{t('co01.columnBomItem')}</th>
+                    <th>{t('co01.columnMaterial')}</th>
+                    <th>{t('co01.columnSource')}</th>
+                    <th>{t('co01.columnPlant')}</th>
+                    <th className="text-right">{t('co01.columnQuantity')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {created.preview.components.map((component) => (
-                    <tr key={component.bomItem} className="border-t border-line" data-bom-item={component.bomItem}>
-                      <td className="py-1">{component.orderItemNumber}</td>
-                      <td className="py-1">{component.bomItem}</td>
-                      <td className="py-1">{component.materialNumber}</td>
-                      <td className="py-1">{component.sourceMaterial}</td>
-                      <td className="py-1">{component.plant}</td>
-                      <td className="py-1 text-right tabular">{component.requiredQuantity} {component.unit}</td>
+                    <tr key={component.bomItem} data-bom-item={component.bomItem}>
+                      <td>{component.orderItemNumber}</td>
+                      <td>{component.bomItem}</td>
+                      <td>{component.materialNumber}</td>
+                      <td>{component.sourceMaterial}</td>
+                      <td>{component.plant}</td>
+                      <td className="text-right tabular">{component.requiredQuantity} {component.unit}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -124,7 +124,7 @@ export default function OrderCreate({
       </section>
 
       {created.ok && created.order && (
-        <section aria-labelledby="order-release" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="order-release" className="border border-line bg-surface p-4">
           <h2 id="order-release" className="text-sm font-semibold">{t('co01.releaseHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('co01.releaseHint')}</p>
           <p role="status" className={`mt-2 text-sm ${released.ok ? 'text-ink' : 'text-red-700'}`}>
@@ -151,7 +151,7 @@ export default function OrderCreate({
       )}
 
       {order && (
-        <section aria-labelledby="order-summary" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <section aria-labelledby="order-summary" className="border border-line bg-surface p-4">
           <h2 id="order-summary" className="text-sm font-semibold">
             {t('co01.order')} <span className="code" data-order-number={order.orderNumber}>{order.orderNumber}</span>
           </h2>
@@ -172,26 +172,26 @@ export default function OrderCreate({
             <div><dt className="field-label">Batch</dt><dd className="code">{order.batch || '—'}</dd></div>
             <div><dt className="field-label">{t('co01.releasedBy')}</dt><dd>{order.releasedBy ?? '—'}{order.releasedAt ? ` · ${order.releasedAt}` : ''}</dd></div>
           </dl>
-          <table className="mt-3 w-full text-sm">
+          <table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('co01.columnItem')}</th>
-                <th className="py-1">{t('co01.columnBomItem')}</th>
-                <th className="py-1">{t('co01.columnMaterial')}</th>
-                <th className="py-1">{t('co01.columnPlant')}</th>
-                <th className="py-1">{t('co01.columnLocation')}</th>
-                <th className="py-1 text-right">{t('co01.columnQuantity')}</th>
+                <th>{t('co01.columnItem')}</th>
+                <th>{t('co01.columnBomItem')}</th>
+                <th>{t('co01.columnMaterial')}</th>
+                <th>{t('co01.columnPlant')}</th>
+                <th>{t('co01.columnLocation')}</th>
+                <th className="text-right">{t('co01.columnQuantity')}</th>
               </tr>
             </thead>
             <tbody>
               {order.components.map((c) => (
-                <tr key={c.itemNumber} className="border-t border-line" data-item={c.itemNumber} data-bom-item={c.bomItem ?? ''}>
-                  <td className="py-1">{c.itemNumber}</td>
-                  <td className="py-1">{c.bomItem ?? '—'}</td>
-                  <td className="py-1">{c.materialNumber} · {c.materialDescription ?? '—'}</td>
-                  <td className="py-1">{c.plant}</td>
-                  <td className="py-1">{c.storageLocation ?? '—'}</td>
-                  <td className="py-1 text-right tabular">{c.requiredQuantity} {c.unit}</td>
+                <tr key={c.itemNumber} data-item={c.itemNumber} data-bom-item={c.bomItem ?? ''}>
+                  <td>{c.itemNumber}</td>
+                  <td>{c.bomItem ?? '—'}</td>
+                  <td>{c.materialNumber} · {c.materialDescription ?? '—'}</td>
+                  <td>{c.plant}</td>
+                  <td>{c.storageLocation ?? '—'}</td>
+                  <td className="text-right tabular">{c.requiredQuantity} {c.unit}</td>
                 </tr>
               ))}
             </tbody>
