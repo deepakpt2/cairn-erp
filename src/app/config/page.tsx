@@ -161,6 +161,7 @@ export default async function WorkbenchPage({
     '/config/purchasing-orgs/assign-company',
     '/config/purchasing-orgs/assign-plant',
     '/config/purchasing-groups',
+    '/config/delivery-completion',
     '/config/number-ranges',
     '/config/number-range-objects',
     '/registry',
