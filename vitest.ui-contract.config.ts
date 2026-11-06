@@ -14,6 +14,7 @@ export default defineConfig({
       'tests/shell-navigation-contract.test.ts',
       'tests/related-screens-access.test.ts',
       'tests/role-capability-select.test.ts',
+      'tests/document-display-contract.test.ts',
     ],
     globalSetup: [],
     fileParallelism: false,
