@@ -51,6 +51,12 @@ interface ItemRow {
   contractItem: string;
   assignment: 'STOCK' | 'COST_CENTER';
   markedForDeletion: boolean;
+  /** Delivery control. A blank tolerance resolves from the masters when the order is saved. */
+  overdeliveryTolerance: string;
+  underdeliveryTolerance: string;
+  unlimitedOverdelivery: boolean;
+  deliveryCompleted: boolean;
+  goodsReceiptIndicator: boolean;
   scheduleLines: ScheduleRow[];
   assignments: AssignmentRow[];
 }
@@ -74,6 +80,11 @@ const EMPTY_ITEM: ItemRow = {
   contractItem: '',
   assignment: 'STOCK',
   markedForDeletion: false,
+  overdeliveryTolerance: '',
+  underdeliveryTolerance: '',
+  unlimitedOverdelivery: false,
+  deliveryCompleted: false,
+  goodsReceiptIndicator: true,
   scheduleLines: [{ deliveryDate: '', quantity: '' }],
   assignments: [{ glAccount: '', costCenter: '', percentage: '100' }],
 };
@@ -99,6 +110,11 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
     contractItem: item.contractItem ? String(item.contractItem) : '',
     assignment: item.accountAssignmentCategory === 'COST_CENTER' ? 'COST_CENTER' : 'STOCK',
     markedForDeletion: item.markedForDeletion,
+    overdeliveryTolerance: item.overdeliveryTolerance,
+    underdeliveryTolerance: item.underdeliveryTolerance,
+    unlimitedOverdelivery: item.unlimitedOverdelivery,
+    deliveryCompleted: item.deliveryCompleted,
+    goodsReceiptIndicator: item.goodsReceiptIndicator,
     scheduleLines: item.scheduleLines.map((s) => ({ deliveryDate: s.deliveryDate, quantity: s.quantity })),
     assignments: item.assignments.length > 0
       ? item.assignments.map((a) => ({
@@ -245,6 +261,11 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
         batch: item.batch,
         accountAssignmentCategory: item.assignment === 'COST_CENTER' ? 'COST_CENTER' : null,
         markedForDeletion: item.markedForDeletion,
+        overdeliveryTolerance: item.overdeliveryTolerance,
+        underdeliveryTolerance: item.underdeliveryTolerance,
+        unlimitedOverdelivery: item.unlimitedOverdelivery,
+        deliveryCompleted: item.deliveryCompleted,
+        goodsReceiptIndicator: item.goodsReceiptIndicator,
         requisitionNumber: item.requisitionNumber,
         requisitionItem: item.requisitionItem ? Number(item.requisitionItem) : undefined,
         quotationNumber: item.quotationNumber,
@@ -678,6 +699,55 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                       onChange={(event) => patch(active, { batch: event.target.value })}
                     />
                   </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Overdelivery tolerance %</span>
+                    <input
+                      className="input w-full"
+                      inputMode="decimal"
+                      maxLength={6}
+                      value={items[active].overdeliveryTolerance}
+                      placeholder="From the material"
+                      onChange={(event) => patch(active, { overdeliveryTolerance: event.target.value })}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Underdelivery tolerance %</span>
+                    <input
+                      className="input w-full"
+                      inputMode="decimal"
+                      maxLength={6}
+                      value={items[active].underdeliveryTolerance}
+                      placeholder="From the material"
+                      onChange={(event) => patch(active, { underdeliveryTolerance: event.target.value })}
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-4 self-end pb-2 text-sm">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={items[active].unlimitedOverdelivery}
+                        onChange={(event) => patch(active, { unlimitedOverdelivery: event.target.checked })}
+                      />
+                      Unlimited overdelivery
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={items[active].deliveryCompleted}
+                        onChange={(event) => patch(active, { deliveryCompleted: event.target.checked })}
+                      />
+                      Delivery completed
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={items[active].goodsReceiptIndicator}
+                        disabled={!items[active].material}
+                        onChange={(event) => patch(active, { goodsReceiptIndicator: event.target.checked })}
+                      />
+                      Goods receipt
+                    </label>
+                  </div>
                 </div>
               )}
 

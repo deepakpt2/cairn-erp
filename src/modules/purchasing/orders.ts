@@ -101,6 +101,15 @@ const itemInput = z.object({
   batch: z.string().trim().max(10).optional().default(''),
   accountAssignmentCategory: z.enum(['COST_CENTER']).nullable().optional().default(null),
   markedForDeletion: z.boolean().optional().default(false),
+  /**
+   * Delivery control. A blank tolerance resolves from the material at its plant, then the
+   * info record, then zero, and what resolves is stored on the item.
+   */
+  overdeliveryTolerance: z.string().trim().max(6).optional().default(''),
+  underdeliveryTolerance: z.string().trim().max(6).optional().default(''),
+  unlimitedOverdelivery: z.boolean().optional().default(false),
+  deliveryCompleted: z.boolean().optional().default(false),
+  goodsReceiptIndicator: z.boolean().optional().default(true),
   requisitionNumber: z.string().trim().max(10).optional().default(''),
   requisitionItem: z.coerce.number().int().positive().optional(),
   quotationNumber: z.string().trim().max(20).optional().default(''),
@@ -145,6 +154,11 @@ export interface OrderItemRow {
   materialGroup: string | null;
   accountAssignmentCategory: string | null;
   markedForDeletion: boolean;
+  overdeliveryTolerance: string;
+  underdeliveryTolerance: string;
+  unlimitedOverdelivery: boolean;
+  deliveryCompleted: boolean;
+  goodsReceiptIndicator: boolean;
   requisitionNumber: string | null;
   requisitionItem: number | null;
   quotationNumber: string | null;
@@ -246,6 +260,35 @@ interface JudgedItem {
   assignments: z.infer<typeof assignmentInput>[];
 }
 
+/**
+ * The tolerance an item carries from here on. A buyer's figure stands first; with none, the
+ * material at its plant; with none there either, the info record this item priced from; with
+ * none at all, zero. What resolves is stored on the item, so a receipt is later judged against
+ * the order's own figures and not against whatever the masters happen to say that week.
+ */
+function resolveItemTolerances(input: {
+  overdelivery: string;
+  underdelivery: string;
+  materialPlant: { overdeliveryTolerance: string; underdeliveryTolerance: string } | null;
+  infoRecord: { overdeliveryTolerance?: string | null; underdeliveryTolerance?: string | null } | null;
+}): { overdeliveryTolerance: string; underdeliveryTolerance: string } {
+  const side = (buyer: string, master: string | null | undefined, record: string | null | undefined): string => {
+    const typed = buyer.trim();
+    if (typed.length > 0) {
+      const value = Number(typed);
+      if (!Number.isFinite(value) || value < 0 || value > 100) {
+        throw new PurchaseOrderError(`A tolerance of ${typed}% does not stand between 0 and 100.`);
+      }
+      return (Math.round(value * 100) / 100).toFixed(2);
+    }
+    return Number(master ?? record ?? '0').toFixed(2);
+  };
+  return {
+    overdeliveryTolerance: side(input.overdelivery, input.materialPlant?.overdeliveryTolerance, input.infoRecord?.overdeliveryTolerance),
+    underdeliveryTolerance: side(input.underdelivery, input.materialPlant?.underdeliveryTolerance, input.infoRecord?.underdeliveryTolerance),
+  };
+}
+
 async function judgeItem(
   tx: Tx,
   client: string,
@@ -299,6 +342,7 @@ async function judgeItem(
   let group9: string | null = null;
   let record: Awaited<ReturnType<typeof resolvePurchasingInfoRecord>> | null = null;
   let sourceNumber: string | null = null;
+  let plantExtension: { overdeliveryTolerance: string; underdeliveryTolerance: string } | null = null;
   if (item.materialNumber) {
     const [mat] = await tx.select().from(material)
       .where(and(eq(material.client, client), eq(material.materialNumber, item.materialNumber)));
@@ -313,6 +357,7 @@ async function judgeItem(
         'Extend the material to the plant on the material master, or choose another plant.',
       );
     }
+    plantExtension = ext;
     if (mat.markedForDeletion || ext.markedForDeletion) {
       warnings.push(`Material ${item.materialNumber} is flagged for deletion (SCR-053) — the flag warns here; it does not block an order.`);
     }
@@ -600,6 +645,12 @@ async function judgeItem(
     }
   }
 
+  const tolerances = resolveItemTolerances({
+    overdelivery: item.overdeliveryTolerance,
+    underdelivery: item.underdeliveryTolerance,
+    materialPlant: plantExtension,
+    infoRecord: record,
+  });
   return {
     values: {
       client,
@@ -632,6 +683,12 @@ async function judgeItem(
       contractNumber: item.contractNumber.trim() || null,
       contractItem: item.contractItem ?? null,
       markedForDeletion: item.markedForDeletion,
+      overdeliveryTolerance: tolerances.overdeliveryTolerance,
+      underdeliveryTolerance: tolerances.underdeliveryTolerance,
+      unlimitedOverdelivery: item.unlimitedOverdelivery,
+      deliveryCompleted: item.deliveryCompleted,
+      /** An item with no material receives nothing, so the indicator is off however it arrived. */
+      goodsReceiptIndicator: item.materialNumber ? item.goodsReceiptIndicator : false,
     },
     scheduleLines: item.scheduleLines.map((line) => ({
       deliveryDate: applyRecord && item.applyLeadTime && record?.qualified && record.plannedDeliveryDays != null && item.scheduleLines.length === 1
@@ -689,6 +746,11 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
       materialGroup: item.materialGroup,
       accountAssignmentCategory: item.accountAssignmentCategory,
       markedForDeletion: item.markedForDeletion,
+      overdeliveryTolerance: item.overdeliveryTolerance,
+      underdeliveryTolerance: item.underdeliveryTolerance,
+      unlimitedOverdelivery: item.unlimitedOverdelivery,
+      deliveryCompleted: item.deliveryCompleted,
+      goodsReceiptIndicator: item.goodsReceiptIndicator,
       requisitionNumber: item.requisitionNumber,
       requisitionItem: item.requisitionItem,
       quotationNumber: item.quotationNumber,

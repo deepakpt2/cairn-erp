@@ -126,6 +126,9 @@ export interface InfoRecordResolution {
   plannedDeliveryDays?: number | null;
   minimumOrderQuantity?: string | null;
   minimumOrderUnit?: string | null;
+  /** The tolerances the segment states. An order resolves these when the material carries none. */
+  overdeliveryTolerance?: string | null;
+  underdeliveryTolerance?: string | null;
 }
 
 function blank(value: string | null | undefined): string | null {
@@ -1021,6 +1024,8 @@ export async function resolvePurchasingInfoRecord(
     plannedDeliveryDays: chosen.plannedDeliveryDays,
     minimumOrderQuantity: chosen.minimumOrderQuantity,
     minimumOrderUnit: chosen.minimumOrderUnit,
+    overdeliveryTolerance: chosen.overdeliveryTolerance,
+    underdeliveryTolerance: chosen.underdeliveryTolerance,
   };
 }
 
@@ -1043,6 +1048,8 @@ export interface InfoRecordSegmentView {
   minimumOrderQuantity: string | null;
   minimumOrderUnit: string | null;
   orderUnit: string | null;
+  overdeliveryTolerance: string;
+  underdeliveryTolerance: string;
   markedForDeletion: boolean;
   version: number;
   prices: InfoRecordPriceView[];
@@ -1133,6 +1140,8 @@ export async function getPurchasingInfoRecord(client: string, infoRecordNumber: 
         minimumOrderQuantity: segment.minimumOrderQuantity,
         minimumOrderUnit: segment.minimumOrderUnit,
         orderUnit: segment.orderUnit,
+        overdeliveryTolerance: segment.overdeliveryTolerance,
+        underdeliveryTolerance: segment.underdeliveryTolerance,
         markedForDeletion: segment.markedForDeletion,
         version: segment.version,
         prices: prices.filter((price) => price.segmentNumber === segment.segmentNumber).map((price) => ({

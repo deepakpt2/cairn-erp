@@ -3,7 +3,7 @@ import { pgTable, varchar, char, integer, bigint, smallint, numeric, boolean, da
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
-import { plant, purchasingGroup, purchasingOrg, storageLocation } from '../foundation/schema';
+import { companyCode, plant, purchasingGroup, purchasingOrg, storageLocation } from '../foundation/schema';
 import { bpRole } from '../foundation/business-partner-schema';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { material, materialGroup } from '../inventory/schema';
@@ -166,6 +166,9 @@ export const purchasingInfoRecordOrg = pgTable('purchasing_info_record_org', {
   minimumOrderQuantity: numeric('minimum_order_quantity', { precision: 13, scale: 3 }),
   minimumOrderUnit: varchar('minimum_order_unit', { length: 6 }),
   orderUnit: varchar('order_unit', { length: 6 }),
+  /** The tolerances a standing agreement states. An order resolves these when the material carries none. */
+  overdeliveryTolerance: numeric('overdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),
+  underdeliveryTolerance: numeric('underdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
   version: integer('version').notNull().default(1),
   ...auditColumns,
@@ -196,6 +199,44 @@ export const purchasingInfoRecordOrg = pgTable('purchasing_info_record_org', {
   check('purchasing_info_record_org_lead_ck', sql`${t.plannedDeliveryDays} is null or ${t.plannedDeliveryDays} >= 0`),
   check('purchasing_info_record_org_minimum_ck', sql`${t.minimumOrderQuantity} is null or ${t.minimumOrderQuantity} >= 0`),
   check('purchasing_info_record_org_minimum_pair_ck', sql`(${t.minimumOrderQuantity} is null) = (${t.minimumOrderUnit} is null)`),
+  check('purchasing_info_record_org_tolerance_ck', sql`${t.overdeliveryTolerance} between 0 and 100 and ${t.underdeliveryTolerance} between 0 and 100`),
+]);
+
+/**
+ * Whether a goods receipt may close a purchase order item by itself, taken as a company-code
+ * default. A plant row overrides it; a plant with no row inherits the company it belongs to,
+ * and with no row at all the answer is no — an item closes when someone says so.
+ */
+export const purchaseDeliveryCompletionPolicy = pgTable('purchase_delivery_completion_policy', {
+  client: tenant(),
+  companyCode: varchar('company_code', { length: 4 }).notNull(),
+  autoClose: boolean('auto_close').notNull().default(false),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode] }),
+  foreignKey({
+    columns: [t.client, t.companyCode],
+    foreignColumns: [companyCode.client, companyCode.companyCode],
+  }).onDelete('restrict'),
+  check('purchase_delivery_completion_policy_version_ck', sql`${t.version} > 0`),
+]);
+
+export const purchaseDeliveryCompletionPlant = pgTable('purchase_delivery_completion_plant', {
+  client: tenant(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  autoClose: boolean('auto_close').notNull(),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.plant] }),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  check('purchase_delivery_completion_plant_version_ck', sql`${t.version} > 0`),
 ]);
 
 export const purchasingInfoRecordPrice = pgTable('purchasing_info_record_price', {
@@ -389,6 +430,15 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   requisitionNumber: varchar('requisition_number', { length: 10 }),
   requisitionItem: integer('requisition_item'),
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  /**
+   * Delivery control, resolved when the item was written and stored as the order's own figures.
+   * A receipt is judged against these, not against whatever the masters say now.
+   */
+  overdeliveryTolerance: numeric('overdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),
+  underdeliveryTolerance: numeric('underdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),
+  unlimitedOverdelivery: boolean('unlimited_overdelivery').notNull().default(false),
+  deliveryCompleted: boolean('delivery_completed').notNull().default(false),
+  goodsReceiptIndicator: boolean('goods_receipt_indicator').notNull().default(true),
   /** The price that qualified, when one did. The snapshot columns above remain what the order used. */
   infoRecordNumber: varchar('info_record_number', { length: 20 }),
   priceSequence: integer('price_sequence'),
@@ -426,6 +476,7 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   check('po_item_number_ck', sql`${t.itemNumber} > 0`),
   check('po_item_category_ck', sql`${t.itemCategory} in ('STANDARD')`),
   check('po_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER')`),
+  check('po_item_tolerance_ck', sql`${t.overdeliveryTolerance} between 0 and 100 and ${t.underdeliveryTolerance} between 0 and 100`),
   check('po_item_requisition_pair_ck', sql`(${t.requisitionNumber} is null) = (${t.requisitionItem} is null)`),
   check('purchase_order_item_info_record_pair_ck', sql`(${t.infoRecordNumber} is null) = (${t.priceSequence} is null)`),
   check('purchase_order_item_quotation_pair_ck', sql`(${t.quotationNumber} is null) = (${t.quotationItem} is null)`),

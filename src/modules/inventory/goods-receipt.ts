@@ -23,6 +23,7 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
+import { deliveryCompletionDecision, readDeliveryCompletionPolicy } from '../purchasing/delivery-completion';
 import { documentRelease, purchaseOrder, purchaseOrderItem } from '../purchasing/schema';
 import { materialPeriodAllows } from './material-period-control';
 import {
@@ -211,6 +212,13 @@ export interface ReceiptItemView {
   remaining: number;
   netPrice: string;
   priceUnit: string;
+  /** The tolerance this order carries, snapshotted when the item was written. */
+  overdeliveryTolerance: string;
+  underdeliveryTolerance: string;
+  /** Set only by an authorised change to the item; it removes the ceiling entirely. */
+  unlimitedOverdelivery: boolean;
+  deliveryCompleted: boolean;
+  goodsReceiptIndicator: boolean;
   eligible: boolean;
   refusal: string | null;
 }
@@ -259,6 +267,10 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
         else if (item.accountAssignmentCategory) {
           refusal = assignedReceiptRefusal(await readAssignedGoodsReceiptDecision(tx, client, item.plant, true));
         }
+        else if (!item.goodsReceiptIndicator) refusal = 'The item does not receive goods.';
+        else if (item.deliveryCompleted) {
+          refusal = 'The item is closed for delivery. Reopen it on the order before receiving against it.';
+        }
         return {
           itemNumber: item.itemNumber,
           materialNumber: item.materialNumber,
@@ -273,6 +285,11 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
           remaining: Math.max(0, ordered - got.quantity),
           netPrice: item.netPrice,
           priceUnit: item.priceUnit,
+          overdeliveryTolerance: item.overdeliveryTolerance,
+          underdeliveryTolerance: item.underdeliveryTolerance,
+          unlimitedOverdelivery: item.unlimitedOverdelivery,
+          deliveryCompleted: item.deliveryCompleted,
+          goodsReceiptIndicator: item.goodsReceiptIndicator,
           eligible: !refusal,
           refusal,
         };
@@ -617,12 +634,15 @@ export async function postGoodsReceipt(
       if (ext.markedForDeletion) {
         throw new GoodsReceiptError(`Material ${item.materialNumber} is flagged for deletion in plant ${item.plant}.`, 'Cancel the plant deletion flag, then post again.');
       }
-      const toleranceMax = item.ordered * (1 + Number(ext.overdeliveryTolerance) / 100);
+      // The ceiling is the one this order carries, snapshotted when the item was written —
+      // not whatever the material says today. An item marked unlimited has no ceiling at all.
+      const tolerance = Number(item.overdeliveryTolerance);
+      const toleranceMax = item.ordered * (1 + tolerance / 100);
       const alreadyClaimed = claimedReceipt.get(line.itemNumber) ?? 0;
-      if (item.received + alreadyClaimed + line.quantity > toleranceMax + 1e-9) {
+      if (!item.unlimitedOverdelivery && item.received + alreadyClaimed + line.quantity > toleranceMax + 1e-9) {
         throw new GoodsReceiptError(
-          `Item ${line.itemNumber}: received ${item.received} plus ${line.quantity} exceeds the ordered ${item.ordered} beyond the overdelivery tolerance of ${ext.overdeliveryTolerance}%.`,
-          'Reduce the receipt quantity to the remaining open quantity.',
+          `Item ${line.itemNumber}: received ${item.received} plus ${line.quantity} exceeds the ordered ${item.ordered} beyond the overdelivery tolerance of ${tolerance}% that this order carries.`,
+          'Reduce the receipt quantity, or raise the tolerance on the order item.',
         );
       }
       const [valuation] = await tx.select().from(materialValuation).where(and(
@@ -804,6 +824,35 @@ export async function postGoodsReceipt(
       );
     }
 
+    // Delivery completion is the plant's rule, not a constant: the company default stands
+    // unless the plant keeps a row of its own, and with no rule at all nothing closes here -
+    // an item closes when somebody closes it.
+    const postedByItem = new Map<number, number>();
+    for (const p of prepared) {
+      postedByItem.set(p.item.itemNumber, (postedByItem.get(p.item.itemNumber) ?? 0) + p.quantity);
+    }
+    const closedItems: string[] = [];
+    for (const [itemNumber, posted] of postedByItem) {
+      const item = itemsByNumber.get(itemNumber);
+      if (!item || item.deliveryCompleted) continue;
+      const policy = await readDeliveryCompletionPolicy(tx, input.client, view.companyCode, item.plant);
+      const decision = deliveryCompletionDecision({
+        autoClose: policy.autoClose,
+        ordered: item.ordered,
+        receivedAfter: item.received + posted,
+        underdeliveryTolerance: Number(item.underdeliveryTolerance),
+      });
+      if (!decision.close) continue;
+      await tx.update(purchaseOrderItem).set({
+        deliveryCompleted: true, changedBy: input.changedBy, changedAt: new Date(),
+      }).where(and(
+        eq(purchaseOrderItem.client, input.client),
+        eq(purchaseOrderItem.orderNumber, input.orderNumber),
+        eq(purchaseOrderItem.itemNumber, itemNumber),
+      ));
+      closedItems.push(`Item ${itemNumber}: ${decision.reason}`);
+    }
+
     await linkDocuments(tx, {
       client: input.client,
       predecessor: { documentClass: 'purchase_order', documentKey: input.orderNumber },
@@ -821,6 +870,7 @@ export async function postGoodsReceipt(
       after: {
         movement: movement.movementType, order: input.orderNumber,
         lines: prepared.length, journal: journal.documentNumber, status: 'POSTED',
+        closedItems,
       },
     });
     await noteBatchControlUse(tx, input.client, number, input.changedBy);
@@ -866,6 +916,10 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
       else if (item.accountAssignmentCategory) {
         refusal = assignedReceiptRefusal(await readAssignedGoodsReceiptDecision(tx, client, item.plant, true));
       }
+      else if (!item.goodsReceiptIndicator) refusal = 'The item does not receive goods.';
+      else if (item.deliveryCompleted) {
+        refusal = 'The item is closed for delivery. Reopen it on the order before receiving against it.';
+      }
       return {
         itemNumber: item.itemNumber,
         materialNumber: item.materialNumber,
@@ -877,6 +931,11 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
         unit: item.unit,
         ordered, received: got.quantity, remaining: Math.max(0, ordered - got.quantity),
         netPrice: item.netPrice, priceUnit: item.priceUnit,
+        overdeliveryTolerance: item.overdeliveryTolerance,
+        underdeliveryTolerance: item.underdeliveryTolerance,
+        unlimitedOverdelivery: item.unlimitedOverdelivery,
+        deliveryCompleted: item.deliveryCompleted,
+        goodsReceiptIndicator: item.goodsReceiptIndicator,
         eligible: !refusal, refusal,
       };
     })),
