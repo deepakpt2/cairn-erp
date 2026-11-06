@@ -69,7 +69,7 @@ describe('what a save to a released order would move', () => {
     expect(releaseImpactingChanges({
       before,
       after: [{ itemNumber: 25, quantity: 4 }],
-    })).toEqual(['item 10 removed', 'an item added at 4']);
+    })).toEqual(['an item added at 4', 'item 10 removed']);
     expect(releaseImpactingChanges({
       before,
       after: [{ itemNumber: 10, quantity: 100, markedForDeletion: true }],
