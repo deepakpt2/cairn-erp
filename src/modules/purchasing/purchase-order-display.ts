@@ -262,6 +262,11 @@ function qty(value: string): string {
   return fromScaled(toScaled(value || '0', 3), 3);
 }
 
+/** A tolerance is a percentage, not a quantity: two decimals, and no unit after it. */
+function percent(value: string): string {
+  return fromScaled(toScaled(value || '0', 2), 2);
+}
+
 function sub(left: string, right: string, scale = 3): string {
   return fromScaled(toScaled(left || '0', scale) - toScaled(right || '0', scale), scale);
 }
@@ -502,8 +507,8 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
       requisitionItem: row.requisition_item == null ? null : Number(row.requisition_item),
       infoRecordNumber: row.info_record_number == null ? null : text(row.info_record_number),
       sourceNumber: row.source_number == null ? null : text(row.source_number),
-      overdeliveryTolerance: qty(text(row.overdelivery_tolerance)),
-      underdeliveryTolerance: qty(text(row.underdelivery_tolerance)),
+      overdeliveryTolerance: percent(text(row.overdelivery_tolerance)),
+      underdeliveryTolerance: percent(text(row.underdelivery_tolerance)),
       unlimitedOverdelivery: row.unlimited_overdelivery === true,
       deliveryCompleted: row.delivery_completed === true,
       goodsReceiptIndicator: row.goods_receipt_indicator === true,

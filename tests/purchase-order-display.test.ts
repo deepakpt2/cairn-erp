@@ -246,6 +246,14 @@ describe('SCR-164 purchase order display', () => {
       `);
     });
 
+    // What the item carries for a receipt to be judged against, shown as the order stored it.
+    await withTenant(client, (tx) => tx.execute(sql`
+      update purchase_order_item
+         set overdelivery_tolerance = 4.5, underdelivery_tolerance = 2.5,
+             unlimited_overdelivery = false, delivery_completed = true, goods_receipt_indicator = true
+       where client = ${client} and order_number = ${ALT} and item_number = 10
+    `));
+
     const before = await counts(client);
     try {
       const shown = await displayPurchaseOrder(client, ALT);
@@ -259,6 +267,10 @@ describe('SCR-164 purchase order display', () => {
         conversion: { sameUnit: false, baseUnit: master.base_unit, numerator: 12, denominator: 1 },
       });
       // The legacy line's base figure already counted boxes, so no factor is applied to it.
+      expect(item(10)).toMatchObject({
+        overdeliveryTolerance: '4.50', underdeliveryTolerance: '2.50',
+        unlimitedOverdelivery: false, deliveryCompleted: true, goodsReceiptIndicator: true,
+      });
       expect(item(20)?.receivedQuantity).toBe('2.000');
       expect(item(20)?.state).toBe('PARTIALLY_DELIVERED');
       // A partial receipt of one box is one box of three ordered, not twelve pieces of three.
