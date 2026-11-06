@@ -13,6 +13,7 @@ export default defineConfig({
       'tests/work-indicator-contract.test.ts',
       'tests/shell-navigation-contract.test.ts',
       'tests/related-screens-access.test.ts',
+      'tests/role-capability-select.test.ts',
     ],
     globalSetup: [],
     fileParallelism: false,
