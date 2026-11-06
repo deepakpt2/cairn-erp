@@ -149,6 +149,50 @@
     @apply border-signal-info/30 bg-signal-info-soft text-signal-info;
   }
 
+  /* ---- Working indicators -------------------------------------------------- */
+
+  /* Says a click was taken and the answer is on its way. It is decoration for
+     the words beside it, not a message in itself, so it never takes the focus
+     and never reaches assistive technology alone. */
+  .spinner {
+    @apply inline-block h-3 w-3 shrink-0 rounded-full border border-current;
+    border-top-color: transparent;
+    animation: cairn-spin 0.7s linear infinite;
+  }
+
+  /* A thin indeterminate bar pinned to the top of the viewport: the one place
+     that is in view wherever on a long page the click happened. */
+  .route-progress {
+    @apply pointer-events-none fixed inset-x-0 top-0 z-30 h-0.5 overflow-hidden bg-accent-soft;
+  }
+
+  .route-progress::after {
+    content: '';
+    @apply absolute inset-y-0 w-1/3 bg-accent;
+    animation: cairn-progress 1.1s ease-in-out infinite;
+  }
+
+  /* Right-to-left runs the bar the other way (R-19). */
+  [dir='rtl'] .route-progress::after {
+    animation-name: cairn-progress-rtl;
+  }
+
+  /* Movement that cannot be turned off is a barrier. Where the reader asks for
+     less of it, the spinner pulses where it stands and the bar simply stands
+     too — the reassurance is kept, the motion is not. */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner {
+      border-top-color: currentColor;
+      animation: cairn-pulse 1.4s ease-in-out infinite;
+    }
+
+    .route-progress::after {
+      width: 100%;
+      animation: none;
+      opacity: 0.65;
+    }
+  }
+
   /* ---- The status bar — orientation without decoration -------------------- */
 
   .status-bar {
@@ -192,5 +236,44 @@
     .grid-table {
       min-width: 0;
     }
+  }
+}
+
+/* ==========================================================================
+   Working-indicator motion.
+   Kept outside the layers so they are never dropped with unused utilities.
+   ========================================================================== */
+
+@keyframes cairn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cairn-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@keyframes cairn-progress-rtl {
+  from {
+    transform: translateX(300%);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes cairn-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
   }
 }

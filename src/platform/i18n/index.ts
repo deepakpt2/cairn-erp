@@ -78,6 +78,7 @@ const en: Catalogue = {
   'command.label': 'Command',
   'command.placeholder': 'Enter a transaction code, a configuration activity, or a familiar alias',
   'command.execute': 'Execute',
+  'command.executing': 'Executing',
   'command.help': 'Press Enter to execute. Codes look like FIN.JOURNAL.POST.',
   'command.notFound': 'Nothing matches "{term}".',
   'command.notFoundHint':
@@ -4927,6 +4928,7 @@ const en: Catalogue = {
 
   // ── Status bar ────────────────────────────────────────────────────────────
   'status.ready': 'Ready',
+  'status.working': 'Working…',
   'status.environment': 'Environment',
   'status.noTenant': 'No tenant selected',
 };

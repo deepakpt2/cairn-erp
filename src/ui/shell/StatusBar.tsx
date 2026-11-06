@@ -1,5 +1,6 @@
 import { t } from '@/platform/i18n';
 import { getSession } from '@/platform/auth/current';
+import { WorkIndicator } from './WorkIndicator';
 
 // Intentionally visible in every environment, including production, for build verification.
 const DEVELOPMENT_UI_BUILD_CODE = 'DEV-SCR022-DISTCHANNEL-DIVISION-20261014';
@@ -17,7 +18,10 @@ export async function StatusBar() {
   return (
     <footer className="status-bar flex-wrap gap-x-3 gap-y-1">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <span>{t('status.ready')}</span>
+        {/* "Ready" while nothing is outstanding, "Working…" the moment a click is
+            being answered. Rendered on the server as "Ready" either way, so the
+            status bar still says it with no client JavaScript at all. */}
+        <WorkIndicator />
         <span className="text-line-strong" aria-hidden>
           |
         </span>

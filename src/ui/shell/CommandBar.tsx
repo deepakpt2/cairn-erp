@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { executeCommand } from '@/app/command';
+import { SubmitButton } from './SubmitButton';
 
 /**
  * The command bar — CAIRN.md §19.1.
@@ -41,9 +42,13 @@ export function CommandBar() {
             placeholder={t('command.placeholder')}
             aria-describedby="command-help"
           />
-          <button type="submit" className="btn btn-default border-0 border-s border-line">
-            {t('command.execute')}
-          </button>
+          {/* Executing a command is a round trip, and it was the one click in the
+              shell with nothing to show for itself. */}
+          <SubmitButton
+            label={t('command.execute')}
+            pendingLabel={t('command.executing')}
+            className="btn btn-default border-0 border-s border-line"
+          />
         </form>
 
         <nav className="flex w-full shrink-0 items-stretch border-t border-line sm:w-auto sm:border-t-0 sm:border-s">

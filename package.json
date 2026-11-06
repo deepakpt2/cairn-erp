@@ -17,6 +17,7 @@
     "seed": "tsx scripts/seed.ts",
     "walkthrough:seed": "tsx walkthrough-seed.ts",
     "test:walkthrough:contract": "vitest run --config vitest.walkthrough.config.ts",
+    "test:ui:contract": "vitest run --config vitest.ui-contract.config.ts",
     "test": "vitest run",
     "test:integration": "tsx scripts/test-integration.ts",
     "backup:integration": "python3 scripts/backup-integration-db.py",
