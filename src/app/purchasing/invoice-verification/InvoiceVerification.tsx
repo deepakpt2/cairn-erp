@@ -131,7 +131,12 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                         <td>{item.ordered} {item.unit}</td>
                         <td>{item.received}</td>
                         <td>{item.invoiced}</td>
-                        <td>{item.invoiceable}</td>
+                        <td>
+                          {item.invoiceable}
+                          <span className="block text-xs text-ink-soft">
+                            {item.invoiceBasis === 'GOODS_RECEIPT' ? 'of received' : 'of ordered'}
+                          </span>
+                        </td>
                         <td>
                           {item.eligible ? (
                             <input

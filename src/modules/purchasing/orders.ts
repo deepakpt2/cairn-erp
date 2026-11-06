@@ -110,6 +110,13 @@ const itemInput = z.object({
   unlimitedOverdelivery: z.boolean().optional().default(false),
   deliveryCompleted: z.boolean().optional().default(false),
   goodsReceiptIndicator: z.boolean().optional().default(true),
+  /**
+   * Invoice control. All three default to what the application does today, so an item
+   * behaves as it always has until somebody says otherwise on it.
+   */
+  invoiceReceiptIndicator: z.boolean().optional().default(true),
+  grBasedInvoiceVerification: z.boolean().optional().default(true),
+  finalInvoiceIndicator: z.boolean().optional().default(false),
   requisitionNumber: z.string().trim().max(10).optional().default(''),
   requisitionItem: z.coerce.number().int().positive().optional(),
   quotationNumber: z.string().trim().max(20).optional().default(''),
@@ -159,6 +166,9 @@ export interface OrderItemRow {
   unlimitedOverdelivery: boolean;
   deliveryCompleted: boolean;
   goodsReceiptIndicator: boolean;
+  invoiceReceiptIndicator: boolean;
+  grBasedInvoiceVerification: boolean;
+  finalInvoiceIndicator: boolean;
   requisitionNumber: string | null;
   requisitionItem: number | null;
   quotationNumber: string | null;
@@ -689,6 +699,9 @@ async function judgeItem(
       deliveryCompleted: item.deliveryCompleted,
       /** An item with no material receives nothing, so the indicator is off however it arrived. */
       goodsReceiptIndicator: item.materialNumber ? item.goodsReceiptIndicator : false,
+      invoiceReceiptIndicator: item.invoiceReceiptIndicator,
+      grBasedInvoiceVerification: item.grBasedInvoiceVerification,
+      finalInvoiceIndicator: item.finalInvoiceIndicator,
     },
     scheduleLines: item.scheduleLines.map((line) => ({
       deliveryDate: applyRecord && item.applyLeadTime && record?.qualified && record.plannedDeliveryDays != null && item.scheduleLines.length === 1
@@ -751,6 +764,9 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
       unlimitedOverdelivery: item.unlimitedOverdelivery,
       deliveryCompleted: item.deliveryCompleted,
       goodsReceiptIndicator: item.goodsReceiptIndicator,
+      invoiceReceiptIndicator: item.invoiceReceiptIndicator,
+      grBasedInvoiceVerification: item.grBasedInvoiceVerification,
+      finalInvoiceIndicator: item.finalInvoiceIndicator,
       requisitionNumber: item.requisitionNumber,
       requisitionItem: item.requisitionItem,
       quotationNumber: item.quotationNumber,
@@ -1019,10 +1035,12 @@ export function releaseImpactingChanges(input: {
   before: Array<{
     itemNumber: number; quantity: string; netPrice: string; priceUnit: string;
     overdeliveryTolerance: string; unlimitedOverdelivery: boolean; markedForDeletion: boolean;
+    grBasedInvoiceVerification: boolean;
   }>;
   after: Array<{
     itemNumber?: number; quantity: number; netPrice?: number; priceUnit?: number;
     overdeliveryTolerance?: string; unlimitedOverdelivery?: boolean; markedForDeletion?: boolean;
+    grBasedInvoiceVerification?: boolean;
   }>;
 }): string[] {
   const standing = new Map(input.before.map((row) => [row.itemNumber, row]));
@@ -1053,6 +1071,11 @@ export function releaseImpactingChanges(input: {
     }
     if (Boolean(next.markedForDeletion) !== row.markedForDeletion) {
       impacts.push(`item ${row.itemNumber} deletion ${row.markedForDeletion ? 'cleared' : 'set'}`);
+    }
+    // Paying an item that was approved on the strength of goods arriving first is not a
+    // detail: it is the whole of what the release was for.
+    if (next.grBasedInvoiceVerification === false && row.grBasedInvoiceVerification) {
+      impacts.push(`item ${row.itemNumber} invoice verification no longer waits for the goods`);
     }
   }
   for (const row of input.before) {

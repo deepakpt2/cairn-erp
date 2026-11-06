@@ -439,6 +439,15 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   unlimitedOverdelivery: boolean('unlimited_overdelivery').notNull().default(false),
   deliveryCompleted: boolean('delivery_completed').notNull().default(false),
   goodsReceiptIndicator: boolean('goods_receipt_indicator').notNull().default(true),
+  /** Whether the item is invoiceable at all. Off, no invoice stands against it. */
+  invoiceReceiptIndicator: boolean('invoice_receipt_indicator').notNull().default(true),
+  /**
+   * The invoice is verified against goods received rather than the quantity ordered. Off,
+   * the item can be invoiced before anything arrives.
+   */
+  grBasedInvoiceVerification: boolean('gr_based_invoice_verification').notNull().default(true),
+  /** No further invoices expected. Set by a buyer; never set by a posting. */
+  finalInvoiceIndicator: boolean('final_invoice_indicator').notNull().default(false),
   /** The price that qualified, when one did. The snapshot columns above remain what the order used. */
   infoRecordNumber: varchar('info_record_number', { length: 20 }),
   priceSequence: integer('price_sequence'),

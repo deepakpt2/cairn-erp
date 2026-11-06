@@ -57,6 +57,10 @@ interface ItemRow {
   unlimitedOverdelivery: boolean;
   deliveryCompleted: boolean;
   goodsReceiptIndicator: boolean;
+  /** Invoice control. All three default to what the order has always done. */
+  invoiceReceiptIndicator: boolean;
+  grBasedInvoiceVerification: boolean;
+  finalInvoiceIndicator: boolean;
   scheduleLines: ScheduleRow[];
   assignments: AssignmentRow[];
 }
@@ -85,6 +89,9 @@ const EMPTY_ITEM: ItemRow = {
   unlimitedOverdelivery: false,
   deliveryCompleted: false,
   goodsReceiptIndicator: true,
+  invoiceReceiptIndicator: true,
+  grBasedInvoiceVerification: true,
+  finalInvoiceIndicator: false,
   scheduleLines: [{ deliveryDate: '', quantity: '' }],
   assignments: [{ glAccount: '', costCenter: '', percentage: '100' }],
 };
@@ -115,6 +122,9 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
     unlimitedOverdelivery: item.unlimitedOverdelivery,
     deliveryCompleted: item.deliveryCompleted,
     goodsReceiptIndicator: item.goodsReceiptIndicator,
+    invoiceReceiptIndicator: item.invoiceReceiptIndicator,
+    grBasedInvoiceVerification: item.grBasedInvoiceVerification,
+    finalInvoiceIndicator: item.finalInvoiceIndicator,
     scheduleLines: item.scheduleLines.map((s) => ({ deliveryDate: s.deliveryDate, quantity: s.quantity })),
     assignments: item.assignments.length > 0
       ? item.assignments.map((a) => ({
@@ -266,6 +276,9 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
         unlimitedOverdelivery: item.unlimitedOverdelivery,
         deliveryCompleted: item.deliveryCompleted,
         goodsReceiptIndicator: item.goodsReceiptIndicator,
+        invoiceReceiptIndicator: item.invoiceReceiptIndicator,
+        grBasedInvoiceVerification: item.grBasedInvoiceVerification,
+        finalInvoiceIndicator: item.finalInvoiceIndicator,
         requisitionNumber: item.requisitionNumber,
         requisitionItem: item.requisitionItem ? Number(item.requisitionItem) : undefined,
         quotationNumber: item.quotationNumber,
@@ -752,7 +765,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
               )}
 
               {itemTab === 'INVOICE' && (
-                <div className="max-w-xs">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Tax code</span>
                     <ConstrainedField
@@ -763,6 +776,49 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                       onChange={(taxCode) => patch(active, { taxCode })}
                     />
                   </label>
+                  <div className="space-y-2 self-end pb-1 text-sm">
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={items[active].grBasedInvoiceVerification}
+                        disabled={!items[active].goodsReceiptIndicator}
+                        onChange={(event) => patch(active, { grBasedInvoiceVerification: event.target.checked })}
+                      />
+                      <span>
+                        GR-based invoice verification
+                        <span className="block text-xs text-ink-soft">
+                          {items[active].goodsReceiptIndicator
+                            ? 'On, the invoice is checked against what arrived. Off, the item can be invoiced before the goods arrive.'
+                            : 'Nothing to check against: the item receives no goods, so it is invoiced against the quantity ordered.'}
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={items[active].invoiceReceiptIndicator}
+                        onChange={(event) => patch(active, { invoiceReceiptIndicator: event.target.checked })}
+                      />
+                      <span>
+                        Invoice receipt
+                        <span className="block text-xs text-ink-soft">Off, no invoice is posted against the item at all.</span>
+                      </span>
+                    </label>
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={items[active].finalInvoiceIndicator}
+                        onChange={(event) => patch(active, { finalInvoiceIndicator: event.target.checked })}
+                      />
+                      <span>
+                        Final invoice
+                        <span className="block text-xs text-ink-soft">No further invoices are expected. Set by a buyer; never set by a posting.</span>
+                      </span>
+                    </label>
+                  </div>
                 </div>
               )}
 

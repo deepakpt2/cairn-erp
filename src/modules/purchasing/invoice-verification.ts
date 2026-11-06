@@ -98,6 +98,16 @@ export interface InvoiceItemView {
   received: number;
   invoiced: number;
   invoiceable: number;
+  /**
+   * What the invoiceable figure was worked out from: the goods that arrived, or the
+   * quantity that was ordered. A screen that shows one number without saying which is
+   * hiding the thing that decided it.
+   */
+  invoiceBasis: 'GOODS_RECEIPT' | 'ORDERED_QUANTITY';
+  goodsReceiptIndicator: boolean;
+  invoiceReceiptIndicator: boolean;
+  grBasedInvoiceVerification: boolean;
+  finalInvoiceIndicator: boolean;
   netPrice: string;
   priceUnit: string;
   eligible: boolean;
@@ -132,8 +142,14 @@ async function orderViewInTx(tx: Tx, client: string, orderNumber: string): Promi
       const done = invoiced.get(item.itemNumber) ?? 0;
       let refusal: string | null = null;
       if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
+      else if (!item.invoiceReceiptIndicator) refusal = 'The item is not invoiceable: its invoice receipt indicator is off.';
+      else if (item.finalInvoiceIndicator) refusal = 'The final invoice has been posted against this item.';
       else if (!item.materialNumber) refusal = 'Text items carry no goods receipt to verify against this round.';
       else if (item.accountAssignmentCategory) refusal = 'Account-assigned items verify without GR/IR this round.';
+      // Verified against goods only where there are goods to verify against and the item asks
+      // for it. An item that receives none is invoiced against what was ordered, which is not a
+      // fallback: the buyer who switched the goods receipt off said none would arrive.
+      const grBased = item.grBasedInvoiceVerification && item.goodsReceiptIndicator;
       return {
         itemNumber: item.itemNumber,
         materialNumber: item.materialNumber,
@@ -144,7 +160,12 @@ async function orderViewInTx(tx: Tx, client: string, orderNumber: string): Promi
         ordered: Number(item.quantity),
         received: got,
         invoiced: done,
-        invoiceable: Math.max(0, got - done),
+        invoiceable: grBased ? Math.max(0, got - done) : Math.max(0, Number(item.quantity) - done),
+        invoiceBasis: grBased ? 'GOODS_RECEIPT' : 'ORDERED_QUANTITY',
+        goodsReceiptIndicator: item.goodsReceiptIndicator,
+        invoiceReceiptIndicator: item.invoiceReceiptIndicator,
+        grBasedInvoiceVerification: item.grBasedInvoiceVerification,
+        finalInvoiceIndicator: item.finalInvoiceIndicator,
         netPrice: item.netPrice,
         priceUnit: item.priceUnit,
         eligible: !refusal,
@@ -382,8 +403,12 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       if (!(line.quantity > 0)) throw new InvoiceVerificationError(`Item ${line.itemNumber}: the invoiced quantity must be positive.`);
       if (line.quantity > item.invoiceable + 1e-9) {
         throw new InvoiceVerificationError(
-          `Item ${line.itemNumber}: ${line.quantity} exceeds the invoiceable quantity ${item.invoiceable} (received ${item.received}, already invoiced ${item.invoiced}).`,
-          'Invoice no more than stands received and not yet invoiced.',
+          item.invoiceBasis === 'GOODS_RECEIPT'
+            ? `Item ${line.itemNumber}: ${line.quantity} exceeds the invoiceable quantity ${item.invoiceable} (received ${item.received}, already invoiced ${item.invoiced}).`
+            : `Item ${line.itemNumber}: ${line.quantity} exceeds the quantity ordered and not yet invoiced, ${item.invoiceable} (ordered ${item.ordered}, already invoiced ${item.invoiced}). This item is not verified against goods receipts.`,
+          item.invoiceBasis === 'GOODS_RECEIPT'
+            ? 'Invoice no more than stands received and not yet invoiced.'
+            : 'Invoice no more than stands ordered and not yet invoiced. The item is paid before the goods arrive, so nothing checks the quantity against a receipt.',
         );
       }
       if (!(line.netAmount >= 0)) throw new InvoiceVerificationError(`Item ${line.itemNumber}: the net amount cannot be negative.`);
