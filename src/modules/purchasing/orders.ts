@@ -266,7 +266,7 @@ interface JudgedItem {
  * none at all, zero. What resolves is stored on the item, so a receipt is later judged against
  * the order's own figures and not against whatever the masters happen to say that week.
  */
-function resolveItemTolerances(input: {
+export function resolveItemTolerances(input: {
   overdelivery: string;
   underdelivery: string;
   materialPlant: { overdeliveryTolerance: string; underdeliveryTolerance: string } | null;
