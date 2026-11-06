@@ -16,7 +16,7 @@ function one(path: string, query: string, target: string): string {
 }
 
 describe('screen links', () => {
-  it('lists every built page except sign-in, and no missing page', () => {
+  it('lists every built page except explicit non-catalog routes, and no missing page', () => {
     const pages = new Set<string>();
     const walk = (directory: string, route: string) => {
       for (const name of readdirSync(directory)) {
@@ -26,11 +26,61 @@ describe('screen links', () => {
       }
     };
     walk(join(process.cwd(), 'src/app'), '');
-    pages.delete('/signin');
+
+    const excludedRoutes = [
+      '/signin',
+      '/forgot-password',
+      '/reset-password',
+      '/platform/users/[username]',
+    ];
+    for (const route of excludedRoutes) pages.delete(route);
+
     const paths = new Set(SCREENS.map((screen) => screen.path));
     expect([...pages].filter((path) => !paths.has(path))).toEqual([]);
     expect([...paths].filter((path) => !pages.has(path))).toEqual([]);
     expect(new Set(SCREENS.map((screen) => screen.id)).size).toBe(SCREENS.length);
+
+    const requiredScreens = [
+      {
+        path: '/config/credit-control-areas',
+        area: 'configuration',
+        family: 'credit',
+        code: 'CFG.FIN.CCA.MAINTAIN',
+        accepts: [],
+      },
+      {
+        path: '/platform/users',
+        area: 'platform',
+        family: 'platform-users',
+        code: 'CFG.PLT.USER.MAINTAIN',
+        accepts: ['q', 'status'],
+      },
+      {
+        path: '/platform/users/access',
+        area: 'platform',
+        family: 'platform-users',
+        code: 'CFG.PLT.USER.MAINTAIN',
+        accepts: ['query', 'user'],
+      },
+      {
+        path: '/production/order-settlement',
+        area: 'production',
+        family: 'production-orders',
+        code: 'PROD.ORDER.SETTLE',
+        accepts: ['order'],
+      },
+      {
+        path: '/quality/inspection',
+        area: 'inventory',
+        family: 'quality-inspection',
+        code: 'QM.INSPECTION.RECORD',
+        accepts: ['lot'],
+      },
+    ];
+    for (const expected of requiredScreens) {
+      expect(SCREENS.find((screen) => screen.path === expected.path), expected.path).toMatchObject(expected);
+    }
+
     for (const targets of Object.values(ALSO)) {
       for (const target of targets) expect(paths.has(target), target).toBe(true);
     }
