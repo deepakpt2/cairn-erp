@@ -17,6 +17,7 @@ describe('what a save to a released order would move', () => {
       overdeliveryTolerance: '0.00',
       unlimitedOverdelivery: false,
       markedForDeletion: false,
+      grBasedInvoiceVerification: true,
     },
   ];
 
@@ -74,6 +75,19 @@ describe('what a save to a released order would move', () => {
       before,
       after: [{ itemNumber: 10, quantity: 100, markedForDeletion: true }],
     })).toEqual(['item 10 deletion set']);
+  });
+
+  it('names an item that could be paid before the goods arrive', () => {
+    // Paying on the supplier's word alone is what a release of the value was for.
+    expect(releaseImpactingChanges({
+      before,
+      after: [{ itemNumber: 10, quantity: 100, grBasedInvoiceVerification: false }],
+    })).toEqual(['item 10 invoice verification no longer waits for the goods']);
+    // Asking for the goods again is not asking for anything more.
+    expect(releaseImpactingChanges({
+      before: [{ ...before[0], grBasedInvoiceVerification: false }],
+      after: [{ itemNumber: 10, quantity: 100, grBasedInvoiceVerification: true }],
+    })).toEqual([]);
   });
 
   it('reports every line it finds, in the order the items stand', () => {

@@ -181,6 +181,105 @@ describe('SCR-062 invoice verification (MIRO)', () => {
     })).rejects.toThrow('exceeds the invoiceable quantity');
   });
 
+  it('invoices before the goods arrive only where the order says the invoice need not wait', async () => {
+    const c = await standingClient();
+
+    // The default, which is what every order does today: nothing has arrived, so nothing is
+    // invoiceable. A supplier is not paid for goods that were never received.
+    const waiting = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [item(5, 100)] });
+    expect((await getInvoiceOrder(c, waiting.orderNumber))?.items[0])
+      .toMatchObject({ received: 0, invoiceable: 0, invoiceBasis: 'GOODS_RECEIPT' });
+    await expect(postSupplierInvoice({
+      client: c, changedBy: ACTOR, orderNumber: waiting.orderNumber,
+      supplierReference: 'INV-EARLY', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 550, requestKey: 'iv-early-default',
+      lines: [{ itemNumber: 10, quantity: 5, netAmount: 500, taxCode: 'T10' }],
+    })).rejects.toThrow('exceeds the invoiceable quantity');
+
+    // Where the item says the invoice need not wait for the goods, it does not. This is the
+    // whole of what switching GR-based verification off buys, and it is why it is per item.
+    const early = await createOrder({
+      client: c, changedBy: ACTOR, ...header,
+      items: [{ ...item(5, 100), grBasedInvoiceVerification: false }],
+    });
+    expect((await getInvoiceOrder(c, early.orderNumber))?.items[0])
+      .toMatchObject({ received: 0, invoiceable: 5, invoiceBasis: 'ORDERED_QUANTITY' });
+    const invoice = await postSupplierInvoice({
+      client: c, changedBy: ACTOR, orderNumber: early.orderNumber,
+      supplierReference: 'INV-BEFORE', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 550, requestKey: 'iv-before-gr',
+      lines: [{ itemNumber: 10, quantity: 5, netAmount: 500, taxCode: 'T10' }],
+    });
+    expect(invoice.status).toBe('POSTED');
+
+    // The goods arriving afterwards does not make the same quantity invoiceable twice, and
+    // the refusal now says which figure it was worked out from.
+    await postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: early.orderNumber, ...DATES,
+      requestKey: 'gr-after-invoice', lines: [{ itemNumber: 10, quantity: 5 }],
+    });
+    expect((await getInvoiceOrder(c, early.orderNumber))?.items[0])
+      .toMatchObject({ received: 5, invoiced: 5, invoiceable: 0 });
+    await expect(postSupplierInvoice({
+      client: c, changedBy: ACTOR, orderNumber: early.orderNumber,
+      supplierReference: 'INV-AGAIN', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 550, requestKey: 'iv-after-gr',
+      lines: [{ itemNumber: 10, quantity: 5, netAmount: 500, taxCode: 'T10' }],
+    })).rejects.toThrow('exceeds the quantity ordered and not yet invoiced');
+  });
+
+  it('holds an item that is not invoiceable, one whose final invoice stands, and one that receives no goods', async () => {
+    const c = await standingClient();
+
+    const notInvoiceable = await createOrder({
+      client: c, changedBy: ACTOR, ...header,
+      items: [{ ...item(5, 100), invoiceReceiptIndicator: false }],
+    });
+    expect((await getInvoiceOrder(c, notInvoiceable.orderNumber))?.items[0])
+      .toMatchObject({ eligible: false, invoiceReceiptIndicator: false });
+    await expect(postSupplierInvoice({
+      client: c, changedBy: ACTOR, orderNumber: notInvoiceable.orderNumber,
+      supplierReference: 'INV-OFF', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 550, requestKey: 'iv-indicator-off',
+      lines: [{ itemNumber: 10, quantity: 5, netAmount: 500, taxCode: 'T10' }],
+    })).rejects.toThrow('not invoiceable');
+
+    const closed = await createOrder({
+      client: c, changedBy: ACTOR, ...header,
+      items: [{ ...item(5, 100), finalInvoiceIndicator: true }],
+    });
+    await expect(postSupplierInvoice({
+      client: c, changedBy: ACTOR, orderNumber: closed.orderNumber,
+      supplierReference: 'INV-FINAL', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 550, requestKey: 'iv-final',
+      lines: [{ itemNumber: 10, quantity: 5, netAmount: 500, taxCode: 'T10' }],
+    })).rejects.toThrow('final invoice');
+
+    // An item that receives no goods is invoiced against what was ordered: the buyer who
+    // switched the goods receipt off said none would arrive.
+    const noGoods = await createOrder({
+      client: c, changedBy: ACTOR, ...header,
+      items: [{ ...item(5, 100), goodsReceiptIndicator: false }],
+    });
+    expect((await getInvoiceOrder(c, noGoods.orderNumber))?.items[0])
+      .toMatchObject({ eligible: true, goodsReceiptIndicator: false, invoiceable: 5, invoiceBasis: 'ORDERED_QUANTITY' });
+
+    // The final invoice indicator is a buyer's claim, so it does not appear on its own when
+    // the quantity happens to be met.
+    const paid = await createOrder({
+      client: c, changedBy: ACTOR, ...header,
+      items: [{ ...item(5, 100), grBasedInvoiceVerification: false }],
+    });
+    await postSupplierInvoice({
+      client: c, changedBy: ACTOR, orderNumber: paid.orderNumber,
+      supplierReference: 'INV-FULL', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 550, requestKey: 'iv-full',
+      lines: [{ itemNumber: 10, quantity: 5, netAmount: 500, taxCode: 'T10' }],
+    });
+    const after = await getInvoiceOrder(c, paid.orderNumber);
+    expect(after?.items[0]).toMatchObject({ invoiced: 5, invoiceable: 0, finalInvoiceIndicator: false });
+  });
+
   it('posts price variance to the difference account and cancels as a linked mirror', async () => {
     const c = await standingClient();
     const order = await receivedOrder(c, 'gr-2');
