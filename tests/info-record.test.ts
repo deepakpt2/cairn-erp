@@ -431,6 +431,77 @@ describe('SCR-151 purchasing info record', () => {
     expect(hidden.qualified).toBe(false);
   });
 
+  it('keeps the delivery tolerances through create and change, and an order takes them from the record', async () => {
+    const c = await standing();
+    await withTenant(c, async (tx) => {
+      await tx.execute(sql`
+        insert into material (client, material_number, description, material_type, base_unit, created_by)
+        select ${c}, 'MAT-TOL', 'Tolerance material', material_type, 'EA', ${ACTOR}
+        from material_type where client = ${c} order by material_type limit 1
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_plant (client, material_number, plant, procurement_type, created_by)
+        values (${c}, 'MAT-TOL', '1000', 'BUY', ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+
+    // A tolerance is a percentage of the ordered quantity, so it runs from nothing to everything.
+    await expect(createPurchasingInfoRecord({
+      client: c, changedBy: ACTOR, partnerNumber: 'V-IR', materialNumber: 'MAT-TOL',
+      purchasingOrg: '1000', price, overdeliveryTolerance: 101,
+    })).rejects.toThrow(/Overdelivery/);
+    await expect(createPurchasingInfoRecord({
+      client: c, changedBy: ACTOR, partnerNumber: 'V-IR', materialNumber: 'MAT-TOL',
+      purchasingOrg: '1000', price, underdeliveryTolerance: -1,
+    })).rejects.toThrow(/Underdelivery/);
+
+    const created = await createPurchasingInfoRecord({
+      client: c, changedBy: ACTOR, partnerNumber: 'V-IR', materialNumber: 'MAT-TOL',
+      purchasingOrg: '1000', price, overdeliveryTolerance: 5, underdeliveryTolerance: 8,
+    });
+    const opened = await getPurchasingInfoRecord(c, created.infoRecordNumber);
+    expect(opened?.segments[0]).toMatchObject({
+      overdeliveryTolerance: '5.00', underdeliveryTolerance: '8.00',
+    });
+
+    // The last tier of the chain: with nothing on the item and nothing on the material,
+    // the record decides how far a receipt may run.
+    const ordered = await createOrder({
+      client: c, changedBy: ACTOR, supplierNumber: 'V-IR', purchasingOrg: '1000',
+      purchasingGroup: '001', companyCode: '1000', currency: '',
+      items: [{
+        ...orderItem, materialNumber: 'MAT-TOL', quantity: 4,
+        scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 4 }],
+      }],
+    });
+    expect((await getOrder(c, ordered.orderNumber))?.items[0]).toMatchObject({
+      overdeliveryTolerance: '5.00', underdeliveryTolerance: '8.00',
+    });
+
+    await changePurchasingInfoRecord({
+      client: c, changedBy: ACTOR, reason: 'Tolerance review', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: created.version, segmentNumber: created.segmentNumber,
+      overdeliveryTolerance: 12.5, underdeliveryTolerance: 0,
+    });
+    const changed = await getPurchasingInfoRecord(c, created.infoRecordNumber);
+    expect(changed?.segments[0]).toMatchObject({
+      overdeliveryTolerance: '12.50', underdeliveryTolerance: '0.00',
+    });
+
+    const audit = await withTenant(c, (tx) => tx.execute(sql`
+      select i.field_name, i.old_value, i.new_value
+        from change_document d
+        join change_document_item i on i.change_document_id = d.id
+       where d.client = ${c} and d.object_key = ${created.infoRecordNumber} and d.reason = 'Tolerance review'
+       order by i.field_name
+    `)) as unknown as Array<{ field_name: string; old_value: string | null; new_value: string | null }>;
+    expect(audit).toEqual(expect.arrayContaining([
+      { field_name: 'overdeliveryTolerance', old_value: '5.00', new_value: '12.50' },
+      { field_name: 'underdeliveryTolerance', old_value: '8.00', new_value: '0.00' },
+    ]));
+  });
   it('records the change, a check writes nothing, and a failed change rolls the audit back', async () => {
     const c = await standing();
     await withTenant(c, async (tx) => {
