@@ -44,8 +44,9 @@ function CapabilityGrantField({ roleCode, capabilities, held }: { roleCode: stri
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('');
   const options = assignableCapabilitiesFor(held, capabilities, query);
-  // A capability just granted leaves the list; do not keep pointing at it.
-  const effectiveSelected = options.some((cap) => cap.code === selected) ? selected : '';
+  // A capability just granted leaves the list, and the list must never open
+  // empty: fall back to the first row so the field always reads as a choice.
+  const effectiveSelected = options.some((cap) => cap.code === selected) ? selected : options[0]?.code ?? '';
   const chosen = options.find((cap) => cap.code === effectiveSelected) ?? null;
   const hint = chosen
     ? chosen.description ?? 'No description recorded for this capability.'
@@ -56,7 +57,7 @@ function CapabilityGrantField({ roleCode, capabilities, held }: { roleCode: stri
         : 'Every registered capability is already granted to this role.';
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-medium text-ink-soft" htmlFor={`capability-search-${roleCode}`}>Find a capability<input id={`capability-search-${roleCode}`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Code, module, action or description" autoComplete="off" className="field-input mt-1" /></label>
+      <label className="block text-xs font-medium text-ink-soft" htmlFor={`capability-search-${roleCode}`}>Find a capability<input id={`capability-search-${roleCode}`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search capabilities" autoComplete="off" className="field-input mt-1" /></label>
       {options.length ? <label className="block text-xs font-medium text-ink-soft" htmlFor={`capability-code-${roleCode}`}>Registered capability<select id={`capability-code-${roleCode}`} name="capabilityCode" required value={effectiveSelected} onChange={(event) => setSelected(event.target.value)} className="field-input mt-1">{options.map((cap) => <option key={cap.code} value={cap.code}>{capabilityOptionLabel(cap)}</option>)}</select></label> : null}
       <p className="field-hint">{hint}</p>
     </div>

@@ -133,6 +133,10 @@ describe('the field the reader sees', () => {
     expect(SOURCE).not.toContain('visibleCapabilities.filter((cap) => !role.capabilities');
   });
 
+  it('opens with a row chosen, so the field never reads as an empty box', () => {
+    expect(SOURCE).toContain("options.some((cap) => cap.code === selected) ? selected : options[0]?.code ?? ''");
+  });
+
   it('shows the description of the selected capability where it can be read', () => {
     expect(SOURCE).toContain('chosen.description ??');
   });
