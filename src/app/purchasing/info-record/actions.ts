@@ -107,6 +107,14 @@ function optionalCount(form: FormData, name: string): number | null {
   return value === '' ? null : Number(value);
 }
 
+/** A tolerance is a percentage. The module refuses one outside 0 and 100. */
+function optionalPercent(form: FormData, name: string): number | null {
+  const value = text(form, name);
+  if (value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
 function createInput(form: FormData, client: string, changedBy: string): InfoRecordCreateInput {
   const number = text(form, 'infoRecordNumber');
   const version = text(form, 'expectedVersion');
@@ -131,6 +139,8 @@ function createInput(form: FormData, client: string, changedBy: string): InfoRec
     minimumOrderQuantity: optionalCount(form, 'minimumOrderQuantity'),
     minimumOrderUnit: text(form, 'minimumOrderUnit') || null,
     orderUnit: text(form, 'orderUnit') || null,
+    overdeliveryTolerance: optionalPercent(form, 'overdeliveryTolerance'),
+    underdeliveryTolerance: optionalPercent(form, 'underdeliveryTolerance'),
     ...extras(form),
   };
 }
@@ -180,6 +190,12 @@ function changeInput(form: FormData, client: string, changedBy: string, intent: 
     minimumOrderQuantity: form.has('minimumOrderQuantity') ? optionalCount(form, 'minimumOrderQuantity') : undefined,
     minimumOrderUnit: form.has('minimumOrderUnit') ? text(form, 'minimumOrderUnit') || null : undefined,
     orderUnit: form.has('orderUnit') ? text(form, 'orderUnit') || null : undefined,
+    overdeliveryTolerance: form.has('overdeliveryTolerance')
+      ? optionalPercent(form, 'overdeliveryTolerance')
+      : undefined,
+    underdeliveryTolerance: form.has('underdeliveryTolerance')
+      ? optionalPercent(form, 'underdeliveryTolerance')
+      : undefined,
     markRecordDeleted: intent === 'deactivate-record',
     reactivateRecord: intent === 'reactivate-record',
     markSegmentDeleted: intent === 'deactivate-segment',

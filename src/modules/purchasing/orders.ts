@@ -1001,6 +1001,92 @@ export async function createOrder(
   return { orderNumber, warnings };
 }
 
+/** A number without the trailing zeros a stored numeric carries. */
+function figure(value: string | number): string {
+  return String(Number(value));
+}
+
+/**
+ * What a save would do to the value and quantity a release was given for.
+ *
+ * A release approves an order for a value and a quantity. Switching unlimited overdelivery on,
+ * or raising an overdelivery tolerance, changes neither figure written on the order, but it
+ * changes what the order will accept — and to whoever approved it that is the same thing: the
+ * ceiling they approved is no longer the ceiling that stands. So both are named here beside
+ * price and quantity.
+ */
+export function releaseImpactingChanges(input: {
+  before: Array<{
+    itemNumber: number; quantity: string; netPrice: string; priceUnit: string;
+    overdeliveryTolerance: string; unlimitedOverdelivery: boolean; markedForDeletion: boolean;
+  }>;
+  after: Array<{
+    itemNumber?: number; quantity: number; netPrice?: number; priceUnit?: number;
+    overdeliveryTolerance?: string; unlimitedOverdelivery?: boolean; markedForDeletion?: boolean;
+  }>;
+}): string[] {
+  const standing = new Map(input.before.map((row) => [row.itemNumber, row]));
+  const impacts: string[] = [];
+  const kept = new Set<number>();
+  for (const next of input.after) {
+    const row = next.itemNumber == null ? undefined : standing.get(next.itemNumber);
+    if (!row) {
+      impacts.push(`an item added at ${figure(next.quantity)}`);
+      continue;
+    }
+    kept.add(row.itemNumber);
+    if (Number(next.quantity).toFixed(3) !== Number(row.quantity).toFixed(3)) {
+      impacts.push(`item ${row.itemNumber} quantity ${figure(row.quantity)} to ${figure(next.quantity)}`);
+    }
+    const price = next.netPrice == null ? row.netPrice : String(next.netPrice);
+    const per = next.priceUnit == null ? row.priceUnit : String(next.priceUnit);
+    if (Number(price).toFixed(2) !== Number(row.netPrice).toFixed(2) || Number(per) !== Number(row.priceUnit)) {
+      impacts.push(`item ${row.itemNumber} price ${figure(row.netPrice)} to ${figure(price)} per ${figure(per)}`);
+    }
+    const typed = (next.overdeliveryTolerance ?? '').trim();
+    const over = typed.length > 0 ? Number(typed) : Number(row.overdeliveryTolerance);
+    if (over > Number(row.overdeliveryTolerance) + 1e-9) {
+      impacts.push(`item ${row.itemNumber} overdelivery tolerance ${figure(row.overdeliveryTolerance)}% to ${figure(over)}%`);
+    }
+    if (next.unlimitedOverdelivery && !row.unlimitedOverdelivery) {
+      impacts.push(`item ${row.itemNumber} unlimited overdelivery set`);
+    }
+    if (Boolean(next.markedForDeletion) !== row.markedForDeletion) {
+      impacts.push(`item ${row.itemNumber} deletion ${row.markedForDeletion ? 'cleared' : 'set'}`);
+    }
+  }
+  for (const row of input.before) {
+    if (!kept.has(row.itemNumber)) impacts.push(`item ${row.itemNumber} removed`);
+  }
+  return impacts;
+}
+
+/**
+ * A released order is never changed silently. Where the save would move the approved value or
+ * quantity, the refusal names what would move: whoever released the order is entitled to know
+ * what they are being asked to approve again.
+ */
+async function assertReleaseImpact(
+  tx: Tx,
+  client: string,
+  orderNumber: string,
+  before: OrderDocument,
+  items: z.infer<typeof itemInput>[],
+): Promise<void> {
+  const [release] = await tx.select().from(documentRelease).where(and(
+    eq(documentRelease.client, client),
+    eq(documentRelease.documentCategory, 'PURCHASE_ORDER'),
+    eq(documentRelease.documentNumber, orderNumber),
+  ));
+  if (!release || release.status !== 'RELEASED') return;
+  const impacts = releaseImpactingChanges({ before: before.items, after: items });
+  if (impacts.length === 0) return;
+  throw new PurchaseOrderError(
+    `Purchase order ${orderNumber} is released, and this save would change what was approved: ${impacts.join('; ')}.`,
+    'Cancel the release, save the change, then release the order again. An approval stands against the value and the quantity it was given for.',
+  );
+}
+
 export async function changeOrder(
   raw: CreateOrderInput & { orderNumber: string },
 ): Promise<{ orderNumber: string; warnings: string[] }> {
@@ -1015,6 +1101,7 @@ export async function changeOrder(
   await withTenant(input.client, async (tx) => {
     const before = await loadDocument(tx, input.client, raw.orderNumber);
     if (!before) throw new PurchaseOrderError(`Purchase order ${raw.orderNumber} does not exist.`);
+    await assertReleaseImpact(tx, input.client, raw.orderNumber, before, input.items);
     try {
       await assertDocumentNotReleased(tx, input.client, 'PURCHASE_ORDER', raw.orderNumber, 'Purchase order');
     } catch (error) {
@@ -1059,7 +1146,10 @@ export async function changeOrder(
       client: input.client, objectClass: PO_OBJECT_CLASS, objectKey: raw.orderNumber,
       changeType: 'CHANGE', changedBy: input.changedBy,
       before: { items: before.items.map((i) => ({ item: i.itemNumber, qty: i.quantity, value: i.netValue, deleted: i.markedForDeletion })) },
-      after: { items: after?.items.map((i) => ({ item: i.itemNumber, qty: i.quantity, value: i.netValue, deleted: i.markedForDeletion })) },
+      after: {
+        items: after?.items.map((i) => ({ item: i.itemNumber, qty: i.quantity, value: i.netValue, deleted: i.markedForDeletion })),
+        releaseImpact: releaseImpactingChanges({ before: before.items, after: input.items }),
+      },
     });
   });
   return { orderNumber: raw.orderNumber, warnings };

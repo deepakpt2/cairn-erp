@@ -225,6 +225,7 @@ export default function InfoRecordWorkbench({
                   {t('infoRecord.leadTime')}: {segment.plannedDeliveryDays ?? '—'}
                   {' · '}{t('infoRecord.minimum')}: {segment.minimumOrderQuantity ?? '—'} {segment.minimumOrderUnit ?? ''}
                   {' · '}{t('infoRecord.orderUnit')}: {segment.orderUnit ?? '—'}
+                  {' · '}{t('infoRecord.overdelivery')}: {segment.overdeliveryTolerance}% · {t('infoRecord.underdelivery')}: {segment.underdeliveryTolerance}%
                 </p>
                 <table className="grid-table mt-2 text-sm">
                   <thead>
@@ -263,6 +264,12 @@ export default function InfoRecordWorkbench({
                     </Field>
                     <Field label={t('infoRecord.orderUnit')}>
                       <ConstrainedField kind="unit" name="orderUnit" defaultValue={segment.orderUnit ?? ''} uppercase />
+                    </Field>
+                    <Field label={t('infoRecord.overdelivery')}>
+                      <input name="overdeliveryTolerance" className="input w-full" inputMode="decimal" defaultValue={segment.overdeliveryTolerance} />
+                    </Field>
+                    <Field label={t('infoRecord.underdelivery')}>
+                      <input name="underdeliveryTolerance" className="input w-full" inputMode="decimal" defaultValue={segment.underdeliveryTolerance} />
                     </Field>
                   </div>
                   <p className="text-xs text-ink-soft">{t('infoRecord.newPriceHint')}</p>
@@ -394,6 +401,12 @@ export default function InfoRecordWorkbench({
             </Field>
             <Field label={t('infoRecord.orderUnit')}>
               <ConstrainedField kind="unit" name="orderUnit" uppercase />
+            </Field>
+            <Field label={t('infoRecord.overdelivery')}>
+              <input name="overdeliveryTolerance" className="input w-full" inputMode="decimal" />
+            </Field>
+            <Field label={t('infoRecord.underdelivery')}>
+              <input name="underdeliveryTolerance" className="input w-full" inputMode="decimal" />
             </Field>
           </div>
           <div className="flex flex-wrap gap-2">

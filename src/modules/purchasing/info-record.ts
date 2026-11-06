@@ -65,6 +65,9 @@ export interface InfoRecordCreateInput {
   minimumOrderQuantity?: number | null;
   minimumOrderUnit?: string | null;
   orderUnit?: string | null;
+  /** The tolerances an order inherits when the material at its plant carries none. */
+  overdeliveryTolerance?: number | null;
+  underdeliveryTolerance?: number | null;
   materialGroup?: string | null;
   category?: string | null;
   conditionType?: string | null;
@@ -91,6 +94,8 @@ export interface InfoRecordChangeInput {
   minimumOrderQuantity?: number | null;
   minimumOrderUnit?: string | null;
   orderUnit?: string | null;
+  overdeliveryTolerance?: number | null;
+  underdeliveryTolerance?: number | null;
   markRecordDeleted?: boolean;
   reactivateRecord?: boolean;
   markSegmentDeleted?: boolean;
@@ -243,7 +248,21 @@ async function assertOperational(input: {
   minimumOrderQuantity?: number | null;
   minimumOrderUnit?: string | null;
   orderUnit?: string | null;
+  overdeliveryTolerance?: number | null;
+  underdeliveryTolerance?: number | null;
 }, tx: Tx, client: string, materialNumber: string): Promise<void> {
+  for (const [name, value] of [
+    ['Overdelivery', input.overdeliveryTolerance],
+    ['Underdelivery', input.underdeliveryTolerance],
+  ] as const) {
+    if (value == null) continue;
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      throw new InfoRecordError(`${name} tolerance is a percentage between 0 and 100, or it is omitted.`);
+    }
+    if (decimalScale(value) > 2) {
+      throw new InfoRecordError(`${name} tolerance is held to two decimal places.`);
+    }
+  }
   if (input.plannedDeliveryDays != null && (!Number.isInteger(input.plannedDeliveryDays) || input.plannedDeliveryDays < 0)) {
     throw new InfoRecordError('Planned delivery time is a nonnegative whole number of days, or it is omitted.');
   }
@@ -485,6 +504,8 @@ export async function writePurchasingInfoRecord(tx: Tx, input: InfoRecordCreateI
     minimumOrderQuantity: input.minimumOrderQuantity == null ? null : input.minimumOrderQuantity.toFixed(3),
     minimumOrderUnit: minimumUnit,
     orderUnit,
+    overdeliveryTolerance: percentText(input.overdeliveryTolerance),
+    underdeliveryTolerance: percentText(input.underdeliveryTolerance),
     version: 1,
     createdBy: input.changedBy,
   });
@@ -607,6 +628,8 @@ interface ChangePlan {
     minimumOrderQuantity: string | null;
     minimumOrderUnit: string | null;
     orderUnit: string | null;
+    overdeliveryTolerance: string;
+    underdeliveryTolerance: string;
     markedForDeletion: boolean;
     version: number;
   } | null;
@@ -622,6 +645,11 @@ function pushDelta(changes: ChangeDelta[], field: string, before: string | null,
 
 function quantityText(value: number | null): string | null {
   return value == null ? null : value.toFixed(3);
+}
+
+/** A tolerance is stored whether or not it was sent: an omitted one means no tolerance. */
+function percentText(value: number | null | undefined): string {
+  return value == null ? '0' : Number(value).toFixed(2);
 }
 
 function quantityStored(value: string | null): string | null {
@@ -697,11 +725,19 @@ async function planInfoRecordChange(tx: Tx, input: InfoRecordChangeInput): Promi
       ? segment.minimumOrderUnit
       : blank(input.minimumOrderUnit)?.toUpperCase() ?? null;
     const nextOrderUnit = input.orderUnit === undefined ? segment.orderUnit : blank(input.orderUnit)?.toUpperCase() ?? null;
+    const nextOver = input.overdeliveryTolerance === undefined
+      ? segment.overdeliveryTolerance
+      : percentText(input.overdeliveryTolerance);
+    const nextUnder = input.underdeliveryTolerance === undefined
+      ? segment.underdeliveryTolerance
+      : percentText(input.underdeliveryTolerance);
     const nextSegmentMark = input.markSegmentDeleted ? true : input.reactivateSegment ? false : segment.markedForDeletion;
     await assertOperational({
       plannedDeliveryDays: nextLead,
       minimumOrderQuantity: nextMinimum == null ? null : Number(nextMinimum),
       minimumOrderUnit: nextMinimumUnit,
+      overdeliveryTolerance: Number(nextOver),
+      underdeliveryTolerance: Number(nextUnder),
     }, tx, input.client, general.materialNumber);
     if (input.orderUnit !== undefined) {
       await assertQuantityUnit(tx, input.client, general.materialNumber, nextOrderUnit, 'The order unit');
@@ -714,6 +750,8 @@ async function planInfoRecordChange(tx: Tx, input: InfoRecordChangeInput): Promi
     }
     pushDelta(changes, 'minimumOrderUnit', segment.minimumOrderUnit, nextMinimumUnit);
     pushDelta(changes, 'orderUnit', segment.orderUnit, nextOrderUnit);
+    pushDelta(changes, 'overdeliveryTolerance', segment.overdeliveryTolerance, nextOver);
+    pushDelta(changes, 'underdeliveryTolerance', segment.underdeliveryTolerance, nextUnder);
     pushDelta(changes, 'segmentMarkedForDeletion', String(segment.markedForDeletion), String(nextSegmentMark));
 
     if (input.newPrice) {
@@ -763,6 +801,8 @@ async function planInfoRecordChange(tx: Tx, input: InfoRecordChangeInput): Promi
         minimumOrderQuantity: nextMinimum,
         minimumOrderUnit: nextMinimumUnit,
         orderUnit: nextOrderUnit,
+        overdeliveryTolerance: nextOver,
+        underdeliveryTolerance: nextUnder,
         markedForDeletion: nextSegmentMark,
         version: segment.version + 1,
       };
@@ -857,6 +897,8 @@ async function applyInfoRecordChange(tx: Tx, changedBy: string, reason: string, 
       minimumOrderQuantity: plan.segment.minimumOrderQuantity,
       minimumOrderUnit: plan.segment.minimumOrderUnit,
       orderUnit: plan.segment.orderUnit,
+      overdeliveryTolerance: plan.segment.overdeliveryTolerance,
+      underdeliveryTolerance: plan.segment.underdeliveryTolerance,
       markedForDeletion: plan.segment.markedForDeletion,
       version: plan.segment.version,
       changedBy,
