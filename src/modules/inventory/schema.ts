@@ -210,8 +210,13 @@ export const materialPlant = pgTable('material_plant', {
   plant: varchar('plant', { length: 10 }).notNull(),
   purchasingGroup: varchar('purchasing_group', { length: 3 }),
   orderUnit: varchar('order_unit', { length: 6 }).references(() => unitOfMeasure.code),
-  overdeliveryTolerance: numeric('overdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),
-  underdeliveryTolerance: numeric('underdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),
+  /**
+   * How far a receipt may run past the ordered quantity, as a percentage. Null is not a
+   * zero that was never set: it is this material holding no opinion, which lets the
+   * purchasing info record decide.
+   */
+  overdeliveryTolerance: numeric('overdelivery_tolerance', { precision: 5, scale: 2 }),
+  underdeliveryTolerance: numeric('underdelivery_tolerance', { precision: 5, scale: 2 }),
   manufacturerPartNumber: varchar('manufacturer_part_number', { length: 80 }),
   purchasingStatus: varchar('purchasing_status', { length: 16 }).notNull().default('NOT_CREATED'),
   /** Deletion flag at plant level (SCR-053 / MM06): a marker, never a lock. */

@@ -269,7 +269,7 @@ interface JudgedItem {
 export function resolveItemTolerances(input: {
   overdelivery: string;
   underdelivery: string;
-  materialPlant: { overdeliveryTolerance: string; underdeliveryTolerance: string } | null;
+  materialPlant: { overdeliveryTolerance: string | null; underdeliveryTolerance: string | null } | null;
   infoRecord: { overdeliveryTolerance?: string | null; underdeliveryTolerance?: string | null } | null;
 }): { overdeliveryTolerance: string; underdeliveryTolerance: string } {
   const side = (buyer: string, master: string | null | undefined, record: string | null | undefined): string => {
@@ -342,7 +342,7 @@ async function judgeItem(
   let group9: string | null = null;
   let record: Awaited<ReturnType<typeof resolvePurchasingInfoRecord>> | null = null;
   let sourceNumber: string | null = null;
-  let plantExtension: { overdeliveryTolerance: string; underdeliveryTolerance: string } | null = null;
+  let plantExtension: { overdeliveryTolerance: string | null; underdeliveryTolerance: string | null } | null = null;
   if (item.materialNumber) {
     const [mat] = await tx.select().from(material)
       .where(and(eq(material.client, client), eq(material.materialNumber, item.materialNumber)));

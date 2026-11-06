@@ -18,7 +18,18 @@ export class MaterialError extends Error {
 }
 const quantity = z.string().regex(/^(0|[1-9]\d{0,19})(\.\d{1,3})?$/, 'Use a non-negative quantity with up to 3 decimals.').transform((s) => fromScaled(toScaled(s, 3), 3));
 const money = z.string().regex(/^(0|[1-9]\d{0,18})(\.\d{1,4})?$/, 'Use a non-negative price with up to 4 decimals.').transform((s) => fromScaled(toScaled(s), 4));
-const percent = z.string().regex(/^\d{1,3}(\.\d{1,2})?$/).refine((s) => toScaled(s, 2) <= 10000n, 'Tolerance must be between 0 and 100.').transform((s) => fromScaled(toScaled(s, 2), 2));
+/**
+ * A tolerance is a percentage between nothing and everything. A blank field is not zero -
+ * it is the material declining to hold an opinion, which leaves the purchasing info record
+ * to decide what a receipt may do.
+ */
+const percent = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+  z.string().regex(/^\d{1,3}(\.\d{1,2})?$/)
+    .refine((s) => toScaled(s, 2) <= 10000n, 'Tolerance must be between 0 and 100.')
+    .transform((s) => fromScaled(toScaled(s, 2), 2))
+    .nullable(),
+);
 const common = z.object({
   client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
   materialNumber: z.string().regex(/^[A-Z0-9][A-Z0-9_.-]{0,39}$/),

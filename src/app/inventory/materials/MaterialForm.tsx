@@ -17,7 +17,7 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
   const [state, action, pending] = useActionState(saveMaterialAction, { ok: true });
   const value = (name: string, fallback = '') => materialFormValue(initial, name, fallback);
   const currentType = choices.types.find((t) => t.materialType === value('materialType', 'RAW'));
-  const decimal = (name: string, label: string, fallback = '0') => <Field label={t(label)}><input name={name} defaultValue={value(name, fallback)} inputMode="decimal" className="field-input tabular" required /></Field>;
+  const decimal = (name: string, label: string, fallback = '0', optional = false) => <Field label={t(label)}><input name={name} defaultValue={value(name, fallback)} inputMode="decimal" className="field-input tabular" required={!optional} /></Field>;
   const options = (name: string, label: string, rows: Array<{ key: string; text: string }>, fallback = '', blank = true, immutable = false) => <Field label={t(label)}>
     {immutable ? <input name={name} value={value(name, fallback)} className="field-input code bg-sunken" readOnly /> :
       <select name={name} defaultValue={value(name, fallback)} className="field-input">{blank && <option value="">{t('material.notSet')}</option>}{rows.map((r) => <option key={r.key} value={r.key}>{r.key} · {r.text}</option>)}</select>}
@@ -59,7 +59,7 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
           {options('purchasingGroup', 'material.purchasingGroup', choices.purchasingGroups.map((r) => ({ key: r.purchasingGroup, text: r.name })), '001')}
           {options('orderUnit', 'material.orderUnit', unitOptions, value('baseUnit'))}
           <Field label={t('material.manufacturerPart')}><input name="manufacturerPartNumber" defaultValue={value('manufacturerPartNumber')} maxLength={80} className="field-input code" /></Field>
-          {decimal('overdeliveryTolerance', 'material.overdelivery')}{decimal('underdeliveryTolerance', 'material.underdelivery')}
+          {decimal('overdeliveryTolerance', 'material.overdelivery', '', true)}{decimal('underdeliveryTolerance', 'material.underdelivery', '', true)}
         </div><p className="text-2xs text-ink-soft">{t('material.orderUnitNote')}</p>
       </>}
       {view === 'MRP' && <>
