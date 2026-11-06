@@ -82,10 +82,10 @@ describe('production order writers', () => {
       expect(headers).toHaveLength(2);
       const checked = headers.find((row) => row.order_number === fixture.order);
       const uncontrolled = headers.find((row) => row.order_number === fixture.orderUncontrolled);
-      // Version 2 is the fixture's own component addition. Nothing else has touched either
-      // order: no release, and no hand-set status.
+      // Both orders are checked exactly as converted: the fixture does not edit either order
+      // afterward, and it never hand-sets a status.
       expect(checked).toMatchObject({
-        status: 'CREATED', version: 2, order_type: 'PP01', material_number: 'CO09-GOOD',
+        status: 'CREATED', version: 1, order_type: 'PP01', material_number: 'CO09-GOOD',
         plant: 'QG01', production_version: 'V01', bom_usage: 'P', bom_alternative: '01',
         from_conversion: true,
       });
@@ -96,7 +96,8 @@ describe('production order writers', () => {
 
       const components = await withTenant(tenant.client, (tx) => tx.execute(sql`
         select order_number, item_number, material_number, required_quantity::text as required_quantity,
-               unit_of_measure, bom_item, source_material, requirement_date::text as requirement_date
+               unit_of_measure, bom_item, source_material, requirement_date::text as requirement_date,
+               bom_item_category, bom_stock_relevant, bom_phantom, bom_bulk_material
           from production_order_component
          where client = ${tenant.client}
          order by order_number, item_number
@@ -104,13 +105,14 @@ describe('production order writers', () => {
       const onChecked = components.filter((row) => row.order_number === fixture.order);
       expect(onChecked.map((row) => [
         row.item_number, row.material_number, row.required_quantity, row.bom_item, row.requirement_date,
+        row.bom_item_category, row.bom_stock_relevant, row.bom_phantom, row.bom_bulk_material,
       ])).toEqual([
-        [10, 'CO09-PART', '20.000', '0010', fixture.requirementDay],
-        [20, 'CO09-BULK', '3.000', '0020', fixture.requirementDay],
-        [30, 'CO09-FREE', '7.000', '0030', fixture.requirementDay],
-        // The line the bill does not carry: added by the change screen, so no bill identity
-        // and nothing to copy a date from.
-        [40, 'CO09-NONE', '6.000', null, null],
+        [10, 'CO09-PART', '20.000', '0010', fixture.requirementDay, 'S', 'X', ' ', ' '],
+        [20, 'CO09-BULK', '3.000', '0020', fixture.requirementDay, 'S', 'X', ' ', ' '],
+        [30, 'CO09-FREE', '7.000', '0030', fixture.requirementDay, 'S', 'X', ' ', ' '],
+        // Added to the BOM after planning but before conversion: eligible snapshot facts
+        // stand, while the absence of a matching dependent requirement leaves it undated.
+        [40, 'CO09-NONE', '6.000', '0040', null, 'S', 'X', ' ', ' '],
       ]);
       expect(components.filter((row) => row.order_number === fixture.orderUncontrolled)).toEqual([
         expect.objectContaining({
@@ -125,7 +127,7 @@ describe('production order writers', () => {
       });
       expect(view.components.map((row) => [row.itemNumber, row.outcome, row.cumulatedAtp, row.coveredQuantity])).toEqual([
         ['10', 'AVAILABLE', 34, 20],
-        ['20', 'EXCLUDED', null, null],
+        ['20', 'NO_ELEMENTS', 0, 0],
         ['30', 'NO_GROUP', null, null],
         ['40', 'UNDATED', null, null],
       ]);

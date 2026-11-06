@@ -17,7 +17,6 @@ import { createWorkCenter, saveWorkCenterCategory } from '../../src/modules/prod
 import { planSingleItem } from '../../src/modules/production/mrp-run';
 import { convertPlannedOrder } from '../../src/modules/production/planned-order-conversion';
 import { saveOrderTypeParameter } from '../../src/modules/production/order-type-parameters';
-import { changeProductionOrder } from '../../src/modules/production/production-order-change';
 import { checkProductionVersion, createProductionVersion } from '../../src/modules/production/production-version';
 import type { BrowserTarget } from './targets';
 
@@ -76,14 +75,15 @@ export interface Co09Fixture {
  * conversion copied one from a matching dependent requirement, so the shortage is planned
  * by single-item planning, each proposal is converted by planned-order conversion, and
  * the date the check reads is the date conversion stored — read back off the order, not
- * chosen by this file. The two
- * marks the screen reports as refusals are applied the way a tenant applies them after the
- * fact: the bulk mark is set on the bill of material after conversion, because creating the
- * order refuses a bulk item outright rather than dropping it silently, and the undated line
- * is added by the change screen, because a component the bill does not carry has no
- * dependent requirement to date it. The component materials are left out of the planning
- * candidate set on purpose: their own MRP view is not created, so the run proposes nothing
- * below the finished good and the requisitions below are the only supply the check can see.
+ * chosen by this file. The undated line is added to the bill after planning but before
+ * conversion: the order snapshot
+ * carries its eligibility facts, while no matching dependent requirement exists to date it.
+ * The bulk mark is changed on the bill only after conversion because order creation rejects
+ * bulk BOM items. That later change does not rewrite the saved snapshot, so it cannot make
+ * this existing order line EXCLUDED as bulk. The component materials are left out of the
+ * planning candidate set on purpose: their own MRP view is not created, so the run proposes
+ * nothing below the finished good and the requisitions below are the only supply the check
+ * can see.
  */
 export async function co09AvailabilityFixture(client: string): Promise<Co09Fixture> {
   await withTenant(client, async (tx) => {
@@ -156,11 +156,12 @@ export async function co09AvailabilityFixture(client: string): Promise<Co09Fixtu
     client, changedBy: ACTOR, usage: 'P', description: 'Production availability',
     productionRelevance: '.', engineeringRelevance: '.', costingRelevance: '.', salesRelevance: '.',
   });
-  // The item category decides which marks an item may carry at all, so the fixture
-  // grants the phantom and bulk allowances through its own maintenance service.
+  // The item category decides which marks an item may carry at all. The stock-relevant
+  // flag is also copied into each order's eligibility snapshot at conversion, so set it
+  // explicitly before planning and conversion.
   await saveBomItemCategory({
     client, changedBy: ACTOR, category: 'S', description: 'Stock item', materialEntry: '+', quantityEntry: '+',
-    allowPhantom: 'X', allowBulk: 'X',
+    stockRelevant: 'X', allowPhantom: 'X', allowBulk: 'X',
   });
   await createMaterialBom({
     client, changedBy: ACTOR, materialNumber: 'CO09-GOOD', plant: PLANT, usage: 'P', alternative: '01',
@@ -218,6 +219,23 @@ export async function co09AvailabilityFixture(client: string): Promise<Co09Fixtu
     assert.ok(proposal, `planning ${material} proposed no planned order. Run ${run.runNumber} planned ${run.materialsPlanned} of ${run.materialsSelected}.`);
     proposed.push({ orderType, plannedOrder: String(proposal.documentNumber) });
   }
+  // Add the undated line after planning has produced its dependent requirements, but before
+  // conversion snapshots the BOM. The snapshot will carry item-category eligibility facts;
+  // there is deliberately no matching dependent requirement to supply a date for item 0040.
+  await changeMaterialBom({
+    client, changedBy: ACTOR, materialNumber: 'CO09-GOOD', plant: PLANT, usage: 'P', alternative: '01',
+    baseQuantity: '1', baseUnit: 'KG', validFrom: '2020-01-01', version: 1,
+    items: [
+      { itemNumber: '0010', itemCategory: 'S', componentMaterial: 'CO09-PART', quantity: '20', unit: 'KG' },
+      { itemNumber: '0020', itemCategory: 'S', componentMaterial: 'CO09-BULK', quantity: '3', unit: 'KG' },
+      { itemNumber: '0030', itemCategory: 'S', componentMaterial: 'CO09-FREE', quantity: '7', unit: 'KG' },
+      { itemNumber: '0040', itemCategory: 'S', componentMaterial: 'CO09-NONE', quantity: '6', unit: 'KG' },
+    ],
+  });
+  // BOM maintenance makes the previously checked production version stale; refresh its
+  // consistency result through the owning service before planned-order conversion.
+  await checkProductionVersion(client, 'CO09-GOOD', PLANT, 'V01', ACTOR);
+
   const orders: string[] = [];
   for (const proposal of proposed) {
     const converted = await convertPlannedOrder({
@@ -230,22 +248,17 @@ export async function co09AvailabilityFixture(client: string): Promise<Co09Fixtu
   }
   const [order, orderUncontrolled] = orders;
 
-  // The component the bill does not carry, added where a component is added: no bill
-  // identity, so no dependent requirement, so no date. The check answers that as UDATED.
-  await changeProductionOrder({
-    client, changedBy: ACTOR, orderNumber: order, expectedVersion: 1,
-    components: [{ materialNumber: 'CO09-NONE', requiredQuantity: '6', unit: 'KG' }],
-  });
-  // The bulk mark is set on the bill after conversion, because an order snapshot refuses a
-  // bulk item instead of dropping it. The check reads the mark off the standing bill, so the
-  // line is excluded while the date conversion stored stays.
+  // The bulk mark changes on the current BOM only after conversion. The order snapshot
+  // keeps the blank bulk flag it captured, so this does not exclude item 0020 or create a
+  // supported bulk-order scenario; it proves that a later BOM change is not re-read.
   await changeMaterialBom({
     client, changedBy: ACTOR, materialNumber: 'CO09-GOOD', plant: PLANT, usage: 'P', alternative: '01',
-    baseQuantity: '1', baseUnit: 'KG', validFrom: '2020-01-01', version: 1,
+    baseQuantity: '1', baseUnit: 'KG', validFrom: '2020-01-01', version: 2,
     items: [
       { itemNumber: '0010', itemCategory: 'S', componentMaterial: 'CO09-PART', quantity: '20', unit: 'KG' },
       { itemNumber: '0020', itemCategory: 'S', componentMaterial: 'CO09-BULK', quantity: '3', unit: 'KG', bulkMaterial: 'X' },
       { itemNumber: '0030', itemCategory: 'S', componentMaterial: 'CO09-FREE', quantity: '7', unit: 'KG' },
+      { itemNumber: '0040', itemCategory: 'S', componentMaterial: 'CO09-NONE', quantity: '6', unit: 'KG' },
     ],
   });
   const [dated] = await withTenant(client, (tx) => tx.execute(sql`
@@ -355,14 +368,17 @@ export async function co09Availability(ctx: Context) {
   assert.deepEqual(elementUnits, ['KG', 'KG', 'KG'], 'every counted element carries the base unit of the material it is checked for');
   console.log('  ✓ three dated elements stand behind the requirement, each in the base unit, and the excluded kind is absent by the scope’s rule');
 
-  // ── A rule that excludes a component is not a shortage ───────────────────
-  assert.equal(await page.locator('tr[data-co09-component="20"]').getAttribute('data-co09-outcome'), 'EXCLUDED');
-  assert.match(await page.locator('[data-co09-message="20"]').innerText(), /bulk material/i, 'the bulk item is named as the reason');
+  // ── A later bulk mark does not rewrite the saved order snapshot ──────────
+  const bulkMarkedLater = page.locator('tr[data-co09-component="20"]');
+  assert.equal(await bulkMarkedLater.getAttribute('data-co09-outcome'), 'NO_ELEMENTS');
+  assert.equal(await figure('20', 'atp'), '0.000');
+  assert.equal(await figure('20', 'shortage'), '3.000');
+  assert.doesNotMatch(await page.locator('[data-co09-message="20"]').innerText(), /bulk material/i);
   assert.equal(await page.locator('tr[data-co09-component="30"]').getAttribute('data-co09-outcome'), 'NO_GROUP');
   assert.match(await page.locator('[data-co09-message="30"]').innerText(), /No group is not a default group/);
   assert.equal(await page.locator('tr[data-co09-component="40"]').getAttribute('data-co09-outcome'), 'UNDATED');
   assert.match(await page.locator('[data-co09-message="40"]').innerText(), /bill-of-material date are each rejected/);
-  console.log('  ✓ a bulk item, an unassigned group and an undated line are three different answers');
+  console.log('  ✓ a post-conversion bulk mark leaves the saved line unchanged; no elements, no group and no date remain distinct answers');
 
   // ── The scope decides, switch by switch ──────────────────────────────────
   // Dependent requirements switched on brings the component demand onto the list:
