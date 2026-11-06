@@ -11,7 +11,10 @@ function ScreenLinkChip({ link }: { link: RelatedLink }) {
       href={link.href}
       className="inline-flex max-w-full items-center gap-1 border border-line bg-surface px-2 py-1 text-xs text-ink hover:border-accent-line hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
     >
-      {link.screen.code ? <span className="code text-ink-faint">{link.screen.code}</span> : null}
+      {/* The name alone. The code still opens the screen from the command bar,
+          and the term registry lists every code against its screen — a chip
+          showing "CFG.FIN.COA.DEFINE · Chart of Accounts definition" spends
+          half its width on a string only the machine needs. */}
       <span>{link.screen.title}</span>
     </Link>
   );

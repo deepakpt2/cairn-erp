@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { searchRegistry, coverageLabel, type RegistryHit } from '@/platform/registry';
 import { RegistrySearch } from './RegistrySearch';
+import { screenTerms } from './screen-terms';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,10 @@ export default async function RegistryPage({
 }) {
   const params = await searchParams;
   const query = params.q ?? '';
-  const hits = await searchRegistry(query);
+  const terms = await searchRegistry(query);
+  // Screens are terms too: their codes are listed here so a code stays findable
+  // now that the related-screens strip shows names alone.
+  const hits = [...terms, ...screenTerms(query)];
 
   return (
     <div className="mx-auto max-w-4xl p-6">

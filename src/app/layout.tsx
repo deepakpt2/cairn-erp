@@ -5,6 +5,7 @@ import { CommandBar } from '@/ui/shell/CommandBar';
 import { RelatedScreens } from '@/ui/shell/RelatedScreens';
 import { StatusBar } from '@/ui/shell/StatusBar';
 import { SessionBar } from '@/ui/shell/SessionBar';
+import { ScrollToTop } from '@/ui/shell/ScrollToTop';
 import { t, DEFAULT_LOCALE, LOCALE_DIRECTION } from '@/platform/i18n';
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <RelatedScreens />
           </Suspense>
           <main className="flex-1">{children}</main>
+          <ScrollToTop />
           <StatusBar />
         </div>
       </body>

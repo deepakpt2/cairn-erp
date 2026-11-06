@@ -11,6 +11,7 @@
  */
 import { redirect } from 'next/navigation';
 import { resolveTerm } from '@/platform/registry';
+import { resolveScreen } from './registry/screen-terms';
 
 export async function executeCommand(formData: FormData): Promise<void> {
   const term = String(formData.get('term') ?? '').trim();
@@ -18,7 +19,9 @@ export async function executeCommand(formData: FormData): Promise<void> {
     redirect('/');
   }
 
-  const hit = await resolveTerm(term);
+  // A code that names a screen is answered outright: it is exact, and it costs
+  // nothing to check before asking the registry to rank the world.
+  const hit = resolveScreen(term) ?? (await resolveTerm(term));
 
   if (hit?.routePath && (hit.matchKind !== 'NEAREST' || hit.matchUnique !== false)) {
     redirect(hit.routePath);
