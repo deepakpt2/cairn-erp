@@ -179,9 +179,10 @@ describe('a vendor advance raised against a purchase order', () => {
     }))).rejects.toThrow(/was raised against/);
 
     // Naming the same order twice is not a disagreement.
+    const again = await request(first.orderNumber, 'ADV-REQ-3');
     await postVendorDownPayment(payment({
       amount: 500, requestKey: 'adv-same-order', purchaseOrder: first.orderNumber,
-      requestAllocations: [{ requestNumber: raised.requestNumber }],
+      requestAllocations: [{ requestNumber: again.requestNumber }],
     }));
     expect(await getOrderAdvances(c, first.orderNumber)).toHaveLength(2);
   });
