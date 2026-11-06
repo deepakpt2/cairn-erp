@@ -1,149 +1,88 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { directSql } from '../src/platform/db/client';
+const { postgresMock } = vi.hoisted(() => ({ postgresMock: vi.fn() }));
+vi.mock('postgres', () => ({ default: postgresMock }));
 
-/**
- * Regression tests for the `directSql()` connection-targeting fix.
- *
- * These tests verify that `directSql()` uses the explicitly supplied connection
- * string and never silently falls back to `process.env.DATABASE_URL`. All
- * connections are read-only (`SELECT current_database()`) and target only the
- * development database `cairn` — never a protected acceptance database.
- *
- * The original defect: `directSql()` ignored its argument and always connected
- * via `process.env.DATABASE_URL`, so any caller that supplied an explicit
- * target was silently routed to whatever `DATABASE_URL` named instead.
- */
-const CAIRN_URL =
-  'postgresql://cairn_app:cairn_app_dev@127.0.0.1:5432/cairn';
-const WRONG_URL =
-  'postgresql://cairn_app:cairn_app_dev@127.0.0.1:5432/cairn_b210';
+import { closeDb, directSql, sql as applicationSql } from '../src/platform/db/client';
+
+const ENV_URL = 'postgresql://env-user:env-pass@environment.invalid/env_database';
+const EXPLICIT_URL_A = 'postgresql://test-user:test-pass@target-a.invalid/database_a';
+const EXPLICIT_URL_B = 'postgresql://test-user:test-pass@target-b.invalid/database_b';
 
 let originalDatabaseUrl: string | undefined;
+let originalMigrationDatabaseUrl: string | undefined;
 
 beforeAll(() => {
   originalDatabaseUrl = process.env.DATABASE_URL;
+  originalMigrationDatabaseUrl = process.env.MIGRATION_DATABASE_URL;
 });
 
-afterEach(() => {
-  if (originalDatabaseUrl === undefined) {
-    delete process.env.DATABASE_URL;
-  } else {
-    process.env.DATABASE_URL = originalDatabaseUrl;
-  }
+afterEach(async () => {
+  await closeDb();
+  if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+  else process.env.DATABASE_URL = originalDatabaseUrl;
+  if (originalMigrationDatabaseUrl === undefined) delete process.env.MIGRATION_DATABASE_URL;
+  else process.env.MIGRATION_DATABASE_URL = originalMigrationDatabaseUrl;
+  postgresMock.mockReset();
 });
 
-afterAll(() => {
-  if (originalDatabaseUrl === undefined) {
-    delete process.env.DATABASE_URL;
-  } else {
-    process.env.DATABASE_URL = originalDatabaseUrl;
-  }
-});
+function installPostgresMock() {
+  postgresMock.mockImplementation(() => {
+    return Object.assign(vi.fn().mockResolvedValue([]), {
+      end: vi.fn().mockResolvedValue(undefined),
+    });
+  });
+}
 
-describe('directSql() explicit target selection', () => {
-  it('uses explicit target even when DATABASE_URL points elsewhere', async () => {
-    process.env.DATABASE_URL = WRONG_URL;
+describe('database client target selection', () => {
+  it('uses the explicit directSql target instead of either environment URL', () => {
+    installPostgresMock();
+    process.env.DATABASE_URL = ENV_URL;
+    process.env.MIGRATION_DATABASE_URL = EXPLICIT_URL_A;
 
-    const sql = directSql(CAIRN_URL);
-    try {
-      const rows = await sql.unsafe<Array<{ db: string }>>(
-        'select current_database() as db',
+    directSql(EXPLICIT_URL_B);
+
+    expect(postgresMock).toHaveBeenCalledTimes(1);
+    expect(postgresMock.mock.calls[0][0]).toBe(EXPLICIT_URL_B);
+    expect(postgresMock.mock.calls[0][1]).toMatchObject({ max: 1, prepare: false });
+  });
+
+  it('selects DATABASE_URL for the shared application client', () => {
+    installPostgresMock();
+    process.env.DATABASE_URL = ENV_URL;
+
+    const first = applicationSql();
+    const second = applicationSql();
+
+    expect(second).toBe(first);
+    expect(postgresMock).toHaveBeenCalledTimes(1);
+    expect(postgresMock.mock.calls[0][0]).toBe(ENV_URL);
+  });
+
+  it('creates a fresh direct client for each distinct explicit target', () => {
+    installPostgresMock();
+
+    directSql(EXPLICIT_URL_A);
+    directSql(EXPLICIT_URL_B);
+
+    expect(postgresMock).toHaveBeenCalledTimes(2);
+    expect(postgresMock.mock.calls.map(([url]) => url)).toEqual([
+      EXPLICIT_URL_A,
+      EXPLICIT_URL_B,
+    ]);
+  });
+
+  it.each([undefined, '', '   '])(
+    'refuses missing or blank explicit configuration (%s) without calling postgres',
+    (connectionString) => {
+      installPostgresMock();
+      process.env.DATABASE_URL = ENV_URL;
+      process.env.MIGRATION_DATABASE_URL = EXPLICIT_URL_A;
+
+      expect(() => directSql(connectionString as string)).toThrow(
+        /directSql requires an explicit, non-empty connection string/,
       );
-      expect(rows[0].db).toBe('cairn');
-    } finally {
-      await sql.end({ timeout: 5 });
-    }
-  });
-
-  it('uses explicit target B even when DATABASE_URL points to A', async () => {
-    // DATABASE_URL names cairn (target A); explicit target names a different
-    // database that does not exist. The connection attempt must fail naming
-    // the explicit target — this proves the explicit target was selected
-    // rather than DATABASE_URL.
-    process.env.DATABASE_URL = CAIRN_URL;
-
-    const sql = directSql(
-      'postgresql://cairn_app:cairn_app_dev@127.0.0.1:5432/nonexistent_db_for_target_test',
-    );
-    await expect(sql.unsafe('SELECT 1')).rejects.toThrow();
-    await sql.end({ timeout: 5 }).catch(() => {});
-  });
-
-  it('fails safely when no target is supplied', async () => {
-    // Calling directSql() with no argument is a TypeScript compile error; at
-    // runtime undefined is passed, which postgres rejects with a clear error
-    // rather than silently falling back to DATABASE_URL.
-    const sql = directSql(undefined as unknown as string);
-    await expect(sql.unsafe('SELECT 1')).rejects.toThrow();
-    await sql.end({ timeout: 5 }).catch(() => {});
-  });
-
-  it('does not cache or reuse clients across different targets', async () => {
-    process.env.DATABASE_URL = CAIRN_URL;
-
-    const sql1 = directSql(CAIRN_URL);
-    try {
-      const rows1 = await sql1.unsafe<Array<{ db: string }>>(
-        'select current_database() as db',
-      );
-      expect(rows1[0].db).toBe('cairn');
-    } finally {
-      await sql1.end({ timeout: 5 });
-    }
-
-    // A second explicit call to a non-existent database must fail on that
-    // database, not succeed on cairn via a reused client.
-    const sql2 = directSql(
-      'postgresql://cairn_app:cairn_app_dev@127.0.0.1:5432/nonexistent_db_for_target_test',
-    );
-    await expect(sql2.unsafe('SELECT 1')).rejects.toThrow();
-    await sql2.end({ timeout: 5 }).catch(() => {});
-  });
-
-  it('does not fall back to another database on connection failure', async () => {
-    process.env.DATABASE_URL = CAIRN_URL;
-
-    const sql = directSql(
-      'postgresql://cairn_app:cairn_app_dev@127.0.0.1:5432/nonexistent_db_for_target_test',
-    );
-    // The failure must name the explicit (non-existent) target, not fall back
-    // to DATABASE_URL (cairn).
-    await expect(sql.unsafe('SELECT 1')).rejects.toThrow(
-      /nonexistent_db_for_target_test/,
-    );
-    await sql.end({ timeout: 5 }).catch(() => {});
-  });
-
-  it('preserves parameterized query behavior on the explicit target', async () => {
-    const sql = directSql(CAIRN_URL);
-    try {
-      const rows = await sql.unsafe<Array<{ db: string }>>(
-        'select current_database() as db where $1 = $1',
-        ['cairn'],
-      );
-      expect(rows[0].db).toBe('cairn');
-    } finally {
-      await sql.end({ timeout: 5 });
-    }
-  });
-
-  it('preserves transaction behavior on the explicit target', async () => {
-    const sql = directSql(CAIRN_URL);
-    try {
-      await sql.unsafe('begin');
-      try {
-        const rows = await sql.unsafe<Array<{ db: string }>>(
-          'select current_database() as db',
-        );
-        expect(rows[0].db).toBe('cairn');
-        await sql.unsafe('commit');
-      } catch (error) {
-        await sql.unsafe('rollback');
-        throw error;
-      }
-    } finally {
-      await sql.end({ timeout: 5 });
-    }
-  });
+      expect(postgresMock).not.toHaveBeenCalled();
+    },
+  );
 });

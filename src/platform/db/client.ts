@@ -59,6 +59,11 @@ export function db(): Db {
  * created for one target can never be reused against another.
  */
 export function directSql(connectionString: string) {
+  if (typeof connectionString !== 'string' || connectionString.trim().length === 0) {
+    throw new Error(
+      'directSql requires an explicit, non-empty connection string; it never falls back to environment configuration.',
+    );
+  }
   return postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
 }
 

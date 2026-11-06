@@ -111,7 +111,7 @@ function verifyCredentials(connectionString?: string): {
       user: decodeURIComponent(url.username),
       password: decodeURIComponent(url.password),
       host: url.hostname,
-      port: Number(url.port ?? 5432),
+      port: Number(url.port || 5432),
     };
   }
   return {
