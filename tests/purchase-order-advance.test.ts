@@ -69,9 +69,11 @@ describe('a vendor advance raised against a purchase order', () => {
       await tx.execute(sql`
         insert into special_gl_config (
           client, company_code, account_type, indicator,
-          alternative_reconciliation_account, description, created_by
+          alternative_reconciliation_account, target_special_gl_indicator, description, created_by
         )
-        values (${client}, '', 'AP', 'A', '230000', 'Advances to suppliers', ${ACTOR})
+        values
+          (${client}, '', 'AP', 'A', '230000', null, 'Advances to suppliers', ${ACTOR}),
+          (${client}, '', 'AP', 'F', '230000', 'A', 'Advance requests', ${ACTOR})
         on conflict do nothing
       `);
       await tx.execute(sql`
@@ -149,7 +151,7 @@ describe('a vendor advance raised against a purchase order', () => {
       client: c, changedBy: ACTOR,
       vendorNumber: 'V10000', companyCode: '1000',
       documentDate: '2026-10-18', postingDate: '2026-10-18', dueDate: '2026-11-01',
-      amount: 1000, currency: 'USD', specialGlIndicator: 'A', documentType: 'KA',
+      amount: 1000, currency: 'USD', specialGlIndicator: 'F', documentType: 'KA',
       reference, purchaseOrder: orderNumber,
       requestKey: `req-${reference}`,
     });
