@@ -22,6 +22,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { supplierCompany } from '../foundation/supplier-company-schema';
+import { purchaseOrder } from '../purchasing/schema';
 import {
   journalEntry, journalEntryLine, vendorDownPayment, vendorDownPaymentClearing, vendorInvoice,
 } from './schema';
@@ -227,6 +228,56 @@ export async function getDownPaymentClearing(
     }
     return { vendor: vendorNumber, companyCode, indicator, alternativeAccount, downPayments, invoices };
   });
+}
+
+/**
+ * The advances raised against one purchase order, and how much of each is still unspent.
+ *
+ * An advance that names an order is money given against that commitment, so the buyer is
+ * entitled to see it there and to know what is left of it when the invoice comes in. What
+ * is left is derived the same way the clearing derives it: what has been applied against
+ * the advance already, read off the offsetting lines that name it.
+ */
+export async function getOrderAdvances(client: string, orderNumber: string): Promise<OrderAdvance[]> {
+  const context = await withTenant(client, async (tx) => {
+    const [order] = await tx.select().from(purchaseOrder).where(and(
+      eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, orderNumber),
+    ));
+    if (!order) {
+      throw new VendorDownPaymentClearingError(
+        `Purchase order ${orderNumber} does not stand.`,
+        'Open the order, then look at its advances again.',
+      );
+    }
+    const rows = await tx.select().from(vendorDownPayment).where(and(
+      eq(vendorDownPayment.client, client),
+      eq(vendorDownPayment.vendorNumber, order.supplierNumber),
+      eq(vendorDownPayment.companyCode, order.companyCode),
+      eq(vendorDownPayment.purchaseOrder, orderNumber),
+    ));
+    return { supplier: order.supplierNumber, companyCode: order.companyCode, rows };
+  });
+  if (context.rows.length === 0) return [];
+
+  const advances: OrderAdvance[] = [];
+  for (const indicator of new Set(context.rows.map((r) => r.specialGlIndicator))) {
+    const view = await getDownPaymentClearing(client, context.supplier, context.companyCode, indicator);
+    const documents = new Set(
+      context.rows.filter((r) => r.specialGlIndicator === indicator).map((r) => r.journalDocumentNumber),
+    );
+    for (const payment of view.downPayments) {
+      if (!documents.has(payment.documentNumber)) continue;
+      advances.push({ ...payment, indicator });
+    }
+  }
+  return advances.sort(
+    (a, b) => a.postingDate.localeCompare(b.postingDate) || a.documentNumber.localeCompare(b.documentNumber),
+  );
+}
+
+export interface OrderAdvance extends DownPaymentItem {
+  /** The special G/L indicator the advance was posted under. */
+  indicator: string;
 }
 
 export interface ClearingItemRef {

@@ -41,6 +41,7 @@ export async function postDownPaymentAction(
       currency: text(form, 'currency').toUpperCase(),
       specialGlIndicator: text(form, 'specialGlIndicator').toUpperCase(),
       reference: text(form, 'reference') || undefined,
+      purchaseOrder: text(form, 'purchaseOrder').trim() || undefined,
       valueDate: text(form, 'valueDate') || undefined,
       text: text(form, 'text') || undefined,
       requestKey: text(form, 'requestKey') || crypto.randomUUID(),

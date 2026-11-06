@@ -24,6 +24,7 @@ import { supplierCompany } from '../foundation/supplier-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { materialDocumentLine, materialValuation, movementType } from '../inventory/schema';
 import { postingValuationRefusal } from '../inventory/valuation-class-definition';
+import { getOrderAdvances, type OrderAdvance } from '../finance/vendor-down-payment-clearing';
 import {
   parkedSupplierInvoice,
   purchaseOrder, purchaseOrderItem, supplierInvoice, supplierInvoiceItem,
@@ -120,9 +121,14 @@ export interface InvoiceOrderView {
   companyCode: string;
   currency: string;
   items: InvoiceItemView[];
+  /** Money already handed to the supplier against this order, and what is left of it. */
+  advances: OrderAdvance[];
 }
 
-async function orderViewInTx(tx: Tx, client: string, orderNumber: string): Promise<InvoiceOrderView | null> {
+/** The order as the invoice will judge it. The advances against it are read separately. */
+async function orderViewInTx(
+  tx: Tx, client: string, orderNumber: string,
+): Promise<Omit<InvoiceOrderView, 'advances'> | null> {
   const [header] = await tx.select().from(purchaseOrder).where(and(
     eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, orderNumber),
   ));
@@ -176,7 +182,11 @@ async function orderViewInTx(tx: Tx, client: string, orderNumber: string): Promi
 }
 
 export async function getInvoiceOrder(client: string, orderNumber: string): Promise<InvoiceOrderView | null> {
-  return withTenant(client, (tx) => orderViewInTx(tx, client, orderNumber));
+  const view = await withTenant(client, (tx) => orderViewInTx(tx, client, orderNumber));
+  if (!view) return null;
+  // An order with no advance raises no question, so nothing is looked up for one: an order
+  // that does carry money already paid is the only one that needs the answer.
+  return { ...view, advances: await getOrderAdvances(client, orderNumber) };
 }
 
 export interface TaxCodeChoice { code: string; ratePercent: string; name: string }

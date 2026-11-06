@@ -20,8 +20,9 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { supplierCompany } from '../foundation/supplier-company-schema';
+import { purchaseOrder } from '../purchasing/schema';
 import { specialGlConfig } from '../foundation/schema';
-import { journalEntryLine, vendorDownPayment } from './schema';
+import { journalEntryLine, vendorDownPayment, vendorDownPaymentRequest } from './schema';
 import {
   VendorDownPaymentRequestError, applyVendorRequestFulfillment, downPaymentDebitLine,
 } from './vendor-down-payment-request';
@@ -83,6 +84,38 @@ export async function resolveSpecialGlAccount(
   return row.alternativeReconciliationAccount;
 }
 
+/**
+ * The order an advance is raised against has to be that supplier's own order, in the same
+ * company the advance is posted in. Pointing money at somebody else's commitment would be a
+ * way to spend the same advance twice.
+ */
+export async function judgeAdvanceOrder(
+  tx: Tx, client: string, orderNumber: string, vendorNumber: string, companyCode: string,
+): Promise<string> {
+  const [order] = await tx.select().from(purchaseOrder).where(and(
+    eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, orderNumber),
+  ));
+  if (!order) {
+    throw new VendorDownPaymentError(
+      `Purchase order ${orderNumber} does not stand.`,
+      'Enter an order that exists, or leave it blank for an advance that belongs to no order.',
+    );
+  }
+  if (order.supplierNumber !== vendorNumber) {
+    throw new VendorDownPaymentError(
+      `Purchase order ${orderNumber} was placed with supplier ${order.supplierNumber}, not ${vendorNumber}.`,
+      'An advance is money given against a commitment made to one supplier. Raise it against that supplier’s order, or leave the order blank.',
+    );
+  }
+  if (order.companyCode !== companyCode) {
+    throw new VendorDownPaymentError(
+      `Purchase order ${orderNumber} stands in company ${order.companyCode}, not ${companyCode}.`,
+      'An advance is posted in one company. Choose an order of that company, or leave the order blank.',
+    );
+  }
+  return order.orderNumber;
+}
+
 export interface PostedDownPayment {
   paymentNumber: string;
   journalDocumentNumber: string;
@@ -107,6 +140,11 @@ export async function postVendorDownPayment(input: {
   bankGlAccount: string; amount: number; currency: string;
   specialGlIndicator: string;
   reference?: string; valueDate?: string; text?: string; requestKey: string;
+  /**
+   * The order this advance is paid against. Leave it blank for a general advance against the
+   * vendor. When requests are fulfilled, the order they name is the order of the advance.
+   */
+  purchaseOrder?: string;
   /** Optional fulfillment of standing down-payment requests (F-47). */
   requestAllocations?: Array<{ requestNumber: string; amount?: number }>;
 }): Promise<PostedDownPayment> {
@@ -134,6 +172,29 @@ export async function postVendorDownPayment(input: {
     const alternativeAccount = await resolveSpecialGlAccount(tx, input.client, input.companyCode, input.specialGlIndicator);
     const company = await getCompanyCode(tx, input.client, input.companyCode);
     if (!company?.fiscalYearVariant) throw new VendorDownPaymentError(`Company code ${input.companyCode} is not configured.`);
+
+    // Which order this advance is for. Where requests are fulfilled, the order they name is
+    // the order of this advance, and they may not disagree about which one it is.
+    let advanceOrder: string | null = input.purchaseOrder?.trim() || null;
+    if (input.requestAllocations && input.requestAllocations.length > 0) {
+      for (const allocation of input.requestAllocations) {
+        const [request] = await tx.select().from(vendorDownPaymentRequest).where(and(
+          eq(vendorDownPaymentRequest.client, input.client),
+          eq(vendorDownPaymentRequest.requestNumber, allocation.requestNumber),
+        ));
+        if (!request?.purchaseOrder) continue;
+        if (advanceOrder && advanceOrder !== request.purchaseOrder) {
+          throw new VendorDownPaymentError(
+            `This payment is raised against order ${advanceOrder}, but request ${allocation.requestNumber} was raised against ${request.purchaseOrder}.`,
+            'Fulfil only the requests raised against one order, or post the advances separately.',
+          );
+        }
+        advanceOrder = request.purchaseOrder;
+      }
+    }
+    if (advanceOrder) {
+      advanceOrder = await judgeAdvanceOrder(tx, input.client, advanceOrder, input.vendorNumber, input.companyCode);
+    }
 
     const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
     const journal = await postJournalEntry(tx, {
@@ -176,6 +237,7 @@ export async function postVendorDownPayment(input: {
       amount: String(round4(input.amount)),
       currency: input.currency.toUpperCase(), reference: input.reference ?? null,
       headerText: input.text ?? null,
+      purchaseOrder: advanceOrder,
       journalDocumentNumber: journal.documentNumber,
       requestKey: input.requestKey, createdBy: input.changedBy,
     });
@@ -222,7 +284,10 @@ export async function postVendorDownPayment(input: {
 // it is listed here so screens and later clearing can find them.
 export async function getVendorDownPayments(
   client: string, vendorNumber: string, companyCode: string,
-): Promise<Array<{ documentNumber: string; fiscalYear: number; amount: string; postingDate: string }>> {
+): Promise<Array<{
+  documentNumber: string; fiscalYear: number; amount: string; postingDate: string;
+  purchaseOrder: string | null;
+}>> {
   return withTenant(client, async (tx) => {
     await judgeVendor(tx, client, vendorNumber, companyCode);
     const rows = await tx.select({
@@ -230,6 +295,7 @@ export async function getVendorDownPayments(
       fiscalYear: journalEntryLine.fiscalYear,
       amount: journalEntryLine.amountLocal,
       postingDate: vendorDownPayment.postingDate,
+      purchaseOrder: vendorDownPayment.purchaseOrder,
     }).from(journalEntryLine)
       .innerJoin(vendorDownPayment, and(
         eq(vendorDownPayment.client, journalEntryLine.client),
@@ -244,7 +310,7 @@ export async function getVendorDownPayments(
       ));
     return rows.map((r) => ({
       documentNumber: r.documentNumber, fiscalYear: r.fiscalYear,
-      amount: r.amount, postingDate: r.postingDate,
+      amount: r.amount, postingDate: r.postingDate, purchaseOrder: r.purchaseOrder,
     }));
   });
 }

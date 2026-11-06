@@ -110,6 +110,29 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                 <input type="date" name="postingDate" className="input w-full" defaultValue={today} required />
               </label>
             </div>
+            {order.advances.length > 0 && (
+              <div className="mt-3 border border-line bg-sunken p-3 text-sm">
+                <p className="font-medium">Money already paid against this order</p>
+                <ul className="mt-2 space-y-1">
+                  {order.advances.map((advance) => (
+                    <li key={`${advance.documentNumber}-${advance.lineNumber}`} className="flex flex-wrap gap-x-2">
+                      <span className="code">{advance.documentNumber}</span>
+                      <span>{advance.postingDate}</span>
+                      <span>{money(advance.amount).toFixed(2)} {advance.currency}</span>
+                      <span className="text-ink-soft">
+                        {advance.applied > 0
+                          ? `${money(advance.applied).toFixed(2)} applied, ${money(advance.remaining).toFixed(2)} still unspent`
+                          : 'not applied to anything yet'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-ink-soft">
+                  An advance is set against the invoice in the down-payment clearing, not here. Nothing in
+                  this document spends it.
+                </p>
+              </div>
+            )}
             <div className="mt-3 overflow-x-auto">
               <table className="grid-table text-left text-sm">
                 <thead>

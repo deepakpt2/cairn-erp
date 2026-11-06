@@ -819,6 +819,8 @@ export const vendorDownPayment = pgTable('vendor_down_payment', {
   reference: varchar('reference', { length: 16 }),
   headerText: varchar('header_text', { length: 100 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  /** The order this advance was paid against, when one was named. Null is a general advance. */
+  purchaseOrder: varchar('purchase_order', { length: 20 }),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,
 }, (t) => [
@@ -1026,6 +1028,8 @@ export const vendorDownPaymentRequest = pgTable('vendor_down_payment_request', {
   documentType: varchar('document_type', { length: 12 }).notNull(),
   currency: char('currency', { length: 3 }).notNull(),
   reference: varchar('reference', { length: 16 }),
+  /** The order this advance is raised against, when one is named. Null is a general advance. */
+  purchaseOrder: varchar('purchase_order', { length: 20 }),
   requestedAmount: numeric('requested_amount', { precision: 23, scale: 4 }).notNull(),
   /** OPEN | PARTIAL | FULFILLED advance with fulfillment; CLOSED/REVERSED reserved. */
   status: varchar('status', { length: 12 }).notNull().default('OPEN'),

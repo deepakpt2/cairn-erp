@@ -42,6 +42,7 @@ export async function postVendorRequestAction(
       specialGlIndicator: text(form, 'indicator').toUpperCase(),
       documentType: text(form, 'documentType').toUpperCase(),
       reference: text(form, 'reference') || undefined,
+      purchaseOrder: text(form, 'purchaseOrder').trim() || undefined,
       requestKey: text(form, 'requestKey') || crypto.randomUUID(),
     });
     revalidatePath(ROUTE);

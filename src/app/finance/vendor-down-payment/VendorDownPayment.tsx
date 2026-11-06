@@ -67,6 +67,10 @@ export default function VendorDownPayment({ canEnter, today }: {
               <input name="reference" className="input w-full" placeholder="DP-2026-001" />
             </label>
             <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Purchase order</span>
+              <input name="purchaseOrder" className="input w-full" placeholder="POF-0000001" maxLength={20} />
+            </label>
+            <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Value date (optional)</span>
               <input type="date" name="valueDate" className="input w-full" />
             </label>

@@ -72,11 +72,18 @@ export default function VendorDownPaymentRequest({ requests, canEnter, today }: 
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reference</span>
               <input name="reference" className="input w-full" placeholder="REQ-V-2026-001" />
             </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Purchase order</span>
+              <input name="purchaseOrder" className="input w-full" placeholder="POF-0000001" maxLength={20} />
+            </label>
           </div>
           <p className="mt-2 text-sm text-ink-soft">
             A request is a noted item: it creates no payable and moves no account. The request
             indicator must stand configured with its target — the actual down-payment indicator the
-            payment (F-48) will post against when the advance is paid.
+            payment (F-48) will post against when the advance is paid. Naming a purchase order ties
+            the advance to that commitment; the order must belong to this supplier and company.
+            Left blank, the advance is general to the vendor and settles against any of their
+            invoices.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button

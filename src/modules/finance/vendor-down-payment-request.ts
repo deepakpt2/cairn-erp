@@ -30,7 +30,7 @@ import { documentType, specialGlConfig } from '../foundation/schema';
 import {
   journalEntryLine, vendorDownPaymentRequest, vendorDpRequestFulfillment,
 } from './schema';
-import { resolveSpecialGlAccount } from './vendor-down-payment';
+import { judgeAdvanceOrder, resolveSpecialGlAccount } from './vendor-down-payment';
 
 export const VENDOR_DOWN_PAYMENT_REQUEST_CAPABILITY = 'FIN.AP.DOWNPAYMENT.REQUEST';
 const REQUEST_CLASS = 'vendor_down_payment_request';
@@ -59,6 +59,7 @@ export interface VendorDownPaymentRequestView {
   currency: string;
   reference: string | null;
   requestedAmount: number;
+  purchaseOrder: string | null;
   fulfilledAmount: number;
   remainingAmount: number;
   status: string;
@@ -69,6 +70,7 @@ export interface CreatedVendorDownPaymentRequest {
   fiscalYear: number;
   targetIndicator: string;
   requestedAmount: string;
+  purchaseOrder: string | null;
   status: string;
 }
 
@@ -129,7 +131,7 @@ async function byRequestKey(tx: Tx, client: string, requestKey: string): Promise
   return row ? {
     requestNumber: row.requestNumber, fiscalYear: row.fiscalYear,
     targetIndicator: row.targetSpecialGlIndicator,
-    requestedAmount: row.requestedAmount, status: row.status,
+    requestedAmount: row.requestedAmount, purchaseOrder: row.purchaseOrder, status: row.status,
   } : null;
 }
 
@@ -140,6 +142,8 @@ export async function createVendorDownPaymentRequest(input: {
   amount: number; currency: string;
   specialGlIndicator: string; documentType: string;
   reference?: string; requestKey: string;
+  /** The order this advance is for. Blank is a general advance against the vendor. */
+  purchaseOrder?: string;
 }): Promise<CreatedVendorDownPaymentRequest> {
   if (!(input.amount > 0)) throw new VendorDownPaymentRequestError('The requested amount must stand above zero.');
   for (const [label, value] of [['Document date', input.documentDate], ['Posting date', input.postingDate], ['Due date', input.dueDate]] as const) {
@@ -159,6 +163,14 @@ export async function createVendorDownPaymentRequest(input: {
     if (replayLocked) return replayLocked;
 
     await judgeVendor(tx, input.client, input.vendorNumber, input.companyCode);
+    const order = input.purchaseOrder?.trim()
+      ? await judgeAdvanceOrder(
+        tx, input.client, input.purchaseOrder.trim(), input.vendorNumber, input.companyCode,
+      ).catch((error: unknown) => {
+        if (error instanceof Error) throw new VendorDownPaymentRequestError(error.message, (error as { remedy?: string }).remedy);
+        throw error;
+      })
+      : null;
     const targetIndicator = await resolveRequestTarget(tx, input.client, input.companyCode, input.specialGlIndicator);
     // The target must stand as an actual (non-request) indicator.
     await resolveSpecialGlAccount(tx, input.client, input.companyCode, targetIndicator, 'AP')
@@ -203,6 +215,7 @@ export async function createVendorDownPaymentRequest(input: {
       documentDate: input.documentDate, postingDate: input.postingDate, dueDate: input.dueDate,
       documentType: input.documentType.toUpperCase(),
       currency: input.currency.toUpperCase(), reference: input.reference ?? null,
+      purchaseOrder: order,
       requestedAmount: String(round2(input.amount)),
       status: 'OPEN',
       requestKey: input.requestKey, createdBy: input.changedBy,
@@ -211,7 +224,10 @@ export async function createVendorDownPaymentRequest(input: {
       client: input.client, objectClass: REQUEST_CLASS,
       objectKey: `${input.companyCode}/${input.vendorNumber}/${requestNumber}`,
       changeType: 'CREATE', changedBy: input.changedBy, transactionCode: VENDOR_DOWN_PAYMENT_REQUEST_CAPABILITY,
-      after: { amount: round2(input.amount), indicator: input.specialGlIndicator, targetIndicator, dueDate: input.dueDate },
+      after: {
+        amount: round2(input.amount), indicator: input.specialGlIndicator, targetIndicator,
+        dueDate: input.dueDate, purchaseOrder: order,
+      },
     });
     return (await byRequestKey(tx, input.client, input.requestKey))!;
   });
@@ -247,7 +263,7 @@ export async function getVendorDownPaymentRequests(
         vendor: row.vendorNumber, companyCode: row.companyCode,
         indicator: row.specialGlIndicator, targetIndicator: row.targetSpecialGlIndicator,
         documentDate: row.documentDate, postingDate: row.postingDate, dueDate: row.dueDate,
-        currency: row.currency, reference: row.reference,
+        currency: row.currency, reference: row.reference, purchaseOrder: row.purchaseOrder,
         requestedAmount: requested, fulfilledAmount: fulfilled,
         remainingAmount: round2(requested - fulfilled), status: row.status,
       });
