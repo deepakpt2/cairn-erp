@@ -31,6 +31,9 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
   const [quantities, setQuantities] = useState<Record<number, string>>({});
   const [amounts, setAmounts] = useState<Record<number, string>>({});
   const [taxes, setTaxes] = useState<Record<number, string>>({});
+  const [gross, setGross] = useState('');
+  const [selectedAdvances, setSelectedAdvances] = useState<Record<string, boolean>>({});
+  const [advanceAmounts, setAdvanceAmounts] = useState<Record<string, string>>({});
 
   const rateOf = (code: string) => {
     const row = taxCodes.find((t) => t.code === code);
@@ -48,6 +51,18 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
   }
   netTotal = money(netTotal);
   taxTotal = money(taxTotal);
+
+  // An advance is money already handed over, not a discount: it settles part of
+  // what this invoice asks for and leaves the rest standing as a liability.
+  let advancesClearing = 0;
+  for (const advance of order?.advances ?? []) {
+    if (!selectedAdvances[advance.paymentNumber]) continue;
+    const asked = Number(advanceAmounts[advance.paymentNumber] ?? advance.remaining);
+    if (asked > 0) advancesClearing = money(advancesClearing + Math.min(asked, advance.remaining));
+  }
+  const grossNow = Number(gross) || 0;
+  const stillPayable = money(grossNow - advancesClearing);
+  const overCleared = advancesClearing - grossNow > 0.005;
 
   return (
     <>
@@ -99,7 +114,10 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Gross amount</span>
-                <input name="grossAmount" type="number" step="0.01" min="0" className="input w-full" placeholder="0.00" required />
+                <input
+                  name="grossAmount" type="number" step="0.01" min="0" className="input w-full" placeholder="0.00" required
+                  value={gross} onChange={(e) => setGross(e.target.value)}
+                />
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Invoice date</span>
@@ -112,25 +130,73 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
             </div>
             {order.advances.length > 0 && (
               <div className="mt-3 border border-line bg-sunken p-3 text-sm">
-                <p className="font-medium">Money already paid against this order</p>
-                <ul className="mt-2 space-y-1">
-                  {order.advances.map((advance) => (
-                    <li key={`${advance.documentNumber}-${advance.lineNumber}`} className="flex flex-wrap gap-x-2">
-                      <span className="code">{advance.documentNumber}</span>
-                      <span>{advance.postingDate}</span>
-                      <span>{money(advance.amount).toFixed(2)} {advance.currency}</span>
-                      <span className="text-ink-soft">
-                        {advance.applied > 0
-                          ? `${money(advance.applied).toFixed(2)} applied, ${money(advance.remaining).toFixed(2)} still unspent`
-                          : 'not applied to anything yet'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-xs text-ink-soft">
-                  An advance is set against the invoice in the down-payment clearing, not here. Nothing in
-                  this document spends it.
+                <p className="font-medium">Advances already paid against this order</p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  Tick an advance to set it against this invoice. The invoice amount does not change:
+                  the advance settles part of what the invoice asks for, and the rest stays owed.
                 </p>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="grid-table text-left text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                        <th>Clear</th><th>Advance</th><th>Posted</th><th>Paid</th>
+                        <th>Already applied</th><th>Still unspent</th><th>Clearing now</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {order.advances.map((advance) => {
+                        const usable = advance.remaining > 0 && advance.currency === order.currency;
+                        return (
+                          <tr key={advance.paymentNumber}>
+                            <td>
+                              <input
+                                type="checkbox" name={`adv-${advance.paymentNumber}`} aria-label={`Clear advance ${advance.paymentNumber}`}
+                                checked={!!selectedAdvances[advance.paymentNumber]} disabled={!canPost || !usable}
+                                onChange={(e) => setSelectedAdvances((a) => ({ ...a, [advance.paymentNumber]: e.target.checked }))}
+                              />
+                            </td>
+                            <td className="code">{advance.paymentNumber}</td>
+                            <td>{advance.postingDate}</td>
+                            <td>{money(advance.amount).toFixed(2)} {advance.currency}</td>
+                            <td>{money(advance.applied).toFixed(2)}</td>
+                            <td>{money(advance.remaining).toFixed(2)}</td>
+                            <td>
+                              {usable ? (
+                                <input
+                                  type="number" step="0.01" min="0" max={advance.remaining}
+                                  name={`advamt-${advance.paymentNumber}`} className="input w-28"
+                                  aria-label={`Amount of advance ${advance.paymentNumber} to clear`}
+                                  value={advanceAmounts[advance.paymentNumber] ?? money(advance.remaining).toFixed(2)}
+                                  disabled={!selectedAdvances[advance.paymentNumber]}
+                                  onChange={(e) => setAdvanceAmounts((a) => ({ ...a, [advance.paymentNumber]: e.target.value }))}
+                                />
+                              ) : (
+                                <span className="text-ink-faint">
+                                  {advance.remaining > 0
+                                    ? `Stands in ${advance.currency}; the invoice stands in ${order.currency}.`
+                                    : 'Fully applied already.'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 text-sm">
+                  Advances cleared against this invoice{' '}
+                  <strong>{advancesClearing.toFixed(2)} {order.currency}</strong>
+                  {' '}of {grossNow.toFixed(2)} · still payable{' '}
+                  <strong>{stillPayable.toFixed(2)} {order.currency}</strong>.
+                </p>
+                {overCleared && (
+                  <p className="mt-1 text-sm text-red-700">
+                    The advances asked to clear {advancesClearing.toFixed(2)} exceed the invoice gross
+                    {' '}{grossNow.toFixed(2)}. An advance is money already paid, not a discount: clear
+                    no more than the invoice is worth.
+                  </p>
+                )}
               </div>
             )}
             <div className="mt-3 overflow-x-auto">
@@ -205,7 +271,10 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
               The gross amount entered must reconcile with this balance; a price variance against the order price posts separately and is named here.
             </p>
             <div className="mt-3">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || posting}>
+              <button
+                type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
+                disabled={!canPost || posting || overCleared}
+              >
                 Post invoice
               </button>
             </div>
@@ -223,6 +292,34 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
             {invoice.journalDocumentNumber ? ` · journal ${invoice.journalDocumentNumber}` : ''}
             {invoice.cancelledBy ? ` · cancelled by ${invoice.cancelledBy}` : ''}
           </p>
+          {Number(invoice.advanceApplied) > 0 && (
+            <p className="mt-1 text-sm">
+              Advances cleared against this invoice <strong>{invoice.advanceApplied} {invoice.currency}</strong>
+              {' '}· still payable <strong>{invoice.remainingPayable} {invoice.currency}</strong>.
+            </p>
+          )}
+          {invoice.settlements.length > 0 && (
+            <div className="mt-2 overflow-x-auto">
+              <table className="grid-table text-left text-sm">
+                <thead>
+                  <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                    <th>Clearing</th><th>Indicator</th><th>Applied</th><th>Journal</th><th>Standing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.settlements.map((settlement) => (
+                    <tr key={settlement.clearingNumber}>
+                      <td className="code">{settlement.clearingNumber}</td>
+                      <td>{settlement.indicator}</td>
+                      <td>{settlement.totalApplied} {invoice.currency}</td>
+                      <td className="code">{settlement.journalDocumentNumber}</td>
+                      <td>{settlement.reversed ? 'Reversed with the invoice' : 'Standing'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="mt-3 overflow-x-auto">
             <table className="grid-table text-left text-sm">
               <thead>

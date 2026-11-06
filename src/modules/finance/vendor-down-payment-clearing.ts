@@ -164,70 +164,74 @@ async function openLines(
   return rows;
 }
 
+export async function getDownPaymentClearingTx(
+  tx: Tx, client: string, vendorNumber: string, companyCode: string, indicator: string,
+): Promise<DownPaymentClearingView> {
+  const vendor = await judgeVendor(tx, client, vendorNumber, companyCode);
+  const alternativeAccount = await resolveSpecialGlAccount(tx, client, companyCode, indicator)
+    .catch((error: unknown) => {
+      if (error instanceof Error) throw new VendorDownPaymentClearingError(error.message);
+      throw error;
+    });
+
+  // Down payments: the open advance lines of this indicator.
+  const dpRecords = await tx.select().from(vendorDownPayment).where(and(
+    eq(vendorDownPayment.client, client),
+    eq(vendorDownPayment.vendorNumber, vendorNumber),
+    eq(vendorDownPayment.companyCode, companyCode),
+    eq(vendorDownPayment.specialGlIndicator, indicator),
+  ));
+  const dpDocs = new Set(dpRecords.map((r) => r.journalDocumentNumber));
+  const dpLines = (await openLines(tx, client, companyCode, alternativeAccount, vendorNumber, 'S'))
+    .filter((l) => dpDocs.has(l.documentNumber));
+  const downPayments: DownPaymentItem[] = [];
+  for (const line of dpLines) {
+    const applied = await appliedSoFar(
+      tx, client, companyCode, alternativeAccount, vendorNumber, `Applied from ${line.documentNumber}`, true,
+    );
+    const amount = Number(line.amount);
+    downPayments.push({
+      documentNumber: line.documentNumber, fiscalYear: line.fiscalYear, lineNumber: line.lineNumber,
+      postingDate: line.postingDate, currency: line.currency,
+      amount, applied, remaining: round2(amount - applied), indicator,
+    });
+  }
+
+  // Invoices: the open credit items on the ordinary account.
+  const dueDates = new Map<string, string>();
+  for (const inv of await tx.select().from(vendorInvoice).where(eq(vendorInvoice.client, client))) {
+    if (inv.dueDate) dueDates.set(inv.invoiceNumber, inv.dueDate);
+  }
+  const originKeys = new Map<string, string>();
+  for (const entry of await tx.select().from(journalEntry).where(eq(journalEntry.client, client))) {
+    if (entry.originClass === 'vendor_invoice' && entry.originKey) {
+      originKeys.set(entry.documentNumber, entry.originKey);
+    }
+  }
+  const recon = vendor.reconciliationAccount!;
+  const invLines = await openLines(tx, client, companyCode, recon, vendorNumber, 'H');
+  const invoices: ClearingInvoiceItem[] = [];
+  for (const line of invLines) {
+    const applied = await appliedSoFar(
+      tx, client, companyCode, recon, vendorNumber, `Settles ${line.documentNumber}`, false,
+    );
+    const amount = Number(line.amount);
+    const originKey = originKeys.get(line.documentNumber);
+    invoices.push({
+      documentNumber: line.documentNumber, fiscalYear: line.fiscalYear, lineNumber: line.lineNumber,
+      postingDate: line.postingDate,
+      dueDate: originKey ? (dueDates.get(originKey) ?? line.postingDate) : line.postingDate,
+      currency: line.currency,
+      amount, applied, remaining: round2(amount - applied),
+    });
+  }
+  return { vendor: vendorNumber, companyCode, indicator, alternativeAccount, downPayments, invoices };
+}
+
 export async function getDownPaymentClearing(
   client: string, vendorNumber: string, companyCode: string, indicator: string,
 ): Promise<DownPaymentClearingView> {
-  return withTenant(client, async (tx) => {
-    const vendor = await judgeVendor(tx, client, vendorNumber, companyCode);
-    const alternativeAccount = await resolveSpecialGlAccount(tx, client, companyCode, indicator)
-      .catch((error: unknown) => {
-        if (error instanceof Error) throw new VendorDownPaymentClearingError(error.message);
-        throw error;
-      });
-
-    // Down payments: the open advance lines of this indicator.
-    const dpRecords = await tx.select().from(vendorDownPayment).where(and(
-      eq(vendorDownPayment.client, client),
-      eq(vendorDownPayment.vendorNumber, vendorNumber),
-      eq(vendorDownPayment.companyCode, companyCode),
-      eq(vendorDownPayment.specialGlIndicator, indicator),
-    ));
-    const dpDocs = new Set(dpRecords.map((r) => r.journalDocumentNumber));
-    const dpLines = (await openLines(tx, client, companyCode, alternativeAccount, vendorNumber, 'S'))
-      .filter((l) => dpDocs.has(l.documentNumber));
-    const downPayments: DownPaymentItem[] = [];
-    for (const line of dpLines) {
-      const applied = await appliedSoFar(
-        tx, client, companyCode, alternativeAccount, vendorNumber, `Applied from ${line.documentNumber}`, true,
-      );
-      const amount = Number(line.amount);
-      downPayments.push({
-        documentNumber: line.documentNumber, fiscalYear: line.fiscalYear, lineNumber: line.lineNumber,
-        postingDate: line.postingDate, currency: line.currency,
-        amount, applied, remaining: round2(amount - applied), indicator,
-      });
-    }
-
-    // Invoices: the open credit items on the ordinary account.
-    const dueDates = new Map<string, string>();
-    for (const inv of await tx.select().from(vendorInvoice).where(eq(vendorInvoice.client, client))) {
-      if (inv.dueDate) dueDates.set(inv.invoiceNumber, inv.dueDate);
-    }
-    const originKeys = new Map<string, string>();
-    for (const entry of await tx.select().from(journalEntry).where(eq(journalEntry.client, client))) {
-      if (entry.originClass === 'vendor_invoice' && entry.originKey) {
-        originKeys.set(entry.documentNumber, entry.originKey);
-      }
-    }
-    const recon = vendor.reconciliationAccount!;
-    const invLines = await openLines(tx, client, companyCode, recon, vendorNumber, 'H');
-    const invoices: ClearingInvoiceItem[] = [];
-    for (const line of invLines) {
-      const applied = await appliedSoFar(
-        tx, client, companyCode, recon, vendorNumber, `Settles ${line.documentNumber}`, false,
-      );
-      const amount = Number(line.amount);
-      const originKey = originKeys.get(line.documentNumber);
-      invoices.push({
-        documentNumber: line.documentNumber, fiscalYear: line.fiscalYear, lineNumber: line.lineNumber,
-        postingDate: line.postingDate,
-        dueDate: originKey ? (dueDates.get(originKey) ?? line.postingDate) : line.postingDate,
-        currency: line.currency,
-        amount, applied, remaining: round2(amount - applied),
-      });
-    }
-    return { vendor: vendorNumber, companyCode, indicator, alternativeAccount, downPayments, invoices };
-  });
+  return withTenant(client, (tx) => getDownPaymentClearingTx(tx, client, vendorNumber, companyCode, indicator));
 }
 
 /**
@@ -239,7 +243,7 @@ export async function getDownPaymentClearing(
  * the advance already, read off the offsetting lines that name it.
  */
 export async function getOrderAdvances(client: string, orderNumber: string): Promise<OrderAdvance[]> {
-  const context = await withTenant(client, async (tx) => {
+  return withTenant(client, async (tx) => {
     const [order] = await tx.select().from(purchaseOrder).where(and(
       eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, orderNumber),
     ));
@@ -255,29 +259,38 @@ export async function getOrderAdvances(client: string, orderNumber: string): Pro
       eq(vendorDownPayment.companyCode, order.companyCode),
       eq(vendorDownPayment.purchaseOrder, orderNumber),
     ));
-    return { supplier: order.supplierNumber, companyCode: order.companyCode, rows };
-  });
-  if (context.rows.length === 0) return [];
+    if (rows.length === 0) return [];
 
-  const advances: OrderAdvance[] = [];
-  for (const indicator of new Set(context.rows.map((r) => r.specialGlIndicator))) {
-    const view = await getDownPaymentClearing(client, context.supplier, context.companyCode, indicator);
-    const documents = new Set(
-      context.rows.filter((r) => r.specialGlIndicator === indicator).map((r) => r.journalDocumentNumber),
-    );
-    for (const payment of view.downPayments) {
-      if (!documents.has(payment.documentNumber)) continue;
-      advances.push({ ...payment, indicator });
+    const advances: OrderAdvance[] = [];
+    for (const indicator of new Set(rows.map((r) => r.specialGlIndicator))) {
+      const view = await getDownPaymentClearingTx(tx, client, order.supplierNumber, order.companyCode, indicator);
+      const documents = new Set(
+        rows.filter((r) => r.specialGlIndicator === indicator).map((r) => r.journalDocumentNumber),
+      );
+      const numbers = new Map(rows.map((r) => [r.journalDocumentNumber, r.paymentNumber]));
+      for (const payment of view.downPayments) {
+        if (!documents.has(payment.documentNumber)) continue;
+        advances.push({
+          ...payment, indicator,
+          paymentNumber: numbers.get(payment.documentNumber) ?? payment.documentNumber,
+        });
+      }
     }
-  }
-  return advances.sort(
-    (a, b) => a.postingDate.localeCompare(b.postingDate) || a.documentNumber.localeCompare(b.documentNumber),
-  );
+    return advances.sort(
+      (a, b) => a.postingDate.localeCompare(b.postingDate) || a.documentNumber.localeCompare(b.documentNumber),
+    );
+  });
 }
 
 export interface OrderAdvance extends DownPaymentItem {
   /** The special G/L indicator the advance was posted under. */
   indicator: string;
+  /**
+   * The number the advance is known by. Its journal line is what a clearing
+   * settles, but the document people name is the payment, so the order's view
+   * carries both.
+   */
+  paymentNumber: string;
 }
 
 export interface ClearingItemRef {
@@ -304,14 +317,31 @@ async function byRequestKey(tx: Tx, client: string, requestKey: string): Promise
   } : null;
 }
 
-export async function clearDownPayments(input: {
+export interface ClearDownPaymentsInput {
   client: string; changedBy: string;
   vendorNumber: string; companyCode: string; indicator: string;
   documentDate: string; postingDate: string; clearingDate: string;
   currency: string; reference?: string; requestKey: string;
   downPayments: ClearingItemRef[];
   invoices: ClearingItemRef[];
-}): Promise<PostedClearing> {
+  /** The supplier invoice this clearing settles, when it was raised from invoice verification. */
+  invoiceNumber?: string;
+  /** The order behind the settlement, when the advance named one. */
+  purchaseOrder?: string;
+}
+
+/**
+ * The settlement itself, on a transaction the caller already owns.
+ *
+ * Invoice verification posts the invoice and settles the advances against it in one
+ * movement: the clearing reads the invoice's open credit line, and that line does not
+ * exist until the invoice journal stands written. So the clearing takes the caller's
+ * transaction rather than opening one of its own — a second connection could not see
+ * the invoice the first has not yet committed.
+ */
+export async function clearDownPaymentsTx(
+  tx: Tx, input: ClearDownPaymentsInput,
+): Promise<PostedClearing> {
   if (input.downPayments.length === 0) {
     throw new VendorDownPaymentClearingError('Select at least one down payment to apply.', 'Tick the advances this clearing applies.');
   }
@@ -332,180 +362,187 @@ export async function clearDownPayments(input: {
     throw new VendorDownPaymentClearingError('The reference may be at most 16 characters.', 'Shorten the clearing reference.');
   }
 
-  return withTenant(input.client, async (tx) => {
-    const replay = await byRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/dpclear/${input.companyCode}/${input.vendorNumber}`}, 0))`);
-    const replayLocked = await byRequestKey(tx, input.client, input.requestKey);
-    if (replayLocked) return replayLocked;
+  const replay = await byRequestKey(tx, input.client, input.requestKey);
+  if (replay) return replay;
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/dpclear/${input.companyCode}/${input.vendorNumber}`}, 0))`);
+  const replayLocked = await byRequestKey(tx, input.client, input.requestKey);
+  if (replayLocked) return replayLocked;
 
-    const vendor = await judgeVendor(tx, input.client, input.vendorNumber, input.companyCode);
-    const alternativeAccount = await resolveSpecialGlAccount(tx, input.client, input.companyCode, input.indicator)
-      .catch((error: unknown) => {
-        if (error instanceof Error) throw new VendorDownPaymentClearingError(error.message);
-        throw error;
-      });
-    const company = await getCompanyCode(tx, input.client, input.companyCode);
-    if (!company?.fiscalYearVariant) throw new VendorDownPaymentClearingError(`Company code ${input.companyCode} is not configured.`);
-    const recon = vendor.reconciliationAccount!;
-
-    interface Held {
-      ref: ClearingItemRef; applied: number; remaining: number; currency: string; lineText: string;
-    }
-    const holdSide = async (
-      refs: ClearingItemRef[], account: string, debitCredit: 'S' | 'H',
-      kind: 'down payment' | 'invoice', textOf: (doc: string) => string, creditSide: boolean,
-    ): Promise<Held[]> => {
-      const held: Held[] = [];
-      for (const ref of refs) {
-        const [line] = await tx.select().from(journalEntryLine).where(and(
-          eq(journalEntryLine.client, input.client),
-          eq(journalEntryLine.documentNumber, ref.documentNumber),
-          eq(journalEntryLine.fiscalYear, ref.fiscalYear),
-          eq(journalEntryLine.lineNumber, ref.lineNumber),
-        ));
-        if (!line || line.businessPartner !== input.vendorNumber || line.companyCode !== input.companyCode
-          || line.glAccount !== account || line.debitCredit !== debitCredit) {
-          throw new VendorDownPaymentClearingError(
-            `Document ${ref.documentNumber} line ${ref.lineNumber} is not an open ${kind} of vendor ${input.vendorNumber} in company ${input.companyCode}.`,
-            'Reload the open items, then post.',
-          );
-        }
-        if (line.clearingDocument) {
-          throw new VendorDownPaymentClearingError(
-            `Document ${ref.documentNumber} line ${ref.lineNumber} already stands cleared by ${line.clearingDocument}.`,
-            'Reload the open items, then post.',
-          );
-        }
-        const already = await appliedSoFar(
-          tx, input.client, input.companyCode, account, input.vendorNumber, textOf(ref.documentNumber), creditSide,
-        );
-        const remaining = round2(Number(line.amountLocal) - already);
-        const applied = ref.applied === undefined ? remaining : round2(ref.applied);
-        if (!(applied > 0)) {
-          throw new VendorDownPaymentClearingError(
-            `Document ${ref.documentNumber} line ${ref.lineNumber}: the applied amount must stand above zero.`,
-          );
-        }
-        if (applied - remaining > 0.005) {
-          throw new VendorDownPaymentClearingError(
-            `The applied ${applied.toFixed(2)} on document ${ref.documentNumber} exceeds its remaining ${remaining.toFixed(2)}.`,
-            'Apply no more than the item stands open at.',
-          );
-        }
-        held.push({ ref, applied, remaining, currency: line.currency, lineText: textOf(ref.documentNumber) });
-      }
-      return held;
-    };
-
-    const dpHeld = await holdSide(
-      input.downPayments, alternativeAccount, 'S', 'down payment', (doc) => `Applied from ${doc}`, true,
-    );
-    const invHeld = await holdSide(
-      input.invoices, recon, 'H', 'invoice', (doc) => `Settles ${doc}`, false,
-    );
-
-    const dpTotal = round2(dpHeld.reduce((s, h) => s + h.applied, 0));
-    if (dpTotal !== round2(invHeld.reduce((s, h) => s + h.applied, 0))) {
-      throw new VendorDownPaymentClearingError(
-        `The applied totals do not agree: down payments ${dpTotal.toFixed(2)} against invoices ${round2(invHeld.reduce((s, h) => s + h.applied, 0)).toFixed(2)} ${input.currency.toUpperCase()}.`,
-        'Apply exactly as much advance as the invoices settle — a clearing transfers value, it never creates it.',
-      );
-    }
-
-    const currencies = [...new Set([
-      ...dpHeld.map((h) => h.currency), ...invHeld.map((h) => h.currency), input.currency.toUpperCase(),
-    ])];
-    if (currencies.length > 1) {
-      throw new VendorDownPaymentClearingError(
-        `The clearing and its items stand in ${currencies.join(' and ')}; one clearing settles one currency.`,
-        'Clear items in the clearing currency.',
-      );
-    }
-
-    const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
-    const journal = await postJournalEntry(tx, {
-      client: input.client,
-      companyCode: input.companyCode,
-      documentType: JOURNAL_DOCUMENT_TYPE,
-      documentDate: input.documentDate,
-      postingDate: input.postingDate,
-      fiscalYear: position.fiscalYear,
-      postingPeriod: position.period,
-      currency: currencies[0],
-      localCurrency: company.currency,
-      reference: input.reference,
-      headerText: `Down payment clearing ${input.vendorNumber}`,
-      lines: [
-        ...invHeld.map((h) => ({
-          glAccount: recon, debitCredit: 'S' as const,
-          amount: h.applied.toFixed(2), businessPartner: input.vendorNumber,
-          lineText: h.lineText,
-        })),
-        ...dpHeld.map((h) => ({
-          glAccount: alternativeAccount, debitCredit: 'H' as const,
-          amount: h.applied.toFixed(2), businessPartner: input.vendorNumber,
-          lineText: h.lineText,
-        })),
-      ],
-      origin: { documentClass: CLEARING_CLASS, documentKey: `${input.companyCode}/${input.vendorNumber}` },
-      postedBy: input.changedBy,
-      transactionCode: VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY,
-    }).catch((error: unknown) => {
-      if (error instanceof PostingError) throw new VendorDownPaymentClearingError(error.message, error.remedy);
+  const vendor = await judgeVendor(tx, input.client, input.vendorNumber, input.companyCode);
+  const alternativeAccount = await resolveSpecialGlAccount(tx, input.client, input.companyCode, input.indicator)
+    .catch((error: unknown) => {
+      if (error instanceof Error) throw new VendorDownPaymentClearingError(error.message);
       throw error;
     });
+  const company = await getCompanyCode(tx, input.client, input.companyCode);
+  if (!company?.fiscalYearVariant) throw new VendorDownPaymentClearingError(`Company code ${input.companyCode} is not configured.`);
+  const recon = vendor.reconciliationAccount!;
 
-    // Full application stamps the original item and its offsetting
-    // lines; partial application leaves the netting pair standing.
-    let itemsCleared = 0;
-    const stampItem = async (h: Held, account: string) => {
-      itemsCleared += 1;
-      await tx.update(journalEntryLine).set({
-        clearingDocument: journal.documentNumber, clearingDate: input.clearingDate,
-      }).where(and(
+  interface Held {
+    ref: ClearingItemRef; applied: number; remaining: number; currency: string; lineText: string;
+  }
+  const holdSide = async (
+    refs: ClearingItemRef[], account: string, debitCredit: 'S' | 'H',
+    kind: 'down payment' | 'invoice', textOf: (doc: string) => string, creditSide: boolean,
+  ): Promise<Held[]> => {
+    const held: Held[] = [];
+    for (const ref of refs) {
+      const [line] = await tx.select().from(journalEntryLine).where(and(
         eq(journalEntryLine.client, input.client),
-        eq(journalEntryLine.documentNumber, h.ref.documentNumber),
-        eq(journalEntryLine.fiscalYear, h.ref.fiscalYear),
-        eq(journalEntryLine.lineNumber, h.ref.lineNumber),
+        eq(journalEntryLine.documentNumber, ref.documentNumber),
+        eq(journalEntryLine.fiscalYear, ref.fiscalYear),
+        eq(journalEntryLine.lineNumber, ref.lineNumber),
       ));
-      await tx.update(journalEntryLine).set({
-        clearingDocument: journal.documentNumber, clearingDate: input.clearingDate,
-      }).where(and(
-        eq(journalEntryLine.client, input.client),
-        eq(journalEntryLine.companyCode, input.companyCode),
-        eq(journalEntryLine.glAccount, account),
-        eq(journalEntryLine.businessPartner, input.vendorNumber),
-        eq(journalEntryLine.lineText, h.lineText),
-        sql`${journalEntryLine.clearingDocument} is null`,
-      ));
-    };
-    for (const h of invHeld) {
-      if (h.applied >= h.remaining - 0.005) await stampItem(h, recon);
+      if (!line || line.businessPartner !== input.vendorNumber || line.companyCode !== input.companyCode
+        || line.glAccount !== account || line.debitCredit !== debitCredit) {
+        throw new VendorDownPaymentClearingError(
+          `Document ${ref.documentNumber} line ${ref.lineNumber} is not an open ${kind} of vendor ${input.vendorNumber} in company ${input.companyCode}.`,
+          'Reload the open items, then post.',
+        );
+      }
+      if (line.clearingDocument) {
+        throw new VendorDownPaymentClearingError(
+          `Document ${ref.documentNumber} line ${ref.lineNumber} already stands cleared by ${line.clearingDocument}.`,
+          'Reload the open items, then post.',
+        );
+      }
+      const already = await appliedSoFar(
+        tx, input.client, input.companyCode, account, input.vendorNumber, textOf(ref.documentNumber), creditSide,
+      );
+      const remaining = round2(Number(line.amountLocal) - already);
+      const applied = ref.applied === undefined ? remaining : round2(ref.applied);
+      if (!(applied > 0)) {
+        throw new VendorDownPaymentClearingError(
+          `Document ${ref.documentNumber} line ${ref.lineNumber}: the applied amount must stand above zero.`,
+        );
+      }
+      if (applied - remaining > 0.005) {
+        throw new VendorDownPaymentClearingError(
+          `The applied ${applied.toFixed(2)} on document ${ref.documentNumber} exceeds its remaining ${remaining.toFixed(2)}.`,
+          'Apply no more than the item stands open at.',
+        );
+      }
+      held.push({ ref, applied, remaining, currency: line.currency, lineText: textOf(ref.documentNumber) });
     }
-    for (const h of dpHeld) {
-      if (h.applied >= h.remaining - 0.005) await stampItem(h, alternativeAccount);
-    }
+    return held;
+  };
 
-    const clearingNumber = journal.documentNumber;
-    await tx.insert(vendorDownPaymentClearing).values({
-      client: input.client, clearingNumber, fiscalYear: journal.fiscalYear,
-      vendorNumber: input.vendorNumber, companyCode: input.companyCode,
-      specialGlIndicator: input.indicator,
-      alternativeReconciliationAccount: alternativeAccount,
-      documentDate: input.documentDate, postingDate: input.postingDate, clearingDate: input.clearingDate,
-      totalApplied: String(dpTotal),
-      currency: currencies[0], reference: input.reference ?? null,
-      journalDocumentNumber: journal.documentNumber,
-      requestKey: input.requestKey, createdBy: input.changedBy,
-    });
-    await recordChange(tx, {
-      client: input.client, objectClass: CLEARING_CLASS,
-      objectKey: `${input.companyCode}/${input.vendorNumber}/${clearingNumber}`,
-      changeType: 'CREATE', changedBy: input.changedBy, transactionCode: VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY,
-      after: { journal: journal.documentNumber, totalApplied: dpTotal, itemsCleared },
-    });
-    const result = await byRequestKey(tx, input.client, input.requestKey);
-    return { ...result!, itemsCleared };
+  const dpHeld = await holdSide(
+    input.downPayments, alternativeAccount, 'S', 'down payment', (doc) => `Applied from ${doc}`, true,
+  );
+  const invHeld = await holdSide(
+    input.invoices, recon, 'H', 'invoice', (doc) => `Settles ${doc}`, false,
+  );
+
+  const dpTotal = round2(dpHeld.reduce((s, h) => s + h.applied, 0));
+  if (dpTotal !== round2(invHeld.reduce((s, h) => s + h.applied, 0))) {
+    throw new VendorDownPaymentClearingError(
+      `The applied totals do not agree: down payments ${dpTotal.toFixed(2)} against invoices ${round2(invHeld.reduce((s, h) => s + h.applied, 0)).toFixed(2)} ${input.currency.toUpperCase()}.`,
+      'Apply exactly as much advance as the invoices settle — a clearing transfers value, it never creates it.',
+    );
+  }
+
+  const currencies = [...new Set([
+    ...dpHeld.map((h) => h.currency), ...invHeld.map((h) => h.currency), input.currency.toUpperCase(),
+  ])];
+  if (currencies.length > 1) {
+    throw new VendorDownPaymentClearingError(
+      `The clearing and its items stand in ${currencies.join(' and ')}; one clearing settles one currency.`,
+      'Clear items in the clearing currency.',
+    );
+  }
+
+  const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
+  const journal = await postJournalEntry(tx, {
+    client: input.client,
+    companyCode: input.companyCode,
+    documentType: JOURNAL_DOCUMENT_TYPE,
+    documentDate: input.documentDate,
+    postingDate: input.postingDate,
+    fiscalYear: position.fiscalYear,
+    postingPeriod: position.period,
+    currency: currencies[0],
+    localCurrency: company.currency,
+    reference: input.reference,
+    headerText: `Down payment clearing ${input.vendorNumber}`,
+    lines: [
+      ...invHeld.map((h) => ({
+        glAccount: recon, debitCredit: 'S' as const,
+        amount: h.applied.toFixed(2), businessPartner: input.vendorNumber,
+        lineText: h.lineText,
+      })),
+      ...dpHeld.map((h) => ({
+        glAccount: alternativeAccount, debitCredit: 'H' as const,
+        amount: h.applied.toFixed(2), businessPartner: input.vendorNumber,
+        lineText: h.lineText,
+      })),
+    ],
+    origin: { documentClass: CLEARING_CLASS, documentKey: `${input.companyCode}/${input.vendorNumber}` },
+    postedBy: input.changedBy,
+    transactionCode: VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY,
+  }).catch((error: unknown) => {
+    if (error instanceof PostingError) throw new VendorDownPaymentClearingError(error.message, error.remedy);
+    throw error;
   });
+
+  // Full application stamps the original item and its offsetting
+  // lines; partial application leaves the netting pair standing.
+  let itemsCleared = 0;
+  const stampItem = async (h: Held, account: string) => {
+    itemsCleared += 1;
+    await tx.update(journalEntryLine).set({
+      clearingDocument: journal.documentNumber, clearingDate: input.clearingDate,
+    }).where(and(
+      eq(journalEntryLine.client, input.client),
+      eq(journalEntryLine.documentNumber, h.ref.documentNumber),
+      eq(journalEntryLine.fiscalYear, h.ref.fiscalYear),
+      eq(journalEntryLine.lineNumber, h.ref.lineNumber),
+    ));
+    await tx.update(journalEntryLine).set({
+      clearingDocument: journal.documentNumber, clearingDate: input.clearingDate,
+    }).where(and(
+      eq(journalEntryLine.client, input.client),
+      eq(journalEntryLine.companyCode, input.companyCode),
+      eq(journalEntryLine.glAccount, account),
+      eq(journalEntryLine.businessPartner, input.vendorNumber),
+      eq(journalEntryLine.lineText, h.lineText),
+      sql`${journalEntryLine.clearingDocument} is null`,
+    ));
+  };
+  for (const h of invHeld) {
+    if (h.applied >= h.remaining - 0.005) await stampItem(h, recon);
+  }
+  for (const h of dpHeld) {
+    if (h.applied >= h.remaining - 0.005) await stampItem(h, alternativeAccount);
+  }
+
+  const clearingNumber = journal.documentNumber;
+  await tx.insert(vendorDownPaymentClearing).values({
+    client: input.client, clearingNumber, fiscalYear: journal.fiscalYear,
+    vendorNumber: input.vendorNumber, companyCode: input.companyCode,
+    specialGlIndicator: input.indicator,
+    alternativeReconciliationAccount: alternativeAccount,
+    documentDate: input.documentDate, postingDate: input.postingDate, clearingDate: input.clearingDate,
+    totalApplied: String(dpTotal),
+    currency: currencies[0], reference: input.reference ?? null,
+    journalDocumentNumber: journal.documentNumber,
+    invoiceNumber: input.invoiceNumber ?? null,
+    purchaseOrder: input.purchaseOrder ?? null,
+    requestKey: input.requestKey, createdBy: input.changedBy,
+  });
+  await recordChange(tx, {
+    client: input.client, objectClass: CLEARING_CLASS,
+    objectKey: `${input.companyCode}/${input.vendorNumber}/${clearingNumber}`,
+    changeType: 'CREATE', changedBy: input.changedBy, transactionCode: VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY,
+    after: {
+      journal: journal.documentNumber, totalApplied: dpTotal, itemsCleared,
+      invoice: input.invoiceNumber ?? null, order: input.purchaseOrder ?? null,
+    },
+  });
+  const result = await byRequestKey(tx, input.client, input.requestKey);
+  return { ...result!, itemsCleared };
+}
+
+export async function clearDownPayments(input: ClearDownPaymentsInput): Promise<PostedClearing> {
+  return withTenant(input.client, (tx) => clearDownPaymentsTx(tx, input));
 }

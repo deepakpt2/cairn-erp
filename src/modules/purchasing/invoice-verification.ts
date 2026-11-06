@@ -19,12 +19,19 @@ import { linkDocuments } from '../../platform/document';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
+import { ClearingResetError, resetClearingTx } from '../finance/clearing-reset';
 import { accountDetermination, taxCode } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { materialDocumentLine, materialValuation, movementType } from '../inventory/schema';
 import { postingValuationRefusal } from '../inventory/valuation-class-definition';
-import { getOrderAdvances, type OrderAdvance } from '../finance/vendor-down-payment-clearing';
+import {
+  clearDownPaymentsTx, getDownPaymentClearingTx, getOrderAdvances,
+  VendorDownPaymentClearingError, type OrderAdvance,
+} from '../finance/vendor-down-payment-clearing';
+import {
+  journalEntry, journalEntryLine, vendorDownPayment, vendorDownPaymentClearing,
+} from '../finance/schema';
 import {
   parkedSupplierInvoice,
   purchaseOrder, purchaseOrderItem, supplierInvoice, supplierInvoiceItem,
@@ -227,12 +234,30 @@ export interface SupplierInvoiceView {
     quantity: string; netAmount: string; expectedAmount: string; varianceAmount: string;
     taxCode: string | null; taxAmount: string;
   }>;
+  /**
+   * The advance settlements this invoice carries (9223). A settlement is its own
+   * accounting document; listed here so the invoice can say what it has already
+   * been paid against, and what is still owed.
+   */
+  settlements: Array<{
+    clearingNumber: string; fiscalYear: number; indicator: string; totalApplied: string;
+    journalDocumentNumber: string; reversed: boolean;
+  }>;
+  /** What the settlements have taken off the gross so far. */
+  advanceApplied: string;
+  /** The gross less what the settlements have taken — the liability that still stands. */
+  remainingPayable: string;
 }
 
 function toView(
   header: typeof supplierInvoice.$inferSelect,
   items: Array<typeof supplierInvoiceItem.$inferSelect>,
+  settlements: SupplierInvoiceView['settlements'],
 ): SupplierInvoiceView {
+  const applied = settlements
+    .filter((row) => !row.reversed)
+    .reduce((sum, row) => sum + Number(row.totalApplied), 0);
+  const gross = Number(header.grossAmount);
   return {
     invoiceNumber: header.invoiceNumber, fiscalYear: header.fiscalYear,
     category: header.category, supplierNumber: header.supplierNumber,
@@ -250,7 +275,48 @@ function toView(
       netAmount: i.netAmount, expectedAmount: i.expectedAmount,
       varianceAmount: i.varianceAmount, taxCode: i.taxCode, taxAmount: i.taxAmount,
     })),
+    settlements,
+    advanceApplied: round2(applied).toFixed(2),
+    remainingPayable: round2(gross - applied).toFixed(2),
   };
+}
+
+/**
+ * The advance settlements raised against one invoice.
+ *
+ * A settlement that has been reversed no longer counts: the advance stands open
+ * again and the invoice is owed in full. The judgement is read off the clearing
+ * journal, which is the document that stands, not off a column that could drift.
+ */
+async function loadSettlements(
+  tx: Tx, client: string, invoiceNumber: string,
+): Promise<SupplierInvoiceView['settlements']> {
+  const rows = await tx.select({
+    clearingNumber: vendorDownPaymentClearing.clearingNumber,
+    fiscalYear: vendorDownPaymentClearing.fiscalYear,
+    indicator: vendorDownPaymentClearing.specialGlIndicator,
+    totalApplied: vendorDownPaymentClearing.totalApplied,
+    journalDocumentNumber: vendorDownPaymentClearing.journalDocumentNumber,
+    status: journalEntry.status,
+  }).from(vendorDownPaymentClearing)
+    .leftJoin(journalEntry, and(
+      eq(journalEntry.client, vendorDownPaymentClearing.client),
+      eq(journalEntry.documentNumber, vendorDownPaymentClearing.journalDocumentNumber),
+      eq(journalEntry.fiscalYear, vendorDownPaymentClearing.fiscalYear),
+    ))
+    .where(and(
+      eq(vendorDownPaymentClearing.client, client),
+      eq(vendorDownPaymentClearing.invoiceNumber, invoiceNumber),
+    ))
+    .orderBy(vendorDownPaymentClearing.clearingNumber);
+  return rows.map((row) => ({
+    clearingNumber: row.clearingNumber,
+    fiscalYear: row.fiscalYear,
+    indicator: row.indicator,
+    totalApplied: row.totalApplied,
+    journalDocumentNumber: row.journalDocumentNumber,
+    reversed: row.status === 'REVERSED',
+  }));
 }
 
 async function loadView(tx: Tx, client: string, number: string): Promise<SupplierInvoiceView | null> {
@@ -261,7 +327,7 @@ async function loadView(tx: Tx, client: string, number: string): Promise<Supplie
   const items = await tx.select().from(supplierInvoiceItem).where(and(
     eq(supplierInvoiceItem.client, client), eq(supplierInvoiceItem.invoiceNumber, number),
   )).orderBy(supplierInvoiceItem.lineNumber);
-  return toView(header, items);
+  return toView(header, items, await loadSettlements(tx, client, number));
 }
 
 export async function getSupplierInvoice(client: string, number: string): Promise<SupplierInvoiceView | null> {
@@ -324,6 +390,181 @@ export interface PostInvoiceInput {
   headerText?: string;
   requestKey: string;
   lines: Array<{ itemNumber: number; quantity: number; netAmount: number; taxCode?: string }>;
+  /**
+   * Advances to clear against this invoice, named by their payment document. The
+   * amount defaults to what stands open on the advance; naming one at all is
+   * always the user's decision, never the system's.
+   */
+  advances?: Array<{ paymentNumber: string; amount?: number }>;
+}
+
+interface InvoiceSettlement {
+  clearingNumber: string;
+  indicator: string;
+  totalApplied: string;
+}
+
+/**
+ * Clear the advances the user selected against the invoice that has just been posted.
+ *
+ * The invoice is posted first and settled second, in one transaction, because the
+ * settlement clears an open vendor credit line — and that line does not exist until
+ * the invoice journal stands written. Nothing about the invoice changes: the gross
+ * stands, the tax stands, and the vendor is still credited in full. What the
+ * settlement does is transfer value from the advance to the invoice, so the
+ * supplier is owed the difference rather than the whole.
+ *
+ * Every guard the clearing already keeps on its own screen applies here as well:
+ * vendor, company and currency must agree, and no advance can give more than it
+ * still stands open at. What is added is the one rule only the invoice knows —
+ * the advances may clear no more than the invoice is worth.
+ */
+async function settleAdvances(
+  tx: Tx,
+  input: {
+    client: string; changedBy: string; orderNumber: string; invoiceNumber: string;
+    supplierNumber: string; companyCode: string; currency: string;
+    grossAmount: number; invoiceDate: string; postingDate: string;
+    requestKey: string; journalDocumentNumber: string; journalFiscalYear: number;
+    advances: NonNullable<PostInvoiceInput['advances']>;
+  },
+): Promise<InvoiceSettlement[]> {
+  const requested = input.advances;
+  if (requested.length === 0) return [];
+
+  const [credit] = await tx.select().from(journalEntryLine).where(and(
+    eq(journalEntryLine.client, input.client),
+    eq(journalEntryLine.documentNumber, input.journalDocumentNumber),
+    eq(journalEntryLine.fiscalYear, input.journalFiscalYear),
+    eq(journalEntryLine.businessPartner, input.supplierNumber),
+    eq(journalEntryLine.debitCredit, 'H'),
+  ));
+  if (!credit) {
+    throw new InvoiceVerificationError(
+      `Invoice ${input.invoiceNumber} posted no open credit to supplier ${input.supplierNumber}, so no advance can be cleared against it.`,
+      'Post the invoice without advances, then clear them from the clearing screen.',
+    );
+  }
+
+  const seen = new Set<string>();
+  const groups = new Map<string, Array<{
+    documentNumber: string; fiscalYear: number; lineNumber: number; applied: number;
+  }>>();
+  let total = 0;
+
+  for (const request of requested) {
+    const paymentNumber = request.paymentNumber?.trim();
+    if (!paymentNumber) {
+      throw new InvoiceVerificationError('An advance was named without a document number.');
+    }
+    if (seen.has(paymentNumber)) {
+      throw new InvoiceVerificationError(
+        `Advance ${paymentNumber} is named twice.`,
+        'Name each advance once; the amount decides how much of it is cleared.',
+      );
+    }
+    seen.add(paymentNumber);
+
+    const [advance] = await tx.select().from(vendorDownPayment).where(and(
+      eq(vendorDownPayment.client, input.client),
+      eq(vendorDownPayment.paymentNumber, paymentNumber),
+    ));
+    if (!advance) {
+      throw new InvoiceVerificationError(
+        `Advance ${paymentNumber} does not stand.`,
+        'Reload the order; the advances on offer are the ones that stand posted.',
+      );
+    }
+    if (advance.vendorNumber !== input.supplierNumber) {
+      throw new InvoiceVerificationError(
+        `Advance ${paymentNumber} was paid to supplier ${advance.vendorNumber}, not to ${input.supplierNumber}.`,
+        'An advance settles the supplier it was paid to.',
+      );
+    }
+    if (advance.companyCode !== input.companyCode) {
+      throw new InvoiceVerificationError(
+        `Advance ${paymentNumber} was paid in company code ${advance.companyCode}, not in ${input.companyCode}.`,
+        'An advance settles inside the company that paid it.',
+      );
+    }
+    if (advance.currency !== input.currency) {
+      throw new InvoiceVerificationError(
+        `Advance ${paymentNumber} stands in ${advance.currency}; the invoice stands in ${input.currency}.`,
+        'Clear advances in the currency they were paid in.',
+      );
+    }
+
+    const standing = await getDownPaymentClearingTx(
+      tx, input.client, input.supplierNumber, input.companyCode, advance.specialGlIndicator,
+    );
+    const open = standing.downPayments.find((row) => row.documentNumber === advance.journalDocumentNumber);
+    if (!open) {
+      throw new InvoiceVerificationError(
+        `Advance ${paymentNumber} stands fully cleared already.`,
+        'Reload the order; only what is still open can be cleared.',
+      );
+    }
+    const applied = request.amount === undefined ? open.remaining : round2(request.amount);
+    if (!(applied > 0)) {
+      throw new InvoiceVerificationError(
+        `Advance ${paymentNumber}: the amount to clear must stand above zero.`,
+      );
+    }
+    if (applied - open.remaining > 0.005) {
+      throw new InvoiceVerificationError(
+        `Advance ${paymentNumber} stands open at ${open.remaining.toFixed(2)} ${input.currency}; ${applied.toFixed(2)} was asked of it.`,
+        'Clear no more than the advance still stands at.',
+      );
+    }
+
+    const group = groups.get(advance.specialGlIndicator) ?? [];
+    group.push({
+      documentNumber: open.documentNumber, fiscalYear: open.fiscalYear,
+      lineNumber: open.lineNumber, applied,
+    });
+    groups.set(advance.specialGlIndicator, group);
+    total = round2(total + applied);
+  }
+
+  // An advance is money already given, not a discount: clearing more than the
+  // invoice is worth would leave the supplier owing us on a document that says
+  // they owe nothing.
+  if (total - round2(input.grossAmount) > 0.005) {
+    throw new InvoiceVerificationError(
+      `The advances asked to clear ${total.toFixed(2)} ${input.currency}, which exceeds the invoice gross ${round2(input.grossAmount).toFixed(2)}.`,
+      'Clear no more than the invoice is worth.',
+    );
+  }
+
+  const settlements: InvoiceSettlement[] = [];
+  for (const [indicator, references] of groups) {
+    const applied = round2(references.reduce((sum, row) => sum + row.applied, 0));
+    const clearing = await clearDownPaymentsTx(tx, {
+      client: input.client, changedBy: input.changedBy,
+      vendorNumber: input.supplierNumber, companyCode: input.companyCode, indicator,
+      documentDate: input.invoiceDate,
+      postingDate: input.postingDate, clearingDate: input.postingDate,
+      currency: input.currency,
+      reference: input.invoiceNumber.length > 16 ? input.invoiceNumber.slice(0, 16) : input.invoiceNumber,
+      requestKey: `${input.requestKey}/advance/${indicator}`,
+      downPayments: references,
+      invoices: [{
+        documentNumber: credit.documentNumber, fiscalYear: credit.fiscalYear,
+        lineNumber: credit.lineNumber, applied,
+      }],
+      invoiceNumber: input.invoiceNumber,
+      purchaseOrder: input.orderNumber,
+    }).catch((error: unknown) => {
+      if (error instanceof VendorDownPaymentClearingError) {
+        throw new InvoiceVerificationError(error.message, error.remedy);
+      }
+      throw error;
+    });
+    settlements.push({
+      clearingNumber: clearing.clearingNumber, indicator, totalApplied: clearing.totalApplied,
+    });
+  }
+  return settlements;
 }
 
 export async function postSupplierInvoice(input: PostInvoiceInput): Promise<SupplierInvoiceView> {
@@ -546,6 +787,16 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
         taxAmount: String(p.taxAmount), createdBy: input.changedBy,
       });
     }
+    const settlements = await settleAdvances(tx, {
+      client: input.client, changedBy: input.changedBy, orderNumber: input.orderNumber,
+      invoiceNumber: number, supplierNumber: view.supplierNumber, companyCode: view.companyCode,
+      currency: view.currency, grossAmount: input.grossAmount,
+      invoiceDate: input.invoiceDate, postingDate: input.postingDate,
+      requestKey: input.requestKey,
+      journalDocumentNumber: journal.documentNumber, journalFiscalYear: journal.fiscalYear,
+      advances: input.advances ?? [],
+    });
+
     await linkDocuments(tx, {
       client: input.client,
       predecessor: { documentClass: 'purchase_order', documentKey: input.orderNumber },
@@ -559,6 +810,9 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       after: {
         order: input.orderNumber, supplier: view.supplierNumber,
         gross: round2(input.grossAmount), tax: taxTotal, journal: journal.documentNumber,
+        advances: settlements.map((row) => ({
+          clearing: row.clearingNumber, indicator: row.indicator, applied: row.totalApplied,
+        })),
       },
     });
 
@@ -593,6 +847,40 @@ export async function cancelSupplierInvoice(input: CancelInvoiceInput): Promise<
       client: input.client, objectCode: 'VENDINV', allocatedBy: input.changedBy,
     });
     const number = allocated.display;
+
+    // Advances cleared against the invoice come off with it. An advance is money
+    // already paid: leaving it cleared against an invoice that no longer stands
+    // would spend it twice. The clearing is reset first, which reopens the advance
+    // and the invoice line, and only then reversed — a reversal mirrors a document
+    // that stands posted, and a reset will not touch one already reversed.
+    const settlements = (await loadSettlements(tx, input.client, input.invoiceNumber))
+      .filter((row) => !row.reversed);
+    for (const settlement of settlements) {
+      await resetClearingTx(tx, {
+        client: input.client, changedBy: input.changedBy,
+        companyCode: original.companyCode,
+        clearingDocument: settlement.clearingNumber, fiscalYear: settlement.fiscalYear,
+        reason: `Invoice cancellation ${number}`,
+        requestKey: `${input.requestKey}/reset/${settlement.clearingNumber}`,
+      }).catch((error: unknown) => {
+        if (error instanceof ClearingResetError) {
+          throw new InvoiceVerificationError(error.message, error.remedy);
+        }
+        throw error;
+      });
+      await reverseJournalEntry(tx, {
+        client: input.client,
+        documentNumber: settlement.clearingNumber, fiscalYear: settlement.fiscalYear,
+        reversalDate: input.postingDate,
+        reason: `Invoice cancellation ${number}`,
+        reversedBy: input.changedBy,
+        transactionCode: INVOICE_CAPABILITY,
+      }).catch((error: unknown) => {
+        if (error instanceof PostingError) throw new InvoiceVerificationError(error.message, error.remedy);
+        throw error;
+      });
+    }
+
     const journalYear = Number(original.journalDocumentNumber.split('/')[1]);
 
     const reversal = await reverseJournalEntry(tx, {

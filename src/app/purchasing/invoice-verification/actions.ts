@@ -46,6 +46,15 @@ export async function postInvoiceAction(
       });
     }
   }
+  // Advances the user ticked. An amount of zero or less means "leave this one
+  // alone" rather than "clear nothing", so only what stands above zero is named.
+  const advances: Array<{ paymentNumber: string; amount?: number }> = [];
+  for (const [key] of form.entries()) {
+    if (!key.startsWith('adv-') || key.startsWith('advamt-')) continue;
+    const paymentNumber = key.slice(4);
+    const asked = Number(form.get(`advamt-${paymentNumber}`));
+    advances.push({ paymentNumber, ...(Number.isFinite(asked) && asked > 0 ? { amount: asked } : {}) });
+  }
   try {
     const doc = await postSupplierInvoice({
       client: session.user.client,
@@ -58,11 +67,16 @@ export async function postInvoiceAction(
       headerText: text(form, 'headerText') || undefined,
       requestKey: text(form, 'requestKey'),
       lines,
+      advances,
     });
     revalidatePath(ROUTE);
+    const settled = Number(doc.advanceApplied);
     return {
       ok: true,
-      message: `Invoice posted as document ${doc.invoiceNumber}; journal ${doc.journalDocumentNumber}.`,
+      message: settled > 0
+        ? `Invoice posted as document ${doc.invoiceNumber}; journal ${doc.journalDocumentNumber}. `
+          + `Advances cleared ${doc.advanceApplied} ${doc.currency}, leaving ${doc.remainingPayable} ${doc.currency} payable.`
+        : `Invoice posted as document ${doc.invoiceNumber}; journal ${doc.journalDocumentNumber}.`,
       documentNumber: doc.invoiceNumber,
     };
   } catch (error) {

@@ -843,10 +843,16 @@ export const vendorDownPaymentClearing = pgTable('vendor_down_payment_clearing',
   currency: char('currency', { length: 3 }).notNull(),
   reference: varchar('reference', { length: 16 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  /** The supplier invoice this clearing settles, when it was raised from invoice verification (9223). */
+  invoiceNumber: varchar('invoice_number', { length: 20 }),
+  /** The order behind the settlement, when the advance named one (9223). */
+  purchaseOrder: varchar('purchase_order', { length: 20 }),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.clearingNumber] }),
+  index('vendor_dp_clearing_invoice_idx').on(t.client, t.invoiceNumber).where(sql`${t.invoiceNumber} is not null`),
+  index('vendor_dp_clearing_order_idx').on(t.client, t.purchaseOrder).where(sql`${t.purchaseOrder} is not null`),
 ]);
 
 /** Customer down payment record (SCR-083): the DZ journal stands the truth. */

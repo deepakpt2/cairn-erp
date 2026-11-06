@@ -132,107 +132,122 @@ export async function getClearingDocument(client: string, input: {
   });
 }
 
-export async function resetClearing(input: {
+export interface ResetClearingInput {
   client: string; changedBy: string;
   companyCode: string; clearingDocument: string; fiscalYear: number;
   reason: string; requestKey?: string;
-}): Promise<ClearingResetResult> {
+}
+
+/**
+ * The reset itself, on a transaction the caller already owns.
+ *
+ * Reversing an invoice has to undo the settlements that were made against it, and
+ * undo them in the same movement: an advance that stayed cleared while the invoice
+ * came off the books would be spent twice. So the reset takes the caller's
+ * transaction rather than committing on its own — a reset that committed early
+ * could not be taken back when the cancellation it belongs to later failed.
+ */
+export async function resetClearingTx(
+  tx: Parameters<Parameters<typeof withTenant>[1]>[0], input: ResetClearingInput,
+): Promise<ClearingResetResult> {
   if (!input.reason?.trim()) {
     throw new ClearingResetError('A reason stands required for a clearing reset.', 'State why the clearing is undone.');
   }
-  return withTenant(input.client, async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/clearreset`}, 0))`);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/clearreset`}, 0))`);
 
-    if (input.requestKey) {
-      const [standing] = await tx.select().from(clearingReset).where(and(
-        eq(clearingReset.client, input.client),
-        eq(clearingReset.requestKey, input.requestKey),
-      ));
-      if (standing) {
-        return {
-          resetNumber: standing.resetNumber, clearingDocument: standing.clearingDocument,
-          fiscalYear: standing.fiscalYear, companyCode: standing.companyCode,
-          clearingDate: standing.clearingDate, itemsReset: standing.itemsReset, reason: standing.reason,
-        };
-      }
-    }
-
-    const [journal] = await tx.select().from(journalEntry).where(and(
-      eq(journalEntry.client, input.client),
-      eq(journalEntry.documentNumber, input.clearingDocument),
-      eq(journalEntry.fiscalYear, input.fiscalYear),
+  if (input.requestKey) {
+    const [standing] = await tx.select().from(clearingReset).where(and(
+      eq(clearingReset.client, input.client),
+      eq(clearingReset.requestKey, input.requestKey),
     ));
-    if (!journal || journal.companyCode !== input.companyCode || journal.status !== 'POSTED') {
+    if (standing) {
+      return {
+        resetNumber: standing.resetNumber, clearingDocument: standing.clearingDocument,
+        fiscalYear: standing.fiscalYear, companyCode: standing.companyCode,
+        clearingDate: standing.clearingDate, itemsReset: standing.itemsReset, reason: standing.reason,
+      };
+    }
+  }
+
+  const [journal] = await tx.select().from(journalEntry).where(and(
+    eq(journalEntry.client, input.client),
+    eq(journalEntry.documentNumber, input.clearingDocument),
+    eq(journalEntry.fiscalYear, input.fiscalYear),
+  ));
+  if (!journal || journal.companyCode !== input.companyCode || journal.status !== 'POSTED') {
+    throw new ClearingResetError(
+      `Clearing document ${input.clearingDocument} does not stand posted in company ${input.companyCode} for ${input.fiscalYear}.`,
+      'Name the clearing document exactly as it stands stamped on the cleared items.',
+    );
+  }
+  const lines = await loadCleared(tx, input.client, input.companyCode, input.clearingDocument);
+  if (lines.length === 0) {
+    const reset = await loadReset(tx, input.client, input.companyCode, input.clearingDocument, input.fiscalYear);
+    if (reset) {
       throw new ClearingResetError(
-        `Clearing document ${input.clearingDocument} does not stand posted in company ${input.companyCode} for ${input.fiscalYear}.`,
-        'Name the clearing document exactly as it stands stamped on the cleared items.',
+        `Clearing document ${input.clearingDocument} already stands reset by ${reset.resetNumber}.`,
+        'The items stand open again; clear them anew if they settle.',
       );
     }
-    const lines = await loadCleared(tx, input.client, input.companyCode, input.clearingDocument);
-    if (lines.length === 0) {
-      const reset = await loadReset(tx, input.client, input.companyCode, input.clearingDocument, input.fiscalYear);
-      if (reset) {
-        throw new ClearingResetError(
-          `Clearing document ${input.clearingDocument} already stands reset by ${reset.resetNumber}.`,
-          'The items stand open again; clear them anew if they settle.',
-        );
-      }
-      throw new ClearingResetError(
-        `Document ${input.clearingDocument} cleared no items in company ${input.companyCode}.`,
-        'FBRA resets a document that performed clearing; name the clearing document.',
-      );
-    }
+    throw new ClearingResetError(
+      `Document ${input.clearingDocument} cleared no items in company ${input.companyCode}.`,
+      'FBRA resets a document that performed clearing; name the clearing document.',
+    );
+  }
 
-    // A clearing that generated residual items cannot simply be reset: the
-    // residual line is a posted open item of the clearing document, so lifting
-    // the stamps alone would leave it open beside the reopened originals.
-    const residualRows = await tx.execute(sql`
-      select count(*)::int as n from gl_clearing_residual
-      where client = ${input.client} and clearing_document = ${input.clearingDocument} and is_active
-    `) as unknown as Array<{ n: number }>;
-    if ((residualRows[0]?.n ?? 0) > 0) {
-      throw new ClearingResetError(
-        `Clearing document ${input.clearingDocument} generated ${residualRows[0]!.n} residual item(s); a reset would leave them open beside the reopened originals.`,
-        'Reverse the clearing document through the standing reversal workflow, which cancels the residual line, then reset.',
-      );
-    }
+  // A clearing that generated residual items cannot simply be reset: the
+  // residual line is a posted open item of the clearing document, so lifting
+  // the stamps alone would leave it open beside the reopened originals.
+  const residualRows = await tx.execute(sql`
+    select count(*)::int as n from gl_clearing_residual
+    where client = ${input.client} and clearing_document = ${input.clearingDocument} and is_active
+  `) as unknown as Array<{ n: number }>;
+  if ((residualRows[0]?.n ?? 0) > 0) {
+    throw new ClearingResetError(
+      `Clearing document ${input.clearingDocument} generated ${residualRows[0]!.n} residual item(s); a reset would leave them open beside the reopened originals.`,
+      'Reverse the clearing document through the standing reversal workflow, which cancels the residual line, then reset.',
+    );
+  }
 
-    const clearingDate = lines[0].clearingDate!;
-    const itemRefs = lines.map((l) => `${l.documentNumber}/${l.fiscalYear}/${l.lineNumber}`).join(',');
-    const count = await tx.select({ n: sql<number>`count(*)::int` }).from(clearingReset)
-      .where(eq(clearingReset.client, input.client));
-    const resetNumber = `RST-${String((count[0]?.n ?? 0) + 1).padStart(6, '0')}`;
+  const clearingDate = lines[0].clearingDate!;
+  const itemRefs = lines.map((l) => `${l.documentNumber}/${l.fiscalYear}/${l.lineNumber}`).join(',');
+  const count = await tx.select({ n: sql<number>`count(*)::int` }).from(clearingReset)
+    .where(eq(clearingReset.client, input.client));
+  const resetNumber = `RST-${String((count[0]?.n ?? 0) + 1).padStart(6, '0')}`;
 
-    await tx.update(journalEntryLine).set({ clearingDocument: null, clearingDate: null }).where(and(
-      eq(journalEntryLine.client, input.client),
-      eq(journalEntryLine.companyCode, input.companyCode),
-      eq(journalEntryLine.clearingDocument, input.clearingDocument),
-    ));
-    // Allocations lift as history, never as a delete: the rows stand inactive
-    // and the source items' remaining balances restore.
-    await tx.update(glClearingAllocation).set({
-      isActive: false, resetNumber, changedBy: input.changedBy, changedAt: new Date(),
-    }).where(and(
-      eq(glClearingAllocation.client, input.client),
-      eq(glClearingAllocation.clearingDocument, input.clearingDocument),
-      eq(glClearingAllocation.isActive, true),
-    ));
-    await tx.insert(clearingReset).values({
-      client: input.client, resetNumber, companyCode: input.companyCode,
-      clearingDocument: input.clearingDocument, fiscalYear: input.fiscalYear,
-      clearingDate, itemsReset: lines.length, itemRefs, reason: input.reason.trim(),
-      requestKey: input.requestKey ?? null,
-      createdBy: input.changedBy, changedBy: input.changedBy,
-    });
-    await recordChange(tx, {
-      client: input.client, objectClass: RESET_CLASS, objectKey: `${input.companyCode}/${input.clearingDocument}`,
-      changeType: 'CREATE', changedBy: input.changedBy, transactionCode: CLEARING_RESET_CAPABILITY,
-      after: { resetNumber, clearingDocument: input.clearingDocument, itemsReset: lines.length, clearingDate, reason: input.reason.trim() },
-    });
-
-    return {
-      resetNumber, clearingDocument: input.clearingDocument, fiscalYear: input.fiscalYear,
-      companyCode: input.companyCode, clearingDate, itemsReset: lines.length, reason: input.reason.trim(),
-    };
+  await tx.update(journalEntryLine).set({ clearingDocument: null, clearingDate: null }).where(and(
+    eq(journalEntryLine.client, input.client),
+    eq(journalEntryLine.companyCode, input.companyCode),
+    eq(journalEntryLine.clearingDocument, input.clearingDocument),
+  ));
+  // Allocations lift as history, never as a delete: the rows stand inactive
+  // and the source items' remaining balances restore.
+  await tx.update(glClearingAllocation).set({
+    isActive: false, resetNumber, changedBy: input.changedBy, changedAt: new Date(),
+  }).where(and(
+    eq(glClearingAllocation.client, input.client),
+    eq(glClearingAllocation.clearingDocument, input.clearingDocument),
+    eq(glClearingAllocation.isActive, true),
+  ));
+  await tx.insert(clearingReset).values({
+    client: input.client, resetNumber, companyCode: input.companyCode,
+    clearingDocument: input.clearingDocument, fiscalYear: input.fiscalYear,
+    clearingDate, itemsReset: lines.length, itemRefs, reason: input.reason.trim(),
+    requestKey: input.requestKey ?? null,
+    createdBy: input.changedBy, changedBy: input.changedBy,
   });
+  await recordChange(tx, {
+    client: input.client, objectClass: RESET_CLASS, objectKey: `${input.companyCode}/${input.clearingDocument}`,
+    changeType: 'CREATE', changedBy: input.changedBy, transactionCode: CLEARING_RESET_CAPABILITY,
+    after: { resetNumber, clearingDocument: input.clearingDocument, itemsReset: lines.length, clearingDate, reason: input.reason.trim() },
+  });
+
+  return {
+    resetNumber, clearingDocument: input.clearingDocument, fiscalYear: input.fiscalYear,
+    companyCode: input.companyCode, clearingDate, itemsReset: lines.length, reason: input.reason.trim(),
+  };
+}
+
+export async function resetClearing(input: ResetClearingInput): Promise<ClearingResetResult> {
+  return withTenant(input.client, (tx) => resetClearingTx(tx, input));
 }
