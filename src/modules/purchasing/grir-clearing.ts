@@ -104,6 +104,20 @@ export interface GrIrResidual {
   receivedQuantity: number;
   invoicedQuantity: number;
   openQuantity: number;
+  /** Delivery completed / final invoice: procurement's own word that it has finished. */
+  deliveryCompleted: boolean;
+  finalInvoiceIndicator: boolean;
+  /** What the item invoices against — the rule the invoice screen judges by. */
+  invoiceBasis: 'GOODS_RECEIPT' | 'ORDERED_QUANTITY';
+  /**
+   * The documents the position was read from. A reconciliation is only useful if it
+   * can be walked back to the postings that made it.
+   */
+  documents: {
+    goodsReceipts: string[];
+    invoices: string[];
+    clearings: string[];
+  };
   grIrValue: number;
   remaining: number;
   surplus: 'DELIVERY' | 'INVOICE';
@@ -200,6 +214,10 @@ interface ItemFact {
   ordered_qty: string;
   item_category: string;
   account_assignment_category: string | null;
+  delivery_completed: boolean;
+  final_invoice_indicator: boolean;
+  gr_based_invoice_verification: boolean;
+  goods_receipt_indicator: boolean;
   chart_of_accounts: string;
   company_currency: string;
   valuation_class: string | null;
@@ -225,6 +243,7 @@ interface MoveLine {
 interface InvoiceLine {
   order_number: string;
   item_number: number;
+  invoice_number: string;
   quantity: string;
   expected_amount: string;
   category: string;
@@ -233,6 +252,7 @@ interface InvoiceLine {
 interface PriorLine {
   order_number: string;
   item_number: number;
+  document_number: string;
   allocated_amount: string;
 }
 
@@ -250,6 +270,8 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
     select po.order_number, poi.item_number, po.company_code, po.supplier_number, po.currency,
            poi.material_number, poi.short_text, poi.plant, poi.unit, poi.quantity as ordered_qty,
            poi.item_category, poi.account_assignment_category,
+           poi.delivery_completed, poi.final_invoice_indicator,
+           poi.gr_based_invoice_verification, poi.goods_receipt_indicator,
            cc.chart_of_accounts, cc.currency as company_currency,
            mv.valuation_class, mp.overdelivery_tolerance
       from purchase_order po
@@ -315,6 +337,7 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
   // the item is reported as unresolved below rather than cleared on a figure nobody stated.
   const unresolved = new Map<string, number>();
   const received = new Map<string, { qty: number; value: number }>();
+  const receiptDocuments = new Map<string, Set<string>>();
   for (const row of moves) {
     if (row.item_number == null) continue;
     const id = keyOf(row.order_number, row.item_number);
@@ -322,15 +345,18 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
     const rowSign = sign.get(`${row.document_number}/${row.line_number}`) ?? 1;
     const qty = rowSign * Number(row.quantity);
     const value = rowSign * postedValue(Number(row.quantity), Number(row.unit_price), Number(row.price_unit));
-    const current = received.get(keyOf(row.order_number, row.item_number)) ?? { qty: 0, value: 0 };
+    const current = received.get(id) ?? { qty: 0, value: 0 };
     current.qty = round3(current.qty + qty);
     current.value = round2(current.value + value);
-    received.set(keyOf(row.order_number, row.item_number), current);
+    received.set(id, current);
+    const documents = receiptDocuments.get(id) ?? new Set<string>();
+    documents.add(row.document_number);
+    receiptDocuments.set(id, documents);
   }
 
   const invoices = await tx.execute(sql`
     select i.purchase_order_number as order_number, i.purchase_order_item as item_number,
-           i.quantity, i.expected_amount, h.category
+           i.invoice_number, i.quantity, i.expected_amount, h.category
       from supplier_invoice_item i
       join supplier_invoice h
         on h.client = i.client and h.invoice_number = i.invoice_number
@@ -344,19 +370,24 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
        and (${selection.companyTo || null}::varchar is null or po.company_code <= ${selection.companyTo || null})
   `) as unknown as InvoiceLine[];
   const invoiced = new Map<string, { qty: number; value: number; other: boolean }>();
+  const invoiceDocuments = new Map<string, Set<string>>();
   for (const row of invoices) {
-    const current = invoiced.get(keyOf(row.order_number, row.item_number)) ?? { qty: 0, value: 0, other: false };
+    const id = keyOf(row.order_number, row.item_number);
+    const current = invoiced.get(id) ?? { qty: 0, value: 0, other: false };
     if (row.category !== 'INVOICE') {
       current.other = true;
     } else {
       current.qty = round3(current.qty + Number(row.quantity));
       current.value = round2(current.value + Number(row.expected_amount));
+      const documents = invoiceDocuments.get(id) ?? new Set<string>();
+      documents.add(row.invoice_number);
+      invoiceDocuments.set(id, documents);
     }
-    invoiced.set(keyOf(row.order_number, row.item_number), current);
+    invoiced.set(id, current);
   }
 
   const priors = await tx.execute(sql`
-    select l.order_number, l.item_number, l.allocated_amount
+    select l.order_number, l.item_number, l.document_number, l.allocated_amount
       from gr_ir_maintenance_link l
       join journal_entry j
         on j.client = l.client and j.document_number = l.document_number and j.fiscal_year = l.fiscal_year
@@ -365,9 +396,13 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
        and j.status <> 'REVERSED'
   `) as unknown as PriorLine[];
   const cleared = new Map<string, number>();
+  const clearingDocuments = new Map<string, Set<string>>();
   for (const row of priors) {
     const id = keyOf(row.order_number, row.item_number);
     cleared.set(id, round2((cleared.get(id) ?? 0) + Number(row.allocated_amount)));
+    const documents = clearingDocuments.get(id) ?? new Set<string>();
+    documents.add(row.document_number);
+    clearingDocuments.set(id, documents);
   }
 
   const accounts = await tx.execute(sql`
@@ -435,6 +470,15 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
       receivedQuantity: got.qty,
       invoicedQuantity: billed.qty,
       openQuantity,
+      deliveryCompleted: item.delivery_completed,
+      finalInvoiceIndicator: item.final_invoice_indicator,
+      invoiceBasis: item.gr_based_invoice_verification && item.goods_receipt_indicator
+        ? 'GOODS_RECEIPT' : 'ORDERED_QUANTITY',
+      documents: {
+        goodsReceipts: [...(receiptDocuments.get(id) ?? [])].sort(),
+        invoices: [...(invoiceDocuments.get(id) ?? [])].sort(),
+        clearings: [...(clearingDocuments.get(id) ?? [])].sort(),
+      },
       grIrValue: history,
       remaining,
       surplus,

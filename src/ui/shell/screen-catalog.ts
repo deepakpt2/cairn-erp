@@ -770,6 +770,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/delivery-completion",
+    path: "/config/delivery-completion",
+    query: {},
+    code: "PROC.DELIVERYCOMPLETION.CONFIGURE",
+    title: "Configure delivery completion",
+    area: "configuration",
+    family: "release-config",
+    accepts: [],
+  },
+  {
     id: "/config/retained-earnings",
     path: "/config/retained-earnings",
     query: {},
@@ -2328,6 +2338,16 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "invoice-verification",
     accepts: ["companyFrom", "companyTo", "keyDate", "orderFrom", "orderTo"],
+  },
+  {
+    id: "/purchasing/grir-reconciliation",
+    path: "/purchasing/grir-reconciliation",
+    query: {},
+    code: "PROC.GRIR.RECONCILE",
+    title: "Reconcile GR/IR",
+    area: "purchasing",
+    family: "invoice-verification",
+    accepts: ["companyFrom", "companyTo", "keyDate", "orderFrom", "orderTo", "category"],
   },
   {
     id: "/purchasing/info-record",

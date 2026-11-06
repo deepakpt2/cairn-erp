@@ -342,6 +342,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'PROC.GRIR.MAINTAIN', module: 'PROC', action: 'DISPLAY', posting: false, description: 'List a GR/IR residual on a purchase-order item and check it without posting' },
   { code: 'PROC.GRIR.MAINTAIN.POST', module: 'PROC', action: 'POST', posting: true, description: 'Clear a posted GR/IR residual with one balanced journal, without a material movement and without changing stock' },
   { code: 'PROC.GRIR.MAINTAIN.REVERSE', module: 'PROC', action: 'REVERSE', posting: true, description: 'Reverse a GR/IR clearing by a compensating journal. The original document is not deleted' },
+  { code: 'PROC.GRIR.RECONCILE', module: 'PROC', action: 'DISPLAY', posting: false, description: 'List the GR/IR balances that no longer explain themselves, without clearing, adjusting, reversing or reclassifying any of them' },
   { code: 'INV.TRANSFER.POST', module: 'INV', action: 'POST', posting: true, description: 'Post a stock transfer between storage locations and plants' },
   { code: 'INV.REVERSE', module: 'INV', action: 'REVERSE', posting: true, description: 'Reverse a material document, in whole or by line' },
   { code: 'INV.RESERVATION.CREATE', module: 'INV', action: 'CREATE', posting: false, description: 'Create a reservation: a planned withdrawal of a material from a plant on a required date, charged to the cost centre its movement type names' },
