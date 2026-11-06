@@ -23,6 +23,7 @@ import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { purchaseItemState, type PurchaseItemState } from './item-state';
 import { receiptMovementSign, receiptQuantityInOrderUnit, receiptUnitJoins } from './receipt-unit-basis';
 
 export const PO_LIST_CAPABILITY = 'PROC.PO.LIST';
@@ -49,7 +50,7 @@ export const SCOPES = [
 ] as const;
 export type PoListScope = (typeof SCOPES)[number]['code'];
 
-export type PoListStatus = 'OPEN' | 'PARTIALLY_DELIVERED' | 'DELIVERED' | 'COMPLETED' | 'MARKED';
+export type PoListStatus = PurchaseItemState;
 
 export interface PoListSelection {
   perspective?: string;
@@ -276,12 +277,22 @@ export async function listPurchaseOrders(input: {
     // Scope of selection over the derived quantities. A marked item is not
     // outstanding work, so it never stands in a "still to be" or "completed"
     // scope — only under all items, carrying its flag.
+    // A closed item is not outstanding work, whatever its quantities say: an item flagged
+    // delivery-completed at 60 of 100 will never receive another thing, and an item whose final
+    // invoice stands will never be invoiced again. The completed scope is the same test as the
+    // word the row shows, so the two cannot disagree.
     const scopeFilter = s.scope === 'STILL_TO_BE_DELIVERED'
-      ? sql`and not marked_for_deletion and delivered < quantity`
+      ? sql`and not marked_for_deletion and not delivery_completed and delivered < quantity`
       : s.scope === 'STILL_TO_BE_INVOICED'
-        ? sql`and not marked_for_deletion and delivered > invoiced`
+        // What stands to be invoiced follows the same rule the invoice itself judges by: against
+        // the goods that arrived where the item asks for that, and against the quantity ordered
+        // where it does not.
+        ? sql`and not marked_for_deletion and not final_invoice_indicator
+              and (case when gr_based_invoice_verification and goods_receipt_indicator
+                        then delivered > invoiced else quantity > invoiced end)`
         : s.scope === 'COMPLETED'
-          ? sql`and not marked_for_deletion and delivered >= quantity and invoiced >= quantity`
+          ? sql`and not marked_for_deletion and ((delivered >= quantity and invoiced >= quantity)
+              or (delivery_completed and final_invoice_indicator))`
           : sql``;
 
     const orderBy = perspective.code === 'MATERIAL'
@@ -322,6 +333,8 @@ export async function listPurchaseOrders(input: {
                coalesce(i.material_number, '') as material_number, i.short_text,
                coalesce(i.material_group, '') as material_group, coalesce(i.plant, '') as plant,
                i.quantity, i.unit, i.net_price, i.price_unit, i.net_value, i.marked_for_deletion,
+               i.delivery_completed, i.final_invoice_indicator,
+               i.goods_receipt_indicator, i.gr_based_invoice_verification,
                coalesce(i.account_assignment_category, '') as account_assignment_category,
                coalesce(i.requisition_number, '') as requisition_number, i.requisition_item,
                case when i.requisition_number is null then null else r.quantity end as requisition_quantity,
@@ -359,13 +372,12 @@ export async function listPurchaseOrders(input: {
       const delivered = num(r.delivered);
       const invoiced = num(r.invoiced);
       const marked = r.marked_for_deletion === true;
-      const status: PoListStatus = marked
-        ? 'MARKED'
-        : delivered >= quantity && invoiced >= quantity
-          ? 'COMPLETED'
-          : delivered >= quantity
-            ? 'DELIVERED'
-            : delivered > 0 ? 'PARTIALLY_DELIVERED' : 'OPEN';
+      const status: PoListStatus = purchaseItemState({
+        markedForDeletion: marked,
+        deliveryCompleted: r.delivery_completed === true,
+        finalInvoiceIndicator: r.final_invoice_indicator === true,
+        ordered: quantity, received: delivered, invoiced,
+      });
       return {
         orderNumber: String(r.order_number),
         itemNumber: Number(r.item_number),

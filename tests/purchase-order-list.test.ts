@@ -489,4 +489,37 @@ describe('SCR-124 purchase order list (ME2L suite)', () => {
       });
     }
   });
+
+  it('judges a closed item as closed, whatever its quantities say', async () => {
+    const flags = async (deliveryCompleted: boolean, finalInvoice: boolean) => {
+      await withTenant(client, (tx) => tx.execute(sql`
+        update purchase_order_item
+           set delivery_completed = ${deliveryCompleted}, final_invoice_indicator = ${finalInvoice}
+         where client = ${client} and order_number = '4500000002'
+      `));
+    };
+    const row = async () => (await list({ scope: 'ALL' })).rows.find((r) => r.orderNumber === '4500000002');
+    const orders = async (scope: 'STILL_TO_BE_DELIVERED' | 'STILL_TO_BE_INVOICED' | 'COMPLETED') =>
+      (await list({ scope })).rows.map((r) => r.orderNumber);
+
+    try {
+      // 4 of 10 received, not invoiced, and somebody has closed it to delivery. The goods are
+      // done: calling it partially delivered would send somebody looking for the rest.
+      await flags(true, false);
+      expect(await row()).toMatchObject({ status: 'DELIVERED', openDeliveryQuantity: 6 });
+      expect(await orders('STILL_TO_BE_DELIVERED')).toEqual([]);
+      // It is still open to invoicing: 4 arrived and none of it has been invoiced.
+      expect(await orders('STILL_TO_BE_INVOICED')).toEqual(['4500000002', '4500000003']);
+
+      // Closed at both ends, it is complete at 4 of 10, and it stops being invoicing work.
+      await flags(true, true);
+      expect(await row()).toMatchObject({ status: 'COMPLETED' });
+      expect((await orders('COMPLETED')).sort()).toEqual(['4500000001', '4500000002']);
+      expect(await orders('STILL_TO_BE_INVOICED')).toEqual(['4500000003']);
+    } finally {
+      await flags(false, false);
+    }
+    expect(await row()).toMatchObject({ status: 'PARTIALLY_DELIVERED' });
+  });
+
 });

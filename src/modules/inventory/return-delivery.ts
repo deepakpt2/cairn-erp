@@ -39,6 +39,7 @@ import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, stockQuantity,
 } from './schema';
+import { purchaseOrderItem } from '../purchasing/schema';
 import { materialPeriodAllows } from './material-period-control';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
@@ -560,6 +561,21 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
           'This round returns goods received against a purchase order.',
         );
       }
+      // An item somebody closed does not quietly reopen. Sending goods back makes the claim
+      // that the delivery was complete untrue, and only whoever made that claim should
+      // withdraw it — so this is refused, not cleared on the way past.
+      const [orderItem] = await tx.select().from(purchaseOrderItem).where(and(
+        eq(purchaseOrderItem.client, input.client),
+        eq(purchaseOrderItem.orderNumber, original.purchaseOrderNumber),
+        eq(purchaseOrderItem.itemNumber, original.purchaseOrderItem),
+      ));
+      if (orderItem?.deliveryCompleted) {
+        throw new ReturnDeliveryError(
+          `Purchase order ${original.purchaseOrderNumber} item ${original.purchaseOrderItem} is flagged delivery-completed, and a return does not reopen it.`,
+          'Clear the delivery-completed indicator on the order, then return the goods. No stock was posted.',
+        );
+      }
+
       const receiptBatch = (original.batchNumber ?? '').trim().toUpperCase();
       if (typedBatch && typedBatch !== receiptBatch) {
         throw new ReturnDeliveryError(

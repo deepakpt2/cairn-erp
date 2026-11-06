@@ -11,6 +11,10 @@ import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import {
+  purchaseHeaderState, purchaseItemState,
+  type PurchaseHeaderState, type PurchaseItemState,
+} from './item-state';
 import { getDocumentRelease, type DocumentReleaseState } from './release';
 import { receiptMovementSign, receiptQuantityInOrderUnit, receiptUnitJoins } from './receipt-unit-basis';
 
@@ -111,7 +115,7 @@ export interface DisplayedItem {
   invoicedQuantity: string;
   remainingToDeliver: string;
   remainingToInvoice: string;
-  state: string;
+  state: PurchaseItemState;
   conversion: DisplayedConversion;
   schedules: DisplayedSchedule[];
   assignments: DisplayedAssignment[];
@@ -197,7 +201,7 @@ export interface DisplayedOrder {
   currency: string;
   releaseStatus: string;
   release: DocumentReleaseState;
-  headerState: string;
+  headerState: PurchaseHeaderState;
   items: DisplayedItem[];
   goods: DisplayedGoodsEvent[];
   invoices: DisplayedInvoiceEvent[];
@@ -216,7 +220,7 @@ export interface PurchaseOrderHit {
   documentDate: string;
   currency: string;
   releaseStatus: string;
-  headerState: string;
+  headerState: PurchaseHeaderState;
 }
 
 export type PurchaseOrderDisplayResult =
@@ -277,17 +281,19 @@ function compare(left: string, right: string, scale = 3): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function itemState(marked: boolean, quantity: string, received: string, invoiced: string): string {
-  if (marked) return 'MARKED';
-  if (compare(received, quantity) >= 0 && compare(invoiced, quantity) >= 0) return 'COMPLETED';
-  if (compare(received, quantity) >= 0) return 'DELIVERED';
-  if (compare(received, '0') > 0) return 'PARTIALLY_DELIVERED';
-  return 'OPEN';
+/**
+ * An item's word comes from one place, so this screen and the order list cannot disagree about
+ * it. The quantities decide it until somebody closes the item.
+ */
+function itemState(input: {
+  markedForDeletion: boolean; deliveryCompleted: boolean; finalInvoiceIndicator: boolean;
+  ordered: number; received: number; invoiced: number;
+}): PurchaseItemState {
+  return purchaseItemState(input);
 }
 
-function headerState(states: string[]): string {
-  if (states.length === 0) return 'OPEN';
-  return states.every((state) => state === states[0]) ? states[0] : 'MIXED';
+function headerState(states: PurchaseItemState[]): PurchaseHeaderState {
+  return purchaseHeaderState(states);
 }
 
 /** Share of the stored net value. Rounded half-up at the cent. Not added back onto the item. */
@@ -516,7 +522,12 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
       invoicedQuantity: qty(invoiced),
       remainingToDeliver: sub(quantity, received),
       remainingToInvoice: sub(received, invoiced),
-      state: itemState(row.marked_for_deletion === true, quantity, received, invoiced),
+      state: itemState({
+        markedForDeletion: row.marked_for_deletion === true,
+        deliveryCompleted: row.delivery_completed === true,
+        finalInvoiceIndicator: row.final_invoice_indicator === true,
+        ordered: Number(quantity), received: Number(received), invoiced: Number(invoiced),
+      }),
       conversion: {
         baseUnit,
         numerator: row.numerator == null ? null : Number(row.numerator),
@@ -715,7 +726,7 @@ export async function searchPurchaseOrders(
         documentDate: text(row.document_date),
         currency: text(row.currency),
         releaseStatus: text(row.release_status),
-        headerState: text(row.header_state),
+        headerState: text(row.header_state) as PurchaseHeaderState,
       })),
     };
   });

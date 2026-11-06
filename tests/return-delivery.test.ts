@@ -680,4 +680,40 @@ describe('SCR-145 return delivery (MBRL)', () => {
     expect(view?.items[0].remaining).toBe(36);
     expect(view?.items[0].previouslyReturned).toBe(0);
   });
+
+  it('refuses to return goods against an item somebody closed, and clears nothing on the way past', async () => {
+    const c = await standingClient();
+    const order = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [item('RET-MAT', 10, 100)] });
+    const doc = await postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ itemNumber: 10, quantity: 10, storageLocation: '0001' }],
+    });
+    const flag = async (deliveryCompleted: boolean) => {
+      await withTenant(c, (tx) => tx.execute(sql`
+        update purchase_order_item set delivery_completed = ${deliveryCompleted}
+         where client = ${c} and order_number = ${order.orderNumber} and item_number = 10
+      `));
+    };
+
+    await flag(true);
+    await expect(postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber,
+      ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 4 }],
+    })).rejects.toThrow(/delivery-completed/);
+
+    // Nothing was returned and nothing was cleared on the way past.
+    const view = await getReturnableDocument(c, { documentNumber: doc.materialDocumentNumber });
+    expect(view?.items[0].previouslyReturned).toBe(0);
+    expect(view?.items[0].remaining).toBe(10);
+
+    // Whoever closed the item opens it again, and the return then stands.
+    await flag(false);
+    const returned = await postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber,
+      ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 4 }],
+    });
+    expect(returned.status).toBe('POSTED');
+    expect(returned.lines[0].quantity).toBe('4.000');
+  });
+
 });
