@@ -3867,6 +3867,7 @@ const en: Catalogue = {
     'the item is consumed rather than stocked. Saving a requisition posts nothing — ' +
     'financial and material posting periods are judged by the follow-on documents. ' +
     'An order can be created from a requisition without a request or a quotation.',
+  'purchaseRequisition.list': 'Requisition list',
   'materialPeriod.title': 'Define Material Period Control',
   'materialPeriod.subtitle':
     'One control record per company code: the current material posting year and ' +

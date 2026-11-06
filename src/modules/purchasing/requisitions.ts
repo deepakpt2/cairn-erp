@@ -27,6 +27,7 @@ import {
 } from '../foundation/schema';
 import { glAccount } from '../finance/schema';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
+import { employee } from '../people/schema';
 import { purchaseRequisitionAssignment, purchaseRequisitionItem } from './schema';
 import {
   ReleaseError, assertDocumentNotReleased, requisitionAttributes, syncDocumentRelease,
@@ -84,6 +85,8 @@ const documentInput = z.object({
   documentType: z.string().trim().min(1).max(20).optional().default('STANDARD'),
   /** Total planning's run number. A buyer's requisition does not send one. */
   planningRunNumber: z.string().trim().max(12).optional(),
+  /** Who asked for this, from the employee master. Empty when nobody is named. */
+  requestedBy: z.string().trim().max(20).optional(),
   items: z.array(itemInput).min(1, 'a requisition needs at least one item'),
 });
 
@@ -113,6 +116,7 @@ export interface RequisitionDocument {
   requisitionNumber: string;
   documentType: string;
   requisitionDate: string;
+  requestedBy: string | null;
   createdBy: string;
   createdAt: Date;
   items: RequisitionItemRow[];
@@ -288,6 +292,7 @@ async function loadDocument(tx: Tx, client: string, requisitionNumber: string): 
     requisitionNumber,
     documentType: items[0].documentType,
     requisitionDate: items[0].requisitionDate,
+    requestedBy: items[0].requestedBy,
     createdBy: items[0].createdBy,
     createdAt: items[0].createdAt,
     items: items.map((item) => ({
@@ -314,21 +319,6 @@ async function loadDocument(tx: Tx, client: string, requisitionNumber: string): 
         })),
     })),
   };
-}
-
-export async function listRequisitions(client: string): Promise<RequisitionDocument[]> {
-  return withTenant(client, async (tx) => {
-    const numbers = await tx.execute(sql`
-      select requisition_number from purchase_requisition_item
-      where client = ${client} group by requisition_number order by requisition_number desc limit 100
-    `);
-    const docs: RequisitionDocument[] = [];
-    for (const row of numbers as unknown as Array<{ requisition_number: string }>) {
-      const doc = await loadDocument(tx, client, row.requisition_number);
-      if (doc) docs.push(doc);
-    }
-    return docs;
-  });
 }
 
 export async function getRequisition(client: string, requisitionNumber: string): Promise<RequisitionDocument | null> {
@@ -391,6 +381,7 @@ export async function createRequisition(
         itemNumber,
         createdBy: input.changedBy,
         planningRunNumber: input.planningRunNumber ?? null,
+        requestedBy: input.requestedBy || null,
       });
       let line = 0;
       for (const row of item.assignments) {
@@ -463,6 +454,7 @@ export async function changeRequisition(
           itemNumber,
           requisitionDate: before.requisitionDate,
           createdBy: input.changedBy,
+          requestedBy: input.requestedBy || null,
         });
       } else {
         await tx.update(purchaseRequisitionItem).set({
@@ -470,6 +462,7 @@ export async function changeRequisition(
           requisitionNumber: raw.requisitionNumber,
           itemNumber,
           requisitionDate: before.requisitionDate,
+          requestedBy: input.requestedBy || null,
           changedBy: input.changedBy,
           changedAt: new Date(),
         }).where(and(
@@ -524,6 +517,7 @@ export interface RequisitionChoices {
   storageLocations: Array<{ plant: string; storageLocation: string; name: string }>;
   purchasingGroups: Array<{ purchasingGroup: string; name: string }>;
   units: string[];
+  employees: Array<{ personnelNumber: string; fullName: string }>;
 }
 
 export async function requisitionChoices(client: string): Promise<RequisitionChoices> {
@@ -532,6 +526,11 @@ export async function requisitionChoices(client: string): Promise<RequisitionCho
     const slRows = await tx.select().from(storageLocation).where(eq(storageLocation.client, client));
     const groupRows = await tx.select().from(purchasingGroup).where(eq(purchasingGroup.client, client));
     const unitRows = await tx.select().from(unitOfMeasure).orderBy(asc(unitOfMeasure.code));
+    const employeeRows = await tx.select({
+      personnelNumber: employee.personnelNumber,
+      fullName: employee.fullName,
+    }).from(employee).where(and(eq(employee.client, client), eq(employee.isActive, true)))
+      .orderBy(asc(employee.fullName));
     return {
       plants: plantRows.map((p) => ({ plant: p.plant, name: p.name, companyCode: p.companyCode })),
       storageLocations: slRows.filter((s) => s.isActive).map((s) => ({
@@ -541,6 +540,7 @@ export async function requisitionChoices(client: string): Promise<RequisitionCho
         purchasingGroup: g.purchasingGroup, name: g.name,
       })),
       units: unitRows.map((u) => u.code),
+      employees: employeeRows.map((e) => ({ personnelNumber: e.personnelNumber, fullName: e.fullName })),
     };
   });
 }

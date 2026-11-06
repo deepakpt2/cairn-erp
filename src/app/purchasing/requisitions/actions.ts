@@ -102,12 +102,14 @@ export async function saveRequisitionAction(
   try {
     const input = JSON.parse(typeof payload === 'string' ? payload : '{}') as {
       documentType?: string;
+      requestedBy?: string;
       items?: unknown[];
     };
     const base = {
       client: session.user.client,
       changedBy: session.user.username,
       documentType: input.documentType ?? 'STANDARD',
+      requestedBy: input.requestedBy,
       items: (input.items ?? []) as never[],
     };
     const editing = typeof requisitionNumber === 'string' && requisitionNumber;

@@ -93,14 +93,12 @@ function itemFromDocument(item: RequisitionDocument['items'][number]): ItemRow {
 
 const INITIAL: RequisitionActionState = { ok: false };
 
-export default function Requisitions({ documents, choices, selected, canCreate, viewOnly = false, lockMessage = null, releases, selectedRelease, canRelease }: {
-  documents: RequisitionDocument[];
+export default function Requisitions({ choices, selected, canCreate, viewOnly = false, lockMessage = null, selectedRelease, canRelease }: {
   choices: RequisitionChoices;
   selected: RequisitionDocument | null;
   canCreate: boolean;
   viewOnly?: boolean;
   lockMessage?: string | null;
-  releases: Record<string, DocumentReleaseState>;
   selectedRelease: DocumentReleaseState | null;
   canRelease: boolean;
 }) {
@@ -109,6 +107,7 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
   const [cancelState, cancelAction] = useActionState(cancelRequisitionReleaseAction, { ok: false } as ReleaseActionState);
   const releaseMessage = cancelState.message ? cancelState : releaseState;
   const [documentType, setDocumentType] = useState(selected?.documentType ?? 'STANDARD');
+  const [requestedBy, setRequestedBy] = useState(selected?.requestedBy ?? '');
   const [items, setItems] = useState<ItemRow[]>(
     selected ? selected.items.map(itemFromDocument) : [{ ...EMPTY_ITEM }],
   );
@@ -120,6 +119,7 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
   function payload(): string {
     return JSON.stringify({
       documentType,
+      requestedBy: requestedBy || undefined,
       items: items.map((item) => ({
         itemNumber: item.itemNumber,
         materialNumber: item.material,
@@ -159,47 +159,6 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
 
   return (
     <div className="space-y-4">
-      <section aria-labelledby="pr-overview" className="border border-line bg-surface p-4">
-        <h2 id="pr-overview" className="text-sm font-semibold">Requisitions</h2>
-        {documents.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-soft">No requisitions stand yet. Create the first below.</p>
-        ) : (
-          <table className="grid-table mt-2 text-sm">
-            <thead>
-              <tr className="text-left">
-                <th>Requisition</th>
-                <th>Type</th>
-                <th>Date</th>
-                <th>Items</th>
-                <th>Created by</th>
-                <th>Release</th>
-              </tr>
-            </thead>
-            <tbody>
-              {documents.map((doc) => (
-                <tr key={doc.requisitionNumber}>
-                  <td>
-                    <a className="underline" href={`/purchasing/requisitions?req=${doc.requisitionNumber}`}>
-                      {doc.requisitionNumber}
-                    </a>
-                  </td>
-                  <td>{doc.documentType}</td>
-                  <td>{doc.requisitionDate}</td>
-                  <td>{doc.items.length}</td>
-                  <td>{doc.createdBy}</td>
-                  <td>
-                    {releases[doc.requisitionNumber]
-                      ? releases[doc.requisitionNumber].status === 'RELEASED'
-                        ? 'Released'
-                        : `Pending · step ${releases[doc.requisitionNumber].currentStep} of ${releases[doc.requisitionNumber].steps.length}`
-                      : 'Not required'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
 
       {selected && selectedRelease && (
         <section aria-labelledby="pr-release" className="border border-line bg-surface p-4">
@@ -268,6 +227,21 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
               Create purchase order
             </Link>
           )}
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Requested by</span>
+            <select
+              className="input w-72"
+              value={requestedBy}
+              onChange={(event) => setRequestedBy(event.target.value)}
+            >
+              <option value="">Not named</option>
+              {choices.employees.map((person) => (
+                <option key={person.personnelNumber} value={person.personnelNumber}>
+                  {person.fullName} · {person.personnelNumber}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document type</span>
             <select
@@ -469,6 +443,14 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
             <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
               {state.message}
               {state.remedy ? ` ${state.remedy}` : ''}
+              {state.ok && state.requisitionNumber ? (
+                <>
+                  {' '}
+                  <a className="underline" href={`/purchasing/requisitions?req=${encodeURIComponent(state.requisitionNumber)}`}>
+                    Open requisition {state.requisitionNumber}
+                  </a>
+                </>
+              ) : null}
             </p>
           )}
           {state.warnings?.map((warning) => (

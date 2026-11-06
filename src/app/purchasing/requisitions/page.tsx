@@ -7,13 +7,11 @@ import { t } from '@/platform/i18n';
 import {
   PR_CREATE_CAPABILITY,
   getRequisition,
-  listRequisitions,
   requisitionChoices,
 } from '@/modules/purchasing/requisitions';
 import {
   RELEASE_CAPABILITIES,
   getDocumentRelease,
-  listDocumentReleases,
 } from '@/modules/purchasing/release';
 import Requisitions from './Requisitions';
 
@@ -31,11 +29,7 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const client = session.user.client;
-  const [documents, choices, releases] = await Promise.all([
-    listRequisitions(client),
-    requisitionChoices(client),
-    listDocumentReleases(client, 'PURCHASE_REQUISITION'),
-  ]);
+  const choices = await requisitionChoices(client);
   const selected = params.req ? await getRequisition(client, params.req) : null;
   const selectedRelease = selected
     ? await getDocumentRelease(client, 'PURCHASE_REQUISITION', selected.requisitionNumber)
@@ -55,9 +49,14 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
         <span className="code text-ink-faint">PROC.PR.CREATE · ME51N</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('purchaseRequisition.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/purchasing/requisition-list" className="btn btn-default min-h-11 sm:min-h-8">
+              {t('purchaseRequisition.list')}
+            </Link>
+            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
+              {t('nav.launchpad')}
+            </Link>
+          </div>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchaseRequisition.subtitle')}</p>
       </header>
@@ -66,13 +65,11 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
         <ChangeLock lockObject="PURCHASE_REQUISITION" argument={selected.requisitionNumber} />
       )}
       <Requisitions
-        documents={documents}
         choices={choices}
         selected={selected}
         canCreate={canChange}
         viewOnly={changeLock?.mode === 'DISPLAY'}
         lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
-        releases={Object.fromEntries(releases)}
         selectedRelease={selectedRelease}
         canRelease={can(session, RELEASE_CAPABILITIES.PURCHASE_REQUISITION)}
       />

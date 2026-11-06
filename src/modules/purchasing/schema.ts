@@ -41,6 +41,8 @@ export const purchaseRequisitionItem = pgTable('purchase_requisition_item', {
   creationSource: varchar('creation_source', { length: 16 }).notNull().default('MANUAL'),
   /** Set when total planning created the item. A buyer's requisition leaves this empty and is not rewritten. */
   planningRunNumber: varchar('planning_run_number', { length: 12 }),
+  /** Who asked for this. An employee, not necessarily a holder of a login; the saver stays in created_by. */
+  requestedBy: varchar('requested_by', { length: 20 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.requisitionNumber, t.itemNumber] }),
