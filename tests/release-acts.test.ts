@@ -243,6 +243,50 @@ describe('SCR-060 release acts', () => {
     });
   });
 
+  it('names what a save to a released order would move, and the release is the way through', async () => {
+    const c = await standingClient();
+    const order = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [orderItem(2000)] });
+    await releaseDocument({ client: c, changedBy: ACTOR, documentCategory: 'PURCHASE_ORDER', documentNumber: order.orderNumber, releaseCode: 'MGR' });
+    await releaseDocument({ client: c, changedBy: ACTOR, documentCategory: 'PURCHASE_ORDER', documentNumber: order.orderNumber, releaseCode: 'FIN' });
+    expect(await getDocumentRelease(c, 'PURCHASE_ORDER', order.orderNumber)).toMatchObject({ status: 'RELEASED' });
+
+    // A refusal is only as good as what it says: whoever released the order is entitled to
+    // know what they are being asked to approve a second time.
+    await expect(changeOrder({
+      client: c, changedBy: ACTOR, ...header, orderNumber: order.orderNumber,
+      items: [{ ...orderItem(2000), itemNumber: 10, quantity: 20, scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 20 }] }],
+    })).rejects.toThrow(/quantity 10 to 20/);
+
+    await expect(changeOrder({
+      client: c, changedBy: ACTOR, ...header, orderNumber: order.orderNumber,
+      items: [{ ...orderItem(3000), itemNumber: 10 }],
+    })).rejects.toThrow(/price 2000 to 3000 per 1/);
+
+    // Tightening what was approved is not an impact. The order is still released, so the
+    // save is still refused - just without a list of things that would move.
+    await expect(changeOrder({
+      client: c, changedBy: ACTOR, ...header, orderNumber: order.orderNumber,
+      items: [{ ...orderItem(2000), itemNumber: 10, overdeliveryTolerance: '0', unlimitedOverdelivery: false }],
+    })).rejects.toThrow(/released/);
+
+    // Cancel the release, save, release again. An approval stands against the value and the
+    // quantity it was given for, and the save re-determines the strategy on its own.
+    await cancelDocumentRelease({
+      client: c, changedBy: ACTOR, documentCategory: 'PURCHASE_ORDER', documentNumber: order.orderNumber,
+    });
+    await changeOrder({
+      client: c, changedBy: ACTOR, ...header, orderNumber: order.orderNumber,
+      items: [{ ...orderItem(2000), itemNumber: 10, quantity: 20, scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 20 }] }],
+    });
+    expect((await getOrder(c, order.orderNumber))?.items[0]).toMatchObject({ quantity: '20.000' });
+    await releaseDocument({
+      client: c, changedBy: ACTOR, documentCategory: 'PURCHASE_ORDER',
+      documentNumber: order.orderNumber, releaseCode: 'MGR',
+    });
+    expect(await getDocumentRelease(c, 'PURCHASE_ORDER', order.orderNumber))
+      .toMatchObject({ status: 'PENDING', currentStep: 1 });
+  });
+
   it('restarts a pending document at step zero when a change moves its claimant', async () => {
     const c = await standingClient();
     const order = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [orderItem(2000)] });
