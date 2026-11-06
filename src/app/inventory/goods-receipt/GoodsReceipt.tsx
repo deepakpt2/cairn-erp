@@ -99,6 +99,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
                     <th>Item</th><th>Material</th>
                     <th>Plant</th><th>Ordered</th>
                     <th>Received</th><th>Remaining</th>
+                    <th>Overdelivery</th>
                     <th>Receipt quantity</th><th>Storage location</th><th>Batch</th>
                   </tr>
                 </thead>
@@ -111,6 +112,9 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
                       <td>{item.ordered} {item.unit}</td>
                       <td>{item.received}</td>
                       <td>{item.remaining}</td>
+                      <td className="text-ink-soft">
+                        {item.unlimitedOverdelivery ? 'Unlimited' : `${item.overdeliveryTolerance}%`}
+                      </td>
                       <td>
                         {item.eligible ? (
                           <input
