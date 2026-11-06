@@ -243,6 +243,14 @@ describe('purchase order delivery control', () => {
     it('leaves the item open where no rule stands, closes it under a company rule, and lets a plant row overrule the company', async () => {
       const c = await standingClient();
       const under = 5;
+      // Nothing of a previous run may stand: the plant row wins over the company one, so a
+      // leftover override would decide the very case this test is about.
+      await withTenant(c, (tx) => tx.execute(sql`
+        delete from purchase_delivery_completion_plant where client = ${c}
+      `));
+      await withTenant(c, (tx) => tx.execute(sql`
+        delete from purchase_delivery_completion_policy where client = ${c}
+      `));
       // 96 of 100 is inside the 5% underdelivery floor, so it is a candidate for closing.
       const open = await createOrder({
         client: c, changedBy: ACTOR, ...header,
