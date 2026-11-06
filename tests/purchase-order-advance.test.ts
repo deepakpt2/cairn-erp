@@ -31,6 +31,7 @@ describe('a vendor advance raised against a purchase order', () => {
     await defineTestRanges(tenant, { fiscalYear: 2026 });
     await withTenant(client, async (tx) => {
       await defineRange(tx, { client, objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', numberLength: 7, createdBy: ACTOR });
+      await defineRange(tx, { client, objectCode: 'VENDDPREQ', subObject: '*', prefix: 'VR', numberLength: 7, createdBy: ACTOR });
       await tx.execute(sql`
         insert into purchasing_org (client, purchasing_org, name, company_code, created_by)
         values (${client}, '1000', 'Advance purchasing organization', '1000', ${ACTOR}) on conflict do nothing
