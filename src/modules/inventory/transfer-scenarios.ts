@@ -1,3 +1,5 @@
+import { RETURNS } from './warehouse-stocks';
+
 /**
  * The transfer movement catalogue — SCR-131 / MB1B.
  *
@@ -22,6 +24,12 @@ export interface TransferScenario {
   locationRule: 'SAME' | 'DIFFERENT' | 'ANY';
   isTwoStep: boolean;
   valuationRelevant: boolean;
+  /**
+   * Whether the counter movement carries value. True only where the forward posting put value INTO
+   * valuated stock that the issuing bucket never carried — returns stock — and the reversal therefore
+   * has to take it back out. Every other move inside one valuation area carries no value either way.
+   */
+  reversalValuationRelevant?: boolean;
   negativeStockPolicy: 'LOCATION' | 'FORBID';
 }
 
@@ -54,6 +62,36 @@ export const TRANSFER_SCENARIOS: readonly TransferScenario[] = [
     plantRule: 'SAME', locationRule: 'SAME', isTwoStep: false,
     valuationRelevant: false, negativeStockPolicy: 'LOCATION',
   },
+  // The returns transfers — SAP 453, 457 and 459. Goods that came back from a customer stand in
+  // returns stock: counted, and deliberately not valued, because the receipt that brought them in
+  // (651) wrote no accounting document and the goods are not the company's stock again until
+  // somebody has inspected them. Taking them out of returns stock is the moment they become valuated
+  // stock again, and therefore the moment the accounting document is written — which is why these
+  // three carry value and their counters carry it back out, while 321 carries none.
+  {
+    code: '453', movementType: 'TR_RETURNS_UNRES',
+    reversalMovementType: 'TR_RETURNS_UNRES_REV', kind: 'STOCK_TYPE',
+    description: 'Returns stock to unrestricted-use',
+    fromStockType: RETURNS, toStockType: 'UNRESTRICTED',
+    plantRule: 'SAME', locationRule: 'SAME', isTwoStep: false,
+    valuationRelevant: true, reversalValuationRelevant: true, negativeStockPolicy: 'LOCATION',
+  },
+  {
+    code: '457', movementType: 'TR_RETURNS_QUAL',
+    reversalMovementType: 'TR_RETURNS_QUAL_REV', kind: 'STOCK_TYPE',
+    description: 'Returns stock to quality inspection',
+    fromStockType: RETURNS, toStockType: 'QUALITY',
+    plantRule: 'SAME', locationRule: 'SAME', isTwoStep: false,
+    valuationRelevant: true, reversalValuationRelevant: true, negativeStockPolicy: 'LOCATION',
+  },
+  {
+    code: '459', movementType: 'TR_RETURNS_BLOCK',
+    reversalMovementType: 'TR_RETURNS_BLOCK_REV', kind: 'STOCK_TYPE',
+    description: 'Returns stock to blocked',
+    fromStockType: RETURNS, toStockType: 'BLOCKED',
+    plantRule: 'SAME', locationRule: 'SAME', isTwoStep: false,
+    valuationRelevant: true, reversalValuationRelevant: true, negativeStockPolicy: 'LOCATION',
+  },
 ] as const;
 
 /**
@@ -81,6 +119,11 @@ export const COUNTER_CODES: Record<string, [string, string]> = {
   '312': ['311', 'TRANSFER_SLOC'],
   '302': ['301', 'TRANSFER_PLANT'],
   '322': ['321', 'TRANSFER_STYPE'],
+  // The returns counters. Entered by hand they are refused — a counter is what a reversal posts —
+  // but they have to be known, or reversing a returns transfer would answer with a missing row.
+  '454': ['453', 'TR_RETURNS_UNRES'],
+  '458': ['457', 'TR_RETURNS_QUAL'],
+  '460': ['459', 'TR_RETURNS_BLOCK'],
 };
 
 /**
@@ -104,7 +147,10 @@ export const DELIVERED_TRANSFER_MOVEMENTS = [
       reversalMovementType: null,
       movementKind: s.kind, sourceStockType: s.toStockType, destinationStockType: s.fromStockType,
       plantRule: s.plantRule, locationRule: s.locationRule, isTwoStep: false,
-      valuationRelevant: false, negativeStockPolicy: 'LOCATION',
+      // The counter carries value only where the forward posting created it: undoing a returns
+      // transfer has to take the value back out of valuated stock, or the books would keep a value
+      // for goods that are sitting in returns stock again.
+      valuationRelevant: s.reversalValuationRelevant ?? false, negativeStockPolicy: 'LOCATION',
     },
   ]),
   // TRANSFER_STYPE_BLOCK (323) is a one-way quality-to-blocked stock type transfer

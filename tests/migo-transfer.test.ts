@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   MIGO_REFERENCES, migoMatrix, resolveMigoCell,
 } from '../src/modules/inventory/migo';
-import { TRANSFER_SCENARIOS } from '../src/modules/inventory/transfer-scenarios';
 
 /**
  * SCR-141 / MIGO A04: the transfer posting is entered on the same screen as every other
@@ -35,7 +34,10 @@ describe('SCR-141 MIGO A04 transfer posting', () => {
   it('offers exactly the three transfer movements canon carries, and nothing else', () => {
     const cell = resolveMigoCell('A04', 'R10');
     if (cell?.kind !== 'POST_HERE') throw new Error('A04 + R10 must post here');
-    expect(cell.movements).toEqual(TRANSFER_SCENARIOS.map((s) => s.code));
+    // MIGO curates its own three: the transfer-posting screen derives its list from the whole
+    // catalogue and so carries the returns transfers (453, 457, 459) and 323 besides, but this grid
+    // has never offered every transfer canon knows.
+    expect(cell.movements).toEqual(['311', '301', '321']);
   });
 
   it('keeps the posting cells, which now include the cancellation', () => {

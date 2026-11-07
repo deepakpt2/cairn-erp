@@ -59,6 +59,12 @@ export const POSTING_EVENTS: PostingEvent[] = [
   // no seeded row: a tenant that has not maintained the event is refused at posting, which is the honest answer
   // (§14.7, DI-020).
   { event: 'SALES_ISSUE', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
+  // The credit side of a returns transfer (453, 457, 459). Goods that came back stand in returns
+  // stock with no value; the transfer that takes them out of it is where they become valuated stock
+  // again, and this is the account the value is credited from. Registered with no seeded row, as
+  // SALES_ISSUE is: a tenant that has not maintained the event is refused at posting, because an
+  // account nobody chose is not an answer.
+  { event: 'RETURNS_TRANSFER', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'SALES_REVENUE', referenceAlias: 'ERL', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'PRICE_DIFFERENCE', referenceAlias: 'PRD', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'TAX', referenceAlias: 'MWS', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },

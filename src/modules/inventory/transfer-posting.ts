@@ -27,6 +27,7 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { RETURNS } from './warehouse-stocks';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
 import { noteBatchControlUse } from './batch-control-use';
@@ -82,6 +83,10 @@ const MOVEMENT_ALIASES: Record<string, string> = {
   '301': 'TRANSFER_PLANT',
   '321': 'TRANSFER_STYPE',
   '323': 'TRANSFER_STYPE_BLOCK',
+  // The returns transfers: out of returns stock, where a return's value arrives.
+  '453': 'TR_RETURNS_UNRES',
+  '457': 'TR_RETURNS_QUAL',
+  '459': 'TR_RETURNS_BLOCK',
 };
 
 /** The counters, so a hand-entered counter is refused with its own movement named. */
@@ -89,6 +94,9 @@ const COUNTER_ALIASES: Record<string, [string, string]> = {
   '312': ['311', 'TRANSFER_SLOC_REV'],
   '302': ['301', 'TRANSFER_PLANT_REV'],
   '322': ['321', 'TRANSFER_STYPE_REV'],
+  '454': ['453', 'TR_RETURNS_UNRES_REV'],
+  '458': ['457', 'TR_RETURNS_QUAL_REV'],
+  '460': ['459', 'TR_RETURNS_BLOCK_REV'],
 };
 
 /** Two-step movements canon does not carry — §14 requires them refused by name, never run one-step. */
@@ -151,7 +159,7 @@ async function resolveScenario(
   if (!movementName) {
     throw new TransferPostingError(
       `Movement type ${trimmed || '(empty)'} is not a transfer.`,
-      'Transfer postings stand on 311 (storage location to storage location), 301 (plant to plant) or 321 (quality inspection to unrestricted).',
+      'Transfer postings stand on 311 (storage location to storage location), 301 (plant to plant), 321 (quality inspection to unrestricted), 323 (quality inspection to blocked), or 453, 457 and 459 (out of returns stock).',
     );
   }
 
@@ -607,6 +615,12 @@ export interface TransferPreflight {
   position: { fiscalYear: number; period: number };
   q: number;
   valueMoves: boolean;
+  /**
+   * True where the goods are leaving returns stock for valuated stock: value arrives rather than
+   * moves, because the issuing bucket never carried any (§11 — the receipt that filled it, 651,
+   * wrote no accounting document).
+   */
+  valueEntersStock: boolean;
   movedValue: number;
   receivingValue: number;
   stockOnHand: number;
@@ -778,6 +792,20 @@ async function preflight(
     : movedValue;
   }
 
+  // Out of returns stock into valuated stock the value does not move — it ARRIVES. Returns stock is
+  // not valuated: 651 counted the goods and wrote no accounting document, so there is nothing on the
+  // issuing side to carry across and there is value to create on the receiving side. This is the
+  // moment SAP writes the accounting document for a return, and the reason it is written here rather
+  // than at the goods receipt.
+  const valueEntersStock = scenario.fromStockType === RETURNS
+    && scenario.toStockType !== RETURNS
+    && scenario.valuationRelevant;
+  if (valueEntersStock) {
+    receivingValue = round2(q * (receiving.valuation.priceControl === 'STANDARD'
+      ? Number(receiving.valuation.standardPrice) / Number(receiving.valuation.priceUnit)
+      : Number(receiving.valuation.movingAveragePrice) / Number(receiving.valuation.priceUnit)));
+  }
+
   const stockOnHand = (await stockAt(
   tx, client, materialNumber, input.issuingPlant,
   issuingLocation.storageLocation, scenario.fromStockType, batch,
@@ -786,7 +814,7 @@ async function preflight(
   return {
     scenario, mat, baseUnit, entryUnit, entryQuantity: input.quantity, quantity, q,
     issuing, receiving, issuingLocation, receivingLocation, company, position,
-    valueMoves, movedValue, receivingValue, stockOnHand, batch,
+    valueMoves, valueEntersStock, movedValue, receivingValue, stockOnHand, batch,
   };
 }
 
@@ -830,11 +858,15 @@ export async function validateTransfer(
 
   return withTenant(input.client, async (tx) => {
     const pre = await preflight(tx, input.client, input.changedBy, { ...input, requestKey: 'validate' }, materialNumber);
-    const journalExpected = pre.valueMoves
-      && round2(pre.receivingValue - pre.movedValue) !== 0;
+    const journalExpected = pre.valueEntersStock
+      || (pre.valueMoves && round2(pre.receivingValue - pre.movedValue) !== 0);
 
     const notes: string[] = [];
-    if (pre.valueMoves) {
+    if (pre.valueEntersStock) {
+      notes.push(
+        `The goods leave returns stock and become valuated stock again: a journal posts for ${pre.receivingValue.toFixed(2)}.`,
+      );
+    } else if (pre.valueMoves) {
       notes.push(
         journalExpected
           ? `Value moves and the receiving plant values it differently: a journal posts for ${round2(pre.receivingValue - pre.movedValue).toFixed(2)}.`
@@ -923,7 +955,7 @@ export async function postTransferInTx(tx: Tx, input: PostTransferInput): Promis
   const {
     scenario, mat, entryUnit, quantity, issuing, receiving,
     issuingLocation, receivingLocation, company, position,
-    valueMoves, movedValue, receivingValue, q, batch,
+    valueMoves, valueEntersStock, movedValue, receivingValue, q, batch,
   } = pre;
   const refused = await batchClassificationRefusal(tx, input.client, scenario.movementType);
   if (refused) throw new TransferPostingError(refused.message, refused.remedy);
@@ -937,7 +969,39 @@ export async function postTransferInTx(tx: Tx, input: PostTransferInput): Promis
   // standard-priced receiving plant values the stock differently from what was transferred —
   // SAP posts no journal otherwise. §11: never assume cross-plant means a valuation change.
   let journalNumber: string | null = null;
-  if (valueMoves && round2(receivingValue - movedValue) !== 0) {
+  if (valueEntersStock) {
+    // Inventory is debited with what the goods are worth now that they are stock again, and the
+    // value is credited from the account the tenant maintains for returns transfers. Refused by name
+    // when that account does not stand: an account nobody chose is not an answer.
+    const chart = company.chartOfAccounts;
+    const stockAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', receiving.valuation.valuationClass);
+    const offsetAccount = await resolveAccount(tx, input.client, chart, 'RETURNS_TRANSFER', receiving.valuation.valuationClass);
+    const lines = [
+      { glAccount: stockAccount, debitCredit: 'S' as const, amount: receivingValue.toFixed(2), material: materialNumber, plant: input.receivingPlant },
+      { glAccount: offsetAccount, debitCredit: 'H' as const, amount: receivingValue.toFixed(2), material: materialNumber, plant: input.receivingPlant },
+    ];
+    const journal = await postJournalEntry(tx, {
+      client: input.client,
+      companyCode: issuing.companyCode,
+      documentType: JOURNAL_DOCUMENT_TYPE,
+      documentDate: input.documentDate,
+      postingDate: input.postingDate,
+      fiscalYear: position.fiscalYear,
+      postingPeriod: position.period,
+      currency: company.currency,
+      localCurrency: company.currency,
+      reference: `TRANSFER ${scenario.code}`,
+      headerText: input.headerText,
+      lines,
+      origin: { documentClass: MATERIAL_DOCUMENT_CLASS, documentKey: number },
+      postedBy: input.changedBy,
+      transactionCode: TRANSFER_POST_CAPABILITY,
+    }).catch((error: unknown) => {
+      if (error instanceof PostingError) throw new TransferPostingError(error.message, error.remedy);
+      throw error;
+    });
+    journalNumber = journal.documentNumber;
+  } else if (valueMoves && round2(receivingValue - movedValue) !== 0) {
     const chart = company.chartOfAccounts;
     const receivingAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', receiving.valuation.valuationClass);
     const issuingAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', issuing.valuation.valuationClass);
@@ -1028,7 +1092,11 @@ export async function postTransferInTx(tx: Tx, input: PostTransferInput): Promis
     storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType, batchNumber: batch,
   }, q);
 
-  if (valueMoves) {
+  if (valueEntersStock) {
+    // The quantity and the value both arrive: returns stock was never in the valuation area's
+    // totals, so nothing is taken from the issuing side — there is nothing there to take.
+    await moveValuation(tx, input.client, input.changedBy, receiving.valuation, q, receivingValue);
+  } else if (valueMoves) {
     await moveValuation(tx, input.client, input.changedBy, issuing.valuation, -q, -movedValue);
     await moveValuation(tx, input.client, input.changedBy, receiving.valuation, q, receivingValue);
   }
@@ -1212,7 +1280,24 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
     // of the movement that posted it; a reversal that decided differently would either move value
     // the transfer never moved, or leave value behind that it did.
     const reversalMovesValue = Boolean(movement.valuationRelevant) && Boolean(counter.valuationRelevant);
-    if (reversalMovesValue) {
+    // A returns transfer did not move value from one valuated bucket to another — it put value INTO
+    // valuated stock that returns stock had never carried. Undoing it therefore takes the quantity and
+    // the value back out of the valuated side, and does NOT add them to the returns side, which was
+    // never in the valuation area at all. Reversing it the ordinary way would leave the books counting
+    // goods in returns stock as stock the company owns.
+    const valueEnteredStock = movement.sourceStockType === RETURNS
+      && movement.destinationStockType !== RETURNS
+      && Boolean(movement.valuationRelevant);
+    if (reversalMovesValue && valueEnteredStock) {
+      const [valuation] = await tx.select().from(materialValuation).where(and(
+        eq(materialValuation.client, input.client),
+        eq(materialValuation.materialNumber, issue.materialNumber),
+        eq(materialValuation.valuationArea, receipt.plant),
+      ));
+      if (valuation) {
+        await moveValuation(tx, input.client, input.changedBy, valuation, -quantity, -Number(receipt.value));
+      }
+    } else if (reversalMovesValue) {
       for (const [plant, quantityDelta, valueDelta] of [
         [receipt.plant, -quantity, -Number(receipt.value)],
         [issue.plant, quantity, Number(issue.value)],

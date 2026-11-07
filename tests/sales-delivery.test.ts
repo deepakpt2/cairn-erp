@@ -31,6 +31,7 @@ import {
   releaseSalesOrderCredit,
 } from '../src/modules/sales/sales-order';
 import { postReturnsReceipt, ReturnsError } from '../src/modules/sales/returns';
+import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import {
   assignSalesAreaDimensions,
@@ -977,5 +978,87 @@ describe('sales fulfillment and billing (DI-020)', () => {
       postingDate: DATE, requestKey,
       lines: [{ lineNumber: 10, quantity: 1, storageLocation: STORE }],
     })).rejects.toThrow(ReturnsError);
+  });
+
+  // ---------------------------------------------------------------------------------------------------
+  // Out of returns stock: SAP 453, 457 and 459. This is where a return's value arrives — the receipt
+  // that brought the goods back counted them and posted nothing, and the transfer that releases them
+  // after inspection is the moment they become valuated stock again, and the moment the accounting
+  // document is written.
+  // ---------------------------------------------------------------------------------------------------
+
+  const transferReturns = (movementTypeCode: string, quantity: number, requestKey: string) =>
+    postTransfer({
+      client: tenant.client, changedBy: ACTOR, movementTypeCode,
+      materialNumber: MATERIAL, quantity,
+      issuingPlant: PLANT, issuingStorageLocation: STORE,
+      receivingPlant: PLANT, receivingStorageLocation: STORE,
+      postingDate: DATE, documentDate: DATE, requestKey,
+    });
+
+  it('takes inspected goods out of returns stock, and that is where their value arrives', async () => {
+    const before = await returnsState();
+    expect(bucketOf(before.buckets, 'RETURNS')).toBe(4);
+
+    // No account stands for returns transfers, and the posting says so rather than choosing one.
+    await expect(transferReturns('453', 2, key('returns-transfer'))).rejects.toThrow(/RETURNS_TRANSFER/);
+
+    // The tenant names the account the value is credited from, as it does for every other event.
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      insert into account_determination (client, chart_of_accounts, event, valuation_class, general_modifier, gl_account, created_by)
+      select ${tenant.client}, c.chart_of_accounts, 'RETURNS_TRANSFER', 'RAW_INVENTORY', '', '510300', ${ACTOR}
+        from (select chart_of_accounts from chart_of_accounts where client = ${tenant.client} limit 1) c
+    `));
+
+    const moved = await transferReturns('453', 2, key('returns-transfer-posted'));
+
+    // The accounting document SAP writes here rather than at the goods receipt.
+    expect(moved.journalDocumentNumber).not.toBeNull();
+    const journal = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select gl_account, debit_credit, amount_local::text as amount
+        from journal_entry_line
+       where client = ${tenant.client} and document_number = ${moved.journalDocumentNumber}
+       order by line_number
+    `) as unknown as Promise<Array<{ gl_account: string; debit_credit: string; amount: string }>>);
+    expect(journal.map((row) => `${row.gl_account}:${row.debit_credit}`)).toEqual(['120000:S', '510300:H']);
+    const value = Number(journal[0].amount);
+    expect(value).toBeGreaterThan(0);
+
+    // Counted before, valued now: the quantity and the value both arrive, because returns stock was
+    // never in the valuation area's totals.
+    const after = await returnsState();
+    expect(bucketOf(after.buckets, 'RETURNS')).toBe(2);
+    expect(bucketOf(after.buckets, 'UNRESTRICTED')).toBe(bucketOf(before.buckets, 'UNRESTRICTED') + 2);
+    expect(Number(after.valuation.q)).toBeCloseTo(Number(before.valuation.q) + 2, 3);
+    expect(Number(after.valuation.v)).toBeCloseTo(Number(before.valuation.v) + value, 2);
+
+    // And reversing it takes the value back out: goods sitting in returns stock are not stock again.
+    const reversed = await reverseTransfer({
+      client: tenant.client, changedBy: ACTOR, materialDocumentNumber: moved.materialDocumentNumber,
+      postingDate: DATE, documentDate: DATE, requestKey: key('returns-transfer-reversed'),
+    });
+    expect(reversed.journalDocumentNumber).not.toBeNull();
+    const back = await returnsState();
+    expect(bucketOf(back.buckets, 'RETURNS')).toBe(4);
+    expect(Number(back.valuation.q)).toBeCloseTo(Number(before.valuation.q), 3);
+    expect(Number(back.valuation.v)).toBeCloseTo(Number(before.valuation.v), 2);
+  });
+
+  it('sends an inspected return to quality inspection or to blocked stock, by the movement chosen', async () => {
+    const before = await returnsState();
+    const blockedBefore = bucketOf(before.buckets, 'BLOCKED');
+
+    await transferReturns('457', 1, key('returns-to-quality'));
+    const inspected = await returnsState();
+    expect(bucketOf(inspected.buckets, 'QUALITY')).toBe(1);
+    expect(bucketOf(inspected.buckets, 'RETURNS')).toBe(3);
+
+    await transferReturns('459', 1, key('returns-to-blocked'));
+    const blocked = await returnsState();
+    expect(bucketOf(blocked.buckets, 'BLOCKED')).toBe(blockedBefore + 1);
+    expect(bucketOf(blocked.buckets, 'RETURNS')).toBe(2);
+
+    // Both took value with them: nothing is left counted and unvalued that is not in returns stock.
+    expect(Number(blocked.valuation.q)).toBeCloseTo(Number(before.valuation.q) + 2, 3);
   });
 });
