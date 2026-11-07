@@ -33,6 +33,7 @@ import { StorageLocationError, resolveStorageLocation, storageLocationRequired }
 import { UnitConversionError } from '../inventory/unit-conversion';
 
 import { delivery, deliveryLine, deliveryPicking, salesOrder, salesOrderLine } from './schema';
+import { DOCUMENT_TYPE_REMEDY, STANDARD_DELIVERY_TYPE, salesDocumentTypeFor } from './document-type';
 import { deliveredOf, orderLineProgress } from './fulfillment-quantities';
 import { creditAreaFor } from './sales-order';
 
@@ -41,7 +42,6 @@ export const DELIVERY_PICK_CAPABILITY = 'SALES.DELIVERY.PICK';
 export const DELIVERY_GOODS_ISSUE_CAPABILITY = 'SALES.GI.POST';
 export const DELIVERY_ROUTE = '/sales/delivery';
 export const DELIVERY_OBJECT_CLASS = 'delivery';
-export const DELIVERY_TYPE = { code: 'LF', name: 'Outbound delivery', rangeSubObject: 'LF' } as const;
 /** The movement that ships to a customer, named as the inventory engine's own scenario table names it. */
 export const DELIVERY_GOODS_ISSUE_MOVEMENT = '601';
 
@@ -548,16 +548,25 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       });
     }
 
+    // The document type is configuration now (9226); see the same note in sales-order.ts.
+    const deliveryType = await salesDocumentTypeFor(tx, parsed.client, STANDARD_DELIVERY_TYPE);
+    if (!deliveryType) {
+      throw new DeliveryError(
+        `Sales document type ${STANDARD_DELIVERY_TYPE} does not stand for this tenant, so no delivery number can be drawn and no delivery can be created.`,
+        DOCUMENT_TYPE_REMEDY,
+      );
+    }
+
     let number: string;
     try {
       const drawn = await allocateNumber(tx, {
-        client: parsed.client, objectCode: 'DELIVERY', companyCode: '*',
-        subObject: DELIVERY_TYPE.rangeSubObject, fiscalYear: 0, allocatedBy: parsed.changedBy,
+        client: parsed.client, objectCode: deliveryType.numberRangeObject, companyCode: '*',
+        subObject: deliveryType.numberRangeSubObject, fiscalYear: 0, allocatedBy: parsed.changedBy,
       });
       number = drawn.display;
     } catch {
       throw new DeliveryError(
-        `No active internal DELIVERY number range stands for sub-object ${DELIVERY_TYPE.rangeSubObject}, so no delivery number can be drawn.`,
+        `No active internal ${deliveryType.numberRangeObject} number range stands for sub-object ${deliveryType.numberRangeSubObject} of sales document type ${deliveryType.documentType}, so no delivery number can be drawn.`,
         'Define or unblock the interval on the number ranges screen, then save again.',
       );
     }
@@ -565,7 +574,7 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
     await tx.insert(delivery).values({
       client: parsed.client,
       deliveryNumber: number,
-      documentType: DELIVERY_TYPE.code,
+      documentType: deliveryType.documentType,
       orderNumber: order.orderNumber,
       salesOrg: order.salesOrg,
       distributionChannel: order.distributionChannel,

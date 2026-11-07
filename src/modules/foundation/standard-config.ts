@@ -34,6 +34,7 @@ import type { Tx } from '../../platform/db/client';
 import { buildPeriodRows } from '../../platform/periods';
 import { recordChange } from '../../platform/change';
 import { applyPaymentTermDefaults } from './payment-terms';
+import { STANDARD_SALES_DOCUMENT_TYPES } from '../sales/document-type';
 import {
   RETAINED_EARNINGS_EVENT,
   STANDARD_RETAINED_EARNINGS_INDICATOR,
@@ -57,6 +58,7 @@ import {
   financialStatementAssignment, financialStatementNode, financialStatementVersion,
 } from '../finance/schema';
 import { glAccountGroup } from '../finance/gl-account-group-schema';
+import { salesDocumentType } from '../sales/schema';
 import {
   deriveGlAccountType,
   deriveIsBalanceSheet,
@@ -621,6 +623,20 @@ export async function applyStandardPackage(
         requiresReference: documentTypeSpec.requiresReference ?? false,
         createdBy: activatedBy,
       })
+      .onConflictDoNothing();
+  }
+
+  /* ── Sales document types ─────────────────────────────────────────────────── */
+  // VOV8, the delivery type and the billing type, held in one table since 9226. The three the chain uses
+  // today are delivered with the package rather than hard-coded in the services, because the row is where
+  // the number range is read from: a tenant without it has no type for an order to carry and no interval
+  // for its number, and the service refuses rather than inventing one.
+  // One pass, in the order the catalogue stands in: a type that names a cancellation counterpart is written
+  // after that counterpart, because the column carries a foreign key and each row is its own insert.
+  for (const spec of STANDARD_SALES_DOCUMENT_TYPES) {
+    await tx
+      .insert(salesDocumentType)
+      .values({ client, ...spec, createdBy: activatedBy })
       .onConflictDoNothing();
   }
 

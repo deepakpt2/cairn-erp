@@ -39,13 +39,12 @@ import { customerCredit } from '../finance/schema';
 import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
 import { PricingError, assertMaterialAtPlant, itemNetAmount, priceItem, resolveCustomerSalesData } from './pricing';
 import { salesOrder, salesOrderLine } from './schema';
+import { DOCUMENT_TYPE_REMEDY, STANDARD_ORDER_TYPE, salesDocumentTypeFor } from './document-type';
 
 export const SALES_ORDER_CAPABILITY = 'SALES.ORDER.CREATE';
 export const SALES_ORDER_RELEASE_CAPABILITY = 'SALES.ORDER.RELEASE';
 export const SALES_ORDER_OBJECT_CLASS = 'sales_order';
 export const SALES_ORDER_ROUTE = '/sales/orders';
-/** The document type this round: standard order, whose number-range sub-object is OR. */
-export const SALES_ORDER_TYPE = { code: 'OR', name: 'Standard order', rangeSubObject: 'OR' } as const;
 
 export class SalesOrderError extends Error {
   remedy: string;
@@ -518,16 +517,28 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
       }
     }
 
+    // The document type is configuration now (9226): what the order is called and where its number comes
+    // from are read from the row, so a new type needs no deployment. A type that does not stand is a
+    // refusal, not a fallback — the number range is on the row, and inventing one would draw a number
+    // from an interval nothing is watching.
+    const orderType = await salesDocumentTypeFor(tx, parsed.client, STANDARD_ORDER_TYPE);
+    if (!orderType) {
+      throw new SalesOrderError(
+        `Sales document type ${STANDARD_ORDER_TYPE} does not stand for this tenant, so no order number can be drawn and no sales order can be created.`,
+        DOCUMENT_TYPE_REMEDY,
+      );
+    }
+
     let number: string;
     try {
       const drawn = await allocateNumber(tx, {
-        client: parsed.client, objectCode: 'SALESORD', companyCode: '*',
-        subObject: SALES_ORDER_TYPE.rangeSubObject, fiscalYear: 0, allocatedBy: parsed.changedBy,
+        client: parsed.client, objectCode: orderType.numberRangeObject, companyCode: '*',
+        subObject: orderType.numberRangeSubObject, fiscalYear: 0, allocatedBy: parsed.changedBy,
       });
       number = drawn.display;
     } catch {
       throw new SalesOrderError(
-        `No active internal SALESORD number range stands for sub-object ${SALES_ORDER_TYPE.rangeSubObject}, so no order number can be drawn.`,
+        `No active internal ${orderType.numberRangeObject} number range stands for sub-object ${orderType.numberRangeSubObject} of sales document type ${orderType.documentType}, so no order number can be drawn.`,
         'Define or unblock the interval on the number ranges screen, then save again.',
       );
     }
@@ -535,7 +546,7 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
     await tx.insert(salesOrder).values({
       client: parsed.client,
       orderNumber: number,
-      documentType: SALES_ORDER_TYPE.code,
+      documentType: orderType.documentType,
       salesOrg: parsed.salesOrg,
       distributionChannel: parsed.distributionChannel,
       division: parsed.division,

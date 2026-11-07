@@ -25,7 +25,37 @@ export const ORDER_STATUSES = ['OPEN', 'CANCELLED'] as const;
 export const ORDER_LINE_STATUSES = ['OPEN', 'REJECTED'] as const;
 /** The only condition type that stands today: the item price. A discount step is DI-018. */
 export const CONDITION_TYPES = ['PR00'] as const;
-export const SALES_ORDER_TYPE = { code: 'OR', rangeSubObject: 'OR' } as const;
+
+/**
+ * A sales document type — VOV8, the delivery type and the billing type held in one table, because all
+ * three are the same fact: the code a document carries, the number range its number is drawn from, and
+ * whether the type may still be used. Until 9226 these were constants written into the three services,
+ * which made every new commercial process a deployment instead of a configuration.
+ *
+ * Only what is read is stored. The cancellation billing type, the proposed follow-on types and the
+ * pricing and partner procedure keys arrive with the increments that read them.
+ */
+export const salesDocumentType = pgTable('sales_document_type', {
+  client: tenant(),
+  documentType: varchar('document_type', { length: 4 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  numberRangeObject: varchar('number_range_object', { length: 10 }).notNull(),
+  numberRangeSubObject: varchar('number_range_sub_object', { length: 10 }).notNull(),
+  /**
+   * The type a document of this type cancels into — `S1` for `F2`, as VF11 uses it. Null where the type has
+   * no cancellation counterpart, which is true of an order and of a delivery: nothing there is undone by a
+   * second document.
+   */
+  cancellationDocumentType: varchar('cancellation_document_type', { length: 4 }),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentType] }),
+  foreignKey({
+    columns: [t.client, t.cancellationDocumentType],
+    foreignColumns: [t.client, t.documentType],
+  }).onDelete('restrict'),
+]);
 
 /** One sales order. The order posts nothing; it states what the customer asked for and at what value. */
 export const salesOrder = pgTable('sales_order', {
@@ -265,8 +295,14 @@ export const billingDocument = pgTable('billing_document', {
   customerInvoiceNumber: varchar('customer_invoice_number', { length: 20 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 20 }),
   referenceDocumentText: varchar('reference_document_text', { length: 100 }),
-  /** Optional link to the original billing document this credit memo or replacement billing stands against. */
+  /** The document this one stands against: a credit memo names the invoice it credits. */
   creditOf: varchar('credit_of', { length: 20 }),
+  /**
+   * Set only on a cancellation document: the billing document this one cancels. A cancellation names its
+   * document once and never twice, which is why this is its own column and not `credit_of` — a customer may
+   * legitimately hold two credit memos against one invoice.
+   */
+  cancellationOf: varchar('cancellation_of', { length: 20 }),
   version: integer('version').notNull().default(1),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,
@@ -274,7 +310,14 @@ export const billingDocument = pgTable('billing_document', {
   primaryKey({ columns: [t.client, t.billingNumber] }),
   check('billing_document_status_ck', sql`${t.status} in ('OPEN', 'POSTED', 'CANCELLED')`),
   check('billing_document_posted_needs_invoice_ck', sql`${t.status} <> 'POSTED' or (${t.customerInvoiceNumber} is not null and ${t.journalDocumentNumber} is not null)`),
-  uniqueIndex('billing_document_delivery_uq').on(t.client, t.deliveryNumber),
+  // One *live* billing document per delivery. A cancelled document no longer occupies the slot — that is what
+  // makes a cancelled invoice re-billable — and neither does a document that stands against another one,
+  // because the document it stands against already did. Two live documents for one delivery stay impossible.
+  uniqueIndex('billing_document_delivery_live_uq').on(t.client, t.deliveryNumber)
+    .where(sql`${t.status} <> 'CANCELLED' and ${t.creditOf} is null and ${t.cancellationOf} is null`),
+  // A document is cancelled once.
+  uniqueIndex('billing_document_cancellation_uq').on(t.client, t.cancellationOf)
+    .where(sql`${t.cancellationOf} is not null`),
 ]);
 
 /** One item of a billing document — VBRP. Written once, and one delivery line earns one of them, ever. */
@@ -301,7 +344,13 @@ export const billingDocumentLine = pgTable('billing_document_line', {
   primaryKey({ columns: [t.client, t.billingNumber, t.lineNumber] }),
   check('billing_document_line_quantity_ck', sql`${t.billingQuantity} > 0 and ${t.priceUnit} > 0`),
   check('billing_document_line_amount_math_ck', sql`abs(${t.netAmount} - (${t.billingQuantity} * ${t.netPrice} / ${t.priceUnit})) < 0.005`),
-  uniqueIndex('billing_document_line_delivery_line_uq').on(t.client, t.deliveryNumber, t.deliveryLineNumber),
+  /**
+   * One line per delivery line *within a document*. The header's own index is what keeps a delivered line
+   * from being billed twice: only one live billing document may stand for a delivery, so only that
+   * document's lines bill its lines. Scoped to the document rather than to the delivery, because a cancelled
+   * document's lines stay where they are while the corrected document writes its own.
+   */
+  uniqueIndex('billing_document_line_delivery_line_uq').on(t.client, t.billingNumber, t.deliveryLineNumber),
   foreignKey({
     name: 'billing_document_line_condition_fk',
     columns: [t.client, t.conditionNumber],

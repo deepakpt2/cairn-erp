@@ -35,13 +35,13 @@ import {
 import { lineNotReversed } from '../inventory/production-document-quantity';
 
 import { billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine } from './schema';
+import { DOCUMENT_TYPE_REMEDY, STANDARD_BILLING_TYPE, salesDocumentTypeFor } from './document-type';
 import { standingDetermination } from './delivery';
 
 export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
 export const BILLING_CANCEL_CAPABILITY = 'SALES.BILLING.CANCEL';
 export const BILLING_ROUTE = '/sales/billing';
 export const BILLING_OBJECT_CLASS = 'billing_document';
-export const BILLING_TYPE = { code: 'F2', name: 'Invoice', rangeSubObject: 'F2' } as const;
 /** The revenue event the account is read from. A chart without it is a refusal, never a default. */
 export const REVENUE_EVENT = 'SALES_REVENUE';
 
@@ -102,6 +102,7 @@ export interface BillingView {
   customerInvoiceNumber: string | null;
   journalDocumentNumber: string | null;
   creditOf: string | null;
+  cancellationOf: string | null;
   version: number;
   createdBy: string;
   lines: Array<{
@@ -142,6 +143,7 @@ function mapHeader(row: typeof billingDocument.$inferSelect): Omit<BillingView, 
     customerInvoiceNumber: row.customerInvoiceNumber,
     journalDocumentNumber: row.journalDocumentNumber,
     creditOf: row.creditOf,
+    cancellationOf: row.cancellationOf,
     version: row.version,
     createdBy: row.createdBy,
   };
@@ -208,7 +210,12 @@ export async function listBillableDeliveries(
         join delivery_line dl on dl.client = d.client and dl.delivery_number = d.delivery_number
         join sales_order_line l
           on l.client = dl.client and l.order_number = dl.order_number and l.line_number = dl.order_line_number
-        left join billing_document bd on bd.client = d.client and bd.delivery_number = d.delivery_number
+        left join billing_document bd
+          on bd.client = d.client
+         and bd.delivery_number = d.delivery_number
+         and bd.status <> 'CANCELLED'
+         and bd.credit_of is null
+         and bd.cancellation_of is null
        where d.client = ${client}
          and d.status = 'GOODS_ISSUED'
          and bd.billing_number is null
@@ -239,7 +246,7 @@ export async function listBillings(
 ): Promise<Array<{
   billingNumber: string; deliveryNumber: string; orderNumber: string; customerNumber: string;
   billingDate: string; status: string; grossValue: string; customerInvoiceNumber: string | null; version: number;
-  creditOf: string | null;
+  creditOf: string | null; cancellationOf: string | null;
 }>> {
   return withTenant(client, async (tx) => {
     const rows = await tx.select().from(billingDocument).where(and(
@@ -258,6 +265,7 @@ export async function listBillings(
       grossValue: row.grossValue,
       customerInvoiceNumber: row.customerInvoiceNumber,
       creditOf: row.creditOf,
+      cancellationOf: row.cancellationOf,
       version: row.version,
     }));
   });
@@ -363,13 +371,19 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       }
     }
 
+    // A cancelled document no longer occupies the delivery's slot, and neither does a document that stands
+    // against another one: the delivery is billable again, and the corrected document is a real one. This is
+    // the same predicate as billing_document_delivery_live_uq, because a service that disagreed with the
+    // index would refuse a document the database would have accepted, or the other way round.
     const [standing] = await tx.select({ number: billingDocument.billingNumber }).from(billingDocument).where(and(
-      eq(billingDocument.client, parsed.client), eq(billingDocument.deliveryNumber, deliveryHeader.deliveryNumber),
+      eq(billingDocument.client, parsed.client),
+      eq(billingDocument.deliveryNumber, deliveryHeader.deliveryNumber),
+      sql`${billingDocument.status} <> 'CANCELLED' and ${billingDocument.creditOf} is null and ${billingDocument.cancellationOf} is null`,
     )).limit(1);
     if (standing) {
       throw new BillingError(
         `Delivery ${deliveryHeader.deliveryNumber} is already billed as ${standing.number}.`,
-        'A delivery earns one billing document. A correction needs the credit memo path (DI-020).',
+        'A delivery earns one live billing document. Cancel it first, then bill the corrected value.',
       );
     }
 
@@ -491,16 +505,25 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       });
     }
 
+    // The document type is configuration now (9226); see the same note in sales-order.ts.
+    const billingType = await salesDocumentTypeFor(tx, parsed.client, STANDARD_BILLING_TYPE);
+    if (!billingType) {
+      throw new BillingError(
+        `Sales document type ${STANDARD_BILLING_TYPE} does not stand for this tenant, so no billing number can be drawn and no billing document can be created.`,
+        DOCUMENT_TYPE_REMEDY,
+      );
+    }
+
     let number: string;
     try {
       const drawn = await allocateNumber(tx, {
-        client: parsed.client, objectCode: 'BILLING', companyCode: '*',
-        subObject: BILLING_TYPE.rangeSubObject, fiscalYear: 0, allocatedBy: parsed.changedBy,
+        client: parsed.client, objectCode: billingType.numberRangeObject, companyCode: '*',
+        subObject: billingType.numberRangeSubObject, fiscalYear: 0, allocatedBy: parsed.changedBy,
       });
       number = drawn.display;
     } catch {
       throw new BillingError(
-        `No active internal BILLING number range stands for sub-object ${BILLING_TYPE.rangeSubObject}, so no billing number can be drawn.`,
+        `No active internal ${billingType.numberRangeObject} number range stands for sub-object ${billingType.numberRangeSubObject} of sales document type ${billingType.documentType}, so no billing number can be drawn.`,
         'Define or unblock the interval on the number ranges screen, then bill again.',
       );
     }
@@ -508,7 +531,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     await tx.insert(billingDocument).values({
       client: parsed.client,
       billingNumber: number,
-      documentType: BILLING_TYPE.code,
+      documentType: billingType.documentType,
       orderNumber: order.orderNumber,
       deliveryNumber: deliveryHeader.deliveryNumber,
       salesOrg: deliveryHeader.salesOrg,
@@ -771,22 +794,20 @@ export async function postBillingDocument(
   const parsed = billingCreateInput.parse(input);
   const existing = await withTenant(parsed.client, async (tx) => {
     const [row] = await tx.select({ number: billingDocument.billingNumber }).from(billingDocument).where(and(
-      eq(billingDocument.client, parsed.client), eq(billingDocument.deliveryNumber, parsed.deliveryNumber),
+      eq(billingDocument.client, parsed.client),
+      eq(billingDocument.deliveryNumber, parsed.deliveryNumber),
+      sql`${billingDocument.status} <> 'CANCELLED' and ${billingDocument.creditOf} is null and ${billingDocument.cancellationOf} is null`,
     )).limit(1);
     return row?.number ?? null;
   });
+  // No live document stands, so a cancelled one is history rather than a door: the corrected document is
+  // drawn here, which is what the billing due list offers once a cancellation has released the delivery.
   if (!existing) return createBillingFromDelivery(parsed);
 
   const view = await getBilling(parsed.client, existing);
   if (!view) throw new BillingError(`Billing document ${existing} could not be read.`);
   if (view.status === 'POSTED') {
     return { billing: view, invoice: null, posted: true, heldForCredit: false, replayed: true };
-  }
-  if (view.status === 'CANCELLED') {
-    throw new BillingError(
-      `Billing document ${existing} stands CANCELLED; the delivery is not billed again from here.`,
-      'A cancelled billing needs the credit memo path first (DI-020).',
-    );
   }
   // An OPEN document is the one state that may still raise its invoice. Re-read the block, then post.
   const held = await standingDetermination(parsed.client, view.deliveryNumber);
@@ -803,13 +824,128 @@ export async function postBillingDocument(
 }
 
 /**
+ * The document a cancellation creates: a billing document of the cancellation type the original's own type
+ * names, carrying the original's value with the sign reversed and pointing at the invoice cancellation that
+ * did the accounting.
+ *
+ * It carries no lines of its own. The revenue, the tax and the receivable were determined line by line when
+ * the invoice was raised, and the accounting-invoice service mirrors that journal line for line when it
+ * cancels — so a second set of lines here would be a second description of the same delivered quantities,
+ * obliged to stay in step with the original for no reader's benefit. The credit memo that arrives with the
+ * returns work will carry lines, because a credit memo describes goods rather than undoing a document.
+ *
+ * A second cancellation is not possible: `billing_document_cancellation_uq` holds one document per original.
+ */
+async function insertCancellationDocument(
+  tx: Tx,
+  input: {
+    client: string;
+    header: typeof billingDocument.$inferSelect;
+    invoice: CustomerInvoiceView;
+    changedBy: string;
+    requestKey: string;
+  },
+): Promise<string> {
+  const { client, header, invoice, changedBy, requestKey } = input;
+  const negate = (value: string) => (-Number(value)).toFixed(4);
+
+  const type = await salesDocumentTypeFor(tx, client, header.documentType);
+  if (!type) {
+    throw new BillingError(
+      `Sales document type ${header.documentType} does not stand for this tenant, so billing document ${header.billingNumber} cannot be cancelled.`,
+      DOCUMENT_TYPE_REMEDY,
+    );
+  }
+  if (!type.cancellationDocumentType) {
+    throw new BillingError(
+      `Sales document type ${type.documentType} names no cancellation document type, so billing document ${header.billingNumber} has no document to cancel into.`,
+      'Name the cancellation type for that document type in the sales document type configuration, then cancel again.',
+    );
+  }
+  const cancellationType = await salesDocumentTypeFor(tx, client, type.cancellationDocumentType);
+  if (!cancellationType) {
+    throw new BillingError(
+      `The cancellation type ${type.cancellationDocumentType} that ${type.documentType} names does not stand for this tenant, so billing document ${header.billingNumber} cannot be cancelled.`,
+      'Add that type to the sales document type configuration, then cancel again.',
+    );
+  }
+
+  let number: string;
+  try {
+    const drawn = await allocateNumber(tx, {
+      client, objectCode: cancellationType.numberRangeObject, companyCode: '*',
+      subObject: cancellationType.numberRangeSubObject, fiscalYear: 0, allocatedBy: changedBy,
+    });
+    number = drawn.display;
+  } catch {
+    throw new BillingError(
+      `No active internal ${cancellationType.numberRangeObject} number range stands for sub-object ${cancellationType.numberRangeSubObject} of sales document type ${cancellationType.documentType}, so no cancellation document can be drawn.`,
+      'Define or unblock the interval on the number ranges screen, then cancel again.',
+    );
+  }
+
+  await tx.insert(billingDocument).values({
+    client,
+    billingNumber: number,
+    documentType: cancellationType.documentType,
+    orderNumber: header.orderNumber,
+    deliveryNumber: header.deliveryNumber,
+    salesOrg: header.salesOrg,
+    distributionChannel: header.distributionChannel,
+    division: header.division,
+    customerNumber: header.customerNumber,
+    companyCode: header.companyCode,
+    currency: header.currency,
+    billingDate: header.billingDate,
+    postingDate: header.postingDate,
+    status: 'POSTED',
+    // Not a second sale: the same value, reversed.
+    netValue: negate(header.netValue),
+    taxValue: negate(header.taxValue),
+    grossValue: negate(header.grossValue),
+    customerInvoiceNumber: invoice.invoiceNumber,
+    journalDocumentNumber: invoice.journalDocumentNumber,
+    referenceDocumentText: `Cancellation of ${header.billingNumber}`.slice(0, 100),
+    cancellationOf: header.billingNumber,
+    requestKey,
+    createdBy: changedBy,
+  });
+
+  await recordChange(tx, {
+    client, objectClass: BILLING_OBJECT_CLASS, objectKey: number,
+    changeType: 'CREATE', changedBy,
+    after: {
+      documentType: cancellationType.documentType,
+      cancellationOf: header.billingNumber,
+      value: negate(header.grossValue),
+      invoice: invoice.invoiceNumber,
+      journal: invoice.journalDocumentNumber ?? '',
+    },
+    fieldLabels: {
+      cancellationOf: 'Cancels', value: 'Value reversed',
+      invoice: 'Cancellation invoice', journal: 'Reversal journal',
+    },
+  });
+  return number;
+}
+
+/**
  * Cancel a posted billing document. The receivable leaves the customer account the only way it can: through
- * the accounting-invoice service's own cancellation, which mirrors the journal. The billing row stays behind as
- * CANCELLED, because the chain has to remember that this delivery was billed and undone.
+ * the accounting-invoice service's own cancellation, which mirrors the journal.
+ *
+ * Two documents come out of this, as they do under VF11. The original stays behind as CANCELLED, because the
+ * chain has to remember that this delivery was billed and undone. Beside it stands a cancellation document of
+ * the type the original's own billing type names — `S1` for an `F2` — carrying the value reversed and linked
+ * to the document it cancels. The delivery's slot is then free again, so a corrected billing document can be
+ * created against the same delivery and the same order: the cancellation is the end of one document, not the
+ * end of the delivery.
+ *
+ * An OPEN document has nothing to reverse and earns no cancellation document: it is marked CANCELLED and the
+ * delivery is billable again.
  */
 export async function cancelBillingDocument(
   input: BillingCancelInput,
-): Promise<{ billing: BillingView; invoice: CustomerInvoiceView | null }> {
+): Promise<{ billing: BillingView; invoice: CustomerInvoiceView | null; cancellation: BillingView | null }> {
   const parsed = billingCancelInput.parse(input);
   const target = await withTenant(parsed.client, async (tx) => {
     const [header] = await tx.select().from(billingDocument).where(and(
@@ -825,7 +961,21 @@ export async function cancelBillingDocument(
 
   let invoice: CustomerInvoiceView | null = null;
   if (target.status === 'CANCELLED') {
-    return { billing: (await getBilling(parsed.client, parsed.billingNumber))!, invoice: null };
+    // Already cancelled: a second call is not a second reversal. The document that did it is answered with,
+    // so a caller who asks twice sees the same cancellation rather than a silent nothing.
+    const standing = await withTenant(parsed.client, (tx) => tx
+      .select({ number: billingDocument.billingNumber })
+      .from(billingDocument)
+      .where(and(
+        eq(billingDocument.client, parsed.client),
+        eq(billingDocument.cancellationOf, parsed.billingNumber),
+      ))
+      .limit(1));
+    return {
+      billing: (await getBilling(parsed.client, parsed.billingNumber))!,
+      invoice: null,
+      cancellation: standing[0]?.number ? await getBilling(parsed.client, standing[0].number) : null,
+    };
   }
   if (target.status === 'POSTED') {
     if (!target.invoiceNumber) {
@@ -849,11 +999,22 @@ export async function cancelBillingDocument(
     });
   }
 
+  let cancellationNumber: string | null = null;
   await withTenant(parsed.client, async (tx) => {
     const [header] = await tx.select().from(billingDocument).where(and(
       eq(billingDocument.client, parsed.client), eq(billingDocument.billingNumber, parsed.billingNumber),
     )).limit(1);
     if (!header || header.status === 'CANCELLED') return;
+    // Only a posted document has a receivable to reverse, and only a reversal earns a cancellation document.
+    if (invoice) {
+      cancellationNumber = await insertCancellationDocument(tx, {
+        client: parsed.client,
+        header,
+        invoice,
+        changedBy: parsed.changedBy,
+        requestKey: `${parsed.requestKey || `sd-bl-cancel-${parsed.client}-${parsed.billingNumber}`}-cancellation`.slice(0, 64),
+      });
+    }
     const applied = await tx.update(billingDocument).set({
       status: 'CANCELLED',
       version: header.version + 1,
@@ -875,12 +1036,20 @@ export async function cancelBillingDocument(
         status: 'CANCELLED', version: header.version + 1,
         reason: (parsed.reason ?? '').trim(),
         mirroredInvoice: invoice?.invoiceNumber ?? '',
+        cancellation: cancellationNumber ?? '',
       },
-      fieldLabels: { reason: 'Cancellation reason', mirroredInvoice: 'Cancellation invoice' },
+      fieldLabels: {
+        reason: 'Cancellation reason', mirroredInvoice: 'Cancellation invoice',
+        cancellation: 'Cancellation document',
+      },
     });
   });
 
-  return { billing: (await getBilling(parsed.client, parsed.billingNumber))!, invoice };
+  return {
+    billing: (await getBilling(parsed.client, parsed.billingNumber))!,
+    invoice,
+    cancellation: cancellationNumber ? await getBilling(parsed.client, cancellationNumber) : null,
+  };
 }
 
 /**

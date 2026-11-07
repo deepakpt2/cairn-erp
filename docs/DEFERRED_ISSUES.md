@@ -32,7 +32,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-017 | Thirty-five fixtures still choose a material type by which one sorts first | Low | Test fixtures | OPEN |
 | DI-018 | Sales pricing resolves an item price and no other condition type | Medium | SD pricing | OPEN |
 | DI-019 | Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing | Medium | SD credit control | OPEN |
-| DI-020 | Delivery, goods issue and billing for a sales order line, credit-bound | High | SD order-to-invoice | OPEN — built and verified on the test box; open for the AR tail past the invoice and the re-bill path (see below) |
+| DI-020 | Delivery, goods issue and billing for a sales order line, credit-bound | High | SD order-to-invoice | PARTLY CLOSED — the re-bill path is closed on the test box by `9227` (see below); open for the returns and credit-memo half, increment 1.3 of `sales-gap-closure-plan.md` |
 | DI-021 | The sales order-to-invoice journey has no browser acceptance run | Medium | Test harness / SD | CLOSED — run on the test box 2026-10-28, `--target sales-order-to-invoice` exits 0 twice with 24 assertions across 11 steps |
 | DI-022 | Quality-inspection stock is a dimension the model carries and no posting can reach | Medium | Inventory / QM boundary | OPEN — blocked at `goods-receipt.ts`, an owner-owned file; the consumer trace is complete (three readers) and the reversal half turned out to need no change. Needs the owner's ruling on how quarantine is expressed |
 | DI-023 | Nothing says a material needs inspection: the Quality view is not built and QM is Tier 3 | Medium | Material master / QM | OPEN — a requirement, not a defect. A lot is now stored (9192) and the registry carries its first `QM` rows; the indicator and the owner's Tier-3 ruling are still outstanding |
@@ -609,6 +609,32 @@ blocked milestone), and given acceptance criteria so the next person can close i
   Nothing the service
   gates would report is still owed: they were run, and what they reported was fixed.
 
+
+* **Status (2026-11-07, the pass that closed the re-bill path).** `drizzle/9226_sales_document_type.sql` and
+  `drizzle/9227_sales_billing_cancellation.sql` close the half this entry kept open, and they are the first two
+  increments of the plan in `sales-gap-closure-plan.md`. The document type became configuration:
+  `sales_document_type` holds the code, the name and the number range a document draws from, seeded with `OR`,
+  `LF` and `F2` for every tenant that stood and every tenant created since, and read by all three services that
+  create a document — so a new commercial process is a row rather than a deployment. Then the invoice got a
+  cancellation type, `S1`, and a cancelled billing stopped occupying the delivery's slot: cancelling now writes
+  a cancellation document of that type, carrying the value reversed, linked to the document it cancels and
+  posted on the invoice cancellation that does the accounting; the delivery returns to the billing due list;
+  and a corrected document is created against the same delivery and the same order.
+  `billing_document_delivery_uq` became `billing_document_delivery_live_uq`, partial on
+  `status <> 'CANCELLED' and credit_of is null and cancellation_of is null`, so two *live* billing documents for
+  one delivery are still structurally impossible while a cancelled one is history instead of a door;
+  `billing_document_cancellation_uq` holds one cancellation per document. The constraint that a document's value
+  is not negative now says what it always meant: a document that stands on its own is not negative, a
+  cancellation carries the value it reverses, and the two sum to nothing. The line index narrowed from "a
+  delivered line is billed once, ever" to "once per document", because a corrected document writes its own lines
+  against delivered lines a cancelled one already wrote — the invariant that matters is the header's, and it
+  holds. Verified on the test box against a database built from zero (350 migrations, then `db:init-reference`
+  and `seed`): `tsc --noEmit` exit 0, and 34 of 34 across `tests/sales-document-type.test.ts`,
+  `tests/sales-order.test.ts` and `tests/sales-delivery.test.ts`, whose cancellation test now asserts the
+  cancellation document, the delivery's return to the due list, the corrected document that posts, and that a
+  second cancellation is idempotent rather than a second reversal. What remains of this entry is the returns and
+  credit-memo half — movement 651 into a non-valuated returns bucket, then a credit memo — scheduled as
+  increment 1.3; the AR tail past the invoice is Finance's own and was never this entry's debt.
 ---
 
 ## DI-021 — The sales order-to-invoice journey has no browser acceptance run

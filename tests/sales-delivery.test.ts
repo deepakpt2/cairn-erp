@@ -10,6 +10,7 @@ import {
   cancelBillingDocument,
   createBillingFromDelivery,
   getBilling,
+  listBillableDeliveries,
   postBillingDocument,
 } from '../src/modules/sales/billing';
 import {
@@ -121,6 +122,9 @@ describe('sales fulfillment and billing (DI-020)', () => {
         { objectCode: 'SALESORD', subObject: 'OR', prefix: 'SO', numberLength: 7 },
         { objectCode: 'DELIVERY', subObject: 'LF', prefix: 'DL', numberLength: 7 },
         { objectCode: 'BILLING', subObject: 'F2', prefix: 'INV', numberLength: 7 },
+        // What a cancellation document draws its number from (9227). A fixture tenant does not go through
+        // createTenant, so STANDARD_RANGES never ran for it: the interval is defined here, as the others are.
+        { objectCode: 'BILLING', subObject: 'S1', prefix: 'CN', numberLength: 7 },
         { objectCode: 'MATDOC', subObject: '*', prefix: 'MD', numberLength: 8 },
         { objectCode: 'CUSTINV', subObject: '*', prefix: 'CI', numberLength: 7 },
       ]) {
@@ -779,16 +783,50 @@ describe('sales fulfillment and billing (DI-020)', () => {
     expect(original!.status).toBe('CANCELLED');
     expect(original!.cancelledBy).toBe(cancelled.invoice!.invoiceNumber);
 
-    // The row stays behind so the chain remembers it.
-    // Re-billing the delivery answers with the cancelled document by name and points at the memo path: the
-    // screen's button cannot quietly draw a second invoice behind a cancellation.
-    await expect(postBillingDocument({
+    // Two documents come out of a cancellation: the original, CANCELLED, and the cancellation document that
+    // reversed it. The cancellation carries the same value with the sign reversed, names the document it
+    // cancels, and stands posted on the invoice cancellation that did the accounting. It holds no lines of
+    // its own — the journal it mirrors was written line by line when the invoice was raised.
+    expect(cancelled.cancellation).not.toBeNull();
+    expect(cancelled.cancellation!.documentType).toBe('S1');
+    expect(cancelled.cancellation!.cancellationOf).toBe(billing);
+    expect(cancelled.cancellation!.status).toBe('POSTED');
+    expect(cancelled.cancellation!.customerInvoiceNumber).toBe(cancelled.invoice!.invoiceNumber);
+    expect(cancelled.cancellation!.journalDocumentNumber).toBe(cancelled.invoice!.journalDocumentNumber);
+    expect(Number(cancelled.cancellation!.grossValue)).toBe(-Number(billed!.grossValue));
+    expect(cancelled.cancellation!.lines).toEqual([]);
+
+    // The row stays behind so the chain remembers it — and the delivery is billable again, which is what
+    // the cancellation is for. Before 9227 a cancelled invoice left the delivery unbillable for ever and the
+    // only route back to the customer's money was a credit memo typed by hand in Finance.
+    const due = await listBillableDeliveries(tenant.client, { deliveryNumber: delivery });
+    expect(due.map((row) => row.deliveryNumber)).toEqual([delivery]);
+
+    const corrected = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, billingDate: DATE,
       requestKey: key('rebilled'),
-    })).rejects.toThrow(new RegExp(`Billing document ${billing} stands CANCELLED`));
+    });
+    expect(corrected.replayed).toBe(false);
+    expect(corrected.posted).toBe(true);
+    expect(corrected.billing.billingNumber).not.toBe(billing);
+    expect(corrected.billing.documentType).toBe('F2');
+    expect(corrected.billing.cancellationOf).toBeNull();
+    expect(Number(corrected.billing.grossValue)).toBe(Number(billed!.grossValue));
+    expect(corrected.invoice!.invoiceNumber).not.toBe(billed!.customerInvoiceNumber);
+
+    // One live billing per delivery, still.
     await expect(createBillingFromDelivery({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, billingDate: DATE,
       requestKey: key('rebilled-strict'),
-    })).rejects.toThrow(new RegExp(`is already billed as ${billing}`));
+    })).rejects.toThrow(new RegExp(`is already billed as ${corrected.billing.billingNumber}`));
+
+    // Cancelling the same document a second time is not a second reversal: the call is idempotent and answers
+    // with the cancellation that already stands, and the unique index would refuse a second row anyway.
+    const again = await cancelBillingDocument({
+      client: tenant.client, changedBy: ACTOR, billingNumber: billing, postingDate: DATE,
+      reason: 'Cancelled a second time', requestKey: key('cancel-bill-again'),
+    });
+    expect(again.billing.status).toBe('CANCELLED');
+    expect(again.cancellation?.billingNumber).toBe(cancelled.cancellation!.billingNumber);
   });
 });
