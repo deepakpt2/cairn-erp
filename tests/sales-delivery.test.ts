@@ -31,6 +31,7 @@ import {
   releaseSalesOrderCredit,
 } from '../src/modules/sales/sales-order';
 import { postReturnsReceipt, ReturnsError } from '../src/modules/sales/returns';
+import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import {
@@ -1060,5 +1061,56 @@ describe('sales fulfillment and billing (DI-020)', () => {
 
     // Both took value with them: nothing is left counted and unvalued that is not in returns stock.
     expect(Number(blocked.valuation.q)).toBeCloseTo(Number(before.valuation.q) + 2, 3);
+  });
+
+  // ---------------------------------------------------------------------------------------------------
+  // The promise the non-valuated bucket was made on: that carrying returns through valuation, the stock
+  // overview and availability would leave the reconciliation tying. It is not enough for the numbers to
+  // look right in each place — the ledger and the projection have to agree with goods standing in a
+  // bucket that is counted and not owned.
+  // ---------------------------------------------------------------------------------------------------
+
+  it('reconciles the returns bucket exactly, and adds no drift of its own', async () => {
+    const standing = await returnsState();
+    expect(bucketOf(standing.buckets, 'RETURNS')).toBeGreaterThan(0);
+
+    // This fixture seeds its opening stock straight into the projection, with no material document
+    // behind it, so one dimension — unrestricted — drifts by exactly that opening balance, and it did
+    // before any goods came back. What the non-valuated bucket promised was that it would add no
+    // drift of its own, and that is what this asserts.
+    const result = await reconcileStock(tenant.client, { plant: PLANT });
+    expect(result.drift, `drift: ${JSON.stringify(result.drift)}`)
+      .toEqual(result.drift.filter((row) => row.stockType !== 'RETURNS'));
+    expect(result.dimensionsChecked).toBeGreaterThan(1);
+
+    // The returns bucket ties on its own terms: what the documents say is what the projection says.
+    await withTenant(tenant.client, async (tx) => {
+      const rows = await tx.execute(sql`
+        select coalesce(sum(case when l.line_direction = 'RECEIPT' then l.base_quantity
+                                 else -l.base_quantity end), 0)::text as ledger,
+               coalesce((select sum(s.quantity) from stock_quantity s
+                          where s.client = ${tenant.client} and s.material_number = ${MATERIAL}
+                            and s.plant = ${PLANT} and s.stock_type = 'RETURNS'), 0)::text as projected
+          from material_document_line l
+         where l.client = ${tenant.client} and l.material_number = ${MATERIAL}
+           and l.plant = ${PLANT} and l.stock_type = 'RETURNS'
+      `) as unknown as Array<{ ledger: string; projected: string }>;
+      expect(Number(rows[0].ledger)).toBeCloseTo(Number(rows[0].projected), 3);
+
+      // Counted and not owned: the valuation area holds everything standing in the plant EXCEPT what
+      // is in the returns bucket, and nothing else.
+      const counted = await tx.execute(sql`
+        select sum(case when stock_type = 'RETURNS' then quantity else 0 end)::text as returns_qty,
+               sum(quantity)::text as counted
+          from stock_quantity
+         where client = ${tenant.client} and plant = ${PLANT}
+      `) as unknown as Array<{ returns_qty: string; counted: string }>;
+      const [valuation] = await tx.execute(sql`
+        select total_stock_quantity::text as q
+          from material_valuation
+         where client = ${tenant.client} and material_number = ${MATERIAL} and valuation_area = ${PLANT}
+      `) as unknown as Array<{ q: string }>;
+      expect(Number(valuation.q)).toBeCloseTo(Number(counted[0].counted) - Number(counted[0].returns_qty), 3);
+    });
   });
 });
