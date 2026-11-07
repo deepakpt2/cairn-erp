@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import {
+  ACCOUNT_ASSIGNMENT_CODE, ACCOUNT_ASSIGNMENT_NAME, isAccountAssignmentCategory,
+} from '@/modules/purchasing/account-assignment';
 import { PO_CREATE_CAPABILITY } from '@/modules/purchasing/orders';
 import {
   PO_DISPLAY_CAPABILITY,
@@ -27,6 +30,18 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       {children}
     </label>
   );
+}
+
+/**
+ * The assignment category, named the way every screen names it: the category in words
+ * with SAP's code beside it, because the two are the same thing and a buyer may know
+ * either. An unrecognised category is shown as it stands rather than hidden — a value
+ * the screen does not understand is a thing the buyer needs to see, not to guess at.
+ */
+function categoryLabel(category: string | null): string | null {
+  if (!category) return null;
+  if (!isAccountAssignmentCategory(category)) return category;
+  return `${ACCOUNT_ASSIGNMENT_NAME[category]} (${ACCOUNT_ASSIGNMENT_CODE[category]})`;
 }
 
 function stateLabel(state: string): string {
@@ -100,6 +115,9 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
             {item.storageLocation ? ` · ${item.storageLocation}` : ` · ${t('poDisplay.notProvided')}`}
             {item.batch ? ` · Batch ${item.batch}` : ''}
             {' · '}{item.itemCategory}
+            {categoryLabel(item.accountAssignmentCategory)
+              ? ` · ${t('poDisplay.assignmentCategory')} ${categoryLabel(item.accountAssignmentCategory)}`
+              : ''}
             {item.markedForDeletion ? ` · ${t('poDisplay.marked')}` : ''}
           </p>
           <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
@@ -177,7 +195,7 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
               <thead>
                 <tr className="text-left text-ink-soft">
                   <th>{t('poDisplay.line')}</th>
-                  <th>{t('poDisplay.costCenter')}</th>
+                  <th>{t('poDisplay.assignedObject')}</th>
                   <th>{t('poDisplay.gl')}</th>
                   <th>{t('poDisplay.percent')}</th>
                   <th>{t('poDisplay.share')}</th>
@@ -187,8 +205,14 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
                 {item.assignments.map((line) => (
                   <tr key={line.lineNumber} data-po-assignment={`${item.itemNumber}-${line.lineNumber}`}>
                     <td>{line.lineNumber}</td>
-                    <td>{line.costCenter}</td>
-                    <td>{line.glAccount}</td>
+                    <td data-po-assigned-object={`${item.itemNumber}-${line.lineNumber}`}>
+                      {line.object
+                        ? (line.object.kind === 'ASSET' && line.assetTransactionType
+                          ? `${line.object.label} · ${line.assetTransactionType}`
+                          : line.object.label)
+                        : t('poDisplay.notProvided')}
+                    </td>
+                    <td>{line.object?.kind === 'ASSET' ? t('poDisplay.glFromAssetClass') : line.glAccount}</td>
                     <td>{line.distributionPercentage}</td>
                     <td data-po-share={`${item.itemNumber}-${line.lineNumber}`}>{line.assignedValue}</td>
                   </tr>

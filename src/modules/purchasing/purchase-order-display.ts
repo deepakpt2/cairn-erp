@@ -15,6 +15,7 @@ import {
   purchaseHeaderState, purchaseItemState,
   type PurchaseHeaderState, type PurchaseItemState,
 } from './item-state';
+import { assignmentObject, type AssignmentObject } from './account-assignment';
 import { getDocumentRelease, type DocumentReleaseState } from './release';
 import { receiptMovementSign, receiptQuantityInOrderUnit, receiptUnitJoins } from './receipt-unit-basis';
 
@@ -71,6 +72,16 @@ export interface DisplayedAssignment {
   lineNumber: number;
   glAccount: string;
   costCenter: string;
+  /** The other two objects a line can name (9224); exactly one of the three stands. */
+  internalOrder: string;
+  assetNumber: string;
+  assetSubNumber: string;
+  assetTransactionType: string;
+  /**
+   * The object this line commits to, read once and shown the same way on every screen.
+   * Null only for a row written before the object columns stood and naming nothing.
+   */
+  object: AssignmentObject | null;
   distributionPercentage: string;
   /** Share of the stored item net value, rounded at the line. Not a second item total. */
   assignedValue: string;
@@ -258,6 +269,11 @@ function text(value: unknown): string {
   return value == null ? '' : String(value);
 }
 
+/** A column that may be absent: null, so the screen can tell "none" from "blank". */
+function nullable(value: unknown): string | null {
+  return value == null ? null : String(value).trim() || null;
+}
+
 function money(value: string): string {
   return fromScaled(toScaled(value || '0', 2), 2);
 }
@@ -406,7 +422,8 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
        order by item_number, line_number
     `) as unknown as Array<Record<string, unknown>>;
     const assignments = await tx.execute(sql`
-      select item_number, line_number, gl_account, cost_center, distribution_percentage::text as distribution_percentage
+      select item_number, line_number, gl_account, cost_center, internal_order, asset_number,
+             asset_sub_number, asset_transaction_type, distribution_percentage::text as distribution_percentage
         from purchase_order_assignment
        where client = ${client} and order_number = ${number}
        order by item_number, line_number
@@ -482,6 +499,14 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
       lineNumber: Number(row.line_number),
       glAccount: text(row.gl_account),
       costCenter: text(row.cost_center),
+      internalOrder: text(row.internal_order),
+      assetNumber: text(row.asset_number),
+      assetSubNumber: text(row.asset_sub_number),
+      assetTransactionType: text(row.asset_transaction_type),
+      object: assignmentObject({
+        costCenter: nullable(row.cost_center), internalOrder: nullable(row.internal_order),
+        assetNumber: nullable(row.asset_number), assetSubNumber: nullable(row.asset_sub_number),
+      }),
       distributionPercentage: percent,
       assignedValue: assignedShare(netByItem.get(itemNumber) ?? '0', percent),
     });
