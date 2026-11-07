@@ -64,6 +64,29 @@ git --no-pager for-each-ref --format='%(refname:short) -> %(upstream:short)'
    ```
 3. Never merge into `main` without owner authorization.
 
+### The Sandbox Forgets `.git/config`, `node_modules` and Shell History
+
+Every working session starts in a workspace where only ordinary files persisted. Three things are
+missing again each time, and each of them fails in a way that looks like something else:
+
+- **No remote and no committer identity.** `git push` answers "the remote does not appear to be a
+  git repository" and `git commit` answers "Author identity unknown". Neither means the repository
+  is broken. Restore both before any git command that touches the network:
+  ```bash
+  git config user.name "deepakpt2"
+  git config user.email "85660908+deepakpt2@users.noreply.github.com"
+  git remote add origin https://github.com/deepakpt2/cairn-erp.git   # only if `git remote -v` is empty
+  ```
+  Then push with the PAT header from `.env.local` as documented above. A commit made through a
+  bundle (as the test host is synced) needs the identity set on the host that creates it, not on
+  the host that fetches it.
+- **No `node_modules`.** `npx tsc` will try to download a package named `tsc` from the registry and
+  fail. Do not install locally to fix it — the install is several minutes of work the next session
+  will have to repeat. Run typechecks and tests on the test host instead, which keeps its
+  dependencies.
+- **No shell history or exported environment.** Export `DATABASE_URL`, `MIGRATION_DATABASE_URL` and
+  `CAIRN_ENV` in the same command that uses them, as the §4 recipe does.
+
 ## 2. Test-Server Connection
 
 ### Connection Parameters
