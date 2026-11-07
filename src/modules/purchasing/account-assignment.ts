@@ -14,6 +14,14 @@
  * the commitment was made is not the same question as what stands valid on the
  * day the money is posted.
  *
+ * Each category names one kind of object and is judged on that object's own
+ * terms: a cost centre against its validity and posting lock, an internal order
+ * against its validity, lock and controlling area, an asset against its class,
+ * its status and the acquisition type the order named. An internal order is not
+ * a cost centre wearing a different hat, and a row that says cost centre while
+ * naming an order would leave every reader to choose which of the two to
+ * believe.
+ *
  * Nothing here posts. It answers what the value belongs to and what account
  * carries it; the document that posts decides what to do with the answer.
  */
@@ -24,6 +32,47 @@ import { controllingAreaCompany, costCenter, internalOrder } from '../foundation
 import {
   assetClass, assetTransactionType, fixedAsset, glAccount,
 } from '../finance/schema';
+
+/** The three objects a purchase order item can be assigned to, and no fourth. */
+export const ACCOUNT_ASSIGNMENT_CATEGORIES = ['COST_CENTER', 'ORDER', 'ASSET'] as const;
+export type AccountAssignmentCategory = (typeof ACCOUNT_ASSIGNMENT_CATEGORIES)[number];
+
+/** The SAP code for each, because the screens and the reports speak in both. */
+export const ACCOUNT_ASSIGNMENT_CODE: Record<AccountAssignmentCategory, string> = {
+  COST_CENTER: 'K', ORDER: 'F', ASSET: 'A',
+};
+
+/** What each category is called when a screen has to say it in words. */
+export const ACCOUNT_ASSIGNMENT_NAME: Record<AccountAssignmentCategory, string> = {
+  COST_CENTER: 'Cost centre', ORDER: 'Internal order', ASSET: 'Asset',
+};
+
+export function isAccountAssignmentCategory(value: string | null): value is AccountAssignmentCategory {
+  return value !== null
+    && (ACCOUNT_ASSIGNMENT_CATEGORIES as readonly string[]).includes(value);
+}
+
+/**
+ * The category as a screen names it, computed where the category is known rather than
+ * in each screen that shows it: 'Cost centre (K)', 'Internal order (F)', 'Asset (A)'.
+ * A value this canon does not carry is named as it stands — a buyer who is shown a
+ * blank is a buyer who cannot see what the order says.
+ */
+export function accountAssignmentLabel(category: string | null): string | null {
+  if (!category) return null;
+  const normalized = normalizeAccountAssignmentCategory(category);
+  if (!isAccountAssignmentCategory(normalized)) return `${category} (not carried)`;
+  return `${ACCOUNT_ASSIGNMENT_NAME[normalized]} (${ACCOUNT_ASSIGNMENT_CODE[normalized]})`;
+}
+
+/** 'K' and 'COST_CENTER' mean the same thing; so do 'F'/'ORDER' and 'A'/'ASSET'. */
+export function normalizeAccountAssignmentCategory(value: string): string {
+  const upper = value.trim().toUpperCase();
+  if (upper === 'K') return 'COST_CENTER';
+  if (upper === 'F') return 'ORDER';
+  if (upper === 'A') return 'ASSET';
+  return upper;
+}
 
 export interface AssignmentRow {
   /** Numbered when the row is written; an assignment being judged for the first time has none. */
@@ -55,6 +104,42 @@ export interface JudgedAssignments {
   rows: JudgedAssignment[];
 }
 
+/**
+ * The object an assignment row names, read from the row itself. Every screen that
+ * shows an assignment shows it the same way, so a cost centre, an internal order
+ * and an asset never appear differently on two screens.
+ */
+export interface AssignmentObject {
+  kind: 'COST_CENTER' | 'INTERNAL_ORDER' | 'ASSET';
+  /** The code: the centre, the order number, or the asset with its sub-number. */
+  code: string;
+  /** The same thing with its name in front, for a column that has no header to spare. */
+  label: string;
+}
+
+export function assignmentObject(row: {
+  costCenter?: string | null;
+  internalOrder?: string | null;
+  assetNumber?: string | null;
+  assetSubNumber?: string | null;
+}): AssignmentObject | null {
+  const asset = row.assetNumber?.trim();
+  if (asset) {
+    const sub = row.assetSubNumber?.trim() || '0000';
+    return { kind: 'ASSET', code: `${asset}/${sub}`, label: `Asset ${asset}/${sub}` };
+  }
+  const order = row.internalOrder?.trim();
+  if (order) return { kind: 'INTERNAL_ORDER', code: order, label: `Order ${order}` };
+  const centre = row.costCenter?.trim();
+  if (centre) return { kind: 'COST_CENTER', code: centre, label: centre };
+  return null;
+}
+
+/** What a row of this category is required to name, in words a refusal can use. */
+const REQUIRED: Record<AccountAssignmentCategory, string> = {
+  COST_CENTER: 'a cost centre', ORDER: 'an internal order', ASSET: 'an asset',
+};
+
 export async function judgeAccountAssignments(
   tx: Tx,
   input: {
@@ -67,15 +152,19 @@ export async function judgeAccountAssignments(
     rows: AssignmentRow[];
   },
 ): Promise<JudgedAssignments> {
-  const { client, companyCode, chartOfAccounts, onDate, category, rows } = input;
+  const { client, companyCode, chartOfAccounts, onDate, rows } = input;
+  const category = input.category ? normalizeAccountAssignmentCategory(input.category) : null;
 
   if (!category) {
     return rows.length > 0
       ? { refusal: 'A stock item carries no account assignments.', rows: [] }
       : { refusal: null, rows: [] };
   }
-  if (category !== 'COST_CENTER' && category !== 'ASSET') {
-    return { refusal: `Account assignment category ${category} is not supported this round.`, rows: [] };
+  if (!isAccountAssignmentCategory(category)) {
+    return {
+      refusal: `Account assignment category ${input.category} is not carried: an item is assigned to a cost centre, an internal order or an asset. There is no project or WBS assignment, and no service assignment.`,
+      rows: [],
+    };
   }
   if (rows.length === 0) {
     return { refusal: 'An account-assigned item needs at least one account assignment row.', rows: [] };
@@ -99,11 +188,13 @@ export async function judgeAccountAssignments(
       row.internalOrder ? 'internal order' : null,
       row.assetNumber ? 'asset' : null,
     ].filter((value): value is string => value !== null);
-    if (named.length !== 1) {
+    // The category decides which object a row may name. Naming another is not a
+    // second opinion the row is entitled to: it is a row that contradicts the item.
+    if (named.length !== 1 || named[0] !== OBJECT_OF[category]) {
       return {
         refusal: named.length === 0
-          ? 'An account assignment row names no cost object: a cost centre, an internal order or an asset.'
-          : `An account assignment row names ${named.join(' and ')}. One row charges one cost object.`,
+          ? `An item assigned to ${ACCOUNT_ASSIGNMENT_NAME[category].toLowerCase()} (${ACCOUNT_ASSIGNMENT_CODE[category]}) has a row naming no object; every row must name ${REQUIRED[category]}.`
+          : `An item assigned to ${ACCOUNT_ASSIGNMENT_NAME[category].toLowerCase()} (${ACCOUNT_ASSIGNMENT_CODE[category]}) has a row naming ${named.join(' and ')}; every row must name ${REQUIRED[category]} and no other object.`,
         rows: [],
       };
     }
@@ -251,3 +342,8 @@ export async function judgeAccountAssignments(
 
   return { refusal: null, rows: judged };
 }
+
+/** The one object each category's rows must name. */
+const OBJECT_OF: Record<AccountAssignmentCategory, string> = {
+  COST_CENTER: 'cost centre', ORDER: 'internal order', ASSET: 'asset',
+};

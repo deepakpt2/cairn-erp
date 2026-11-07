@@ -375,7 +375,7 @@ describe('ME2K assignment lines by the object they name', () => {
       await tx.execute(sql`
         insert into purchase_order_item (client, order_number, item_number, item_category, account_assignment_category,
                                          short_text, quantity, unit, net_price, price_unit, net_value, plant, created_by) values
-          (${client}, '4700000011', 10, 'STANDARD', 'COST_CENTER', 'Overhaul', 1, 'PC', 200, 1, 200, 'QD01', ${ACTOR}),
+          (${client}, '4700000011', 10, 'STANDARD', 'ORDER', 'Overhaul', 1, 'PC', 200, 1, 200, 'QD01', ${ACTOR}),
           (${client}, '4700000011', 20, 'STANDARD', 'ASSET', 'Press line', 1, 'PC', 300, 1, 300, 'QD01', ${ACTOR})
         on conflict do nothing
       `);

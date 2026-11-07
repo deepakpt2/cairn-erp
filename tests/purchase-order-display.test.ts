@@ -49,10 +49,14 @@ describe('SCR-164 purchase order display', () => {
       `);
       await tx.execute(sql`
         insert into purchase_order_item
-          (client, order_number, item_number, material_number, short_text, quantity, unit, net_price, price_unit, net_value, plant, created_by)
+          (client, order_number, item_number, material_number, short_text, quantity, unit, net_price, price_unit,
+           net_value, plant, account_assignment_category, created_by)
         values
-          (${client}, ${ORDER}, 10, 'MAT-DISP', 'Bolts', 10, ${unit.base_unit}, 15, 1, 100, '1000', ${ACTOR}),
-          (${client}, ${ORDER}, 20, 'MAT-DISP', 'Marked', 2, ${unit.base_unit}, 5, 1, 10, '1000', ${ACTOR})
+          -- Item 10 is account-assigned: it received goods and was invoiced before it was
+          -- assigned, so that history stands and is displayed. No further receipt against
+          -- it is allowed, which is the rule this fixture does not exercise.
+          (${client}, ${ORDER}, 10, 'MAT-DISP', 'Bolts', 10, ${unit.base_unit}, 15, 1, 100, '1000', 'COST_CENTER', ${ACTOR}),
+          (${client}, ${ORDER}, 20, 'MAT-DISP', 'Marked', 2, ${unit.base_unit}, 5, 1, 10, '1000', null, ${ACTOR})
       `);
       await tx.execute(sql`
         update purchase_order_item set marked_for_deletion = true

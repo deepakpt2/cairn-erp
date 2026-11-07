@@ -25,11 +25,29 @@ interface ScheduleRow {
   quantity: string;
 }
 
+/**
+ * One share of an account-assigned item. Which of the three objects it carries is
+ * decided by the item's category, and the screen shows only that one: a cost centre
+ * row has no asset field to fill in, and an asset row has no cost centre.
+ */
 interface AssignmentRow {
   glAccount: string;
-  /** Null where the row charges an internal order or an asset instead (9224). */
   costCenter: string | null;
+  internalOrder: string | null;
+  assetNumber: string | null;
+  assetSubNumber: string | null;
+  assetTransactionType: string | null;
   percentage: string;
+}
+
+/** What the item is charged to. STOCK is not an account assignment; the other three are. */
+type AssignmentKind = 'STOCK' | 'COST_CENTER' | 'ORDER' | 'ASSET';
+
+function blankAssignment(): AssignmentRow {
+  return {
+    glAccount: '', costCenter: null, internalOrder: null, assetNumber: null,
+    assetSubNumber: null, assetTransactionType: null, percentage: '100',
+  };
 }
 
 interface ItemRow {
@@ -50,7 +68,7 @@ interface ItemRow {
   quotationItem: string;
   contractNumber: string;
   contractItem: string;
-  assignment: 'STOCK' | 'COST_CENTER';
+  assignment: AssignmentKind;
   markedForDeletion: boolean;
   /** Delivery control. A blank tolerance resolves from the masters when the order is saved. */
   overdeliveryTolerance: string;
@@ -94,7 +112,7 @@ const EMPTY_ITEM: ItemRow = {
   grBasedInvoiceVerification: true,
   finalInvoiceIndicator: false,
   scheduleLines: [{ deliveryDate: '', quantity: '' }],
-  assignments: [{ glAccount: '', costCenter: '', percentage: '100' }],
+  assignments: [blankAssignment()],
 };
 
 function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
@@ -116,7 +134,7 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
     quotationItem: item.quotationItem ? String(item.quotationItem) : '',
     contractNumber: item.contractNumber ?? '',
     contractItem: item.contractItem ? String(item.contractItem) : '',
-    assignment: item.accountAssignmentCategory === 'COST_CENTER' ? 'COST_CENTER' : 'STOCK',
+    assignment: assignmentKindOf(item.accountAssignmentCategory),
     markedForDeletion: item.markedForDeletion,
     overdeliveryTolerance: item.overdeliveryTolerance,
     underdeliveryTolerance: item.underdeliveryTolerance,
@@ -129,10 +147,35 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
     scheduleLines: item.scheduleLines.map((s) => ({ deliveryDate: s.deliveryDate, quantity: s.quantity })),
     assignments: item.assignments.length > 0
       ? item.assignments.map((a) => ({
-          glAccount: a.glAccount, costCenter: a.costCenter, percentage: a.distributionPercentage,
+          ...blankAssignment(),
+          glAccount: a.glAccount, costCenter: a.costCenter,
+          internalOrder: a.internalOrder, assetNumber: a.assetNumber,
+          assetSubNumber: a.assetSubNumber, assetTransactionType: a.assetTransactionType,
+          percentage: a.distributionPercentage,
         }))
-      : [{ glAccount: '', costCenter: '', percentage: '100' }],
+      : [blankAssignment()],
   };
+}
+
+/**
+ * What each assignment means, said once beside the fields. An asset takes its account
+ * from its class and its value from the invoice, so the buyer names the asset and the
+ * acquisition type and nothing else.
+ */
+const ASSIGNMENT_NOTE: Record<Exclude<AssignmentKind, 'STOCK'>, string> = {
+  COST_CENTER: 'The value is charged to the cost centre named here when the invoice is verified. No stock and no GR/IR are created, and no goods receipt is posted against this item.',
+  ORDER: 'The value is charged to the internal order named here when the invoice is verified. No stock and no GR/IR are created, and no goods receipt is posted against this item.',
+  ASSET: 'The value capitalizes on the asset named here, under its class reconciliation account and this acquisition type. No stock and no GR/IR are created, and no goods receipt is posted against this item.',
+};
+
+/**
+ * A stored category becomes one of the four choices the screen offers. A category the
+ * screen does not carry — a project or WBS row, or a value written by something else —
+ * falls back to STOCK rather than being silently rewritten, because the screen has no
+ * fields for it and losing what the order says is worse than showing it plainly.
+ */
+function assignmentKindOf(category: string | null | undefined): AssignmentKind {
+  return category === 'COST_CENTER' || category === 'ORDER' || category === 'ASSET' ? category : 'STOCK';
 }
 
 const INITIAL: OrderActionState = { ok: false };
@@ -238,14 +281,15 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
             requisitionItem: item.requisitionItem ? String(item.requisitionItem) : '',
             quotationNumber: item.quotationNumber,
             quotationItem: item.quotationItem ? String(item.quotationItem) : '',
-            assignment: item.accountAssignmentCategory === 'COST_CENTER' ? 'COST_CENTER' : 'STOCK',
+            assignment: assignmentKindOf(item.accountAssignmentCategory),
             assignments: item.assignments && item.assignments.length > 0
               ? item.assignments.map((row) => ({
+                  ...blankAssignment(),
                   glAccount: row.glAccount,
-                  costCenter: row.costCenter,
+                  costCenter: row.costCenter ?? null,
                   percentage: row.percentage,
                 }))
-              : [{ glAccount: '', costCenter: '', percentage: '100' }],
+              : [blankAssignment()],
             scheduleLines: [{ deliveryDate: item.deliveryDate, quantity: String(item.quantity) }],
           }))
         : [{ ...EMPTY_ITEM, contractNumber: callOff?.contractNumber ?? '', contractItem: callOff?.contractItem ?? '' }],
@@ -270,7 +314,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
         plant: item.plant,
         storageLocation: item.storageLocation,
         batch: item.batch,
-        accountAssignmentCategory: item.assignment === 'COST_CENTER' ? 'COST_CENTER' : null,
+        accountAssignmentCategory: item.assignment === 'STOCK' ? null : item.assignment,
         markedForDeletion: item.markedForDeletion,
         overdeliveryTolerance: item.overdeliveryTolerance,
         underdeliveryTolerance: item.underdeliveryTolerance,
@@ -289,12 +333,19 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
         scheduleLines: item.scheduleLines.map((line) => ({
           deliveryDate: line.deliveryDate, quantity: Number(line.quantity),
         })),
-        assignments: item.assignment === 'COST_CENTER'
-          ? item.assignments.map((row) => ({
-              glAccount: row.glAccount, costCenter: row.costCenter ?? '',
-              distributionPercentage: Number(row.percentage),
-            }))
-          : [],
+        assignments: item.assignment === 'STOCK' ? [] : item.assignments.map((row) => ({
+          glAccount: row.glAccount,
+          distributionPercentage: Number(row.percentage),
+          ...(item.assignment === 'COST_CENTER' ? { costCenter: row.costCenter ?? '' } : {}),
+          ...(item.assignment === 'ORDER' ? { internalOrder: row.internalOrder ?? '' } : {}),
+          ...(item.assignment === 'ASSET'
+            ? {
+                assetNumber: row.assetNumber ?? '',
+                ...(row.assetSubNumber ? { assetSubNumber: row.assetSubNumber } : {}),
+                assetTransactionType: row.assetTransactionType ?? '',
+              }
+            : {}),
+        })),
       })),
     });
   }
@@ -834,16 +885,33 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                     <label className="inline-flex items-center gap-2">
                       <input type="radio" name="assignment" checked={items[active].assignment === 'COST_CENTER'}
                         onChange={() => patch(active, { assignment: 'COST_CENTER' })} />
-                      Cost centre
+                      Cost centre (K)
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="radio" name="assignment" checked={items[active].assignment === 'ORDER'}
+                        onChange={() => patch(active, { assignment: 'ORDER' })} />
+                      Internal order (F)
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input type="radio" name="assignment" checked={items[active].assignment === 'ASSET'}
+                        onChange={() => patch(active, { assignment: 'ASSET' })} />
+                      Asset (A)
                     </label>
                   </div>
-                  {items[active].assignment === 'COST_CENTER' && (
+                  {items[active].assignment !== 'STOCK' && (
                     <div className="space-y-2">
+                      <p className="text-xs text-ink-soft">{ASSIGNMENT_NOTE[items[active].assignment]}</p>
                       <table className="grid-table text-sm">
                         <thead>
                           <tr className="text-left">
-                            <th>G/L account</th>
-                            <th>Cost centre</th>
+                            {items[active].assignment === 'ASSET'
+                              ? <th>G/L account</th>
+                              : null}
+                            {items[active].assignment === 'COST_CENTER' ? <th>Cost centre</th> : null}
+                            {items[active].assignment === 'ORDER' ? <th>Internal order</th> : null}
+                            {items[active].assignment === 'ASSET'
+                              ? (<><th>Asset</th><th>Sub-number</th><th>Transaction type</th></>)
+                              : null}
                             <th>Distribution %</th>
                             {items[active].assignments.length > 1 && <th><span className="sr-only">Remove</span></th>}
                           </tr>
@@ -851,22 +919,66 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                         <tbody>
                           {items[active].assignments.map((row, rowIndex) => (
                             <tr key={rowIndex}>
-                              <td>
-                                <input className="input w-40" placeholder="G/L account" value={row.glAccount}
-                                  onChange={(event) => {
-                                    const rows = items[active].assignments.slice();
-                                    rows[rowIndex] = { ...rows[rowIndex], glAccount: event.target.value };
-                                    patch(active, { assignments: rows });
-                                  }} />
-                              </td>
-                              <td>
-                                <input className="input w-40" placeholder="Cost centre" value={row.costCenter ?? ''}
-                                  onChange={(event) => {
-                                    const rows = items[active].assignments.slice();
-                                    rows[rowIndex] = { ...rows[rowIndex], costCenter: event.target.value };
-                                    patch(active, { assignments: rows });
-                                  }} />
-                              </td>
+                              {items[active].assignment === 'ASSET' ? (
+                                <td className="text-ink-soft">from the asset class</td>
+                              ) : (
+                                <td>
+                                  <input className="input w-40" placeholder="G/L account" value={row.glAccount}
+                                    onChange={(event) => {
+                                      const rows = items[active].assignments.slice();
+                                      rows[rowIndex] = { ...rows[rowIndex], glAccount: event.target.value };
+                                      patch(active, { assignments: rows });
+                                    }} />
+                                </td>
+                              )}
+                              {items[active].assignment === 'COST_CENTER' ? (
+                                <td>
+                                  <input className="input w-40" placeholder="Cost centre" value={row.costCenter ?? ''}
+                                    onChange={(event) => {
+                                      const rows = items[active].assignments.slice();
+                                      rows[rowIndex] = { ...rows[rowIndex], costCenter: event.target.value };
+                                      patch(active, { assignments: rows });
+                                    }} />
+                                </td>
+                              ) : null}
+                              {items[active].assignment === 'ORDER' ? (
+                                <td>
+                                  <input className="input w-40" placeholder="Internal order" value={row.internalOrder ?? ''}
+                                    onChange={(event) => {
+                                      const rows = items[active].assignments.slice();
+                                      rows[rowIndex] = { ...rows[rowIndex], internalOrder: event.target.value };
+                                      patch(active, { assignments: rows });
+                                    }} />
+                                </td>
+                              ) : null}
+                              {items[active].assignment === 'ASSET' ? (
+                                <>
+                                  <td>
+                                    <input className="input w-40" placeholder="Asset" value={row.assetNumber ?? ''}
+                                      onChange={(event) => {
+                                        const rows = items[active].assignments.slice();
+                                        rows[rowIndex] = { ...rows[rowIndex], assetNumber: event.target.value };
+                                        patch(active, { assignments: rows });
+                                      }} />
+                                  </td>
+                                  <td>
+                                    <input className="input w-24" placeholder="0000" value={row.assetSubNumber ?? ''}
+                                      onChange={(event) => {
+                                        const rows = items[active].assignments.slice();
+                                        rows[rowIndex] = { ...rows[rowIndex], assetSubNumber: event.target.value };
+                                        patch(active, { assignments: rows });
+                                      }} />
+                                  </td>
+                                  <td>
+                                    <input className="input w-28" placeholder="Type" value={row.assetTransactionType ?? ''}
+                                      onChange={(event) => {
+                                        const rows = items[active].assignments.slice();
+                                        rows[rowIndex] = { ...rows[rowIndex], assetTransactionType: event.target.value };
+                                        patch(active, { assignments: rows });
+                                      }} />
+                                  </td>
+                                </>
+                              ) : null}
                               <td>
                                 <input className="input w-28" inputMode="decimal" placeholder="Distribution %" value={row.percentage}
                                   onChange={(event) => {
@@ -896,7 +1008,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                         type="button"
                         className="btn btn-default min-h-11 sm:min-h-8"
                         onClick={() => patch(active, {
-                          assignments: [...items[active].assignments, { glAccount: '', costCenter: '', percentage: '0' }],
+                          assignments: [...items[active].assignments, { ...blankAssignment(), percentage: '0' }],
                         })}
                       >
                         Add assignment row

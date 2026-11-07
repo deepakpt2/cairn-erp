@@ -105,10 +105,11 @@ const itemInput = z.object({
   /** A batch that already stands. The order does not create it. */
   batch: z.string().trim().max(10).optional().default(''),
   /**
-   * What the item is charged to. COST_CENTER settles a consumed cost on the day it is
-   * invoiced; ASSET capitalizes it (9224). Both bypass stock and GR/IR entirely.
+   * What the item is charged to (9225): COST_CENTER (K) a cost centre, ORDER (F) an
+   * internal order, ASSET (A) a fixed asset. Each names its own object and is judged
+   * on that object's own terms. None of them passes through stock or GR/IR.
    */
-  accountAssignmentCategory: z.enum(['COST_CENTER', 'ASSET']).nullable().optional().default(null),
+  accountAssignmentCategory: z.enum(['COST_CENTER', 'ORDER', 'ASSET']).nullable().optional().default(null),
   markedForDeletion: z.boolean().optional().default(false),
   /**
    * Delivery control. A blank tolerance resolves from the material at its plant, then the

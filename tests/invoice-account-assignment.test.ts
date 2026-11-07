@@ -228,7 +228,7 @@ describe('account-assigned invoice verification', () => {
     const order = await createOrder({
       client, changedBy: ACTOR, ...header,
       items: [item(1, 500, {
-        accountAssignmentCategory: 'COST_CENTER',
+        accountAssignmentCategory: 'ORDER',
         assignments: [{ glAccount: EXPENSE, internalOrder, distributionPercentage: 100 }],
       })],
     });
@@ -244,15 +244,21 @@ describe('account-assigned invoice verification', () => {
     expect(lines.some((l) => l.gl_account === GR_IR)).toBe(false);
   });
 
-  it('splits one item across two cost objects and the parts sum to the charge', async () => {
-    const internalOrder = await newInternalOrder();
+  it('splits one item across two cost centres and the parts sum to the charge', async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into cost_center (client, controlling_area, cost_center, valid_from, valid_to, name, category, company_code, is_posting_locked, created_by)
+        values (${client}, 'A000', 'CC2000', '2026-01-01', '2026-12-31', 'Overhead', 'PRODUCTION', '1000', false, ${ACTOR})
+        on conflict do nothing
+      `);
+    });
     const order = await createOrder({
       client, changedBy: ACTOR, ...header,
       items: [item(3, 100, {
         accountAssignmentCategory: 'COST_CENTER',
         assignments: [
           { glAccount: EXPENSE, costCenter: 'CC1000', distributionPercentage: 60 },
-          { glAccount: EXPENSE, internalOrder, distributionPercentage: 40 },
+          { glAccount: EXPENSE, costCenter: 'CC2000', distributionPercentage: 40 },
         ],
       })],
     });
@@ -267,6 +273,37 @@ describe('account-assigned invoice verification', () => {
     expect(charges).toHaveLength(2);
     expect(charges.reduce((s, l) => s + Number(l.amount), 0)).toBe(300);
     expect(charges.map((l) => Number(l.amount)).sort()).toEqual([120, 180]);
+    expect(charges.map((l) => l.cost_center).sort()).toEqual(['CC1000', 'CC2000']);
+  });
+
+  it('refuses an internal order on an item assigned to a cost centre, and the other way about', async () => {
+    const internalOrder = await newInternalOrder();
+    // The category is the item's: it names one kind of object, and every row under it
+    // names that kind. A row naming another is not a second opinion — it contradicts.
+    await expect(createOrder({
+      client, changedBy: ACTOR, ...header,
+      items: [item(1, 100, {
+        accountAssignmentCategory: 'COST_CENTER',
+        assignments: [{ glAccount: EXPENSE, internalOrder, distributionPercentage: 100 }],
+      })],
+    })).rejects.toThrow(/must name a cost centre and no other object/);
+
+    await expect(createOrder({
+      client, changedBy: ACTOR, ...header,
+      items: [item(1, 100, {
+        accountAssignmentCategory: 'ORDER',
+        assignments: [{ glAccount: EXPENSE, costCenter: 'CC1000', distributionPercentage: 100 }],
+      })],
+    })).rejects.toThrow(/must name an internal order and no other object/);
+
+    // An asset row under either consumption category is refused the same way.
+    await expect(createOrder({
+      client, changedBy: ACTOR, ...header,
+      items: [item(1, 100, {
+        accountAssignmentCategory: 'COST_CENTER',
+        assignments: [{ glAccount: EXPENSE, assetNumber: 'AS0000001', assetTransactionType: 'AQ01', distributionPercentage: 100 }],
+      })],
+    })).rejects.toThrow(/must name a cost centre and no other object/);
   });
 
   it('capitalizes an asset item on the class reconciliation account and writes the asset subledger', async () => {

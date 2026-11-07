@@ -484,7 +484,13 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   check('po_item_price_unit_ck', sql`${t.priceUnit} > 0`),
   check('po_item_number_ck', sql`${t.itemNumber} > 0`),
   check('po_item_category_ck', sql`${t.itemCategory} in ('STANDARD')`),
-  check('po_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER', 'ASSET')`),
+  /**
+   * What the item is charged to (9225): a cost centre (K), an internal order (F) or an
+   * asset (A). Each names its own object and is validated on that object's own terms;
+   * an internal order is not a cost centre wearing a different hat. There is no project
+   * or WBS category and no service category: neither has a master behind it.
+   */
+  check('po_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER', 'ORDER', 'ASSET')`),
   check('po_item_tolerance_ck', sql`${t.overdeliveryTolerance} between 0 and 100 and ${t.underdeliveryTolerance} between 0 and 100`),
   check('po_item_requisition_pair_ck', sql`(${t.requisitionNumber} is null) = (${t.requisitionItem} is null)`),
   check('purchase_order_item_info_record_pair_ck', sql`(${t.infoRecordNumber} is null) = (${t.priceSequence} is null)`),
@@ -526,9 +532,11 @@ export const purchaseOrderAssignment = pgTable('purchase_order_assignment', {
   glAccount: varchar('gl_account', { length: 10 }).notNull(),
   /**
    * The cost object the value belongs to (9224): a cost centre, an internal order, or a
-   * fixed asset. Exactly one stands on a row — charging two would charge twice.
+   * fixed asset. Exactly one stands on a row — charging two would charge twice — and
+   * which one it may be is decided by the item's assignment category (9225).
    */
   costCenter: varchar('cost_center', { length: 10 }),
+  /** An internal order, where and only where the item is assigned to one (ORDER). */
   internalOrder: varchar('internal_order', { length: 20 }),
   assetNumber: varchar('asset_number', { length: 12 }),
   assetSubNumber: varchar('asset_sub_number', { length: 4 }),

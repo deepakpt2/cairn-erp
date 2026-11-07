@@ -279,29 +279,27 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                     <thead>
                       <tr className="text-xs uppercase tracking-wide text-ink-faint">
                         <th>Item</th><th>Category</th><th>G/L account</th>
-                        <th>Cost object</th><th>Share</th><th>Acceptance</th>
+                        <th>Assigned object</th><th>Share</th><th>Acceptance</th>
                       </tr>
                     </thead>
                     <tbody>
                       {order.items.filter((item) => item.accountAssignmentCategory).map((item) => (
                         <tr key={item.itemNumber}>
                           <td>{item.itemNumber}</td>
-                          <td>{item.accountAssignmentCategory}</td>
+                          <td>{item.accountAssignmentLabel ?? item.accountAssignmentCategory}</td>
                           <td>
                             {item.assignments.map((row) => (
                               <div key={row.lineNumber}>
-                                {row.assetNumber ? 'from the asset class' : row.glAccount}
+                                {row.object?.kind === 'ASSET' ? 'from the asset class' : row.glAccount}
                               </div>
                             ))}
                           </td>
                           <td>
                             {item.assignments.map((row) => (
                               <div key={row.lineNumber}>
-                                {row.assetNumber
-                                  ? `Asset ${row.assetNumber}/${row.assetSubNumber ?? '0000'} · ${row.assetTransactionType ?? '—'}`
-                                  : row.internalOrder
-                                    ? `Internal order ${row.internalOrder}`
-                                    : `Cost centre ${row.costCenter ?? '—'}`}
+                                {row.object?.kind === 'ASSET' && row.assetTransactionType
+                                  ? `${row.object.label} · ${row.assetTransactionType}`
+                                  : row.object?.label ?? '—'}
                               </div>
                             ))}
                           </td>

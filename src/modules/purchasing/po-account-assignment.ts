@@ -11,10 +11,11 @@
  * what the items were worth.
  *
  * An assignment line commits to one object: a cost centre (K), an internal order
- * (F) or an asset (A). All three are listed and grouped by the object they name, so
- * a line charged to an order or an asset never appears as a nameless row. WBS (P) is
- * refused by name: this system holds no WBS element master, so there is nothing for
- * such a line to point at. Read-only: no insert, update or delete.
+ * (F) or an asset (A) — each its own account assignment category since 9225. All
+ * three are listed and grouped by the object they name, so a line charged to an
+ * order or an asset never appears as a nameless row. WBS (P) is refused by name:
+ * this system holds no WBS element master, so there is nothing for such a line to
+ * point at. Read-only: no insert, update or delete.
  */
 import { sql } from 'drizzle-orm';
 
@@ -38,8 +39,7 @@ export type ScopeOfList = (typeof SCOPE_OF_LIST)[number];
 
 /**
  * The assignment categories this canon carries, with the SAP code beside each.
- * An internal order is a cost-centre-category line that names an order instead of a
- * centre: the category says the value is consumed, the line says where.
+ * Each names one object: K a cost centre, F an internal order, A an asset (9225).
  */
 export const ACCOUNT_ASSIGNMENT_CATEGORIES = [
   'COST_CENTER', 'K', 'ORDER', 'F', 'ASSET', 'A',
@@ -54,10 +54,10 @@ function categoryFilter(category: string) {
   switch (category) {
     case 'K':
     case 'COST_CENTER':
-      return sql`and i.account_assignment_category = 'COST_CENTER' and a.cost_center is not null`;
+      return sql`and i.account_assignment_category = 'COST_CENTER'`;
     case 'F':
     case 'ORDER':
-      return sql`and i.account_assignment_category = 'COST_CENTER' and a.internal_order is not null`;
+      return sql`and i.account_assignment_category = 'ORDER'`;
     case 'A':
     case 'ASSET':
       return sql`and i.account_assignment_category = 'ASSET'`;

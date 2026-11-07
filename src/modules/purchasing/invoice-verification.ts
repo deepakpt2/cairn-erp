@@ -23,6 +23,9 @@ import { ClearingResetError, resetClearingTx } from '../finance/clearing-reset';
 import {
   AssetAcquisitionError, markAssetAcquisitionsReversedTx, recordAssetAcquisition,
 } from '../finance/asset-acquisition';
+import {
+  accountAssignmentLabel, assignmentObject, type AssignmentObject,
+} from './account-assignment';
 import { accountDetermination, taxCode } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
@@ -126,11 +129,15 @@ export interface InvoiceItemView {
    * Empty for an ordinary stock item.
    */
   accountAssignmentCategory: string | null;
+  /** The same category as a screen names it — 'Cost centre (K)' — or null for stock. */
+  accountAssignmentLabel: string | null;
   assignments: Array<{
     lineNumber: number; glAccount: string; distributionPercentage: string;
     costCenter: string | null; internalOrder: string | null;
     assetNumber: string | null; assetSubNumber: string | null;
     assetTransactionType: string | null;
+    /** The object this line commits to, read once and shown as every screen shows it. */
+    object: AssignmentObject | null;
   }>;
   netPrice: string;
   priceUnit: string;
@@ -218,12 +225,15 @@ async function orderViewInTx(
         grBasedInvoiceVerification: item.grBasedInvoiceVerification,
         finalInvoiceIndicator: item.finalInvoiceIndicator,
         accountAssignmentCategory: item.accountAssignmentCategory,
+        /** The category in words with SAP's code beside it; null for a stock item. */
+        accountAssignmentLabel: accountAssignmentLabel(item.accountAssignmentCategory),
         assignments: assignmentRows.map((row) => ({
           lineNumber: row.lineNumber, glAccount: row.glAccount,
           distributionPercentage: row.distributionPercentage,
           costCenter: row.costCenter, internalOrder: row.internalOrder,
           assetNumber: row.assetNumber, assetSubNumber: row.assetSubNumber,
           assetTransactionType: row.assetTransactionType,
+          object: assignmentObject(row),
         })),
         netPrice: item.netPrice,
         priceUnit: item.priceUnit,
