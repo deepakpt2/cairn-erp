@@ -1,7 +1,10 @@
 # Cairn ERP — Development Operations Runbook
 
-Verified operational procedures for the Cairn ERP development workflow.
-All commands in this document have been executed and verified against the repository.
+**Read this file at the start of every working session, before any command is run on the test host.** It holds
+the two rules that are easiest to break and most expensive to break them: only one application instance may run
+on the test host at a time (§3), and which databases may be created, reused and dropped (§4). Everything in it
+has been executed and verified against the repository; where a procedure and this file disagree, the file is
+what was true when it was written and the host is what is true now — check the host, then correct the file.
 
 ## 1. GitHub Procedures
 
@@ -67,7 +70,7 @@ git --no-pager for-each-ref --format='%(refname:short) -> %(upstream:short)'
 - Host: `107.173.201.115`
 - SSH port: `2222`
 - User: `cairn`
-- Project directory: `/home/cairn/cairn-erp/`
+- Project directory: `/home/cairn/ui-build/` — corrected on 2026-11-07; the runbook named `/home/cairn/cairn-erp/`, which no longer exists on this host, and a command run there fails silently enough to be mistaken for a broken build.
 
 ### Credentials
 - SSH password: `CAIRN_TESTBOX_PASSWORD` from `.env.local` (never printed)
@@ -93,7 +96,7 @@ child.expect(['$', pexpect.TIMEOUT, pexpect.EOF], timeout=15)
 child.prompt = r'cairn@cairn:.*\$ '
 
 # Run commands
-child.sendline('cd /home/cairn/cairn-erp && git --no-pager branch --show-current')
+child.sendline('cd /home/cairn/ui-build && git --no-pager branch --show-current')
 child.expect(child.prompt, timeout=15)
 print(child.before)
 
@@ -106,8 +109,8 @@ Direct SSH and SSH_ASKPASS attempts previously failed. The Pexpect-based interac
 ### Connectivity Verification
 ```bash
 # On the test server, after connecting:
-cd /home/cairn/cairn-erp && pwd
-# Expected: /home/cairn/cairn-erp
+cd /home/cairn/ui-build && pwd
+# Expected: /home/cairn/ui-build   (the runbook once said /home/cairn/cairn-erp — see §2)
 ```
 
 ## 3. Test-Server Workflow
@@ -115,7 +118,7 @@ cd /home/cairn/cairn-erp && pwd
 ### Git Status and Commit Inspection
 
 ```bash
-cd /home/cairn/cairn-erp
+cd /home/cairn/ui-build
 git --no-pager branch --show-current
 git --no-pager rev-parse HEAD
 git --no-pager status --short
@@ -125,7 +128,7 @@ git --no-pager stash list
 ### Fetch and Development Synchronization
 
 ```bash
-cd /home/cairn/cairn-erp
+cd /home/cairn/ui-build
 GITHUB_PAT=<from .env.local>
 git -c 'http.extraheader=Authorization: Basic $(echo -n "x-access-token:${GITHUB_PAT}" | base64 -w0)' fetch origin
 git --no-pager checkout development
@@ -141,14 +144,14 @@ git --no-pager rev-parse HEAD  # Must match origin/development
 ### Dependency Installation
 
 ```bash
-cd /home/cairn/cairn-erp
+cd /home/cairn/ui-build
 npm install  # Only when node_modules is missing or outdated
 ```
 
 ### Verified Build Commands
 
 ```bash
-cd /home/cairn/cairn-erp
+cd /home/cairn/ui-build
 npx next build  # Production build (may take >10 min on single CPU)
 ```
 
@@ -157,7 +160,7 @@ npx next build  # Production build (may take >10 min on single CPU)
 ### Verified Focused Test Commands
 
 ```bash
-cd /home/cairn/cairn-erp
+cd /home/cairn/ui-build
 CAIRN_ENV=development \
 MIGRATION_DATABASE_URL='postgresql://cairn:cairn_dev@127.0.0.1:5432/cairn_acceptance' \
 DATABASE_URL='postgresql://cairn_app:cairn_app_dev@127.0.0.1:5432/cairn_acceptance' \
@@ -180,10 +183,25 @@ echo "EXIT_CODE=$?"
 git --no-pager rev-parse HEAD  # Record this commit hash with test results
 ```
 
-### Avoid Disrupting Running Services
+### One Application Instance at a Time (OWNER RULE — 2026-11-07)
 
-- Do not restart the running Next.js application unnecessarily.
-- The test server runs `next start -p 3100 -H 127.0.0.1` (PID visible via `ps aux`).
+**At most one Next.js instance may run on the test host at any moment.** This is an owner rule, and it binds
+everyone working there, not only the agent.
+
+- Start one only when a browser or UI check actually needs it, and **stop it as soon as the check is done**.
+  Nothing else needs an application: a suite run, a migration, a seeding run and `tsc` all talk to PostgreSQL or
+  to the source tree directly, and an instance standing while they run only competes for the machine.
+- Before starting one, look for a straggler and stop it rather than adding a second:
+  ```bash
+  pgrep -af 'next-server|next dev' | grep -v grep    # what stands
+  pkill -f next-server                                # stop it
+  pgrep -af 'next-server' | grep -v grep              # confirm it is gone
+  ```
+- Two instances were found running at once on 2026-11-07, on ports 3100 and 3200; both were stopped. Two
+  instances are worse than none because they make a UI check lie: the browser may be served by a build that is
+  not the one the tests just exercised, and the two ports then disagree about which code is live.
+- The application runs `next start -p 3100 -H 127.0.0.1` (PID visible via `ps aux`). Do not restart it
+  unnecessarily.
 
 ## 4. Database Procedures
 
@@ -242,6 +260,41 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 - `tests/global-setup.ts` independently treats `cairn_integration` as guarded, requires the full integration identity configuration whenever either URL names it, refuses whole-suite runs unless explicitly permitted, and always skips stale-fixture deletion on guarded targets. Focused integration tests own and remove only their own fixtures.
 - `scripts/test-integration.ts`, `scripts/test-db.ts`, and `scripts/sync-db-app-role.ts` fail closed on missing/mismatched integration configuration; persistent-target changes verify the actual database role, endpoint, server version/state, data directory, and system identifier before mutation.
 - `src/platform/db/target-guard.ts` — `validateTarget()` refuses protected databases without explicit authorization.
+
+### Disposable Verification Databases — Agent Discretion (OWNER-APPROVED; 2026-11-07)
+
+- Owner decision (2026-11-07): the agent may **create a scratch database on the test host whenever a change
+  needs verifying, and is expected to drop it once verification is finished**. No per-database approval is
+  needed, and asking for one costs more than the database does.
+- Naming: `cairn_<topic>_<shorthand>`, unique per task — e.g. `cairn_sd_9227`, `cairn_sd_fresh`.
+- Cluster: the main one on port `5432` (not the `55435` integration cluster of `cairn_integration`). Roles are
+  `cairn_integration_migrator` as owner/migration role and `cairn_app` as runtime role.
+- **Four steps, all of them mandatory.** A database that skips the seed fails on foreign keys that look like
+  application bugs:
+  ```bash
+  psql 'postgresql://cairn:cairn_dev@127.0.0.1:5432/postgres' \
+       -c 'create database <name> owner cairn_integration_migrator'
+  export DATABASE_URL='postgresql://cairn_app:cairn_app_dev@127.0.0.1:5432/<name>' \
+         MIGRATION_DATABASE_URL='postgresql://cairn_integration_migrator:cairn_dev@127.0.0.1:5432/<name>' \
+         CAIRN_ENV=development
+  cd /home/cairn/ui-build
+  npm run db:migrate && npm run db:init-reference && npm run seed     # the seed is not optional
+  NODE_OPTIONS=--max-old-space-size=4096 npx vitest run <files...>
+  ```
+- Cleanup is part of the work, not a favour. Check owner and active sessions, then drop only the database this
+  task created:
+  ```bash
+  psql 'postgresql://cairn:cairn_dev@127.0.0.1:5432/postgres' \
+       -tAc "select datname from pg_database where datname like 'cairn_%' order by 1"
+  psql 'postgresql://cairn:cairn_dev@127.0.0.1:5432/postgres' -c 'drop database <name>'
+  ```
+- A whole-suite run takes about fifteen minutes: launch it detached and poll the log instead of holding the
+  connection open — `setsid nohup npx vitest run --reporter=basic > /tmp/<name>.log 2>&1 < /dev/null & disown`
+  — and read the failures back with `grep -E '^ *× '`.
+- Nothing here relaxes a guard that stands above it. The permanently prohibited databases, `cairn_acceptance`
+  and `cairn_integration` are out of scope for this discretion; `npm run db:verify` still cannot be used,
+  because it targets the prohibited `cairn_b210` configuration; and the four steps above are for a database
+  that will be dropped, never for one that is kept.
 
 ### Test Data Isolation
 
@@ -388,7 +441,7 @@ If a volume already exists with data and the `cairn_app` role credentials are ou
 
 | Symptom | Verified Solution |
 |---------|-------------------|
-| Missing node_modules | `npm install` in `/home/cairn/cairn-erp/` |
+| Missing node_modules | `npm install` in `/home/cairn/ui-build/` |
 
 ### Build and Test Failures
 
