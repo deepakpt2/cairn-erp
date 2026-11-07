@@ -5,6 +5,7 @@ import { t } from '@/platform/i18n';
 import { listTenants, configReadiness } from '@/platform/tenancy';
 import { requireSession } from '@/platform/auth/current';
 import { WorkbenchTree } from './WorkbenchTree';
+import { recheckConfigurationStatusAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,6 +84,9 @@ export default async function WorkbenchPage({
     '/config/exchange-rates',
     '/config/tax-codes',
     '/config/banks',
+    '/config/credit-control-areas',
+    '/platform/roles',
+    '/sales/conditions',
     '/config/house-banks',
     '/config/document-types',
     '/config/tolerance-groups',
@@ -216,6 +220,13 @@ export default async function WorkbenchPage({
         <div className="mt-3 h-1.5 w-full bg-sunken">
           <div className="h-full bg-accent" style={{ width: `${percent}%` }} />
         </div>
+        {/* Steps written by a package, a structure build or a data load carry no mark,
+            so the workbench can ask for work that is already standing. This settles the
+            list against the tenant's own configuration. */}
+        <form action={recheckConfigurationStatusAction} className="mt-3 flex items-center justify-between gap-4">
+          <p className="text-2xs text-ink-faint">{t('workbench.recheck.help')}</p>
+          <button type="submit" className="btn-secondary text-xs">{t('workbench.recheck')}</button>
+        </form>
       </section>
 
       <WorkbenchTree rows={rows} completed={[...completed]} builtRoutes={[...BUILT_ROUTES]} />

@@ -29,9 +29,9 @@ interface Activity {
 const ACTIVITIES: Activity[] = [
   // ── Platform ──────────────────────────────────────────────────────────────
   { code: 'CFG.PLT.CLIENT.DEFINE', area: 'PLATFORM', title: 'Tenant administration', kind: 'DEFINE', prerequisites: [], enables: 'Everything else', wizardStage: 'ONBOARDING', route: '/clients' },
-  { code: 'CFG.PLT.ROLE.DEFINE', area: 'PLATFORM', title: 'Define roles and capabilities', kind: 'DEFINE', prerequisites: ['CFG.PLT.CLIENT.DEFINE'], enables: 'User authorisation', wizardStage: 'ONBOARDING' },
-  { code: 'CFG.PLT.USER.CREATE', area: 'PLATFORM', title: 'Create users', kind: 'DEFINE', prerequisites: ['CFG.PLT.ROLE.DEFINE'], enables: 'Sign-in', wizardStage: 'ONBOARDING' },
-  { code: 'CFG.PLT.USER.MAINTAIN', area: 'PLATFORM', title: 'Maintain users', kind: 'DEFINE', prerequisites: ['CFG.PLT.USER.CREATE'], enables: 'Change user details, activate and deactivate accounts', wizardStage: 'STANDARD' },
+  { code: 'CFG.PLT.ROLE.DEFINE', area: 'PLATFORM', title: 'Define roles and capabilities', kind: 'DEFINE', prerequisites: ['CFG.PLT.CLIENT.DEFINE'], enables: 'User authorisation', wizardStage: 'ONBOARDING', route: '/platform/roles' },
+  { code: 'CFG.PLT.USER.CREATE', area: 'PLATFORM', title: 'Create users', kind: 'DEFINE', prerequisites: ['CFG.PLT.ROLE.DEFINE'], enables: 'Sign-in', wizardStage: 'ONBOARDING', route: '/platform/users' },
+  { code: 'CFG.PLT.USER.MAINTAIN', area: 'PLATFORM', title: 'Maintain users', kind: 'DEFINE', prerequisites: ['CFG.PLT.USER.CREATE'], enables: 'Change user details, activate and deactivate accounts', wizardStage: 'STANDARD', route: '/platform/users' },
   { code: 'CFG.PLT.USER.PASSWORD_RESET', area: 'PLATFORM', title: 'Reset user passwords', kind: 'DEFINE', prerequisites: ['CFG.PLT.USER.CREATE'], enables: 'Administrator-initiated password reset without touching HR data', wizardStage: 'STANDARD' },
   { code: 'CFG.PLT.NUMBERRANGE.DEFINE', area: 'PLATFORM', title: 'Number range maintenance', kind: 'DEFINE', prerequisites: ['CFG.PLT.CLIENT.DEFINE'], enables: 'Document numbering', wizardStage: 'ONBOARDING', route: '/config/number-range-objects' },
 
@@ -81,8 +81,8 @@ const ACTIVITIES: Activity[] = [
   { code: 'CFG.ORG.DIVISION.DEFINE', area: 'SALES', title: 'Define division', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE'], enables: 'Product line reporting', wizardStage: 'ONBOARDING', route: '/config/divisions' },
   { code: 'CFG.ORG.SALESORG.ASSIGN_DIVISION', area: 'SALES', title: 'Assign Division to Sales Organization', kind: 'ASSIGN', prerequisites: ['CFG.ORG.SALESORG.DEFINE', 'CFG.ORG.DIVISION.DEFINE'], enables: 'Sales Area eligibility', wizardStage: 'ONBOARDING', route: '/config/sales-orgs/assign-division' },
   { code: 'CFG.ORG.SALESAREA.DEFINE', area: 'SALES', title: 'Define sales area', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE', 'CFG.ORG.DISTCHANNEL.DEFINE', 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL', 'CFG.ORG.DIVISION.DEFINE', 'CFG.ORG.SALESORG.ASSIGN_DIVISION'], enables: 'Sales master data and documents', wizardStage: 'ONBOARDING', route: '/config/sales-areas' },
-  { code: 'CFG.SALES.PRICING.DEFINE', area: 'SALES', title: 'Define pricing procedure', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESAREA.DEFINE'], enables: 'Price determination', wizardStage: 'ONBOARDING' },
-  { code: 'CFG.SALES.CONDITION.MAINTAIN', area: 'SALES', title: 'Maintain condition records', kind: 'DEFINE', prerequisites: ['CFG.SALES.PRICING.DEFINE'], enables: 'Actual prices on documents', wizardStage: 'STANDARD' },
+  { code: 'CFG.SALES.PRICING.DEFINE', area: 'SALES', title: 'Define pricing procedure', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESAREA.DEFINE'], enables: 'Price determination', wizardStage: 'ONBOARDING', route: '/sales/conditions' },
+  { code: 'CFG.SALES.CONDITION.MAINTAIN', area: 'SALES', title: 'Maintain condition records', kind: 'DEFINE', prerequisites: ['CFG.SALES.PRICING.DEFINE'], enables: 'Actual prices on documents', wizardStage: 'STANDARD', route: '/sales/conditions' },
 
   { code: 'CFG.COST.CONTROLLINGAREA.DEFINE', area: 'CONTROLLING', title: 'Define controlling area', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'Cost accounting', wizardStage: 'ONBOARDING', route: '/config/controlling-area' },
   { code: 'CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY', area: 'CONTROLLING', title: 'Assign controlling area to company code', kind: 'ASSIGN', prerequisites: ['CFG.COST.CONTROLLINGAREA.DEFINE'], enables: 'Cost postings', wizardStage: 'ONBOARDING', route: '/config/controlling-area/assign-company-code' },
@@ -703,6 +703,7 @@ const MESSAGES: Array<{ code: string; severity: string; cls: string; text: strin
 ];
 
 import { validateTarget } from '../src/platform/db/target-guard';
+import { recomputeActivityStatus } from '../src/platform/tenancy/config-activity-status';
 
 async function main() {
   const connectionString =
@@ -1126,6 +1127,21 @@ async function main() {
         ) as v(criterion_code, description, method, evidence, score_min, score_max, weight)
       on conflict (client, criterion_code) do nothing
     `);
+
+    // Every step every tenant already holds, settled from the configuration itself.
+    // The inserts above each patch one code that became actionable after some tenant
+    // was created; this settles the whole list for all of them, once, and the
+    // workbench carries the same rule for a tenant that is already running. It runs
+    // only when the application URL names the same database, so seeding one database
+    // can never rewrite the checklist of another.
+    const applicationURL = process.env.DATABASE_URL;
+    if (applicationURL && new URL(applicationURL).pathname === new URL(connectionString).pathname) {
+      const tenants = await client.unsafe<Array<{ client: string }>>(`select client from client order by client`);
+      for (const tenant of tenants) {
+        await recomputeActivityStatus({ client: tenant.client, by: 'SEED' });
+      }
+      if (tenants.length > 0) console.log(`Settled the configuration checklist for ${tenants.length} tenant(s) from their own configuration.`);
+    }
 
     console.log('Seeding message catalogue…');
     for (const m of MESSAGES) {

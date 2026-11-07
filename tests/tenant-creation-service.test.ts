@@ -93,11 +93,15 @@ describe('tenant creation without a company', () => {
     expect(await count('ZT01', 'sales_org')).toBe(0);
     expect(await tenantSetting('ZT01')).toBeNull();
 
-    // Only what creation actually did is complete: the tenant, its roles and its user.
-    // Not one configuration activity, and above all not CFG.ORG.COMPANYCODE.DEFINE,
-    // which the dead branch used to mark on a tenant with no company code.
+    // Only what creation actually did is complete: the tenant, its roles, its user,
+    // and the number range intervals creation writes under it — four, not three,
+    // because the checklist is settled against the rows the tenant holds and an empty
+    // tenant already holds thirty-three intervals. Not one company-level configuration
+    // activity, and above all not CFG.ORG.COMPANYCODE.DEFINE, which the dead branch
+    // used to mark on a tenant with no company code.
     expect(await completedActivities('ZT01')).toEqual([
       'CFG.PLT.CLIENT.DEFINE',
+      'CFG.PLT.NUMBERRANGE.DEFINE',
       'CFG.PLT.ROLE.DEFINE',
       'CFG.PLT.USER.CREATE',
     ]);
@@ -158,23 +162,33 @@ describe('tenant creation without a company', () => {
 
     const completed = await completedActivities('ZT03');
     // The twelve the reduced package marks — `inventory/standard-config.ts:97` marks the
-    // valuation classes it seeds just above that loop — plus the three platform ones, asserted as an
-    // exact list rather than a count. Measured by execution, which corrected two readings
-    // of the source: the payment terms applier records a change document under
-    // CFG.FIN.PAYTERMS.DEFINE but never marks that activity, so it is not one of the
-    // package's marks and the pre-split total was twenty-nine rather than thirty.
+    // valuation classes it seeds just above that loop — plus the three platform ones, plus
+    // every step the package satisfies without marking: it writes the G/L accounts, the
+    // retained-earnings determination (ACCTDET), the payment terms and both industry
+    // vocabularies, and none of those five was ever marked before the checklist was
+    // settled against the tenant's own rows. Asserted as an exact list rather than a
+    // count, and measured by execution, which corrected two readings of the source:
+    // the payment terms applier records a change document under CFG.FIN.PAYTERMS.DEFINE
+    // but never marks that activity, and the pre-split total was twenty-nine rather
+    // than thirty.
     expect(completed).toEqual([
+      'CFG.FIN.ACCTDET.DEFINE',
       'CFG.FIN.COA.DEFINE',
       'CFG.FIN.DOCTYPE.DEFINE',
       'CFG.FIN.EXRATE.MAINTAIN',
       'CFG.FIN.FYV.DEFINE',
+      'CFG.FIN.GLACCOUNT.CREATE',
+      'CFG.FIN.PAYTERMS.DEFINE',
       'CFG.FIN.PPV.DEFINE',
+      'CFG.INV.INDUSTRYSECTOR.DEFINE',
       'CFG.INV.MATERIALGROUP.DEFINE',
       'CFG.INV.MATERIALTYPE.DEFINE',
       'CFG.INV.VALCLASS.DEFINE',
       'CFG.ORG.DISTCHANNEL.DEFINE',
       'CFG.ORG.DIVISION.DEFINE',
+      'CFG.ORG.INDUSTRY.DEFINE',
       'CFG.PLT.CLIENT.DEFINE',
+      'CFG.PLT.NUMBERRANGE.DEFINE',
       'CFG.PLT.ROLE.DEFINE',
       'CFG.PLT.USER.CREATE',
       'CFG.PROC.PURGROUP.DEFINE',

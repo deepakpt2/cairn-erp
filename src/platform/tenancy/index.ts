@@ -14,6 +14,7 @@ import { withTenant, type Tx } from '../db/client';
 import { client as clientTable, clientSettings } from '../tables/tenancy';
 import { appUser, role, roleCapability, userRole } from '../tables/security';
 import { configActivity, configActivityStatus } from '../tables/registry';
+import { recomputeActivityStatus } from './config-activity-status';
 import { defineRange } from '../numbering';
 import { hashPassword, checkPasswordPolicy } from '../auth/password';
 
@@ -456,6 +457,13 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
     // A tenant created without the package used to be told its company code was
     // defined. Nothing defined one, so nothing is marked: an empty tenant now reports
     // an empty workbench, which is the truth the workbench exists to show.
+
+    // The checklist is then settled against what the tenant actually holds, in this
+    // same transaction. The package writes rows for steps it never marks — G/L
+    // accounts, payment terms, movement types — and a catalogue that grew after this
+    // tenant was created leaves status rows missing altogether, which an update-based
+    // mark silently does nothing about.
+    await recomputeActivityStatus({ client: clientKey, by: input.createdBy, tx });
 
     return {
       client: clientKey,

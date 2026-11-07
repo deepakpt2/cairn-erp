@@ -61,6 +61,7 @@ import { recordChange } from '../change';
 import { withTenant, type Tx } from '../db/client';
 import { markActivityComplete } from './index';
 import { eq, and } from 'drizzle-orm';
+import { recomputeActivityStatus } from './config-activity-status';
 
 /** The keys this builder uses. They are the keys the standard package used. */
 export const STANDARD_STRUCTURE = {
@@ -413,6 +414,12 @@ export async function applyStandardStructureInTransaction(
   for (const code of STRUCTURE_ACTIVITIES) {
     await markActivityComplete(tx, client, code, changedBy);
   }
+
+  // The structure carries more than the steps named above — storage locations, a
+  // purchasing organisation, work centres, a credit control area — and a step whose
+  // status row is missing is one no mark can ever reach. Settle the whole list against
+  // what the tenant now holds, in this same commit.
+  await recomputeActivityStatus({ client, by: changedBy, tx });
 
   return result;
 }
