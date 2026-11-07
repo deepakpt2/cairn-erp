@@ -214,6 +214,91 @@ async function acquiredTotal(tx: Tx, client: string, companyCode: string, assetN
   return round2(rows.reduce((s, r) => s + Number(r.amount), 0));
 }
 
+/**
+ * Write the asset side of a value that has already been posted.
+ *
+ * An invoice against an asset-assigned order capitalizes value on the asset, but the
+ * document that posts it is the invoice, not an acquisition document: the supplier is
+ * credited once, by the invoice's own journal. So the asset subledger is written here,
+ * against a document somebody else posted, rather than by posting a second journal that
+ * would credit the supplier a second time.
+ *
+ * The journal stays the financial authority — this records what the posting means for
+ * the asset: its acquired value, its capitalization date, and when depreciation starts.
+ */
+export async function recordAssetAcquisition(
+  tx: Tx,
+  input: {
+    client: string; changedBy: string;
+    companyCode: string; assetNumber: string; subNumber: string;
+    transactionType: string;
+    documentDate: string; postingDate: string; assetValueDate: string;
+    amount: number; currency: string;
+    offsetAccount: string;
+    reference?: string; text?: string;
+    /** The journal document, already posted, that carries the value. */
+    documentNumber: string; fiscalYear: number;
+    requestKey: string;
+  },
+): Promise<AcquisitionResult> {
+  const asset = { assetNumber: input.assetNumber, subNumber: input.subNumber || '0000' };
+  await tx.insert(assetTransaction).values({
+    client: input.client, companyCode: input.companyCode,
+    assetNumber: asset.assetNumber, subNumber: asset.subNumber,
+    documentNumber: input.documentNumber, fiscalYear: input.fiscalYear,
+    transactionType: input.transactionType,
+    documentDate: input.documentDate, postingDate: input.postingDate,
+    assetValueDate: input.assetValueDate,
+    amount: String(round2(input.amount)), currency: input.currency.toUpperCase(),
+    offsetAccount: input.offsetAccount,
+    reference: input.reference ?? null, lineText: input.text ?? null,
+    status: 'ACTIVE', requestKey: input.requestKey, createdBy: input.changedBy,
+  });
+  if (!(await capitalizedOn(tx, input.client, input.companyCode, asset.assetNumber, asset.subNumber))) {
+    await tx.update(fixedAsset).set({
+      capitalizationDate: input.assetValueDate,
+      changedBy: input.changedBy, changedAt: new Date(),
+    }).where(and(
+      eq(fixedAsset.client, input.client), eq(fixedAsset.companyCode, input.companyCode),
+      eq(fixedAsset.assetNumber, asset.assetNumber), eq(fixedAsset.subNumber, asset.subNumber),
+    ));
+  }
+  await tx.update(assetDepreciation).set({
+    depreciationStartDate: input.assetValueDate,
+    changedBy: input.changedBy, changedAt: new Date(),
+  }).where(and(
+    eq(assetDepreciation.client, input.client), eq(assetDepreciation.companyCode, input.companyCode),
+    eq(assetDepreciation.assetNumber, asset.assetNumber), eq(assetDepreciation.subNumber, asset.subNumber),
+    sql`${assetDepreciation.depreciationStartDate} is null`,
+  ));
+  await recordChange(tx, {
+    client: input.client, objectClass: ASSET_ACQUISITION_CLASS,
+    objectKey: `${input.companyCode}/${asset.assetNumber}/${asset.subNumber}/${input.documentNumber}`,
+    changeType: 'CREATE', changedBy: input.changedBy, transactionCode: ASSET_ACQUIRE_CAPABILITY,
+    after: {
+      documentNumber: input.documentNumber, amount: round2(input.amount),
+      currency: input.currency.toUpperCase(), transactionType: input.transactionType,
+      assetValueDate: input.assetValueDate,
+    },
+  });
+  return {
+    documentNumber: input.documentNumber, fiscalYear: input.fiscalYear,
+    assetNumber: asset.assetNumber, subNumber: asset.subNumber,
+    amount: round2(input.amount), currency: input.currency.toUpperCase(),
+    totalAcquiredValue: await acquiredTotal(tx, input.client, input.companyCode, asset.assetNumber, asset.subNumber),
+  };
+}
+
+async function capitalizedOn(
+  tx: Tx, client: string, companyCode: string, assetNumber: string, subNumber: string,
+): Promise<boolean> {
+  const [row] = await tx.select({ date: fixedAsset.capitalizationDate }).from(fixedAsset).where(and(
+    eq(fixedAsset.client, client), eq(fixedAsset.companyCode, companyCode),
+    eq(fixedAsset.assetNumber, assetNumber), eq(fixedAsset.subNumber, subNumber),
+  ));
+  return Boolean(row?.date);
+}
+
 export async function postAssetAcquisition(
   input: AssetAcquisitionInput & { requestKey: string },
 ): Promise<AcquisitionResult> {
@@ -261,51 +346,19 @@ export async function postAssetAcquisition(
       throw error;
     });
 
-    await tx.insert(assetTransaction).values({
-      client: input.client, companyCode: input.companyCode,
+    return await recordAssetAcquisition(tx, {
+      client: input.client, changedBy: input.changedBy,
+      companyCode: input.companyCode,
       assetNumber: asset.assetNumber, subNumber: asset.subNumber,
-      documentNumber: journal.documentNumber, fiscalYear: journal.fiscalYear,
       transactionType: input.transactionType,
       documentDate: input.documentDate, postingDate: input.postingDate,
       assetValueDate: input.assetValueDate,
-      amount: String(round2(input.amount)), currency: input.currency.toUpperCase(),
+      amount: input.amount, currency: input.currency,
       offsetAccount: input.offsetAccount,
-      reference: input.reference ?? null, lineText: input.text ?? null,
-      status: 'ACTIVE', requestKey: input.requestKey, createdBy: input.changedBy,
-    });
-    if (!asset.capitalizationDate) {
-      await tx.update(fixedAsset).set({
-        capitalizationDate: input.assetValueDate,
-        changedBy: input.changedBy, changedAt: new Date(),
-      }).where(and(
-        eq(fixedAsset.client, input.client), eq(fixedAsset.companyCode, input.companyCode),
-        eq(fixedAsset.assetNumber, asset.assetNumber), eq(fixedAsset.subNumber, asset.subNumber),
-      ));
-    }
-    await tx.update(assetDepreciation).set({
-      depreciationStartDate: input.assetValueDate,
-      changedBy: input.changedBy, changedAt: new Date(),
-    }).where(and(
-      eq(assetDepreciation.client, input.client), eq(assetDepreciation.companyCode, input.companyCode),
-      eq(assetDepreciation.assetNumber, asset.assetNumber), eq(assetDepreciation.subNumber, asset.subNumber),
-      sql`${assetDepreciation.depreciationStartDate} is null`,
-    ));
-    await recordChange(tx, {
-      client: input.client, objectClass: ASSET_ACQUISITION_CLASS,
-      objectKey: `${input.companyCode}/${asset.assetNumber}/${asset.subNumber}/${journal.documentNumber}`,
-      changeType: 'CREATE', changedBy: input.changedBy, transactionCode: ASSET_ACQUIRE_CAPABILITY,
-      after: {
-        documentNumber: journal.documentNumber, amount: round2(input.amount),
-        currency: input.currency.toUpperCase(), transactionType: input.transactionType,
-        assetValueDate: input.assetValueDate,
-      },
-    });
-    return {
+      reference: input.reference, text: input.text,
       documentNumber: journal.documentNumber, fiscalYear: journal.fiscalYear,
-      assetNumber: asset.assetNumber, subNumber: asset.subNumber,
-      amount: round2(input.amount), currency: input.currency.toUpperCase(),
-      totalAcquiredValue: await acquiredTotal(tx, input.client, input.companyCode, asset.assetNumber, asset.subNumber),
-    };
+      requestKey: input.requestKey,
+    });
   });
 }
 
@@ -360,6 +413,55 @@ export async function reverseAssetAcquisition(input: {
     });
     return { reversalDocumentNumber: reversal.documentNumber };
   });
+}
+
+/**
+ * Mark every acquisition a document capitalized as reversed, without posting a
+ * second journal.
+ *
+ * This is for the caller that has already reversed the value itself. An invoice
+ * cancellation mirrors the invoice's own journal — debiting back what the
+ * invoice credited — so the asset's value record has to follow that reversal,
+ * not start another one. Posting a second reversal here would credit the
+ * supplier twice. `reverseAssetAcquisition` remains the operation for the
+ * acquisition that stands alone.
+ */
+export async function markAssetAcquisitionsReversedTx(
+  tx: Tx,
+  input: {
+    client: string; changedBy: string; companyCode: string;
+    documentNumber: string; fiscalYear: number;
+    reversalDocumentNumber: string; reason: string;
+  },
+): Promise<number> {
+  const rows = await tx.select().from(assetTransaction).where(and(
+    eq(assetTransaction.client, input.client),
+    eq(assetTransaction.companyCode, input.companyCode),
+    eq(assetTransaction.documentNumber, input.documentNumber),
+    eq(assetTransaction.fiscalYear, input.fiscalYear),
+    eq(assetTransaction.status, 'ACTIVE'),
+  )).for('update');
+  for (const row of rows) {
+    await tx.update(assetTransaction).set({
+      status: 'REVERSED', reversalDocumentNumber: input.reversalDocumentNumber,
+      changedBy: input.changedBy, changedAt: new Date(),
+    }).where(and(
+      eq(assetTransaction.client, input.client),
+      eq(assetTransaction.companyCode, input.companyCode),
+      eq(assetTransaction.assetNumber, row.assetNumber),
+      eq(assetTransaction.subNumber, row.subNumber),
+      eq(assetTransaction.documentNumber, input.documentNumber),
+      eq(assetTransaction.fiscalYear, input.fiscalYear),
+    ));
+    await recordChange(tx, {
+      client: input.client, objectClass: ASSET_ACQUISITION_CLASS,
+      objectKey: `${input.companyCode}/${row.assetNumber}/${row.subNumber}/${input.documentNumber}`,
+      changeType: 'REVERSE', changedBy: input.changedBy, transactionCode: ASSET_ACQUIRE_CAPABILITY,
+      reason: input.reason,
+      after: { status: 'REVERSED', reversalDocumentNumber: input.reversalDocumentNumber },
+    });
+  }
+  return rows.length;
 }
 
 export async function getAssetTransactions(

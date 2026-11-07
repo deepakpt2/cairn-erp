@@ -20,6 +20,9 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
 import { ClearingResetError, resetClearingTx } from '../finance/clearing-reset';
+import {
+  AssetAcquisitionError, markAssetAcquisitionsReversedTx, recordAssetAcquisition,
+} from '../finance/asset-acquisition';
 import { accountDetermination, taxCode } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
@@ -34,8 +37,10 @@ import {
 } from '../finance/schema';
 import {
   parkedSupplierInvoice,
-  purchaseOrder, purchaseOrderItem, supplierInvoice, supplierInvoiceItem,
+  purchaseOrder, purchaseOrderAssignment, purchaseOrderItem,
+  supplierInvoice, supplierInvoiceItem,
 } from './schema';
+import { judgeAccountAssignments } from './account-assignment';
 
 export const INVOICE_CAPABILITY = 'PROC.INV.RECORD';
 const JOURNAL_DOCUMENT_TYPE = 'KR';
@@ -116,6 +121,17 @@ export interface InvoiceItemView {
   invoiceReceiptIndicator: boolean;
   grBasedInvoiceVerification: boolean;
   finalInvoiceIndicator: boolean;
+  /**
+   * What the item's value belongs to, where it does not go through stock (9224).
+   * Empty for an ordinary stock item.
+   */
+  accountAssignmentCategory: string | null;
+  assignments: Array<{
+    lineNumber: number; glAccount: string; distributionPercentage: string;
+    costCenter: string | null; internalOrder: string | null;
+    assetNumber: string | null; assetSubNumber: string | null;
+    assetTransactionType: string | null;
+  }>;
   netPrice: string;
   priceUnit: string;
   eligible: boolean;
@@ -145,6 +161,10 @@ async function orderViewInTx(
   )).orderBy(purchaseOrderItem.itemNumber);
   const received = await receivedQuantities(tx, client, orderNumber);
   const invoiced = await invoicedQuantities(tx, client, orderNumber);
+  const assigned = await tx.select().from(purchaseOrderAssignment).where(and(
+    eq(purchaseOrderAssignment.client, client),
+    eq(purchaseOrderAssignment.orderNumber, orderNumber),
+  )).orderBy(purchaseOrderAssignment.itemNumber, purchaseOrderAssignment.lineNumber);
   return {
     orderNumber: header.orderNumber,
     supplierNumber: header.supplierNumber,
@@ -153,16 +173,34 @@ async function orderViewInTx(
     items: items.map((item) => {
       const got = received.get(item.itemNumber) ?? 0;
       const done = invoiced.get(item.itemNumber) ?? 0;
+      const assignmentRows = assigned.filter((row) => row.itemNumber === item.itemNumber);
       let refusal: string | null = null;
       if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
       else if (!item.invoiceReceiptIndicator) refusal = 'The item is not invoiceable: its invoice receipt indicator is off.';
       else if (item.finalInvoiceIndicator) refusal = 'The final invoice has been posted against this item.';
-      else if (!item.materialNumber) refusal = 'Text items carry no goods receipt to verify against this round.';
-      else if (item.accountAssignmentCategory) refusal = 'Account-assigned items verify without GR/IR this round.';
-      // Verified against goods only where there are goods to verify against and the item asks
-      // for it. An item that receives none is invoiced against what was ordered, which is not a
-      // fallback: the buyer who switched the goods receipt off said none would arrive.
-      const grBased = item.grBasedInvoiceVerification && item.goodsReceiptIndicator;
+      // An account-assigned item needs no material: what it buys is not stock, and the
+      // short text is what describes it. What it does need is somewhere for the value to
+      // go, and that is checked in full when the invoice is posted — a cost centre that
+      // stood valid when the order was written may not stand valid on the posting day.
+      else if (!item.accountAssignmentCategory && !item.materialNumber) {
+        refusal = 'Text items carry no goods receipt to verify against this round.';
+      } else if (item.accountAssignmentCategory && assignmentRows.length === 0) {
+        refusal = 'An account-assigned item carries no account assignment row, so nothing says where its value belongs.';
+      } else if (item.accountAssignmentCategory) {
+        const total = assignmentRows.reduce((sum, row) => sum + Number(row.distributionPercentage), 0);
+        if (Math.abs(total - 100) > 0.005) {
+          refusal = `Assignment percentages total ${total.toFixed(2)}, not 100.`;
+        }
+      }
+      // Verified against goods only where there are goods to verify against and the item
+      // asks for it. An item that receives none is invoiced against what was ordered, which
+      // is not a fallback: the buyer who switched the goods receipt off said none would
+      // arrive. An account-assigned item joins them by the same reasoning carried one step
+      // further — its invoice clears no goods-received balance at all, because it never
+      // created one, so the order quantity is the only quantity there is to check against.
+      const grBased = item.grBasedInvoiceVerification
+        && item.goodsReceiptIndicator
+        && !item.accountAssignmentCategory;
       return {
         itemNumber: item.itemNumber,
         materialNumber: item.materialNumber,
@@ -179,6 +217,14 @@ async function orderViewInTx(
         invoiceReceiptIndicator: item.invoiceReceiptIndicator,
         grBasedInvoiceVerification: item.grBasedInvoiceVerification,
         finalInvoiceIndicator: item.finalInvoiceIndicator,
+        accountAssignmentCategory: item.accountAssignmentCategory,
+        assignments: assignmentRows.map((row) => ({
+          lineNumber: row.lineNumber, glAccount: row.glAccount,
+          distributionPercentage: row.distributionPercentage,
+          costCenter: row.costCenter, internalOrder: row.internalOrder,
+          assetNumber: row.assetNumber, assetSubNumber: row.assetSubNumber,
+          assetTransactionType: row.assetTransactionType,
+        })),
         netPrice: item.netPrice,
         priceUnit: item.priceUnit,
         eligible: !refusal,
@@ -644,6 +690,16 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
     const prepared: Array<{
       item: InvoiceItemView; quantity: number; netAmount: number; expected: number;
       variance: number; taxCode: string | null; taxAmount: number; valuationClass: string;
+      /**
+       * Where an account-assigned item's value goes, judged on the posting date.
+       * Empty for a stock item, which settles through GR/IR instead.
+       */
+      shares: Array<{
+        glAccount: string; amount: number;
+        costCenter: string | null; internalOrder: string | null;
+        assetNumber: string | null; assetSubNumber: string | null;
+        assetTransactionType: string | null;
+      }>;
     }> = [];
     for (const line of input.lines) {
       const item = itemsByNumber.get(line.itemNumber);
@@ -673,11 +729,49 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
         taxAmount = round2((line.netAmount * rate) / 100);
       }
       const expected = round2((line.quantity * Number(item.netPrice)) / Number(item.priceUnit));
+      // An account-assigned item is judged again here, on the day the money is posted, by
+      // the same rule the order was written under. A cost centre locked since October, an
+      // internal order that ended, an asset since deactivated: none of them may take the
+      // value now, however valid they were when the commitment was made.
+      const shares: typeof prepared[number]['shares'] = [];
+      if (item.accountAssignmentCategory) {
+        const judged = await judgeAccountAssignments(tx, {
+          client: input.client, companyCode: view.companyCode, chartOfAccounts: chart,
+          onDate: input.postingDate,
+          category: item.accountAssignmentCategory, rows: item.assignments,
+        });
+        if (judged.refusal) {
+          throw new InvoiceVerificationError(
+            `Item ${line.itemNumber}: ${judged.refusal}`,
+            'Put the account assignment right on the order, then verify the invoice again.',
+          );
+        }
+        // The value is what the supplier charged: with no stock to revalue there is no
+        // variance to separate, and the order price was a planning figure. The last share
+        // takes the rounding so the shares add up to the invoice exactly.
+        const net = round2(line.netAmount);
+        let given = 0;
+        judged.rows.forEach((row, index) => {
+          const amount = index === judged.rows.length - 1
+            ? round2(net - given)
+            : round2((net * row.percentage) / 100);
+          given = round2(given + amount);
+          shares.push({
+            glAccount: row.glAccount, amount,
+            costCenter: row.costCenter, internalOrder: row.internalOrder,
+            assetNumber: row.assetNumber, assetSubNumber: row.assetSubNumber,
+            assetTransactionType: row.assetTransactionType,
+          });
+        });
+      }
       prepared.push({
         item, quantity: line.quantity, netAmount: round2(line.netAmount), expected,
         variance: round2(line.netAmount - expected),
         taxCode: code || null, taxAmount,
-        valuationClass: await valuationClassFor(tx, input.client, item.materialNumber, item.plant),
+        valuationClass: item.accountAssignmentCategory
+          ? ''
+          : await valuationClassFor(tx, input.client, item.materialNumber, item.plant),
+        shares,
       });
     }
 
@@ -690,23 +784,54 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       );
     }
 
-    const grIrAccount = await resolveAccount(tx, input.client, chart, 'GR_IR_CLEARING', '');
+    // Asked for only when something settles through GR/IR. An order of nothing but
+    // account-assigned items buys no stock, and a tenant that has never configured a
+    // GR/IR account has no reason to be told about one.
+    let grIr: string | null = null;
+    const grIrAccount = async (): Promise<string> => (
+      grIr ??= await resolveAccount(tx, input.client, chart, 'GR_IR_CLEARING', '')
+    );
     const journalLines: Array<{
       glAccount: string; debitCredit: 'S' | 'H'; amount: string;
       businessPartner?: string; material?: string; plant?: string; taxCode?: string;
     }> = [];
     const taxByCode = new Map<string, number>();
+    /** What each asset takes from this invoice, capitalized once the journal stands. */
+    const assetCharges: Array<{
+      assetNumber: string; subNumber: string; transactionType: string; amount: number;
+    }> = [];
     for (const p of prepared) {
-      journalLines.push({
-        glAccount: grIrAccount, debitCredit: 'S', amount: p.expected.toFixed(2),
-        material: p.item.materialNumber!, plant: p.item.plant,
-      });
-      if (p.variance !== 0) {
-        const prd = await resolveAccount(tx, input.client, chart, 'PRICE_DIFFERENCE', p.valuationClass);
+      if (p.shares.length > 0) {
+        // Nothing here touches GR/IR. An account-assigned item buys no stock, so there
+        // is no receipt for the invoice to clear and no balance left to explain: the
+        // value goes where the order said it belonged.
+        for (const share of p.shares) {
+          journalLines.push({
+            glAccount: share.glAccount, debitCredit: 'S', amount: share.amount.toFixed(2),
+            ...(share.costCenter ? { costCenter: share.costCenter } : {}),
+            ...(share.internalOrder ? { internalOrder: share.internalOrder } : {}),
+            ...(share.assetNumber ? { lineText: `Asset ${share.assetNumber}/${share.assetSubNumber ?? '0000'}` } : {}),
+            plant: p.item.plant,
+          });
+          if (share.assetNumber) {
+            assetCharges.push({
+              assetNumber: share.assetNumber, subNumber: share.assetSubNumber ?? '0000',
+              transactionType: share.assetTransactionType!, amount: share.amount,
+            });
+          }
+        }
+      } else {
         journalLines.push({
-          glAccount: prd, debitCredit: p.variance > 0 ? 'S' : 'H',
-          amount: Math.abs(p.variance).toFixed(2), material: p.item.materialNumber!, plant: p.item.plant,
+          glAccount: await grIrAccount(), debitCredit: 'S', amount: p.expected.toFixed(2),
+          material: p.item.materialNumber!, plant: p.item.plant,
         });
+        if (p.variance !== 0) {
+          const prd = await resolveAccount(tx, input.client, chart, 'PRICE_DIFFERENCE', p.valuationClass);
+          journalLines.push({
+            glAccount: prd, debitCredit: p.variance > 0 ? 'S' : 'H',
+            amount: Math.abs(p.variance).toFixed(2), material: p.item.materialNumber!, plant: p.item.plant,
+          });
+        }
       }
       if (p.taxAmount > 0 && p.taxCode) {
         taxByCode.set(p.taxCode, round2((taxByCode.get(p.taxCode) ?? 0) + p.taxAmount));
@@ -761,6 +886,33 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       if (error instanceof PostingError) throw new InvoiceVerificationError(error.message, error.remedy);
       throw error;
     });
+
+    // An asset-assigned line capitalizes as the invoice posts: the value has gone and the
+    // supplier stands credited, so the asset must carry it. The invoice's own journal is
+    // the posting — no second journal is written, because a second journal would credit
+    // the supplier twice.
+    for (const charge of assetCharges) {
+      if (!(charge.amount > 0)) continue;
+      await recordAssetAcquisition(tx, {
+        client: input.client, changedBy: input.changedBy,
+        companyCode: view.companyCode,
+        assetNumber: charge.assetNumber, subNumber: charge.subNumber,
+        transactionType: charge.transactionType,
+        documentDate: input.invoiceDate, postingDate: input.postingDate,
+        assetValueDate: input.postingDate,
+        amount: charge.amount, currency: view.currency,
+        offsetAccount: supplier.reconciliationAccount,
+        reference: `Invoice ${number}`,
+        text: `Order ${input.orderNumber}`,
+        documentNumber: journal.documentNumber, fiscalYear: journal.fiscalYear,
+        requestKey: `${input.requestKey}/asset/${charge.assetNumber}-${charge.subNumber}`,
+      }).catch((error: unknown) => {
+        if (error instanceof AssetAcquisitionError) {
+          throw new InvoiceVerificationError(error.message, error.remedy);
+        }
+        throw error;
+      });
+    }
 
     await tx.insert(supplierInvoice).values({
       client: input.client, invoiceNumber: number, fiscalYear: position.fiscalYear,
@@ -894,6 +1046,16 @@ export async function cancelSupplierInvoice(input: CancelInvoiceInput): Promise<
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new InvoiceVerificationError(error.message, error.remedy);
       throw error;
+    });
+
+    // What the invoice capitalized comes off the asset with it. The reversal above
+    // already mirrored the journal, so the asset's value record follows that document
+    // rather than starting a second reversal — a second one would credit the supplier twice.
+    await markAssetAcquisitionsReversedTx(tx, {
+      client: input.client, changedBy: input.changedBy, companyCode: original.companyCode,
+      documentNumber: original.journalDocumentNumber, fiscalYear: journalYear,
+      reversalDocumentNumber: reversal.documentNumber,
+      reason: `Invoice cancellation ${number}`,
     });
 
     const company = await getCompanyCode(tx, input.client, original.companyCode);

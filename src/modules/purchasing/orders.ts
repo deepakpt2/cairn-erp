@@ -39,6 +39,7 @@ import { DELIVERY_TERMS } from '../foundation/supplier-purchasing';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { glAccount } from '../finance/schema';
+import { judgeAccountAssignments } from './account-assignment';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { FollowOnError, adoptQuotation, convertMoney, settleQuota, updateInfoRecordFromOrder } from './follow-on';
@@ -75,7 +76,11 @@ export class PurchaseOrderError extends Error {
 
 const assignmentInput = z.object({
   glAccount: z.string().trim().min(1).max(10),
-  costCenter: z.string().trim().min(1).max(10),
+  costCenter: z.string().trim().min(1).max(10).optional(),
+  internalOrder: z.string().trim().min(1).max(20).optional(),
+  assetNumber: z.string().trim().min(1).max(12).optional(),
+  assetSubNumber: z.string().trim().min(1).max(4).optional(),
+  assetTransactionType: z.string().trim().min(1).max(4).optional(),
   distributionPercentage: z.coerce.number().positive().max(100),
 });
 
@@ -99,7 +104,11 @@ const itemInput = z.object({
   storageLocation: z.string().trim().max(10).optional().default(''),
   /** A batch that already stands. The order does not create it. */
   batch: z.string().trim().max(10).optional().default(''),
-  accountAssignmentCategory: z.enum(['COST_CENTER']).nullable().optional().default(null),
+  /**
+   * What the item is charged to. COST_CENTER settles a consumed cost on the day it is
+   * invoiced; ASSET capitalizes it (9224). Both bypass stock and GR/IR entirely.
+   */
+  accountAssignmentCategory: z.enum(['COST_CENTER', 'ASSET']).nullable().optional().default(null),
   markedForDeletion: z.boolean().optional().default(false),
   /**
    * Delivery control. A blank tolerance resolves from the material at its plant, then the
@@ -182,7 +191,11 @@ export interface OrderItemRow {
   contractNumber: string | null;
   contractItem: number | null;
   scheduleLines: Array<{ lineNumber: number; deliveryDate: string; quantity: string }>;
-  assignments: Array<{ lineNumber: number; glAccount: string; costCenter: string; distributionPercentage: string }>;
+  assignments: Array<{
+    lineNumber: number; glAccount: string; distributionPercentage: string;
+    costCenter: string | null; internalOrder: string | null;
+    assetNumber: string | null; assetSubNumber: string | null; assetTransactionType: string | null;
+  }>;
 }
 
 export interface OrderDocument {
@@ -597,35 +610,13 @@ async function judgeItem(
     }
   }
 
-  if (item.accountAssignmentCategory === 'COST_CENTER') {
-    if (item.assignments.length === 0) throw new PurchaseOrderError('A cost-centre item needs at least one account assignment row.');
-    const total = item.assignments.reduce((sum, row) => sum + row.distributionPercentage, 0);
-    if (Math.abs(total - 100) > 0.005) {
-      throw new PurchaseOrderError(`Assignment percentages total ${total.toFixed(2)}, not 100.`);
-    }
-    const [area] = await tx.select().from(controllingAreaCompany).where(and(
-      eq(controllingAreaCompany.client, client), eq(controllingAreaCompany.companyCode, header.companyCode),
-    ));
-    for (const row of item.assignments) {
-      if (!area) throw new PurchaseOrderError(`Company code ${header.companyCode} belongs to no controlling area.`);
-      const centres = await tx.select().from(costCenter).where(and(
-        eq(costCenter.client, client), eq(costCenter.controllingArea, area.controllingArea),
-        eq(costCenter.costCenter, row.costCenter),
-      ));
-      const standing = centres.find((c) => c.validFrom <= documentDate && c.validTo >= documentDate);
-      if (!standing) throw new PurchaseOrderError(`Cost centre ${row.costCenter} does not stand valid on ${documentDate} in controlling area ${area.controllingArea}.`);
-      if (standing.isPostingLocked) throw new PurchaseOrderError(`Cost centre ${row.costCenter} is locked for postings.`);
-      if (!company.chartOfAccounts) throw new PurchaseOrderError(`Company code ${header.companyCode} has no chart of accounts assigned.`);
-      const [account] = await tx.select().from(glAccount).where(and(
-        eq(glAccount.client, client), eq(glAccount.chartOfAccounts, company.chartOfAccounts),
-        eq(glAccount.accountNumber, row.glAccount),
-      ));
-      if (!account) throw new PurchaseOrderError(`G/L account ${row.glAccount} does not exist in chart ${company.chartOfAccounts}.`);
-      if (account.isBalanceSheet) throw new PurchaseOrderError(`G/L account ${row.glAccount} is a balance-sheet account; a consumption assignment needs a P&L account.`);
-    }
-  } else if (item.assignments.length > 0) {
-    throw new PurchaseOrderError('A stock item carries no account assignments.');
-  }
+  // What the value belongs to is judged where the invoice will judge it again: one
+  // answer, read at both gates, instead of two codes that could one day disagree.
+  const assignment = await judgeAccountAssignments(tx, {
+    client, companyCode: header.companyCode, chartOfAccounts: company.chartOfAccounts ?? null,
+    onDate: documentDate, category: item.accountAssignmentCategory, rows: item.assignments,
+  });
+  if (assignment.refusal) throw new PurchaseOrderError(assignment.refusal);
 
   if (
     applyRecord && item.applyLeadTime && record?.qualified && record.plannedDeliveryDays != null
@@ -783,7 +774,10 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
         .map((s) => ({ lineNumber: s.lineNumber, deliveryDate: s.deliveryDate, quantity: s.quantity })),
       assignments: assignments.filter((a) => a.itemNumber === item.itemNumber)
         .map((a) => ({
-          lineNumber: a.lineNumber, glAccount: a.glAccount, costCenter: a.costCenter,
+          lineNumber: a.lineNumber, glAccount: a.glAccount,
+          costCenter: a.costCenter, internalOrder: a.internalOrder,
+          assetNumber: a.assetNumber, assetSubNumber: a.assetSubNumber,
+          assetTransactionType: a.assetTransactionType,
           distributionPercentage: a.distributionPercentage,
         })),
     })),
@@ -939,7 +933,12 @@ async function writeItem(
     line += 1;
     await tx.insert(purchaseOrderAssignment).values({
       client, orderNumber, itemNumber, lineNumber: line,
-      glAccount: row.glAccount, costCenter: row.costCenter,
+      glAccount: row.glAccount,
+      costCenter: row.costCenter ?? null,
+      internalOrder: row.internalOrder ?? null,
+      assetNumber: row.assetNumber ?? null,
+      assetSubNumber: row.assetNumber ? (row.assetSubNumber ?? '0000') : null,
+      assetTransactionType: row.assetTransactionType ?? null,
       distributionPercentage: String(row.distributionPercentage), createdBy: changedBy,
     });
   }

@@ -484,7 +484,7 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   check('po_item_price_unit_ck', sql`${t.priceUnit} > 0`),
   check('po_item_number_ck', sql`${t.itemNumber} > 0`),
   check('po_item_category_ck', sql`${t.itemCategory} in ('STANDARD')`),
-  check('po_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER')`),
+  check('po_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER', 'ASSET')`),
   check('po_item_tolerance_ck', sql`${t.overdeliveryTolerance} between 0 and 100 and ${t.underdeliveryTolerance} between 0 and 100`),
   check('po_item_requisition_pair_ck', sql`(${t.requisitionNumber} is null) = (${t.requisitionItem} is null)`),
   check('purchase_order_item_info_record_pair_ck', sql`(${t.infoRecordNumber} is null) = (${t.priceSequence} is null)`),
@@ -524,7 +524,16 @@ export const purchaseOrderAssignment = pgTable('purchase_order_assignment', {
   itemNumber: integer('item_number').notNull(),
   lineNumber: smallint('line_number').notNull(),
   glAccount: varchar('gl_account', { length: 10 }).notNull(),
-  costCenter: varchar('cost_center', { length: 10 }).notNull(),
+  /**
+   * The cost object the value belongs to (9224): a cost centre, an internal order, or a
+   * fixed asset. Exactly one stands on a row — charging two would charge twice.
+   */
+  costCenter: varchar('cost_center', { length: 10 }),
+  internalOrder: varchar('internal_order', { length: 20 }),
+  assetNumber: varchar('asset_number', { length: 12 }),
+  assetSubNumber: varchar('asset_sub_number', { length: 4 }),
+  /** The acquisition type an asset line capitalizes under, named on the order. */
+  assetTransactionType: varchar('asset_transaction_type', { length: 4 }),
   distributionPercentage: numeric('distribution_percentage', { precision: 5, scale: 2 }).notNull(),
   ...auditColumns,
 }, (t) => [
@@ -535,6 +544,13 @@ export const purchaseOrderAssignment = pgTable('purchase_order_assignment', {
   }),
   check('po_assignment_percentage_ck', sql`${t.distributionPercentage} > 0 and ${t.distributionPercentage} <= 100`),
   check('po_assignment_line_ck', sql`${t.lineNumber} > 0`),
+  check('po_assignment_cost_object_ck', sql`(
+    (case when ${t.costCenter} is not null then 1 else 0 end)
+    + (case when ${t.internalOrder} is not null then 1 else 0 end)
+    + (case when ${t.assetNumber} is not null then 1 else 0 end)
+  ) = 1`),
+  check('po_assignment_asset_ck', sql`(${t.assetNumber} is null) = (${t.assetSubNumber} is null)
+    and (${t.assetNumber} is null or ${t.assetTransactionType} is not null)`),
 ]);
 
 /**

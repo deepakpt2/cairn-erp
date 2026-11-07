@@ -266,6 +266,70 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                 </tbody>
               </table>
             </div>
+            {order.items.some((item) => item.accountAssignmentCategory) && (
+              <div className="mt-3 border border-line bg-sunken p-3 text-sm">
+                <p className="font-medium">Account assignment</p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  An account-assigned item settles without GR/IR. No stock is created and no
+                  goods-received balance is left behind: the value is charged where the order
+                  says it belongs.
+                </p>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="grid-table text-left text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                        <th>Item</th><th>Category</th><th>G/L account</th>
+                        <th>Cost object</th><th>Share</th><th>Acceptance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {order.items.filter((item) => item.accountAssignmentCategory).map((item) => (
+                        <tr key={item.itemNumber}>
+                          <td>{item.itemNumber}</td>
+                          <td>{item.accountAssignmentCategory}</td>
+                          <td>
+                            {item.assignments.map((row) => (
+                              <div key={row.lineNumber}>
+                                {row.assetNumber ? 'from the asset class' : row.glAccount}
+                              </div>
+                            ))}
+                          </td>
+                          <td>
+                            {item.assignments.map((row) => (
+                              <div key={row.lineNumber}>
+                                {row.assetNumber
+                                  ? `Asset ${row.assetNumber}/${row.assetSubNumber ?? '0000'} · ${row.assetTransactionType ?? '—'}`
+                                  : row.internalOrder
+                                    ? `Internal order ${row.internalOrder}`
+                                    : `Cost centre ${row.costCenter ?? '—'}`}
+                              </div>
+                            ))}
+                          </td>
+                          <td>
+                            {item.assignments.map((row) => (
+                              <div key={row.lineNumber}>{row.distributionPercentage}%</div>
+                            ))}
+                          </td>
+                          <td>
+                            {item.goodsReceiptIndicator
+                              ? `Invoiceable ${item.invoiceable} of ${item.received} received`
+                              : 'Invoiced against the quantity ordered; this item receives no goods'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {order.items.some((item) => item.accountAssignmentCategory && !item.goodsReceiptIndicator) && (
+                  <p className="mt-2 text-xs text-ink-soft">
+                    An item that receives no goods is invoiced against what was ordered. This
+                    system holds no service entry sheet, so there is no service acceptance to
+                    enforce here: the quantity is checked against the order, and nothing else
+                    stands behind it.
+                  </p>
+                )}
+              </div>
+            )}
             <p className="mt-3 text-sm text-ink-soft">
               Balance: items net {netTotal.toFixed(2)} + tax {taxTotal.toFixed(2)} = {(netTotal + taxTotal).toFixed(2)} {order.currency}.
               The gross amount entered must reconcile with this balance; a price variance against the order price posts separately and is named here.

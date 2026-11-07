@@ -27,7 +27,8 @@ interface ScheduleRow {
 
 interface AssignmentRow {
   glAccount: string;
-  costCenter: string;
+  /** Null where the row charges an internal order or an asset instead (9224). */
+  costCenter: string | null;
   percentage: string;
 }
 
@@ -185,7 +186,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
       quotationItem: number | null;
       deliveryDate: string;
       accountAssignmentCategory?: 'COST_CENTER' | null;
-      assignments?: Array<{ glAccount: string; costCenter: string; percentage: string }>;
+      assignments?: Array<{ glAccount: string; costCenter: string | null; percentage: string }>;
     }>;
   } | null;
 }) {
@@ -290,7 +291,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
         })),
         assignments: item.assignment === 'COST_CENTER'
           ? item.assignments.map((row) => ({
-              glAccount: row.glAccount, costCenter: row.costCenter,
+              glAccount: row.glAccount, costCenter: row.costCenter ?? '',
               distributionPercentage: Number(row.percentage),
             }))
           : [],
@@ -859,7 +860,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                                   }} />
                               </td>
                               <td>
-                                <input className="input w-40" placeholder="Cost centre" value={row.costCenter}
+                                <input className="input w-40" placeholder="Cost centre" value={row.costCenter ?? ''}
                                   onChange={(event) => {
                                     const rows = items[active].assignments.slice();
                                     rows[rowIndex] = { ...rows[rowIndex], costCenter: event.target.value };
