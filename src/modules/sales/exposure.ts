@@ -20,6 +20,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { STANDARD_RETURNS_DELIVERY_TYPE } from './document-type';
+
 import type { Tx } from '../../platform/db/client';
 
 /**
@@ -51,6 +53,10 @@ export async function openSalesCommitments(
               join delivery d
                 on d.client = dl.client and d.delivery_number = dl.delivery_number
              and d.status <> 'CANCELLED'
+             -- A return does not reduce what the customer still owes for. Exposure counts what is
+             -- open against them; a returns delivery counts goods coming back, and letting it
+             -- shrink that figure would weaken the very block this module exists to raise.
+             and d.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
              group by 1, 2, 3
           ) open on open.client = l.client and open.order_number = l.order_number
                and open.order_line_number = l.line_number
@@ -77,6 +83,7 @@ export async function openSalesCommitments(
          where dl.client = ${client}
            and o.customer_number = ${customer}
            and d.status <> 'CANCELLED'
+           and d.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
            and o.status <> 'CANCELLED'
            and o.currency = ${areaCurrency}
            and bd.billing_number is null

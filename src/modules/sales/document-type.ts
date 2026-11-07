@@ -32,6 +32,8 @@ export const STANDARD_DELIVERY_TYPE = 'LF';
 export const STANDARD_BILLING_TYPE = 'F2';
 /** What an invoice cancels into — VF11, as opposed to a credit memo, which stands on its own. */
 export const STANDARD_BILLING_CANCELLATION_TYPE = 'S1';
+/** SAP's LR: the delivery goods come back on, and the document that posts movement 651. */
+export const STANDARD_RETURNS_DELIVERY_TYPE = 'LR';
 
 /**
  * The three types every tenant is delivered with, in the shape the standard configuration package writes
@@ -57,6 +59,10 @@ export interface StandardSalesDocumentType {
 export const STANDARD_SALES_DOCUMENT_TYPES: StandardSalesDocumentType[] = [
   { documentType: STANDARD_ORDER_TYPE, name: 'Standard order', numberRangeObject: 'SALESORD', numberRangeSubObject: 'OR' },
   { documentType: STANDARD_DELIVERY_TYPE, name: 'Outbound delivery', numberRangeObject: 'DELIVERY', numberRangeSubObject: 'LF' },
+  {
+    documentType: STANDARD_RETURNS_DELIVERY_TYPE, name: 'Returns delivery',
+    numberRangeObject: 'DELIVERY', numberRangeSubObject: 'LR',
+  },
   {
     documentType: STANDARD_BILLING_CANCELLATION_TYPE, name: 'Cancellation of invoice',
     numberRangeObject: 'BILLING', numberRangeSubObject: 'S1',

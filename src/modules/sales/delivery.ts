@@ -33,7 +33,9 @@ import { StorageLocationError, resolveStorageLocation, storageLocationRequired }
 import { UnitConversionError } from '../inventory/unit-conversion';
 
 import { delivery, deliveryLine, deliveryPicking, salesOrder, salesOrderLine } from './schema';
-import { DOCUMENT_TYPE_REMEDY, STANDARD_DELIVERY_TYPE, salesDocumentTypeFor } from './document-type';
+import {
+  DOCUMENT_TYPE_REMEDY, STANDARD_DELIVERY_TYPE, STANDARD_RETURNS_DELIVERY_TYPE, salesDocumentTypeFor,
+} from './document-type';
 import { deliveredOf, orderLineProgress } from './fulfillment-quantities';
 import { creditAreaFor } from './sales-order';
 
@@ -186,6 +188,8 @@ async function refuseStandingBlock(client: string, document: string, label: stri
 export interface DeliveryView {
   deliveryNumber: string;
   documentType: string;
+  /** Set only on a returns delivery: the delivery the goods went out on and are coming back against. */
+  referenceDeliveryNumber: string | null;
   orderNumber: string;
   salesOrg: string;
   distributionChannel: string;
@@ -233,6 +237,7 @@ function mapHeader(row: typeof delivery.$inferSelect): Omit<DeliveryView, 'lines
   return {
     deliveryNumber: row.deliveryNumber,
     documentType: row.documentType,
+    referenceDeliveryNumber: row.referenceDeliveryNumber,
     orderNumber: row.orderNumber,
     salesOrg: row.salesOrg,
     distributionChannel: row.distributionChannel,
@@ -347,6 +352,10 @@ export async function listDeliverableOrderLines(
             from delivery_line dl
             join delivery dd on dd.client = dl.client and dd.delivery_number = dl.delivery_number
            and dd.status <> 'CANCELLED'
+           -- A returns delivery carries the quantity coming BACK, on the same order line, in the
+           -- same column. Counting it would tell the screen that goods returned were goods
+           -- delivered, and the line would offer less to deliver than the customer is still owed.
+           and dd.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
            group by 1, 2, 3
         ) d on d.client = l.client and d.order_number = l.order_number and d.order_line_number = l.line_number
        where l.client = ${client}

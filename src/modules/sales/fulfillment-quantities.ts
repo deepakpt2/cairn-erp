@@ -13,6 +13,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { STANDARD_RETURNS_DELIVERY_TYPE } from './document-type';
+
 import type { Tx } from '../../platform/db/client';
 
 export interface OrderLineProgress {
@@ -28,6 +30,9 @@ export async function orderLineProgress(tx: Tx, client: string, orderNumber: str
       from delivery_line dl
       join delivery d on d.client = dl.client and d.delivery_number = dl.delivery_number
      where dl.client = ${client} and dl.order_number = ${orderNumber} and d.status <> 'CANCELLED'
+       -- Goods coming back are not goods that were never delivered: a return leaves the delivered
+       -- quantity exactly where it was, and the order line stays as drawn on as it ever was.
+       and d.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
      group by 1
   `) as unknown as Array<{ line_number: number; quantity: string }>;
   const billed = await tx.execute(sql`

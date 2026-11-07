@@ -191,6 +191,12 @@ export const delivery = pgTable('delivery', {
   client: tenant(),
   deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
   documentType: varchar('document_type', { length: 2 }).notNull().default('LF'),
+  /**
+   * Set only on a returns delivery: the delivery the goods went out on and are coming back against.
+   * Nothing else names one, and a return names exactly one — a document that received goods from two
+   * deliveries could not say which of them may still return what.
+   */
+  referenceDeliveryNumber: varchar('reference_delivery_number', { length: 20 }),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),
   salesOrg: varchar('sales_org', { length: 4 }).notNull(),
   distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),

@@ -30,7 +30,8 @@ import {
   getSalesOrder,
   releaseSalesOrderCredit,
 } from '../src/modules/sales/sales-order';
-import { postReturnsReceipt, ReturnsError } from '../src/modules/sales/returns';
+import { createReturnsDelivery, postReturnsDelivery, postReturnsReceipt, ReturnsError } from '../src/modules/sales/returns';
+import { openSalesCommitments } from '../src/modules/sales/exposure';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
@@ -124,6 +125,8 @@ describe('sales fulfillment and billing (DI-020)', () => {
       for (const range of [
         { objectCode: 'SALESORD', subObject: 'OR', prefix: 'SO', numberLength: 7 },
         { objectCode: 'DELIVERY', subObject: 'LF', prefix: 'DL', numberLength: 7 },
+        // What a returns delivery draws its number from (9229), for the same reason as S1 above.
+        { objectCode: 'DELIVERY', subObject: 'LR', prefix: 'RT', numberLength: 7 },
         { objectCode: 'BILLING', subObject: 'F2', prefix: 'INV', numberLength: 7 },
         // What a cancellation document draws its number from (9227). A fixture tenant does not go through
         // createTenant, so STANDARD_RANGES never ran for it: the interval is defined here, as the others are.
@@ -1112,5 +1115,128 @@ describe('sales fulfillment and billing (DI-020)', () => {
       `) as unknown as Array<{ q: string }>;
       expect(Number(valuation.q)).toBeCloseTo(Number(counted[0].counted) - Number(counted[0].returns_qty), 3);
     });
+  });
+
+  // ---------------------------------------------------------------------------------------------------
+  // The returns delivery: the document that drives a return, instead of a service called against a
+  // delivery. What it must not do is the point of the second half of this test — goods coming back
+  // are not goods never delivered, and they do not reduce what the customer still owes.
+  // ---------------------------------------------------------------------------------------------------
+
+  const exposureNow = () => withTenant(tenant.client, (tx) =>
+    openSalesCommitments(tx, tenant.client, CUSTOMER, 'USD'));
+
+  it('returns through a returns delivery, which posts the 651 and moves nothing else', async () => {
+    // Its own order: the one the tests above share is drawn down to nothing by the time this runs,
+    // and a returns delivery must stand against a delivery of its own.
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('returns-order'),
+      lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
+    });
+    const source = placed.orderNumber;
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: source });
+    expect(open).toHaveLength(1);
+    expect(open[0].remainingQuantity).toBe('2.000');
+
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: source, deliveryDate: DATE,
+      items: [{ orderLineNumber: 10, quantity: '2' }], requestKey: key('returns-second-delivery'),
+    });
+    const shippedNumber = shipped.deliveryNumber;
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber,
+      items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('returns-second-pick'),
+    });
+    const standing = await getDelivery(tenant.client, shippedNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+
+    // What the chain says before any return exists on this delivery.
+    const deliveredBefore = (await listDeliverableOrderLines(tenant.client, { orderNumber: source }))
+      .map((row) => row.deliveredQuantity);
+    const exposureBefore = await exposureNow();
+
+    const created = await createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber, deliveryDate: DATE,
+      requestKey: key('returns-delivery'),
+      items: [{ lineNumber: 10, quantity: 2 }],
+    });
+    expect(created.replayed).toBe(false);
+    expect(created.deliveryNumber).toMatch(/^RT-/);
+
+    const draft = await getDelivery(tenant.client, created.deliveryNumber);
+    expect(draft!.documentType).toBe('LR');
+    expect(draft!.status).toBe('OPEN');
+    expect(draft!.referenceDeliveryNumber).toBe(shippedNumber);
+    expect(draft!.materialDocumentNumber).toBeNull();
+
+    const before = await returnsState();
+    const received = await postReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: created.deliveryNumber,
+      expectedVersion: draft!.version, postingDate: DATE, requestKey: key('returns-delivery-posted'),
+    });
+    expect(received.materialDocumentNumber).toMatch(/^MD-/);
+    expect(received.returnsDeliveryNumber).toBe(created.deliveryNumber);
+    expect(received.stockType).toBe('RETURNS');
+
+    // The document carries its movement, as an issued delivery does.
+    const after = await getDelivery(tenant.client, created.deliveryNumber);
+    expect(after!.status).toBe('RECEIVED');
+    expect(after!.materialDocumentNumber).toBe(received.materialDocumentNumber);
+    expect(after!.goodsMovementDate).toBe(DATE);
+
+    // The goods stand in returns stock, and the delivery they left on remembers they came back.
+    const state = await returnsState();
+    expect(bucketOf(state.buckets, 'RETURNS')).toBe(bucketOf(before.buckets, 'RETURNS') + 2);
+    const [line] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select returned_quantity::text as returned, goods_issue_quantity::text as issued
+        from delivery_line
+       where client = ${tenant.client} and delivery_number = ${shippedNumber} and line_number = 10
+    `) as unknown as Promise<Array<{ returned: string; issued: string }>>);
+    expect(Number(line.returned)).toBe(2);
+    expect(Number(line.issued)).toBe(2);
+
+    // What a return must NOT do. Goods coming back are not goods that were never delivered, and they
+    // do not reduce what the customer still owes for — which is the exposure the credit block reads.
+    const deliveredAfter = (await listDeliverableOrderLines(tenant.client, { orderNumber: source }))
+      .map((row) => row.deliveredQuantity);
+    expect(deliveredAfter).toEqual(deliveredBefore);
+    expect(await exposureNow()).toBe(exposureBefore);
+
+    // A returns delivery is not something to bill: it does not appear in the billing due list.
+    const billable = await listBillableDeliveries(tenant.client);
+    expect(billable.map((row) => row.deliveryNumber)).not.toContain(created.deliveryNumber);
+
+    // Receiving the same returns delivery twice is answered with the receipt it already posted.
+    const again = await postReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: created.deliveryNumber,
+      expectedVersion: after!.version, postingDate: DATE, requestKey: key('returns-delivery-posted'),
+    });
+    expect(again.materialDocumentNumber).toBe(received.materialDocumentNumber);
+  });
+
+  it('refuses a returns delivery that has nothing to return against, or more than it may', async () => {
+    // The first delivery stands issued with everything it sent already back, so there is no
+    // quantity left on it to return — the returnable quantity is what was issued, less what came back.
+    await expect(createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, deliveryDate: DATE,
+      requestKey: key('returns-delivery-exhausted'),
+      items: [{ lineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/only 0 can come back/);
+
+    // A returns delivery cannot be raised against a delivery that is not there.
+    await expect(createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: 'DL-9999999', deliveryDate: DATE,
+      requestKey: key('returns-delivery-missing'),
+      items: [{ lineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/does not stand/);
+
+    // And what was issued cannot be received back through the returns path: it is not a return.
+    await expect(postReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
+      expectedVersion: 1, postingDate: DATE, requestKey: key('returns-posting-not-a-return'),
+    })).rejects.toThrow(/only a returns delivery receives goods back/);
   });
 });

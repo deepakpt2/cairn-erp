@@ -41,6 +41,7 @@ import { resolveStorageLocation, StorageLocationError } from '../inventory/stora
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { RETURNS } from '../inventory/warehouse-stocks';
 import { plant as plantTable } from '../foundation/schema';
+import { STANDARD_RETURNS_DELIVERY_TYPE, salesDocumentTypeFor } from './document-type';
 import { delivery, deliveryLine } from './schema';
 
 /** The transaction code this posting records. No screen offers it yet, so no capability is bound. */
@@ -523,4 +524,297 @@ export async function postReturnsReceiptInTx(tx: Tx, input: PostReturnsReceiptIn
     stockType: RETURNS,
     lines: posted,
   };
+}
+
+/**
+ * The returns delivery — SAP's LR.
+ *
+ * A return has been postable by naming an outbound delivery and calling the receipt directly. That
+ * works for the movement and it is not enough for the chain: nothing else can point at the return,
+ * so a credit memo has nothing to name, a document flow has nothing to draw, and "what came back"
+ * lives in a column on the delivery the goods left on instead of in a document of its own.
+ *
+ * The returns delivery names the delivery it came back against and carries the quantity on its own
+ * lines. Posting it is what posts the 651: the document moves the goods, and the receipt inside it
+ * is the movement.
+ *
+ * One thing it deliberately does not do. A returns delivery is not an outbound delivery that happens
+ * to run backwards, and every place that answers "how much of this order line has been delivered"
+ * has to keep saying the same number before and after a return — returning goods does not undeliver
+ * them. Those readers exclude returns deliveries by document type, and a test holds them to it.
+ */
+/** A line of a returns delivery: the delivery line the goods came back against, and how much of it. */
+export interface ReturnsDeliveryLineInput {
+  /** The line of the outbound delivery the goods are coming back against. */
+  lineNumber: number;
+  quantity: number;
+}
+
+/** The transaction code the returns delivery records. No screen offers it yet. */
+export const RETURNS_DELIVERY_TRANSACTION = 'SALES.RETURNS.DELIVERY';
+
+export interface CreateReturnsDeliveryInput {
+  client: string;
+  changedBy: string;
+  /** The outbound delivery the goods went out on. */
+  deliveryNumber: string;
+  deliveryDate: string;
+  headerText?: string;
+  requestKey: string;
+  items: ReturnsDeliveryLineInput[];
+}
+
+export interface PostReturnsDeliveryInput {
+  client: string;
+  changedBy: string;
+  /** The returns delivery being received. */
+  deliveryNumber: string;
+  expectedVersion: number;
+  postingDate: string;
+  documentDate?: string;
+  requestKey: string;
+}
+
+function validateReturnsDeliveryInput(input: CreateReturnsDeliveryInput): void {
+  if (!input.client?.trim()) throw new ReturnsError('A returns delivery names the tenant it belongs to.');
+  if (!input.changedBy?.trim()) throw new ReturnsError('A returns delivery names who created it.');
+  if (!input.deliveryNumber?.trim()) {
+    throw new ReturnsError('A returns delivery names the delivery the goods left on.', 'Give the delivery number.');
+  }
+  if (!ISO_DATE.test(input.deliveryDate)) {
+    throw new ReturnsError(`Delivery date ${input.deliveryDate} is not an ISO date.`, 'Create the return with a date like 2026-11-07.');
+  }
+  if (!input.requestKey?.trim()) throw new ReturnsError('A returns delivery carries the request key it is created under.');
+  if (!input.items?.length) {
+    throw new ReturnsError('A returns delivery carries at least one item.', 'Name the delivery lines the goods came back against.');
+  }
+  const seen = new Set<number>();
+  for (const item of input.items) {
+    if (!Number.isInteger(item.lineNumber) || item.lineNumber <= 0) {
+      throw new ReturnsError(`Delivery line ${item.lineNumber} is not a line number.`);
+    }
+    if (seen.has(item.lineNumber)) {
+      throw new ReturnsError(`Delivery line ${item.lineNumber} is named twice.`, 'Return each delivery line once.');
+    }
+    seen.add(item.lineNumber);
+    if (!(item.quantity > 0)) {
+      throw new ReturnsError(
+        `Delivery line ${item.lineNumber} states no positive quantity to receive back.`,
+        'Return a quantity greater than zero.',
+      );
+    }
+  }
+}
+
+export async function createReturnsDelivery(
+  input: CreateReturnsDeliveryInput,
+): Promise<{ deliveryNumber: string; replayed: boolean }> {
+  validateReturnsDeliveryInput(input);
+  return withTenant(input.client, async (tx) => {
+    const type = await salesDocumentTypeFor(tx, input.client, STANDARD_RETURNS_DELIVERY_TYPE);
+    if (!type) {
+      throw new ReturnsError(
+        'This tenant configures no returns delivery type (LR).',
+        'Maintain the returns delivery type in the sales document type catalogue.',
+      );
+    }
+
+    const [standing] = await tx.select({ number: delivery.deliveryNumber }).from(delivery).where(and(
+      eq(delivery.client, input.client), eq(delivery.requestKey, input.requestKey),
+    ));
+    if (standing) return { deliveryNumber: standing.number, replayed: true };
+
+    const [origin] = await tx.select().from(delivery).where(and(
+      eq(delivery.client, input.client), eq(delivery.deliveryNumber, input.deliveryNumber),
+    ));
+    if (!origin) {
+      throw new ReturnsError(
+        `Delivery ${input.deliveryNumber} does not stand for this tenant.`,
+        'Return against a delivery that exists.',
+      );
+    }
+    if (origin.documentType === STANDARD_RETURNS_DELIVERY_TYPE) {
+      throw new ReturnsError(
+        `Delivery ${input.deliveryNumber} is itself a returns delivery, and goods come back against the delivery they left on.`,
+        'Name the outbound delivery the goods were issued from.',
+      );
+    }
+    if (origin.status !== 'GOODS_ISSUED') {
+      throw new ReturnsError(
+        `Delivery ${input.deliveryNumber} is ${origin.status}, and goods can only come back from a delivery that has been issued.`,
+        'Post the goods issue first; nothing has left the plant to return.',
+      );
+    }
+
+    const originLines = await tx.select().from(deliveryLine).where(and(
+      eq(deliveryLine.client, input.client), eq(deliveryLine.deliveryNumber, input.deliveryNumber),
+    ));
+    const byNumber = new Map(originLines.map((line) => [line.lineNumber, line]));
+
+    const rows: Array<typeof deliveryLine.$inferInsert> = [];
+    for (const item of input.items) {
+      const line = byNumber.get(item.lineNumber);
+      if (!line) {
+        throw new ReturnsError(
+          `Delivery ${input.deliveryNumber} carries no line ${item.lineNumber}.`,
+          'Name a line the delivery actually carries.',
+        );
+      }
+      const issued = Number(line.goodsIssueQuantity);
+      const already = Number(line.returnedQuantity);
+      if (item.quantity > issued - already + 1e-9) {
+        throw new ReturnsError(
+          `Delivery line ${item.lineNumber} has already received back ${already} of the ${issued} that was issued, so only ${issued - already} can come back.`,
+          'Return no more than was issued; the goods that never left cannot come back.',
+        );
+      }
+      rows.push({
+        client: input.client, deliveryNumber: '', lineNumber: item.lineNumber,
+        orderNumber: line.orderNumber, orderLineNumber: line.orderLineNumber,
+        materialNumber: line.materialNumber, plant: line.plant, quantityUnit: line.quantityUnit,
+        // Ordered against what left, delivered-before against what has already come back, so the
+        // line's own remaining quantity answers how much of the shipment might still return.
+        orderedQuantity: line.goodsIssueQuantity, deliveredBefore: line.returnedQuantity,
+        deliveryQuantity: String(item.quantity),
+        remainingQuantity: String(issued - already - item.quantity),
+        pickedQuantity: '0', goodsIssueQuantity: '0', returnedQuantity: '0',
+        status: 'OPEN', createdBy: input.changedBy,
+      });
+    }
+
+    const drawn = await allocateNumber(tx, {
+      client: input.client, objectCode: type.numberRangeObject, companyCode: '*',
+      subObject: type.numberRangeSubObject, fiscalYear: 0, allocatedBy: input.changedBy,
+    });
+    const number = drawn.display;
+
+    await tx.insert(delivery).values({
+      client: input.client, deliveryNumber: number,
+      documentType: type.documentType, referenceDeliveryNumber: origin.deliveryNumber,
+      orderNumber: origin.orderNumber,
+      salesOrg: origin.salesOrg, distributionChannel: origin.distributionChannel, division: origin.division,
+      customerNumber: origin.customerNumber, companyCode: origin.companyCode, plant: origin.plant,
+      deliveryDate: input.deliveryDate, goodsMovementDate: null,
+      headerText: input.headerText?.trim() || null,
+      status: 'OPEN',
+      requestKey: input.requestKey, createdBy: input.changedBy,
+    });
+    for (const row of rows) {
+      await tx.insert(deliveryLine).values({ ...row, deliveryNumber: number });
+    }
+
+    await recordChange(tx, {
+      client: input.client, objectClass: 'delivery', objectKey: number, changeType: 'CREATE',
+      changedBy: input.changedBy, transactionCode: RETURNS_DELIVERY_TRANSACTION,
+      after: { documentType: type.documentType, returnOf: origin.deliveryNumber, items: rows.length, status: 'OPEN' },
+    });
+
+    return { deliveryNumber: number, replayed: false };
+  });
+}
+
+/** Receive a returns delivery: this is what posts the 651. */
+export async function postReturnsDelivery(
+  input: PostReturnsDeliveryInput,
+): Promise<ReturnsReceiptResult & { returnsDeliveryNumber: string }> {
+  if (!input.client?.trim()) throw new ReturnsError('A returns delivery names the tenant it belongs to.');
+  if (!ISO_DATE.test(input.postingDate)) {
+    throw new ReturnsError(`Posting date ${input.postingDate} is not an ISO date.`, 'Post with a date like 2026-11-07.');
+  }
+  if (input.documentDate != null && !ISO_DATE.test(input.documentDate)) {
+    throw new ReturnsError(`Document date ${input.documentDate} is not an ISO date.`, 'Post with a date like 2026-11-07.');
+  }
+
+  return withTenant(input.client, async (tx) => {
+    const [header] = await tx.select().from(delivery).where(and(
+      eq(delivery.client, input.client), eq(delivery.deliveryNumber, input.deliveryNumber),
+    ));
+    if (!header) {
+      throw new ReturnsError(`Returns delivery ${input.deliveryNumber} does not stand for this tenant.`);
+    }
+    if (header.documentType !== STANDARD_RETURNS_DELIVERY_TYPE) {
+      throw new ReturnsError(
+        `Delivery ${input.deliveryNumber} is ${header.documentType}, and only a returns delivery receives goods back.`,
+        'A delivery that took goods out is not received; it is billed.',
+      );
+    }
+    if (header.status === 'CANCELLED') {
+      throw new ReturnsError(`Returns delivery ${input.deliveryNumber} is cancelled, and a cancelled return receives nothing.`);
+    }
+    if (!header.referenceDeliveryNumber) {
+      throw new ReturnsError(
+        `Returns delivery ${input.deliveryNumber} names no delivery it came back against.`,
+        'The delivery is incomplete: a return without an origin cannot say what may come back.',
+      );
+    }
+    // Already received: the same request pressed twice is answered with what the first attempt
+    // posted, not with a second receipt of the same goods.
+    if (header.status === 'RECEIVED') {
+      const receipt = await standingReceipt(
+        tx, input.client, header.materialDocumentNumber ?? '', header.referenceDeliveryNumber,
+      );
+      return { ...receipt, returnsDeliveryNumber: header.deliveryNumber };
+    }
+    if (header.version !== input.expectedVersion) {
+      throw new ReturnsError(
+        `Returns delivery ${input.deliveryNumber} changed since it was read.`,
+        'Re-read the delivery and post again.',
+      );
+    }
+
+    const lines = await tx.select().from(deliveryLine).where(and(
+      eq(deliveryLine.client, input.client), eq(deliveryLine.deliveryNumber, input.deliveryNumber),
+    ));
+    if (!lines.length) {
+      throw new ReturnsError(`Returns delivery ${input.deliveryNumber} carries no items to receive.`);
+    }
+
+    const receipt = await postReturnsReceiptInTx(tx, {
+      client: input.client, changedBy: input.changedBy,
+      deliveryNumber: header.referenceDeliveryNumber,
+      postingDate: input.postingDate, documentDate: input.documentDate,
+      headerText: `Return ${header.deliveryNumber}`.slice(0, 25),
+      requestKey: input.requestKey,
+      lines: lines.map((line) => ({
+        lineNumber: line.lineNumber,
+        quantity: Number(line.deliveryQuantity),
+      })),
+    });
+
+    const applied = await tx.update(delivery).set({
+      status: 'RECEIVED',
+      materialDocumentNumber: receipt.materialDocumentNumber,
+      materialDocumentYear: receipt.documentYear,
+      goodsMovementDate: input.postingDate,
+      version: header.version + 1,
+      changedBy: input.changedBy, changedAt: new Date(),
+    }).where(and(
+      eq(delivery.client, input.client),
+      eq(delivery.deliveryNumber, input.deliveryNumber),
+      eq(delivery.version, header.version),
+    )).returning({ number: delivery.deliveryNumber });
+    if (!applied.length) {
+      throw new ReturnsError(
+        `Returns delivery ${input.deliveryNumber} changed while it was being received. The receipt was rolled back with it.`,
+      );
+    }
+    await tx.update(deliveryLine).set({
+      status: 'RECEIVED', changedBy: input.changedBy, changedAt: new Date(),
+    }).where(and(
+      eq(deliveryLine.client, input.client),
+      eq(deliveryLine.deliveryNumber, input.deliveryNumber),
+    ));
+
+    await recordChange(tx, {
+      client: input.client, objectClass: 'delivery', objectKey: input.deliveryNumber,
+      changeType: 'CHANGE', changedBy: input.changedBy,
+      transactionCode: RETURNS_DELIVERY_TRANSACTION,
+      after: {
+        status: 'RECEIVED', materialDocument: receipt.materialDocumentNumber,
+        returnOf: header.referenceDeliveryNumber, lines: lines.length,
+      },
+    });
+
+    return { ...receipt, returnsDeliveryNumber: header.deliveryNumber };
+  });
 }
