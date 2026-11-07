@@ -27,6 +27,7 @@ import {
   controllingAreaCompany, plant as plantTable, purchasingOrg, purchasingOrgPlant, salesArea,
   salesOrg, salesOrgText, salesOrgDistributionChannel, salesOrgDivision,
 } from './src/modules/foundation/schema';
+import { configActivity } from './src/platform/tables/registry';
 import {
   readWalkthroughCreditPrerequisiteSnapshot,
   walkthroughCreditPrerequisiteError,
@@ -287,6 +288,16 @@ async function assertNoUnownedWalkthroughStock(tenant: string) {
 }
 
 async function ensureTaxAndAccounts(tenant: string, summary: WalkthroughSummary) {
+  // The tax screen gates on the configuration workbench, and the workbench's activities
+  // come from the global catalogue `npm run seed` writes. A tenant onboarded against a
+  // database where that has not run inherits a partial catalogue with no company-code
+  // activity in it, and the tax service then refuses with a step the operator has already
+  // done. Say what is actually missing instead.
+  const [companyCodeActivity] = await withTenant(tenant, (tx) => tx.select({ code: configActivity.code })
+    .from(configActivity).where(eq(configActivity.code, 'CFG.ORG.COMPANYCODE.DEFINE')));
+  if (!companyCodeActivity) {
+    throw new Error('The configuration activity catalogue is missing CFG.ORG.COMPANYCODE.DEFINE. Initialize global reference data with "npm run seed" (scripts/seed.ts) before onboarding the tenant, then run the walkthrough against a fresh database.');
+  }
   const codes = await listTaxCodes(tenant);
   const standingTax = codes.find((row) => row.country === COUNTRY && row.taxCode === VENDOR_TAX);
   if (standingTax) {
@@ -960,12 +971,16 @@ async function assertStandardWalkthroughStructure(tx: Tx, tenant: string): Promi
     eq(salesArea.client, tenant), eq(salesArea.salesOrg, '1000'), eq(salesArea.distributionChannel, '01'), eq(salesArea.division, '01'),
   ));
   const locationKeys = new Set(locations.map((row) => row.storageLocation.trim()));
+  // The four the standard structure writes have to stand. What is counted is presence,
+  // not the total: this tenant also carries the walkthrough's own transfer bin (0004),
+  // so a run that has already been through the transfer would otherwise look like a
+  // structure that was never built, and a re-run would be refused for no good reason.
   const expectedLocations = ['0001', '0002', '0003', '0099'];
   if (!company?.isActive || company.name !== 'Walkthrough Company' || company.country !== COUNTRY || company.currency !== CURRENCY ||
       company.chartOfAccounts !== CHART || company.fiscalYearVariant !== FYV || company.postingPeriodVariant !== PPV || company.creditControlArea !== '0001' ||
       !cca?.isActive || cca.currency !== CURRENCY || !area?.isActive || area.currency !== CURRENCY || area.fiscalYearVariant !== FYV ||
       controllingLinks.length !== 1 || !mainPlant?.isActive || mainPlant.companyCode !== COMPANY ||
-      expectedLocations.some((key) => !locationKeys.has(key)) || locations.length !== expectedLocations.length ||
+      expectedLocations.some((key) => !locationKeys.has(key)) || locations.length < expectedLocations.length ||
       !purchasing?.isActive || purchasing.companyCode !== COMPANY || purchasingLinks.length !== 1 ||
       !sales?.isActive || sales.companyCode !== COMPANY || sales.currency !== CURRENCY ||
       salesTexts.length !== 1 || salesTexts[0]?.name !== 'Standard Sales' || channelLinks.length !== 1 || divisionLinks.length !== 1 || salesAreas.length !== 1) {
@@ -1224,13 +1239,21 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     await ensureMrpSafetyStock(tenant, summary);
     await ensureSalesPrice(tenant, dates.sales, summary);
 
-    // Purchase order creation has no request-key field. Locate only the exact seed-owned order;
-    // a different document under the same actor or multiple candidates is a hard conflict.
+    // Purchase order creation has no request-key field, so the order is found by what it
+    // buys: the two walkthrough materials, and nothing else in the tenant buys either of
+    // them. Searching by actor and company alone is not enough to identify it — the same
+    // administrator also owns the volume orders and the asset order, so on any run after
+    // the first that search finds dozens and can only refuse.
     const candidateRows = await withTenant(tenant, (tx) => tx.execute(sql`
-      select order_number from purchase_order where client = ${tenant} and created_by = ${ACTOR}
-        and company_code = ${COMPANY}
+      select o.order_number
+        from purchase_order o
+        join purchase_order_item i
+          on i.client = o.client and i.order_number = o.order_number
+       where o.client = ${tenant} and o.created_by = ${ACTOR} and o.company_code = ${COMPANY}
+         and i.material_number in ('RAW-STEEL', 'PACK-CARTON')
+       group by o.order_number
     `) as unknown as Promise<Array<{ order_number: string }>>);
-    if (candidateRows.length > 1) throw new Error('More than one purchase order exists under the seed actor/company; refusing to guess which is the walkthrough order.');
+    if (candidateRows.length > 1) throw new Error('More than one purchase order buys the walkthrough materials under the seed actor/company; refusing to guess which is the walkthrough order.');
     let order = candidateRows.length ? await getOrder(tenant, candidateRows[0].order_number) : null;
     if (order) {
       const itemExpectations = new Map([['RAW-STEEL', { quantity: 100, unit: 'KG', price: 5 }], ['PACK-CARTON', { quantity: 50, unit: 'PC', price: 2 }]]);
