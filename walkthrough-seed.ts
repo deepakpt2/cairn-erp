@@ -56,7 +56,7 @@ import { saveSupplierPurchasing, getSupplierPurchasing } from './src/modules/fou
 import { saveCustomerSalesArea, getCustomerSalesArea } from './src/modules/foundation/customer-sales-areas';
 import { saveTaxCode, listTaxCodes } from './src/modules/foundation/tax-code-definition';
 import { saveAccountDetermination, listAccountDeterminations } from './src/modules/foundation/account-determination';
-import { creditRiskCategory, journalEntryLine } from './src/modules/finance/schema';
+import { assetClass, assetTransactionType, creditRiskCategory, journalEntryLine } from './src/modules/finance/schema';
 import { getCustomerCredit, saveCustomerCredit } from './src/modules/finance/credit';
 import { calculateSubledgerTie } from './src/modules/finance/subledger-tie-out';
 import { reconcileStock } from './src/modules/inventory/stock-reconcile';
@@ -89,6 +89,7 @@ import { getReceivables, postIncomingPayment } from './src/modules/finance/incom
 import { clearCustomerItems, getCustomerClearing } from './src/modules/finance/customer-clearing';
 import { getTransferDocument, postTransfer, reverseTransfer, transferStockAt } from './src/modules/inventory/transfer-posting';
 import { runWalkthroughVolume } from './src/dev/walkthrough-volume';
+import { runWalkthroughAssetProcurement } from './src/dev/walkthrough-asset';
 
 const COMPANY = '1000';
 const PLANT = '1000';
@@ -108,11 +109,13 @@ const CUSTOMER = 'C10000';
 const SUPPLIER = 'S10000';
 const MATERIALS = ['RAW-STEEL', 'PACK-CARTON', 'FG-BRACKET'] as const;
 const VENDOR_TAX = 'V05';
+/** The asset transaction type the walkthrough acquires with; the code the standard package carries. */
+const ASSET_ACQUISITION_TYPE = 'ACQ';
 let ACTOR = '';
 const REQUEST_PREFIX = 'wk-walkthrough';
 const OUT_OF_SCOPE = [
   'The volume phase adds masters, documents, quality inspection and HR master/time data. Payroll results and postings are not fabricated: pay components and their G/L mapping stand, but the amount paid comes from an imported payroll result or a future rule engine, and AE statutory logic is never guessed.',
-  'Fixed-asset accounting, projects, and maintenance are not fabricated by this scenario.',
+  'Fixed-asset accounting is exercised once: one machine, bought on an asset-assigned order item and capitalized by the supplier invoice. Depreciation runs, asset transfers, revaluations, projects, and maintenance are not fabricated by this scenario.',
   'Automated payment runs, bank-statement ingestion/reconciliation and electronic bank interfaces are outside this walkthrough; individual AP/AR payments and customer open-item clearing are exercised.',
 ] as const;
 
@@ -321,6 +324,48 @@ async function ensureTaxAndAccounts(tenant: string, summary: WalkthroughSummary)
       record(summary, `account determination ${desired.event}/${desired.valuationClass || 'blank'}`, true);
     }
   }
+}
+
+/**
+ * Asset accounting needs two things configured before any value can be capitalized:
+ * an active transaction type of kind ACQUISITION, and an active asset class carrying
+ * the reconciliation account the acquisition is posted to. The standard package
+ * carries both, so this normally finds them standing and only records the finding.
+ *
+ * It completes the tenant when the type is missing rather than letting the walkthrough
+ * fail later at the invoice: a tenant that cannot capitalize an asset cannot show the
+ * path at all, and leaving that to be configured by hand is the gap this closes. The
+ * class is not invented — it is master data with accounts, depreciation keys and
+ * useful lives, and a class guessed here would post to accounts nobody chose.
+ */
+async function ensureAssetAcquisitionConfiguration(
+  tenant: string, summary: WalkthroughSummary,
+): Promise<{ transactionType: string; assetClass: string; assetAccount: string }> {
+  const types = await withTenant(tenant, (tx) => tx.select().from(assetTransactionType).where(and(
+    eq(assetTransactionType.client, tenant), eq(assetTransactionType.kind, 'ACQUISITION'),
+  )).orderBy(asc(assetTransactionType.typeCode)));
+  const active = types.find((row) => row.isActive);
+  let transactionType = active?.typeCode;
+  if (!transactionType) {
+    await withTenant(tenant, (tx) => tx.insert(assetTransactionType).values({
+      client: tenant, typeCode: ASSET_ACQUISITION_TYPE, name: 'Acquisition with automatic offsetting',
+      kind: 'ACQUISITION', isActive: true, createdBy: ACTOR,
+    }));
+    transactionType = ASSET_ACQUISITION_TYPE;
+    record(summary, `asset transaction type ${transactionType}`, true);
+  } else {
+    record(summary, `asset transaction type ${transactionType}`, false);
+  }
+
+  const classes = await withTenant(tenant, (tx) => tx.select().from(assetClass).where(and(
+    eq(assetClass.client, tenant), eq(assetClass.isActive, true),
+  )).orderBy(asc(assetClass.assetClass)));
+  const usable = classes.find((row) => row.reconAccount !== null && row.reconAccount.length > 0);
+  if (!usable?.reconAccount) {
+    throw new Error('No active asset class carries a reconciliation account; configure asset class account determination before running the walkthrough.');
+  }
+  record(summary, `asset class ${usable.assetClass} (${usable.reconAccount})`, false);
+  return { transactionType, assetClass: usable.assetClass, assetAccount: usable.reconAccount };
 }
 
 async function ensurePartners(tenant: string, summary: WalkthroughSummary) {
@@ -1172,6 +1217,7 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     await ensureFiNumberRange(tenant, summary);
     await ensureCreditRiskCategory(tenant, summary);
     await ensurePartners(tenant, summary);
+    const assetConfiguration = await ensureAssetAcquisitionConfiguration(tenant, summary);
 
     const dates = { po: asOf, gr: addDays(asOf, 1), invoice: addDays(asOf, 2), productionStart: addDays(asOf, 3), productionFinish: addDays(asOf, 4), issue: addDays(asOf, 5), receipt: addDays(asOf, 6), sales: addDays(asOf, 7), delivery: addDays(asOf, 8), billing: addDays(asOf, 8) };
     await ensureProductionMasters(tenant, asOf, summary);
@@ -1519,8 +1565,24 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
       `${volume.absences} approved absences, ${volume.timeRecordings} time recordings, ${volume.payComponents} pay components; ` +
       'every volume component closes at purchased less consumed, every finished good at zero after sale, and every volume partner at zero open items';
 
+    // The asset path runs last, before the checks below, so every tie-out has to hold
+    // with an asset in the tenant too: the acquisition, the invoice that capitalized it,
+    // the payment that settled it, and no stock or GR/IR balance anywhere in between.
+    const asset = await runWalkthroughAssetProcurement({
+      tenant, actor: ACTOR, company: COMPANY, plant: PLANT, chart: CHART,
+      purchasingOrg: PURCHASING_ORG, purchasingGroup: PURCHASING_GROUP, supplier: SUPPLIER,
+      currency: CURRENCY, taxCode: VENDOR_TAX,
+      transactionType: assetConfiguration.transactionType, assetClass: assetConfiguration.assetClass,
+      assetAccount: assetConfiguration.assetAccount,
+      requestPrefix: REQUEST_PREFIX,
+      invoiceDate: dates.invoice, postingDate: dates.invoice, paymentDate: dates.billing,
+      record: (label, created) => record(summary, label, created),
+    });
+    summary.checks.assetProcurement = `asset ${asset.assetNumber}/${asset.subNumber} acquired for ${asset.acquiredValue} by invoice ${asset.invoiceNumber} ` +
+      `(order ${asset.orderNumber}, no goods movement, ${asset.grIrLines} GR/IR or stock lines), settled by payment ${asset.paymentNumber}`;
+
     await runChecks(tenant, base.fiscalYear, summary);
-    summary.checks.lifecycle = 'PO → GR → supplier invoice → AP payment/clearing; safety-stock MRP → planned order change/conversion → released production order → 261 issue → output receipt; sales order → delivery pick → goods issue → billing/invoice → partial AR receipt → DI-020 credit memo → customer clearing; 311 storage transfer → reversal';
+    summary.checks.lifecycle = 'PO → GR → supplier invoice → AP payment/clearing; safety-stock MRP → planned order change/conversion → released production order → 261 issue → output receipt; sales order → delivery pick → goods issue → billing/invoice → partial AR receipt → DI-020 credit memo → customer clearing; 311 storage transfer → reversal; asset-assigned PO → supplier invoice capitalizing the asset → AP payment/clearing (no receipt, no GR/IR)';
     summary.checks.openItems = 'supplier and customer open items are zero after payment/clearing; customer and vendor subledgers tie to G/L';
     summary.checks.payments = `supplier payment ${apPayment.paymentNumber} cleared ${vendorClearing.clearedItems.length} AP items; customer partial receipt ${arPayment.paymentNumber} and clearing ${arClearing.clearingDocumentNumber} left zero AR items`;
     summary.checks.transferReversal = `transfer ${transfer.materialDocumentNumber} reversed by ${reversal.materialDocumentNumber}; 2 KG raw steel restored to ${STORAGE}, zero in ${TRANSFER_STORAGE}`;

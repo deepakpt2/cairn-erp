@@ -722,6 +722,7 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       if (!item.eligible || (!item.materialNumber && !item.accountAssignmentCategory)) {
         throw new InvoiceVerificationError(`Item ${line.itemNumber} cannot be verified: ${item.refusal ?? 'not eligible.'}`);
       }
+      const material = item.materialNumber ?? '';
       if (!(line.quantity > 0)) throw new InvoiceVerificationError(`Item ${line.itemNumber}: the invoiced quantity must be positive.`);
       if (line.quantity > item.invoiceable + 1e-9) {
         throw new InvoiceVerificationError(
@@ -785,7 +786,7 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
         taxCode: code || null, taxAmount,
         valuationClass: item.accountAssignmentCategory
           ? ''
-          : await valuationClassFor(tx, input.client, item.materialNumber, item.plant),
+          : await valuationClassFor(tx, input.client, material, item.plant),
         shares,
       });
     }
