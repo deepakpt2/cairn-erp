@@ -115,10 +115,11 @@ export default function PoAccountAssignmentShell({ canUse, selection, result, re
             </thead>
             <tbody>
               {result.groups.map((group) => (
-                <tr key={group.costCenter} data-group={group.costCenter}>
+                <tr key={group.costObject} data-group={group.costObject}>
                   <td className="code">
-                    <Link href={`/controlling/cost-center-report?costCenter=${encodeURIComponent(group.costCenter)}`}>
-                      {group.costCenter}
+                    <Link href={group.drillDown}>
+                      {group.costObjectKind === 'COST_CENTER' ? group.costObject
+                        : `${group.costObjectKind === 'ASSET' ? 'Asset' : 'Order'} ${group.costObject}`}
                     </Link>
                   </td>
                   <td className="text-end">{group.lineCount}</td>
@@ -146,7 +147,7 @@ export default function PoAccountAssignmentShell({ canUse, selection, result, re
               <th>{t('poAa.order')}</th>
               <th className="text-end">{t('poAa.item')}</th>
               <th className="text-end">{t('poAa.line')}</th>
-              <th>{t('poAa.costCenter')}</th>
+              <th>{t('poAa.costObject')}</th>
               <th>{t('poAa.glAccount')}</th>
               <th>{t('poAa.material')}</th>
               <th>{t('poAa.description')}</th>
@@ -172,11 +173,14 @@ export default function PoAccountAssignmentShell({ canUse, selection, result, re
             ) : null}
             {result?.rows.map((row) => (
               <tr key={`${row.orderNumber}|${row.itemNumber}|${row.assignmentLine}`}
-                data-order={row.orderNumber} data-cost-center={row.costCenter}>
+                data-order={row.orderNumber} data-cost-object={row.costObject}>
                 <td className="code">{row.orderNumber}</td>
                 <td className="text-end">{row.itemNumber}</td>
                 <td className="text-end">{row.assignmentLine}</td>
-                <td className="code">{row.costCenter}</td>
+                <td className="code">
+                  {row.costObjectKind === 'COST_CENTER' ? row.costObject
+                    : `${row.costObjectKind === 'ASSET' ? 'Asset' : 'Order'} ${row.costObject}`}
+                </td>
                 <td className="code">{row.glAccount}</td>
                 <td className="code">{row.materialNumber}</td>
                 <td>{row.materialDescription}</td>
@@ -192,7 +196,7 @@ export default function PoAccountAssignmentShell({ canUse, selection, result, re
                 <td className="code">{row.supplierNumber}</td>
                 <td className="space-x-2 whitespace-nowrap text-xs">
                   <Link className="code" href={row.orderDrillDown}>{t('poAa.order')}</Link>
-                  <Link className="code" href={row.costCenterDrillDown}>{t('poAa.costCenter')}</Link>
+                  <Link className="code" href={row.costObjectDrillDown}>{t('poAa.costObject')}</Link>
                 </td>
               </tr>
             ))}

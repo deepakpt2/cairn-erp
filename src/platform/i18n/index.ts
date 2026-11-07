@@ -3596,6 +3596,7 @@ const en: Catalogue = {
   'poAa.item': 'Item',
   'poAa.line': 'Asgmt',
   'poAa.costCenter': 'Cost Center',
+  'poAa.costObject': 'Assigned Object',
   'poAa.glAccount': 'G/L Account',
   'poAa.material': 'Material',
   'poAa.description': 'Description',

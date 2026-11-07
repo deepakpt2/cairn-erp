@@ -156,8 +156,16 @@ describe('SCR-129 purchase orders by account assignment (ME2K)', () => {
   it('groups by assigned object and the group totals sum to the lines', async () => {
     const result = await report();
     expect(result.groups).toEqual([
-      { costCenter: 'CC1000', assignedValue: 60, lineCount: 1 },
-      { costCenter: 'CC2000', assignedValue: 90, lineCount: 2 },
+      {
+        costObject: 'CC1000', costObjectKind: 'COST_CENTER', costCenter: 'CC1000',
+        assignedValue: 60, lineCount: 1,
+        drillDown: '/controlling/cost-center-report?costCenter=CC1000',
+      },
+      {
+        costObject: 'CC2000', costObjectKind: 'COST_CENTER', costCenter: 'CC2000',
+        assignedValue: 90, lineCount: 2,
+        drillDown: '/controlling/cost-center-report?costCenter=CC2000',
+      },
     ]);
     expect(result.groupCount).toBe(2);
     expect(result.totalAssignedValue).toBe(150);
@@ -197,15 +205,18 @@ describe('SCR-129 purchase orders by account assignment (ME2K)', () => {
     await expect(report({ scope: 'SOMETHING' })).rejects.toThrow(/scope of selection SOMETHING does not stand/);
   });
 
-  it('refuses the asset, WBS and internal-order categories by name', async () => {
-    await expect(report({ accountAssignmentCategory: 'A' })).rejects.toThrow(/category A \(asset\) is not carried/);
+  it('carries the cost centre, internal order and asset categories, and refuses WBS by name', async () => {
+    // WBS is the one this canon cannot carry: there is no WBS element master to assign to.
     await expect(report({ accountAssignmentCategory: 'P' })).rejects.toThrow(/category P \(WBS element\) is not carried/);
-    await expect(report({ accountAssignmentCategory: 'F' })).rejects.toThrow(/category F \(internal order\) is not carried/);
     const remedy = await report({ accountAssignmentCategory: 'P' }).catch((error: PoAccountAssignError) => error);
-    expect((remedy as PoAccountAssignError).remedy).toMatch(/cost centres only/);
-    // The one this canon carries is accepted, both by name and by SAP code.
+    expect((remedy as PoAccountAssignError).remedy).toMatch(/holds no WBS element master/);
+    // The ones it does carry are accepted, by name and by SAP code. This fixture names
+    // cost centres only, so the order and asset selections list nothing here.
     expect((await report({ accountAssignmentCategory: 'K' })).rows).toHaveLength(3);
     expect((await report({ accountAssignmentCategory: 'COST_CENTER' })).rows).toHaveLength(3);
+    expect((await report({ accountAssignmentCategory: 'F' })).rows).toHaveLength(0);
+    expect((await report({ accountAssignmentCategory: 'A' })).rows).toHaveLength(0);
+    await expect(report({ accountAssignmentCategory: 'Q' })).rejects.toThrow(/category Q does not stand/);
   });
 
   it('refuses keys that do not stand and impossible dates, by name', async () => {
@@ -220,7 +231,7 @@ describe('SCR-129 purchase orders by account assignment (ME2K)', () => {
   it('gives each row its order and cost-centre drills', async () => {
     const result = await report();
     expect(result.rows[0]!.orderDrillDown).toBe('/purchasing/orders?order=4700000001');
-    expect(result.rows[0]!.costCenterDrillDown).toBe('/controlling/cost-center-report?costCenter=CC1000');
+    expect(result.rows[0]!.costObjectDrillDown).toBe('/controlling/cost-center-report?costCenter=CC1000');
   });
 
   it('truncates at the maximum hits and says so', async () => {
@@ -320,5 +331,108 @@ describe('SCR-129 purchase orders by account assignment (ME2K)', () => {
         `);
       });
     }
+  });
+});
+
+/**
+ * The objects a line can be assigned to since 9224. The suite above pins the cost
+ * centre case against a fixture of cost centres only; this one names an internal
+ * order and an asset, because a report that grouped those under a blank heading
+ * would be hiding exactly the commitments the controlling view exists to show.
+ */
+describe('ME2K assignment lines by the object they name', () => {
+  const ACTOR = 'SCR129_ME2K_OBJECTS';
+  let client = '';
+
+  beforeAll(async () => {
+    const tenant = await createTenant('scr129-me2k-objects');
+    client = tenant.client;
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into plant (client, plant, name, country, created_by) values (${client}, 'QD01', 'Plant D', 'KW', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchasing_org (client, purchasing_org, name, created_by) values (${client}, 'O910', 'Test org', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchasing_group (client, purchasing_group, name, created_by) values (${client}, 'G91', 'Test group', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into business_partner (client, partner_number, name, created_by) values (${client}, 'V91000', 'Test supplier', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into cost_center (client, controlling_area, cost_center, valid_from, valid_to, name, category, company_code, created_by)
+        select ${client}, ca.controlling_area, 'CC1000', '2026-01-01', '2026-12-31', 'Cost centre 1000', 'ADMINISTRATION', '1000', ${ACTOR}
+        from (select controlling_area from controlling_area where client = ${client} limit 1) ca
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order (client, order_number, document_type, supplier_number, purchasing_org, purchasing_group,
+                                    company_code, currency, document_date, release_status, created_by) values
+          (${client}, '4700000011', 'STANDARD', 'V91000', 'O910', 'G91', '1000', 'KWD', '2026-04-10', 'RELEASED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_item (client, order_number, item_number, item_category, account_assignment_category,
+                                         short_text, quantity, unit, net_price, price_unit, net_value, plant, created_by) values
+          (${client}, '4700000011', 10, 'STANDARD', 'COST_CENTER', 'Overhaul', 1, 'PC', 200, 1, 200, 'QD01', ${ACTOR}),
+          (${client}, '4700000011', 20, 'STANDARD', 'ASSET', 'Press line', 1, 'PC', 300, 1, 300, 'QD01', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_assignment (client, order_number, item_number, line_number, gl_account,
+                                               internal_order, asset_number, asset_sub_number, asset_transaction_type,
+                                               distribution_percentage, created_by) values
+          (${client}, '4700000011', 10, 1, '500000', 'IO900', null, null, null, 100, ${ACTOR}),
+          (${client}, '4700000011', 20, 1, '500000', null, 'AS9000001', '0000', 'AQ01', 100, ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+  }, 180_000);
+
+  afterAll(async () => {
+    if (client) await destroyTenant(client);
+  }, 180_000);
+
+  async function report(selection: Partial<PoAccountAssignSelection> = {}) {
+    return purchaseOrdersByAccountAssignment({ client, selection: { maxHits: 100, ...selection } });
+  }
+
+  it('lists an internal order and an asset by the object each names, and groups them', async () => {
+    const result = await report();
+    expect(result.rows.map((r) => [r.costObjectKind, r.costObject])).toEqual([
+      ['ASSET', 'AS9000001/0000'],
+      ['INTERNAL_ORDER', 'IO900'],
+    ]);
+    expect(result.rows.find((r) => r.costObjectKind === 'ASSET'))
+      .toMatchObject({ costCenter: '', internalOrder: '', assetNumber: 'AS9000001', assetSubNumber: '0000', assignedValue: 300 });
+    expect(result.rows.find((r) => r.costObjectKind === 'INTERNAL_ORDER'))
+      .toMatchObject({ costCenter: '', internalOrder: 'IO900', assetNumber: '', assignedValue: 200 });
+    // Each group stands under the object its lines commit to, not under a blank heading.
+    expect(result.groups.map((g) => [g.costObject, g.costObjectKind, g.assignedValue])).toEqual([
+      ['AS9000001/0000', 'ASSET', 300],
+      ['IO900', 'INTERNAL_ORDER', 200],
+    ]);
+    expect(result.totalAssignedValue).toBe(500);
+  });
+
+  it('drills an asset line into the asset history and an order line into the order', async () => {
+    const result = await report();
+    expect(result.rows.find((r) => r.costObjectKind === 'ASSET')?.costObjectDrillDown)
+      .toBe('/finance/assets/history?assetNumberFrom=AS9000001&assetNumberTo=AS9000001');
+    expect(result.rows.find((r) => r.costObjectKind === 'INTERNAL_ORDER')?.costObjectDrillDown)
+      .toBe('/controlling/internal-orders?order=IO900');
+  });
+
+  it('selects each category by its SAP code', async () => {
+    expect((await report({ accountAssignmentCategory: 'F' })).rows.map((r) => r.costObject)).toEqual(['IO900']);
+    expect((await report({ accountAssignmentCategory: 'A' })).rows.map((r) => r.costObject)).toEqual(['AS9000001/0000']);
+    expect((await report({ accountAssignmentCategory: 'K' })).rows).toHaveLength(0);
+  });
+
+  it('does not drop the rows that name no cost centre when a cost-centre range is given', async () => {
+    // The range asks for cost-centre lines, and says so: these rows are not silently hidden.
+    expect((await report({ costCenterFrom: 'CC1000' })).rows).toHaveLength(0);
+    expect((await report()).rows).toHaveLength(2);
   });
 });

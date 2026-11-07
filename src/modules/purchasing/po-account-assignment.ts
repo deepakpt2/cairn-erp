@@ -10,9 +10,11 @@
  * totals are sums of those lines, so the cost-centre view always adds back to
  * what the items were worth.
  *
- * Deferred or refused by name (contract §26.858): asset (A), WBS (P) and internal
- * order (F) assignment categories — the canon item constraint admits only
- * COST_CENTER. Read-only: no insert, update or delete.
+ * An assignment line commits to one object: a cost centre (K), an internal order
+ * (F) or an asset (A). All three are listed and grouped by the object they name, so
+ * a line charged to an order or an asset never appears as a nameless row. WBS (P) is
+ * refused by name: this system holds no WBS element master, so there is nothing for
+ * such a line to point at. Read-only: no insert, update or delete.
  */
 import { sql } from 'drizzle-orm';
 
@@ -34,8 +36,35 @@ export type PoScope = (typeof SCOPES)[number]['code'];
 export const SCOPE_OF_LIST = ['ALV', 'STANDARD'] as const;
 export type ScopeOfList = (typeof SCOPE_OF_LIST)[number];
 
-/** The one assignment category this canon can carry, and the SAP code for it. */
-export const COST_CENTER_CATEGORIES = ['COST_CENTER', 'K'] as const;
+/**
+ * The assignment categories this canon carries, with the SAP code beside each.
+ * An internal order is a cost-centre-category line that names an order instead of a
+ * centre: the category says the value is consumed, the line says where.
+ */
+export const ACCOUNT_ASSIGNMENT_CATEGORIES = [
+  'COST_CENTER', 'K', 'ORDER', 'F', 'ASSET', 'A',
+] as const;
+
+/** The one object a line commits to. */
+export const COST_OBJECT_KINDS = ['COST_CENTER', 'INTERNAL_ORDER', 'ASSET'] as const;
+export type CostObjectKind = (typeof COST_OBJECT_KINDS)[number];
+
+/** What a selected category means as a filter over the assignment lines. */
+function categoryFilter(category: string) {
+  switch (category) {
+    case 'K':
+    case 'COST_CENTER':
+      return sql`and i.account_assignment_category = 'COST_CENTER' and a.cost_center is not null`;
+    case 'F':
+    case 'ORDER':
+      return sql`and i.account_assignment_category = 'COST_CENTER' and a.internal_order is not null`;
+    case 'A':
+    case 'ASSET':
+      return sql`and i.account_assignment_category = 'ASSET'`;
+    default:
+      return sql``;
+  }
+}
 
 export const DEFAULT_MAX_HITS = 500;
 export const MAX_HITS_CAP = 5000;
@@ -65,6 +94,13 @@ export interface PoAccountAssignRow {
   assignmentLine: number;
   accountAssignmentCategory: string;
   costCenter: string;
+  /** The other two objects a line can commit to (9224); exactly one of the three stands. */
+  internalOrder: string;
+  assetNumber: string;
+  assetSubNumber: string;
+  /** Which of the three this line names, and the value it shows and groups under. */
+  costObjectKind: CostObjectKind;
+  costObject: string;
   glAccount: string;
   materialNumber: string;
   materialDescription: string;
@@ -79,13 +115,17 @@ export interface PoAccountAssignRow {
   supplierNumber: string;
   currency: string;
   orderDrillDown: string;
-  costCenterDrillDown: string;
+  costObjectDrillDown: string;
 }
 
 export interface PoAccountAssignGroup {
+  costObject: string;
+  costObjectKind: CostObjectKind;
+  /** Set where the group is a cost centre, so the cost-centre view keeps its own key. */
   costCenter: string;
   assignedValue: number;
   lineCount: number;
+  drillDown: string;
 }
 
 export interface PoAccountAssignResult {
@@ -168,17 +208,17 @@ export async function purchaseOrdersByAccountAssignment(input: {
   }
   if (s.accountAssignmentCategory) {
     const category = s.accountAssignmentCategory;
-    if (category === 'A' || category === 'P' || category === 'F') {
-      const name = category === 'A' ? 'asset' : category === 'P' ? 'WBS element' : 'internal order';
+    if (category === 'P' || category === 'WBS') {
       fail(
-        `The account assignment category ${category} (${name}) is not carried.`,
-        'This canon assigns purchase order items to cost centres only; K and COST_CENTER are accepted.',
+        `The account assignment category ${category} (WBS element) is not carried.`,
+        'This system holds no WBS element master, so a purchase order item has nothing to be assigned to. '
+        + 'Assign the item to a cost centre, an internal order or an asset instead.',
       );
     }
-    if (!(COST_CENTER_CATEGORIES as readonly string[]).includes(category)) {
+    if (!(ACCOUNT_ASSIGNMENT_CATEGORIES as readonly string[]).includes(category)) {
       fail(
         `The account assignment category ${category} does not stand.`,
-        `Use ${COST_CENTER_CATEGORIES.join(' or ')}.`,
+        `Use ${ACCOUNT_ASSIGNMENT_CATEGORIES.join(', ')} — K for a cost centre, F for an internal order, A for an asset.`,
       );
     }
   }
@@ -237,8 +277,12 @@ export async function purchaseOrdersByAccountAssignment(input: {
           : sql``;
 
     const where = sql.join([
-      s.costCenterFrom ? sql`and a.cost_center >= ${s.costCenterFrom}` : sql``,
-      s.costCenterTo ? sql`and a.cost_center <= ${s.costCenterTo}` : sql``,
+      s.accountAssignmentCategory ? categoryFilter(s.accountAssignmentCategory.toUpperCase()) : sql``,
+      // A cost centre range asks for cost-centre lines. Stated, because the rows that
+      // name another object carry no cost centre and a range would otherwise drop them
+      // without saying so — a report that hides a line is worse than one that omits it by name.
+      s.costCenterFrom ? sql`and a.cost_center is not null and a.cost_center >= ${s.costCenterFrom}` : sql``,
+      s.costCenterTo ? sql`and a.cost_center is not null and a.cost_center <= ${s.costCenterTo}` : sql``,
       s.purchasingOrgFrom ? sql`and po.purchasing_org >= ${s.purchasingOrgFrom}` : sql``,
       s.purchasingOrgTo ? sql`and po.purchasing_org <= ${s.purchasingOrgTo}` : sql``,
       s.purchasingGroupFrom ? sql`and po.purchasing_group >= ${s.purchasingGroupFrom}` : sql``,
@@ -280,7 +324,8 @@ export async function purchaseOrdersByAccountAssignment(input: {
         group by order_number, item_number
       )
       select po.order_number, i.item_number, a.line_number, i.account_assignment_category,
-             a.cost_center, a.gl_account, coalesce(i.material_number, '') as material_number,
+             a.cost_center, a.internal_order, a.asset_number, a.asset_sub_number,
+             a.gl_account, coalesce(i.material_number, '') as material_number,
              coalesce(mat.description, i.short_text) as material_description, i.plant,
              i.quantity::text as quantity, i.unit, i.net_value::text as net_value,
              a.distribution_percentage::text as distribution_percentage,
@@ -295,7 +340,7 @@ export async function purchaseOrdersByAccountAssignment(input: {
       left join ir on ir.purchase_order_number = i.order_number and ir.purchase_order_item = i.item_number
       left join schedule sc on sc.order_number = i.order_number and sc.item_number = i.item_number
       where po.client = ${client} ${where} ${scopeFilter}
-      order by a.cost_center, po.order_number, i.item_number, a.line_number
+      order by coalesce(a.cost_center, a.internal_order, a.asset_number), po.order_number, i.item_number, a.line_number
       limit ${maxHits + 1}
     `) as unknown as Array<Record<string, unknown>>;
 
@@ -308,14 +353,26 @@ export async function purchaseOrdersByAccountAssignment(input: {
     const out: PoAccountAssignRow[] = window.map((r) => {
       const netValue = num(r.net_value);
       const percent = num(r.distribution_percentage);
-      const costCenter = String(r.cost_center ?? '');
+      const costCenter = String(r.cost_center ?? '').trim();
+      const internalOrder = String(r.internal_order ?? '').trim();
+      const assetNumber = String(r.asset_number ?? '').trim();
+      const assetSubNumber = String(r.asset_sub_number ?? '').trim() || '0000';
       const orderNumber = String(r.order_number);
+      const costObjectKind: CostObjectKind = assetNumber ? 'ASSET' : internalOrder ? 'INTERNAL_ORDER' : 'COST_CENTER';
+      const costObject = assetNumber
+        ? `${assetNumber}/${assetSubNumber}`
+        : internalOrder || costCenter;
       return {
         orderNumber,
         itemNumber: Number(r.item_number),
         assignmentLine: Number(r.line_number),
         accountAssignmentCategory: String(r.account_assignment_category ?? ''),
         costCenter,
+        internalOrder,
+        assetNumber,
+        assetSubNumber,
+        costObjectKind,
+        costObject,
         glAccount: String(r.gl_account ?? ''),
         materialNumber: String(r.material_number ?? ''),
         materialDescription: String(r.material_description ?? ''),
@@ -331,24 +388,38 @@ export async function purchaseOrdersByAccountAssignment(input: {
         supplierNumber: String(r.supplier_number ?? ''),
         currency: String(r.currency ?? ''),
         orderDrillDown: `/purchasing/orders?order=${encodeURIComponent(orderNumber)}`,
-        costCenterDrillDown: `/controlling/cost-center-report?costCenter=${encodeURIComponent(costCenter)}`,
+        costObjectDrillDown: assetNumber
+          ? `/finance/assets/history?assetNumberFrom=${encodeURIComponent(assetNumber)}&assetNumberTo=${encodeURIComponent(assetNumber)}`
+          : internalOrder
+            ? `/controlling/internal-orders?order=${encodeURIComponent(internalOrder)}`
+            : `/controlling/cost-center-report?costCenter=${encodeURIComponent(costCenter)}`,
       };
     });
 
-    // Grouped by assigned object: the controlling view the package asks for.
-    const groupMap = new Map<string, { assignedValue: number; lineCount: number }>();
+    // Grouped by assigned object: the controlling view the package asks for. An asset
+    // and an internal order commit just as a cost centre does, so they stand beside it
+    // rather than under a blank heading.
+    const groupMap = new Map<string, {
+      assignedValue: number; lineCount: number; kind: CostObjectKind; costCenter: string; drillDown: string;
+    }>();
     for (const row of out) {
-      const entry = groupMap.get(row.costCenter) ?? { assignedValue: 0, lineCount: 0 };
+      const entry = groupMap.get(row.costObject) ?? {
+        assignedValue: 0, lineCount: 0, kind: row.costObjectKind,
+        costCenter: row.costObjectKind === 'COST_CENTER' ? row.costCenter : '', drillDown: row.costObjectDrillDown,
+      };
       entry.assignedValue += row.assignedValue;
       entry.lineCount += 1;
-      groupMap.set(row.costCenter, entry);
+      groupMap.set(row.costObject, entry);
     }
     const groups: PoAccountAssignGroup[] = [...groupMap.entries()]
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([costCenter, entry]) => ({
-        costCenter,
+      .map(([costObject, entry]) => ({
+        costObject,
+        costObjectKind: entry.kind,
+        costCenter: entry.costCenter,
         assignedValue: Number(entry.assignedValue.toFixed(2)),
         lineCount: entry.lineCount,
+        drillDown: entry.drillDown,
       }));
     const totalAssignedValue = Number(groups.reduce((sum, g) => sum + g.assignedValue, 0).toFixed(2));
 

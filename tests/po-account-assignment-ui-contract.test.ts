@@ -43,7 +43,7 @@ describe('SCR-129 purchase orders by account assignment UI contract', () => {
 
   it('shows every grid column the package names', () => {
     for (const key of [
-      'poAa.order', 'poAa.item', 'poAa.line', 'poAa.costCenter', 'poAa.glAccount', 'poAa.material',
+      'poAa.order', 'poAa.item', 'poAa.line', 'poAa.costObject', 'poAa.glAccount', 'poAa.material',
       'poAa.description', 'poAa.plant', 'poAa.quantity', 'poAa.unit', 'poAa.netValue', 'poAa.percent',
       'poAa.assignedValue', 'poAa.deliveryDate', 'poAa.release', 'poAa.supplier',
     ]) {
@@ -57,24 +57,25 @@ describe('SCR-129 purchase orders by account assignment UI contract', () => {
 
   it('groups by the assigned object and totals the commitment', () => {
     expect(shell).toContain('result.groups.map');
-    expect(shell).toContain('data-group={group.costCenter}');
+    expect(shell).toContain('data-group={group.costObject}');
     expect(shell).toContain('result.totalAssignedValue.toFixed(2)');
     expect(service).toContain('const groupMap = new Map');
   });
 
-  it('drills each row into the order and the cost centre', () => {
+  it('drills each row into the order and the object it is assigned to', () => {
     expect(service).toContain('/purchasing/orders?order=');
     expect(service).toContain('/controlling/cost-center-report?costCenter=');
+    expect(service).toContain('/controlling/internal-orders?order=');
+    expect(service).toContain('/finance/assets/history?assetNumberFrom=');
     expect(shell).toContain('href={row.orderDrillDown}');
-    expect(shell).toContain('href={row.costCenterDrillDown}');
+    expect(shell).toContain('href={row.costObjectDrillDown}');
   });
 
-  it('refuses the categories this canon cannot carry, by name and with a remedy', () => {
-    expect(service).toContain('(${name}) is not carried');
-    expect(service).toContain("const name = category === 'A' ? 'asset'");
-    expect(service).toContain("'P' ? 'WBS element' : 'internal order'");
-    expect(service).toContain('cost centres only');
-    expect(service).toContain("export const COST_CENTER_CATEGORIES = ['COST_CENTER', 'K'] as const");
+  it('refuses the one category this canon cannot carry, by name and with a remedy', () => {
+    expect(service).toContain('(WBS element) is not carried');
+    expect(service).toContain('holds no WBS element master');
+    expect(service).toContain('export const ACCOUNT_ASSIGNMENT_CATEGORIES = [');
+    expect(service).toContain("'ASSET', 'A'");
   });
 
   it('reads the order book and never writes', () => {
