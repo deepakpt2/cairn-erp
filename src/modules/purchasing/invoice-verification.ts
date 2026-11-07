@@ -714,7 +714,12 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
     for (const line of input.lines) {
       const item = itemsByNumber.get(line.itemNumber);
       if (!item) throw new InvoiceVerificationError(`Order item ${line.itemNumber} does not stand on ${input.orderNumber}.`);
-      if (!item.eligible || !item.materialNumber) {
+      // A stock item is verified through its material: the valuation class and the stock
+      // account come from it, and there is nothing else to value. An account-assigned item
+      // needs no material at all — what it buys is not stock, and the assignment judged
+      // below is what says where the value goes. An item with neither is already refused
+      // as ineligible above, with the reason, so nothing reaches this line unexplained.
+      if (!item.eligible || (!item.materialNumber && !item.accountAssignmentCategory)) {
         throw new InvoiceVerificationError(`Item ${line.itemNumber} cannot be verified: ${item.refusal ?? 'not eligible.'}`);
       }
       if (!(line.quantity > 0)) throw new InvoiceVerificationError(`Item ${line.itemNumber}: the invoiced quantity must be positive.`);

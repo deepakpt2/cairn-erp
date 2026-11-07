@@ -344,6 +344,42 @@ describe('account-assigned invoice verification', () => {
     expect(asset?.capitalizationDate).toBe('2026-10-18');
   });
 
+  it('verifies an account-assigned item that carries no material, and refuses one that carries neither', async () => {
+    // The usual asset or service item is a text item: it names no material because it
+    // buys no stock. The assignment is what says where the value goes, not the material.
+    const assetNumber = await newAsset();
+    const order = await createOrder({
+      client, changedBy: ACTOR, ...header,
+      items: [item(1, 2500, {
+        materialNumber: '', shortText: 'Office machine',
+        accountAssignmentCategory: 'ASSET',
+        assignments: [{ glAccount: EXPENSE, assetNumber, assetTransactionType: 'AQ01', distributionPercentage: 100 }],
+      })],
+    });
+    const invoice = await postSupplierInvoice({
+      client, changedBy: ACTOR, orderNumber: order.orderNumber,
+      supplierReference: 'INV-AS-TXT', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 2750, requestKey: 'iv-as-text',
+      lines: [{ itemNumber: 10, quantity: 1, netAmount: 2500, taxCode: 'T10' }],
+    });
+    expect(invoice.status).toBe('POSTED');
+    const lines = await journalLines(invoice.journalDocumentNumber!);
+    expect(lines.find((l) => l.gl_account === ASSET_RECON)).toMatchObject({ debit_credit: 'S', amount: 2500 });
+    expect(lines.some((l) => l.gl_account === GR_IR)).toBe(false);
+
+    // A text item with no assignment anywhere is still refused, and says why.
+    const bare = await createOrder({
+      client, changedBy: ACTOR, ...header,
+      items: [item(1, 100, { materialNumber: '', shortText: 'Mystery' })],
+    });
+    await expect(postSupplierInvoice({
+      client, changedBy: ACTOR, orderNumber: bare.orderNumber,
+      supplierReference: 'INV-BARE', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 110, requestKey: 'iv-bare',
+      lines: [{ itemNumber: 10, quantity: 1, netAmount: 100, taxCode: 'T10' }],
+    })).rejects.toThrow(/Text items carry no goods receipt to verify against this round/);
+  });
+
   it('takes the capitalization off the asset when the invoice is cancelled', async () => {
     const assetNumber = await newAsset();
     const order = await createOrder({
