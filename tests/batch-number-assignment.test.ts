@@ -330,14 +330,14 @@ describe('OMCZ internal batch number assignment', () => {
       )
     `));
     const view = await getReceiptOrder(client, 'PO-ASSIGNED');
-    expect(view?.items[0]?.refusal).toMatch(/later round/);
+    expect(view?.items[0]?.refusal).toMatch(/takes no goods receipt/);
     expect(view?.items[0]?.eligible).toBe(false);
     const before = await currentNumber(client);
     await expect(postGoodsReceipt({
       client, changedBy: ACTOR, orderNumber: 'PO-ASSIGNED',
       documentDate: '2026-10-18', postingDate: '2026-10-18', requestKey: 'omcz-assigned',
       lines: [{ itemNumber: 10, quantity: 1, storageLocation: '0001' }],
-    })).rejects.toThrow(/later round/);
+    })).rejects.toThrow(/takes no goods receipt/);
     expect(await currentNumber(client)).toBe(before);
   });
 
@@ -359,7 +359,9 @@ describe('OMCZ internal batch number assignment', () => {
     const action = readFileSync('src/app/config/batch-number-assignment/actions.ts', 'utf8');
     expect(action).toContain('requireCapability(ACTIVITY)');
     expect(action.match(/requireCapability\(ACTIVITY\)/g)).toHaveLength(2);
-    expect(readFileSync('src/modules/inventory/goods-receipt.ts', 'utf8')).toContain('readAssignedGoodsReceiptDecision');
+    // The goods receipt is the only place an account-assigned movement could be posted
+    // from, so the refusal has to stand there and nowhere else.
+    expect(readFileSync('src/modules/inventory/goods-receipt.ts', 'utf8')).toContain('accountAssignedReceiptRefusal');
     expect(readFileSync('src/modules/inventory/goods-receipt.ts', 'utf8')).not.toContain('allocateInternalBatchNumber');
   });
 });

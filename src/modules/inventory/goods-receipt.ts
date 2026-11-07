@@ -24,13 +24,15 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
 import { deliveryCompletionDecision, readDeliveryCompletionPolicy } from '../purchasing/delivery-completion';
+import {
+  ACCOUNT_ASSIGNMENT_NAME, type AccountAssignmentCategory, normalizeAccountAssignmentCategory,
+} from '../purchasing/account-assignment';
 import { documentRelease, purchaseOrder, purchaseOrderItem } from '../purchasing/schema';
 import { materialPeriodAllows } from './material-period-control';
 import {
   proposeStorageLocation, resolveStorageLocation, storageLocationRequired, StorageLocationError,
 } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
-import { assignedReceiptRefusal, readAssignedGoodsReceiptDecision } from './batch-number-assignment';
 import { noteBatchControlUse } from './batch-control-use';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
@@ -233,6 +235,29 @@ export interface ReceiptOrderView {
   items: ReceiptItemView[];
 }
 
+/**
+ * Why a goods receipt is refused against an account-assigned item.
+ *
+ * The item buys no stock. Its value belongs to a cost centre, an internal order or
+ * an asset, and it is charged there when the invoice is verified. Receiving it would
+ * create an inventory movement for something that was never inventory and leave a
+ * GR/IR balance that no invoice will ever clear, because invoice verification charges
+ * the assigned account directly and touches GR/IR not at all. So the receipt is
+ * refused here, in the one place a movement could be posted from, rather than allowed
+ * and reconciled away afterwards.
+ *
+ * An account-assigned goods movement — a service or consumable receipt with its own
+ * acceptance and its own accounting — is a feature of its own, designed whole. It is
+ * not approximated here by posting stock and clearing it later.
+ */
+export function accountAssignedReceiptRefusal(category: string): string {
+  const name = ACCOUNT_ASSIGNMENT_NAME[normalizeAccountAssignmentCategory(category) as AccountAssignmentCategory]
+    ?? category.toLowerCase();
+  return `The item is account-assigned to ${name.toLowerCase()}, so it takes no goods receipt: `
+    + 'its value is not stock, and a receipt would leave a GR/IR balance nothing will ever clear. '
+    + 'The value is charged when the invoice is verified.';
+}
+
 export async function getReceiptOrder(client: string, orderNumber: string): Promise<ReceiptOrderView | null> {
   return withTenant(client, async (tx) => {
     const [header] = await tx.select().from(purchaseOrder).where(and(
@@ -264,9 +289,7 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
           refusal = `The quantity received on this item cannot be stated in ${item.unit}: the material carries no conversion between ${item.unit} and its base unit, and the posted lines are kept in that base unit. Maintain the conversion to read the order history, or post the receipt in the base unit.`;
         } else if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
         else if (!item.materialNumber) refusal = 'Text items carry no stock.';
-        else if (item.accountAssignmentCategory) {
-          refusal = assignedReceiptRefusal(await readAssignedGoodsReceiptDecision(tx, client, item.plant, true));
-        }
+        else if (item.accountAssignmentCategory) refusal = accountAssignedReceiptRefusal(item.accountAssignmentCategory);
         else if (!item.goodsReceiptIndicator) refusal = 'The item does not receive goods.';
         else if (item.deliveryCompleted) {
           refusal = 'The item is closed for delivery. Reopen it on the order before receiving against it.';
@@ -913,9 +936,7 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
         refusal = `The quantity received on this item cannot be stated in ${item.unit}: the material carries no conversion between ${item.unit} and its base unit, and the posted lines are kept in that base unit. Maintain the conversion to read the order history, or post the receipt in the base unit.`;
       } else if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
       else if (!item.materialNumber) refusal = 'Text items carry no stock.';
-      else if (item.accountAssignmentCategory) {
-        refusal = assignedReceiptRefusal(await readAssignedGoodsReceiptDecision(tx, client, item.plant, true));
-      }
+      else if (item.accountAssignmentCategory) refusal = accountAssignedReceiptRefusal(item.accountAssignmentCategory);
       else if (!item.goodsReceiptIndicator) refusal = 'The item does not receive goods.';
       else if (item.deliveryCompleted) {
         refusal = 'The item is closed for delivery. Reopen it on the order before receiving against it.';

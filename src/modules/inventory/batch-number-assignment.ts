@@ -592,12 +592,6 @@ export function assignedGoodsReceiptDecision(input: {
   };
 }
 
-export function assignedReceiptRefusal(decision: AssignedGoodsReceiptDecision): string {
-  // The decision is evaluated so the plant flag is read. Neither result posts the receipt.
-  void decision.assign;
-  return 'Account-assigned items are received without stock; that movement is a later round.';
-}
-
 export async function readAssignedGoodsReceiptDecision(
   tx: Tx,
   client: string,

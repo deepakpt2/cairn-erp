@@ -100,6 +100,25 @@ describe('SCR-061 goods receipt (MIGO)', () => {
                  (${client}, 'CA01', 'GR_IR_CLEARING', '', '', '210000', ${ACTOR})
           on conflict do nothing
         `);
+        // A cost centre and a consumption account, so an account-assigned order item can
+        // be created through the service rather than written straight into the table.
+        await tx.execute(sql`
+          insert into controlling_area_company (client, controlling_area, company_code, created_by)
+          values (${client}, 'A000', '1000', ${ACTOR}) on conflict do nothing
+        `);
+        await tx.execute(sql`
+          insert into cost_center (client, controlling_area, cost_center, valid_from, valid_to, name, category, company_code, is_posting_locked, created_by)
+          values (${client}, 'A000', 'CC9000', '2026-01-01', '2026-12-31', 'Maintenance', 'PRODUCTION', '1000', false, ${ACTOR})
+          on conflict do nothing
+        `);
+        await tx.execute(sql`
+          insert into gl_account (client, chart_of_accounts, account_number, name, account_type,
+                                  is_balance_sheet, is_open_item_managed, reconciliation_type,
+                                  requires_cost_object, is_tax_relevant, account_group, gl_account_type, created_by)
+          select ${client}, c.chart_of_accounts, '400000', 'Consumables expense', 'EXPENSE', false, false, null, true, false, 'GENL', 'PL_STATEMENT', ${ACTOR}
+          from (select chart_of_accounts from chart_of_accounts where client = ${client} limit 1) c
+          on conflict do nothing
+        `);
         // A release strategy claiming orders of 1000 and above, unreleased at first.
         await tx.execute(sql`
           insert into characteristic (client, characteristic_name, description, data_format, value_length, decimal_places, lifecycle_status, created_by)
@@ -236,6 +255,35 @@ describe('SCR-061 goods receipt (MIGO)', () => {
     markedForDeletion: false,
     scheduleLines: [{ deliveryDate: '2026-11-15', quantity }],
     assignments: [] as never[],
+  });
+
+  it('refuses a goods receipt against an account-assigned item, and posts nothing at all', async () => {
+    const c = await standingClient();
+    const order = await createOrder({
+      client: c, changedBy: ACTOR, ...header,
+      items: [{
+        ...item(5, 100),
+        accountAssignmentCategory: 'COST_CENTER',
+        assignments: [{ glAccount: '400000', costCenter: 'CC9000', distributionPercentage: 100 }],
+      }],
+    });
+
+    // The item is ineligible, and the screen's reason is the accounting one.
+    const view = await getReceiptOrder(c, order.orderNumber);
+    expect(view?.items[0]).toMatchObject({ eligible: false });
+    expect(view?.items[0]?.refusal).toMatch(/takes no goods receipt/);
+    expect(view?.items[0]?.refusal).toMatch(/GR\/IR/);
+
+    const before = await postingSnapshot(c);
+    await expect(postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey: 'gr-assigned-refused', lines: [{ itemNumber: 10, quantity: 5 }],
+    })).rejects.toThrow(/takes no goods receipt/);
+    // No material document, no stock, no journal: nothing was created to reconcile away.
+    expect(await postingSnapshot(c)).toEqual(before);
+
+    const stock = await stockAndValuation(c);
+    expect(stock.stock).toHaveLength(0);
   });
 
   async function stockAndValuation(c: string) {
