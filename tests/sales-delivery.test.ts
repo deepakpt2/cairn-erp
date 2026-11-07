@@ -30,6 +30,7 @@ import {
   getSalesOrder,
   releaseSalesOrderCredit,
 } from '../src/modules/sales/sales-order';
+import { postReturnsReceipt, ReturnsError } from '../src/modules/sales/returns';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import {
   assignSalesAreaDimensions,
@@ -828,5 +829,153 @@ describe('sales fulfillment and billing (DI-020)', () => {
     });
     expect(again.billing.status).toBe('CANCELLED');
     expect(again.cancellation?.billingNumber).toBe(cancelled.cancellation!.billingNumber);
+  });
+
+  // ---------------------------------------------------------------------------------------------------
+  // Returns from the customer: movement 651. The goods come back into returns stock, which is NOT
+  // VALUATED — so this posts no accounting document at all, leaves valuation exactly where it was, and
+  // the quantity is counted without being stock the company owns again. The value returns with the
+  // transfer out of returns stock, after inspection, which is the next increment.
+  // ---------------------------------------------------------------------------------------------------
+
+  async function returnsState() {
+    return withTenant(tenant.client, async (tx) => {
+      const buckets = await tx.execute(sql`
+        select stock_type, quantity::text as q from stock_quantity
+         where client = ${tenant.client} and material_number = ${MATERIAL} and plant = ${PLANT}
+           and storage_location = ${STORE}
+         order by stock_type
+      `) as unknown as Array<{ stock_type: string; q: string }>;
+      const valuation = await tx.execute(sql`
+        select total_stock_quantity::text as q, stock_value::text as v
+          from material_valuation
+         where client = ${tenant.client} and material_number = ${MATERIAL} and valuation_area = ${PLANT}
+      `) as unknown as Array<{ q: string; v: string }>;
+      const line = await tx.execute(sql`
+        select goods_issue_quantity::text as issued, returned_quantity::text as returned
+          from delivery_line
+         where client = ${tenant.client} and delivery_number = ${delivery} and line_number = 10
+      `) as unknown as Array<{ issued: string; returned: string }>;
+      return { buckets, valuation: valuation[0], line: line[0] };
+    });
+  }
+
+  const bucketOf = (rows: Array<{ stock_type: string; q: string }>, type: string) =>
+    Number(rows.find((row) => row.stock_type === type)?.q ?? '0');
+
+  async function documentOf(materialDocumentNumber: string) {
+    return withTenant(tenant.client, async (tx) => {
+      const lines = await tx.execute(sql`
+        select ml.movement_type, ml.line_direction, ml.stock_type, ml.base_quantity::text as qty,
+               ml.value::text as value, h.journal_document_number, h.status
+          from material_document_line ml
+          join material_document h
+            on h.client = ml.client and h.material_document_number = ml.material_document_number
+         where ml.client = ${tenant.client} and ml.material_document_number = ${materialDocumentNumber}
+         order by ml.line_number
+      `) as unknown as Array<{
+        movement_type: string; line_direction: string; stock_type: string; qty: string;
+        value: string; journal_document_number: string | null; status: string;
+      }>;
+      return lines;
+    });
+  }
+
+  it('receives a customer return into returns stock, valued at nothing', async () => {
+    const before = await returnsState();
+
+    const receipt = await postReturnsReceipt({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
+      postingDate: DATE, requestKey: key('return'),
+      lines: [{ lineNumber: 10, quantity: 2, storageLocation: STORE }],
+    });
+
+    expect(receipt.materialDocumentNumber).toMatch(/^MD-/);
+    expect(receipt.stockType).toBe('RETURNS');
+    expect(receipt.lines).toHaveLength(1);
+    expect(receipt.lines[0].baseQuantity).toBe(2);
+
+    // The movement is a receipt into returns stock, and it carries no value.
+    const lines = await documentOf(receipt.materialDocumentNumber);
+    expect(lines.map((row) => `${row.movement_type}:${row.line_direction}:${row.stock_type}:${row.qty}`))
+      .toEqual(['RETURNS_RECEIPT:RECEIPT:RETURNS:2.000']);
+    expect(Number(lines[0].value)).toBe(0);
+    expect(lines[0].journal_document_number).toBeNull();
+    expect(lines[0].status).toBe('POSTED');
+
+    // Counted, not valued: the goods stand in a returns bucket of their own, and neither the stock the
+    // company owns nor the value it carries has moved by a penny. What an earlier test in this file left
+    // in unrestricted stock is its business, not this assertion's.
+    const after = await returnsState();
+    expect(bucketOf(before.buckets, 'RETURNS')).toBe(0);
+    expect(bucketOf(after.buckets, 'RETURNS')).toBe(2);
+    expect(bucketOf(after.buckets, 'UNRESTRICTED')).toBe(bucketOf(before.buckets, 'UNRESTRICTED'));
+    expect(Number(after.valuation.q)).toBe(Number(before.valuation.q));
+    expect(Number(after.valuation.v)).toBe(Number(before.valuation.v));
+
+    // The delivery line remembers what came back, and what is still out.
+    expect(Number(after.line.returned)).toBe(2);
+    expect(Number(after.line.issued)).toBe(4);
+  });
+
+  it('refuses a return beyond what the delivery issued, and a delivery that issued nothing', async () => {
+    // Four left the plant and two have already come back, so two is all that is left to return.
+    await expect(postReturnsReceipt({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
+      postingDate: DATE, requestKey: key('return-too-much'),
+      lines: [{ lineNumber: 10, quantity: 5, storageLocation: STORE }],
+    })).rejects.toThrow(/only 2 can come back/);
+
+    await expect(postReturnsReceipt({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
+      postingDate: DATE, requestKey: key('return-unknown-line'),
+      lines: [{ lineNumber: 99, quantity: 1, storageLocation: STORE }],
+    })).rejects.toThrow(/carries no line 99/);
+
+    const fresh = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
+      items: [{ orderLineNumber: 10, quantity: '0.001' }], requestKey: key('return-unissued'),
+    }).catch(() => null);
+    if (fresh) {
+      await expect(postReturnsReceipt({
+        client: tenant.client, changedBy: ACTOR, deliveryNumber: fresh.deliveryNumber,
+        postingDate: DATE, requestKey: key('return-unissued-2'),
+        lines: [{ lineNumber: 10, quantity: 0.001, storageLocation: STORE }],
+      })).rejects.toThrow(/has been issued/);
+    }
+
+    // Nothing moved: a refused return is not a partial one.
+    const after = await returnsState();
+    expect(Number(after.line.returned)).toBe(2);
+  });
+
+  it('answers a repeated request with the receipt it already posted', async () => {
+    const before = await returnsState();
+    const requestKey = key('return-replay');
+    const first = await postReturnsReceipt({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
+      postingDate: DATE, requestKey,
+      lines: [{ lineNumber: 10, quantity: 2, storageLocation: STORE }],
+    });
+    const second = await postReturnsReceipt({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
+      postingDate: DATE, requestKey,
+      lines: [{ lineNumber: 10, quantity: 2, storageLocation: STORE }],
+    });
+
+    expect(second.materialDocumentNumber).toBe(first.materialDocumentNumber);
+    const after = await returnsState();
+    // Two was all that was left to return; a replay must not take it twice.
+    expect(Number(after.line.returned)).toBe(4);
+    expect(bucketOf(after.buckets, 'RETURNS')).toBe(4);
+    expect(bucketOf(after.buckets, 'UNRESTRICTED')).toBe(bucketOf(before.buckets, 'UNRESTRICTED'));
+    expect(Number(after.valuation.q)).toBe(Number(before.valuation.q));
+
+    // The same key with a different posting is refused rather than silently posted.
+    await expect(postReturnsReceipt({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
+      postingDate: DATE, requestKey,
+      lines: [{ lineNumber: 10, quantity: 1, storageLocation: STORE }],
+    })).rejects.toThrow(ReturnsError);
   });
 });

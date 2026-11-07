@@ -239,6 +239,13 @@ export const deliveryLine = pgTable('delivery_line', {
   remainingQuantity: numeric('remaining_quantity', { precision: 13, scale: 3 }).notNull(),
   pickedQuantity: numeric('picked_quantity', { precision: 13, scale: 3 }).notNull().default('0'),
   goodsIssueQuantity: numeric('goods_issue_quantity', { precision: 13, scale: 3 }).notNull().default('0'),
+  /**
+   * What has been received back from the customer against this line (movement 651). Bounded by the
+   * issued quantity — `delivery_line_returned_ck` — because a return cannot invent goods the plant
+   * never sent. Returns stock is not valuated, so this quantity carries no value: it becomes stock
+   * again when a transfer takes it out of returns stock and into valuated stock.
+   */
+  returnedQuantity: numeric('returned_quantity', { precision: 13, scale: 3 }).notNull().default('0'),
   status: varchar('status', { length: 16 }).notNull().default('OPEN'),
   ...auditColumns,
 }, (t) => [

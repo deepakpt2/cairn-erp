@@ -31,6 +31,13 @@ export const UNRESTRICTED = 'UNRESTRICTED';
 // The stock type column is varchar(16): the canonical value is QUALITY, displayed as quality inspection.
 export const QUALITY_INSPECTION = 'QUALITY';
 export const BLOCKED = 'BLOCKED';
+/**
+ * Returns stock — SAP's "blocked stock returns", what movement 651 receives a customer return into.
+ * The goods stand in the plant but are not the company's stock again until they are inspected and
+ * transferred out of here: the bucket is deliberately NOT VALUATED, so it is counted and it is not
+ * valued, and a movement into it posts no accounting document.
+ */
+export const RETURNS = 'RETURNS';
 
 export const SCOPE_OF_LIST_OPTIONS = ['ALV', 'STANDARD'] as const;
 export type ScopeOfList = (typeof SCOPE_OF_LIST_OPTIONS)[number];
@@ -65,6 +72,8 @@ export interface WarehouseStockRow {
   unrestrictedQuantity: number;
   qualityInspectionQuantity: number;
   blockedQuantity: number;
+  /** Returns stock: counted here, not valuated, and not available to promise. */
+  returnsQuantity: number;
   specialQuantity: number;
   totalQuantity: number;
   /** null where no valuation record stands — unknown, never zero. */
@@ -91,6 +100,7 @@ export interface WarehouseStockResult {
     unrestrictedQuantity: number;
     qualityInspectionQuantity: number;
     blockedQuantity: number;
+    returnsQuantity: number;
     specialQuantity: number;
     totalQuantity: number;
     value: number | null;
@@ -249,7 +259,12 @@ export async function listWarehouseStocks(input: {
              sum(case when s.stock_type = ${UNRESTRICTED} then s.quantity else 0 end) as unrestricted_qty,
              sum(case when s.stock_type = ${QUALITY_INSPECTION} then s.quantity else 0 end) as quality_qty,
              sum(case when s.stock_type = ${BLOCKED} then s.quantity else 0 end) as blocked_qty,
-             sum(case when s.stock_type not in (${UNRESTRICTED}, ${QUALITY_INSPECTION}, ${BLOCKED}) then s.quantity else 0 end) as special_qty,
+             sum(case when s.stock_type = ${RETURNS} then s.quantity else 0 end) as returns_qty,
+             sum(case when s.stock_type not in (${UNRESTRICTED}, ${QUALITY_INSPECTION}, ${BLOCKED}, ${RETURNS}) then s.quantity else 0 end) as special_qty,
+             -- Value is struck on what the company owns, not on what stands in the plant. Returns stock is
+             -- the one bucket this screen knows is not valuated: the goods are back but they are not stock
+             -- again until inspection releases them, and movement 651 wrote no accounting document for them.
+             sum(case when s.stock_type <> ${RETURNS} then s.quantity else 0 end) as valuated_qty,
              sum(s.quantity) as total_qty,
              max(v.price_control) as price_control,
              max(case when v.price_control = 'STANDARD' then v.standard_price else v.moving_average_price end) as price,
@@ -302,7 +317,7 @@ export async function listWarehouseStocks(input: {
         if (!unknownValuation.includes(materialNumber)) unknownValuation.push(materialNumber);
       } else {
         price = num(r.price, 4);
-        value = Number(((totalQuantity * price) / priceUnit).toFixed(2));
+        value = Number(((num(r.valuated_qty) * price) / priceUnit).toFixed(2));
         valueTotal += value;
         if (currency && currency !== localCurrency) {
           foreignCurrency.set(currency, (foreignCurrency.get(currency) ?? 0) + 1);
@@ -331,6 +346,7 @@ export async function listWarehouseStocks(input: {
         unrestrictedQuantity: num(r.unrestricted_qty),
         qualityInspectionQuantity: num(r.quality_qty),
         blockedQuantity: num(r.blocked_qty),
+        returnsQuantity: num(r.returns_qty),
         specialQuantity: num(r.special_qty),
         totalQuantity,
         price,
@@ -365,6 +381,7 @@ export async function listWarehouseStocks(input: {
       unrestrictedQuantity: out.reduce((sum, r) => sum + r.unrestrictedQuantity, 0),
       qualityInspectionQuantity: out.reduce((sum, r) => sum + r.qualityInspectionQuantity, 0),
       blockedQuantity: out.reduce((sum, r) => sum + r.blockedQuantity, 0),
+      returnsQuantity: out.reduce((sum, r) => sum + r.returnsQuantity, 0),
       specialQuantity: out.reduce((sum, r) => sum + r.specialQuantity, 0),
       totalQuantity: out.reduce((sum, r) => sum + r.totalQuantity, 0),
       value: valuationKnown || out.some((r) => r.value !== null) ? Number(valueTotal.toFixed(2)) : null,
