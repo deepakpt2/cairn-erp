@@ -112,3 +112,60 @@ export async function cancelBillingAction(
     return refuse(error);
   }
 }
+
+/**
+ * Bill a delivery again, after the document that billed it was cancelled.
+ *
+ * Since 9227 a cancelled document stops occupying the delivery's slot: the partial unique index holds
+ * one *live* billing document per delivery, and a cancelled one is no longer live. The delivery is
+ * therefore billable again, and the corrected document is a real document with a number of its own —
+ * not an edit of the cancelled row, which stays behind so the chain remembers what was sent.
+ *
+ * The capability is the billing code and not a new one, because this is the same act as the first
+ * bill: the correction is not a new power over the customer's account, it is the same power exercised
+ * again after the previous exercise was undone. What stops a second live document is the database, and
+ * what names it when it happens is the service.
+ */
+export async function rebillDeliveryAction(
+  _previous: BillingActionState,
+  form: FormData,
+): Promise<BillingActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, BILLING_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the billing capability.', remedy: 'Ask for SALES.BILLING.CREATE.' };
+  }
+  const deliveryNumber = text(form, 'deliveryNumber');
+  const replaces = optional(form, 'replacesBillingNumber');
+  try {
+    const result = await postBillingDocument({
+      client: session.user.client,
+      changedBy: session.user.username,
+      deliveryNumber,
+      billingDate: text(form, 'billingDate'),
+      requestKey: text(form, 'requestKey') || `BL-RE-${session.user.username}-${Date.now()}`,
+    });
+    revalidatePath(ROUTE);
+    if (result.heldForCredit) {
+      return {
+        ok: false,
+        billingNumber: result.billing.billingNumber,
+        message: `Billing document ${result.billing.billingNumber} stands, but the receivable is held: the delivery or its order is credit-blocked.`,
+        remedy: 'Release the blocked document at /finance/credit-release; the corrected document posts from there rather than a second one being raised.',
+      };
+    }
+    return {
+      ok: true,
+      billingNumber: result.billing.billingNumber,
+      message: result.posted
+        ? `Delivery ${deliveryNumber} billed again as ${result.billing.billingNumber}`
+          + `${replaces ? `, replacing cancelled document ${replaces}` : ''}`
+          + `, receivable posted as invoice ${result.billing.customerInvoiceNumber}.`
+        : `Billing document ${result.billing.billingNumber} stands open for delivery ${deliveryNumber}.`,
+      remedy: result.invoice?.dueDate
+        ? `The corrected invoice is due ${result.invoice.dueDate}. The cancelled document stays in the chain, and the delivery carries one live billing document throughout.`
+        : 'The cancelled document stays in the chain, and the delivery carries one live billing document throughout.',
+    };
+  } catch (error) {
+    return refuse(error);
+  }
+}

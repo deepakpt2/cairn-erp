@@ -13,6 +13,7 @@ import {
   goodsIssueStands,
   listBillableDeliveries,
   postBillingDocument,
+  salesDocumentFlow,
 } from '../src/modules/sales/billing';
 import {
   DeliveryError,
@@ -2090,5 +2091,87 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const all = await listCreditMemoRequests(tenant.client);
     expect(all.map((row) => row.orderNumber)).not.toContain(shipped.orderNumber);
     for (const row of all) expect(row.billingNumber).not.toBeNull();
+  });
+
+  it('bills a cancelled delivery again, with one live document at every moment', async () => {
+    const shipped = await issuedChain('rebill');
+    const first = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('rebill-first'),
+    });
+
+    const live = async (): Promise<number> => withTenant(tenant.client, async (tx) => {
+      const [row] = await tx.execute(sql`
+        select count(*)::int as n from billing_document
+         where client = ${tenant.client} and delivery_number = ${shipped.deliveryNumber}
+           and status <> 'CANCELLED' and credit_of is null and cancellation_of is null
+      `) as unknown as Array<{ n: number }>;
+      return Number(row?.n ?? 0);
+    });
+
+    expect(await live()).toBe(1);
+    // While it stands, the delivery is not offered for billing again.
+    const billableWhileBilled = await listBillableDeliveries(tenant.client, { deliveryNumber: shipped.deliveryNumber });
+    expect(billableWhileBilled.map((row) => row.deliveryNumber)).not.toContain(shipped.deliveryNumber);
+
+    // The cancellation: the receivable leaves the account, and the delivery's slot comes back.
+    const cancelled = await cancelBillingDocument({
+      client: tenant.client, changedBy: ACTOR, billingNumber: first.billing.billingNumber,
+      postingDate: DATE, reason: 'Wrong quantity', requestKey: key('rebill-cancel'),
+    });
+    expect(cancelled.billing.status).toBe('CANCELLED');
+    expect(cancelled.cancellation?.billingNumber).toBeTruthy();
+    expect(await getBilling(tenant.client, first.billing.billingNumber)).toMatchObject({ status: 'CANCELLED' });
+
+    // What the screen offers next is here in the service: the delivery is billable again.
+    const billableAgain = await listBillableDeliveries(tenant.client, { deliveryNumber: shipped.deliveryNumber });
+    expect(billableAgain.map((row) => row.deliveryNumber)).toContain(shipped.deliveryNumber);
+
+    // The corrected bill is a document of its own, not an edit of the cancelled row.
+    const second = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('rebill-second'),
+    });
+    expect(second.billing.billingNumber).not.toBe(first.billing.billingNumber);
+    expect(second.posted).toBe(true);
+    // One live document at every moment: the cancelled row is history, not a competitor.
+    expect(await live()).toBe(1);
+
+    // Asking again is answered with the document that stands, not with a second one: a delivery is billed
+    // once, and a form pressed twice changes nothing.
+    const again = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('rebill-third'),
+    });
+    expect(again.billing.billingNumber).toBe(second.billing.billingNumber);
+    expect(again.replayed).toBe(true);
+    expect(await live()).toBe(1);
+
+    // And what stands behind the whole path: creating a second document over a live one is refused
+    // outright, which is why the corrected bill could only be created once the first was cancelled.
+    await expect(createBillingFromDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('rebill-duplicate'),
+    })).rejects.toThrow(/already billed as/);
+
+    // The chain reads the way the screen now draws it: what was sent, the cancellation that undid it,
+    // and the corrected document that stands.
+    const flow = await salesDocumentFlow(tenant.client, shipped.orderNumber);
+    const numbers = flow.map((row) => row.billingNumber);
+    expect(numbers).toContain(first.billing.billingNumber);
+    expect(numbers).toContain(cancelled.cancellation!.billingNumber);
+    expect(numbers).toContain(second.billing.billingNumber);
+
+    const row = (billingNumber: string) => {
+      const found = flow.find((entry) => entry.billingNumber === billingNumber);
+      expect(found, billingNumber).toBeDefined();
+      return found!;
+    };
+    // Each row names what it is, so a reader can tell the live invoice from the rest.
+    expect(row(first.billing.billingNumber).billingStatus).toBe('CANCELLED');
+    expect(row(first.billing.billingNumber).billingDocumentType).toBe('F2');
+    expect(row(cancelled.cancellation!.billingNumber).billingCancels).toBe(first.billing.billingNumber);
+    expect(row(second.billing.billingNumber).billingStatus).toBe('POSTED');
+    expect(row(second.billing.billingNumber).billingCancels).toBeNull();
   });
 });

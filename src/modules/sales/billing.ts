@@ -1064,6 +1064,12 @@ export async function cancelBillingDocument(
 /**
  * The document flow a reader asks for at the end of the chain: order, delivery, the material document that
  * moved the stock, the billing document and the receivable it raised, in the one read that proves the links.
+ *
+ * One row per billing document the delivery carries, and each row names what that document *is*: its type,
+ * whether it stands or was cancelled, and — for a cancellation — the document it cancels. Without those three
+ * a corrected chain is unreadable: an invoice, its cancellation and the corrected invoice are three rows of
+ * the same delivery, and a reader shown only their numbers has to guess which is the live one. They are
+ * returned in the order they were created, which is the order they happened in.
  */
 export async function salesDocumentFlow(
   client: string,
@@ -1073,6 +1079,12 @@ export async function salesDocumentFlow(
   deliveryNumber: string | null;
   materialDocumentNumber: string | null;
   billingNumber: string | null;
+  /** What the billing document is: F2 an invoice, S1 its cancellation, G2 a credit memo. */
+  billingDocumentType: string | null;
+  /** Whether that document stands or was cancelled. */
+  billingStatus: string | null;
+  /** The document this one cancels, on a cancellation row. */
+  billingCancels: string | null;
   customerInvoiceNumber: string | null;
   status: string;
   issuedStands: boolean;
@@ -1080,22 +1092,27 @@ export async function salesDocumentFlow(
   return withTenant(client, async (tx) => {
     const rows = await tx.execute(sql`
       select d.delivery_number, d.material_document_number, d.status as delivery_status,
-             bd.billing_number, bd.customer_invoice_number,
+             bd.billing_number, bd.customer_invoice_number, bd.document_type, bd.status as billing_status,
+             bd.cancellation_of,
              (select count(*) from material_document_line rev
                where rev.client = d.client and rev.reversal_of_document = d.material_document_number) as reversed_lines
         from delivery d
         left join billing_document bd on bd.client = d.client and bd.delivery_number = d.delivery_number
        where d.client = ${client} and d.order_number = ${orderNumber}
-       order by d.delivery_number
+       order by d.delivery_number, bd.created_at, bd.billing_number
     `) as unknown as Array<{
       delivery_number: string; material_document_number: string | null; delivery_status: string;
       billing_number: string | null; customer_invoice_number: string | null; reversed_lines: number;
+      document_type: string | null; billing_status: string | null; cancellation_of: string | null;
     }>;
     return rows.map((row) => ({
       orderNumber,
       deliveryNumber: row.delivery_number,
       materialDocumentNumber: row.material_document_number,
       billingNumber: row.billing_number,
+      billingDocumentType: row.document_type,
+      billingStatus: row.billing_status,
+      billingCancels: row.cancellation_of,
       customerInvoiceNumber: row.customer_invoice_number,
       status: row.delivery_status,
       issuedStands: Number(row.reversed_lines) === 0,

@@ -5,7 +5,7 @@ import { useActionState, useId } from 'react';
 
 import type { BillingView } from '@/modules/sales/billing';
 import type { listBillableDeliveries, listBillings, salesDocumentFlow } from '@/modules/sales/billing';
-import { cancelBillingAction, createBillingAction, type BillingActionState } from './actions';
+import { cancelBillingAction, createBillingAction, rebillDeliveryAction, type BillingActionState } from './actions';
 
 const EMPTY: BillingActionState = { ok: false };
 
@@ -90,12 +90,14 @@ function CreateBilling({
 }
 
 function SelectedBilling({
-  selected, flow, canCancel,
-}: { selected: BillingView; flow: Props['flow']; canCancel: boolean }) {
+  selected, flow, canCancel, canCreate,
+}: { selected: BillingView; flow: Props['flow']; canCancel: boolean; canCreate: boolean }) {
   const [state, action, pending] = useActionState(cancelBillingAction, EMPTY);
+  const [rebillState, rebillAction, rebillPending] = useActionState(rebillDeliveryAction, EMPTY);
   const id = useId();
   const today = new Date().toISOString().slice(0, 10);
   const held = selected.credit?.status === 'BLOCKED';
+  const cancelled = selected.status === 'CANCELLED';
   return (
     <section className="panel p-4" aria-labelledby={`${id}-heading`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -161,7 +163,8 @@ function SelectedBilling({
             <thead>
               <tr className="text-left text-xs text-ink-faint">
                 <th>Order</th><th>Delivery</th><th>Material document</th>
-                <th>Billing</th><th>Invoice</th><th>Delivery status</th><th>Issue stands</th>
+                <th>Billing</th><th>What it is</th><th>Stands</th><th>Cancels</th>
+                <th>Invoice</th><th>Delivery status</th><th>Issue stands</th>
               </tr>
             </thead>
             <tbody>
@@ -171,6 +174,9 @@ function SelectedBilling({
                   <td>{row.deliveryNumber ?? '—'}</td>
                   <td>{row.materialDocumentNumber ?? '—'}</td>
                   <td>{row.billingNumber ?? '—'}</td>
+                  <td>{row.billingDocumentType ?? '—'}</td>
+                  <td>{row.billingStatus ?? '—'}</td>
+                  <td>{row.billingCancels ?? '—'}</td>
                   <td>{row.customerInvoiceNumber ?? '—'}</td>
                   <td>{row.status}</td>
                   <td>{row.issuedStands ? 'yes' : 'reversed'}</td>
@@ -179,6 +185,40 @@ function SelectedBilling({
             </tbody>
           </table>
         </details>
+      ) : null}
+
+      {cancelled ? (
+        <div className="panel mt-4 space-y-3 p-4" aria-label="Bill this delivery again">
+          <p className="text-sm font-medium">This document is cancelled</p>
+          <p className="text-sm text-ink-soft">
+            The receivable has left the customer account, and delivery{' '}
+            <Link className="link" href={`/sales/delivery?delivery=${selected.deliveryNumber}`}>{selected.deliveryNumber}</Link>{' '}
+            is billable again: a cancelled document stops occupying the delivery&apos;s slot, so the corrected
+            value can be billed without ever allowing two live documents at once. The cancelled row stays
+            behind so the chain remembers what was sent.
+          </p>
+          {canCreate ? (
+            <form action={rebillAction} className="space-y-2">
+              <input type="hidden" name="deliveryNumber" value={selected.deliveryNumber} />
+              <input type="hidden" name="replacesBillingNumber" value={selected.billingNumber} />
+              <input type="hidden" name="requestKey" value={`BL-RE-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`} />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <label className="block text-xs text-ink-soft" htmlFor={`${id}-rebill-date`}>
+                  Billing date
+                  <input className="input mt-1" id={`${id}-rebill-date`} name="billingDate" defaultValue={today} autoComplete="off" />
+                </label>
+              </div>
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-9" disabled={rebillPending}>
+                {rebillPending ? 'Billing…' : 'Bill this delivery again'}
+              </button>
+              <Notice state={rebillState} label="Corrected billing" />
+            </form>
+          ) : (
+            <p className="text-sm text-ink-soft">
+              Billing it again is closed for this session: it needs SALES.BILLING.CREATE.
+            </p>
+          )}
+        </div>
       ) : null}
 
       {canCancel && selected.status !== 'CANCELLED' ? (
@@ -248,6 +288,7 @@ export default function Billing(props: Props) {
           selected={props.selected}
           flow={props.flow}
           canCancel={props.canCancel}
+          canCreate={props.canCreate}
         />
       ) : null}
     </div>
