@@ -37,7 +37,8 @@ import {
 } from '../src/modules/sales/returns';
 import { openSalesCommitments } from '../src/modules/sales/exposure';
 import {
-  createCreditMemo, createCreditMemoRequest, postCreditMemo, releaseBillingBlock,
+  createCreditMemo, createCreditMemoRequest, listCreditMemoRequests,
+  postCreditMemo, releaseBillingBlock,
 } from '../src/modules/sales/credit-memo';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
@@ -2018,5 +2019,76 @@ describe('sales fulfillment and billing (DI-020)', () => {
     expect(allDeliveries.map((row) => row.deliveryNumber)).not.toContain(shipped.deliveryNumber);
     for (const row of allOrders) expect(row.billingNumber).not.toBeNull();
     for (const row of allDeliveries) expect(row.referenceDeliveryNumber).not.toBeNull();
+  });
+
+  it('reads a credit the way the screen reads it: held, released, and credited', async () => {
+    // A shipped and invoiced chain, because a credit settles what was billed.
+    const shipped = await issuedChain('credit-screen');
+    const invoiced = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('credit-screen-invoice'),
+    });
+
+    // The complaint: raised against the invoice, and held from the moment it exists.
+    const request = await createCreditMemoRequest({
+      client: tenant.client, changedBy: ACTOR, requestKey: key('credit-screen-request'),
+      billingNumber: invoiced.billing.billingNumber, orderDate: DATE,
+      blockReason: 'Awaiting the complaint desk', headerText: 'Overbilled',
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    });
+
+    const complaints = await listCreditMemoRequests(tenant.client);
+    const complaint = complaints.find((row) => row.orderNumber === request.orderNumber);
+    expect(complaint).toBeDefined();
+    // What the desk reads: the invoice disputed, how much, and the block that says it is not agreed to.
+    expect(complaint!.billingNumber).toBe(invoiced.billing.billingNumber);
+    expect(complaint!.billingBlock).toBe('Awaiting the complaint desk');
+    expect(complaint!.requestedQuantity).toBe('1.000');
+    expect(complaint!.creditedQuantity).toBe('0.000');
+    expect(complaint!.status).toBe('OPEN');
+    expect(complaint!.headerText).toBe('Overbilled');
+
+    // Nothing can be credited from it: the service refuses, and names the act that lifts the block.
+    await expect(createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, requestKey: key('credit-screen-while-held'),
+      billingNumber: invoiced.billing.billingNumber, billingDate: DATE,
+      creditMemoRequestNumber: request.orderNumber,
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/stands blocked for billing: Awaiting the complaint desk/);
+
+    // The release: the act that agrees, guarded by the version the screen read.
+    const held = await getSalesOrder(tenant.client, request.orderNumber);
+    const released = await releaseBillingBlock({
+      client: tenant.client, changedBy: ACTOR, orderNumber: request.orderNumber,
+      expectedVersion: held!.version,
+    });
+    expect(released.version).toBe(held!.version + 1);
+
+    const afterRelease = (await listCreditMemoRequests(tenant.client)).find((row) => row.orderNumber === request.orderNumber);
+    expect(afterRelease!.billingBlock).toBeNull();
+    // Still nothing credited: releasing is not giving the money away.
+    expect(afterRelease!.creditedQuantity).toBe('0.000');
+
+    // The credit, raised from the request and bounded by it.
+    const memo = await createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, requestKey: key('credit-screen-memo'),
+      billingNumber: invoiced.billing.billingNumber, billingDate: DATE,
+      creditMemoRequestNumber: request.orderNumber,
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    });
+    const posted = await postCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: memo.billingNumber,
+      expectedVersion: 1, postingDate: DATE, requestKey: key('credit-screen-post'),
+    });
+    expect(posted.invoiceNumber).toMatch(/^CI-/);
+
+    // The row now says what has been given back.
+    const credited = (await listCreditMemoRequests(tenant.client)).find((row) => row.orderNumber === request.orderNumber);
+    expect(credited!.creditedQuantity).toBe('1.000');
+
+    // And the list is the complaint desk's own: an order that is not a credit memo request is not on it.
+    const all = await listCreditMemoRequests(tenant.client);
+    expect(all.map((row) => row.orderNumber)).not.toContain(shipped.orderNumber);
+    for (const row of all) expect(row.billingNumber).not.toBeNull();
   });
 });

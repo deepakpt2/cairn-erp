@@ -31,8 +31,29 @@ import {
 } from './document-type';
 import { revenueAccountFor } from './billing';
 
-/** The transaction a credit memo records. No screen offers it yet, so no capability is bound. */
+/** The transaction a credit memo records, as the change history names it. */
 export const CREDIT_MEMO_TRANSACTION = 'SALES.CREDIT_MEMO.CREATE';
+
+/** The screen the complaint is worked from, and the capability each of its acts is gated by. */
+export const CREDIT_MEMO_ROUTE = '/sales/credit-memo-request';
+/**
+ * Raise the complaint. It is created held — raising one is not agreeing to it, which is why this
+ * code does not also grant the release.
+ */
+export const CREDIT_MEMO_REQUEST_CAPABILITY = 'SALES.CREDIT.REQUEST.CREATE';
+/**
+ * Release the block: the act that says somebody with the authority to give the money away has agreed.
+ * This is the control, so it is not the same code as the complaint that asks for the money. An
+ * installation that wants the complaint raised by sales and released by finance grants these two
+ * separately; one code could not express that.
+ */
+export const CREDIT_MEMO_RELEASE_CAPABILITY = 'SALES.CREDIT.RELEASE';
+/**
+ * Raise and post the credit memo itself. The request bounds it and the release authorises it, so what
+ * is left is the billing act — still a separate code, because giving money away is not the same act as
+ * invoicing, and the history should be able to say who did which.
+ */
+export const CREDIT_MEMO_POST_CAPABILITY = 'SALES.CREDIT.MEMO.POST';
 
 const BILLING_OBJECT_CLASS = 'billing_document';
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -108,6 +129,11 @@ export interface PostCreditMemoInput {
   expectedVersion: number;
   postingDate: string;
   requestKey: string;
+}
+
+/** Three decimals is what a quantity carries everywhere else in the chain. */
+function fixed3(value: string | number | null | undefined): string {
+  return Number(value ?? 0).toFixed(3);
 }
 
 function round2(value: number): string {
@@ -853,5 +879,86 @@ export async function releaseBillingBlock(input: ReleaseBillingBlockInput): Prom
     });
 
     return { orderNumber: input.orderNumber, version: order.version + 1 };
+  });
+}
+
+/**
+ * What the complaint desk reads: the credit memo requests that stand, and where each one has got to.
+ *
+ * The row carries the two facts the screen is about. The block: while it stands, the request is a
+ * complaint and nothing more, and the word beside it is the reason it was raised. And the quantities:
+ * how much of the invoice is in dispute, and how much of that has actually been credited — the
+ * difference is what is still waiting on somebody.
+ *
+ * It is a list of credit memo requests and not of orders with a filter, for the same reason the returns
+ * lists are not: the screen shows one chain, and a chain is read from the documents that belong to it.
+ */
+export interface CreditMemoRequestSummary {
+  orderNumber: string;
+  orderDate: string;
+  customerNumber: string;
+  /** The invoice the complaint is about. */
+  billingNumber: string | null;
+  status: string;
+  currency: string;
+  grossValue: string;
+  /** Why the request is held; null once it stands released. */
+  billingBlock: string | null;
+  headerText: string | null;
+  /** How much of the invoice is in dispute. */
+  requestedQuantity: string;
+  /** How much of that has been credited already. */
+  creditedQuantity: string;
+}
+
+export async function listCreditMemoRequests(
+  client: string,
+  filter: { customerNumber?: string } = {},
+): Promise<CreditMemoRequestSummary[]> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value::text as gross_value,
+             o.status, o.header_text, o.billing_block, o.reference_document_number,
+             coalesce(sum(l.order_quantity), 0)::text as requested,
+             coalesce(sum((
+               select coalesce(sum(bl.billing_quantity), 0)
+                 from billing_document_line bl
+                 join billing_document b
+                        on b.client = bl.client and b.billing_number = bl.billing_number
+                where bl.client = o.client
+                  and bl.order_number = o.order_number
+                  and bl.order_line_number = l.line_number
+                  and b.document_type = ${STANDARD_CREDIT_MEMO_TYPE}
+                  and b.status <> 'CANCELLED'
+             )), 0)::text as credited
+        from sales_order o
+        left join sales_order_line l
+               on l.client = o.client and l.order_number = o.order_number and l.status = 'OPEN'
+       where o.client = ${client}
+         and o.document_type = ${STANDARD_CREDIT_MEMO_REQUEST_TYPE}
+         and (${filter.customerNumber ?? null}::varchar is null
+              or o.customer_number = ${filter.customerNumber ?? null}::varchar)
+       group by o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value,
+                o.status, o.header_text, o.billing_block, o.reference_document_number
+       order by o.order_number desc
+       limit 100
+    `) as unknown as Array<{
+      order_number: string; order_date: string; customer_number: string; currency: string;
+      gross_value: string; status: string; header_text: string | null; billing_block: string | null;
+      reference_document_number: string | null; requested: string; credited: string;
+    }>;
+    return rows.map((row) => ({
+      orderNumber: row.order_number,
+      orderDate: typeof row.order_date === 'string' ? row.order_date : String(row.order_date).slice(0, 10),
+      customerNumber: row.customer_number,
+      billingNumber: row.reference_document_number,
+      status: row.status,
+      currency: row.currency,
+      grossValue: row.gross_value,
+      billingBlock: row.billing_block,
+      headerText: row.header_text,
+      requestedQuantity: fixed3(row.requested),
+      creditedQuantity: fixed3(row.credited),
+    }));
   });
 }
