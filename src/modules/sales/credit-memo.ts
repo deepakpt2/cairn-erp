@@ -25,9 +25,9 @@ import { allocateNumber } from '../../platform/numbering';
 import {
   CustomerCreditMemoError, postCustomerCreditMemo,
 } from '../finance/customer-credit-memo';
-import { salesOrderLine, billingDocument, billingDocumentLine } from './schema';
+import { salesOrder, salesOrderLine, billingDocument, billingDocumentLine } from './schema';
 import {
-  STANDARD_CREDIT_MEMO_TYPE, DOCUMENT_TYPE_REMEDY, salesDocumentTypeFor,
+  STANDARD_CREDIT_MEMO_REQUEST_TYPE, STANDARD_CREDIT_MEMO_TYPE, DOCUMENT_TYPE_REMEDY, salesDocumentTypeFor,
 } from './document-type';
 import { revenueAccountFor } from './billing';
 
@@ -64,6 +64,40 @@ export interface CreateCreditMemoInput {
   billingDate: string;
   headerText?: string;
   items: CreditMemoLineInput[];
+  /**
+   * The credit memo request this credit is raised from. When it is named, the request must stand
+   * released — a request is raised held, and the release is the act that says somebody with the
+   * authority to give the money away has agreed to it.
+   */
+  creditMemoRequestNumber?: string;
+}
+
+/** What the user enters for one item of a credit memo request. */
+export interface CreditMemoRequestLineInput {
+  /** The line of the invoice the customer is complaining about. */
+  billingLineNumber: number;
+  quantity: number;
+}
+
+export interface CreateCreditMemoRequestInput {
+  client: string;
+  changedBy: string;
+  requestKey: string;
+  /** The invoice the complaint is about. */
+  billingNumber: string;
+  orderDate: string;
+  /** Why the request is held; it is created blocked, and this is what the block says. */
+  blockReason?: string;
+  headerText?: string;
+  items: CreditMemoRequestLineInput[];
+}
+
+export interface ReleaseBillingBlockInput {
+  client: string;
+  changedBy: string;
+  /** The document being released. */
+  orderNumber: string;
+  expectedVersion: number;
 }
 
 export interface PostCreditMemoInput {
@@ -192,6 +226,100 @@ async function requireCreditableInvoice(
 }
 
 /**
+ * How much of one invoiced line has already been asked back on a credit memo request, over the
+ * requests that stand. A request that has been refused was never released, so it does not count:
+ * only what stands against the invoice and could still be credited does.
+ */
+async function quantityRequestedAgainstInvoiceLine(
+  tx: Tx,
+  client: string,
+  billingNumber: string,
+  billingLineNumber: number,
+): Promise<number> {
+  const [row] = await tx.execute(sql`
+    select coalesce(sum(l.order_quantity), 0)::text as quantity
+      from sales_order_line l
+      join sales_order o on o.client = l.client and o.order_number = l.order_number
+     where l.client = ${client}
+       and o.document_type = ${STANDARD_CREDIT_MEMO_REQUEST_TYPE}
+       and o.status = 'OPEN'
+       and l.reference_billing_number = ${billingNumber}
+       and l.reference_billing_line_number = ${billingLineNumber}
+  `) as unknown as Array<{ quantity: string }>;
+  return Number(row?.quantity ?? '0');
+}
+
+/**
+ * How much of one credit memo request has already been credited, over the credit memos that stand.
+ * The credit names the request on its lines, which is how a request and the credit it authorised
+ * find each other afterwards.
+ */
+async function quantityCreditedAgainstRequest(
+  tx: Tx,
+  client: string,
+  orderNumber: string,
+  orderLineNumber: number,
+): Promise<number> {
+  const [row] = await tx.execute(sql`
+    select coalesce(sum(l.billing_quantity), 0)::text as quantity
+      from billing_document_line l
+      join billing_document d on d.client = l.client and d.billing_number = l.billing_number
+     where l.client = ${client}
+       and d.document_type = ${STANDARD_CREDIT_MEMO_TYPE}
+       and d.status <> 'CANCELLED'
+       and l.order_number = ${orderNumber}
+       and l.order_line_number = ${orderLineNumber}
+  `) as unknown as Array<{ quantity: string }>;
+  return Number(row?.quantity ?? '0');
+}
+
+/**
+ * The request a credit memo is raised from, as it has to stand for the credit to be allowed: the
+ * right kind of document, open, against the same invoice, and released.
+ */
+async function requireReleasedRequest(
+  tx: Tx,
+  client: string,
+  creditMemoRequestNumber: string,
+  billingNumber: string,
+): Promise<typeof salesOrder.$inferSelect> {
+  const [request] = await tx.select().from(salesOrder).where(and(
+    eq(salesOrder.client, client), eq(salesOrder.orderNumber, creditMemoRequestNumber),
+  )).limit(1);
+  if (!request) {
+    throw new CreditMemoError(
+      `Credit memo request ${creditMemoRequestNumber} does not stand for this tenant.`,
+      'Raise the credit against a request that exists, or against the invoice directly.',
+    );
+  }
+  if (request.documentType !== STANDARD_CREDIT_MEMO_REQUEST_TYPE) {
+    throw new CreditMemoError(
+      `Sales order ${creditMemoRequestNumber} is a ${request.documentType}, and a credit memo is raised from a credit memo request.`,
+      'Name a credit memo request, or credit the invoice directly.',
+    );
+  }
+  if (request.status !== 'OPEN') {
+    throw new CreditMemoError(
+      `Credit memo request ${creditMemoRequestNumber} stands ${request.status}, and a request that no longer stands credits nothing.`,
+      'Raise a new request.',
+    );
+  }
+  if (request.referenceDocumentNumber !== billingNumber) {
+    throw new CreditMemoError(
+      `Credit memo request ${creditMemoRequestNumber} was raised against ${request.referenceDocumentNumber ?? 'no invoice'}, not against ${billingNumber}.`,
+      'Credit the invoice the request was raised against.',
+    );
+  }
+  if (request.billingBlock) {
+    throw new CreditMemoError(
+      `Credit memo request ${creditMemoRequestNumber} stands blocked for billing: ${request.billingBlock}. No credit is raised while it is held.`,
+      'Release the request first — that release is the decision to give the money back.',
+    );
+  }
+  return request;
+}
+
+/**
  * Raise a credit memo against a posted invoice.
  *
  * Every figure is the invoice's, at the quantity being credited: the price, the tax rate, the unit and
@@ -233,6 +361,18 @@ export async function createCreditMemo(
     const invoice = await requireCreditableInvoice(tx, input.client, input.billingNumber,
       (message, remedy) => { throw new CreditMemoError(message, remedy); });
 
+    // A credit raised from a request is raised from a released one, and it is bounded by what that
+    // request asks for: the request is the authority for giving the money back, not a note about it.
+    const request = input.creditMemoRequestNumber
+      ? await requireReleasedRequest(tx, input.client, input.creditMemoRequestNumber, input.billingNumber)
+      : null;
+    const requestLines = request
+      ? await tx.select().from(salesOrderLine).where(and(
+        eq(salesOrderLine.client, input.client), eq(salesOrderLine.orderNumber, request.orderNumber),
+      ))
+      : [];
+    const requestedFor = new Map(requestLines.map((line) => [line.referenceBillingLineNumber, line]));
+
     const invoiceLines = await tx.select().from(billingDocumentLine).where(and(
       eq(billingDocumentLine.client, input.client),
       eq(billingDocumentLine.billingNumber, input.billingNumber),
@@ -257,6 +397,27 @@ export async function createCreditMemo(
           'Credit no more than was invoiced; what was never charged cannot be given back.',
         );
       }
+      // The request's own bound: what it asks for, less what has already been credited against it.
+      let askedFor: typeof salesOrderLine.$inferSelect | undefined;
+      if (request) {
+        askedFor = requestedFor.get(item.billingLineNumber);
+        if (!askedFor) {
+          throw new CreditMemoError(
+            `Credit memo request ${request.orderNumber} asks for nothing on invoice line ${item.billingLineNumber}.`,
+            'Credit only what the request asks for; extend the request if more is owed back.',
+          );
+        }
+        const credited = await quantityCreditedAgainstRequest(
+          tx, input.client, request.orderNumber, askedFor.lineNumber,
+        );
+        const asked = Number(askedFor.orderQuantity);
+        if (item.quantity > asked - credited + 1e-9) {
+          throw new CreditMemoError(
+            `Credit memo request ${request.orderNumber} asks for ${asked} on line ${askedFor.lineNumber}, of which ${credited} has already been credited, so only ${asked - credited} can be credited.`,
+            'Credit no more than the request asks for.',
+          );
+        }
+      }
       // The unit the goods were sold in comes from the order line the invoice was raised from, which is
       // what a billing line does not carry; the price and the tax it does carry are the invoice's own.
       const [sold] = await tx.select().from(salesOrderLine).where(and(
@@ -276,7 +437,8 @@ export async function createCreditMemo(
       rows.push({
         client: input.client, billingNumber: '', lineNumber,
         deliveryNumber: billed.deliveryNumber, deliveryLineNumber: billed.deliveryLineNumber,
-        orderNumber: billed.orderNumber, orderLineNumber: billed.orderLineNumber,
+        orderNumber: request ? request.orderNumber : billed.orderNumber,
+        orderLineNumber: askedFor ? askedFor.lineNumber : billed.orderLineNumber,
         materialNumber: billed.materialNumber,
         billingQuantity: String(item.quantity),
         // A credit carries the same goods back at the same price, and its value is what goes back: the
@@ -313,7 +475,8 @@ export async function createCreditMemo(
 
     await tx.insert(billingDocument).values({
       client: input.client, billingNumber: number, documentType: type.documentType,
-      orderNumber: invoice.orderNumber, deliveryNumber: invoice.deliveryNumber,
+      orderNumber: request ? request.orderNumber : invoice.orderNumber,
+      deliveryNumber: invoice.deliveryNumber,
       salesOrg: invoice.salesOrg, distributionChannel: invoice.distributionChannel, division: invoice.division,
       customerNumber: invoice.customerNumber, companyCode: invoice.companyCode, currency: invoice.currency,
       billingDate: input.billingDate, postingDate: null,
@@ -471,5 +634,224 @@ export async function postCreditMemo(input: PostCreditMemoInput): Promise<{
       invoiceNumber: credited.invoiceNumber,
       journalDocumentNumber: credited.journalDocumentNumber ?? '',
     };
+  });
+}
+
+/**
+ * Raise a credit memo request: the complaint a credit is raised from.
+ *
+ * It is created **held**. That is the whole point of it. A credit memo gives the company's money
+ * away, and the act between a customer asking for it and the company agreeing to it is a decision
+ * somebody has to make — so the request stands blocked for billing, and no credit memo can be raised
+ * against it until `releaseBillingBlock` says somebody has. The block carries why it is held, because
+ * a document blocked for no reason anybody can read is how a block becomes a habit rather than a
+ * decision.
+ *
+ * Otherwise it is the same borrowing the returns order makes: created with reference to the invoice,
+ * priced from the invoiced line, bounded by what was invoiced and has not already been asked for.
+ */
+export async function createCreditMemoRequest(
+  input: CreateCreditMemoRequestInput,
+): Promise<{ orderNumber: string; replayed: boolean; billingBlock: string }> {
+  if (!ISO_DATE.test(input.orderDate)) {
+    throw new CreditMemoError(
+      `A credit memo request is raised on a date, and ${input.orderDate} is not one.`,
+      'Enter the date as YYYY-MM-DD.',
+    );
+  }
+  if (input.items.length === 0) {
+    throw new CreditMemoError(
+      'A credit memo request with no items complains about nothing.',
+      'Name at least one invoiced line, and how much of it is in dispute.',
+    );
+  }
+  return withTenant(input.client, async (tx) => {
+    const type = await salesDocumentTypeFor(tx, input.client, STANDARD_CREDIT_MEMO_REQUEST_TYPE);
+    if (!type) {
+      throw new CreditMemoError(
+        `Sales document type ${STANDARD_CREDIT_MEMO_REQUEST_TYPE} does not stand for this tenant, so no credit memo request can be created.`,
+        DOCUMENT_TYPE_REMEDY,
+      );
+    }
+
+    const [standing] = await tx.select({ orderNumber: salesOrder.orderNumber }).from(salesOrder).where(and(
+      eq(salesOrder.client, input.client), eq(salesOrder.requestKey, input.requestKey),
+    )).limit(1);
+    if (standing) {
+      const [saved] = await tx.select().from(salesOrder).where(and(
+        eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, standing.orderNumber),
+      ));
+      return {
+        orderNumber: standing.orderNumber, replayed: true,
+        billingBlock: saved?.billingBlock ?? '',
+      };
+    }
+
+    const invoice = await requireCreditableInvoice(tx, input.client, input.billingNumber,
+      (message, remedy) => { throw new CreditMemoError(message, remedy); });
+
+    const invoiceLines = await tx.select().from(billingDocumentLine).where(and(
+      eq(billingDocumentLine.client, input.client),
+      eq(billingDocumentLine.billingNumber, input.billingNumber),
+    ));
+    const byNumber = new Map(invoiceLines.map((line) => [line.lineNumber, line]));
+
+    const rows: Array<typeof salesOrderLine.$inferInsert> = [];
+    let lineNumber = 10;
+    for (const item of input.items) {
+      const billed = byNumber.get(item.billingLineNumber);
+      if (!billed) {
+        throw new CreditMemoError(
+          `Billing document ${input.billingNumber} carries no line ${item.billingLineNumber}.`,
+          'Name a line the invoice actually carries.',
+        );
+      }
+      const asked = await quantityRequestedAgainstInvoiceLine(
+        tx, input.client, input.billingNumber, item.billingLineNumber,
+      );
+      const invoiced = Number(billed.billingQuantity);
+      if (item.quantity > invoiced - asked + 1e-9) {
+        throw new CreditMemoError(
+          `Invoice line ${item.billingLineNumber} billed ${invoiced}, of which ${asked} has already been asked back, so only ${invoiced - asked} can be disputed.`,
+          'Ask for no more than was invoiced; what was never charged cannot be given back.',
+        );
+      }
+      const [sold] = await tx.select().from(salesOrderLine).where(and(
+        eq(salesOrderLine.client, input.client),
+        eq(salesOrderLine.orderNumber, billed.orderNumber),
+        eq(salesOrderLine.lineNumber, billed.orderLineNumber),
+      )).limit(1);
+      if (!sold) {
+        throw new CreditMemoError(
+          `Invoice line ${item.billingLineNumber} was raised from order item ${billed.orderLineNumber} of order ${billed.orderNumber}, which does not stand.`,
+          'Dispute an invoice whose order still stands.',
+        );
+      }
+
+      const netAmount = round2((item.quantity * Number(billed.netPrice)) / billed.priceUnit);
+      const taxAmount = round2((Number(netAmount) * Number(billed.taxRate)) / 100);
+      rows.push({
+        client: input.client, orderNumber: '', lineNumber,
+        materialNumber: billed.materialNumber, plant: sold.plant,
+        orderQuantity: String(item.quantity), quantityUnit: sold.quantityUnit,
+        baseQuantity: String(item.quantity),
+        netPrice: billed.netPrice, priceUnit: billed.priceUnit, netAmount,
+        taxCode: billed.taxCode, taxRate: billed.taxRate, taxAmount,
+        profitCenter: sold.profitCenter,
+        requestedDeliveryDate: null,
+        conditionNumber: billed.conditionNumber,
+        referenceBillingNumber: billed.billingNumber, referenceBillingLineNumber: billed.lineNumber,
+        status: 'OPEN', createdBy: input.changedBy,
+      });
+      lineNumber += 10;
+    }
+
+    const netValue = round2(rows.reduce((sum, row) => sum + Number(row.netAmount), 0));
+    const taxValue = round2(rows.reduce((sum, row) => sum + Number(row.taxAmount), 0));
+    const grossValue = round2(Number(netValue) + Number(taxValue));
+
+    let number: string;
+    try {
+      const drawn = await allocateNumber(tx, {
+        client: input.client, objectCode: type.numberRangeObject, companyCode: '*',
+        subObject: type.numberRangeSubObject, fiscalYear: 0, allocatedBy: input.changedBy,
+      });
+      number = drawn.display;
+    } catch {
+      throw new CreditMemoError(
+        `No active internal ${type.numberRangeObject} number range stands for sub-object ${type.numberRangeSubObject} of sales document type ${type.documentType}, so no credit memo request number can be drawn.`,
+        'Define or unblock the interval on the number ranges screen, then save again.',
+      );
+    }
+
+    // Held from the moment it exists: nothing credits this request until somebody releases it.
+    const billingBlock = (input.blockReason?.trim() || 'Held for release').slice(0, 60);
+
+    await tx.insert(salesOrder).values({
+      client: input.client, orderNumber: number, documentType: type.documentType,
+      referenceDocumentType: invoice.documentType, referenceDocumentNumber: invoice.billingNumber,
+      salesOrg: invoice.salesOrg, distributionChannel: invoice.distributionChannel, division: invoice.division,
+      customerNumber: invoice.customerNumber, companyCode: invoice.companyCode, currency: invoice.currency,
+      orderDate: input.orderDate,
+      headerText: input.headerText?.trim() || null,
+      status: 'OPEN',
+      billingBlock,
+      netValue, taxValue, grossValue,
+      requestKey: input.requestKey, createdBy: input.changedBy,
+    });
+    for (const row of rows) {
+      await tx.insert(salesOrderLine).values({ ...row, orderNumber: number });
+    }
+
+    await recordChange(tx, {
+      client: input.client, objectClass: 'sales_order', objectKey: number, changeType: 'CREATE',
+      changedBy: input.changedBy, transactionCode: CREDIT_MEMO_TRANSACTION,
+      after: {
+        documentType: type.documentType, against: invoice.billingNumber,
+        items: rows.length, netValue, taxValue, grossValue, billingBlock,
+      },
+      fieldLabels: { against: 'Against invoice', billingBlock: 'Held for billing' },
+    });
+
+    return { orderNumber: number, replayed: false, billingBlock };
+  });
+}
+
+/**
+ * Release a document that stands blocked for billing.
+ *
+ * The decision to give money away is an act, and this is it: the block is named, whoever released it
+ * is recorded, and only then can a credit memo be raised against the request. An order that is not
+ * blocked has nothing to release, which is a refusal rather than a silent no-op — a caller that asks
+ * to release something twice is a caller that has lost track of what it is doing.
+ */
+export async function releaseBillingBlock(input: ReleaseBillingBlockInput): Promise<{
+  orderNumber: string;
+  version: number;
+}> {
+  return withTenant(input.client, async (tx) => {
+    const [order] = await tx.select().from(salesOrder).where(and(
+      eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, input.orderNumber),
+    )).limit(1);
+    if (!order) {
+      throw new CreditMemoError(
+        `Sales order ${input.orderNumber} does not stand for this tenant.`,
+        'Read the document before releasing it.',
+      );
+    }
+    if (order.status !== 'OPEN') {
+      throw new CreditMemoError(
+        `Sales order ${input.orderNumber} stands ${order.status}, and a document that no longer stands is not released.`,
+        'Release a document that is open.',
+      );
+    }
+    if (!order.billingBlock) {
+      throw new CreditMemoError(
+        `Sales order ${input.orderNumber} stands released already, so there is no block to lift.`,
+        'Nothing is holding this document; raise the credit.',
+      );
+    }
+    if (order.version !== input.expectedVersion) {
+      throw new CreditMemoError(
+        `Sales order ${input.orderNumber} changed since it was read (version ${order.version}, expected ${input.expectedVersion}).`,
+        'Reload the document and release what stands now.',
+      );
+    }
+
+    await tx.update(salesOrder)
+      .set({ billingBlock: null, version: order.version + 1 })
+      .where(and(
+        eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, input.orderNumber),
+      ));
+
+    await recordChange(tx, {
+      client: input.client, objectClass: 'sales_order', objectKey: input.orderNumber,
+      changeType: 'CHANGE', changedBy: input.changedBy, transactionCode: CREDIT_MEMO_TRANSACTION,
+      before: { billingBlock: order.billingBlock },
+      after: { billingBlock: null },
+      fieldLabels: { billingBlock: 'Held for billing' },
+    });
+
+    return { orderNumber: input.orderNumber, version: order.version + 1 };
   });
 }

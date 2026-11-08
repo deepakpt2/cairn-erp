@@ -79,6 +79,11 @@ export const salesOrder = pgTable('sales_order', {
   purchaseOrderReference: varchar('purchase_order_reference', { length: 20 }),
   headerText: varchar('header_text', { length: 100 }),
   status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+  /**
+   * Why this document is held from billing; null when it stands released. A credit memo request is
+   * created held, and no credit memo is raised against it until somebody releases it.
+   */
+  billingBlock: varchar('billing_block', { length: 60 }),
   netValue: numeric('net_value', { precision: 23, scale: 4 }).notNull().default('0'),
   taxValue: numeric('tax_value', { precision: 23, scale: 4 }).notNull().default('0'),
   grossValue: numeric('gross_value', { precision: 23, scale: 4 }).notNull().default('0'),

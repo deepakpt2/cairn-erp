@@ -34,7 +34,9 @@ import {
   createReturnsDelivery, createReturnsOrder, postReturnsDelivery, postReturnsReceipt, ReturnsError,
 } from '../src/modules/sales/returns';
 import { openSalesCommitments } from '../src/modules/sales/exposure';
-import { createCreditMemo, postCreditMemo } from '../src/modules/sales/credit-memo';
+import {
+  createCreditMemo, createCreditMemoRequest, postCreditMemo, releaseBillingBlock,
+} from '../src/modules/sales/credit-memo';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
@@ -134,6 +136,8 @@ describe('sales fulfillment and billing (DI-020)', () => {
         { objectCode: 'SALESORD', subObject: 'RE', prefix: 'RO', numberLength: 7 },
         // What a credit memo draws its number from (9231).
         { objectCode: 'BILLING', subObject: 'G2', prefix: 'CM', numberLength: 7 },
+        // What a credit memo request draws its number from (9232).
+        { objectCode: 'SALESORD', subObject: 'CR', prefix: 'CR', numberLength: 7 },
         { objectCode: 'BILLING', subObject: 'F2', prefix: 'INV', numberLength: 7 },
         // What a cancellation document draws its number from (9227). A fixture tenant does not go through
         // createTenant, so STANDARD_RANGES never ran for it: the interval is defined here, as the others are.
@@ -1724,5 +1728,104 @@ describe('sales fulfillment and billing (DI-020)', () => {
       client: tenant.client, changedBy: ACTOR, billingNumber: memo.billingNumber,
       expectedVersion: draft!.version + 1, postingDate: DATE, requestKey: key('credit-post-two'),
     })).rejects.toThrow(/already posted/);
+  });
+
+  it('holds a credit until somebody releases it: the request, the block, and the credit it authorises', async () => {
+    const chain = await invoicedChain('request');
+
+    const raised = await createCreditMemoRequest({
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, orderDate: DATE,
+      requestKey: key('memo-request'),
+      blockReason: 'Awaiting the complaint desk',
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    });
+    expect(raised.replayed).toBe(false);
+    expect(raised.orderNumber).toMatch(/^CR-\d+$/);
+    // It is held from the moment it exists, and it says why.
+    expect(raised.billingBlock).toBe('Awaiting the complaint desk');
+
+    const view = await getSalesOrder(tenant.client, raised.orderNumber);
+    expect(view!.documentType).toBe('CR');
+    expect(view!.billingBlock).toBe('Awaiting the complaint desk');
+    const [reference] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select reference_document_type, reference_document_number
+        from sales_order where client = ${tenant.client} and order_number = ${raised.orderNumber}
+    `) as unknown as Promise<Array<{ reference_document_type: string; reference_document_number: string }>>);
+    expect(reference.reference_document_type).toBe('F2');
+    expect(reference.reference_document_number).toBe(chain.billingNumber);
+
+    // A held request authorises nothing: the credit is refused while the block stands, and the
+    // refusal names the block and the act that lifts it.
+    await expect(createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, billingDate: DATE,
+      requestKey: key('credit-while-held'),
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+      creditMemoRequestNumber: raised.orderNumber,
+    })).rejects.toThrow(/stands blocked for billing: Awaiting the complaint desk/);
+
+    // Releasing it is the decision, and it is recorded as one.
+    const released = await releaseBillingBlock({
+      client: tenant.client, changedBy: ACTOR, orderNumber: raised.orderNumber,
+      expectedVersion: view!.version,
+    });
+    expect(released.version).toBe(view!.version + 1);
+    const freed = await getSalesOrder(tenant.client, raised.orderNumber);
+    expect(freed!.billingBlock).toBeNull();
+    await expect(releaseBillingBlock({
+      client: tenant.client, changedBy: ACTOR, orderNumber: raised.orderNumber,
+      expectedVersion: released.version,
+    })).rejects.toThrow(/stands released already/);
+
+    // Now it authorises a credit, and only up to what it asks for.
+    const credited = await createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, billingDate: DATE,
+      requestKey: key('credit-authorised'),
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+      creditMemoRequestNumber: raised.orderNumber,
+    });
+    expect(credited.netValue).toBe('-25.00');
+    const memo = await getBilling(tenant.client, credited.billingNumber);
+    // The credit belongs to the request it came from, so the chain reads complaint, then credit.
+    expect(memo!.orderNumber).toBe(raised.orderNumber);
+
+    await expect(createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, billingDate: DATE,
+      requestKey: key('credit-beyond-request'),
+      items: [{ billingLineNumber: 10, quantity: 0.5 }],
+      creditMemoRequestNumber: raised.orderNumber,
+    })).rejects.toThrow(/only 0 can be credited/);
+  });
+
+  it('refuses a request that is not against an invoice, and a credit raised from the wrong document', async () => {
+    const chain = await invoicedChain('request-refusals');
+    const first = {
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, orderDate: DATE,
+    };
+
+    // No more than was invoiced may be disputed, and what has already been asked for counts.
+    await createCreditMemoRequest({ ...first, requestKey: key('request-first'),
+      items: [{ billingLineNumber: 10, quantity: 1 }] });
+    await expect(createCreditMemoRequest({ ...first, requestKey: key('request-over'),
+      items: [{ billingLineNumber: 10, quantity: 2 }] })).rejects.toThrow(/only 1 can be disputed/);
+    await expect(createCreditMemoRequest({ ...first, requestKey: key('request-no-line'),
+      items: [{ billingLineNumber: 90, quantity: 1 }] })).rejects.toThrow(/carries no line 90/);
+    await expect(createCreditMemoRequest({ ...first, requestKey: key('request-empty'),
+      items: [] })).rejects.toThrow(/complains about nothing/);
+    await expect(createCreditMemoRequest({ ...first, billingNumber: billing,
+      requestKey: key('request-cancelled'),
+      items: [{ billingLineNumber: 10, quantity: 1 }] })).rejects.toThrow(/stands cancelled/);
+
+    // A credit raised from something that is not a request, from a request for another invoice, and
+    // from a request the credit does not match.
+    await expect(createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, billingDate: DATE,
+      requestKey: key('credit-from-an-order'), creditMemoRequestNumber: chain.orderNumber,
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/is a OR, and a credit memo is raised from a credit memo request/);
+    await expect(createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, billingDate: DATE,
+      requestKey: key('credit-from-nowhere'), creditMemoRequestNumber: 'CR-9999999',
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/does not stand/);
   });
 });

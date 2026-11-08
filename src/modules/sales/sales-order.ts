@@ -330,6 +330,8 @@ export interface SalesOrderView {
   purchaseOrderReference: string | null;
   headerText: string | null;
   status: string;
+  /** Why this document is held from billing; null when it stands released. */
+  billingBlock: string | null;
   netValue: string;
   taxValue: string;
   grossValue: string;
@@ -373,6 +375,7 @@ function mapHeader(row: typeof salesOrder.$inferSelect): Omit<SalesOrderView, 'l
     purchaseOrderReference: row.purchaseOrderReference,
     headerText: row.headerText,
     status: row.status,
+    billingBlock: row.billingBlock,
     netValue: row.netValue,
     taxValue: row.taxValue,
     grossValue: row.grossValue,

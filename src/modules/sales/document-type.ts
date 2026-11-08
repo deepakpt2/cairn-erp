@@ -38,6 +38,8 @@ export const STANDARD_RETURNS_DELIVERY_TYPE = 'LR';
 export const STANDARD_RETURNS_ORDER_TYPE = 'RE';
 /** SAP's G2: the credit memo that gives the customer back what an invoice charged. */
 export const STANDARD_CREDIT_MEMO_TYPE = 'G2';
+/** SAP's CR: the complaint a credit memo is raised from, held for billing until it is released. */
+export const STANDARD_CREDIT_MEMO_REQUEST_TYPE = 'CR';
 
 /**
  * The three types every tenant is delivered with, in the shape the standard configuration package writes
@@ -78,6 +80,10 @@ export const STANDARD_SALES_DOCUMENT_TYPES: StandardSalesDocumentType[] = [
   {
     documentType: STANDARD_CREDIT_MEMO_TYPE, name: 'Credit memo',
     numberRangeObject: 'BILLING', numberRangeSubObject: 'G2',
+  },
+  {
+    documentType: STANDARD_CREDIT_MEMO_REQUEST_TYPE, name: 'Credit memo request',
+    numberRangeObject: 'SALESORD', numberRangeSubObject: 'CR',
   },
   {
     documentType: STANDARD_BILLING_TYPE, name: 'Invoice',
