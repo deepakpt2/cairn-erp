@@ -221,6 +221,12 @@ export const delivery = pgTable('delivery', {
   deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
   goodsMovementDate: date('goods_movement_date', { mode: 'string' }),
   status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+  /**
+   * Whether the goods issue this delivery posted still stands: true from the moment the movement
+   * posts, false when that movement is reversed. A delivery that stands GOODS_ISSUED is a delivery
+   * whose goods are out, so undoing the issue undoes the status with it.
+   */
+  goodsIssueStands: boolean('goods_issue_stands').notNull().default(false),
   materialDocumentNumber: varchar('material_document_number', { length: 20 }),
   materialDocumentYear: integer('material_document_year'),
   headerText: varchar('header_text', { length: 100 }),

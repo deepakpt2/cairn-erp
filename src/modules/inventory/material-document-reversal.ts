@@ -26,6 +26,9 @@
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import {
+  GoodsIssueReversalError, noteGoodsIssueReversed, refuseGoodsIssueReversal,
+} from '../sales/goods-issue-reversal';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
@@ -423,6 +426,18 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
       );
     }
 
+    // A goods issue is posted for a delivery, and since then the goods may have been invoiced or may
+    // have come back. Neither is undone by reversing the movement: the invoice is cancelled, or the
+    // goods are returned and credited. Sales owns that answer, so it is asked before anything moves.
+    try {
+      await refuseGoodsIssueReversal(tx, input.client, input.materialDocumentNumber);
+    } catch (caught) {
+      if (caught instanceof GoodsIssueReversalError) {
+        throw new MaterialReversalError(caught.message, caught.remedy);
+      }
+      throw caught;
+    }
+
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/reverse/${input.materialDocumentNumber}`}, 0))`);
     const [locked] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, input.client),
@@ -660,6 +675,13 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
       eq(materialDocument.client, input.client),
       eq(materialDocument.materialDocumentNumber, input.materialDocumentNumber),
     ));
+
+    // The movement is undone, so the delivery's issue is undone with it. A delivery that went on
+    // standing GOODS_ISSUED after its goods were put back in the plant is a delivery that lies to
+    // every screen that reads it — the billing due list above all.
+    if (allDone) {
+      await noteGoodsIssueReversed(tx, input.client, input.materialDocumentNumber, input.changedBy);
+    }
 
     await releaseDifferenceAllocations(tx, input.client, input.changedBy, {
       reversalDocument: number,

@@ -32,7 +32,6 @@ import { accountDetermination, companyCode as companyCodeTable, taxCode as taxCo
 import {
   cancelCustomerInvoice, postCustomerInvoice, type CustomerInvoiceView,
 } from '../finance/customer-invoice';
-import { lineNotReversed } from '../inventory/production-document-quantity';
 
 import { billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine } from './schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_BILLING_TYPE, salesDocumentTypeFor } from './document-type';
@@ -353,6 +352,15 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     if (deliveryHeader.status === 'CANCELLED') {
       throw new BillingError(`Delivery ${parsed.deliveryNumber} stands CANCELLED; nothing was shipped to bill.`);
     }
+    // An issue that has been reversed puts the delivery back where it stood before the movement, but it
+    // is not a delivery that has never gone out: it is one whose goods came back. Say that, rather than
+    // letting the status check answer "post the goods issue" about goods that were shipped and returned.
+    if (deliveryHeader.materialDocumentNumber && !deliveryHeader.goodsIssueStands) {
+      throw new BillingError(
+        `The goods issue on material document ${deliveryHeader.materialDocumentNumber} has been reversed, so delivery ${deliveryHeader.deliveryNumber} has nothing delivered to bill.`,
+        'Post the goods issue again, or cancel the delivery: a reversed issue is not billed.',
+      );
+    }
     if (deliveryHeader.status !== 'GOODS_ISSUED') {
       throw new BillingError(
         `Delivery ${parsed.deliveryNumber} stands ${deliveryHeader.status}; only a goods-issued delivery earns an invoice.`,
@@ -398,8 +406,9 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     )).orderBy(asc(deliveryLine.lineNumber));
     if (!lines.length) throw new BillingError(`Delivery ${deliveryHeader.deliveryNumber} carries no items.`);
 
-    // A reversed movement is not a delivered quantity. Reversal is by line, so the whole delivery is held
-    // until it is settled — the same rule the inventory engine applies to its own open quantities.
+    // A reversal that left part of the goods out: the delivery still stands issued, so the check above
+    // does not fire, but the delivered quantity is unsettled. Reversal is by line, so the whole delivery
+    // is held until it is settled — the same rule the inventory engine applies to its own open quantities.
     if (deliveryHeader.materialDocumentNumber) {
       const reversed = await tx.execute(sql`
         select count(*)::int as reversed
@@ -1095,14 +1104,20 @@ export async function salesDocumentFlow(
 }
 
 /** The unreversed-issue test the billing refusal uses, exposed for the screen's own wording. */
-export async function goodsIssueStands(client: string, materialDocumentNumber: string): Promise<boolean> {
+/**
+ * Whether the goods issue this delivery posted still stands.
+ *
+ * It is the delivery's own fact now (9233): true from the moment the movement posts, false when that
+ * movement is reversed. It used to be computed here by counting the material document's unreversed
+ * lines — a screen doing arithmetic on another module's tables to answer a question the delivery
+ * owns, and one that went on saying the goods were out after a reversal had put them back in the
+ * plant. The fact is persisted where it belongs, and this reads it.
+ */
+export async function goodsIssueStands(client: string, deliveryNumber: string): Promise<boolean> {
   return withTenant(client, async (tx) => {
-    const rows = await tx.execute(sql`
-      select 1 as open_line from material_document_line l
-       where l.client = ${client} and l.material_document_number = ${materialDocumentNumber}
-         and ${lineNotReversed('l')}
-       limit 1
-    `) as unknown as Array<{ open_line: number }>;
-    return rows.length > 0;
+    const [row] = await tx.select({ stands: delivery.goodsIssueStands }).from(delivery).where(and(
+      eq(delivery.client, client), eq(delivery.deliveryNumber, deliveryNumber),
+    )).limit(1);
+    return row?.stands ?? false;
   });
 }

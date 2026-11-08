@@ -10,6 +10,7 @@ import {
   cancelBillingDocument,
   createBillingFromDelivery,
   getBilling,
+  goodsIssueStands,
   listBillableDeliveries,
   postBillingDocument,
 } from '../src/modules/sales/billing';
@@ -1827,5 +1828,124 @@ describe('sales fulfillment and billing (DI-020)', () => {
       requestKey: key('credit-from-nowhere'), creditMemoRequestNumber: 'CR-9999999',
       items: [{ billingLineNumber: 10, quantity: 1 }],
     })).rejects.toThrow(/does not stand/);
+  });
+
+  // ---------------------------------------------------------------------------------------------------
+  // A reversal Sales can see. A material document is posted and reversed in Inventory, and until now
+  // the reversal knew nothing about the delivery behind it: goods could be taken back out of the
+  // plant with the invoice standing, and a delivery could go on claiming they were out.
+  // ---------------------------------------------------------------------------------------------------
+
+  /** A shipped chain of one's own: ordered, picked and issued, which is what a reversal undoes. */
+  async function issuedChain(label: string, quantity = 2): Promise<{
+    orderNumber: string; deliveryNumber: string;
+    materialDocumentNumber: string; materialDocumentYear: number;
+  }> {
+    const placed = await createSalesOrder({
+      ...base, requestKey: key(`${label}-order`),
+      lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: quantity, quantityUnit: 'UNT', taxCode: 'T10' }],
+    });
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: String(quantity) }], requestKey: key(`${label}-delivery`),
+    });
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      items: [{ lineNumber: 10, quantity: String(quantity), storageLocation: STORE }], requestKey: key(`${label}-pick`),
+    });
+    const standing = await getDelivery(tenant.client, shipped.deliveryNumber);
+    const issued = await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+    return {
+      orderNumber: placed.orderNumber, deliveryNumber: shipped.deliveryNumber,
+      materialDocumentNumber: issued.materialDocumentNumber!,
+      materialDocumentYear: issued.materialDocumentYear!,
+    };
+  }
+
+  it('takes the delivery back with the movement, and lets it be issued again', async () => {
+    const chain = await issuedChain('reversal');
+    const issued = await getDelivery(tenant.client, chain.deliveryNumber);
+    expect(issued!.status).toBe('GOODS_ISSUED');
+    // The issue stands, and the delivery says so rather than leaving it to be worked out.
+    expect(issued!.goodsIssueStands).toBe(true);
+    expect(await goodsIssueStands(tenant.client, chain.deliveryNumber)).toBe(true);
+
+    await reverseMaterialDocument({
+      client: tenant.client, changedBy: ACTOR, materialDocumentNumber: chain.materialDocumentNumber,
+      fiscalYear: chain.materialDocumentYear, postingDate: DATE, documentDate: DATE,
+      headerText: 'Shipment withdrawn', requestKey: key('reversal-visible'),
+    });
+
+    // The goods are back in the plant, so the delivery is back where it was before the issue: the
+    // pick still stands, the issued quantity is off the lines, and the issue no longer stands.
+    const undone = await getDelivery(tenant.client, chain.deliveryNumber);
+    expect(undone!.status).toBe('PICKED');
+    expect(undone!.goodsIssueStands).toBe(false);
+    // What was posted is history: the movement is still named on the header.
+    expect(undone!.materialDocumentNumber).toBe(chain.materialDocumentNumber);
+    expect(await goodsIssueStands(tenant.client, chain.deliveryNumber)).toBe(false);
+
+    const [line] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select goods_issue_quantity::text as issued, picked_quantity::text as picked, status
+        from delivery_line
+       where client = ${tenant.client} and delivery_number = ${chain.deliveryNumber} and line_number = 10
+    `) as unknown as Promise<Array<{ issued: string; picked: string; status: string }>>);
+    expect(line.issued).toBe('0.000');
+    expect(line.picked).toBe('2.000');
+    expect(line.status).toBe('PICKED');
+
+    // And the goods can go out again, from the store's own confirmation rather than from a memory.
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: chain.deliveryNumber,
+      expectedVersion: undone!.version, postingDate: DATE,
+    });
+    const reissued = await getDelivery(tenant.client, chain.deliveryNumber);
+    expect(reissued!.status).toBe('GOODS_ISSUED');
+    expect(reissued!.goodsIssueStands).toBe(true);
+    expect(reissued!.materialDocumentNumber).not.toBe(chain.materialDocumentNumber);
+  });
+
+  it('refuses to reverse a goods issue out from under an invoice, or out from under a return', async () => {
+    // Goods that have been invoiced are taken back by cancelling the invoice, or by a return —
+    // never by undoing the movement underneath the receivable.
+    const billed = await issuedChain('reversal-billed');
+    const invoiced = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: billed.deliveryNumber, billingDate: DATE,
+      requestKey: key('reversal-billed-invoice'),
+    });
+    const refusal = await reverseMaterialDocument({
+      client: tenant.client, changedBy: ACTOR, materialDocumentNumber: billed.materialDocumentNumber,
+      fiscalYear: billed.materialDocumentYear, postingDate: DATE, documentDate: DATE,
+      requestKey: key('reversal-under-invoice'),
+    }).catch((caught: Error & { remedy?: string }) => caught);
+    expect(refusal).toBeInstanceOf(Error);
+    expect((refusal as Error).message).toMatch(new RegExp(`is billed as ${invoiced.billing.billingNumber}`));
+    // The refusal names the two ways through, because a refusal that only says no is a dead end.
+    expect((refusal as { remedy?: string }).remedy).toMatch(
+      new RegExp(`Cancel billing document ${invoiced.billing.billingNumber}|raise a return`),
+    );
+
+    // What stands after the refusal: nothing moved.
+    const untouched = await getDelivery(tenant.client, billed.deliveryNumber);
+    expect(untouched!.status).toBe('GOODS_ISSUED');
+    expect(untouched!.goodsIssueStands).toBe(true);
+
+    // Goods that have already come back are not taken back either: what came back is counted against
+    // what was issued, and undoing the issue would leave more returned than was ever sent out.
+    const returned = await issuedChain('reversal-returned');
+    await postReturnsReceipt({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: returned.deliveryNumber,
+      postingDate: DATE, requestKey: key('reversal-returned-receipt'),
+      lines: [{ lineNumber: 10, quantity: 1, storageLocation: STORE }],
+    });
+    await expect(reverseMaterialDocument({
+      client: tenant.client, changedBy: ACTOR, materialDocumentNumber: returned.materialDocumentNumber,
+      fiscalYear: returned.materialDocumentYear, postingDate: DATE, documentDate: DATE,
+      requestKey: key('reversal-under-return'),
+    })).rejects.toThrow(/has already had .* of its goods come back/);
   });
 });

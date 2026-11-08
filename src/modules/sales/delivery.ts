@@ -201,6 +201,13 @@ export interface DeliveryView {
   deliveryDate: string;
   goodsMovementDate: string | null;
   status: string;
+  /**
+   * Whether this delivery's goods issue still stands: true from the moment the movement posts, false
+   * when that movement is reversed. A screen reads the status to know the goods are out, and reads
+   * this to know the movement behind it has not been undone — the two are undone together, because a
+   * delivery standing GOODS_ISSUED over goods that are back in the plant is a delivery that lies.
+   */
+  goodsIssueStands: boolean;
   materialDocumentNumber: string | null;
   materialDocumentYear: number | null;
   headerText: string | null;
@@ -249,6 +256,7 @@ function mapHeader(row: typeof delivery.$inferSelect): Omit<DeliveryView, 'lines
     deliveryDate: row.deliveryDate,
     goodsMovementDate: row.goodsMovementDate,
     status: row.status,
+    goodsIssueStands: row.goodsIssueStands,
     materialDocumentNumber: row.materialDocumentNumber,
     materialDocumentYear: row.materialDocumentYear,
     headerText: row.headerText,
@@ -951,8 +959,11 @@ export async function postDeliveryGoodsIssue(input: DeliveryIssueInput): Promise
         documentDate: parsed.documentDate || parsed.postingDate,
         headerText: `SD ${header.deliveryNumber}`.slice(0, 25),
         // The movement's own replay key: a resubmission is answered with the document the first attempt
-        // posted, so a shelf is never emptied twice by a form that was pressed twice.
-        requestKey: `sd-gi-${parsed.client}-${header.deliveryNumber}`.slice(0, 64),
+        // posted, so a shelf is never emptied twice by a form that was pressed twice. The version is part
+        // of the key because a posting belongs to the version of the delivery it was posted against — a
+        // re-issue after a reversal carries a later version, and has to move the goods again rather than
+        // be answered with the reversed document.
+        requestKey: `sd-gi-${parsed.client}-${header.deliveryNumber}-${header.version}`.slice(0, 64),
         lines: issueLines,
       }, 'SALES', { tx });
     } catch (caught) {
@@ -983,6 +994,8 @@ export async function postDeliveryGoodsIssue(input: DeliveryIssueInput): Promise
 
     const applied = await tx.update(delivery).set({
       status: 'GOODS_ISSUED',
+      // The issue stands from here, and stops standing only if the movement is reversed (9233).
+      goodsIssueStands: true,
       goodsMovementDate: parsed.postingDate,
       materialDocumentNumber: issue.materialDocumentNumber,
       materialDocumentYear: issue.documentYear,
