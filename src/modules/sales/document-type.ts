@@ -36,6 +36,8 @@ export const STANDARD_BILLING_CANCELLATION_TYPE = 'S1';
 export const STANDARD_RETURNS_DELIVERY_TYPE = 'LR';
 /** SAP's RE: the order a return is raised on, created with reference to the invoice it comes from. */
 export const STANDARD_RETURNS_ORDER_TYPE = 'RE';
+/** SAP's G2: the credit memo that gives the customer back what an invoice charged. */
+export const STANDARD_CREDIT_MEMO_TYPE = 'G2';
 
 /**
  * The three types every tenant is delivered with, in the shape the standard configuration package writes
@@ -72,6 +74,10 @@ export const STANDARD_SALES_DOCUMENT_TYPES: StandardSalesDocumentType[] = [
   {
     documentType: STANDARD_BILLING_CANCELLATION_TYPE, name: 'Cancellation of invoice',
     numberRangeObject: 'BILLING', numberRangeSubObject: 'S1',
+  },
+  {
+    documentType: STANDARD_CREDIT_MEMO_TYPE, name: 'Credit memo',
+    numberRangeObject: 'BILLING', numberRangeSubObject: 'G2',
   },
   {
     documentType: STANDARD_BILLING_TYPE, name: 'Invoice',

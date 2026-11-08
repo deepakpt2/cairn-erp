@@ -34,6 +34,7 @@ import {
   createReturnsDelivery, createReturnsOrder, postReturnsDelivery, postReturnsReceipt, ReturnsError,
 } from '../src/modules/sales/returns';
 import { openSalesCommitments } from '../src/modules/sales/exposure';
+import { createCreditMemo, postCreditMemo } from '../src/modules/sales/credit-memo';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
@@ -131,6 +132,8 @@ describe('sales fulfillment and billing (DI-020)', () => {
         { objectCode: 'DELIVERY', subObject: 'LR', prefix: 'RT', numberLength: 7 },
         // What a returns order draws its number from (9230).
         { objectCode: 'SALESORD', subObject: 'RE', prefix: 'RO', numberLength: 7 },
+        // What a credit memo draws its number from (9231).
+        { objectCode: 'BILLING', subObject: 'G2', prefix: 'CM', numberLength: 7 },
         { objectCode: 'BILLING', subObject: 'F2', prefix: 'INV', numberLength: 7 },
         // What a cancellation document draws its number from (9227). A fixture tenant does not go through
         // createTenant, so STANDARD_RANGES never ran for it: the interval is defined here, as the others are.
@@ -1130,6 +1133,42 @@ describe('sales fulfillment and billing (DI-020)', () => {
   const exposureNow = () => withTenant(tenant.client, (tx) =>
     openSalesCommitments(tx, tenant.client, CUSTOMER, 'USD'));
 
+  /**
+   * A chain of one's own: goods ordered, shipped and invoiced, which is what a credit is raised
+   * against. The invoice the earlier tests share stands cancelled by the time these run, and there is
+   * no crediting a cancelled invoice.
+   */
+  async function invoicedChain(label: string, quantity = 2): Promise<{
+    orderNumber: string; deliveryNumber: string; billingNumber: string;
+  }> {
+    const placed = await createSalesOrder({
+      ...base, requestKey: key(`${label}-order`),
+      lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: quantity, quantityUnit: 'UNT', taxCode: 'T10' }],
+    });
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: String(quantity) }], requestKey: key(`${label}-delivery`),
+    });
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      items: [{ lineNumber: 10, quantity: String(quantity), storageLocation: STORE }], requestKey: key(`${label}-pick`),
+    });
+    const standing = await getDelivery(tenant.client, shipped.deliveryNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+    const invoiced = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key(`${label}-invoice`),
+    });
+    return {
+      orderNumber: placed.orderNumber, deliveryNumber: shipped.deliveryNumber,
+      billingNumber: invoiced.billing.billingNumber,
+    };
+  }
+
   it('returns through a returns delivery, which posts the 651 and moves nothing else', async () => {
     // Its own order: the one the tests above share is drawn down to nothing by the time this runs,
     // and a returns delivery must stand against a delivery of its own.
@@ -1500,5 +1539,148 @@ describe('sales fulfillment and billing (DI-020)', () => {
       requestKey: key('lr-both-origins'),
       items: [{ lineNumber: 10, quantity: 1 }],
     })).rejects.toThrow(/not against neither, nor against both/);
+  });
+
+  // ---------------------------------------------------------------------------------------------------
+  // The credit memo: the end of the loop. Goods can come back and be put back in stock, but until this
+  // document exists the customer is still invoiced for them. It is priced from the invoiced line, and
+  // it travels the same revenue account the invoice used, in the other direction.
+  // ---------------------------------------------------------------------------------------------------
+
+  it('gives the money back: a credit memo priced from the invoiced line, posted against the same revenue', async () => {
+    const chain = await invoicedChain('credit');
+
+    const raised = await createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, billingDate: DATE,
+      requestKey: key('credit-memo'),
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    });
+    expect(raised.replayed).toBe(false);
+    expect(raised.billingNumber).toMatch(/^CM-\d+$/);
+
+    // One of the two invoiced units, at the price and tax they were billed at: 25.00 plus ten per cent,
+    // negated, because a credit memo carries what the customer is being given back.
+    expect(raised.netValue).toBe('-25.00');
+    expect(raised.taxValue).toBe('-2.50');
+    expect(raised.grossValue).toBe('-27.50');
+
+    const draft = await getBilling(tenant.client, raised.billingNumber);
+    expect(draft!.documentType).toBe('G2');
+    expect(draft!.status).toBe('OPEN');
+    expect(draft!.creditOf).toBe(chain.billingNumber);
+    expect(draft!.customerInvoiceNumber).toBeNull();
+
+    // The line names the invoiced line it was priced from, and carries the invoice's material, price
+    // and tax at the credited quantity — the price negated, so quantity times price is the credit.
+    const [line] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select l.billing_quantity::text as quantity, l.net_price::text as price, l.net_amount::text as net,
+             l.tax_code, l.tax_amount::text as tax, l.material_number,
+             l.reference_billing_number, l.reference_billing_line_number
+        from billing_document_line l
+       where l.client = ${tenant.client} and l.billing_number = ${raised.billingNumber} and l.line_number = 10
+    `) as unknown as Promise<Array<{
+      quantity: string; price: string; net: string; tax_code: string; tax: string;
+      material_number: string; reference_billing_number: string; reference_billing_line_number: number;
+    }>>);
+    expect(line.quantity).toBe('1.000');
+    expect(line.price).toBe('-25.0000');
+    expect(line.net).toBe('-25.0000');
+    expect(line.tax_code).toBe('T10');
+    expect(line.tax).toBe('-2.5000');
+    expect(line.material_number).toBe(MATERIAL);
+    expect(line.reference_billing_number).toBe(chain.billingNumber);
+    expect(line.reference_billing_line_number).toBe(10);
+
+    // Posting it is what gives the money back: an accounting credit memo, raised against the
+    // receivable the invoice left, and a journal that travels the revenue in the other direction.
+    const posted = await postCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: raised.billingNumber,
+      expectedVersion: draft!.version, postingDate: DATE, requestKey: key('credit-memo-posted'),
+    });
+    expect(posted.invoiceNumber).toMatch(/^CI-\d+$/);
+    // A journal is numbered by company, year and sequence, as every journal here is.
+    expect(posted.journalDocumentNumber).toMatch(/^1000\/2026\/\d+$/);
+
+    const memo = await getBilling(tenant.client, raised.billingNumber);
+    expect(memo!.status).toBe('POSTED');
+    expect(memo!.customerInvoiceNumber).toBe(posted.invoiceNumber);
+    expect(memo!.journalDocumentNumber).toBe(posted.journalDocumentNumber);
+
+    // The receivable it leaves behind is a credit against the original invoice, not a second sale.
+    const credit = await getCustomerInvoice(tenant.client, posted.invoiceNumber);
+    expect(credit!.category).toBe('CREDIT_MEMO');
+    expect(credit!.creditOf).toBe((await getBilling(tenant.client, chain.billingNumber))!.customerInvoiceNumber);
+    expect(Number(credit!.grossAmount)).toBe(27.5);
+
+    // And the journal credits the customer and debits the revenue and the tax it reverses: the mirror
+    // of the invoice, at the credited value.
+    const journal = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select gl_account, debit_credit, amount_local::text as amount
+        from journal_entry_line
+       where client = ${tenant.client} and document_number = ${posted.journalDocumentNumber}
+       order by gl_account
+    `) as unknown as Promise<Array<{ gl_account: string; debit_credit: string; amount: string }>>);
+    const customer = journal.find((row) => row.gl_account === '110000');
+    expect(customer).toMatchObject({ debit_credit: 'H', amount: '27.5000' });
+    const reversed = journal.filter((row) => row.debit_credit === 'S');
+    expect(reversed).toHaveLength(2);
+    expect(Number(reversed.reduce((sum, row) => sum + Number(row.amount), 0)).toFixed(4)).toBe('27.5000');
+  });
+
+  it('refuses a credit that is not against a posted invoice, or for more than it billed', async () => {
+    const chain = await invoicedChain('credit-refusals');
+    const first = {
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber, billingDate: DATE,
+    };
+
+    await createCreditMemo({ ...first, requestKey: key('credit-first'),
+      items: [{ billingLineNumber: 10, quantity: 1 }] });
+    // What was invoiced bounds the credit, and what has already been credited counts against it.
+    await expect(createCreditMemo({ ...first, requestKey: key('credit-twice'),
+      items: [{ billingLineNumber: 10, quantity: 2 }] })).rejects.toThrow(/only 1 can be credited/);
+    await expect(createCreditMemo({ ...first, requestKey: key('credit-over'),
+      items: [{ billingLineNumber: 10, quantity: 1.001 }] })).rejects.toThrow(/only 1 can be credited/);
+    // A line the invoice does not carry.
+    await expect(createCreditMemo({ ...first, requestKey: key('credit-no-line'),
+      items: [{ billingLineNumber: 90, quantity: 1 }] })).rejects.toThrow(/carries no line 90/);
+    // Nothing to credit.
+    await expect(createCreditMemo({ ...first, requestKey: key('credit-empty'),
+      items: [] })).rejects.toThrow(/credits nothing/);
+
+    // An invoice that does not stand, one that stands cancelled, and one that is not an invoice.
+    await expect(createCreditMemo({ ...first, billingNumber: 'INV-9999999',
+      requestKey: key('credit-missing'),
+      items: [{ billingLineNumber: 10, quantity: 1 }] })).rejects.toThrow(/does not stand/);
+    await expect(createCreditMemo({ ...first, billingNumber: billing,
+      requestKey: key('credit-cancelled'),
+      items: [{ billingLineNumber: 10, quantity: 1 }] })).rejects.toThrow(/stands cancelled/);
+
+    const credited = await createCreditMemo({ ...first, requestKey: key('credit-of-credit'),
+      items: [{ billingLineNumber: 10, quantity: 0.5 }] });
+    await expect(createCreditMemo({ ...first, billingNumber: credited.billingNumber,
+      requestKey: key('credit-a-credit'),
+      items: [{ billingLineNumber: 10, quantity: 0.5 }] })).rejects.toThrow(/is a credit memo/);
+
+    // And what is not a credit memo is not posted as one, nor posted twice.
+    await expect(postCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: chain.billingNumber,
+      expectedVersion: 1, postingDate: DATE, requestKey: key('post-an-invoice'),
+    })).rejects.toThrow(/only a credit memo is posted as one/);
+
+    const second = await invoicedChain('credit-posted-twice');
+    const memo = await createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: second.billingNumber, billingDate: DATE,
+      requestKey: key('credit-twice-posted'),
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    });
+    const draft = await getBilling(tenant.client, memo.billingNumber);
+    await postCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: memo.billingNumber,
+      expectedVersion: draft!.version, postingDate: DATE, requestKey: key('credit-post-one'),
+    });
+    await expect(postCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: memo.billingNumber,
+      expectedVersion: draft!.version + 1, postingDate: DATE, requestKey: key('credit-post-two'),
+    })).rejects.toThrow(/already posted/);
   });
 });

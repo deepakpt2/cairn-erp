@@ -272,7 +272,7 @@ export async function listBillings(
 }
 
 /** The revenue account the chart of accounts holds for a billed line. Absent configuration is a refusal. */
-async function revenueAccountFor(tx: Tx, client: string, company: string): Promise<string> {
+export async function revenueAccountFor(tx: Tx, client: string, company: string): Promise<string> {
   const [companyRow] = await tx.select({
     chart: companyCodeTable.chartOfAccounts, country: companyCodeTable.country,
   }).from(companyCodeTable).where(and(

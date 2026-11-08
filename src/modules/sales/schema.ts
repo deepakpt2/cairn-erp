@@ -359,7 +359,10 @@ export const billingDocumentLine = pgTable('billing_document_line', {
   taxCode: varchar('tax_code', { length: 4 }),
   taxRate: numeric('tax_rate', { precision: 7, scale: 4 }).notNull().default('0'),
   taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
-  conditionNumber: varchar('condition_number', { length: 18 }).notNull(),
+  conditionNumber: varchar('condition_number', { length: 18 }).notNull(),  /** The invoiced line this line was priced from, on a credit memo; null on every other line. */
+  referenceBillingNumber: varchar('reference_billing_number', { length: 20 }),
+  referenceBillingLineNumber: integer('reference_billing_line_number'),
+
   createdBy: varchar('created_by', { length: 60 }).notNull().default('SYSTEM'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

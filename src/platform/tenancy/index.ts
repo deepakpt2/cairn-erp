@@ -136,6 +136,7 @@ const STANDARD_RANGES: Array<{
   { objectCode: 'DELIVERY', subObject: 'LF', prefix: 'DL', length: 7 },
   { objectCode: 'BILLING', subObject: 'F2', prefix: 'INV', length: 7 },
   { objectCode: 'BILLING', subObject: 'S1', prefix: 'CN', length: 7 },
+  { objectCode: 'BILLING', subObject: 'G2', prefix: 'CM', length: 7 },
     { objectCode: 'SALESORD', subObject: 'RE', prefix: 'RO', length: 7 },
   { objectCode: 'DELIVERY', subObject: 'LR', prefix: 'RT', length: 7 },
   { objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', length: 7 },
