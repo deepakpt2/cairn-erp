@@ -1400,4 +1400,105 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createReturnsOrder({ ...first, requestKey: key('returns-order-empty'),
       items: [] })).rejects.toThrow(/returns nothing/);
   });
+
+  it('raises the returns delivery from the returns order, and receives the goods back on it', async () => {
+    // Its own chain again: an order, an invoice against it, and the returns order raised from that.
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('lr-from-order-source'),
+      lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
+    });
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('lr-from-order-delivery'),
+    });
+    const shippedNumber = shipped.deliveryNumber;
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber,
+      items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('lr-from-order-pick'),
+    });
+    const standing = await getDelivery(tenant.client, shippedNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+    const invoiced = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber, billingDate: DATE,
+      requestKey: key('lr-from-order-invoice'),
+    });
+    const raised = await createReturnsOrder({
+      client: tenant.client, changedBy: ACTOR, billingNumber: invoiced.billing.billingNumber, orderDate: DATE,
+      requestKey: key('lr-from-order-return'),
+      items: [{ billingLineNumber: 10, quantity: 2 }],
+    });
+
+    // A returns delivery raised against the returns order, as SAP raises it: the order's line is what
+    // is named, and the delivery the goods left on is found from the invoice line that order was
+    // priced from.
+    const created = await createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, returnsOrderNumber: raised.orderNumber, deliveryDate: DATE,
+      requestKey: key('lr-from-order'),
+      items: [{ lineNumber: 10, quantity: 2 }],
+    });
+    expect(created.deliveryNumber).toMatch(/^RT-\d+$/);
+    const draft = await getDelivery(tenant.client, created.deliveryNumber);
+    expect(draft!.documentType).toBe('LR');
+    expect(draft!.orderNumber).toBe(raised.orderNumber);
+    expect(draft!.referenceDeliveryNumber).toBe(shippedNumber);
+    expect(draft!.status).toBe('OPEN');
+
+    // What the request has promised is what bounds the next document, not what has been received:
+    // this delivery stands unposted, and it has still spent the whole of the request.
+    await expect(createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, returnsOrderNumber: raised.orderNumber, deliveryDate: DATE,
+      requestKey: key('lr-from-order-again'),
+      items: [{ lineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/only 0 of it has not been given a returns delivery/);
+
+    // Receiving it posts the 651 against the delivery the goods went out on.
+    const before = await returnsState();
+    const received = await postReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: created.deliveryNumber,
+      expectedVersion: draft!.version, postingDate: DATE, requestKey: key('lr-from-order-posted'),
+    });
+    expect(received.stockType).toBe('RETURNS');
+    expect(received.materialDocumentNumber).toMatch(/^MD-/);
+    const after = await getDelivery(tenant.client, created.deliveryNumber);
+    expect(after!.status).toBe('RECEIVED');
+
+    const state = await returnsState();
+    expect(bucketOf(state.buckets, 'RETURNS')).toBe(bucketOf(before.buckets, 'RETURNS') + 2);
+    const [line] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select returned_quantity::text as returned, goods_issue_quantity::text as issued
+        from delivery_line
+       where client = ${tenant.client} and delivery_number = ${shippedNumber} and line_number = 10
+    `) as unknown as Promise<Array<{ returned: string; issued: string }>>);
+    expect(Number(line.returned)).toBe(2);
+    expect(Number(line.issued)).toBe(2);
+  });
+
+  it('refuses a returns delivery raised against what is not a returns order', async () => {
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('lr-not-a-return'),
+      lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10' }],
+    });
+    await expect(createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, returnsOrderNumber: placed.orderNumber, deliveryDate: DATE,
+      requestKey: key('lr-not-a-return-first'),
+      items: [{ lineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/is a OR, and a returns delivery is raised against a returns order/);
+
+    // And neither, or both, is not an origin at all.
+    await expect(createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryDate: DATE,
+      requestKey: key('lr-no-origin'),
+      items: [{ lineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/names what the goods are coming back against/);
+    await expect(createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, returnsOrderNumber: placed.orderNumber,
+      deliveryNumber: 'DL-9999999', deliveryDate: DATE,
+      requestKey: key('lr-both-origins'),
+      items: [{ lineNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/not against neither, nor against both/);
+  });
 });

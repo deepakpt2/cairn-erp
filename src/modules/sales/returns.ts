@@ -549,7 +549,10 @@ export async function postReturnsReceiptInTx(tx: Tx, input: PostReturnsReceiptIn
  */
 /** A line of a returns delivery: the delivery line the goods came back against, and how much of it. */
 export interface ReturnsDeliveryLineInput {
-  /** The line of the outbound delivery the goods are coming back against. */
+  /**
+   * The line the goods are coming back against: a line of the outbound delivery when the return is
+   * raised against a delivery, a line of the returns order when it is raised against an order.
+   */
   lineNumber: number;
   quantity: number;
 }
@@ -560,8 +563,13 @@ export const RETURNS_DELIVERY_TRANSACTION = 'SALES.RETURNS.DELIVERY';
 export interface CreateReturnsDeliveryInput {
   client: string;
   changedBy: string;
-  /** The outbound delivery the goods went out on. */
-  deliveryNumber: string;
+  /**
+   * The outbound delivery the goods went out on. Named when the return is raised against a delivery;
+   * a return raised against a returns order names that instead, and the delivery is found from it.
+   */
+  deliveryNumber?: string;
+  /** The returns order the goods are coming back against, as SAP raises a returns delivery. */
+  returnsOrderNumber?: string;
   deliveryDate: string;
   headerText?: string;
   requestKey: string;
@@ -582,8 +590,11 @@ export interface PostReturnsDeliveryInput {
 function validateReturnsDeliveryInput(input: CreateReturnsDeliveryInput): void {
   if (!input.client?.trim()) throw new ReturnsError('A returns delivery names the tenant it belongs to.');
   if (!input.changedBy?.trim()) throw new ReturnsError('A returns delivery names who created it.');
-  if (!input.deliveryNumber?.trim()) {
-    throw new ReturnsError('A returns delivery names the delivery the goods left on.', 'Give the delivery number.');
+  if (!input.deliveryNumber?.trim() && !input.returnsOrderNumber?.trim()) {
+    throw new ReturnsError(
+      'A returns delivery names what the goods are coming back against: the outbound delivery, or the returns order.',
+      'Give the delivery number, or the returns order number.',
+    );
   }
   if (!ISO_DATE.test(input.deliveryDate)) {
     throw new ReturnsError(`Delivery date ${input.deliveryDate} is not an ISO date.`, 'Create the return with a date like 2026-11-07.');
@@ -610,10 +621,59 @@ function validateReturnsDeliveryInput(input: CreateReturnsDeliveryInput): void {
   }
 }
 
+/**
+ * How much of one returns-order line has already been handed to a returns delivery, over the ones
+ * that stand.
+ *
+ * The request is what bounds the next document, not the receipt: a returns delivery that has been
+ * raised but not yet received has still promised those goods to the warehouse, and a second one for
+ * the same line would promise them twice.
+ */
+async function quantityRequestedAgainstOrderLine(
+  tx: Tx,
+  client: string,
+  orderNumber: string,
+  orderLineNumber: number,
+): Promise<number> {
+  const [row] = await tx.execute(sql`
+    select coalesce(sum(dl.delivery_quantity), 0)::text as quantity
+      from delivery_line dl
+      join delivery d on d.client = dl.client and d.delivery_number = dl.delivery_number
+     where dl.client = ${client}
+       and d.document_type = ${STANDARD_RETURNS_DELIVERY_TYPE}
+       and d.status <> 'CANCELLED'
+       and dl.order_number = ${orderNumber}
+       and dl.order_line_number = ${orderLineNumber}
+  `) as unknown as Array<{ quantity: string }>;
+  return Number(row?.quantity ?? '0');
+}
+
+/**
+ * Raise a returns delivery: the document goods come back on.
+ *
+ * SAP raises it two ways, and so does this. Against the outbound delivery, when what is known is that
+ * goods left on a particular shipment; and against a returns order, which is the way a return that
+ * began as a complaint reaches the warehouse — the returns delivery is the returns order's delivery,
+ * and it is what posts the 651. The two differ in what they name and in what bounds the quantity: a
+ * delivery bounds it by what was issued and has not already come back, and a returns order, which has
+ * already been bounded by what was invoiced, adds a second bound of its own — how much of the request
+ * has not already been given a returns delivery.
+ *
+ * Whichever way it is raised, the document names the outbound delivery the goods left on, because
+ * that is the delivery whose line carries how much has come back and whose issue the 651 answers.
+ */
 export async function createReturnsDelivery(
   input: CreateReturnsDeliveryInput,
 ): Promise<{ deliveryNumber: string; replayed: boolean }> {
   validateReturnsDeliveryInput(input);
+  const raisedAgainstOrder = Boolean(input.returnsOrderNumber?.trim());
+  const raisedAgainstDelivery = Boolean(input.deliveryNumber?.trim());
+  if (raisedAgainstOrder === raisedAgainstDelivery) {
+    throw new ReturnsError(
+      'A returns delivery is raised either against the delivery the goods left on or against a returns order, and not against neither, nor against both.',
+      'Name the outbound delivery, or name the returns order — one of them.',
+    );
+  }
   return withTenant(input.client, async (tx) => {
     const type = await salesDocumentTypeFor(tx, input.client, STANDARD_RETURNS_DELIVERY_TYPE);
     if (!type) {
@@ -628,53 +688,160 @@ export async function createReturnsDelivery(
     ));
     if (standing) return { deliveryNumber: standing.number, replayed: true };
 
+    /** What one item resolves to: the delivery line the goods left on, and the order line behind it. */
+    interface RequestedLine {
+      /** The delivery line of the outbound delivery the goods are coming back against. */
+      deliveryLineNumber: number;
+      /** The line of the order this return is raised against, if it was raised against an order. */
+      orderLineNumber: number | null;
+      /** How much of the request has not yet been given a returns delivery. */
+      remainingOnOrder: number | null;
+      quantity: number;
+    }
+
+    let originNumber = '';
+    let orderNumber = '';
+    const requested: RequestedLine[] = [];
+
+    if (raisedAgainstOrder) {
+      const returnsOrderNumber = input.returnsOrderNumber!.trim();
+      const [order] = await tx.select().from(salesOrder).where(and(
+        eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, returnsOrderNumber),
+      )).limit(1);
+      if (!order) {
+        throw new ReturnsError(
+          `Returns order ${returnsOrderNumber} does not stand for this tenant.`,
+          'Name a returns order that exists.',
+        );
+      }
+      if (order.documentType !== STANDARD_RETURNS_ORDER_TYPE) {
+        throw new ReturnsError(
+          `Sales order ${returnsOrderNumber} is a ${order.documentType}, and a returns delivery is raised against a returns order.`,
+          'Name a returns order, or raise the return against the delivery the goods left on.',
+        );
+      }
+      if (order.status !== 'OPEN') {
+        throw new ReturnsError(
+          `Returns order ${returnsOrderNumber} stands ${order.status}, and goods come back against an open return.`,
+          'A return that no longer stands receives nothing; raise a new one.',
+        );
+      }
+      const orderLines = await tx.select().from(salesOrderLine).where(and(
+        eq(salesOrderLine.client, input.client), eq(salesOrderLine.orderNumber, returnsOrderNumber),
+      ));
+      const byNumber = new Map(orderLines.map((line) => [line.lineNumber, line]));
+
+      for (const item of input.items) {
+        const line = byNumber.get(item.lineNumber);
+        if (!line) {
+          throw new ReturnsError(
+            `Returns order ${returnsOrderNumber} carries no line ${item.lineNumber}.`,
+            'Name a line the returns order actually carries.',
+          );
+        }
+        if (!line.referenceBillingNumber || line.referenceBillingLineNumber === null) {
+          throw new ReturnsError(
+            `Returns order line ${item.lineNumber} names no invoiced line, so the delivery these goods left on cannot be found.`,
+            'Raise the return against the delivery instead, or raise a returns order that names the invoice.',
+          );
+        }
+        const [billed] = await tx.select().from(billingDocumentLine).where(and(
+          eq(billingDocumentLine.client, input.client),
+          eq(billingDocumentLine.billingNumber, line.referenceBillingNumber),
+          eq(billingDocumentLine.lineNumber, line.referenceBillingLineNumber),
+        )).limit(1);
+        if (!billed || !billed.deliveryNumber || billed.deliveryLineNumber === null) {
+          throw new ReturnsError(
+            `Returns order line ${item.lineNumber} was priced from an invoiced line that names no delivery, so these goods have nowhere to come back to.`,
+            'Raise the return against the delivery the goods left on.',
+          );
+        }
+        if (!originNumber) {
+          originNumber = billed.deliveryNumber;
+        } else if (originNumber !== billed.deliveryNumber) {
+          throw new ReturnsError(
+            `Returns order ${returnsOrderNumber} asks for goods that left on two deliveries, ${originNumber} and ${billed.deliveryNumber}, and a returns delivery comes back against one.`,
+            'Raise one returns delivery for each delivery the goods left on.',
+          );
+        }
+        // The second bound: what the request has not already handed to a returns delivery. Two
+        // delivery documents for the same request are two promises of the same goods.
+        const asked = await quantityRequestedAgainstOrderLine(
+          tx, input.client, returnsOrderNumber, line.lineNumber,
+        );
+        requested.push({
+          deliveryLineNumber: billed.deliveryLineNumber,
+          orderLineNumber: line.lineNumber,
+          remainingOnOrder: Number(line.orderQuantity) - asked,
+          quantity: item.quantity,
+        });
+      }
+      orderNumber = returnsOrderNumber;
+    } else {
+      originNumber = input.deliveryNumber!.trim();
+      for (const item of input.items) {
+        requested.push({
+          deliveryLineNumber: item.lineNumber, orderLineNumber: null,
+          remainingOnOrder: null, quantity: item.quantity,
+        });
+      }
+    }
+
     const [origin] = await tx.select().from(delivery).where(and(
-      eq(delivery.client, input.client), eq(delivery.deliveryNumber, input.deliveryNumber),
-    ));
+      eq(delivery.client, input.client), eq(delivery.deliveryNumber, originNumber),
+    )).limit(1);
     if (!origin) {
       throw new ReturnsError(
-        `Delivery ${input.deliveryNumber} does not stand for this tenant.`,
+        `Delivery ${originNumber} does not stand for this tenant.`,
         'Return against a delivery that exists.',
       );
     }
     if (origin.documentType === STANDARD_RETURNS_DELIVERY_TYPE) {
       throw new ReturnsError(
-        `Delivery ${input.deliveryNumber} is itself a returns delivery, and goods come back against the delivery they left on.`,
+        `Delivery ${originNumber} is itself a returns delivery, and goods come back against the delivery they left on.`,
         'Name the outbound delivery the goods were issued from.',
       );
     }
     if (origin.status !== 'GOODS_ISSUED') {
       throw new ReturnsError(
-        `Delivery ${input.deliveryNumber} is ${origin.status}, and goods can only come back from a delivery that has been issued.`,
+        `Delivery ${originNumber} is ${origin.status}, and goods can only come back from a delivery that has been issued.`,
         'Post the goods issue first; nothing has left the plant to return.',
       );
     }
+    // A return raised against a delivery is raised against that delivery's own order.
+    if (!orderNumber) orderNumber = origin.orderNumber;
 
     const originLines = await tx.select().from(deliveryLine).where(and(
-      eq(deliveryLine.client, input.client), eq(deliveryLine.deliveryNumber, input.deliveryNumber),
+      eq(deliveryLine.client, input.client), eq(deliveryLine.deliveryNumber, originNumber),
     ));
     const byNumber = new Map(originLines.map((line) => [line.lineNumber, line]));
 
     const rows: Array<typeof deliveryLine.$inferInsert> = [];
-    for (const item of input.items) {
-      const line = byNumber.get(item.lineNumber);
+    for (const item of requested) {
+      const line = byNumber.get(item.deliveryLineNumber);
       if (!line) {
         throw new ReturnsError(
-          `Delivery ${input.deliveryNumber} carries no line ${item.lineNumber}.`,
+          `Delivery ${originNumber} carries no line ${item.deliveryLineNumber}.`,
           'Name a line the delivery actually carries.',
         );
       }
       const issued = Number(line.goodsIssueQuantity);
       const already = Number(line.returnedQuantity);
+      if (item.remainingOnOrder !== null && item.quantity > item.remainingOnOrder + 1e-9) {
+        throw new ReturnsError(
+          `Returns order line ${item.orderLineNumber} asks for ${item.quantity}, but only ${item.remainingOnOrder} of it has not been given a returns delivery already.`,
+          'Receive no more than the returns order asks for; raise another returns order for the rest.',
+        );
+      }
       if (item.quantity > issued - already + 1e-9) {
         throw new ReturnsError(
-          `Delivery line ${item.lineNumber} has already received back ${already} of the ${issued} that was issued, so only ${issued - already} can come back.`,
+          `Delivery line ${item.deliveryLineNumber} has already received back ${already} of the ${issued} that was issued, so only ${issued - already} can come back.`,
           'Return no more than was issued; the goods that never left cannot come back.',
         );
       }
       rows.push({
-        client: input.client, deliveryNumber: '', lineNumber: item.lineNumber,
-        orderNumber: line.orderNumber, orderLineNumber: line.orderLineNumber,
+        client: input.client, deliveryNumber: '', lineNumber: item.deliveryLineNumber,
+        orderNumber, orderLineNumber: item.orderLineNumber ?? line.orderLineNumber,
         materialNumber: line.materialNumber, plant: line.plant, quantityUnit: line.quantityUnit,
         // Ordered against what left, delivered-before against what has already come back, so the
         // line's own remaining quantity answers how much of the shipment might still return.
@@ -695,7 +862,7 @@ export async function createReturnsDelivery(
     await tx.insert(delivery).values({
       client: input.client, deliveryNumber: number,
       documentType: type.documentType, referenceDeliveryNumber: origin.deliveryNumber,
-      orderNumber: origin.orderNumber,
+      orderNumber,
       salesOrg: origin.salesOrg, distributionChannel: origin.distributionChannel, division: origin.division,
       customerNumber: origin.customerNumber, companyCode: origin.companyCode, plant: origin.plant,
       deliveryDate: input.deliveryDate, goodsMovementDate: null,
@@ -710,12 +877,17 @@ export async function createReturnsDelivery(
     await recordChange(tx, {
       client: input.client, objectClass: 'delivery', objectKey: number, changeType: 'CREATE',
       changedBy: input.changedBy, transactionCode: RETURNS_DELIVERY_TRANSACTION,
-      after: { documentType: type.documentType, returnOf: origin.deliveryNumber, items: rows.length, status: 'OPEN' },
+      after: {
+        documentType: type.documentType, returnOf: origin.deliveryNumber,
+        raisedAgainst: raisedAgainstOrder ? `returns order ${orderNumber}` : `delivery ${origin.deliveryNumber}`,
+        items: rows.length, status: 'OPEN',
+      },
     });
 
     return { deliveryNumber: number, replayed: false };
   });
 }
+
 
 /** Receive a returns delivery: this is what posts the 651. */
 export async function postReturnsDelivery(
