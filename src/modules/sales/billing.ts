@@ -4,11 +4,15 @@
  *
  * Two rules hold this file together.
  *
- * **The invoice states no price of its own.** The quantity is what the goods issue actually moved, the unit
- * price and the condition record are read from the order line behind the delivery line, and the tax code is
- * judged by the same tax master the order was judged by. That is what §11.2 asks for — order and invoice
- * agreeing — and it is why a billing line stores the condition number: an auditor reading the invoice can name
- * the record the price came from without reading the order.
+ * **The invoice states no price of its own.** The quantity is what the goods issue actually moved, and
+ * everything after that is the order's: the unit price, the condition record, and — since 9238 — every
+ * condition the order was priced by, scaled to the quantity that went out. A billing document does not look
+ * a price up again, because a price looked up today is today's price; it bills the arithmetic the order
+ * carries, which is what §11.2 asks for and what makes the two documents agree to the cent. An order that
+ * predates the conditions is billed from its line as it always was, so no historic document moves.
+ *
+ * The tax code is judged by the same tax master the order was judged by, and by the rate the order's own
+ * condition states where one stands — a tax looked up again would be today's rate on yesterday's goods.
  *
  * **The receivable is the accounting-invoice service's work.** This file does not post a journal, choose a
  * reconciliation account or compute a due date: it calls `postCustomerInvoice`, which owns all three, and keeps
@@ -35,6 +39,10 @@ import {
 
 import { billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine } from './schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_BILLING_TYPE, salesDocumentTypeFor } from './document-type';
+import {
+  type PricedCondition, type StoredCondition, documentConditionsOf, roundAmount, scaleLineConditions,
+  writeDocumentConditions,
+} from './pricing-procedure';
 import { standingDetermination } from './delivery';
 
 export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
@@ -444,8 +452,20 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       )).limit(1))[0]?.country
       : undefined;
     const revenueAccount = await revenueAccountFor(tx, parsed.client, order.companyCode);
+    // The conditions every order behind this delivery was priced by, so the invoice can bill the same
+    // arithmetic rather than a price of its own. One read for all of them, inside this transaction: a
+    // document that agrees with its order has to read the same row the order wrote.
+    const orderConditionSets = new Map<string, StoredCondition[]>();
+    for (const orderNumber of orderNumbers) {
+      for (const condition of await documentConditionsOf(tx, parsed.client, 'ORDER', orderNumber)) {
+        const rows = orderConditionSets.get(orderNumber) ?? [];
+        rows.push(condition);
+        orderConditionSets.set(orderNumber, rows);
+      }
+    }
 
     const items: Array<typeof billingDocumentLine.$inferInsert> = [];
+    const billedLineConditions: Array<{ lineNumber: number; conditions: PricedCondition[] }> = [];
     const invoice: InvoiceLine[] = [];
     let netTotal = 0;
     let taxTotal = 0;
@@ -463,48 +483,80 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
           'A billing document prices from the order line the delivery names; nothing is defaulted.',
         );
       }
-      // The order line's own price applied to the quantity that went out, at the record's price unit — the
-      // same arithmetic `itemNetAmount` performs on an order, repeated here rather than faked into a priced
-      // item, because the access that found the record belongs to the order and not to this document.
-      const netAmount = (Number(line.goodsIssueQuantity) * Number(orderLine.netPrice)) / orderLine.priceUnit;
-      // The tax code is judged by the tax master as it stands on the billing date — the same rule and the same
-      // formula the order was priced by, so the invoice and this document cannot disagree about the tax.
-      let rate = 0;
-      if (orderLine.taxCode) {
-        const [code] = await tx.select({ ratePercent: taxCodeTable.ratePercent }).from(taxCodeTable).where(and(
-          eq(taxCodeTable.client, parsed.client), eq(taxCodeTable.country, country ?? ''),
-          eq(taxCodeTable.taxCode, orderLine.taxCode),
-        )).limit(1);
-        if (!code) {
-          throw new BillingError(
-            `Tax code ${orderLine.taxCode} no longer stands for country ${country || '(none)'}, which item ${line.lineNumber} is billed under.`,
-            'Maintain the tax code, or change the order line to a code that stands.',
-          );
+      const billed = Number(line.goodsIssueQuantity);
+      const ordered = Number(orderLine.orderQuantity);
+      // The conditions the order priced this line by, scaled to what actually went out. Where the order
+      // carries none — a document created before 9238 — the line's own figures are billed, exactly as
+      // they always were: a historic document is not moved by a rule it was never priced under.
+      const standing = (orderConditionSets.get(line.orderNumber) ?? [])
+        .filter((condition) => condition.lineNumber === line.orderLineNumber);
+      const scaled = standing.length > 0
+        ? scaleLineConditions(standing, ordered === 0 ? 0 : billed / ordered, {
+          lineNumber: 0, quantity: billed,
+        })
+        : undefined;
+
+      let netAmount: number;
+      let taxAmount: number;
+      let rate: number;
+      let priceUnit = orderLine.priceUnit;
+      let conditionNumber = orderLine.conditionNumber;
+      let billedConditions = undefined as PricedCondition[] | undefined;
+      if (scaled) {
+        netAmount = Number(scaled.netAmount);
+        taxAmount = Number(scaled.taxAmount);
+        rate = Number(scaled.taxRate);
+        priceUnit = scaled.priceUnit;
+        conditionNumber = scaled.conditionNumber || orderLine.conditionNumber;
+        billedConditions = scaled.conditions;
+      } else {
+        netAmount = (billed * Number(orderLine.netPrice)) / orderLine.priceUnit;
+        // The tax code is judged by the tax master as it stands on the billing date — the same rule and the
+        // same formula the order was priced by, so the invoice and this document cannot disagree about the
+        // tax.
+        rate = 0;
+        if (orderLine.taxCode) {
+          const [code] = await tx.select({ ratePercent: taxCodeTable.ratePercent }).from(taxCodeTable).where(and(
+            eq(taxCodeTable.client, parsed.client), eq(taxCodeTable.country, country ?? ''),
+            eq(taxCodeTable.taxCode, orderLine.taxCode),
+          )).limit(1);
+          if (!code) {
+            throw new BillingError(
+              `Tax code ${orderLine.taxCode} no longer stands for country ${country || '(none)'}, which item ${line.lineNumber} is billed under.`,
+              'Maintain the tax code, or change the order line to a code that stands.',
+            );
+          }
+          rate = Number(code.ratePercent);
         }
-        rate = Number(code.ratePercent);
+        taxAmount = rate ? Number(round2((netAmount * rate) / 100)) : 0;
       }
-      const taxAmount = rate ? Number(round2((netAmount * rate) / 100)) : 0;
       netTotal += netAmount;
       taxTotal += taxAmount;
+      const billingLineNumber = (items.length + 1) * 10;
       items.push({
         client: parsed.client,
         billingNumber: '',
-        lineNumber: (items.length + 1) * 10,
+        lineNumber: billingLineNumber,
         deliveryNumber: line.deliveryNumber,
         deliveryLineNumber: line.lineNumber,
         orderNumber: line.orderNumber,
         orderLineNumber: line.orderLineNumber,
         materialNumber: line.materialNumber,
         billingQuantity: line.goodsIssueQuantity,
-        netPrice: orderLine.netPrice,
-        priceUnit: orderLine.priceUnit,
+        netPrice: roundAmount((Number(round2(netAmount)) * priceUnit) / (billed === 0 ? 1 : billed), 4),
+        priceUnit,
         netAmount: round2(netAmount),
         taxCode: orderLine.taxCode,
         taxRate: rate.toFixed(4),
         taxAmount: round2(taxAmount),
-        conditionNumber: orderLine.conditionNumber,
+        conditionNumber,
         createdBy: parsed.changedBy,
       });
+      // What priced the invoice, beside the figures it states: an auditor reading it can name the record
+      // the price came from without reading the order.
+      if (billedConditions) {
+        billedLineConditions.push({ lineNumber: billingLineNumber, conditions: billedConditions });
+      }
       invoice.push({
         glAccount: revenueAccount,
         netAmount: Number(round2(netAmount)),
@@ -561,6 +613,15 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     });
     for (const item of items) {
       await tx.insert(billingDocumentLine).values({ ...item, billingNumber: number });
+    }
+    // The conditions the invoice was priced by: the order's own, at the quantity that went out. Written
+    // here so the credit memo that gives part of it back can be proved to be the same price, and so an
+    // invoice read years from still carries the arithmetic behind its figures.
+    if (billedLineConditions.length > 0) {
+      await writeDocumentConditions(tx, {
+        client: parsed.client, documentCategory: 'BILLING', documentNumber: number,
+        currency: order.currency, items: billedLineConditions, changedBy: parsed.changedBy,
+      });
     }
     await recordChange(tx, {
       client: parsed.client, objectClass: BILLING_OBJECT_CLASS, objectKey: number, changeType: 'CREATE',

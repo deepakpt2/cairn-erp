@@ -101,6 +101,8 @@ function round(value: number, places: number): string {
   return (Math.round((value + Number.EPSILON) * factor) / factor).toFixed(places);
 }
 
+/** Money rounded to a stated number of places, for the documents that have to carry the figure. */
+export const roundAmount = (value: number, places: number): string => round(value, places);
 const round2 = (value: number) => round(value, 2);
 const round4 = (value: number) => round(value, 4);
 
@@ -771,11 +773,14 @@ function sumSpan(
 /**
  * Write the conditions a document was priced by.
  *
- * Every step of the procedure is written, not only the steps that contributed: a document's conditions
- * are the procedure as it was executed, and a step that contributed nothing is a fact about the pricing
- * — the customer had no discount, the freight did not apply — not an absence of a row. That is also
- * what lets a re-priced document be rewritten in place instead of deleted and re-inserted: the
- * application role holds no DELETE on history.
+ * Every step is written, not only the steps that contributed: a document's conditions are the procedure
+ * as it was executed, and a step that contributed nothing is a fact about the pricing — the customer had
+ * no discount, the freight did not apply — not an absence of a row. That is also what lets a re-priced
+ * document be rewritten in place instead of deleted and re-inserted: the application role holds no
+ * DELETE on history.
+ *
+ * The steps are taken from the conditions themselves, so a document that was priced by a procedure and a
+ * document that was priced by scaling another's conditions are written the same way.
  */
 export async function writeDocumentConditions(
   tx: Tx,
@@ -783,16 +788,28 @@ export async function writeDocumentConditions(
     client: string;
     documentCategory: 'ORDER' | 'BILLING';
     documentNumber: string;
-    priced: PricedDocument;
+    currency: string;
+    /** Every condition the document's lines carry. */
+    items: Array<{ lineNumber: number; conditions: PricedCondition[] }>;
+    /** The conditions the header carries whole, if it carries any. */
+    headerConditions?: PricedCondition[];
+    /**
+     * The steps the procedure executed, where the document was priced by one. A step in this list with
+     * no condition beside it is written at zero, which is the difference between "the customer had no
+     * discount" and "nobody knows whether the step ran".
+     */
+    steps?: Array<{
+      stepNumber: number; conditionType: string; accountKey: string | null; isStatistical: boolean;
+    }>;
     changedBy: string;
   },
 ): Promise<number> {
   let written = 0;
   const write = async (
     row: {
-      lineNumber: number; stepNumber: number; conditionType: string; baseValue: string; rate: string;
-      amount: string; priceUnit: number; conditionNumber: string | null; accountKey: string | null;
-      isStatistical: boolean; origin: 'ITEM' | 'HEADER' | 'DISTRIBUTED';
+      lineNumber: number; conditionType: string; baseValue: string; rate: string; amount: string;
+      priceUnit: number; conditionNumber: string | null; accountKey: string | null;
+      isStatistical: boolean; origin: 'ITEM' | 'HEADER' | 'DISTRIBUTED'; stepNumber: number;
     },
   ): Promise<void> => {
     const values = {
@@ -806,7 +823,7 @@ export async function writeDocumentConditions(
       rate: row.rate,
       amount: row.amount,
       priceUnit: row.priceUnit,
-      currency: input.priced.currency,
+      currency: input.currency,
       conditionNumber: row.conditionNumber,
       accountKey: row.accountKey,
       isStatistical: row.isStatistical,
@@ -828,83 +845,220 @@ export async function writeDocumentConditions(
 
   // The header's conditions first, whole, at line 0: what the printout shows and what the distributed
   // rows below add up to.
-  for (const header of input.priced.headerConditions) {
-    await write({
-      lineNumber: 0,
-      stepNumber: header.stepNumber,
-      conditionType: header.conditionType,
-      baseValue: header.baseValue,
-      rate: header.rate,
-      amount: header.amount,
-      priceUnit: header.priceUnit,
-      conditionNumber: header.conditionNumber,
-      accountKey: header.accountKey,
-      isStatistical: header.isStatistical,
-      origin: 'HEADER',
-    });
+  for (const header of input.headerConditions ?? []) {
+    await write({ ...header, lineNumber: 0, origin: 'HEADER' });
   }
 
-  for (const item of input.priced.items) {
-    for (const step of input.priced.steps) {
+  for (const item of input.items) {
+    const steps = input.steps
+      ? [...input.steps].sort((a, b) => a.stepNumber - b.stepNumber)
+      : [...new Set(item.conditions.map((condition) => condition.stepNumber))]
+        .sort((a, b) => a - b)
+        .map((stepNumber) => {
+          const contributed = item.conditions.find((condition) => condition.stepNumber === stepNumber);
+          return {
+            stepNumber,
+            conditionType: contributed?.conditionType ?? '',
+            accountKey: contributed?.accountKey ?? null,
+            isStatistical: contributed?.isStatistical ?? false,
+          };
+        });
+    for (const step of steps) {
       const contributed = item.conditions.find((condition) => condition.stepNumber === step.stepNumber);
-      await write({
-        lineNumber: item.lineNumber,
-        stepNumber: step.stepNumber,
-        conditionType: step.conditionType,
-        baseValue: contributed?.baseValue ?? '0.0000',
-        rate: contributed?.rate ?? '0.000000',
-        amount: contributed?.amount ?? '0.0000',
-        priceUnit: contributed?.priceUnit ?? 1,
-        conditionNumber: contributed?.conditionNumber ?? null,
-        accountKey: contributed?.accountKey ?? step.accountKey,
-        isStatistical: contributed?.isStatistical ?? step.isStatistical,
-        origin: contributed?.origin ?? 'ITEM',
-      });
+      await write(contributed
+        ? { ...contributed, lineNumber: item.lineNumber }
+        : {
+          ...step,
+          lineNumber: item.lineNumber,
+          baseValue: '0.0000',
+          rate: '0.000000',
+          amount: '0.0000',
+          priceUnit: 1,
+          conditionNumber: null,
+          origin: 'ITEM' as const,
+        });
     }
   }
   return written;
 }
 
 /**
- * The conditions a document was priced by, read back.
+ * The conditions a document was priced by, read back inside a caller's own transaction.
  *
- * This is what the printout shows under the figures and what a credit memo copies: a document's
- * conditions are the arithmetic that produced it, and they are read rather than recomputed, because
- * recomputing them would price an old document with today's records.
+ * The class and the calculation come from the type master rather than being stored on the row: they are
+ * what the type says, and a row that repeated them could disagree with its own type.
  */
-export async function salesDocumentConditionsOf(
+export async function documentConditionsOf(
+  tx: Tx,
   client: string,
   documentCategory: 'ORDER' | 'BILLING',
   documentNumber: string,
-): Promise<Array<{
-  lineNumber: number; stepNumber: number; conditionType: string; baseValue: string; rate: string;
-  amount: string; priceUnit: number; currency: string; conditionNumber: string | null;
-  accountKey: string | null; isStatistical: boolean; origin: 'ITEM' | 'HEADER' | 'DISTRIBUTED';
-}>> {
-  return withTenant(client, async (tx) => {
-    const rows = await tx.select({
-      lineNumber: salesDocumentCondition.lineNumber,
-      stepNumber: salesDocumentCondition.stepNumber,
-      conditionType: salesDocumentCondition.conditionType,
-      baseValue: salesDocumentCondition.baseValue,
-      rate: salesDocumentCondition.rate,
-      amount: salesDocumentCondition.amount,
-      priceUnit: salesDocumentCondition.priceUnit,
-      currency: salesDocumentCondition.currency,
-      conditionNumber: salesDocumentCondition.conditionNumber,
-      accountKey: salesDocumentCondition.accountKey,
-      isStatistical: salesDocumentCondition.isStatistical,
-      origin: salesDocumentCondition.origin,
-    }).from(salesDocumentCondition).where(and(
+): Promise<StoredCondition[]> {
+  const rows = await tx.select({
+    lineNumber: salesDocumentCondition.lineNumber,
+    stepNumber: salesDocumentCondition.stepNumber,
+    conditionType: salesDocumentCondition.conditionType,
+    conditionClass: salesConditionType.conditionClass,
+    calculationType: salesConditionType.calculationType,
+    baseValue: salesDocumentCondition.baseValue,
+    rate: salesDocumentCondition.rate,
+    amount: salesDocumentCondition.amount,
+    priceUnit: salesDocumentCondition.priceUnit,
+    currency: salesDocumentCondition.currency,
+    conditionNumber: salesDocumentCondition.conditionNumber,
+    accountKey: salesDocumentCondition.accountKey,
+    isStatistical: salesDocumentCondition.isStatistical,
+    origin: salesDocumentCondition.origin,
+  }).from(salesDocumentCondition)
+    .innerJoin(salesConditionType, and(
+      eq(salesConditionType.client, salesDocumentCondition.client),
+      eq(salesConditionType.conditionType, salesDocumentCondition.conditionType),
+    ))
+    .where(and(
       eq(salesDocumentCondition.client, client),
       eq(salesDocumentCondition.documentCategory, documentCategory),
       eq(salesDocumentCondition.documentNumber, documentNumber),
     )).orderBy(asc(salesDocumentCondition.lineNumber), asc(salesDocumentCondition.stepNumber));
-    return rows.map((row) => ({
-      ...row,
-      origin: (row.origin === 'HEADER' || row.origin === 'DISTRIBUTED') ? row.origin : 'ITEM',
-    }));
+  return rows.map((row) => ({
+    ...row,
+    origin: (row.origin === 'HEADER' || row.origin === 'DISTRIBUTED') ? row.origin : 'ITEM',
+  }));
+}
+
+/** The conditions a document was priced by, read back. */
+export async function salesDocumentConditionsOf(
+  client: string,
+  documentCategory: 'ORDER' | 'BILLING',
+  documentNumber: string,
+): Promise<StoredCondition[]> {
+  return withTenant(client, (tx) => documentConditionsOf(tx, client, documentCategory, documentNumber));
+}
+
+/** One row of a document's conditions, as it was written and as its type reads today. */
+export interface StoredCondition {
+  lineNumber: number;
+  stepNumber: number;
+  conditionType: string;
+  /** What the figure means — revenue, a deduction, a charge, a tax, a cost — as the type master says. */
+  conditionClass: string;
+  calculationType: string;
+  baseValue: string;
+  rate: string;
+  amount: string;
+  priceUnit: number;
+  currency: string;
+  conditionNumber: string | null;
+  accountKey: string | null;
+  isStatistical: boolean;
+  origin: 'ITEM' | 'HEADER' | 'DISTRIBUTED';
+}
+
+/**
+ * Scale a set of amounts by one factor, so the parts still sum to the whole, to the cent.
+ *
+ * A document that stands for half of another is worth half of it — in every condition, not only in the
+ * total. Scaling the total and dividing it up again would be a second arithmetic; scaling each condition
+ * and letting the rounding fall where the largest remainder says keeps the one the document was priced
+ * by, and keeps the parts adding to the figure they were scaled to.
+ */
+export function scaleAmounts(amounts: number[], factor: number): number[] {
+  if (amounts.length === 0) return [];
+  const exact = amounts.map((amount) => amount * factor);
+  const total = exact.reduce((sum, value) => sum + value, 0);
+  const targetCents = Math.round(Number(round2(total)) * 100);
+  const cents = exact.map((value) => {
+    const whole = Math.trunc(Number(round4(value)) * 100);
+    return Object.is(whole, -0) ? 0 : whole;
   });
+  let remaining = targetCents - cents.reduce((sum, value) => sum + value, 0);
+  const order = exact
+    .map((value, index) => ({ index, fraction: Math.abs(Number(round4(value)) * 100 - cents[index]) }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
+  for (const entry of order) {
+    if (remaining === 0) break;
+    // Each remainder cent goes the way the whole went, so a credit's parts stay negative.
+    const step = remaining > 0 ? 1 : -1;
+    cents[entry.index] += step;
+    remaining -= step;
+  }
+  return cents.map((value) => value / 100);
+}
+
+/**
+ * A follow-on document's line, priced by scaling the conditions of the document it follows.
+ *
+ * This is what makes a billing document match its order and a credit memo match its invoice: neither is
+ * priced again. A price looked up today would be today's price, and a document that gives money back has
+ * to give back what was actually charged. `undefined` means the earlier document carried no conditions,
+ * so the caller falls back to the figures it has always used.
+ */
+export function scaleLineConditions(
+  conditions: StoredCondition[],
+  factor: number,
+  input: { lineNumber: number; quantity: number },
+): {
+  conditions: PricedCondition[];
+  netAmount: string;
+  taxAmount: string;
+  grossAmount: string;
+  netPrice: string;
+  priceUnit: number;
+  taxRate: string;
+  conditionNumber: string;
+} | undefined {
+  if (conditions.length === 0) return undefined;
+  const amounts = scaleAmounts(conditions.map((condition) => Number(condition.amount)), factor);
+  const scaled: PricedCondition[] = conditions.map((condition, index) => ({
+    lineNumber: input.lineNumber,
+    stepNumber: condition.stepNumber,
+    conditionType: condition.conditionType,
+    conditionClass: condition.conditionClass,
+    origin: condition.origin,
+    baseValue: round2((Number(condition.baseValue) * factor) / 1),
+    rate: condition.rate,
+    amount: round2(amounts[index] ?? 0),
+    priceUnit: condition.priceUnit,
+    conditionNumber: condition.conditionNumber,
+    accountKey: condition.accountKey,
+    isStatistical: condition.isStatistical,
+    access: null,
+  }));
+
+  let net = 0;
+  let tax = 0;
+  let priceUnit = 1;
+  let pricedBy = '';
+  let taxRate = '0.0000';
+  for (const [index, condition] of conditions.entries()) {
+    const amount = amounts[index] ?? 0;
+    if (condition.isStatistical) continue;
+    if (condition.conditionClass === 'TAX') {
+      tax += amount;
+      if (!taxRate.startsWith('0.0000') === false) taxRate = Number(condition.rate).toFixed(4);
+    } else {
+      net += amount;
+    }
+    if (condition.conditionClass === 'PRICE') {
+      priceUnit = condition.priceUnit;
+      pricedBy = condition.conditionNumber ?? '';
+      if (Number(condition.rate) !== 0) {
+        // The rate a price was charged at is what the credit states, sign and all.
+        void 0;
+      }
+    }
+  }
+  const netAmount = round2(net);
+  const taxAmount = round2(tax);
+  return {
+    conditions: scaled,
+    netAmount,
+    taxAmount,
+    grossAmount: round2(net + tax),
+    netPrice: round4((Number(netAmount) * priceUnit) / (input.quantity === 0 ? 1 : input.quantity)),
+    priceUnit,
+    taxRate,
+    conditionNumber: pricedBy,
+  };
 }
 
 /** The determination rows a tenant stands, most-specific first — what the maintenance screen lists. */
@@ -924,37 +1078,4 @@ export async function pricingProcedureDeterminationRows(
   }).from(salesProcedureDetermination).where(eq(salesProcedureDetermination.client, client))
     .orderBy(asc(salesProcedureDetermination.salesOrg), asc(salesProcedureDetermination.documentPricingProcedure),
       asc(salesProcedureDetermination.customerPricingProcedure)));
-}
-
-/**
- * The conditions of a document, mirrored onto another — what a credit memo is.
- *
- * A credit is not newly priced: it is the mirror of the document it gives back, scaled to the quantity
- * being credited. Reading the stored conditions and scaling them is the only way a credit can be proved
- * to be the same price the customer was charged, whatever the condition records say today.
- */
-export function mirrorConditions(
-  conditions: Array<{
-    stepNumber: number; conditionType: string; conditionClass: string; origin?: 'ITEM' | 'HEADER' | 'DISTRIBUTED';
-    baseValue: string; rate: string; amount: string;
-    priceUnit: number; currency: string; conditionNumber: string | null; accountKey: string | null;
-    isStatistical: boolean;
-  }>,
-  factor: number,
-): PricedCondition[] {
-  return conditions.map((condition) => ({
-    lineNumber: 0,
-    stepNumber: condition.stepNumber,
-    conditionType: condition.conditionType,
-    conditionClass: condition.conditionClass,
-    origin: condition.origin ?? 'ITEM',
-    baseValue: round4(Number(condition.baseValue) * factor),
-    rate: condition.rate,
-    amount: round2(Number(condition.amount) * factor),
-    priceUnit: condition.priceUnit,
-    conditionNumber: condition.conditionNumber,
-    accountKey: condition.accountKey,
-    isStatistical: condition.isStatistical,
-    access: null,
-  }));
 }

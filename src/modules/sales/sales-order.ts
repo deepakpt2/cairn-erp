@@ -599,7 +599,11 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
     // a document read years from now can still say where its figures came from.
     await writeDocumentConditions(tx, {
       client: parsed.client, documentCategory: 'ORDER', documentNumber: number,
-      priced, changedBy: parsed.changedBy,
+      currency: parsed.currency,
+      items: priced.items.map((item) => ({ lineNumber: item.lineNumber, conditions: item.conditions })),
+      headerConditions: priced.headerConditions,
+      steps: priced.steps,
+      changedBy: parsed.changedBy,
     });
 
     await recordChange(tx, {
@@ -756,7 +760,11 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
     // DELETE on a document's history.
     await writeDocumentConditions(tx, {
       client: parsed.client, documentCategory: 'ORDER', documentNumber: parsed.orderNumber,
-      priced: pricedOnChange, changedBy: parsed.changedBy,
+      currency: before.currency,
+      items: pricedOnChange.items.map((item) => ({ lineNumber: item.lineNumber, conditions: item.conditions })),
+      headerConditions: pricedOnChange.headerConditions,
+      steps: pricedOnChange.steps,
+      changedBy: parsed.changedBy,
     });
 
     // The header totals are read back from the items as they now stand, inside this transaction: a

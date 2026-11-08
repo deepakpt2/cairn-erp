@@ -30,6 +30,10 @@ import {
   DOCUMENT_TYPE_REMEDY, salesDocumentTypeFor,
 } from './document-type';
 import { returnsChain } from './returns-configuration';
+import {
+  type PricedCondition, type StoredCondition, documentConditionsOf, roundAmount, scaleLineConditions,
+  writeDocumentConditions,
+} from './pricing-procedure';
 import { revenueAccountFor } from './billing';
 
 /** The transaction a credit memo records, as the change history names it. */
@@ -412,6 +416,15 @@ export async function createCreditMemo(
     const byNumber = new Map(invoiceLines.map((line) => [line.lineNumber, line]));
 
     const rows: Array<typeof billingDocumentLine.$inferInsert> = [];
+    const creditLineConditions: Array<{ lineNumber: number; conditions: PricedCondition[] }> = [];
+    // The conditions the invoice it gives back was priced by. One read, inside this transaction: a
+    // credit is proved against the row the invoice wrote, not against a price looked up today.
+    const billingConditions = new Map<string, StoredCondition[]>();
+    for (const condition of await documentConditionsOf(tx, input.client, 'BILLING', input.billingNumber)) {
+      const existing = billingConditions.get(input.billingNumber) ?? [];
+      existing.push(condition);
+      billingConditions.set(input.billingNumber, existing);
+    }
     let lineNumber = 10;
     for (const item of input.items) {
       const billed = byNumber.get(item.billingLineNumber);
@@ -464,8 +477,27 @@ export async function createCreditMemo(
         );
       }
 
-      const netAmount = round2((item.quantity * Number(billed.netPrice)) / billed.priceUnit);
-      const taxAmount = round2((Number(netAmount) * Number(billed.taxRate)) / 100);
+      const credited = Number(item.quantity);
+      // A credit is not priced again. It is the invoice's own conditions, scaled to the quantity going
+      // back and negated, which is the only way to prove the customer is given back what they were
+      // charged — the same price, the same discount, the same freight, and the same tax rate. An
+      // invoice that carries no conditions, because it was raised before 9238, is credited from its
+      // line as it always was.
+      const standing = (billingConditions.get(billed.billingNumber) ?? [])
+        .filter((condition) => condition.lineNumber === billed.lineNumber);
+      const scaled = standing.length > 0
+        ? scaleLineConditions(standing, invoiced === 0 ? 0 : -credited / invoiced, {
+          lineNumber: 0, quantity: credited,
+        })
+        : undefined;
+
+      const netAmount = scaled
+        ? Number(scaled.netAmount)
+        : -Number(round2((credited * Number(billed.netPrice)) / billed.priceUnit));
+      const taxAmount = scaled
+        ? Number(scaled.taxAmount)
+        : -Number(round2((Math.abs(netAmount) * Number(billed.taxRate)) / 100));
+      const priceUnit = scaled ? scaled.priceUnit : billed.priceUnit;
       rows.push({
         client: input.client, billingNumber: '', lineNumber,
         deliveryNumber: billed.deliveryNumber, deliveryLineNumber: billed.deliveryLineNumber,
@@ -475,14 +507,18 @@ export async function createCreditMemo(
         billingQuantity: String(item.quantity),
         // A credit carries the same goods back at the same price, and its value is what goes back: the
         // price is negated so that quantity times price is the negative amount the document is worth.
-        netPrice: (-Number(billed.netPrice)).toFixed(4), priceUnit: billed.priceUnit,
-        netAmount: (-Number(netAmount)).toFixed(2),
-        taxCode: billed.taxCode, taxRate: billed.taxRate,
-        taxAmount: (-Number(taxAmount)).toFixed(2),
-        conditionNumber: billed.conditionNumber,
+        netPrice: roundAmount((Number(netAmount) * priceUnit) / (credited === 0 ? 1 : credited), 4),
+        priceUnit,
+        netAmount: Number(netAmount).toFixed(2),
+        taxCode: billed.taxCode, taxRate: scaled ? scaled.taxRate : billed.taxRate,
+        taxAmount: Number(taxAmount).toFixed(2),
+        conditionNumber: scaled ? (scaled.conditionNumber || billed.conditionNumber) : billed.conditionNumber,
         referenceBillingNumber: billed.billingNumber, referenceBillingLineNumber: billed.lineNumber,
         createdBy: input.changedBy,
       });
+      if (scaled) {
+        creditLineConditions.push({ lineNumber, conditions: scaled.conditions });
+      }
       lineNumber += 10;
     }
 
@@ -520,6 +556,13 @@ export async function createCreditMemo(
     });
     for (const row of rows) {
       await tx.insert(billingDocumentLine).values({ ...row, billingNumber: number });
+    }
+    // The conditions the credit was priced by, which are the invoice's, going back.
+    if (creditLineConditions.length > 0) {
+      await writeDocumentConditions(tx, {
+        client: input.client, documentCategory: 'BILLING', documentNumber: number,
+        currency: invoice.currency, items: creditLineConditions, changedBy: input.changedBy,
+      });
     }
 
     await recordChange(tx, {
@@ -731,6 +774,15 @@ export async function createCreditMemoRequest(
     const byNumber = new Map(invoiceLines.map((line) => [line.lineNumber, line]));
 
     const rows: Array<typeof salesOrderLine.$inferInsert> = [];
+    const requestLineConditions: Array<{ lineNumber: number; conditions: PricedCondition[] }> = [];
+    // The conditions the disputed invoice was priced by: the request states what is to be given back,
+    // so it carries the invoice's own arithmetic rather than a price of its own.
+    const disputedConditions = new Map<string, StoredCondition[]>();
+    for (const condition of await documentConditionsOf(tx, input.client, 'BILLING', input.billingNumber)) {
+      const existing = disputedConditions.get(input.billingNumber) ?? [];
+      existing.push(condition);
+      disputedConditions.set(input.billingNumber, existing);
+    }
     let lineNumber = 10;
     for (const item of input.items) {
       const billed = byNumber.get(item.billingLineNumber);
@@ -762,21 +814,41 @@ export async function createCreditMemoRequest(
         );
       }
 
-      const netAmount = round2((item.quantity * Number(billed.netPrice)) / billed.priceUnit);
-      const taxAmount = round2((Number(netAmount) * Number(billed.taxRate)) / 100);
+      const disputed = (disputedConditions.get(billed.billingNumber) ?? [])
+        .filter((condition) => condition.lineNumber === billed.lineNumber);
+      const scaled = disputed.length > 0
+        ? scaleLineConditions(disputed, invoiced === 0 ? 0 : item.quantity / invoiced, {
+          lineNumber: 0, quantity: item.quantity,
+        })
+        : undefined;
+      const netAmount = scaled
+        ? scaled.netAmount
+        : round2((item.quantity * Number(billed.netPrice)) / billed.priceUnit);
+      const taxAmount = scaled
+        ? scaled.taxAmount
+        : round2((Number(netAmount) * Number(billed.taxRate)) / 100);
       rows.push({
         client: input.client, orderNumber: '', lineNumber,
         materialNumber: billed.materialNumber, plant: sold.plant,
         orderQuantity: String(item.quantity), quantityUnit: sold.quantityUnit,
         baseQuantity: String(item.quantity),
-        netPrice: billed.netPrice, priceUnit: billed.priceUnit, netAmount,
-        taxCode: billed.taxCode, taxRate: billed.taxRate, taxAmount,
+        netPrice: scaled
+          ? roundAmount((Number(netAmount) * scaled.priceUnit) / (item.quantity === 0 ? 1 : item.quantity), 4)
+          : billed.netPrice,
+        priceUnit: scaled ? scaled.priceUnit : billed.priceUnit,
+        netAmount,
+        taxCode: billed.taxCode, taxRate: scaled ? scaled.taxRate : billed.taxRate, taxAmount,
         profitCenter: sold.profitCenter,
         requestedDeliveryDate: null,
-        conditionNumber: billed.conditionNumber,
+        conditionNumber: scaled
+          ? (scaled.conditionNumber || billed.conditionNumber)
+          : billed.conditionNumber,
         referenceBillingNumber: billed.billingNumber, referenceBillingLineNumber: billed.lineNumber,
         status: 'OPEN', createdBy: input.changedBy,
       });
+      if (scaled) {
+        requestLineConditions.push({ lineNumber, conditions: scaled.conditions });
+      }
       lineNumber += 10;
     }
 
@@ -815,6 +887,14 @@ export async function createCreditMemoRequest(
     });
     for (const row of rows) {
       await tx.insert(salesOrderLine).values({ ...row, orderNumber: number });
+    }
+    // The conditions the request was priced by, which are the disputed invoice's: when the credit is
+    // raised against this request it is these it carries back.
+    if (requestLineConditions.length > 0) {
+      await writeDocumentConditions(tx, {
+        client: input.client, documentCategory: 'ORDER', documentNumber: number,
+        currency: invoice.currency, items: requestLineConditions, changedBy: input.changedBy,
+      });
     }
 
     await recordChange(tx, {

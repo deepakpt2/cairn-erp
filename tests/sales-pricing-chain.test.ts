@@ -1,0 +1,451 @@
+/**
+ * DI-018 — the conditions a document is priced by, carried through the chain that follows it.
+ *
+ * An order is priced once. What follows it — a delivery, an invoice, a credit memo — is never priced
+ * again, because a price looked up today is today's price and a customer is invoiced at the price they
+ * were sold at. Each follow-on document repeats the arithmetic of the document it follows at the
+ * quantity it covers, which is why the invoice below is the order's own price at six tenths of the
+ * goods, and the credit is two of those six units given back — discount, freight, header charge and
+ * tax included, not a share of a total.
+ *
+ * Nothing here is mocked: the order, the delivery, the pick, the goods issue, the invoice and the
+ * credit memo are raised by the services that own them, and the condition rows asserted are the ones
+ * those services wrote.
+ */
+import { sql } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { withTenant } from '../src/platform/db/client';
+import { defineRange } from '../src/platform/numbering';
+import { saveCustomerCredit } from '../src/modules/finance/credit';
+import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { salesDocumentConditionsOf } from '../src/modules/sales/pricing-procedure';
+import {
+  confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, postDeliveryGoodsIssue,
+} from '../src/modules/sales/delivery';
+import { postBillingDocument } from '../src/modules/sales/billing';
+import { createCreditMemo } from '../src/modules/sales/credit-memo';
+import {
+  assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, type TestTenant,
+} from './helpers';
+
+const ACTOR = 'SD9239_CHAIN_TEST';
+const AREA = 'CCA1';
+const CUSTOMER = 'SD9239CUST1';
+const MATERIAL = 'SD9239MAT1';
+const PLANT = '1000';
+const STORE = '0001';
+const DATE = '2026-10-15';
+
+const base = {
+  client: '',
+  changedBy: ACTOR,
+  salesOrg: '1000',
+  distributionChannel: '10',
+  division: '01',
+  customerNumber: CUSTOMER,
+  companyCode: '1000',
+  currency: 'USD',
+  orderDate: DATE,
+};
+
+let counter = 0;
+const key = (what: string) => `sd9239-${what}-${++counter}`;
+
+describe('the conditions a document is priced by, through the chain that follows it', () => {
+  let tenant: TestTenant;
+
+  beforeAll(async () => {
+    tenant = await createTenant('sd9239-pricing-chain');
+    base.client = tenant.client;
+    await defineTestRanges(tenant, { fiscalYear: 2026 });
+    await withTenant(tenant.client, async (tx) => {
+      for (const range of [
+        { objectCode: 'SALESORD', subObject: 'OR', prefix: 'SO', numberLength: 7 },
+        { objectCode: 'DELIVERY', subObject: 'LF', prefix: 'DL', numberLength: 7 },
+        { objectCode: 'BILLING', subObject: 'F2', prefix: 'INV', numberLength: 7 },
+        { objectCode: 'BILLING', subObject: 'G2', prefix: 'CM', numberLength: 7 },
+        { objectCode: 'MATDOC', subObject: '*', prefix: 'MD', numberLength: 8 },
+        { objectCode: 'CUSTINV', subObject: '*', prefix: 'CI', numberLength: 7 },
+      ]) {
+        await defineRange(tx, { client: tenant.client, createdBy: ACTOR, ...range });
+      }
+      await assignSalesAreaDimensions(tenant, '1000', [{ distributionChannel: '10', division: '01' }]);
+      await tx.execute(sql`
+        insert into unit_of_measure (code, name, dimension, decimal_places, is_base_unit)
+        values ('UNT', 'Test counted unit', 'COUNT', 0, false)
+        on conflict (code) do update set decimal_places = excluded.decimal_places
+      `);
+      await tx.execute(sql`
+        insert into sales_org (client, sales_org, company_code, currency, created_by)
+        values (${tenant.client}, '1000', '1000', 'USD', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into sales_org_text (client, sales_org, language_key, name, created_by)
+        values (${tenant.client}, '1000', 'E', 'Chain test sales organization', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into sales_area (client, sales_org, distribution_channel, division, name, created_by)
+        values (${tenant.client}, '1000', '10', '01', 'Chain test sales area', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into plant (client, plant, name, company_code, country, created_by)
+        values (${tenant.client}, ${PLANT}, 'Chain test plant', '1000', 'KW', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into storage_location (client, plant, storage_location, name, is_active, allow_negative_stock, created_by)
+        values (${tenant.client}, ${PLANT}, ${STORE}, 'Main store', true, false, ${ACTOR})
+        on conflict (client, plant, storage_location) do update set is_active = excluded.is_active
+      `);
+      await tx.execute(sql`
+        insert into credit_control_area (client, credit_control_area, name, currency, warning_threshold_percent, created_by)
+        values (${tenant.client}, ${AREA}, 'Chain test credit area', 'USD', 90, ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into credit_risk_category (client, risk_category, name, created_by)
+        values (${tenant.client}, 'A', 'Low risk', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        update company_code set credit_control_area = ${AREA}
+        where client = ${tenant.client} and company_code = '1000'
+      `);
+      await tx.execute(sql`
+        insert into payment_terms (client, terms_code, description, baseline_source, net_days, created_by)
+        values (${tenant.client}, 'NET30', 'Net 30 days', 'DOCUMENT_DATE', 30, ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into business_partner (client, partner_number, category, name, created_by)
+        values (${tenant.client}, ${CUSTOMER}, 'ORGANIZATION', 'Chain test customer', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into bp_role (client, partner_number, role_code, created_by)
+        values (${tenant.client}, ${CUSTOMER}, 'CUSTOMER', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into customer_sales_area (
+          client, partner_number, role_code, sales_org, distribution_channel, division,
+          pricing_procedure, is_blocked, sales_status, created_by
+        )
+        values (${tenant.client}, ${CUSTOMER}, 'CUSTOMER', '1000', '10', '01', 'PR01', false, 'MAINTAINED', ${ACTOR})
+        on conflict (client, partner_number, sales_org, distribution_channel, division)
+        do update set is_blocked = false, sales_status = 'MAINTAINED'
+      `);
+      await tx.execute(sql`
+        insert into customer_company_code (
+          client, partner_number, role_code, company_code, chart_of_accounts,
+          reconciliation_account, payment_terms_code, created_by
+        )
+        values (${tenant.client}, ${CUSTOMER}, 'CUSTOMER', '1000', 'CA01', '110000', 'NET30', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material (client, material_number, description, material_type, base_unit, created_by)
+        values (${tenant.client}, ${MATERIAL}, 'Chain test material', 'RAW', 'UNT', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_plant (client, material_number, plant, created_by)
+        values (${tenant.client}, ${MATERIAL}, ${PLANT}, ${ACTOR}) on conflict do nothing
+      `);
+      // What the books say the goods are worth: the rate the statistical cost is read from, and the stock
+      // the goods issue draws down.
+      await tx.execute(sql`
+        insert into material_valuation (client, material_number, valuation_area, valuation_class, price_control,
+                                        standard_price, moving_average_price, price_unit, currency,
+                                        total_stock_quantity, stock_value, created_by)
+        values (${tenant.client}, ${MATERIAL}, ${PLANT}, 'RAW_INVENTORY', 'MOVING_AVERAGE', 10, 10, 1, 'USD',
+                100, 1000, ${ACTOR})
+        on conflict (client, material_number, valuation_area)
+        do update set moving_average_price = excluded.moving_average_price
+      `);
+      await tx.execute(sql`
+        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
+        values (${tenant.client}, ${MATERIAL}, ${PLANT}, ${STORE}, 'UNRESTRICTED', 100, ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into movement_type (client, movement_type, description, direction, reference_category, created_by)
+        values (${tenant.client}, 'OPENING_BALANCE', 'Opening balance', 'RECEIPT', 'MATERIAL_DOCUMENT', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document (client, material_document_number, document_year, document_date,
+                                       posting_date, header_text, status, created_by)
+        values (${tenant.client}, 'MD-CHAIN001', 2026, ${DATE}, ${DATE}, 'Opening balance', 'POSTED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (client, material_document_number, line_number, movement_type,
+                                            material_number, plant, storage_location, stock_type, line_direction,
+                                            entry_quantity, entry_unit, base_quantity, base_unit, created_by)
+        values (${tenant.client}, 'MD-CHAIN001', 1, 'OPENING_BALANCE', ${MATERIAL}, ${PLANT}, ${STORE},
+                'UNRESTRICTED', 'RECEIPT', 100, 'UNT', 100, 'UNT', ${ACTOR})
+        on conflict do nothing
+      `);
+      // The accounts the movement and the receivable post through. The chart the company code carries is
+      // the standard one, so only the two sales-specific accounts have to be added to it.
+      await tx.execute(sql`
+        insert into gl_account (client, chart_of_accounts, account_number, name, account_type,
+                                is_balance_sheet, is_open_item_managed, reconciliation_type,
+                                requires_cost_object, is_tax_relevant, account_group, gl_account_type, created_by)
+        select ${tenant.client}, c.chart_of_accounts, v.n, v.d, 'EXPENSE',
+               false, false, null, false, false, 'GENL', 'PL_STATEMENT', ${ACTOR}
+        from (select chart_of_accounts from chart_of_accounts where client = ${tenant.client} limit 1) c
+        cross join (values ('510300', 'Cost of goods sold'), ('120000', 'Raw materials inventory')) as v(n, d)
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into account_determination (client, chart_of_accounts, event, valuation_class, general_modifier, gl_account, created_by)
+        select ${tenant.client}, c.chart_of_accounts, v.e, v.vc, '', v.a, ${ACTOR}
+        from (select chart_of_accounts from chart_of_accounts where client = ${tenant.client} limit 1) c
+        cross join (values
+          ('INVENTORY', 'RAW_INVENTORY', '120000'),
+          ('SALES_ISSUE', 'RAW_INVENTORY', '510300'),
+          ('SALES_REVENUE', '', '300000'),
+          ('TAX', '', '240000')
+        ) as v(e, vc, a)
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_period_control (client, company_code, current_fiscal_year, current_period,
+                                             previous_fiscal_year, previous_period, allow_backposting, created_by)
+        values (${tenant.client}, '1000', 2026, 10, 2026, 9, true, ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into tax_code (client, country, tax_code, name, tax_type, rate_percent, created_by)
+        values (${tenant.client}, 'KW', 'T10', 'Output tax 10 percent', 'VAT', 10, ${ACTOR}) on conflict do nothing
+      `);
+    });
+
+    const area = { salesOrg: '1000', distributionChannel: '10', division: '01' };
+    const period = { validityFrom: '2026-01-01', validityTo: '2026-12-31', supersedeStanding: false };
+    // The price list this chain is sold under: 25.00 a unit, less ten per cent, plus 5.00 a unit of
+    // freight, plus a 15.00 document charge carried at the header.
+    await saveSalesCondition({
+      client: tenant.client, changedBy: ACTOR, ...area, customerNumber: CUSTOMER, materialNumber: MATERIAL,
+      currency: 'USD', amount: 25, priceUnit: 1, ...period,
+    });
+    await saveSalesCondition({
+      client: tenant.client, changedBy: ACTOR, ...area, customerNumber: CUSTOMER, materialNumber: '',
+      currency: 'USD', amount: 10, priceUnit: 1, ...period, conditionType: 'K007',
+    });
+    await saveSalesCondition({
+      client: tenant.client, changedBy: ACTOR, ...area, customerNumber: CUSTOMER, materialNumber: '',
+      currency: 'USD', amount: 5, priceUnit: 1, ...period, conditionType: 'KF00',
+    });
+    await saveSalesCondition({
+      client: tenant.client, changedBy: ACTOR, ...area, customerNumber: CUSTOMER, materialNumber: '',
+      currency: 'USD', amount: 15, priceUnit: 1, ...period, conditionType: 'HD00',
+    });
+    await saveCustomerCredit({
+      client: tenant.client, changedBy: ACTOR, customer: CUSTOMER, creditControlArea: AREA,
+      creditLimit: '1000000.00', riskCategory: 'A', isBlocked: false, changeReason: 'Chain test credit data.',
+    });
+  });
+
+  afterAll(async () => {
+    if (tenant) await destroyTenant(tenant.client);
+  });
+
+  /** Order `ordered` units, deliver and invoice `delivered` of them. */
+  async function invoicedChain(label: string, ordered: number, delivered: number) {
+    const placed = await createSalesOrder({
+      ...base, requestKey: key(`${label}-order`),
+      lines: [{
+        lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
+        orderQuantity: ordered, quantityUnit: 'UNT', taxCode: 'T10',
+      }],
+    });
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: String(delivered) }],
+      requestKey: key(`${label}-delivery`),
+    });
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      items: [{ lineNumber: 10, quantity: String(delivered), storageLocation: STORE }],
+      requestKey: key(`${label}-pick`),
+    });
+    const standing = await getDelivery(tenant.client, shipped.deliveryNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+    const invoiced = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key(`${label}-invoice`),
+    });
+    return {
+      orderNumber: placed.orderNumber,
+      deliveryNumber: shipped.deliveryNumber,
+      billing: invoiced.billing,
+    };
+  }
+
+  let invoiced: Awaited<ReturnType<typeof invoicedChain>>;
+
+  it('prices the order once, at ten units: 250 less 25 plus 50 plus 15, and tax on all of it', async () => {
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('ten-order'),
+      lines: [{
+        lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
+        orderQuantity: 10, quantityUnit: 'UNT', taxCode: 'T10',
+      }],
+    });
+    const view = await getSalesOrder(tenant.client, placed.orderNumber);
+    expect(Number(view!.netValue)).toBe(290);
+    expect(Number(view!.taxValue)).toBe(29);
+    expect(Number(view!.lines[0].netPrice)).toBe(29);
+
+    const conditions = await salesDocumentConditionsOf(tenant.client, 'ORDER', placed.orderNumber);
+    const at = (conditionType: string) => conditions.find(
+      (row) => row.conditionType === conditionType && row.lineNumber === 10,
+    );
+    expect(Number(at('PR00')!.amount)).toBe(250);
+    expect(Number(at('K007')!.amount)).toBe(-25);
+    expect(Number(at('KF00')!.amount)).toBe(50);
+    // The header charge is one condition the document carries, distributed over the lines that earned it.
+    expect(Number(at('HD00')!.amount)).toBe(15);
+    expect(Number(at('MWST')!.amount)).toBe(29);
+    // The cost stands beside the price and is no part of it.
+    expect(Number(at('VPRS')!.amount)).toBe(100);
+    expect(at('VPRS')!.isStatistical).toBe(true);
+  });
+
+  it('invoices six of the ten at the price they were sold at, not at a second price', async () => {
+    invoiced = await invoicedChain('six', 10, 6);
+    const line = invoiced.billing.lines[0];
+    expect(line.billingQuantity).toBe('6.000');
+    // The price of a unit is what it was: the discount, the freight and the charge all travel with it.
+    expect(line.netPrice).toBe('29.0000');
+    expect(Number(line.netAmount)).toBe(174);
+    expect(Number(line.taxAmount)).toBe(17.4);
+    expect(Number(invoiced.billing.netValue)).toBe(174);
+    expect(Number(invoiced.billing.grossValue)).toBe(191.4);
+
+    const conditions = await salesDocumentConditionsOf(
+      tenant.client, 'BILLING', invoiced.billing.billingNumber,
+    );
+    const at = (conditionType: string) => conditions.find((row) => row.conditionType === conditionType);
+    // 150 less 15 plus 30 plus nine tenths of the header charge.
+    expect(Number(at('PR00')!.amount)).toBe(150);
+    expect(Number(at('K007')!.amount)).toBe(-15);
+    expect(Number(at('KF00')!.amount)).toBe(30);
+    expect(Number(at('HD00')!.amount)).toBe(9);
+    expect(Number(at('MWST')!.amount)).toBe(17.4);
+    expect(Number(at('VPRS')!.amount)).toBe(60);
+    // The conditions written are the value of the line: no figure on the invoice is held anywhere else.
+    const summed = conditions
+      .filter((row) => !row.isStatistical && row.conditionType !== 'MWST')
+      .reduce((total, row) => total + Number(row.amount), 0);
+    expect(Number(summed.toFixed(2))).toBe(174);
+  });
+
+  it('credits two of those six for what those two were charged — discount, freight and charge included', async () => {
+    const raised = await createCreditMemo({
+      client: tenant.client, changedBy: ACTOR, billingNumber: invoiced.billing.billingNumber,
+      billingDate: DATE, requestKey: key('credit-two'),
+      items: [{ billingLineNumber: 10, quantity: 2 }],
+    });
+    // 50 less 5 plus 10 plus 3, negated: the two units' own share of everything the invoice charged.
+    expect(raised.netValue).toBe('-58.00');
+    expect(raised.taxValue).toBe('-5.80');
+    expect(raised.grossValue).toBe('-63.80');
+
+    const conditions = await salesDocumentConditionsOf(tenant.client, 'BILLING', raised.billingNumber);
+    const at = (conditionType: string) => conditions.find((row) => row.conditionType === conditionType);
+    expect(Number(at('PR00')!.amount)).toBe(-50);
+    // The discount is given back with the goods: it is a positive credit because the charge was a deduction.
+    expect(Number(at('K007')!.amount)).toBe(5);
+    expect(Number(at('KF00')!.amount)).toBe(-10);
+    expect(Number(at('HD00')!.amount)).toBe(-3);
+    // Ten per cent of the value going back, which is what makes the credit the invoice's own arithmetic
+    // in reverse. A third of the invoice's tax would have been the same here by luck of the numbers and
+    // wrong in general: a tax is a rate on a value, not a share of a total.
+    expect(Number(at('MWST')!.amount)).toBe(-5.8);
+    expect(Number(at('MWST')!.rate)).toBe(10);
+    const summed = conditions
+      .filter((row) => !row.isStatistical && row.conditionType !== 'MWST')
+      .reduce((total, row) => total + Number(row.amount), 0);
+    expect(Number(summed.toFixed(2))).toBe(-58);
+  });
+
+  it('bills a document that carries no conditions by the figures it has always carried', async () => {
+    // A document raised before the conditions existed: the line holds its price, and nothing else. This
+    // is what every order in the books looks like the morning this is deployed, and none of them may move.
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('historic-order'),
+      lines: [{
+        lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
+        orderQuantity: 10, quantityUnit: 'UNT', taxCode: 'T10',
+      }],
+    });
+    // Rename them onto a document that does not exist, which is the cheapest way to reach the state the
+    // books are actually in: the application role is granted no DELETE on a condition, because what priced
+    // a document is evidence, not working storage, and a tenant cannot quietly unwrite it.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update sales_document_condition set document_number = 'SD9239-ARCHIVED', changed_by = ${ACTOR}
+        where client = ${tenant.client} and document_category = 'ORDER' and document_number = ${placed.orderNumber}
+      `);
+    });
+    expect(await salesDocumentConditionsOf(tenant.client, 'ORDER', placed.orderNumber)).toEqual([]);
+
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: '4' }], requestKey: key('historic-delivery'),
+    });
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      items: [{ lineNumber: 10, quantity: '4', storageLocation: STORE }], requestKey: key('historic-pick'),
+    });
+    const standing = await getDelivery(tenant.client, shipped.deliveryNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+    const invoicedHistoric = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('historic-invoice'),
+    });
+    const line = invoicedHistoric.billing.lines[0];
+    // Four units at the price the line has always carried, and the tax the master stands at today.
+    expect(line.netPrice).toBe('29.0000');
+    expect(Number(line.netAmount)).toBe(116);
+    expect(Number(line.taxAmount)).toBe(11.6);
+    expect(Number(invoicedHistoric.billing.grossValue)).toBe(127.6);
+    // Nothing was invented for it: a document with no conditions is billed without them.
+    expect(await salesDocumentConditionsOf(
+      tenant.client, 'BILLING', invoicedHistoric.billing.billingNumber,
+    )).toEqual([]);
+  });
+
+  it('leaves a document standing at the price it was priced at when the price list moves', async () => {
+    const area = { salesOrg: '1000', distributionChannel: '10', division: '01' };
+    const before = await salesDocumentConditionsOf(
+      tenant.client, 'BILLING', invoiced.billing.billingNumber,
+    );
+    // The price goes up for business written from now on.
+    await saveSalesCondition({
+      client: tenant.client, changedBy: ACTOR, ...area, customerNumber: CUSTOMER, materialNumber: MATERIAL,
+      currency: 'USD', amount: 30, priceUnit: 1, supersedeStanding: true,
+      validityFrom: '2026-10-20', validityTo: '2026-12-31',
+    });
+    const after = await salesDocumentConditionsOf(
+      tenant.client, 'BILLING', invoiced.billing.billingNumber,
+    );
+    expect(after).toEqual(before);
+
+    // A new order, dated after the increase, is priced at the increase.
+    const placed = await createSalesOrder({
+      ...base, orderDate: '2026-10-25', requestKey: key('after-increase'),
+      lines: [{
+        lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
+        orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
+      }],
+    });
+    const conditions = await salesDocumentConditionsOf(tenant.client, 'ORDER', placed.orderNumber);
+    expect(Number(conditions.find((row) => row.conditionType === 'PR00')!.amount)).toBe(30);
+  });
+});
