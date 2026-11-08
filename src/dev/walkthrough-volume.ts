@@ -377,7 +377,8 @@ async function ensurePartners(ctx: VolumeContext, counts: VolumeCounts): Promise
       await saveCustomerSalesArea({ client: ctx.tenant, partnerNumber: number, salesOrg: ctx.salesOrg,
         distributionChannel: ctx.channel, division: ctx.division, expectedVersion: 0, changedBy: ctx.actor,
         reason: 'Walkthrough volume customer sales setup.', salesDistrict: 'DXB', deliveringPlant: ctx.plant,
-        pricingProcedure: 'PR01', completeDelivery: false, orderCombination: false, isBlocked: false });
+        pricingProcedure: 'PR01', accountAssignmentGroup: '001',
+        completeDelivery: false, orderCombination: false, isBlocked: false });
     }
 
     const credit = await getCustomerCredit(ctx.tenant, number, ctx.creditControlArea);

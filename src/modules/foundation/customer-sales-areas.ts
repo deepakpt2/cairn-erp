@@ -16,6 +16,7 @@ const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partne
   salesDistrict:z.string().trim().regex(/^([A-Z0-9]{1,6})?$/,'Sales district uses up to six capital letters or digits.'),
   deliveringPlant:z.string().trim().regex(/^([A-Z0-9]{1,10})?$/,'Delivering plant uses up to ten capital letters or digits.'),
   pricingProcedure:z.string().trim().regex(/^([A-Z0-9]{1,6})?$/,'Pricing procedure uses up to six capital letters or digits.'),
+  accountAssignmentGroup:z.string().trim().regex(/^([A-Z0-9]{1,4})?$/,'Account assignment group uses up to four capital letters or digits.'),
   completeDelivery:z.boolean(),orderCombination:z.boolean(),isBlocked:z.boolean()});
 export type CustomerSalesAreaInput=z.input<typeof inputSchema>;
 const key=(client:string,partner:string,org:string,channel:string,division:string)=>and(eq(customerSalesArea.client,client),eq(customerSalesArea.partnerNumber,partner),eq(customerSalesArea.salesOrg,org),eq(customerSalesArea.distributionChannel,channel),eq(customerSalesArea.division,division));
@@ -50,6 +51,9 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
     const [role]=await tx.select().from(bpRole).where(and(eq(bpRole.client,client),eq(bpRole.partnerNumber,partnerNumber),eq(bpRole.roleCode,'CUSTOMER')));
     if(!partner||!role?.isActive)throw new CustomerSalesAreaError('An existing active customer role is required.','Create/activate the general Customer role first.');
     const values={salesDistrict:input.salesDistrict||null,deliveringPlant:input.deliveringPlant||null,pricingProcedure:input.pricingProcedure||null,
+      // The customer's half of revenue determination. Blank is the group that names none, and rows
+      // maintained with a blank group answer for it — it is never treated as a value nobody set.
+      accountAssignmentGroup:input.accountAssignmentGroup||null,
       completeDelivery:input.completeDelivery,orderCombination:input.orderCombination,isBlocked:input.isBlocked};
     await validateSalesArea(tx,client,org,channel,division,values.deliveringPlant,true);
     const [before]=await tx.select().from(customerSalesArea).where(key(client,partnerNumber,org,channel,division)).for('update');
@@ -63,7 +67,7 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
     const snapshot=(row:Record<string,unknown>)=>Object.fromEntries(Object.keys(values).map(k=>[k,row[k]]));
     await recordChange(tx,{client,objectClass:'customer_sales_area',objectKey:`${partnerNumber}/${org}/${channel}/${division}`,changeType:!before?'CREATE':before.isBlocked!==input.isBlocked?input.isBlocked?'BLOCK':'UNBLOCK':'CHANGE',changedBy,reason,
       transactionCode:'SALES.CUSTOMER.SALESAREA.MAINTAIN',before:before?{...snapshot(before),salesStatus:before.salesStatus}:undefined,after:{...values,salesStatus},
-      securityRelevantFields:['deliveringPlant','pricingProcedure','completeDelivery','orderCombination','isBlocked']});
+      securityRelevantFields:['deliveringPlant','pricingProcedure','accountAssignmentGroup','completeDelivery','orderCombination','isBlocked']});
     return {changed:true,version,status:salesStatus};
   });
 }

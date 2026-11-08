@@ -283,6 +283,7 @@ describe('the conditions a document is priced by, through the chain that follows
       orderNumber: placed.orderNumber,
       deliveryNumber: shipped.deliveryNumber,
       billing: invoiced.billing,
+      invoice: invoiced.invoice,
     };
   }
 
@@ -372,6 +373,184 @@ describe('the conditions a document is priced by, through the chain that follows
       .filter((row) => !row.isStatistical && row.conditionType !== 'MWST')
       .reduce((total, row) => total + Number(row.amount), 0);
     expect(Number(summed.toFixed(2))).toBe(-58);
+  });
+
+  it('posts each part of the sale where determination says: revenue, the discount, freight and the tax', async () => {
+    // 150.00 of price, 15.00 of discount, 30.00 of freight and 9.00 of the document charge, plus 17.40
+    // of tax: four figures of four kinds, and four accounts — none of them chosen by the service that
+    // posted them.
+    const journal = await withTenant(tenant.client, async (tx) => tx.execute(sql`
+      select jl.gl_account, jl.debit_credit, jl.amount_local::text as amount
+        from journal_entry_line jl
+       where jl.client = ${tenant.client} and jl.document_number = ${invoiced.invoice?.journalDocumentNumber ?? ''}
+       order by jl.gl_account, jl.debit_credit
+    `) as unknown as Promise<Array<{ gl_account: string; debit_credit: string; amount: string }>>);
+    const at = (account: string, side: string) => journal.find(
+      (row) => row.gl_account === account && row.debit_credit === side,
+    );
+    // The customer owes the whole of it.
+    expect(at('110000', 'S')?.amount).toBe('191.4000');
+    // The price is revenue. The discount is not revenue and is not credited to it — it is debited to a
+    // deduction account, which is the only place a reader can see what the customer was given off.
+    expect(at('300000', 'H')?.amount).toBe('150.0000');
+    expect(at('310000', 'S')?.amount).toBe('15.0000');
+    // Freight is earned by carrying the goods, not by selling them: both the freight on the line and the
+    // document's own charge, to one account, because the determination says what they are.
+    expect(at('320000', 'H')?.amount).toBe('39.0000');
+    // And the tax, on the account its own key names.
+    expect(at('220000', 'H')?.amount).toBe('17.4000');
+    // It balances: what the customer owes is what the four accounts took between them.
+    const owed = journal.filter((row) => row.debit_credit === 'S')
+      .reduce((total, row) => total + Number(row.amount), 0);
+    const earned = journal.filter((row) => row.debit_credit === 'H')
+      .reduce((total, row) => total + Number(row.amount), 0);
+    expect(Number(owed.toFixed(2))).toBe(Number(earned.toFixed(2)));
+    expect(journal.map((row) => row.gl_account).sort()).toEqual(['110000', '220000', '300000', '310000', '320000']);
+  });
+
+  it('refuses to post an invoice where no account is determined, and names the screen', async () => {
+    // The determination for revenue is made to answer for a customer group this customer does not carry.
+    // It is changed rather than withdrawn because the application role holds no DELETE on configuration:
+    // a tenant that loses a determination by accident has to be able to put it back.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update sales_account_determination set customer_account_assignment_group = 'ZZZZ', changed_by = ${ACTOR}
+        where client = ${tenant.client} and account_key = 'ERL'
+      `);
+    });
+    let refusal: { message: string; remedy?: string } | undefined;
+    try {
+      await invoicedChain('undetermined', 1, 1);
+    } catch (error) {
+      refusal = error as { message: string; remedy?: string };
+    } finally {
+      await withTenant(tenant.client, async (tx) => {
+        await tx.execute(sql`
+          update sales_account_determination set customer_account_assignment_group = '', changed_by = ${ACTOR}
+          where client = ${tenant.client} and account_key = 'ERL'
+        `);
+      });
+    }
+    // The refusal names the key, the customer group and the material group it was looking for, and the
+    // screen where the answer is maintained. An invoice posted to an account nobody chose would be worse
+    // than an invoice that was never raised, because this one only has to be fixed.
+    expect(refusal?.message).toMatch(/No G\/L account is determined for ERL/);
+    expect(refusal?.remedy).toContain('/config/sales-account-determination');
+  });
+
+  it('posts to the most specific row that fits when a customer and a material are named', async () => {
+    // A group for this customer, and a group on the material's own sales view. A determination maintained
+    // for exactly that pair stands over the row that names neither.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update customer_sales_area set account_assignment_group = 'HOME', changed_by = ${ACTOR}
+        where client = ${tenant.client} and partner_number = ${CUSTOMER}
+          and sales_org = '1000' and distribution_channel = '10' and division = '01'
+      `);
+      await tx.execute(sql`
+        update material_sales set material_account_assignment_group = 'GOOD', changed_by = ${ACTOR}
+        where client = ${tenant.client} and material_number = ${MATERIAL}
+          and sales_org = '1000' and distribution_channel = '10'
+      `);
+      // The chart the company code keeps, which is the same chart billing determines against.
+      await tx.execute(sql`
+        insert into sales_account_determination (
+          client, chart_of_accounts, sales_org, customer_account_assignment_group,
+          material_account_assignment_group, account_key, gl_account, is_active, created_by, changed_by
+        )
+        values (
+          ${tenant.client},
+          (select chart_of_accounts from company_code where client = ${tenant.client} and company_code = '1000'),
+          '1000', 'HOME', 'GOOD', 'ERL', '300100', true, ${ACTOR}, ${ACTOR}
+        )
+        on conflict do nothing
+      `);
+    });
+    const specific = await invoicedChain('specific', 2, 2);
+    const journal = await withTenant(tenant.client, async (tx) => tx.execute(sql`
+      select jl.gl_account, jl.debit_credit, jl.amount_local::text as amount
+        from journal_entry_line jl
+       where jl.client = ${tenant.client} and jl.document_number = ${specific.invoice?.journalDocumentNumber ?? ''}
+       order by jl.gl_account
+    `) as unknown as Promise<Array<{ gl_account: string; debit_credit: string; amount: string }>>);
+    // Export revenue, not domestic: the row naming this customer and this material is the one that
+    // answered, and the row naming neither stood behind it and was not asked.
+    expect(journal.find((row) => row.gl_account === '300100')?.amount).toBe('50.0000');
+    expect(journal.some((row) => row.gl_account === '300000')).toBe(false);
+    // Everything else is unchanged: the same deduction, the same freight, the same tax.
+    // 10.00 of freight on the line plus the whole 15.00 the document carries, because one line earned
+    // all of it; and ten per cent of 70.00, which is what the two units came to.
+    expect(journal.find((row) => row.gl_account === '310000')?.amount).toBe('5.0000');
+    expect(journal.find((row) => row.gl_account === '320000')?.amount).toBe('25.0000');
+    expect(journal.find((row) => row.gl_account === '220000')?.amount).toBe('7.0000');
+
+    // Put the master data back, so what runs after this sees the tenant as it stood.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update customer_sales_area set account_assignment_group = null, changed_by = ${ACTOR}
+        where client = ${tenant.client} and partner_number = ${CUSTOMER}
+          and sales_org = '1000' and distribution_channel = '10' and division = '01'
+      `);
+      await tx.execute(sql`
+        update material_sales set material_account_assignment_group = null, changed_by = ${ACTOR}
+        where client = ${tenant.client} and material_number = ${MATERIAL}
+          and sales_org = '1000' and distribution_channel = '10'
+      `);
+    });
+  });
+
+  it('bills on the determination alone, needing the rows it used to need no more', async () => {
+    // Before this section a tenant had to maintain two rows in the finance account determination —
+    // revenue by event, tax by chart — before it could raise a single invoice. The sales determination
+    // answers the same question with more meaning in it, so those rows are a prerequisite no longer.
+    const chart = (await withTenant(tenant.client, async (tx) => tx.execute(sql`
+      select chart_of_accounts from company_code where client = ${tenant.client} and company_code = '1000'
+    `) as unknown as Promise<Array<{ chart_of_accounts: string }>>))[0]?.chart_of_accounts ?? 'CA01';
+    const standing = await withTenant(tenant.client, async (tx) => tx.execute(sql`
+      select event, valuation_class, general_modifier, gl_account from account_determination
+       where client = ${tenant.client} and event in ('SALES_REVENUE', 'TAX')
+    `) as unknown as Promise<Array<{
+      event: string; valuation_class: string; general_modifier: string; gl_account: string;
+    }>>);
+    expect(standing.length).toBeGreaterThan(0);
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        delete from account_determination
+         where client = ${tenant.client} and event in ('SALES_REVENUE', 'TAX')
+      `);
+    });
+    try {
+      const billed = await invoicedChain('determined', 4, 4);
+      const journal = await withTenant(tenant.client, async (tx) => tx.execute(sql`
+        select jl.gl_account, jl.debit_credit, jl.amount_local::text as amount
+          from journal_entry_line jl
+         where jl.client = ${tenant.client} and jl.document_number = ${billed.invoice?.journalDocumentNumber ?? ''}
+         order by jl.gl_account
+      `) as unknown as Promise<Array<{ gl_account: string; debit_credit: string; amount: string }>>);
+      // Four units: 100.00 of price, 10.00 off, 20.00 of freight and the document's own 15.00, and
+      // 12.50 of tax. Every account is one the determination named, and none of them was maintained
+      // anywhere else.
+      expect(journal.find((row) => row.gl_account === '300000')?.amount).toBe('100.0000');
+      expect(journal.find((row) => row.gl_account === '310000')?.amount).toBe('10.0000');
+      expect(journal.find((row) => row.gl_account === '320000')?.amount).toBe('35.0000');
+      expect(journal.find((row) => row.gl_account === '220000')?.amount).toBe('12.5000');
+      expect(journal.find((row) => row.gl_account === '110000')?.amount).toBe('137.5000');
+    } finally {
+      // Put them back, so the tenant is as it stood for whatever runs next.
+      for (const row of standing) {
+        await withTenant(tenant.client, async (tx) => {
+          await tx.execute(sql`
+            insert into account_determination (
+              client, chart_of_accounts, event, valuation_class, general_modifier, gl_account,
+              created_by, changed_by
+            ) values (
+              ${tenant.client}, ${chart}, ${row.event}, ${row.valuation_class}, ${row.general_modifier},
+              ${row.gl_account}, ${ACTOR}, ${ACTOR}
+            )
+          `);
+        });
+      }
+    }
   });
 
   it('bills a document that carries no conditions by the figures it has always carried', async () => {

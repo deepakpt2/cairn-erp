@@ -454,7 +454,8 @@ async function ensurePartners(tenant: string, summary: WalkthroughSummary) {
     await saveCustomerSalesArea({ client: tenant, partnerNumber: CUSTOMER, salesOrg: SALES_ORG,
       distributionChannel: CHANNEL, division: DIVISION, expectedVersion: 0, changedBy: ACTOR,
       reason: 'Development walkthrough customer sales setup.', salesDistrict: 'DXB', deliveringPlant: PLANT,
-      pricingProcedure: 'PR01', completeDelivery: false, orderCombination: false, isBlocked: false });
+      pricingProcedure: 'PR01', accountAssignmentGroup: '001',
+      completeDelivery: false, orderCombination: false, isBlocked: false });
     record(summary, `customer sales area ${CUSTOMER}/${SALES_ORG}/${CHANNEL}/${DIVISION}`, true);
   }
 

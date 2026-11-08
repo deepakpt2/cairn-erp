@@ -38,11 +38,14 @@ import {
 } from '../finance/customer-invoice';
 
 import { billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine } from './schema';
+import { materialSales } from '../inventory/schema';
+import { customerSalesArea } from '../foundation/customer-sales-area-schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_BILLING_TYPE, salesDocumentTypeFor } from './document-type';
 import {
   type PricedCondition, type StoredCondition, documentConditionsOf, roundAmount, scaleLineConditions,
   writeDocumentConditions,
 } from './pricing-procedure';
+import { determineLineAccounts } from './account-determination';
 import { standingDetermination } from './delivery';
 
 export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
@@ -278,28 +281,33 @@ export async function listBillings(
   });
 }
 
-/** The revenue account the chart of accounts holds for a billed line. Absent configuration is a refusal. */
-export async function revenueAccountFor(tx: Tx, client: string, company: string): Promise<string> {
-  const [companyRow] = await tx.select({
-    chart: companyCodeTable.chartOfAccounts, country: companyCodeTable.country,
-  }).from(companyCodeTable).where(and(
-    eq(companyCodeTable.client, client), eq(companyCodeTable.companyCode, company),
-  )).limit(1);
+/** The chart of accounts the company code keeps — the first part of every revenue determination key. */
+export async function chartOfAccountsFor(tx: Tx, client: string, company: string): Promise<string> {
+  const [companyRow] = await tx.select({ chart: companyCodeTable.chartOfAccounts })
+    .from(companyCodeTable).where(and(
+      eq(companyCodeTable.client, client), eq(companyCodeTable.companyCode, company),
+    )).limit(1);
   if (!companyRow?.chart) {
     throw new BillingError(
       `Company code ${company} carries no chart of accounts, so no revenue account can be read.`,
       'Complete the company code before billing.',
     );
   }
+  return companyRow.chart;
+}
+
+/** The revenue account the chart of accounts holds for a billed line. Absent configuration is a refusal. */
+export async function revenueAccountFor(tx: Tx, client: string, company: string): Promise<string> {
+  const chart = await chartOfAccountsFor(tx, client, company);
   const rows = await tx.select().from(accountDetermination).where(and(
     eq(accountDetermination.client, client),
-    eq(accountDetermination.chartOfAccounts, companyRow.chart),
+    eq(accountDetermination.chartOfAccounts, chart),
     eq(accountDetermination.event, REVENUE_EVENT),
   ));
   const row = rows.find((entry) => entry.generalModifier === '') ?? rows[0];
   if (!row) {
     throw new BillingError(
-      `Account determination for ${REVENUE_EVENT} does not stand in chart ${companyRow.chart}.`,
+      `Account determination for ${REVENUE_EVENT} does not stand in chart ${chart}.`,
       'Maintain the revenue account for that event on the account determination screen, then bill again.',
     );
   }
@@ -451,7 +459,14 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
         eq(companyCodeTable.client, parsed.client), eq(companyCodeTable.companyCode, order.companyCode),
       )).limit(1))[0]?.country
       : undefined;
-    const revenueAccount = await revenueAccountFor(tx, parsed.client, order.companyCode);
+    // Read when it is needed, not before. A document whose every line is determined has no need of
+    // the revenue account the chart carries, and a tenant that maintains the determination table must
+    // not be made to maintain the older row as well before it can bill the first time.
+    let revenueAccount: string | undefined;
+    const revenueAccountOnce = async (): Promise<string> => {
+      revenueAccount ??= await revenueAccountFor(tx, parsed.client, order.companyCode);
+      return revenueAccount;
+    };
     // The conditions every order behind this delivery was priced by, so the invoice can bill the same
     // arithmetic rather than a price of its own. One read for all of them, inside this transaction: a
     // document that agrees with its order has to read the same row the order wrote.
@@ -462,6 +477,29 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
         rows.push(condition);
         orderConditionSets.set(orderNumber, rows);
       }
+    }
+    // The two account assignment groups revenue is determined by, read once for the document: the
+    // customer's from its sales area, and each material's from its sales view.
+    const [customerArea] = await tx.select({ group: customerSalesArea.accountAssignmentGroup })
+      .from(customerSalesArea).where(and(
+        eq(customerSalesArea.client, parsed.client),
+        eq(customerSalesArea.partnerNumber, deliveryHeader.customerNumber),
+        eq(customerSalesArea.salesOrg, deliveryHeader.salesOrg),
+        eq(customerSalesArea.distributionChannel, deliveryHeader.distributionChannel),
+        eq(customerSalesArea.division, deliveryHeader.division),
+      )).limit(1);
+    const companyChart = await chartOfAccountsFor(tx, parsed.client, order.companyCode);
+    const materialGroups = new Map<string, string | null>();
+    for (const line of lines) {
+      if (materialGroups.has(line.materialNumber)) continue;
+      const [view] = await tx.select({ group: materialSales.materialAccountAssignmentGroup })
+        .from(materialSales).where(and(
+          eq(materialSales.client, parsed.client),
+          eq(materialSales.materialNumber, line.materialNumber),
+          eq(materialSales.salesOrg, deliveryHeader.salesOrg),
+          eq(materialSales.distributionChannel, deliveryHeader.distributionChannel),
+        )).limit(1);
+      materialGroups.set(line.materialNumber, view?.group ?? null);
     }
 
     const items: Array<typeof billingDocumentLine.$inferInsert> = [];
@@ -557,13 +595,46 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       if (billedConditions) {
         billedLineConditions.push({ lineNumber: billingLineNumber, conditions: billedConditions });
       }
-      invoice.push({
-        glAccount: revenueAccount,
+      // Where the money lands. A line priced by conditions is posted by the account key each condition
+      // carried: the price to revenue, a discount to a deduction, freight to freight revenue. A line
+      // with no conditions — one raised before 9238 — is posted whole to the revenue account the chart
+      // has always held, which is what it was posted to the day it was raised.
+      const accounts = billedConditions
+        ? await determineLineAccounts(tx, parsed.client, {
+          chartOfAccounts: companyChart,
+          salesOrg: deliveryHeader.salesOrg,
+          customerAccountAssignmentGroup: customerArea?.group,
+          materialAccountAssignmentGroup: materialGroups.get(line.materialNumber),
+          conditions: billedConditions.map((condition) => ({
+            accountKey: condition.accountKey,
+            amount: condition.amount,
+            isStatistical: condition.isStatistical,
+            conditionClass: condition.conditionClass,
+            conditionType: condition.conditionType,
+          })),
+        }).catch((error: unknown) => {
+          const caught = error as { message?: string; remedy?: string };
+          throw new BillingError(
+            `The billing document stands priced, but its revenue accounts could not be determined: ${caught.message ?? 'no account stands for one of the keys this document carries.'}`,
+            `${caught.remedy ?? 'Maintain the account determination, then bill again.'} The retry under the same submission raises no second document.`,
+          );
+        })
+        : undefined;
+      const invoiceLine: InvoiceLine = {
         netAmount: Number(round2(netAmount)),
         taxCode: orderLine.taxCode || undefined,
         profitCenter: orderLine.profitCenter || undefined,
         lineText: `Delivery ${line.deliveryNumber} item ${line.lineNumber}`.slice(0, 50),
-      });
+      };
+      if (accounts) {
+        invoiceLine.components = accounts.components.map((component) => ({
+          glAccount: component.glAccount, amount: Number(component.amount),
+        }));
+        if (accounts.taxAccount) invoiceLine.taxAccount = accounts.taxAccount;
+      } else {
+        invoiceLine.glAccount = await revenueAccountOnce();
+      }
+      invoice.push(invoiceLine);
     }
 
     // The document type is configuration now (9226); see the same note in sales-order.ts.
@@ -700,7 +771,19 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
 }
 
 interface InvoiceLine {
-  glAccount: string;
+  /**
+   * The account the whole line posts to. Absent where the line carries components, because a line whose
+   * price, discount and freight each post somewhere of their own has no single account to name.
+   */
+  glAccount?: string;
+  /**
+   * The amounts this line posts, each to the account the key of the condition that produced it
+   * determined. Absent on a line priced before the conditions existed, which posts whole to `glAccount`
+   * as it always did.
+   */
+  components?: Array<{ glAccount: string; amount: number }>;
+  /** Where the tax on this line posts, determined by the account key the tax condition carried. */
+  taxAccount?: string;
   /** A number, because that is what the accounting-invoice service declares on its line input. */
   netAmount: number;
   taxCode?: string;

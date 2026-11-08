@@ -9,6 +9,13 @@ export const customerSalesArea=pgTable('customer_sales_area',{
   partnerNumber:varchar('partner_number',{length:40}).notNull(),roleCode:varchar('role_code',{length:16}).notNull().default('CUSTOMER'),
   salesOrg:varchar('sales_org',{length:4}).notNull(),distributionChannel:varchar('distribution_channel',{length:4}).notNull(),division:varchar('division',{length:4}).notNull(),
   salesDistrict:varchar('sales_district',{length:6}),deliveringPlant:varchar('delivering_plant',{length:10}),pricingProcedure:varchar('pricing_procedure',{length:6}),
+  /**
+   * The customer's account assignment group — the customer half of revenue determination. Blank is a
+   * group of its own and is matched as one, never as a missing value: a customer with no group is
+   * determined by the rows that name none, which is the answer a tenant that has not refined its
+   * revenue accounts yet expects.
+   */
+  accountAssignmentGroup:varchar('account_assignment_group',{length:4}),
   completeDelivery:boolean('complete_delivery').notNull().default(false),orderCombination:boolean('order_combination').notNull().default(false),
   salesStatus:varchar('sales_status',{length:16}).notNull().default('INCOMPLETE'),
   isBlocked:boolean('is_blocked').notNull().default(false),version:integer('version').notNull().default(1),...auditColumns,
@@ -21,4 +28,5 @@ export const customerSalesArea=pgTable('customer_sales_area',{
   check('customer_sales_status',sql`${t.salesStatus} in ('INCOMPLETE','CREATED','MAINTAINED')`),check('customer_sales_version',sql`${t.version}>0`),
   check('customer_sales_district',sql`${t.salesDistrict} is null or ${t.salesDistrict} ~ '^[A-Z0-9]{1,6}$'`),
   check('customer_sales_pricing_procedure',sql`${t.pricingProcedure} is null or ${t.pricingProcedure} ~ '^[A-Z0-9]{1,6}$'`),
+  check('customer_sales_account_group',sql`${t.accountAssignmentGroup} is null or ${t.accountAssignmentGroup} ~ '^[A-Z0-9]{1,4}$'`),
 ]);

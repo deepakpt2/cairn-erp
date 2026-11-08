@@ -13,6 +13,7 @@ export async function saveCustomerSalesAreaAction(_previous:SalesAreaState,form:
     const result=await saveCustomerSalesArea({client:session.user.client,changedBy:session.user.username,partnerNumber:read('partnerNumber'),
       salesOrg:read('salesOrg'),distributionChannel:read('distributionChannel'),division:read('division'),expectedVersion:Number(read('expectedVersion')),
       deliveringPlant:read('deliveringPlant').toUpperCase(),pricingProcedure:read('pricingProcedure').toUpperCase(),salesDistrict:read('salesDistrict').toUpperCase(),
+      accountAssignmentGroup:read('accountAssignmentGroup').toUpperCase(),
       completeDelivery:form.get('completeDelivery')==='on',orderCombination:form.get('orderCombination')==='on',isBlocked:form.get('isBlocked')==='on',reason:read('reason')});
     revalidatePath('/foundation/partners');
     return {ok:true,message:t(result.changed?'csa.saved':'csa.unchanged',{status:t(`bp.status.${result.status}`)}),version:result.version,status:result.status};

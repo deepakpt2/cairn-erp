@@ -2640,6 +2640,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/sales-account-determination",
+    path: "/config/sales-account-determination",
+    query: {},
+    code: "CFG.SALES.ACCOUNT_DETERMINATION.DEFINE",
+    title: "Revenue account determination",
+    area: "configuration",
+    family: "sales-account-determination",
+    accepts: [],
+  },
+  {
     id: "/config/sales-returns",
     path: "/config/sales-returns",
     query: {},

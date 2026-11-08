@@ -120,6 +120,20 @@ export async function listCustomerInvoiceTaxCodes(client: string, companyCode: s
   });
 }
 
+/**
+ * The account a line is principally posted to.
+ *
+ * A line posted by component has no single account, and the invoice's own line has to name one: the part
+ * that carries the largest share of the line is the one the line is about. A discounted sale is still a
+ * sale, and it is the price — not the discount — that says what it was a sale of.
+ */
+function principalAccount(line: { glAccount: string | null; components: Array<{ glAccount: string; amount: number }> | null }): string {
+  if (!line.components) return line.glAccount as string;
+  return line.components
+    .reduce((best, part) => (Math.abs(part.amount) > Math.abs(best.amount) ? part : best))
+    .glAccount;
+}
+
 async function taxAccount(tx: Tx, client: string, chart: string): Promise<string> {
   const rows = await tx.select().from(accountDetermination).where(and(
     eq(accountDetermination.client, client),
@@ -150,7 +164,23 @@ export interface PostCustomerInvoiceInput {
   headerText?: string;
   requestKey: string;
   lines: Array<{
-    glAccount: string; netAmount: number; taxCode?: string;
+    /**
+     * The account this line posts to, or — where the line carries `components` — nothing at all. A line
+     * whose price, discount and freight were priced separately posts to three accounts and can name no
+     * single one of them.
+     */
+    glAccount?: string;
+    /**
+     * The parts of this line and where each posts. Optional because a line may be posted whole: a sales
+     * document raised before revenue was determined by a key carries no components, and it is posted to
+     * the one account it has always been posted to. Where components are given, they must add up to the
+     * line's own net amount — a line that posts somewhere other than where it was priced is not a line
+     * anybody can reconcile.
+     */
+    components?: Array<{ glAccount: string; amount: number }>;
+    /** Where the tax on this line posts, when the document determined it. Otherwise the standing tax account. */
+    taxAccount?: string;
+    netAmount: number; taxCode?: string;
     profitCenter?: string; lineText?: string;
   }>;
 }
@@ -209,10 +239,37 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       eq(taxCode.client, input.client), eq(taxCode.country, company.country),
     ))) rates.set(row.taxCode, Number(row.ratePercent));
 
-    interface Prepared { glAccount: string; net: number; taxCode: string | null; tax: number; profitCenter: string | null; lineText: string | null }
+    interface Prepared {
+      /** Where the whole line posts, when it is posted whole. */
+      glAccount: string | null;
+      /** The parts of the line, when it is posted by component. */
+      components: Array<{ glAccount: string; amount: number }> | null;
+      net: number; taxCode: string | null; tax: number;
+      taxAccount: string | null; profitCenter: string | null; lineText: string | null;
+    }
     const prepared: Prepared[] = [];
     for (const line of input.lines) {
       if (!(line.netAmount > 0)) throw new CustomerInvoiceError('Every line amount must stand above zero.');
+      if (line.components) {
+        if (line.components.length === 0) {
+          throw new CustomerInvoiceError(
+            'A line that names its components must name at least one.',
+            'Post the line to one account, or state the parts it is made of.',
+          );
+        }
+        const summed = round2(line.components.reduce((total, part) => total + part.amount, 0));
+        if (Math.abs(summed - round2(line.netAmount)) > 0.005) {
+          throw new CustomerInvoiceError(
+            `The parts of a line post ${summed.toFixed(2)} between them, which is not the ${round2(line.netAmount).toFixed(2)} the line is worth.`,
+            'A line posts exactly what it is worth: correct the components, or the amount the line carries.',
+          );
+        }
+      } else if (!line.glAccount) {
+        throw new CustomerInvoiceError(
+          'A line must name the account it posts to, or the parts it is made of.',
+          'Name the revenue account, or post the line by component.',
+        );
+      }
       const code = (line.taxCode ?? '').toUpperCase() || null;
       let tax = 0;
       if (code) {
@@ -237,7 +294,10 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
         }
       }
       prepared.push({
-        glAccount: line.glAccount, net: round2(line.netAmount), taxCode: code, tax,
+        glAccount: line.glAccount ?? null,
+        components: line.components ? line.components.map((part) => ({ glAccount: part.glAccount, amount: round2(part.amount) })) : null,
+        net: round2(line.netAmount), taxCode: code, tax,
+        taxAccount: line.taxAccount ?? null,
         profitCenter: line.profitCenter || null, lineText: line.lineText || null,
       });
     }
@@ -259,20 +319,47 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       glAccount: customer.reconciliationAccount, debitCredit: 'S',
       amount: round2(input.grossAmount).toFixed(2), businessPartner: input.customerNumber,
     }];
+    // Each line is credited where it belongs. A line posted by component is credited to each of its
+    // accounts for its own amount, and a component that takes away — a discount, which is not revenue —
+    // is debited for the same figure: the ledger has no negative side to put it on.
     for (const p of prepared) {
-      journalLines.push({
-        glAccount: p.glAccount, debitCredit: 'H', amount: p.net.toFixed(2),
-        ...(p.profitCenter ? { profitCenter: p.profitCenter } : {}),
-      });
+      if (p.components) {
+        for (const component of p.components) {
+          journalLines.push({
+            glAccount: component.glAccount,
+            debitCredit: component.amount < 0 ? 'S' : 'H',
+            amount: Math.abs(component.amount).toFixed(2),
+            ...(p.profitCenter ? { profitCenter: p.profitCenter } : {}),
+          });
+        }
+      } else {
+        journalLines.push({
+          glAccount: p.glAccount as string, debitCredit: 'H', amount: p.net.toFixed(2),
+          ...(p.profitCenter ? { profitCenter: p.profitCenter } : {}),
+        });
+      }
     }
+    // Tax is posted by code, to the account the document determined for it — or, where the document
+    // determined none, to the standing tax account the chart has always carried.
     const taxByCode = new Map<string, number>();
+    const taxByAccount = new Map<string, string | null>();
     for (const p of prepared) {
-      if (p.tax > 0 && p.taxCode) taxByCode.set(p.taxCode, round2((taxByCode.get(p.taxCode) ?? 0) + p.tax));
+      if (p.tax > 0 && p.taxCode) {
+        taxByCode.set(p.taxCode, round2((taxByCode.get(p.taxCode) ?? 0) + p.tax));
+        if (p.taxAccount && !taxByAccount.has(p.taxCode)) taxByAccount.set(p.taxCode, p.taxAccount);
+      }
     }
     if (taxByCode.size > 0) {
-      const account = await taxAccount(tx, input.client, chart);
+      // The standing tax account is read only where the document determined none: a tenant that
+      // maintains MWS in the determination table has said where its tax goes, and is not asked to
+      // say it a second time in a table it no longer posts through.
+      const undetermined = [...taxByCode.keys()].filter((code) => !taxByAccount.has(code));
+      const fallback = undetermined.length > 0 ? await taxAccount(tx, input.client, chart) : null;
       for (const [code, amount] of taxByCode) {
-        journalLines.push({ glAccount: account, debitCredit: 'H', amount: amount.toFixed(2), taxCode: code });
+        journalLines.push({
+          glAccount: taxByAccount.get(code) ?? fallback as string,
+          debitCredit: 'H', amount: amount.toFixed(2), taxCode: code,
+        });
       }
     }
 
@@ -338,7 +425,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       lineNumber += 1;
       await tx.insert(customerInvoiceLine).values({
         client: input.client, invoiceNumber: number, lineNumber,
-        glAccount: p.glAccount, netAmount: String(p.net), taxCode: p.taxCode,
+        glAccount: principalAccount(p), netAmount: String(p.net), taxCode: p.taxCode,
         taxAmount: String(p.tax), profitCenter: p.profitCenter, lineText: p.lineText,
         createdBy: input.changedBy,
       });

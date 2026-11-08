@@ -21,8 +21,9 @@ import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
 import { businessPartner } from '../foundation/business-partner-schema';
-import { companyCode, salesArea } from '../foundation/schema';
+import { chartOfAccounts, companyCode, salesArea } from '../foundation/schema';
 import { material, movementType } from '../inventory/schema';
+import { glAccount } from '../finance/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
 
@@ -396,6 +397,54 @@ export const salesProcedureDetermination = pgTable('sales_procedure_determinatio
     columns: [t.client, t.procedureCode],
     foreignColumns: [salesPricingProcedure.client, salesPricingProcedure.procedureCode],
   }).onDelete('restrict'),
+]);
+
+/**
+ * Revenue account determination — SAP's VKOA, and the reason an invoice is not posted to a revenue
+ * account a service chose.
+ *
+ * A sale does not post to "revenue"; it posts to the account this table names. What it is determined by
+ * is a key of five parts: the chart of accounts the company code keeps, the sales organisation the
+ * document belongs to, the customer's account assignment group, the material's account assignment group,
+ * and the account key the pricing step carried — `ERL` for the price, `ERS` for a discount, `ERF` for
+ * freight, `MWS` for output tax. Blank in any of the three middle parts means "any", and the most
+ * specific row that fits answers, in a fixed order.
+ *
+ * Where no row stands, the document is not posted at all. That refusal is the whole point: an invoice
+ * posted to an account nobody chose is a number in the ledger with no rule behind it, which is exactly
+ * what a determination exists to prevent.
+ */
+export const salesAccountDetermination = pgTable('sales_account_determination', {
+  client: tenant(),
+  chartOfAccounts: varchar('chart_of_accounts', { length: 4 }).notNull(),
+  /** Blank means any sales organisation. */
+  salesOrg: varchar('sales_org', { length: 4 }).notNull().default(''),
+  /** Blank means the customer carries no account assignment group. It is matched as a value. */
+  customerAccountAssignmentGroup: varchar('customer_account_assignment_group', { length: 4 }).notNull().default(''),
+  /** Blank means the material carries no account assignment group. It is matched as a value. */
+  materialAccountAssignmentGroup: varchar('material_account_assignment_group', { length: 4 }).notNull().default(''),
+  accountKey: varchar('account_key', { length: 4 }).notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({
+    columns: [
+      t.client, t.chartOfAccounts, t.salesOrg, t.customerAccountAssignmentGroup,
+      t.materialAccountAssignmentGroup, t.accountKey,
+    ],
+  }),
+  foreignKey({
+    name: 'sales_account_determination_chart_fk',
+    columns: [t.client, t.chartOfAccounts],
+    foreignColumns: [chartOfAccounts.client, chartOfAccounts.chartOfAccounts],
+  }).onDelete('restrict'),
+  foreignKey({
+    name: 'sales_account_determination_account_fk',
+    columns: [t.client, t.chartOfAccounts, t.glAccount],
+    foreignColumns: [glAccount.client, glAccount.chartOfAccounts, glAccount.accountNumber],
+  }).onDelete('restrict'),
+  check('sales_account_determination_key_ck', sql`${t.accountKey} ~ '^[A-Z0-9]{2,4}$'`),
 ]);
 
 /**

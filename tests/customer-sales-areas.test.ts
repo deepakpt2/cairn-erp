@@ -24,7 +24,7 @@ beforeAll(async()=>{
   });
 });
 afterAll(async()=>{await destroyTenant(alpha.client);await destroyTenant(beta.client);await closeDb();});
-const input=(number:string,patch:Partial<CustomerSalesAreaInput>={}):CustomerSalesAreaInput=>({client:alpha.client,partnerNumber:number,salesOrg:'1000',distributionChannel:'01',division:'01',expectedVersion:0,changedBy:'TEST',reason:'Customer sales-area test',salesDistrict:'',deliveringPlant:'1000',pricingProcedure:'RVAA01',completeDelivery:false,orderCombination:false,isBlocked:false,...patch});
+const input=(number:string,patch:Partial<CustomerSalesAreaInput>={}):CustomerSalesAreaInput=>({client:alpha.client,partnerNumber:number,salesOrg:'1000',distributionChannel:'01',division:'01',expectedVersion:0,changedBy:'TEST',reason:'Customer sales-area test',salesDistrict:'',deliveringPlant:'1000',pricingProcedure:'RVAA01',accountAssignmentGroup:'',completeDelivery:false,orderCombination:false,isBlocked:false,...patch});
 const gate=(number:string,org='1000',channel='01',division='01')=>withTenant(alpha.client,tx=>requireCustomerSalesArea(tx,alpha.client,number,org,channel,division));
 describe('customer sales-area defaults',()=>{
   it('stages without delivery/pricing defaults and completes when both are maintained',async()=>{

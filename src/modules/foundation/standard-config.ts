@@ -48,11 +48,13 @@ import {
   STANDARD_DOCUMENT_PRICING_PROCEDURE,
   STANDARD_PRICING_PROCEDURE,
 } from '../sales/pricing-procedure';
+import { DELIVERED_ACCOUNT_DETERMINATION } from '../sales/account-determination';
 import {
   salesConditionType,
   salesPricingProcedure,
   salesPricingProcedureStep,
   salesProcedureDetermination,
+  salesAccountDetermination,
 } from '../sales/schema';
 import { DELIVERED_RETURNS_RECEIPT_MOVEMENT, ensureReturnsMovements } from '../sales/returns';
 import {
@@ -714,6 +716,20 @@ export async function applyStandardPackage(
       createdBy: activatedBy,
     })
     .onConflictDoNothing();
+
+  /* ── Revenue account determination ────────────────────────────────────────── */
+  // Where each part of a sale lands. The procedure says how a figure is calculated and the condition
+  // type says what kind of figure it is; this is what turns the two into a posting. Delivered for the
+  // four keys the standard procedure can produce, against the standard chart — the revenue, deduction,
+  // freight and tax accounts that chart already carries, so nothing new is invented here. A tenant
+  // whose revenue belongs elsewhere maintains the row: the standard package names the accounts it
+  // delivers, and a determination is the one place a tenant is expected to disagree with it.
+  for (const row of DELIVERED_ACCOUNT_DETERMINATION) {
+    await tx
+      .insert(salesAccountDetermination)
+      .values({ client, chartOfAccounts: coaKey, ...row, isActive: true, createdBy: activatedBy })
+      .onConflictDoNothing();
+  }
 
   /* ── Reversal reasons ─────────────────────────────────────────────────────── */
   for (const reason of REVERSAL_REASONS) {
