@@ -34,6 +34,8 @@ export const STANDARD_BILLING_TYPE = 'F2';
 export const STANDARD_BILLING_CANCELLATION_TYPE = 'S1';
 /** SAP's LR: the delivery goods come back on, and the document that posts movement 651. */
 export const STANDARD_RETURNS_DELIVERY_TYPE = 'LR';
+/** SAP's RE: the order a return is raised on, created with reference to the invoice it comes from. */
+export const STANDARD_RETURNS_ORDER_TYPE = 'RE';
 
 /**
  * The three types every tenant is delivered with, in the shape the standard configuration package writes
@@ -59,6 +61,10 @@ export interface StandardSalesDocumentType {
 export const STANDARD_SALES_DOCUMENT_TYPES: StandardSalesDocumentType[] = [
   { documentType: STANDARD_ORDER_TYPE, name: 'Standard order', numberRangeObject: 'SALESORD', numberRangeSubObject: 'OR' },
   { documentType: STANDARD_DELIVERY_TYPE, name: 'Outbound delivery', numberRangeObject: 'DELIVERY', numberRangeSubObject: 'LF' },
+  {
+    documentType: STANDARD_RETURNS_ORDER_TYPE, name: 'Returns',
+    numberRangeObject: 'SALESORD', numberRangeSubObject: 'RE',
+  },
   {
     documentType: STANDARD_RETURNS_DELIVERY_TYPE, name: 'Returns delivery',
     numberRangeObject: 'DELIVERY', numberRangeSubObject: 'LR',

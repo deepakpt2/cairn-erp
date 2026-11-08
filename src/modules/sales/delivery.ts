@@ -34,7 +34,8 @@ import { UnitConversionError } from '../inventory/unit-conversion';
 
 import { delivery, deliveryLine, deliveryPicking, salesOrder, salesOrderLine } from './schema';
 import {
-  DOCUMENT_TYPE_REMEDY, STANDARD_DELIVERY_TYPE, STANDARD_RETURNS_DELIVERY_TYPE, salesDocumentTypeFor,
+  DOCUMENT_TYPE_REMEDY, STANDARD_DELIVERY_TYPE, STANDARD_RETURNS_DELIVERY_TYPE,
+  STANDARD_RETURNS_ORDER_TYPE, salesDocumentTypeFor,
 } from './document-type';
 import { deliveredOf, orderLineProgress } from './fulfillment-quantities';
 import { creditAreaFor } from './sales-order';
@@ -361,6 +362,10 @@ export async function listDeliverableOrderLines(
        where l.client = ${client}
          and o.status = 'OPEN'
          and l.status = 'OPEN'
+         -- A returns order is delivered by a returns delivery, not by an outbound one: its quantity is
+         -- coming back, and offering it here would promise the plant's stock to a shipment that is a
+         -- receipt wearing the wrong coat.
+         and o.document_type <> ${STANDARD_RETURNS_ORDER_TYPE}
          and l.order_quantity > coalesce(d.delivered, 0)
          and (${filter.orderNumber || null}::text is null or o.order_number = ${filter.orderNumber || null})
          and (${filter.customerNumber || null}::text is null or o.customer_number = ${filter.customerNumber || null})
@@ -469,7 +474,12 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
         'A cancelled order is not reopened by a delivery — create a new order.',
       );
     }
-
+    if (order.documentType === STANDARD_RETURNS_ORDER_TYPE) {
+      throw new DeliveryError(
+        `Sales order ${parsed.orderNumber} is a returns order, and goods on a returns order come back rather than go out.`,
+        'Receive the goods on a returns delivery, which is what a returns order is delivered by.',
+      );
+    }
     if (parsed.requestKey) {
       const [existing] = await tx.select({ number: delivery.deliveryNumber }).from(delivery).where(and(
         eq(delivery.client, parsed.client), eq(delivery.requestKey, parsed.requestKey),

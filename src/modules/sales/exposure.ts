@@ -20,7 +20,7 @@
  */
 import { sql } from 'drizzle-orm';
 
-import { STANDARD_RETURNS_DELIVERY_TYPE } from './document-type';
+import { STANDARD_RETURNS_DELIVERY_TYPE, STANDARD_RETURNS_ORDER_TYPE } from './document-type';
 
 import type { Tx } from '../../platform/db/client';
 
@@ -63,6 +63,11 @@ export async function openSalesCommitments(
          where l.client = ${client}
            and o.customer_number = ${customer}
            and o.status = 'OPEN'
+           -- A returns order is a claim against us, not a commitment of theirs: the customer owes
+           -- less because of it, not more. Counting it here would raise the block on the strength
+           -- of goods the customer is sending back, which is the opposite of what it is for. The
+           -- credit that a return earns arrives with the credit memo, not with the request.
+           and o.document_type <> ${STANDARD_RETURNS_ORDER_TYPE}
            and o.currency = ${areaCurrency}
            and l.status = 'OPEN'
            and l.order_quantity > coalesce(open.delivered, 0)

@@ -62,6 +62,12 @@ export const salesOrder = pgTable('sales_order', {
   client: tenant(),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),
   documentType: varchar('document_type', { length: 2 }).notNull().default('OR'),
+  /**
+   * What this order was raised against, as a type and a number: the invoice on a returns order (RE),
+   * nothing on every other. The pair is what lets a return be priced from what was actually invoiced.
+   */
+  referenceDocumentType: varchar('reference_document_type', { length: 2 }),
+  referenceDocumentNumber: varchar('reference_document_number', { length: 20 }),
   salesOrg: varchar('sales_org', { length: 4 }).notNull(),
   distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),
   division: varchar('division', { length: 2 }).notNull(),
@@ -127,6 +133,9 @@ export const salesOrderLine = pgTable('sales_order_line', {
   profitCenter: varchar('profit_center', { length: 20 }),
   requestedDeliveryDate: date('requested_delivery_date', { mode: 'string' }),
   conditionNumber: varchar('condition_number', { length: 18 }).notNull(),
+  /** The billing line this item was copied from, on a returns order; null on every other item. */
+  referenceBillingNumber: varchar('reference_billing_number', { length: 20 }),
+  referenceBillingLineNumber: integer('reference_billing_line_number'),
   status: varchar('status', { length: 16 }).notNull().default('OPEN'),
   rejectionReason: varchar('rejection_reason', { length: 4 }),
   ...auditColumns,

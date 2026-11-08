@@ -41,8 +41,12 @@ import { resolveStorageLocation, StorageLocationError } from '../inventory/stora
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { RETURNS } from '../inventory/warehouse-stocks';
 import { plant as plantTable } from '../foundation/schema';
-import { STANDARD_RETURNS_DELIVERY_TYPE, salesDocumentTypeFor } from './document-type';
-import { delivery, deliveryLine } from './schema';
+import {
+  STANDARD_RETURNS_DELIVERY_TYPE, STANDARD_RETURNS_ORDER_TYPE, salesDocumentTypeFor,
+} from './document-type';
+import {
+  billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine,
+} from './schema';
 
 /** The transaction code this posting records. No screen offers it yet, so no capability is bound. */
 export const RETURNS_RECEIPT_TRANSACTION = 'SALES.RETURNS.RECEIPT';
@@ -816,5 +820,277 @@ export async function postReturnsDelivery(
     });
 
     return { ...receipt, returnsDeliveryNumber: header.deliveryNumber };
+  });
+}
+
+/** The transaction a returns order records. No screen offers it yet, so no capability is bound. */
+export const RETURNS_ORDER_TRANSACTION = 'SALES.RETURNS.ORDER';
+
+/** What the user enters for one item of a returns order: the invoiced line, and how much comes back. */
+export interface ReturnsOrderLineInput {
+  /** The line of the invoice the goods were billed on. */
+  billingLineNumber: number;
+  /** How much of that line the customer is sending back, in the unit it was invoiced in. */
+  quantity: number;
+}
+
+export interface CreateReturnsOrderInput {
+  client: string;
+  changedBy: string;
+  requestKey: string;
+  /** The invoice the goods were billed on, which the return is priced from. */
+  billingNumber: string;
+  orderDate: string;
+  items: ReturnsOrderLineInput[];
+  headerText?: string;
+}
+
+function round2(value: number): string {
+  return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+}
+
+/** Three decimals is what every quantity column here carries; more than that cannot be stored. */
+function quantityDecimals(value: number): number {
+  const text = String(value);
+  const point = text.indexOf('.');
+  return point < 0 ? 0 : text.length - point - 1;
+}
+
+function validateReturnsOrderInput(input: CreateReturnsOrderInput): void {
+  if (!ISO_DATE.test(input.orderDate)) {
+    throw new ReturnsError(
+      `A returns order is raised on a date, and ${input.orderDate} is not one.`,
+      'Enter the date as YYYY-MM-DD.',
+    );
+  }
+  if (input.items.length === 0) {
+    throw new ReturnsError(
+      'A returns order with no items returns nothing.',
+      'Name at least one invoiced line, and how much of it is coming back.',
+    );
+  }
+  const seen = new Set<number>();
+  for (const item of input.items) {
+    if (seen.has(item.billingLineNumber)) {
+      throw new ReturnsError(
+        `Invoice line ${item.billingLineNumber} was named twice.`,
+        'Name each invoiced line once; two items of the same line is one item with a larger quantity.',
+      );
+    }
+    seen.add(item.billingLineNumber);
+    if (!(item.quantity > 0)) {
+      throw new ReturnsError(
+        `A quantity of ${item.quantity} on invoice line ${item.billingLineNumber} returns nothing.`,
+        'Enter how much of the invoiced line the customer is sending back.',
+      );
+    }
+    if (quantityDecimals(item.quantity) > 3) {
+      throw new ReturnsError(
+        `A quantity of ${item.quantity} carries more decimals than a quantity can hold (3).`,
+        'Enter the quantity with at most three decimal places.',
+      );
+    }
+  }
+}
+
+/**
+ * How much of one invoiced line has already been asked back, over the returns orders that stand.
+ *
+ * The request is what bounds the next request, not the receipt: two returns orders for the same goods
+ * are two promises of the same goods, and the goods are only there once.
+ */
+async function quantityReturnedAgainst(
+  tx: Tx,
+  client: string,
+  billingNumber: string,
+  billingLineNumber: number,
+): Promise<number> {
+  const [row] = await tx.execute(sql`
+    select coalesce(sum(l.order_quantity), 0)::text as quantity
+      from sales_order_line l
+      join sales_order o on o.client = l.client and o.order_number = l.order_number
+     where l.client = ${client}
+       and o.document_type = ${STANDARD_RETURNS_ORDER_TYPE}
+       and o.status = 'OPEN'
+       and l.reference_billing_number = ${billingNumber}
+       and l.reference_billing_line_number = ${billingLineNumber}
+  `) as unknown as Array<{ quantity: string }>;
+  return Number(row?.quantity ?? '0');
+}
+
+/**
+ * Raise a returns order against an invoice.
+ *
+ * SAP's RE exists because a return is a commercial event before it is a warehouse one: the customer
+ * says what they are sending back and why, and that request is what the goods are received against and
+ * what the credit memo is priced from. It is created with reference to the invoice, and it copies the
+ * price, the unit and the tax that line was invoiced at rather than pricing again — a return settles
+ * what was billed, and a condition record renegotiated since is no part of what the customer owes.
+ *
+ * The order is not credit-checked, which is the one respect in which it differs from a standard order.
+ * A return is a claim against us, not a commitment of theirs: it earns the customer credit rather than
+ * spending it, and a block raised on the strength of goods coming back is a block raised backwards.
+ */
+export async function createReturnsOrder(
+  input: CreateReturnsOrderInput,
+): Promise<{ orderNumber: string; replayed: boolean; netValue: string; taxValue: string; grossValue: string }> {
+  validateReturnsOrderInput(input);
+  return withTenant(input.client, async (tx) => {
+    const type = await salesDocumentTypeFor(tx, input.client, STANDARD_RETURNS_ORDER_TYPE);
+    if (!type) {
+      throw new ReturnsError(
+        'This tenant configures no returns order type (RE).',
+        'Maintain the returns order type in the sales document type catalogue.',
+      );
+    }
+
+    const [standing] = await tx.select({ orderNumber: salesOrder.orderNumber }).from(salesOrder).where(and(
+      eq(salesOrder.client, input.client), eq(salesOrder.requestKey, input.requestKey),
+    )).limit(1);
+    if (standing) {
+      const [saved] = await tx.select().from(salesOrder).where(and(
+        eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, standing.orderNumber),
+      ));
+      return {
+        orderNumber: standing.orderNumber, replayed: true,
+        netValue: saved ? Number(saved.netValue).toFixed(2) : '0.00',
+        taxValue: saved ? Number(saved.taxValue).toFixed(2) : '0.00',
+        grossValue: saved ? Number(saved.grossValue).toFixed(2) : '0.00',
+      };
+    }
+
+    const [invoice] = await tx.select().from(billingDocument).where(and(
+      eq(billingDocument.client, input.client), eq(billingDocument.billingNumber, input.billingNumber),
+    )).limit(1);
+    if (!invoice) {
+      throw new ReturnsError(
+        `Billing document ${input.billingNumber} does not stand for this tenant.`,
+        'Raise the return against an invoice that exists.',
+      );
+    }
+    if (invoice.status === 'CANCELLED') {
+      throw new ReturnsError(
+        `Billing document ${input.billingNumber} stands cancelled, and nothing is owed on it to return.`,
+        'Raise the return against an invoice that stands.',
+      );
+    }
+    if (invoice.cancellationOf || invoice.creditOf) {
+      throw new ReturnsError(
+        `Billing document ${input.billingNumber} is ${invoice.creditOf ? 'a credit memo' : 'a cancellation'}, and goods are returned against an invoice.`,
+        'Name the invoice the goods were billed on; a credit has no goods behind it.',
+      );
+    }
+
+    const invoiceLines = await tx.select().from(billingDocumentLine).where(and(
+      eq(billingDocumentLine.client, input.client),
+      eq(billingDocumentLine.billingNumber, input.billingNumber),
+    ));
+    const byNumber = new Map(invoiceLines.map((line) => [line.lineNumber, line]));
+
+    const rows: Array<typeof salesOrderLine.$inferInsert> = [];
+    let lineNumber = 10;
+    for (const item of input.items) {
+      const billed = byNumber.get(item.billingLineNumber);
+      if (!billed) {
+        throw new ReturnsError(
+          `Billing document ${input.billingNumber} carries no line ${item.billingLineNumber}.`,
+          'Name a line the invoice actually carries.',
+        );
+      }
+      // The order line the invoice was raised from carries what a billing line does not: the unit the
+      // goods were sold in, the plant they left from, and the profit centre that earned the revenue.
+      const [sold] = await tx.select().from(salesOrderLine).where(and(
+        eq(salesOrderLine.client, input.client),
+        eq(salesOrderLine.orderNumber, billed.orderNumber),
+        eq(salesOrderLine.lineNumber, billed.orderLineNumber),
+      )).limit(1);
+      if (!sold) {
+        throw new ReturnsError(
+          `Invoice line ${item.billingLineNumber} was raised from order item ${billed.orderLineNumber} of order ${billed.orderNumber}, which does not stand.`,
+          'Raise the return against an invoice whose order still stands.',
+        );
+      }
+      const already = await quantityReturnedAgainst(tx, input.client, input.billingNumber, item.billingLineNumber);
+      const invoiced = Number(billed.billingQuantity);
+      if (item.quantity > invoiced - already + 1e-9) {
+        throw new ReturnsError(
+          `Invoice line ${item.billingLineNumber} billed ${invoiced}, of which ${already} has already been asked back, so only ${invoiced - already} can come back.`,
+          'Return no more than was invoiced; what was never billed cannot be credited.',
+        );
+      }
+
+      const netAmount = round2((item.quantity * Number(billed.netPrice)) / billed.priceUnit);
+      const taxAmount = round2((Number(netAmount) * Number(billed.taxRate)) / 100);
+      let baseQuantity: number;
+      try {
+        const conversion = await toBaseQuantity(tx, input.client, {
+          materialNumber: billed.materialNumber, quantity: item.quantity, entryUnit: sold.quantityUnit,
+        });
+        baseQuantity = conversion.baseQuantity;
+      } catch (error) {
+        if (error instanceof UnitConversionError) throw new ReturnsError(error.message, error.remedy);
+        throw error;
+      }
+
+      rows.push({
+        client: input.client, orderNumber: '', lineNumber,
+        materialNumber: billed.materialNumber, plant: sold.plant,
+        orderQuantity: String(item.quantity), quantityUnit: sold.quantityUnit,
+        baseQuantity: String(baseQuantity),
+        netPrice: billed.netPrice, priceUnit: billed.priceUnit, netAmount,
+        taxCode: billed.taxCode, taxRate: billed.taxRate, taxAmount,
+        profitCenter: sold.profitCenter,
+        requestedDeliveryDate: null,
+        // The price came from the invoice, so the condition record named is the one the invoice named.
+        conditionNumber: billed.conditionNumber,
+        referenceBillingNumber: billed.billingNumber, referenceBillingLineNumber: billed.lineNumber,
+        status: 'OPEN', createdBy: input.changedBy,
+      });
+      lineNumber += 10;
+    }
+
+    const netValue = round2(rows.reduce((sum, row) => sum + Number(row.netAmount), 0));
+    const taxValue = round2(rows.reduce((sum, row) => sum + Number(row.taxAmount), 0));
+    const grossValue = round2(Number(netValue) + Number(taxValue));
+
+    let number: string;
+    try {
+      const drawn = await allocateNumber(tx, {
+        client: input.client, objectCode: type.numberRangeObject, companyCode: '*',
+        subObject: type.numberRangeSubObject, fiscalYear: 0, allocatedBy: input.changedBy,
+      });
+      number = drawn.display;
+    } catch {
+      throw new ReturnsError(
+        `No active internal ${type.numberRangeObject} number range stands for sub-object ${type.numberRangeSubObject} of sales document type ${type.documentType}, so no returns order number can be drawn.`,
+        'Define or unblock the interval on the number ranges screen, then save again.',
+      );
+    }
+
+    await tx.insert(salesOrder).values({
+      client: input.client, orderNumber: number, documentType: type.documentType,
+      referenceDocumentType: invoice.documentType, referenceDocumentNumber: invoice.billingNumber,
+      salesOrg: invoice.salesOrg, distributionChannel: invoice.distributionChannel, division: invoice.division,
+      customerNumber: invoice.customerNumber, companyCode: invoice.companyCode, currency: invoice.currency,
+      orderDate: input.orderDate,
+      headerText: input.headerText?.trim() || null,
+      status: 'OPEN',
+      netValue, taxValue, grossValue,
+      requestKey: input.requestKey, createdBy: input.changedBy,
+    });
+    for (const row of rows) {
+      await tx.insert(salesOrderLine).values({ ...row, orderNumber: number });
+    }
+
+    await recordChange(tx, {
+      client: input.client, objectClass: 'sales_order', objectKey: number, changeType: 'CREATE',
+      changedBy: input.changedBy, transactionCode: RETURNS_ORDER_TRANSACTION,
+      after: {
+        documentType: type.documentType, against: invoice.billingNumber,
+        items: rows.length, netValue, taxValue, grossValue,
+      },
+    });
+
+    return { orderNumber: number, replayed: false, netValue, taxValue, grossValue };
   });
 }

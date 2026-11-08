@@ -30,7 +30,9 @@ import {
   getSalesOrder,
   releaseSalesOrderCredit,
 } from '../src/modules/sales/sales-order';
-import { createReturnsDelivery, postReturnsDelivery, postReturnsReceipt, ReturnsError } from '../src/modules/sales/returns';
+import {
+  createReturnsDelivery, createReturnsOrder, postReturnsDelivery, postReturnsReceipt, ReturnsError,
+} from '../src/modules/sales/returns';
 import { openSalesCommitments } from '../src/modules/sales/exposure';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
@@ -127,6 +129,8 @@ describe('sales fulfillment and billing (DI-020)', () => {
         { objectCode: 'DELIVERY', subObject: 'LF', prefix: 'DL', numberLength: 7 },
         // What a returns delivery draws its number from (9229), for the same reason as S1 above.
         { objectCode: 'DELIVERY', subObject: 'LR', prefix: 'RT', numberLength: 7 },
+        // What a returns order draws its number from (9230).
+        { objectCode: 'SALESORD', subObject: 'RE', prefix: 'RO', numberLength: 7 },
         { objectCode: 'BILLING', subObject: 'F2', prefix: 'INV', numberLength: 7 },
         // What a cancellation document draws its number from (9227). A fixture tenant does not go through
         // createTenant, so STANDARD_RANGES never ran for it: the interval is defined here, as the others are.
@@ -1238,5 +1242,162 @@ describe('sales fulfillment and billing (DI-020)', () => {
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
       expectedVersion: 1, postingDate: DATE, requestKey: key('returns-posting-not-a-return'),
     })).rejects.toThrow(/only a returns delivery receives goods back/);
+  });
+
+  // ---------------------------------------------------------------------------------------------------
+  // The returns order: the document that says the customer asked for this, before anything comes back.
+  // Its whole commercial content is borrowed from the invoice — the price, the tax and the unit the
+  // goods were billed at — because a return settles what was invoiced rather than what we would charge
+  // for it today.
+  // ---------------------------------------------------------------------------------------------------
+
+  it('raises a returns order against an invoice, priced from what that invoice billed', async () => {
+    // Its own chain: the invoice the tests above share stands cancelled by the time this runs.
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('returns-order-source'),
+      lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
+    });
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('returns-order-delivery'),
+    });
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('returns-order-pick'),
+    });
+    const standing = await getDelivery(tenant.client, shipped.deliveryNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+    const invoiced = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('returns-order-invoice'),
+    });
+    const invoiceNumber = invoiced.billing.billingNumber;
+
+    // What the customer is committed to before the return is asked for.
+    const exposureBefore = await exposureNow();
+
+    const submitted = key('returns-order');
+    const raised = await createReturnsOrder({
+      client: tenant.client, changedBy: ACTOR, billingNumber: invoiceNumber, orderDate: DATE,
+      requestKey: submitted,
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    });
+    expect(raised.replayed).toBe(false);
+    expect(raised.orderNumber).toMatch(/^RO-\d+$/);
+
+    // One unit of the two that were invoiced, at the price and tax the invoice carried: 25.00 plus
+    // ten per cent. The price is copied, not re-priced, so it is what the customer was charged.
+    expect(raised.netValue).toBe('25.00');
+    expect(raised.taxValue).toBe('2.50');
+    expect(raised.grossValue).toBe('27.50');
+
+    const view = await getSalesOrder(tenant.client, raised.orderNumber);
+    expect(view!.documentType).toBe('RE');
+    expect(view!.currency).toBe('USD');
+    expect(view!.lines).toHaveLength(1);
+    const line = view!.lines[0];
+    expect(line.materialNumber).toBe(MATERIAL);
+    expect(line.orderQuantity).toBe('1.000');
+    expect(line.quantityUnit.trim()).toBe('UNT');
+    expect(line.netPrice).toBe(invoiced.billing.lines[0].netPrice);
+    expect(line.taxCode).toBe('T10');
+    expect(line.taxRate).toBe(invoiced.billing.lines[0].taxRate);
+    // The price is the invoice's, so the condition record named is the one the invoice named.
+    expect(line.conditionNumber).toBe(invoiced.billing.lines[0].conditionNumber);
+
+    // A return is a claim against us, not a commitment of theirs, so it is not credit-checked and it
+    // adds nothing to the exposure the credit block reads.
+    expect(view!.credit).toBeNull();
+    expect(await exposureNow()).toBe(exposureBefore);
+
+    // The document names the invoice it was raised against, on the header and on the line.
+    const [reference] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select reference_document_type, reference_document_number
+        from sales_order
+       where client = ${tenant.client} and order_number = ${raised.orderNumber}
+    `) as unknown as Promise<Array<{ reference_document_type: string; reference_document_number: string }>>);
+    expect(reference.reference_document_type).toBe('F2');
+    expect(reference.reference_document_number).toBe(invoiceNumber);
+
+    const [sourced] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select reference_billing_number, reference_billing_line_number
+        from sales_order_line
+       where client = ${tenant.client} and order_number = ${raised.orderNumber} and line_number = 10
+    `) as unknown as Promise<Array<{ reference_billing_number: string; reference_billing_line_number: number }>>);
+    expect(sourced.reference_billing_number).toBe(invoiceNumber);
+    expect(sourced.reference_billing_line_number).toBe(10);
+
+    // Asking twice is answered with the order the first request created.
+    const again = await createReturnsOrder({
+      client: tenant.client, changedBy: ACTOR, billingNumber: invoiceNumber, orderDate: DATE,
+      requestKey: submitted,
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    });
+    expect(again.replayed).toBe(true);
+    expect(again.orderNumber).toBe(raised.orderNumber);
+
+    // A returns order is not delivered outbound. It is absent from what a delivery may be created
+    // from, and asking for one anyway is refused rather than answered with goods going the wrong way.
+    const deliverable = await listDeliverableOrderLines(tenant.client, { orderNumber: raised.orderNumber });
+    expect(deliverable).toHaveLength(0);
+    await expect(createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: raised.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: 10, quantity: '1' }], requestKey: key('returns-order-outbound'),
+    })).rejects.toThrow(/goods on a returns order come back/);
+  });
+
+  it('refuses a returns order that is not against an invoice, or for more than it billed', async () => {
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('returns-order-refusals'),
+      lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
+    });
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('returns-order-refusals-delivery'),
+    });
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('returns-order-refusals-pick'),
+    });
+    const standing = await getDelivery(tenant.client, shipped.deliveryNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+    const invoiced = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('returns-order-refusals-invoice'),
+    });
+    const invoiceNumber = invoiced.billing.billingNumber;
+    const first = { client: tenant.client, changedBy: ACTOR, billingNumber: invoiceNumber, orderDate: DATE };
+
+    // Only what was invoiced can come back, and what has already been asked for counts against it.
+    await createReturnsOrder({ ...first, requestKey: key('returns-order-first'),
+      items: [{ billingLineNumber: 10, quantity: 1 }] });
+    await expect(createReturnsOrder({ ...first, requestKey: key('returns-order-second'),
+      items: [{ billingLineNumber: 10, quantity: 2 }] })).rejects.toThrow(/only 1 can come back/);
+    await expect(createReturnsOrder({ ...first, requestKey: key('returns-order-over'),
+      items: [{ billingLineNumber: 10, quantity: 1.001 }] })).rejects.toThrow(/only 1 can come back/);
+
+    // A line the invoice does not carry, and an invoice that does not stand.
+    await expect(createReturnsOrder({ ...first, requestKey: key('returns-order-no-line'),
+      items: [{ billingLineNumber: 90, quantity: 1 }] })).rejects.toThrow(/carries no line 90/);
+    await expect(createReturnsOrder({ ...first, billingNumber: 'INV-9999999',
+      requestKey: key('returns-order-no-invoice'),
+      items: [{ billingLineNumber: 10, quantity: 1 }] })).rejects.toThrow(/does not stand/);
+
+    // An invoice that has been cancelled owes nothing to return against.
+    await expect(createReturnsOrder({ ...first, billingNumber: billing,
+      requestKey: key('returns-order-cancelled'),
+      items: [{ billingLineNumber: 10, quantity: 1 }] })).rejects.toThrow(/stands cancelled/);
+
+    // And a return is asked for on something: an empty order returns nothing.
+    await expect(createReturnsOrder({ ...first, requestKey: key('returns-order-empty'),
+      items: [] })).rejects.toThrow(/returns nothing/);
   });
 });
