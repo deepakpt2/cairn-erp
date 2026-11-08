@@ -74,9 +74,10 @@ describe('sales document types are configuration (9226)', () => {
   });
 
   it('does not offer a type that has been deactivated', async () => {
-    // Inserted rather than updated: the application role holds SELECT and INSERT on this table and nothing
-    // else, because no screen maintains it yet — the grant arrives with the increment that writes. Rows
-    // stand for the file and leave with the tenant, which `destroyTenant` drops.
+    // Inserted rather than maintained: the role holds SELECT, INSERT and UPDATE on this table since 9236,
+    // and what is asserted here is the resolver's own rule — a withdrawn type is not offered — rather than
+    // the screen that withdraws it. Rows stand for the file and leave with the tenant, which
+    // `destroyTenant` drops.
     await withTenant(tenant.client, (tx) => tx.insert(salesDocumentType).values([
       {
         client: tenant.client, documentType: 'ZQ', name: 'Withdrawn quotation type',

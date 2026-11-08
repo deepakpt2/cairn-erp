@@ -132,9 +132,22 @@ export async function salesDocumentTypeFor(
 }
 
 /**
- * The remedy every caller offers. It names the configuration rather than a screen, because the maintenance
- * screen is the increment that follows this one and the remedy must not point at something that does not
- * exist yet.
+ * The screen where a document type is defined. It did not exist when the resolver was written, which is
+ * why the remedy below used to name a configuration rather than a route: a remedy that points at
+ * something that is not there is a remedy that sends the reader nowhere.
+ */
+export const DOCUMENT_TYPE_ROUTE = '/config/sales-document-types';
+
+/**
+ * The capability the maintenance screen is gated by. Maintaining what a document *is* is not the same
+ * act as creating one, so it is a configuration code and not a sales one: the configurator reaches it
+ * through the `CFG.*` pattern it already holds, and the sales clerk does not.
+ */
+export const DOCUMENT_TYPE_DEFINE_CAPABILITY = 'CFG.SALES.DOCTYPE.DEFINE';
+
+/**
+ * The remedy every caller offers. It names the screen where the type is restored or redefined, because
+ * "the type does not stand" is only half an answer — the other half is where to put it back.
  */
 export const DOCUMENT_TYPE_REMEDY =
-  'Have the standard sales document types restored for this tenant in the sales document type configuration, then save again.';
+  `Restore or redefine the document type at ${DOCUMENT_TYPE_ROUTE}, then save again.`;

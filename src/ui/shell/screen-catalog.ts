@@ -2620,6 +2620,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["request", "customer"],
   },
   {
+    id: "/config/sales-document-types",
+    path: "/config/sales-document-types",
+    query: {},
+    code: "CFG.SALES.DOCTYPE.DEFINE",
+    title: "Sales document types",
+    area: "configuration",
+    family: "sales-document-types",
+    accepts: [],
+  },
+  {
     // Quality management has no screen area of its own yet: a `quality` entry in `ScreenArea` and
     // `SCREEN_AREAS` would also need its `nav.area.quality` label in src/platform/i18n/index.ts, a file with
     // uncommitted owner work in it. Until that label can land, the lot lives in the Inventory area, beside
