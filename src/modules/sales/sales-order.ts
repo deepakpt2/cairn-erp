@@ -642,10 +642,12 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
 }
 
 /**
- * Change an open order. Every submitted item is re-priced from the records that stand today, the
- * header totals move with it, and the credit determination is re-raised against the new value — so an
- * order that was inside its limit when it was created and is outside it after a quantity change
- * carries the block that the new value deserves.
+ * Change an open order. Every submitted item is re-priced from the records that stood on the day the
+ * document was raised, not from the records that stand today: a price list maintained on Monday does
+ * not move an order written on Friday, and a document read years from now still says what it said the
+ * day it was written. The header totals move with it, and the credit determination is re-raised
+ * against the new value — so an order that was inside its limit when it was created and is outside it
+ * after a quantity change carries the block that the new value deserves.
  */
 export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOrderView> {
   const parsed = orderChangeInput.parse(input);

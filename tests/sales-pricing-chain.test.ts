@@ -19,7 +19,7 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
-import { createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { changeSalesOrder, createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
 import { salesDocumentConditionsOf } from '../src/modules/sales/pricing-procedure';
 import {
   confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, postDeliveryGoodsIssue,
@@ -56,6 +56,10 @@ const key = (what: string) => `sd9239-${what}-${++counter}`;
 
 describe('the conditions a document is priced by, through the chain that follows it', () => {
   let tenant: TestTenant;
+  /** The order raised with conditions and then stripped of them — what every order in the books is. */
+  let historicOrder = '';
+  /** The record that raised the price on 20 October. It must not reach back over what came before. */
+  let increasedRecord = '';
 
   beforeAll(async () => {
     tenant = await createTenant('sd9239-pricing-chain');
@@ -563,6 +567,7 @@ describe('the conditions a document is priced by, through the chain that follows
         orderQuantity: 10, quantityUnit: 'UNT', taxCode: 'T10',
       }],
     });
+    historicOrder = placed.orderNumber;
     // Rename them onto a document that does not exist, which is the cheapest way to reach the state the
     // books are actually in: the application role is granted no DELETE on a condition, because what priced
     // a document is evidence, not working storage, and a tenant cannot quietly unwrite it.
@@ -610,11 +615,12 @@ describe('the conditions a document is priced by, through the chain that follows
       tenant.client, 'BILLING', invoiced.billing.billingNumber,
     );
     // The price goes up for business written from now on.
-    await saveSalesCondition({
+    const raised = await saveSalesCondition({
       client: tenant.client, changedBy: ACTOR, ...area, customerNumber: CUSTOMER, materialNumber: MATERIAL,
       currency: 'USD', amount: 30, priceUnit: 1, supersedeStanding: true,
       validityFrom: '2026-10-20', validityTo: '2026-12-31',
     });
+    increasedRecord = raised.condition.conditionNumber;
     const after = await salesDocumentConditionsOf(
       tenant.client, 'BILLING', invoiced.billing.billingNumber,
     );
@@ -630,5 +636,78 @@ describe('the conditions a document is priced by, through the chain that follows
     });
     const conditions = await salesDocumentConditionsOf(tenant.client, 'ORDER', placed.orderNumber);
     expect(Number(conditions.find((row) => row.conditionType === 'PR00')!.amount)).toBe(30);
+    // And it names the record the increase created — which is what makes the assertions below, that no
+    // older document ever names it, worth reading.
+    expect(increasedRecord).not.toBe('');
+    expect(conditions.find((row) => row.conditionType === 'PR00')!.conditionNumber).toBe(increasedRecord);
   });
+  it('re-prices a document at the price its own date resolves, not at the price that stands now', async () => {
+    // The property worth protecting. Every order in the books was priced by a record that stood on the
+    // day it was raised. Re-priced today — after the increase of 20 October — it must answer to that
+    // record and not to the one that stands now, or the whole of history moves the day a price list is
+    // maintained.
+    const before = (await getSalesOrder(tenant.client, invoiced.orderNumber))!;
+    const beforeLine = before.lines[0];
+    const beforeConditions = await salesDocumentConditionsOf(tenant.client, 'ORDER', invoiced.orderNumber);
+
+    const repriced = await changeSalesOrder({
+      ...base, orderNumber: invoiced.orderNumber, expectedVersion: before.version,
+      requestKey: key('reprice'), rejectLines: [],
+      lines: [{
+        lineNumber: beforeLine.lineNumber, materialNumber: MATERIAL, plant: PLANT,
+        orderQuantity: 10, quantityUnit: 'UNT', taxCode: 'T10',
+      }],
+    });
+
+    const afterLine = repriced.lines.find((row) => row.lineNumber === beforeLine.lineNumber)!;
+    // Ten units at 29.00, which is 250 less 25 plus 50 plus 15 spread over ten, and tax on all of it.
+    expect(afterLine.netPrice).toBe('29.0000');
+    expect(afterLine.netAmount).toBe('290.0000');
+    expect(afterLine.taxAmount).toBe('29.0000');
+    expect(repriced.netValue).toBe(before.netValue);
+    expect(repriced.grossValue).toBe(before.grossValue);
+    // The same record answered, and it is not the record the increase created.
+    expect(afterLine.conditionNumber).toBe(beforeLine.conditionNumber);
+    expect(afterLine.conditionNumber).not.toBe(increasedRecord);
+    // And the arithmetic beside the line is the arithmetic that stood there before it was re-priced.
+    const afterConditions = await salesDocumentConditionsOf(tenant.client, 'ORDER', invoiced.orderNumber);
+    const shape = (rows: typeof afterConditions) => rows.map(
+      (row) => [row.conditionType, row.stepNumber, row.amount, row.conditionNumber],
+    );
+    expect(shape(afterConditions)).toEqual(shape(beforeConditions));
+  });
+
+  it('re-prices a document raised before the conditions existed at the figure it has always carried', async () => {
+    // The order raised with conditions and then stripped of them, which is the state every document in
+    // the books is in the morning this is deployed: a line holding 29.00 a unit, and nothing else.
+    const before = (await getSalesOrder(tenant.client, historicOrder))!;
+    expect(before.lines[0].netPrice).toBe('29.0000');
+    expect(await salesDocumentConditionsOf(tenant.client, 'ORDER', historicOrder)).toEqual([]);
+
+    const repriced = await changeSalesOrder({
+      ...base, orderNumber: historicOrder, expectedVersion: before.version,
+      requestKey: key('reprice-historic'), rejectLines: [],
+      lines: [{
+        lineNumber: before.lines[0].lineNumber, materialNumber: MATERIAL, plant: PLANT,
+        orderQuantity: 10, quantityUnit: 'UNT', taxCode: 'T10',
+      }],
+    });
+    const line = repriced.lines[0];
+    // It did not move: not to the increased price, and not to a figure the procedure invented for it.
+    expect(line.netPrice).toBe('29.0000');
+    expect(line.netAmount).toBe('290.0000');
+    expect(line.taxAmount).toBe('29.0000');
+    expect(Number(repriced.netValue)).toBe(290);
+    expect(Number(repriced.grossValue)).toBe(319);
+    // Re-priced, it gains the arithmetic it never had — written from the records that stood on its own
+    // date, which is why the figure it always carried is the figure it carries still.
+    const conditions = await salesDocumentConditionsOf(tenant.client, 'ORDER', historicOrder);
+    const price = conditions.find((row) => row.conditionType === 'PR00')!;
+    expect(Number(price.amount)).toBe(250);
+    expect(price.conditionNumber).toBe(line.conditionNumber);
+    expect(price.conditionNumber).not.toBe(increasedRecord);
+    // And what was billed against it before it was re-priced still stands at what it billed.
+    expect(Number(invoiced.billing.grossValue)).toBe(191.4);
+  });
+
 });
