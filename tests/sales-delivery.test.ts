@@ -233,6 +233,29 @@ describe('sales fulfillment and billing (DI-020)', () => {
         insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
         values (${tenant.client}, ${MATERIAL}, ${PLANT}, ${STORE}, 'UNRESTRICTED', 100, ${ACTOR}) on conflict do nothing
       `);
+      // The opening stock is backed by an opening document. A projection row with no material
+      // document behind it is a ghost, and reconciliation treats it as drift — which is what it is.
+      // A fixture that ghosts its own opening balance can never prove that a returns bucket
+      // standing in the same plant leaves the reconciliation tying, so the balance is earned here.
+      await tx.execute(sql`
+        insert into movement_type (client, movement_type, description, direction, reference_category, created_by)
+        values (${tenant.client}, 'OPENING_BALANCE', 'Opening balance', 'RECEIPT', 'MATERIAL_DOCUMENT', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document (client, material_document_number, document_year, document_date,
+                                       posting_date, header_text, status, created_by)
+        values (${tenant.client}, 'MD-OPEN001', 2026, ${DATE}, ${DATE}, 'Opening balance', 'POSTED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (client, material_document_number, line_number, movement_type,
+                                            material_number, plant, storage_location, stock_type, line_direction,
+                                            entry_quantity, entry_unit, base_quantity, base_unit, created_by)
+        values (${tenant.client}, 'MD-OPEN001', 1, 'OPENING_BALANCE', ${MATERIAL}, ${PLANT}, ${STORE},
+                'UNRESTRICTED', 'RECEIPT', 100, 'UNT', 100, 'UNT', ${ACTOR})
+        on conflict do nothing
+      `);
       await tx.execute(sql`
         insert into material_period_control (client, company_code, current_fiscal_year, current_period,
                                              previous_fiscal_year, previous_period, allow_backposting, created_by)
@@ -1084,13 +1107,13 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const standing = await returnsState();
     expect(bucketOf(standing.buckets, 'RETURNS')).toBeGreaterThan(0);
 
-    // This fixture seeds its opening stock straight into the projection, with no material document
-    // behind it, so one dimension — unrestricted — drifts by exactly that opening balance, and it did
-    // before any goods came back. What the non-valuated bucket promised was that it would add no
-    // drift of its own, and that is what this asserts.
+    // The whole plant ties, with goods standing in a bucket that is counted and not owned. That is
+    // the promise the non-valuated bucket was made on, and it is the stronger of the two claims: not
+    // that the returns bucket adds no drift of its own, but that the projection and the ledger agree
+    // everywhere while returns stock is standing.
     const result = await reconcileStock(tenant.client, { plant: PLANT });
-    expect(result.drift, `drift: ${JSON.stringify(result.drift)}`)
-      .toEqual(result.drift.filter((row) => row.stockType !== 'RETURNS'));
+    expect(result.drift, `drift: ${JSON.stringify(result.drift)}`).toEqual([]);
+    expect(result.balanced).toBe(true);
     expect(result.dimensionsChecked).toBeGreaterThan(1);
 
     // The returns bucket ties on its own terms: what the documents say is what the projection says.
@@ -1122,6 +1145,25 @@ describe('sales fulfillment and billing (DI-020)', () => {
       `) as unknown as Array<{ q: string }>;
       expect(Number(valuation.q)).toBeCloseTo(Number(counted[0].counted) - Number(counted[0].returns_qty), 3);
     });
+
+    // Goods go back into valuated stock, and the reconciliation still ties — before the value
+    // arrives, while part of the return is still standing in the non-valuated bucket, and after.
+    const back = await transferReturns('453', 1, key('reconcile-returns-out'));
+    expect(back.materialDocumentNumber).toMatch(/^MD-/);
+
+    const midway = await reconcileStock(tenant.client, { plant: PLANT });
+    expect(midway.drift, `drift: ${JSON.stringify(midway.drift)}`).toEqual([]);
+    expect(midway.balanced).toBe(true);
+    const stillStanding = await returnsState();
+    expect(bucketOf(stillStanding.buckets, 'RETURNS')).toBeGreaterThan(0);
+
+    await reverseTransfer({
+      client: tenant.client, changedBy: ACTOR, materialDocumentNumber: back.materialDocumentNumber,
+      postingDate: DATE, documentDate: DATE, requestKey: key('reconcile-returns-reversed'),
+    });
+    const undone = await reconcileStock(tenant.client, { plant: PLANT });
+    expect(undone.drift, `drift: ${JSON.stringify(undone.drift)}`).toEqual([]);
+    expect(undone.balanced).toBe(true);
   });
 
   // ---------------------------------------------------------------------------------------------------
