@@ -169,7 +169,8 @@ describe('sales order and its pricing', () => {
     expect(line.netPrice).toBe('25.0000');
     expect(Number(line.netAmount)).toBe(125);
     expect(Number(line.taxAmount)).toBe(0);
-    expect(line.conditionNumber).toMatch(/^PR20260101/);
+    // The record is numbered by the condition type it maintains, so a record says what it is.
+    expect(line.conditionNumber).toMatch(/^PR0020260101/);
     expect(Number(view!.netValue)).toBe(125);
     expect(Number(view!.grossValue)).toBe(125);
     expect(view!.status).toBe('OPEN');

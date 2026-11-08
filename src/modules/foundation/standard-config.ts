@@ -42,6 +42,18 @@ import {
   STANDARD_SALES_DOCUMENT_TYPES,
 } from '../sales/document-type';
 import { salesReturnsConfiguration } from '../sales/schema';
+import {
+  DELIVERED_CONDITION_TYPES,
+  DELIVERED_PRICING_STEPS,
+  STANDARD_DOCUMENT_PRICING_PROCEDURE,
+  STANDARD_PRICING_PROCEDURE,
+} from '../sales/pricing-procedure';
+import {
+  salesConditionType,
+  salesPricingProcedure,
+  salesPricingProcedureStep,
+  salesProcedureDetermination,
+} from '../sales/schema';
 import { DELIVERED_RETURNS_RECEIPT_MOVEMENT, ensureReturnsMovements } from '../sales/returns';
 import {
   RETAINED_EARNINGS_EVENT,
@@ -663,6 +675,42 @@ export async function applyStandardPackage(
       complaintType: STANDARD_CREDIT_MEMO_REQUEST_TYPE,
       creditMemoType: STANDARD_CREDIT_MEMO_TYPE,
       receiptMovementType: DELIVERED_RETURNS_RECEIPT_MOVEMENT,
+      createdBy: activatedBy,
+    })
+    .onConflictDoNothing();
+
+  /* ── The pricing procedure ─────────────────────────────────────────────────── */
+  // A price, a customer discount, a freight charge, a freight charge on the document, a statistical
+  // cost and an output tax, as rows and as steps (9238), so a tenant's pricing is a configuration and
+  // not a constant in a service. Delivered with the package because a tenant with no procedure cannot
+  // be priced at all, and a tenant that wants another one maintains it — the determination is one row
+  // worth any sales area and any customer.
+  for (const type of DELIVERED_CONDITION_TYPES) {
+    await tx
+      .insert(salesConditionType)
+      .values({ client, ...type, isActive: true, createdBy: activatedBy })
+      .onConflictDoNothing();
+  }
+  await tx
+    .insert(salesPricingProcedure)
+    .values({ client, procedureCode: STANDARD_PRICING_PROCEDURE, name: 'Standard sales pricing', createdBy: activatedBy })
+    .onConflictDoNothing();
+  for (const step of DELIVERED_PRICING_STEPS) {
+    await tx
+      .insert(salesPricingProcedureStep)
+      .values({ client, procedureCode: STANDARD_PRICING_PROCEDURE, ...step, createdBy: activatedBy })
+      .onConflictDoNothing();
+  }
+  await tx
+    .insert(salesProcedureDetermination)
+    .values({
+      client,
+      salesOrg: '',
+      distributionChannel: '',
+      division: '',
+      documentPricingProcedure: STANDARD_DOCUMENT_PRICING_PROCEDURE,
+      customerPricingProcedure: '*',
+      procedureCode: STANDARD_PRICING_PROCEDURE,
       createdBy: activatedBy,
     })
     .onConflictDoNothing();

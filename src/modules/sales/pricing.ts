@@ -61,7 +61,7 @@ export async function resolveCustomerSalesData(
   salesOrg: string,
   distributionChannel: string,
   division: string,
-): Promise<{ isBlocked: boolean; salesStatus: string; deliveringPlant: string | null; completeDelivery: boolean }> {
+): Promise<{ isBlocked: boolean; salesStatus: string; deliveringPlant: string | null; completeDelivery: boolean; pricingProcedure: string | null }> {
   const [record] = await tx.select().from(customerSalesArea).where(and(
     eq(customerSalesArea.client, client),
     eq(customerSalesArea.partnerNumber, customerNumber),
@@ -80,6 +80,7 @@ export async function resolveCustomerSalesData(
     salesStatus: record.salesStatus,
     deliveringPlant: record.deliveringPlant,
     completeDelivery: record.completeDelivery,
+    pricingProcedure: record.pricingProcedure,
   };
 }
 

@@ -16,7 +16,8 @@ import { bpRole, businessPartner } from '../foundation/business-partner-schema';
 import { currency } from '../../platform/tables/reference';
 import { material } from '../inventory/schema';
 import { salesArea } from '../foundation/schema';
-import { CONDITION_TYPES, salesConditionRecord } from './schema';
+import { salesConditionRecord, salesConditionType } from './schema';
+import { PRICING_PROCEDURE_ROUTE } from './pricing-procedure';
 
 export const CONDITION_CAPABILITY = 'CFG.SALES.CONDITION.MAINTAIN';
 export const CONDITION_OBJECT_CLASS = 'sales_condition_record';
@@ -38,6 +39,13 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date as YYYY-
 export const conditionInput = z.object({
   client: key(4),
   changedBy: z.string().trim().min(1).max(60),
+  /**
+   * Which condition this record maintains: a price, a discount, a freight charge. It defaults to the
+   * price so every call that has always saved a price keeps saving one, and it is validated against the
+   * condition type master rather than against a constant — what may be maintained is configuration, and
+   * a master that cannot be extended is a constant with a table around it.
+   */
+  conditionType: key(4).optional().default('PR00'),
   salesOrg: key(4),
   distributionChannel: key(2),
   division: key(2),
@@ -54,7 +62,12 @@ export const conditionInput = z.object({
   supersedeStanding: z.boolean().default(false),
 });
 
-export type ConditionInput = z.infer<typeof conditionInput>;
+/**
+ * What a caller may hand the service. It is the input side of the schema, not the parsed side: the
+ * fields the schema defaults — the condition type most of all — may be left unsaid, and a caller that
+ * has always saved a price keeps saving one without knowing the type exists.
+ */
+export type ConditionInput = z.input<typeof conditionInput>;
 
 /**
  * The record key, derived from the business key rather than drawn from a number range: the same
@@ -62,16 +75,18 @@ export type ConditionInput = z.infer<typeof conditionInput>;
  * collide and no range has to be maintained for a price.
  */
 function deriveConditionNumber(input: {
-  salesOrg: string; distributionChannel: string; division: string;
+  conditionType: string; salesOrg: string; distributionChannel: string; division: string;
   customerNumber?: string; materialNumber?: string; validityFrom: string;
 }): string {
-  const basis = [input.salesOrg, input.distributionChannel, input.division,
+  const basis = [input.conditionType, input.salesOrg, input.distributionChannel, input.division,
     input.customerNumber ?? '', input.materialNumber ?? ''].join('|');
   let hash = 5381;
   for (let i = 0; i < basis.length; i += 1) hash = ((hash * 33) ^ basis.charCodeAt(i)) >>> 0;
   const tail = hash.toString(36).toUpperCase().padStart(6, '0').slice(-6);
   const day = input.validityFrom.replaceAll('-', '');
-  return `PR${day}${tail}`.slice(0, 18);
+  // The type is in the number, so a record says what it is: a discount record numbered like a price
+  // would be a lie the printout tells.
+  return `${input.conditionType}${day}${tail}`.slice(0, 18);
 }
 
 function addDays(iso: string, days: number): string {
@@ -193,10 +208,30 @@ export async function saveSalesCondition(input: ConditionInput): Promise<{
     if (!money) {
       throw new ConditionError(`Currency ${parsed.currency} does not stand.`, 'Price in a currency that exists.');
     }
+    const [type] = await tx.select({
+      name: salesConditionType.name,
+      conditionClass: salesConditionType.conditionClass,
+      calculationType: salesConditionType.calculationType,
+    }).from(salesConditionType).where(and(
+      eq(salesConditionType.client, parsed.client),
+      eq(salesConditionType.conditionType, parsed.conditionType),
+    )).limit(1);
+    if (!type) {
+      throw new ConditionError(
+        `Condition type ${parsed.conditionType} does not stand in this client, so no record of that kind can be maintained.`,
+        `Maintain the condition type at ${PRICING_PROCEDURE_ROUTE} first. A condition the master does not name is not one a document can be priced by.`,
+      );
+    }
+    if (type.calculationType === 'MATERIAL_COST') {
+      throw new ConditionError(
+        `Condition type ${parsed.conditionType} is a cost, and a cost is read from the valuation of the material rather than maintained as a record.`,
+        'Maintain the material valuation instead. A cost kept in a record would be a price with a cost’s name, and it would drift from the books.',
+      );
+    }
 
     const overlaps = await tx.select().from(salesConditionRecord).where(and(
       eq(salesConditionRecord.client, parsed.client),
-      eq(salesConditionRecord.conditionType, CONDITION_TYPES[0]),
+      eq(salesConditionRecord.conditionType, parsed.conditionType),
       eq(salesConditionRecord.salesOrg, parsed.salesOrg),
       eq(salesConditionRecord.distributionChannel, parsed.distributionChannel),
       eq(salesConditionRecord.division, parsed.division),
@@ -239,11 +274,15 @@ export async function saveSalesCondition(input: ConditionInput): Promise<{
       );
     }
 
-    const conditionNumber = deriveConditionNumber(parsed);
+    const conditionNumber = deriveConditionNumber({
+      conditionType: parsed.conditionType, salesOrg: parsed.salesOrg, distributionChannel: parsed.distributionChannel,
+      division: parsed.division, customerNumber: parsed.customerNumber, materialNumber: parsed.materialNumber,
+      validityFrom: parsed.validityFrom,
+    });
     const [inserted] = await tx.insert(salesConditionRecord).values({
       client: parsed.client,
       conditionNumber,
-      conditionType: CONDITION_TYPES[0],
+      conditionType: parsed.conditionType,
       salesOrg: parsed.salesOrg,
       distributionChannel: parsed.distributionChannel,
       division: parsed.division,

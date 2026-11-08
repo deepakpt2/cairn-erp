@@ -8,8 +8,13 @@
  * the delivery carries what left the plant and the material document that moved it, the billing document
  * carries what the customer owes and the invoice that says so. Quantities a follow-on document advances are
  * held there and never copied back onto the order line, so an order and its fulfillment cannot disagree by
- * arithmetic. The pricing procedures, their steps and the access sequences are still absent — a master with
- * no reader is a table only a test would write (DI-018).
+ * arithmetic.
+ *
+ * Pricing is the condition technique (DI-018, closed for the condition types delivered with the package):
+ * a condition type master, a procedure of ordered steps, a determination that decides which procedure
+ * answers for a sales area and a document, and the conditions every document was priced by, kept beside
+ * the figures they produced. The access strategy is fixed and the execution is hardcoded — no scales, no
+ * dynamic condition tables, no requirement routines — which is the line this phase drew.
  */
 import { pgTable, timestamp, varchar, char, integer, numeric, boolean, date, primaryKey, foreignKey, uniqueIndex, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -23,9 +28,6 @@ const tenant = () => varchar('client', { length: 4 }).notNull().references(() =>
 
 export const ORDER_STATUSES = ['OPEN', 'CANCELLED'] as const;
 export const ORDER_LINE_STATUSES = ['OPEN', 'REJECTED'] as const;
-/** The only condition type that stands today: the item price. A discount step is DI-018. */
-export const CONDITION_TYPES = ['PR00'] as const;
-
 /**
  * A sales document type — VOV8, the delivery type and the billing type held in one table, because all
  * three are the same fact: the code a document carries, the number range its number is drawn from, and
@@ -48,6 +50,13 @@ export const salesDocumentType = pgTable('sales_document_type', {
    */
   cancellationDocumentType: varchar('cancellation_document_type', { length: 4 }),
   isActive: boolean('is_active').notNull().default(true),
+  /**
+   * The document's pricing procedure — the key the procedure determination is searched by, as SAP's
+   * VOV8 carries it. It is not the procedure itself: which procedure answers for this document type in
+   * this sales area for this customer is the determination's business, and the same document type can
+   * answer differently for two customers.
+   */
+  pricingProcedure: varchar('pricing_procedure', { length: 6 }).notNull().default('A'),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.documentType] }),
@@ -216,6 +225,50 @@ export const salesOrderLine = pgTable('sales_order_line', {
 ]);
 
 /**
+ * What a condition type *is* — the master every pricing step names.
+ *
+ * The order price used to be `PR00` in a constant, and the tax was a rate read from the tax master and
+ * applied in the service: two pricing facts, neither of them describable. A price, a customer discount,
+ * a freight charge and an output tax are the same kind of thing seen four ways — a figure, a base it is
+ * calculated on, a sign, and a key the ledger is determined by — so they are rows here and steps in a
+ * procedure below. What is *not* configurable is how a figure becomes an amount: `FIXED` and `PERCENTAGE`
+ * are the two calculations the engine executes, and no amount of configuration invents a third.
+ */
+export const salesConditionType = pgTable('sales_condition_type', {
+  client: tenant(),
+  conditionType: varchar('condition_type', { length: 4 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  /** What the figure means on a document: a price, a discount, a freight charge, a tax, a cost. */
+  conditionClass: varchar('condition_class', { length: 10 }).notNull(),
+  /**
+   * How the figure becomes an amount: per price unit, or a percentage of the step's base.
+   *
+   * `MATERIAL_COST` is the third, and the only one whose rate is not maintained: it is read from the
+   * valuation of the material at the plant, which is what a cost is. A cost kept in a condition record
+   * would be a price wearing a cost's name, and it would drift from the books the moment a goods
+   * movement moved them.
+   */
+  calculationType: varchar('calculation_type', { length: 16 }).notNull(),
+  /** Whether the step takes away from the value it is calculated on. A discount does; freight does not. */
+  isNegative: boolean('is_negative').notNull().default(false),
+  /**
+   * A statistical condition is shown and never charged: the cost that makes a margin visible belongs on
+   * the document and in no total and no ledger line.
+   */
+  isStatistical: boolean('is_statistical').notNull().default(false),
+  /** What the G/L account is determined by (2.3): `ERL` revenue, `ERF` freight, `MWS` output tax. */
+  accountKey: varchar('account_key', { length: 3 }),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.conditionType] }),
+  check('sales_condition_type_class_ck',
+    sql`${t.conditionClass} in ('PRICE', 'DISCOUNT', 'FREIGHT', 'TAX', 'COST')`),
+  check('sales_condition_type_calculation_ck',
+    sql`${t.calculationType} in ('FIXED', 'PERCENTAGE', 'MATERIAL_COST')`),
+]);
+
+/**
  * A condition record: the price one combination of sales area, customer and material carries for a
  * period. The empty customer or material position is the general record, which is why those positions
  * default to the empty string rather than to null — null in a unique key would let two "any customer"
@@ -238,17 +291,176 @@ export const salesConditionRecord = pgTable('sales_condition_record', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.conditionNumber] }),
-  check('sales_condition_record_type_ck', sql`${t.conditionType} = 'PR00'`),
   check('sales_condition_record_amount_ck', sql`${t.amount} >= 0 and ${t.priceUnit} > 0`),
   check('sales_condition_record_validity_ck', sql`${t.validityTo} >= ${t.validityFrom}`),
   check('sales_condition_record_key_ck', sql`${t.customerNumber} <> '' or ${t.materialNumber} <> ''`),
   uniqueIndex('sales_condition_record_key_uq').on(
     t.client, t.conditionType, t.salesOrg, t.distributionChannel, t.division, t.customerNumber, t.materialNumber, t.validityFrom,
   ),
+  // The type a record carries is a row in the condition type master, and no longer a literal in a check
+  // constraint: what may be maintained is configuration, and a constraint cannot read a table.
+  foreignKey({
+    columns: [t.client, t.conditionType],
+    foreignColumns: [salesConditionType.client, salesConditionType.conditionType],
+  }).onDelete('restrict'),
+]);
+
+/** A pricing procedure: the ordered set of condition types a document is priced by. */
+export const salesPricingProcedure = pgTable('sales_pricing_procedure', {
+  client: tenant(),
+  procedureCode: varchar('procedure_code', { length: 6 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [primaryKey({ columns: [t.client, t.procedureCode] })]);
+
+/**
+ * One step of a procedure.
+ *
+ * A step is a condition type, the span of steps its percentage is calculated on, and whether it is
+ * required. The span is what makes a tax different from a discount: the discount is taken on the price,
+ * the tax is charged on the value that survives the discount and the freight — in SAP's terms, subtotal
+ * 2 rather than the gross. A step with no span is calculated on nothing, which is a configuration error
+ * and refused when the step is written.
+ */
+export const salesPricingProcedureStep = pgTable('sales_pricing_procedure_step', {
+  client: tenant(),
+  procedureCode: varchar('procedure_code', { length: 6 }).notNull(),
+  stepNumber: integer('step_number').notNull(),
+  conditionType: varchar('condition_type', { length: 4 }).notNull(),
+  /** The first step in the span this step is calculated on; null where the step needs no base. */
+  fromStep: integer('from_step'),
+  /** The last step in the span; null where the step needs no base. */
+  toStep: integer('to_step'),
+  /**
+   * A step the document may go without: a discount nobody maintains a record for is not a refusal, it is
+   * a sale at list price. The price step is not one of those — a document with no price is not priced.
+   */
+  isRequired: boolean('is_required').notNull().default(false),
+  /**
+   * Whether the step stands once for the document or once for every item.
+   *
+   * A header condition is calculated on the value of the whole document and then distributed to the
+   * items in proportion to what each is worth, because the ledger is determined per line (2.3) and a
+   * figure belonging to no line can be posted to no account the determination chose. What the header
+   * keeps is the whole, at line 0; what the items carry is their share of it.
+   */
+  conditionLevel: varchar('condition_level', { length: 6 }).notNull().default('ITEM'),
+  /**
+   * A withdrawn step is not executed. There is no delete: a step is part of the rule a document was
+   * priced by, and a document read years from now must still be able to say what priced it.
+   */
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.procedureCode, t.stepNumber] }),
+  foreignKey({
+    columns: [t.client, t.conditionType],
+    foreignColumns: [salesConditionType.client, salesConditionType.conditionType],
+  }).onDelete('restrict'),
+  check('sales_pricing_step_span_ck', sql`(${t.fromStep} is null) = (${t.toStep} is null)`),
+  check('sales_pricing_step_span_order_ck',
+    sql`${t.fromStep} is null or ${t.toStep} is null or ${t.fromStep} <= ${t.toStep}`),
+  check('sales_pricing_step_level_ck', sql`${t.conditionLevel} in ('ITEM', 'HEADER')`),
+]);
+
+/**
+ * Which procedure prices a document: sales area, the document's pricing procedure and the customer's —
+ * SAP's OVKK. A document is never priced by a procedure it found lying around; the determination either
+ * stands or the document refuses, because a price nobody can name the rule for is not a price.
+ */
+export const salesProcedureDetermination = pgTable('sales_procedure_determination', {
+  client: tenant(),
+  /** Blank means any sales area: one row serves a tenant, and a row for one area can stand beside it. */
+  salesOrg: varchar('sales_org', { length: 4 }).notNull().default(''),
+  distributionChannel: varchar('distribution_channel', { length: 2 }).notNull().default(''),
+  division: varchar('division', { length: 2 }).notNull().default(''),
+  /** The pricing procedure on the document type, as VOV8 carries it. */
+  documentPricingProcedure: varchar('document_pricing_procedure', { length: 6 }).notNull(),
+  /**
+   * The pricing procedure on the customer's sales-area data, as XD01 carries it. `*` is any customer
+   * procedure, and it is a row rather than a fallback in the engine: what the wildcard grants can be
+   * read, and a tenant that wants a customer priced differently maintains a row that names them.
+   */
+  customerPricingProcedure: varchar('customer_pricing_procedure', { length: 6 }).notNull(),
+  procedureCode: varchar('procedure_code', { length: 6 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({
+    columns: [
+      t.client, t.salesOrg, t.distributionChannel, t.division,
+      t.documentPricingProcedure, t.customerPricingProcedure,
+    ],
+  }),
+  foreignKey({
+    columns: [t.client, t.procedureCode],
+    foreignColumns: [salesPricingProcedure.client, salesPricingProcedure.procedureCode],
+  }).onDelete('restrict'),
+]);
+
+/**
+ * The conditions a document was priced by — SAP's KONV, and the reason a document can be read years
+ * later and still explain itself.
+ *
+ * Every step that produced a figure is written here: the condition type, the record that answered, the
+ * base, the rate and the amount. The document line carries only the totals, so without this table a
+ * discounted invoice is a number with no arithmetic behind it, and a re-priced document is one nobody
+ * can prove did not move.
+ */
+export const salesDocumentCondition = pgTable('sales_document_condition', {
+  client: tenant(),
+  /** Which document this row prices: an order or a billing document. */
+  documentCategory: varchar('document_category', { length: 10 }).notNull(),
+  documentNumber: varchar('document_number', { length: 20 }).notNull(),
+  /** The line the condition belongs to; 0 for a condition carried by the header. */
+  lineNumber: integer('line_number').notNull(),
+  /**
+   * Where the row came from. `ITEM` is a condition priced on that line. `HEADER` is the whole of a
+   * header condition, kept at line 0 — the figure the printout shows. `DISTRIBUTED` is the share of a
+   * header condition that fell to this line, which is what the line is worth and what the ledger is
+   * made of; the distributed shares of one header condition sum to the row at line 0, to the cent.
+   */
+  origin: varchar('origin', { length: 11 }).notNull().default('ITEM'),
+  stepNumber: integer('step_number').notNull(),
+  conditionType: varchar('condition_type', { length: 4 }).notNull(),
+  /** What the step was calculated on, in the document currency. */
+  baseValue: numeric('base_value', { precision: 23, scale: 4 }).notNull().default('0'),
+  /** The rate: the record's amount for a fixed step, the percentage for a percentage step. */
+  rate: numeric('rate', { precision: 13, scale: 6 }).notNull().default('0'),
+  /** The amount the step contributes, signed: a discount carries a negative amount. */
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  priceUnit: integer('price_unit').notNull().default(1),
+  currency: char('currency', { length: 3 }).notNull(),
+  /**
+   * The condition record that answered, where a record answered. A tax step is rated by the tax master
+   * and names nothing here, which is the honest difference between a price and a rate.
+   */
+  conditionNumber: varchar('condition_number', { length: 18 }),
+  /** What the ledger account will be determined by — carried from the step, as SAP carries KOKEY. */
+  accountKey: varchar('account_key', { length: 3 }),
+  isStatistical: boolean('is_statistical').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({
+    columns: [t.client, t.documentCategory, t.documentNumber, t.lineNumber, t.stepNumber],
+  }),
+  foreignKey({
+    columns: [t.client, t.conditionType],
+    foreignColumns: [salesConditionType.client, salesConditionType.conditionType],
+  }).onDelete('restrict'),
+  check('sales_document_condition_origin_ck', sql`${t.origin} in ('ITEM', 'HEADER', 'DISTRIBUTED')`),
+  check('sales_document_condition_header_ck',
+    sql`(${t.origin} = 'HEADER' and ${t.lineNumber} = 0) or (${t.origin} <> 'HEADER' and ${t.lineNumber} > 0)`),
+  check('sales_document_condition_category_ck',
+    sql`${t.documentCategory} in ('ORDER', 'BILLING')`),
 ]);
 
 /** The tables this module owns, named for the audit that checks each one is registered and policed. */
-export const salesTableNames = ['sales_order', 'sales_order_line', 'sales_condition_record'] as const;
+export const salesTableNames = [
+  'sales_order', 'sales_order_line', 'sales_condition_record', 'sales_document_type',
+  'sales_condition_type', 'sales_pricing_procedure', 'sales_pricing_procedure_step',
+  'sales_procedure_determination', 'sales_document_condition',
+] as const;
 
 /**
  * The outbound delivery — LIKP. It carries the plant the goods leave, the order it was created from and,

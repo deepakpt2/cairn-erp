@@ -99,6 +99,12 @@ export interface ResolvedSalesDocumentType {
   numberRangeSubObject: string;
   /** What a document of this type cancels into; null where the type has no cancellation counterpart. */
   cancellationDocumentType: string | null;
+  /**
+   * The pricing procedure key the document type carries into the determination (plan §2.1). Not the
+   * procedure itself: which procedure answers is decided by the sales area and the customer's own
+   * pricing procedure as well, and the type contributes one of the three keys.
+   */
+  pricingProcedure: string;
 }
 
 /**
@@ -118,6 +124,11 @@ export async function salesDocumentTypeFor(
       numberRangeObject: salesDocumentType.numberRangeObject,
       numberRangeSubObject: salesDocumentType.numberRangeSubObject,
       cancellationDocumentType: salesDocumentType.cancellationDocumentType,
+      /**
+       * The pricing procedure key the type carries into the determination. Not the procedure itself:
+       * which procedure answers depends on the sales area and the customer as well.
+       */
+      pricingProcedure: salesDocumentType.pricingProcedure,
     })
     .from(salesDocumentType)
     .where(

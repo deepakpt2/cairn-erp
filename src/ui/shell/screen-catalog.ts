@@ -2630,6 +2630,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/pricing-procedure",
+    path: "/config/pricing-procedure",
+    query: {},
+    code: "CFG.SALES.PRICING.DEFINE",
+    title: "Pricing procedures",
+    area: "configuration",
+    family: "sales-pricing-procedure",
+    accepts: [],
+  },
+  {
     id: "/config/sales-returns",
     path: "/config/sales-returns",
     query: {},

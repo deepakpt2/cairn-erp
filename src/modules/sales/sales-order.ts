@@ -28,7 +28,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { bpRole, businessPartner } from '../foundation/business-partner-schema';
-import { companyCode, plant, salesArea, taxCode } from '../foundation/schema';
+import { companyCode, plant, salesArea } from '../foundation/schema';
 import { material } from '../inventory/schema';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import {
@@ -37,9 +37,13 @@ import {
 } from '../finance/credit';
 import { customerCredit } from '../finance/schema';
 import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
-import { PricingError, assertMaterialAtPlant, itemNetAmount, priceItem, resolveCustomerSalesData } from './pricing';
+import { PricingError, assertMaterialAtPlant, resolveCustomerSalesData } from './pricing';
 import { salesOrder, salesOrderLine } from './schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_ORDER_TYPE, salesDocumentTypeFor } from './document-type';
+import {
+  PricingProcedureError, STANDARD_DOCUMENT_PRICING_PROCEDURE, type PricedDocument, priceDocument,
+  writeDocumentConditions,
+} from './pricing-procedure';
 
 export const SALES_ORDER_CAPABILITY = 'SALES.ORDER.CREATE';
 export const SALES_ORDER_RELEASE_CAPABILITY = 'SALES.ORDER.RELEASE';
@@ -170,15 +174,6 @@ export async function creditAreaFor(
   return areas[0];
 }
 
-async function countryOf(tx: Tx, client: string, company: string): Promise<string> {
-  const [row] = await tx.select({ country: companyCode.country }).from(companyCode)
-    .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, company))).limit(1);
-  if (!row) {
-    throw new SalesOrderError(`Company code ${company} does not stand.`, 'Name a company code that exists.');
-  }
-  return row.country;
-}
-
 interface PricedLine {
   lineNumber: number;
   materialNumber: string;
@@ -207,11 +202,16 @@ async function priceLines(
   input: {
     salesOrg: string; distributionChannel: string; division: string; customerNumber: string;
     companyCode: string; currency: string; orderDate: string; lines: z.infer<typeof orderLineInput>[];
+    /** The pricing procedure the document type carries, and the one the customer's data carries. */
+    documentPricingProcedure: string; customerPricingProcedure?: string | null;
   },
   firstLineNumber: number,
-): Promise<PricedLine[]> {
-  const priced: PricedLine[] = [];
+): Promise<{ lines: PricedLine[]; priced: PricedDocument }> {
+  const judged: Array<{ line: z.infer<typeof orderLineInput>; lineNumber: number; quantity: string; unit: string; baseQuantity: number }> = [];
   let fallbackNumber = firstLineNumber;
+  // The first pass judges: a material that does not stand, a plant that does not carry it, a unit or a
+  // quantity that will not do. Nothing is priced until every item has passed, so a refusal is never a
+  // half-priced document.
   for (const line of input.lines) {
     const [materialRow] = await tx.select().from(material).where(and(
       eq(material.client, client), eq(material.materialNumber, line.materialNumber),
@@ -259,61 +259,72 @@ async function priceLines(
       throw error;
     }
 
-    let price: Awaited<ReturnType<typeof priceItem>>;
-    try {
-      price = await priceItem(tx, client, {
-        salesOrg: input.salesOrg,
-        distributionChannel: input.distributionChannel,
-        division: input.division,
-        customerNumber: input.customerNumber,
-        materialNumber: line.materialNumber,
-        documentDate: input.orderDate,
-        currency: input.currency,
-      });
-    } catch (error) {
-      if (error instanceof PricingError) throw new SalesOrderError(error.message, error.remedy);
-      throw error;
-    }
-    const netAmount = itemNetAmount(raw, price);
-
-    let taxRate = '0.0000';
-    let taxAmount = '0.00';
-    if (line.taxCode) {
-      const country = await countryOf(tx, client, input.companyCode);
-      const [code] = await tx.select().from(taxCode).where(and(
-        eq(taxCode.client, client), eq(taxCode.country, country), eq(taxCode.taxCode, line.taxCode),
-      )).limit(1);
-      await requireOne(
-        code,
-        `Tax code ${line.taxCode} does not stand for country ${country}, the country of company code ${input.companyCode}.`,
-        'Maintain the tax code in that country, or leave the item free of tax if that is what the customer is billed at.',
-      );
-      taxRate = Number(code.ratePercent).toFixed(4);
-      taxAmount = round2((Number(netAmount) * Number(code.ratePercent)) / 100);
-    }
-
     const lineNumber = line.lineNumber ?? fallbackNumber;
     fallbackNumber = lineNumber + 10;
-    priced.push({
-      lineNumber,
-      materialNumber: line.materialNumber,
-      plant: line.plant,
-      orderQuantity: Number(raw).toFixed(3),
-      quantityUnit: unit,
-      baseQuantity: baseQuantity.toFixed(3),
-      netPrice: Number(price.netPrice).toFixed(4),
-      priceUnit: price.priceUnit,
-      netAmount,
-      taxCode: line.taxCode || null,
-      taxRate,
-      taxAmount,
-      profitCenter: line.profitCenter || null,
-      requestedDeliveryDate: line.requestedDeliveryDate ?? null,
-      conditionNumber: price.conditionNumber,
-    });
+    judged.push({ line, lineNumber, quantity: raw, unit, baseQuantity });
     void atPlant;
   }
-  return priced;
+
+  // The second pass prices, and it prices through the procedure: the price, whatever discounts and
+  // charges the tenant configured, and the tax on the value that survived them. One call for the whole
+  // document, because a procedure is a rule about a document and not about a line.
+  let priced: PricedDocument;
+  try {
+    priced = await priceDocument(tx, {
+      client,
+      salesOrg: input.salesOrg,
+      distributionChannel: input.distributionChannel,
+      division: input.division,
+      customerNumber: input.customerNumber,
+      companyCode: input.companyCode,
+      currency: input.currency,
+      documentDate: input.orderDate,
+      documentPricingProcedure: input.documentPricingProcedure,
+      customerPricingProcedure: input.customerPricingProcedure,
+      items: judged.map((entry) => ({
+        lineNumber: entry.lineNumber,
+        materialNumber: entry.line.materialNumber,
+        plant: entry.line.plant,
+        quantity: Number(entry.quantity),
+        taxCode: entry.line.taxCode ?? null,
+      })),
+    });
+  } catch (error) {
+    if (error instanceof PricingProcedureError) throw new SalesOrderError(error.message, error.remedy);
+    throw error;
+  }
+  const byLine = new Map(priced.items.map((item) => [item.lineNumber, item]));
+
+  const pricedLines: PricedLine[] = [];
+  for (const entry of judged) {
+    const item = byLine.get(entry.lineNumber);
+    if (!item) {
+      throw new SalesOrderError(
+        `Item ${entry.lineNumber} was judged and then answered with no price.`,
+        'The procedure priced fewer items than it was given; reprice the document.',
+      );
+    }
+    pricedLines.push({
+      lineNumber: entry.lineNumber,
+      materialNumber: entry.line.materialNumber,
+      plant: entry.line.plant,
+      orderQuantity: Number(entry.quantity).toFixed(3),
+      quantityUnit: entry.unit,
+      baseQuantity: entry.baseQuantity.toFixed(3),
+      // The net unit price: the value that survived the discounts and the charges, per price unit. The
+      // conditions beside the line say how it was reached.
+      netPrice: item.netPrice,
+      priceUnit: item.priceUnit,
+      netAmount: item.netAmount,
+      taxCode: entry.line.taxCode || null,
+      taxRate: item.taxRate,
+      taxAmount: item.taxAmount,
+      profitCenter: entry.line.profitCenter || null,
+      requestedDeliveryDate: entry.line.requestedDeliveryDate ?? null,
+      conditionNumber: item.conditionNumber,
+    });
+  }
+  return { lines: pricedLines, priced };
 }
 
 export interface SalesOrderView {
@@ -486,9 +497,6 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
         'Extend the partner with the FL customer role, then order.');
     }
 
-    const country = await countryOf(tx, parsed.client, parsed.companyCode);
-    void country;
-
     let customer: Awaited<ReturnType<typeof resolveCustomerSalesData>>;
     try {
       customer = await resolveCustomerSalesData(tx, parsed.client, parsed.customerNumber,
@@ -511,10 +519,24 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
     }
 
     const creditArea = await creditAreaFor(tx, parsed.client, parsed.customerNumber, parsed.companyCode, parsed.creditControlArea);
-    const lines = await priceLines(tx, parsed.client, {
+
+    // The document type is configuration now (9226), and it stands before the pricing because it carries
+    // the pricing procedure key the procedure is determined by — what the order is called, where its
+    // number comes from, and how it is priced are three facts on the same row.
+    const orderType = await salesDocumentTypeFor(tx, parsed.client, STANDARD_ORDER_TYPE);
+    if (!orderType) {
+      throw new SalesOrderError(
+        `Sales document type ${STANDARD_ORDER_TYPE} does not stand for this tenant, so no order number can be drawn and no sales order can be created.`,
+        DOCUMENT_TYPE_REMEDY,
+      );
+    }
+
+    const { lines, priced } = await priceLines(tx, parsed.client, {
       salesOrg: parsed.salesOrg, distributionChannel: parsed.distributionChannel, division: parsed.division,
       customerNumber: parsed.customerNumber, companyCode: parsed.companyCode, currency: parsed.currency,
       orderDate: parsed.orderDate, lines: parsed.lines,
+      documentPricingProcedure: orderType.pricingProcedure,
+      customerPricingProcedure: customer.pricingProcedure,
     }, 10);
     const netValue = round2(lines.reduce((sum, l) => sum + Number(l.netAmount), 0));
     const taxValue = round2(lines.reduce((sum, l) => sum + Number(l.taxAmount), 0));
@@ -529,18 +551,8 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
       }
     }
 
-    // The document type is configuration now (9226): what the order is called and where its number comes
-    // from are read from the row, so a new type needs no deployment. A type that does not stand is a
-    // refusal, not a fallback — the number range is on the row, and inventing one would draw a number
-    // from an interval nothing is watching.
-    const orderType = await salesDocumentTypeFor(tx, parsed.client, STANDARD_ORDER_TYPE);
-    if (!orderType) {
-      throw new SalesOrderError(
-        `Sales document type ${STANDARD_ORDER_TYPE} does not stand for this tenant, so no order number can be drawn and no sales order can be created.`,
-        DOCUMENT_TYPE_REMEDY,
-      );
-    }
-
+    // A type that does not stand is a refusal, not a fallback: the number range is on the row, and
+    // inventing one would draw a number from an interval nothing is watching.
     let number: string;
     try {
       const drawn = await allocateNumber(tx, {
@@ -582,6 +594,13 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
         client: parsed.client, orderNumber: number, ...line, status: 'OPEN', createdBy: parsed.changedBy,
       });
     }
+
+    // What priced it. The line carries the totals; the conditions carry the arithmetic, step by step, so
+    // a document read years from now can still say where its figures came from.
+    await writeDocumentConditions(tx, {
+      client: parsed.client, documentCategory: 'ORDER', documentNumber: number,
+      priced, changedBy: parsed.changedBy,
+    });
 
     await recordChange(tx, {
       client: parsed.client, objectClass: SALES_ORDER_OBJECT_CLASS, objectKey: number, changeType: 'CREATE',
@@ -674,10 +693,15 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
       if (error instanceof PricingError) throw new SalesOrderError(error.message, error.remedy);
       throw error;
     }
-    const lines = await priceLines(tx, parsed.client, {
+    // The type this order carries is what names the pricing procedure key, as it does when the order is
+    // created: a change is priced by the same rule that priced the original.
+    const orderTypeOnChange = await salesDocumentTypeFor(tx, parsed.client, before.documentType);
+    const { lines, priced: pricedOnChange } = await priceLines(tx, parsed.client, {
       salesOrg: before.salesOrg, distributionChannel: before.distributionChannel, division: before.division,
       customerNumber: before.customerNumber, companyCode: before.companyCode, currency: before.currency,
       orderDate: before.orderDate, lines: parsed.lines,
+      documentPricingProcedure: orderTypeOnChange?.pricingProcedure ?? STANDARD_DOCUMENT_PRICING_PROCEDURE,
+      customerPricingProcedure: customer.pricingProcedure,
     }, 10);
 
     const openRows = await tx.select({ lineNumber: salesOrderLine.lineNumber }).from(salesOrderLine)
@@ -726,6 +750,14 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
         .where(and(eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, parsed.orderNumber),
           eq(salesOrderLine.lineNumber, line.lineNumber)));
     }
+
+    // The conditions are rewritten, not deleted and re-inserted: a changed order keeps the steps it
+    // was priced by, carrying the figures they hold now, and the role of the application holds no
+    // DELETE on a document's history.
+    await writeDocumentConditions(tx, {
+      client: parsed.client, documentCategory: 'ORDER', documentNumber: parsed.orderNumber,
+      priced: pricedOnChange, changedBy: parsed.changedBy,
+    });
 
     // The header totals are read back from the items as they now stand, inside this transaction: a
     // rejected line prices nothing, and a line the change added is counted. Summing a computation of
