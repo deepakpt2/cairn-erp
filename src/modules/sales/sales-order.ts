@@ -36,6 +36,7 @@ import {
   type CreditDeterminationView, type ReleaseOutcome,
 } from '../finance/credit';
 import { customerCredit } from '../finance/schema';
+import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
 import { PricingError, assertMaterialAtPlant, resolveCustomerSalesData } from './pricing';
 import { MaterialSalesError, assertMaterialSalesArea } from './material-sales';
@@ -389,6 +390,12 @@ export interface SalesOrderView {
   }>;
   /** The determination that stands against this number, or null when none has been raised. */
   credit: CreditDeterminationView | null;
+  /**
+   * Who this order is made with. Written when the order was created and never re-derived, so an order
+   * read in a year still names the customer it was shipped to and the customer that was billed for it,
+   * whatever that customer's master says now.
+   */
+  partners: DocumentPartners;
 }
 
 function mapHeader(row: typeof salesOrder.$inferSelect): Omit<SalesOrderView, 'lines' | 'credit'> {
@@ -432,8 +439,16 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
   const lines = await tx.select().from(salesOrderLine)
     .where(and(eq(salesOrderLine.client, client), eq(salesOrderLine.orderNumber, orderNumber)))
     .orderBy(asc(salesOrderLine.lineNumber));
+  // An order raised before the partners stood carries none, and reads as the four-in-one customer it
+  // always was: the number on its header.
+  const partners = await resolvePartners(tx, client, {
+    partnerNumber: header.customerNumber, salesOrg: header.salesOrg,
+    distributionChannel: header.distributionChannel, division: header.division,
+  });
+  const written = await documentPartners(tx, client, 'ORDER', orderNumber);
   return {
     ...mapHeader(header),
+    partners: written ?? { soldTo: partners.soldTo, shipTo: partners.shipTo, billTo: partners.billTo, payer: partners.payer },
     lines: lines.map((l) => ({
       lineNumber: l.lineNumber,
       materialNumber: l.materialNumber,
@@ -608,6 +623,18 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
       });
     }
 
+    // Who it is made with. The order carries the partners it was created with, determined once and
+    // written down: the ship-to the delivery will be raised for, the bill-to the invoice will be
+    // addressed to, and the payer whose receivable it will raise.
+    const partners = await resolvePartners(tx, parsed.client, {
+      partnerNumber: parsed.customerNumber, salesOrg: parsed.salesOrg,
+      distributionChannel: parsed.distributionChannel, division: parsed.division,
+    });
+    await writeDocumentPartners(tx, {
+      client: parsed.client, documentCategory: 'ORDER', documentNumber: number,
+      partners, changedBy: parsed.changedBy,
+    });
+
     // What priced it. The line carries the totals; the conditions carry the arithmetic, step by step, so
     // a document read years from now can still say where its figures came from.
     await writeDocumentConditions(tx, {
@@ -769,6 +796,19 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
         .where(and(eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, parsed.orderNumber),
           eq(salesOrderLine.lineNumber, line.lineNumber)));
     }
+
+    // Who it is made with, re-determined: a customer's master may have named a payer since the order
+    // was raised, and an order that is still open is judged by the master as it stands. What has
+    // already gone out keeps the partners it was made with — the delivery and the invoice wrote theirs
+    // down when they were created.
+    const partners = await resolvePartners(tx, parsed.client, {
+      partnerNumber: before.customerNumber, salesOrg: before.salesOrg,
+      distributionChannel: before.distributionChannel, division: before.division,
+    });
+    await writeDocumentPartners(tx, {
+      client: parsed.client, documentCategory: 'ORDER', documentNumber: parsed.orderNumber,
+      partners, changedBy: parsed.changedBy,
+    });
 
     // The conditions are rewritten, not deleted and re-inserted: a changed order keeps the steps it
     // was priced by, carrying the figures they hold now, and the role of the application holds no

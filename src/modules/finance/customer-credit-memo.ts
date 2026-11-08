@@ -22,6 +22,7 @@ import { customerCompany } from '../foundation/customer-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { customerInvoice, customerInvoiceLine } from '../purchasing/schema';
 import { billingDocument } from '../sales/schema';
+import { documentPartners } from '../sales/partners';
 
 export const CUSTOMER_CREDIT_MEMO_CAPABILITY = 'FIN.AR.CREDITMEMO.POST';
 const JOURNAL_DOCUMENT_TYPE = 'DR';
@@ -220,10 +221,16 @@ export async function postCustomerCreditMemo(input: PostCustomerCreditMemoInput)
           'Credit a posted billing document, or correct the reference.',
         );
       }
-      if (originalBilling.customerNumber !== input.customerNumber || originalBilling.companyCode !== input.companyCode) {
+      // The customer the money was raised from: the payer, where the document names one, and the
+      // customer on its header where it does not — which is every document raised before the partner
+      // functions stood. A credit is given to the customer that paid, not to the customer that
+      // ordered, and a receivable raised against a head office is settled against a head office.
+      const billedPartners = await documentPartners(tx, input.client, 'BILLING', originalBilling.billingNumber);
+      const raisedAgainst = billedPartners?.payer ?? originalBilling.customerNumber;
+      if (raisedAgainst !== input.customerNumber || originalBilling.companyCode !== input.companyCode) {
         throw new CustomerCreditMemoError(
-          `Billing document ${originalBilling.billingNumber} belongs to customer ${originalBilling.customerNumber} in company ${originalBilling.companyCode}, not ${input.customerNumber} / ${input.companyCode}.`,
-          'Name a billing document for this customer and company.',
+          `Billing document ${originalBilling.billingNumber} was raised against customer ${raisedAgainst} in company ${originalBilling.companyCode}, not ${input.customerNumber} / ${input.companyCode}.`,
+          'Name a billing document raised against this customer and company: the money goes back to the customer that paid it.',
         );
       }
       if (originalBilling.currency !== input.currency) {

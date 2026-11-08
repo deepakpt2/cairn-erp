@@ -45,6 +45,9 @@ import {
   type PricedCondition, type StoredCondition, documentConditionsOf, roundAmount, scaleLineConditions,
   writeDocumentConditions,
 } from './pricing-procedure';
+import {
+  type DocumentPartners, documentPartners, partnersForDocument, resolvePartners, writeDocumentPartners,
+} from './partners';
 import { determineLineAccounts } from './account-determination';
 import { standingDetermination } from './delivery';
 
@@ -130,9 +133,15 @@ export interface BillingView {
     conditionNumber: string;
   }>;
   credit: { status: string; blockReason?: string | null } | null;
+  /**
+   * Who this invoice is made with: the sold-to that ordered, the bill-to it is addressed to and the
+   * payer whose receivable it raised. A customer that buys through one company and pays through another
+   * is the whole reason the three are not one.
+   */
+  partners: DocumentPartners;
 }
 
-function mapHeader(row: typeof billingDocument.$inferSelect): Omit<BillingView, 'lines' | 'credit'> {
+function mapHeader(row: typeof billingDocument.$inferSelect): Omit<BillingView, 'lines' | 'credit' | 'partners'> {
   return {
     billingNumber: row.billingNumber,
     documentType: row.documentType,
@@ -183,6 +192,15 @@ async function loadBilling(tx: Tx, client: string, billingNumber: string): Promi
       taxAmount: line.taxAmount,
       conditionNumber: line.conditionNumber,
     })),
+    // Written when the document was created; a document raised before the partners stood reads as the
+    // four-in-one customer on its header.
+    partners: await documentPartners(tx, client, 'BILLING', billingNumber)
+      ?? await documentPartners(tx, client, 'DELIVERY', header.deliveryNumber)
+      ?? await documentPartners(tx, client, 'ORDER', header.orderNumber)
+      ?? await resolvePartners(tx, client, {
+        partnerNumber: header.customerNumber, salesOrg: header.salesOrg,
+        distributionChannel: header.distributionChannel, division: header.division,
+      }),
     credit: null,
   };
 }
@@ -682,6 +700,19 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       requestKey: parsed.requestKey || null,
       createdBy: parsed.changedBy,
     });
+    // Who the invoice is made with: the order's partners, written down again on the billing document.
+    // An invoice is addressed to the bill-to and raises the payer's receivable, and it says both on the
+    // day it is raised rather than reading them back from a master somebody will change.
+    const partners = await documentPartners(tx, parsed.client, 'DELIVERY', deliveryHeader.deliveryNumber)
+      ?? await documentPartners(tx, parsed.client, 'ORDER', order.orderNumber)
+      ?? await resolvePartners(tx, parsed.client, {
+        partnerNumber: order.customerNumber, salesOrg: order.salesOrg,
+        distributionChannel: order.distributionChannel, division: order.division,
+      });
+    await writeDocumentPartners(tx, {
+      client: parsed.client, documentCategory: 'BILLING', documentNumber: number,
+      partners, changedBy: parsed.changedBy,
+    });
     for (const item of items) {
       await tx.insert(billingDocumentLine).values({ ...item, billingNumber: number });
     }
@@ -736,10 +767,15 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     return { billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false };
   }
 
+  // The receivable is raised against the payer, not against the customer that placed the order: it is
+  // the payer who owes the money, whose reconciliation account the entry is posted to and whose open
+  // items the invoice appears in. Where no payer stands, the bill-to answers, and where neither does,
+  // the sold-to — which is every invoice raised before the partners stood, unchanged.
+  const billedPartners = await partnersForDocument(parsed.client, 'BILLING', built.billingNumber);
   const invoice = await postCustomerInvoice({
     client: parsed.client,
     changedBy: parsed.changedBy,
-    customerNumber: built.customerNumber,
+    customerNumber: billedPartners?.payer ?? built.customerNumber,
     companyCode: built.companyCode,
     documentDate: parsed.billingDate,
     postingDate: parsed.postingDate || parsed.billingDate,
@@ -903,10 +939,13 @@ async function postStandingBilling(input: {
     };
   }
 
+  // The same payer as the one the document was written with: a held billing document releases into the
+  // same receivable it would have raised the day it was created, whichever customer that is.
+  const releasedPartners = await partnersForDocument(input.client, 'BILLING', prepared.header.billingNumber);
   const invoice = await postCustomerInvoice({
     client: input.client,
     changedBy: input.changedBy,
-    customerNumber: prepared.header.customerNumber,
+    customerNumber: releasedPartners?.payer ?? prepared.header.customerNumber,
     companyCode: prepared.header.companyCode,
     // The standing document's own dates are authoritative on a retry: a later submission date must not move
     // the invoice's document date or its due date away from the billing document that was held.

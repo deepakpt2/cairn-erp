@@ -48,6 +48,7 @@ import { returnsChain } from './returns-configuration';
 import {
   billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine,
 } from './schema';
+import { documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 
 /** The transaction code this posting records. No screen offers it yet, so no capability is bound. */
 export const RETURNS_RECEIPT_TRANSACTION = 'SALES.RETURNS.RECEIPT';
@@ -1284,6 +1285,18 @@ export async function createReturnsOrder(
     for (const row of rows) {
       await tx.insert(salesOrderLine).values({ ...row, orderNumber: number });
     }
+    // Who the return is made with: the partners of the invoice the goods were billed on, so the goods
+    // come back from the customer they were shipped to and the credit is given to the customer that
+    // paid — which a return raised against an invoice can say, and a return raised from nothing cannot.
+    const returnPartners = await documentPartners(tx, input.client, 'BILLING', invoice.billingNumber)
+      ?? await resolvePartners(tx, input.client, {
+        partnerNumber: invoice.customerNumber, salesOrg: invoice.salesOrg,
+        distributionChannel: invoice.distributionChannel, division: invoice.division,
+      });
+    await writeDocumentPartners(tx, {
+      client: input.client, documentCategory: 'ORDER', documentNumber: number,
+      partners: returnPartners, changedBy: input.changedBy,
+    });
 
     await recordChange(tx, {
       client: input.client, objectClass: 'sales_order', objectKey: number, changeType: 'CREATE',

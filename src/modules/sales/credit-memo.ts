@@ -26,6 +26,7 @@ import {
   CustomerCreditMemoError, postCustomerCreditMemo,
 } from '../finance/customer-credit-memo';
 import { salesOrder, salesOrderLine, billingDocument, billingDocumentLine } from './schema';
+import { documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 import {
   DOCUMENT_TYPE_REMEDY, salesDocumentTypeFor,
 } from './document-type';
@@ -557,6 +558,18 @@ export async function createCreditMemo(
     for (const row of rows) {
       await tx.insert(billingDocumentLine).values({ ...row, billingNumber: number });
     }
+    // Who the credit is made with: the partners of the invoice it is giving back, written down on the
+    // credit itself. Money goes back to the customer that paid it, which is the payer and not
+    // necessarily the customer that placed the order.
+    const creditedPartners = await documentPartners(tx, input.client, 'BILLING', invoice.billingNumber)
+      ?? await resolvePartners(tx, input.client, {
+        partnerNumber: invoice.customerNumber, salesOrg: invoice.salesOrg,
+        distributionChannel: invoice.distributionChannel, division: invoice.division,
+      });
+    await writeDocumentPartners(tx, {
+      client: input.client, documentCategory: 'BILLING', documentNumber: number,
+      partners: creditedPartners, changedBy: input.changedBy,
+    });
     // The conditions the credit was priced by, which are the invoice's, going back.
     if (creditLineConditions.length > 0) {
       await writeDocumentConditions(tx, {
@@ -664,9 +677,13 @@ export async function postCreditMemo(input: PostCreditMemoInput): Promise<{
     // on the finance side, where the direction is carried by the journal's own debit and credit.
     let credited: Awaited<ReturnType<typeof postCustomerCreditMemo>>;
     try {
+      // The money goes back to the customer that paid it. The credit memo names the payer of the
+      // invoice it credits, so a receivable raised against a head office is settled by one — and not
+      // left open on the subsidiary that happened to place the order.
+      const memoPartners = await documentPartners(tx, input.client, 'BILLING', memo.billingNumber);
       credited = await postCustomerCreditMemo({
         client: input.client, changedBy: input.changedBy,
-        customerNumber: memo.customerNumber, companyCode: memo.companyCode,
+        customerNumber: memoPartners?.payer ?? memo.customerNumber, companyCode: memo.companyCode,
         documentDate: memo.billingDate, postingDate: input.postingDate,
         reference: input.billingNumber, currency: memo.currency,
         grossAmount: Math.abs(Number(memo.grossValue)),
@@ -888,6 +905,17 @@ export async function createCreditMemoRequest(
     for (const row of rows) {
       await tx.insert(salesOrderLine).values({ ...row, orderNumber: number });
     }
+    // Who the request is made with: the partners of the invoice the complaint is about, so the credit
+    // released from this request gives the money back to the same customer that paid for the goods.
+    const requestPartners = await documentPartners(tx, input.client, 'BILLING', invoice.billingNumber)
+      ?? await resolvePartners(tx, input.client, {
+        partnerNumber: invoice.customerNumber, salesOrg: invoice.salesOrg,
+        distributionChannel: invoice.distributionChannel, division: invoice.division,
+      });
+    await writeDocumentPartners(tx, {
+      client: input.client, documentCategory: 'ORDER', documentNumber: number,
+      partners: requestPartners, changedBy: input.changedBy,
+    });
     // The conditions the request was priced by, which are the disputed invoice's: when the credit is
     // raised against this request it is these it carries back.
     if (requestLineConditions.length > 0) {

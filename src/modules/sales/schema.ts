@@ -20,7 +20,7 @@ import { pgTable, timestamp, varchar, char, integer, numeric, boolean, date, pri
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
-import { businessPartner } from '../foundation/business-partner-schema';
+import { bpRole, businessPartner } from '../foundation/business-partner-schema';
 import { chartOfAccounts, companyCode, salesArea } from '../foundation/schema';
 import { material, movementType } from '../inventory/schema';
 import { glAccount } from '../finance/schema';
@@ -709,4 +709,131 @@ export const billingDocumentLine = pgTable('billing_document_line', {
     columns: [t.client, t.conditionNumber],
     foreignColumns: [salesConditionRecord.client, salesConditionRecord.conditionNumber],
   }).onDelete('restrict'),
+]);
+
+/**
+ * The four partner functions a sale is made with — SAP's PARVW, delivered with the package and not
+ * extended by a tenant. What a function means is what the code does with it: the ship-to is the
+ * partner the delivery is raised for and whose address it carries, and the payer is the partner the
+ * receivable is posted against. A fifth function would be a row that answered nothing, so the
+ * catalogue is a delivered list and the column that carries it is checked against that list.
+ */
+export const PARTNER_FUNCTIONS = ['SP', 'SH', 'BP', 'PY'] as const;
+export type PartnerFunction = (typeof PARTNER_FUNCTIONS)[number];
+/** The categories a document's partners are written for. */
+export const PARTNER_DOCUMENT_CATEGORIES = ['ORDER', 'DELIVERY', 'BILLING'] as const;
+
+export const DELIVERED_PARTNER_FUNCTIONS = [
+  {
+    functionCode: 'SP', displayName: 'Sold-to party',
+    meaning: 'The customer the order is made with. It is the customer whose master the sale is written against, and it is never assigned to itself.',
+  },
+  {
+    functionCode: 'SH', displayName: 'Ship-to party',
+    meaning: 'Where the goods go. The delivery is raised for it and takes its address from it, and it defaults to the sold-to.',
+  },
+  {
+    functionCode: 'BP', displayName: 'Bill-to party',
+    meaning: 'Who the invoice is addressed to. It defaults to the sold-to, and the payer defaults to it.',
+  },
+  {
+    functionCode: 'PY', displayName: 'Payer',
+    meaning: 'Who owes the money. The receivable is posted against it and it is the account that is settled, so it is the customer the ageing and the open items are read for; it defaults to the bill-to.',
+  },
+] as const;
+
+export const salesPartnerFunction = pgTable('sales_partner_function', {
+  client: tenant(),
+  functionCode: varchar('function_code', { length: 4 }).notNull(),
+  displayName: varchar('display_name', { length: 80 }).notNull(),
+  /** What the function is for, in words, so no screen and no report has to guess at SP and PY. */
+  meaning: varchar('meaning', { length: 240 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.functionCode] }),
+  check('sales_partner_function_code_ck', sql`${t.functionCode} in ('SP', 'SH', 'BP', 'PY')`),
+]);
+
+/**
+ * Who plays each function for a customer — KNVP.
+ *
+ * Maintained for one sales area or for all of them, and read most specific first: the row naming the
+ * sales organisation, the distribution channel and the division stands over the row naming none of
+ * them, and blank is a value that is matched rather than an absence. A function nobody maintains
+ * falls back to the one above it — the payer to the bill-to, and the ship-to and the bill-to to the
+ * sold-to, which is the customer whose master this row hangs off.
+ */
+export const customerSalesPartner = pgTable('customer_sales_partner', {
+  client: tenant(),
+  partnerNumber: varchar('partner_number', { length: 40 }).notNull(),
+  salesOrg: varchar('sales_org', { length: 4 }).notNull().default(''),
+  distributionChannel: varchar('distribution_channel', { length: 4 }).notNull().default(''),
+  division: varchar('division', { length: 4 }).notNull().default(''),
+  functionCode: varchar('function_code', { length: 4 }).notNull(),
+  assignedPartnerNumber: varchar('assigned_partner_number', { length: 40 }).notNull(),
+  partnerRoleCode: varchar('partner_role_code', { length: 16 }).notNull().default('CUSTOMER'),
+  assignedRoleCode: varchar('assigned_role_code', { length: 16 }).notNull().default('CUSTOMER'),
+  isActive: boolean('is_active').notNull().default(true),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({
+    columns: [t.client, t.partnerNumber, t.salesOrg, t.distributionChannel, t.division, t.functionCode],
+  }),
+  foreignKey({
+    name: 'customer_sales_partner_function_fk',
+    columns: [t.client, t.functionCode],
+    foreignColumns: [salesPartnerFunction.client, salesPartnerFunction.functionCode],
+  }).onDelete('restrict'),
+  // Both sides are customers. A ship-to that is not a customer cannot receive a delivery, and a payer
+  // that is not a customer has no reconciliation account for the receivable to be posted to.
+  foreignKey({
+    name: 'customer_sales_partner_customer_fk',
+    columns: [t.client, t.partnerNumber, t.partnerRoleCode],
+    foreignColumns: [bpRole.client, bpRole.partnerNumber, bpRole.roleCode],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'customer_sales_partner_assigned_fk',
+    columns: [t.client, t.assignedPartnerNumber, t.assignedRoleCode],
+    foreignColumns: [bpRole.client, bpRole.partnerNumber, bpRole.roleCode],
+  }).onDelete('restrict'),
+  check('customer_sales_partner_role_ck', sql`${t.partnerRoleCode} = 'CUSTOMER' and ${t.assignedRoleCode} = 'CUSTOMER'`),
+  // The sold-to is not assigned: it is the customer the row hangs off, and a second answer to a
+  // question the row already answers is a contradiction waiting to be read the wrong way.
+  check('customer_sales_partner_function_ck', sql`${t.functionCode} <> 'SP'`),
+  check('customer_sales_partner_area_ck', sql`(${t.salesOrg} = '' or ${t.salesOrg} ~ '^[A-Z0-9]{1,4}$')
+    and (${t.distributionChannel} = '' or ${t.distributionChannel} ~ '^[A-Z0-9]{1,4}$')
+    and (${t.division} = '' or ${t.division} ~ '^[A-Z0-9]{1,4}$')`),
+  check('customer_sales_partner_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * The partners a document was made with — VBPA.
+ *
+ * Written when the document is created and never re-derived: an order carries all four, the delivery
+ * carries the ship-to it ships to, and the billing document carries the bill-to it is addressed to
+ * and the payer whose receivable it raises. A document read in a year still names the customers it
+ * was made with, which a header holding one number cannot say.
+ */
+export const salesDocumentPartner = pgTable('sales_document_partner', {
+  client: tenant(),
+  documentCategory: varchar('document_category', { length: 16 }).notNull(),
+  documentNumber: varchar('document_number', { length: 20 }).notNull(),
+  functionCode: varchar('function_code', { length: 4 }).notNull(),
+  partnerNumber: varchar('partner_number', { length: 40 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentCategory, t.documentNumber, t.functionCode] }),
+  foreignKey({
+    name: 'sales_document_partner_function_fk',
+    columns: [t.client, t.functionCode],
+    foreignColumns: [salesPartnerFunction.client, salesPartnerFunction.functionCode],
+  }).onDelete('restrict'),
+  foreignKey({
+    name: 'sales_document_partner_partner_fk',
+    columns: [t.client, t.partnerNumber],
+    foreignColumns: [businessPartner.client, businessPartner.partnerNumber],
+  }).onDelete('restrict'),
+  check('sales_document_partner_category_ck', sql`${t.documentCategory} in ('ORDER', 'DELIVERY', 'BILLING')`),
 ]);

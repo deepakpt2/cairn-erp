@@ -49,12 +49,14 @@ import {
   STANDARD_PRICING_PROCEDURE,
 } from '../sales/pricing-procedure';
 import { DELIVERED_ACCOUNT_DETERMINATION } from '../sales/account-determination';
+import { DELIVERED_PARTNER_FUNCTIONS } from '../sales/schema';
 import {
   salesConditionType,
   salesPricingProcedure,
   salesPricingProcedureStep,
   salesProcedureDetermination,
   salesAccountDetermination,
+  salesPartnerFunction,
 } from '../sales/schema';
 import { DELIVERED_RETURNS_RECEIPT_MOVEMENT, ensureReturnsMovements } from '../sales/returns';
 import {
@@ -728,6 +730,18 @@ export async function applyStandardPackage(
     await tx
       .insert(salesAccountDetermination)
       .values({ client, chartOfAccounts: coaKey, ...row, isActive: true, createdBy: activatedBy })
+      .onConflictDoNothing();
+  }
+
+  /* ── Partner functions ──────────────────────────────────────────────────────── */
+  // Who a sale is made with. Delivered here as well as by the migration so that a tenant provisioned
+  // after 9242 carries the four functions from the moment it stands: a document that cannot name the
+  // partner it was made with is a document that cannot say who it was made with. The meanings are
+  // what a maintainer reads when deciding who to put in the row.
+  for (const row of DELIVERED_PARTNER_FUNCTIONS) {
+    await tx
+      .insert(salesPartnerFunction)
+      .values({ client, ...row, isActive: true, createdBy: activatedBy })
       .onConflictDoNothing();
   }
 

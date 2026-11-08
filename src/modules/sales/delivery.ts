@@ -21,6 +21,8 @@
  * the plant and the receivable has not been raised, so the next document is held, not the last one undone.
  */
 import { z } from 'zod';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { businessPartner } from '../foundation/business-partner-schema';
 import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
@@ -39,6 +41,7 @@ import {
 } from './document-type';
 import { deliveredOf, orderLineProgress } from './fulfillment-quantities';
 import { creditAreaFor } from './sales-order';
+import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 
 export const DELIVERY_CAPABILITY = 'SALES.DELIVERY.CREATE';
 export const DELIVERY_PICK_CAPABILITY = 'SALES.DELIVERY.PICK';
@@ -239,9 +242,20 @@ export interface DeliveryView {
     }>;
   }>;
   credit: CreditDeterminationView | null;
+  /** Who this delivery is made with, written when it was created. */
+  partners: DocumentPartners;
+  /**
+   * Where the goods are going: the ship-to's own master, read at display time. A delivery raised for a
+   * ship-to carries that customer's address and not the sold-to's, which is the whole reason the
+   * function exists.
+   */
+  shipTo: {
+    partnerNumber: string; name: string; street: string | null; city: string | null;
+    region: string | null; postalCode: string | null; country: string | null;
+  } | null;
 }
 
-function mapHeader(row: typeof delivery.$inferSelect): Omit<DeliveryView, 'lines' | 'credit' | 'value'> {
+function mapHeader(row: typeof delivery.$inferSelect): Omit<DeliveryView, 'lines' | 'credit' | 'value' | 'partners' | 'shipTo'> {
   return {
     deliveryNumber: row.deliveryNumber,
     documentType: row.documentType,
@@ -290,8 +304,26 @@ async function loadDelivery(tx: Tx, client: string, deliveryNumber: string): Pro
     eq(deliveryPicking.client, client), eq(deliveryPicking.deliveryNumber, deliveryNumber),
   )).orderBy(asc(deliveryPicking.lineNumber), asc(deliveryPicking.pickNumber));
 
+  // Who the delivery is made with: written when it was created, and read as the four-in-one customer
+  // on its header for a delivery raised before the partners stood.
+  const partners = await documentPartners(tx, client, 'DELIVERY', deliveryNumber)
+    ?? await documentPartners(tx, client, 'ORDER', header.orderNumber)
+    ?? await resolvePartners(tx, client, {
+      partnerNumber: header.customerNumber, salesOrg: header.salesOrg,
+      distributionChannel: header.distributionChannel, division: header.division,
+    });
+  const [shipToRow] = await tx.select().from(businessPartner).where(and(
+    eq(businessPartner.client, client), eq(businessPartner.partnerNumber, partners.shipTo),
+  )).limit(1);
+
   return {
     ...mapHeader(header),
+    partners,
+    shipTo: shipToRow ? {
+      partnerNumber: shipToRow.partnerNumber, name: shipToRow.name, street: shipToRow.street,
+      city: shipToRow.city, region: shipToRow.region, postalCode: shipToRow.postalCode,
+      country: shipToRow.country,
+    } : null,
     value: await deliveryValue(tx, client, deliveryNumber),
     lines: lines.map((line) => ({
       lineNumber: line.lineNumber,
@@ -615,6 +647,19 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       status: 'OPEN',
       requestKey: parsed.requestKey || null,
       createdBy: parsed.changedBy,
+    });
+
+    // Who it is made with: the order's partners, written down again on the delivery. The delivery is
+    // raised for the ship-to, and it is the ship-to's address the goods go to — not the sold-to's, and
+    // not whatever that customer's master says next month.
+    const partners = await documentPartners(tx, parsed.client, 'ORDER', order.orderNumber)
+      ?? await resolvePartners(tx, parsed.client, {
+        partnerNumber: order.customerNumber, salesOrg: order.salesOrg,
+        distributionChannel: order.distributionChannel, division: order.division,
+      });
+    await writeDocumentPartners(tx, {
+      client: parsed.client, documentCategory: 'DELIVERY', documentNumber: number,
+      partners, changedBy: parsed.changedBy,
     });
 
     for (const item of items) {
