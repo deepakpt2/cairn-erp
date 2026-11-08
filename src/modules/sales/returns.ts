@@ -42,8 +42,9 @@ import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversio
 import { RETURNS } from '../inventory/warehouse-stocks';
 import { plant as plantTable } from '../foundation/schema';
 import {
-  STANDARD_RETURNS_DELIVERY_TYPE, STANDARD_RETURNS_ORDER_TYPE, salesDocumentTypeFor,
+  salesDocumentTypeFor,
 } from './document-type';
+import { returnsChain } from './returns-configuration';
 import {
   billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine,
 } from './schema';
@@ -88,9 +89,12 @@ export class ReturnsError extends Error {
  * is returns stock and the movement carries no value, both of which the posting re-reads from
  * configuration rather than from here.
  */
+/** The movement the delivered returns chain receives with, named so the standard package can seed it. */
+export const DELIVERED_RETURNS_RECEIPT_MOVEMENT = 'RETURNS_RECEIPT';
+
 export const DELIVERED_RETURNS_MOVEMENTS = [
   {
-    movementType: 'RETURNS_RECEIPT',
+    movementType: DELIVERED_RETURNS_RECEIPT_MOVEMENT,
     description: `Returns from customer (${RETURNS_RECEIPT_CODE})`,
     direction: 'RECEIPT',
     referenceCategory: 'SALES_DELIVERY',
@@ -111,7 +115,12 @@ export const DELIVERED_RETURNS_MOVEMENTS = [
   },
 ] as const;
 
-async function ensureMovements(tx: Tx, client: string, changedBy: string): Promise<void> {
+/**
+ * The delivered returns movements, written for a tenant that does not have them. Exported because the
+ * standard package delivers them with the tenant (9237): the returns configuration carries a foreign key
+ * to the receipt movement, so the movement has to stand before the configuration can name it.
+ */
+export async function ensureReturnsMovements(tx: Tx, client: string, changedBy: string): Promise<void> {
   for (const m of DELIVERED_RETURNS_MOVEMENTS) {
     await tx.insert(movementType).values({ client, ...m, createdBy: changedBy }).onConflictDoNothing();
   }
@@ -122,15 +131,18 @@ async function ensureMovements(tx: Tx, client: string, changedBy: string): Promi
  * return into returns stock.
  */
 export async function resolveReturnsMovement(tx: Tx, client: string) {
-  await ensureMovements(tx, client, 'SYSTEM');
+  await ensureReturnsMovements(tx, client, 'SYSTEM');
+  // Which movement a return is received with is configuration (9237), not a constant: the chain names it
+  // per tenant, and what follows re-reads the four facts a return must satisfy.
+  const chain = await returnsChain(tx, client);
   const [row] = await tx.select().from(movementType).where(and(
     eq(movementType.client, client),
-    eq(movementType.movementType, 'RETURNS_RECEIPT'),
+    eq(movementType.movementType, chain.receiptMovementType),
   ));
   if (!row) {
     throw new ReturnsError(
-      'This tenant configures no returns movement (RETURNS_RECEIPT).',
-      `Maintain the movement type in the movement catalogue; ${RETURNS_RECEIPT_CODE} posts it.`,
+      `This tenant configures no returns movement (${chain.receiptMovementType}).`,
+      'Maintain the movement in the movement catalogue, or name one that stands on the returns configuration screen.',
     );
   }
   if (row.direction !== 'RECEIPT') {
@@ -649,12 +661,13 @@ async function quantityRequestedAgainstOrderLine(
   orderNumber: string,
   orderLineNumber: number,
 ): Promise<number> {
+  const chain = await returnsChain(tx, client);
   const [row] = await tx.execute(sql`
     select coalesce(sum(dl.delivery_quantity), 0)::text as quantity
       from delivery_line dl
       join delivery d on d.client = dl.client and d.delivery_number = dl.delivery_number
      where dl.client = ${client}
-       and d.document_type = ${STANDARD_RETURNS_DELIVERY_TYPE}
+       and d.document_type = ${chain.returnsDeliveryType}
        and d.status <> 'CANCELLED'
        and dl.order_number = ${orderNumber}
        and dl.order_line_number = ${orderLineNumber}
@@ -689,11 +702,12 @@ export async function createReturnsDelivery(
     );
   }
   return withTenant(input.client, async (tx) => {
-    const type = await salesDocumentTypeFor(tx, input.client, STANDARD_RETURNS_DELIVERY_TYPE);
+    const chain = await returnsChain(tx, input.client);
+    const type = await salesDocumentTypeFor(tx, input.client, chain.returnsDeliveryType);
     if (!type) {
       throw new ReturnsError(
-        'This tenant configures no returns delivery type (LR).',
-        'Maintain the returns delivery type in the sales document type catalogue.',
+        `This tenant configures no returns delivery type (${chain.returnsDeliveryType}).`,
+        'Maintain the returns delivery type on the sales document types screen, or name one that stands on the returns configuration screen.',
       );
     }
 
@@ -728,7 +742,7 @@ export async function createReturnsDelivery(
           'Name a returns order that exists.',
         );
       }
-      if (order.documentType !== STANDARD_RETURNS_ORDER_TYPE) {
+      if (order.documentType !== chain.returnsOrderType) {
         throw new ReturnsError(
           `Sales order ${returnsOrderNumber} is a ${order.documentType}, and a returns delivery is raised against a returns order.`,
           'Name a returns order, or raise the return against the delivery the goods left on.',
@@ -810,7 +824,7 @@ export async function createReturnsDelivery(
         'Return against a delivery that exists.',
       );
     }
-    if (origin.documentType === STANDARD_RETURNS_DELIVERY_TYPE) {
+    if (origin.documentType === chain.returnsDeliveryType) {
       throw new ReturnsError(
         `Delivery ${originNumber} is itself a returns delivery, and goods come back against the delivery they left on.`,
         'Name the outbound delivery the goods were issued from.',
@@ -916,13 +930,14 @@ export async function postReturnsDelivery(
   }
 
   return withTenant(input.client, async (tx) => {
+    const chain = await returnsChain(tx, input.client);
     const [header] = await tx.select().from(delivery).where(and(
       eq(delivery.client, input.client), eq(delivery.deliveryNumber, input.deliveryNumber),
     ));
     if (!header) {
       throw new ReturnsError(`Returns delivery ${input.deliveryNumber} does not stand for this tenant.`);
     }
-    if (header.documentType !== STANDARD_RETURNS_DELIVERY_TYPE) {
+    if (header.documentType !== chain.returnsDeliveryType) {
       throw new ReturnsError(
         `Delivery ${input.deliveryNumber} is ${header.documentType}, and only a returns delivery receives goods back.`,
         'A delivery that took goods out is not received; it is billed.',
@@ -1091,12 +1106,13 @@ async function quantityReturnedAgainst(
   billingNumber: string,
   billingLineNumber: number,
 ): Promise<number> {
+  const chain = await returnsChain(tx, client);
   const [row] = await tx.execute(sql`
     select coalesce(sum(l.order_quantity), 0)::text as quantity
       from sales_order_line l
       join sales_order o on o.client = l.client and o.order_number = l.order_number
      where l.client = ${client}
-       and o.document_type = ${STANDARD_RETURNS_ORDER_TYPE}
+       and o.document_type = ${chain.returnsOrderType}
        and o.status = 'OPEN'
        and l.reference_billing_number = ${billingNumber}
        and l.reference_billing_line_number = ${billingLineNumber}
@@ -1122,11 +1138,12 @@ export async function createReturnsOrder(
 ): Promise<{ orderNumber: string; replayed: boolean; netValue: string; taxValue: string; grossValue: string }> {
   validateReturnsOrderInput(input);
   return withTenant(input.client, async (tx) => {
-    const type = await salesDocumentTypeFor(tx, input.client, STANDARD_RETURNS_ORDER_TYPE);
+    const chain = await returnsChain(tx, input.client);
+    const type = await salesDocumentTypeFor(tx, input.client, chain.returnsOrderType);
     if (!type) {
       throw new ReturnsError(
-        'This tenant configures no returns order type (RE).',
-        'Maintain the returns order type in the sales document type catalogue.',
+        `This tenant configures no returns order type (${chain.returnsOrderType}).`,
+        'Maintain the returns order type on the sales document types screen, or name one that stands on the returns configuration screen.',
       );
     }
 
@@ -1319,6 +1336,8 @@ export async function listReturnsOrders(
   filter: { customerNumber?: string } = {},
 ): Promise<ReturnsOrderSummary[]> {
   return withTenant(client, async (tx) => {
+    // What a returns order is, is configuration: the list reads the type this tenant named (9237).
+    const { returnsOrderType, returnsDeliveryType } = await returnsChain(tx, client);
     const rows = await tx.execute(sql`
       select o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value::text as gross_value,
              o.status, o.header_text, o.reference_document_number,
@@ -1329,14 +1348,14 @@ export async function listReturnsOrders(
                  join delivery d on d.client = dl.client and d.delivery_number = dl.delivery_number
                 where dl.client = ${client} and dl.order_number = o.order_number
                   and dl.order_line_number = l.line_number
-                  and d.document_type = ${STANDARD_RETURNS_DELIVERY_TYPE}
+                  and d.document_type = ${returnsDeliveryType}
                   and d.status <> 'CANCELLED'
              )), 0)::text as committed
         from sales_order o
         left join sales_order_line l
                on l.client = o.client and l.order_number = o.order_number and l.status = 'OPEN'
        where o.client = ${client}
-         and o.document_type = ${STANDARD_RETURNS_ORDER_TYPE}
+         and o.document_type = ${returnsOrderType}
          and (${filter.customerNumber ?? null}::varchar is null
               or o.customer_number = ${filter.customerNumber ?? null}::varchar)
        group by o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value,
@@ -1383,6 +1402,7 @@ export async function listReturnsDeliveries(
   filter: { orderNumber?: string } = {},
 ): Promise<ReturnsDeliverySummary[]> {
   return withTenant(client, async (tx) => {
+    const { returnsDeliveryType } = await returnsChain(tx, client);
     const rows = await tx.execute(sql`
       select d.delivery_number, d.delivery_date, d.order_number, d.reference_delivery_number,
              d.customer_number, d.status, d.material_document_number,
@@ -1390,7 +1410,7 @@ export async function listReturnsDeliveries(
         from delivery d
         left join delivery_line dl on dl.client = d.client and dl.delivery_number = d.delivery_number
        where d.client = ${client}
-         and d.document_type = ${STANDARD_RETURNS_DELIVERY_TYPE}
+         and d.document_type = ${returnsDeliveryType}
          and (${filter.orderNumber ?? null}::varchar is null
               or d.order_number = ${filter.orderNumber ?? null}::varchar)
        group by d.delivery_number, d.delivery_date, d.order_number, d.reference_delivery_number,

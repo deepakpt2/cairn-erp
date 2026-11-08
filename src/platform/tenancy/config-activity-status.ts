@@ -77,7 +77,12 @@ const EVIDENCE: Readonly<Record<string, (client: string) => ReturnType<typeof sq
   'CFG.INV.INDUSTRYSECTOR.DEFINE': (client) => sql`select 1 from industry_sector where client = ${client}`,
   'CFG.INV.MATERIALRANGE.DEFINE': (client) => sql`select 1 from number_range where client = ${client} and object_code = 'MATERIALNR'`,
   'CFG.INV.MATPERIOD.DEFINE': (client) => sql`select 1 from material_period_control where client = ${client}`,
-  'CFG.INV.MOVETYPE.CONFIG': (client) => sql`select 1 from movement_type where client = ${client}`,
+  // The two returns movements are delivered with every tenant by the standard package (9237), so they
+  // are not evidence that anybody configured the catalogue: without this exclusion, a tenant would
+  // report its movement types configured on the strength of two rows it never chose. The codes are the
+  // ones `sales/returns.ts:DELIVERED_RETURNS_MOVEMENTS` carries.
+  'CFG.INV.MOVETYPE.CONFIG': (client) => sql`select 1 from movement_type
+     where client = ${client} and movement_type not in ('RETURNS_RECEIPT', 'RETURNS_RECEIPT_REV')`,
   'CFG.INV.BATCHNUMBER.DEFINE': (client) => sql`select 1 from batch_number_assignment where client = ${client}`,
   'CFG.INV.BATCHSTATUS.DEFINE': (client) => sql`select 1 from batch_status_management where client = ${client}`,
   'CFG.PROC.CHARACTERISTIC.DEFINE': (client) => sql`select 1 from characteristic where client = ${client}`,

@@ -27,8 +27,9 @@ import {
 } from '../finance/customer-credit-memo';
 import { salesOrder, salesOrderLine, billingDocument, billingDocumentLine } from './schema';
 import {
-  STANDARD_CREDIT_MEMO_REQUEST_TYPE, STANDARD_CREDIT_MEMO_TYPE, DOCUMENT_TYPE_REMEDY, salesDocumentTypeFor,
+  DOCUMENT_TYPE_REMEDY, salesDocumentTypeFor,
 } from './document-type';
+import { returnsChain } from './returns-configuration';
 import { revenueAccountFor } from './billing';
 
 /** The transaction a credit memo records, as the change history names it. */
@@ -195,12 +196,13 @@ async function quantityCreditedAgainst(
   billingNumber: string,
   billingLineNumber: number,
 ): Promise<number> {
+  const { creditMemoType } = await returnsChain(tx, client);
   const [row] = await tx.execute(sql`
     select coalesce(sum(l.billing_quantity), 0)::text as quantity
       from billing_document_line l
       join billing_document d on d.client = l.client and d.billing_number = l.billing_number
      where l.client = ${client}
-       and d.document_type = ${STANDARD_CREDIT_MEMO_TYPE}
+       and d.document_type = ${creditMemoType}
        and d.status <> 'CANCELLED'
        and l.reference_billing_number = ${billingNumber}
        and l.reference_billing_line_number = ${billingLineNumber}
@@ -262,12 +264,13 @@ async function quantityRequestedAgainstInvoiceLine(
   billingNumber: string,
   billingLineNumber: number,
 ): Promise<number> {
+  const { complaintType } = await returnsChain(tx, client);
   const [row] = await tx.execute(sql`
     select coalesce(sum(l.order_quantity), 0)::text as quantity
       from sales_order_line l
       join sales_order o on o.client = l.client and o.order_number = l.order_number
      where l.client = ${client}
-       and o.document_type = ${STANDARD_CREDIT_MEMO_REQUEST_TYPE}
+       and o.document_type = ${complaintType}
        and o.status = 'OPEN'
        and l.reference_billing_number = ${billingNumber}
        and l.reference_billing_line_number = ${billingLineNumber}
@@ -286,12 +289,13 @@ async function quantityCreditedAgainstRequest(
   orderNumber: string,
   orderLineNumber: number,
 ): Promise<number> {
+  const { creditMemoType } = await returnsChain(tx, client);
   const [row] = await tx.execute(sql`
     select coalesce(sum(l.billing_quantity), 0)::text as quantity
       from billing_document_line l
       join billing_document d on d.client = l.client and d.billing_number = l.billing_number
      where l.client = ${client}
-       and d.document_type = ${STANDARD_CREDIT_MEMO_TYPE}
+       and d.document_type = ${creditMemoType}
        and d.status <> 'CANCELLED'
        and l.order_number = ${orderNumber}
        and l.order_line_number = ${orderLineNumber}
@@ -309,6 +313,7 @@ async function requireReleasedRequest(
   creditMemoRequestNumber: string,
   billingNumber: string,
 ): Promise<typeof salesOrder.$inferSelect> {
+  const { complaintType } = await returnsChain(tx, client);
   const [request] = await tx.select().from(salesOrder).where(and(
     eq(salesOrder.client, client), eq(salesOrder.orderNumber, creditMemoRequestNumber),
   )).limit(1);
@@ -318,7 +323,7 @@ async function requireReleasedRequest(
       'Raise the credit against a request that exists, or against the invoice directly.',
     );
   }
-  if (request.documentType !== STANDARD_CREDIT_MEMO_REQUEST_TYPE) {
+  if (request.documentType !== complaintType) {
     throw new CreditMemoError(
       `Sales order ${creditMemoRequestNumber} is a ${request.documentType}, and a credit memo is raised from a credit memo request.`,
       'Name a credit memo request, or credit the invoice directly.',
@@ -361,10 +366,11 @@ export async function createCreditMemo(
 ): Promise<{ billingNumber: string; replayed: boolean; netValue: string; taxValue: string; grossValue: string }> {
   validateCreditMemoInput(input);
   return withTenant(input.client, async (tx) => {
-    const type = await salesDocumentTypeFor(tx, input.client, STANDARD_CREDIT_MEMO_TYPE);
+    const { creditMemoType } = await returnsChain(tx, input.client);
+    const type = await salesDocumentTypeFor(tx, input.client, creditMemoType);
     if (!type) {
       throw new CreditMemoError(
-        `Sales document type ${STANDARD_CREDIT_MEMO_TYPE} does not stand for this tenant, so no credit memo can be created.`,
+        `Sales document type ${creditMemoType} does not stand for this tenant, so no credit memo can be created.`,
         DOCUMENT_TYPE_REMEDY,
       );
     }
@@ -554,6 +560,7 @@ export async function postCreditMemo(input: PostCreditMemoInput): Promise<{
     );
   }
   return withTenant(input.client, async (tx) => {
+    const { creditMemoType } = await returnsChain(tx, input.client);
     const [memo] = await tx.select().from(billingDocument).where(and(
       eq(billingDocument.client, input.client), eq(billingDocument.billingNumber, input.billingNumber),
     )).limit(1);
@@ -563,7 +570,7 @@ export async function postCreditMemo(input: PostCreditMemoInput): Promise<{
         'Read the credit memo before posting it.',
       );
     }
-    if (memo.documentType !== STANDARD_CREDIT_MEMO_TYPE) {
+    if (memo.documentType !== creditMemoType) {
       throw new CreditMemoError(
         `Billing document ${input.billingNumber} is a ${memo.documentType}, and only a credit memo is posted as one.`,
         'Post the document the way its own type is posted — an invoice is posted, not credited.',
@@ -692,10 +699,11 @@ export async function createCreditMemoRequest(
     );
   }
   return withTenant(input.client, async (tx) => {
-    const type = await salesDocumentTypeFor(tx, input.client, STANDARD_CREDIT_MEMO_REQUEST_TYPE);
+    const { complaintType } = await returnsChain(tx, input.client);
+    const type = await salesDocumentTypeFor(tx, input.client, complaintType);
     if (!type) {
       throw new CreditMemoError(
-        `Sales document type ${STANDARD_CREDIT_MEMO_REQUEST_TYPE} does not stand for this tenant, so no credit memo request can be created.`,
+        `Sales document type ${complaintType} does not stand for this tenant, so no credit memo request can be created.`,
         DOCUMENT_TYPE_REMEDY,
       );
     }
@@ -916,6 +924,8 @@ export async function listCreditMemoRequests(
   filter: { customerNumber?: string } = {},
 ): Promise<CreditMemoRequestSummary[]> {
   return withTenant(client, async (tx) => {
+    // Which document a complaint is, and which document credits it, are configuration (9237).
+    const { complaintType, creditMemoType } = await returnsChain(tx, client);
     const rows = await tx.execute(sql`
       select o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value::text as gross_value,
              o.status, o.header_text, o.billing_block, o.reference_document_number,
@@ -928,14 +938,14 @@ export async function listCreditMemoRequests(
                 where bl.client = o.client
                   and bl.order_number = o.order_number
                   and bl.order_line_number = l.line_number
-                  and b.document_type = ${STANDARD_CREDIT_MEMO_TYPE}
+                  and b.document_type = ${creditMemoType}
                   and b.status <> 'CANCELLED'
              )), 0)::text as credited
         from sales_order o
         left join sales_order_line l
                on l.client = o.client and l.order_number = o.order_number and l.status = 'OPEN'
        where o.client = ${client}
-         and o.document_type = ${STANDARD_CREDIT_MEMO_REQUEST_TYPE}
+         and o.document_type = ${complaintType}
          and (${filter.customerNumber ?? null}::varchar is null
               or o.customer_number = ${filter.customerNumber ?? null}::varchar)
        group by o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value,

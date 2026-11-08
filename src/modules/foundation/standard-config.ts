@@ -34,7 +34,15 @@ import type { Tx } from '../../platform/db/client';
 import { buildPeriodRows } from '../../platform/periods';
 import { recordChange } from '../../platform/change';
 import { applyPaymentTermDefaults } from './payment-terms';
-import { STANDARD_SALES_DOCUMENT_TYPES } from '../sales/document-type';
+import {
+  STANDARD_CREDIT_MEMO_REQUEST_TYPE,
+  STANDARD_CREDIT_MEMO_TYPE,
+  STANDARD_RETURNS_DELIVERY_TYPE,
+  STANDARD_RETURNS_ORDER_TYPE,
+  STANDARD_SALES_DOCUMENT_TYPES,
+} from '../sales/document-type';
+import { salesReturnsConfiguration } from '../sales/schema';
+import { DELIVERED_RETURNS_RECEIPT_MOVEMENT, ensureReturnsMovements } from '../sales/returns';
 import {
   RETAINED_EARNINGS_EVENT,
   STANDARD_RETAINED_EARNINGS_INDICATOR,
@@ -639,6 +647,25 @@ export async function applyStandardPackage(
       .values({ client, ...spec, createdBy: activatedBy })
       .onConflictDoNothing();
   }
+
+  /* ── The returns chain ──────────────────────────────────────────────────────── */
+  // Which documents the returns chain uses, and which movement its receipt posts (9237). Delivered with
+  // the package and maintained afterwards at /config/sales-returns: a tenant whose returns process
+  // numbers apart, or whose complaint desk works its own document, should not need a deployment to say
+  // so. The movements are written first, because the row carries a foreign key to the receipt.
+  await ensureReturnsMovements(tx, client, activatedBy);
+  await tx
+    .insert(salesReturnsConfiguration)
+    .values({
+      client,
+      returnsOrderType: STANDARD_RETURNS_ORDER_TYPE,
+      returnsDeliveryType: STANDARD_RETURNS_DELIVERY_TYPE,
+      complaintType: STANDARD_CREDIT_MEMO_REQUEST_TYPE,
+      creditMemoType: STANDARD_CREDIT_MEMO_TYPE,
+      receiptMovementType: DELIVERED_RETURNS_RECEIPT_MOVEMENT,
+      createdBy: activatedBy,
+    })
+    .onConflictDoNothing();
 
   /* ── Reversal reasons ─────────────────────────────────────────────────────── */
   for (const reason of REVERSAL_REASONS) {

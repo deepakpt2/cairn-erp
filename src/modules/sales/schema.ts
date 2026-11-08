@@ -17,7 +17,7 @@ import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
 import { businessPartner } from '../foundation/business-partner-schema';
 import { companyCode, salesArea } from '../foundation/schema';
-import { material } from '../inventory/schema';
+import { material, movementType } from '../inventory/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
 
@@ -54,6 +54,62 @@ export const salesDocumentType = pgTable('sales_document_type', {
   foreignKey({
     columns: [t.client, t.cancellationDocumentType],
     foreignColumns: [t.client, t.documentType],
+  }).onDelete('restrict'),
+]);
+
+/**
+ * Which documents the returns chain uses, and which movement the receipt posts.
+ *
+ * The returns chain arrived carrying `RE`, `LR`, `CR` and `G2` as constants in the services that create
+ * them, and `RETURNS_RECEIPT` as the movement its receipt posts. Constants the way the order type used to
+ * be a constant, and wrong in the same way: a tenant whose returns process wants its own document types —
+ * a returns order that numbers apart, a complaint that a different desk works — had to ask for a
+ * deployment. The types themselves became configuration in 9226; which of them the returns chain *uses*
+ * becomes configuration here.
+ *
+ * One row per tenant, and only one: the chain is one thing, and two rows would let half a chain be
+ * configured against the other half. Every column is a foreign key to a row that must stand — a document
+ * type, or a movement type — so the configuration cannot name a document that cannot be created.
+ */
+export const salesReturnsConfiguration = pgTable('sales_returns_configuration', {
+  client: tenant(),
+  /** The type a returns order carries: what the customer's complaint is recorded as. */
+  returnsOrderType: varchar('returns_order_type', { length: 4 }).notNull(),
+  /** The type of the delivery that brings the goods back. */
+  returnsDeliveryType: varchar('returns_delivery_type', { length: 4 }).notNull(),
+  /** The type of the complaint document a credit is requested on, held until somebody releases it. */
+  complaintType: varchar('complaint_type', { length: 4 }).notNull(),
+  /** The type of the credit memo that gives the customer their money back. */
+  creditMemoType: varchar('credit_memo_type', { length: 4 }).notNull(),
+  /**
+   * The movement the receipt posts — the 651. It must stand configured to receive into returns stock
+   * carrying no value, which is what a return is: counted, and not the company's stock again until
+   * somebody has inspected it. The posting re-reads those facts; the configuration refuses a movement
+   * that contradicts them rather than letting the refusal arrive when the lorry is at the door.
+   */
+  receiptMovementType: varchar('receipt_movement_type', { length: 20 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client] }),
+  foreignKey({
+    columns: [t.client, t.returnsOrderType],
+    foreignColumns: [salesDocumentType.client, salesDocumentType.documentType],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.returnsDeliveryType],
+    foreignColumns: [salesDocumentType.client, salesDocumentType.documentType],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.complaintType],
+    foreignColumns: [salesDocumentType.client, salesDocumentType.documentType],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.creditMemoType],
+    foreignColumns: [salesDocumentType.client, salesDocumentType.documentType],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.receiptMovementType],
+    foreignColumns: [movementType.client, movementType.movementType],
   }).onDelete('restrict'),
 ]);
 
