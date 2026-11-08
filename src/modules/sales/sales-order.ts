@@ -332,6 +332,13 @@ export interface SalesOrderView {
   status: string;
   /** Why this document is held from billing; null when it stands released. */
   billingBlock: string | null;
+  /**
+   * What this order answers, for an order that was raised against another document: a returns order
+   * names the invoice the goods were billed on, and a credit memo request names the invoice the
+   * complaint is about. Both are null on an order that was raised against nothing.
+   */
+  referenceDocumentType: string | null;
+  referenceDocumentNumber: string | null;
   netValue: string;
   taxValue: string;
   grossValue: string;
@@ -376,6 +383,8 @@ function mapHeader(row: typeof salesOrder.$inferSelect): Omit<SalesOrderView, 'l
     headerText: row.headerText,
     status: row.status,
     billingBlock: row.billingBlock,
+    referenceDocumentType: row.referenceDocumentType,
+    referenceDocumentNumber: row.referenceDocumentNumber,
     netValue: row.netValue,
     taxValue: row.taxValue,
     grossValue: row.grossValue,

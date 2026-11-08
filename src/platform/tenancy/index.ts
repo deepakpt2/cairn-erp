@@ -94,7 +94,12 @@ const SYSTEM_ROLES: Array<{
     // QM.LOT.CREATE travels with the receiving role because a lot is opened against the receipt the clerk
     // posted; the code grants no power over stock, and no QM role model exists yet (migration 9192 grants
     // the same code to the receiving and batch roles of tenants that were created before it).
-    capabilities: ['INV.*', 'QM.LOT.CREATE', 'AUDIT.TRAIL.VIEW'],
+    //
+    // SALES.RETURNS.RECEIPT.POST is named here rather than left to a pattern because `INV.*` does not
+    // reach into SALES: the lorry arrives at the goods-in door, and a returns chain the warehouse cannot
+    // receive is a chain that waits for somebody at a desk. Migration 9234 grants the same code to the
+    // warehouse clerks of tenants that were created before it.
+    capabilities: ['INV.*', 'QM.LOT.CREATE', 'SALES.RETURNS.RECEIPT.POST', 'AUDIT.TRAIL.VIEW'],
   },
   {
     code: 'SALES_CLERK',

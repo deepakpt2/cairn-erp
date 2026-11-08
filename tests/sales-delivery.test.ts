@@ -32,7 +32,8 @@ import {
   releaseSalesOrderCredit,
 } from '../src/modules/sales/sales-order';
 import {
-  createReturnsDelivery, createReturnsOrder, postReturnsDelivery, postReturnsReceipt, ReturnsError,
+  createReturnsDelivery, createReturnsOrder, listReturnsDeliveries, listReturnsOrders,
+  postReturnsDelivery, postReturnsReceipt, ReturnsError,
 } from '../src/modules/sales/returns';
 import { openSalesCommitments } from '../src/modules/sales/exposure';
 import {
@@ -1947,5 +1948,75 @@ describe('sales fulfillment and billing (DI-020)', () => {
       fiscalYear: returned.materialDocumentYear, postingDate: DATE, documentDate: DATE,
       requestKey: key('reversal-under-return'),
     })).rejects.toThrow(/has already had .* of its goods come back/);
+  });
+
+  it('reads a return the way the screen reads it: the complaint, the document, and the receipt', async () => {
+    // A shipped and invoiced chain, because a return is raised against what was billed.
+    const shipped = await issuedChain('returns-screen');
+    const invoiced = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('returns-screen-invoice'),
+    });
+
+    // The complaint: raised against the invoice, priced from the line the goods were billed on.
+    const asked = await createReturnsOrder({
+      client: tenant.client, changedBy: ACTOR, requestKey: key('returns-screen-order'),
+      billingNumber: invoiced.billing.billingNumber, orderDate: DATE,
+      headerText: 'Damaged in transit',
+      items: [{ billingLineNumber: 10, quantity: 1 }],
+    });
+
+    const complaints = await listReturnsOrders(tenant.client);
+    const complaint = complaints.find((row) => row.orderNumber === asked.orderNumber);
+    expect(complaint).toBeDefined();
+    // What the screen shows for the row: the invoice it answers, what was asked for, and how much of
+    // that has been handed to a returns delivery. Nothing has been yet.
+    expect(complaint!.billingNumber).toBe(invoiced.billing.billingNumber);
+    expect(complaint!.requestedQuantity).toBe('1.000');
+    expect(complaint!.committedQuantity).toBe('0.000');
+    expect(complaint!.status).toBe('OPEN');
+    expect(complaint!.headerText).toBe('Damaged in transit');
+
+    // The document the warehouse receives against, raised from the complaint.
+    const document = await createReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, requestKey: key('returns-screen-delivery'),
+      returnsOrderNumber: asked.orderNumber, deliveryDate: DATE,
+      items: [{ lineNumber: 10, quantity: 1 }],
+    });
+
+    const documents = await listReturnsDeliveries(tenant.client);
+    const returning = documents.find((row) => row.deliveryNumber === document.deliveryNumber);
+    expect(returning).toBeDefined();
+    // Both references are what makes the chain readable: what asked for the goods, and what they left on.
+    expect(returning!.orderNumber).toBe(asked.orderNumber);
+    expect(returning!.referenceDeliveryNumber).toBe(shipped.deliveryNumber);
+    expect(returning!.quantity).toBe('1.000');
+    // Nothing has come back yet, so no movement stands behind it.
+    expect(returning!.materialDocumentNumber).toBeNull();
+    expect(returning!.status).toBe('OPEN');
+    // And the complaint now shows what it has promised.
+    const promised = (await listReturnsOrders(tenant.client)).find((row) => row.orderNumber === asked.orderNumber);
+    expect(promised!.committedQuantity).toBe('1.000');
+
+    // The receipt: the 651, posted against the version the screen read.
+    const standing = await getDelivery(tenant.client, document.deliveryNumber);
+    const receipt = await postReturnsDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: document.deliveryNumber,
+      expectedVersion: standing!.version, postingDate: DATE, requestKey: key('returns-screen-receipt'),
+    });
+    expect(receipt.materialDocumentNumber).toMatch(/^MD-/);
+
+    const received = (await listReturnsDeliveries(tenant.client)).find((row) => row.deliveryNumber === document.deliveryNumber);
+    expect(received!.status).toBe('RECEIVED');
+    expect(received!.materialDocumentNumber).toBe(receipt.materialDocumentNumber);
+
+    // The two lists are the returns chain's own, and not the order and delivery lists with a filter
+    // applied in the screen: what went out never appears in what comes back.
+    const allOrders = await listReturnsOrders(tenant.client);
+    const allDeliveries = await listReturnsDeliveries(tenant.client);
+    expect(allOrders.map((row) => row.orderNumber)).not.toContain(shipped.orderNumber);
+    expect(allDeliveries.map((row) => row.deliveryNumber)).not.toContain(shipped.deliveryNumber);
+    for (const row of allOrders) expect(row.billingNumber).not.toBeNull();
+    for (const row of allDeliveries) expect(row.referenceDeliveryNumber).not.toBeNull();
   });
 });

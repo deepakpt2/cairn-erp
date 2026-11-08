@@ -51,6 +51,20 @@ import {
 /** The transaction code this posting records. No screen offers it yet, so no capability is bound. */
 export const RETURNS_RECEIPT_TRANSACTION = 'SALES.RETURNS.RECEIPT';
 
+/** The screen the chain is worked from, and the capability each of its three acts is gated by. */
+export const RETURNS_ROUTE = '/sales/returns';
+/** Raise the returns order: a commercial claim, which posts nothing. */
+export const RETURNS_ORDER_CAPABILITY = 'SALES.RETURNS.ORDER.CREATE';
+/** Raise the returns delivery: the document the warehouse receives against. Also posts nothing. */
+export const RETURNS_DELIVERY_CAPABILITY = 'SALES.RETURNS.DELIVERY.CREATE';
+/**
+ * Receive the goods back, which is the 651. It moves stock into returns stock and it writes no
+ * financial record, because returns stock is not valuated — value arrives when the inspected goods
+ * are transferred out of it. It is a posting in the warehouse sense and not in the ledger's, which is
+ * why it is not flagged posting-relevant: an auditor may watch goods come back.
+ */
+export const RETURNS_RECEIPT_CAPABILITY = 'SALES.RETURNS.RECEIPT.POST';
+
 /** What the user enters. The stored identity is the row below; the number is an alias, as elsewhere. */
 export const RETURNS_RECEIPT_CODE = '651';
 /** The reversal, posted when the receipt itself is reversed: 652. */
@@ -1264,5 +1278,139 @@ export async function createReturnsOrder(
     });
 
     return { orderNumber: number, replayed: false, netValue, taxValue, grossValue };
+  });
+}
+
+/**
+ * What the returns screen reads: the complaints that stand, and the documents the goods come back on.
+ *
+ * Both lists are deliberately narrow — a returns order is an order of type RE, a returns delivery is a
+ * delivery of type LR, and neither is the general order or delivery list with a filter in the screen.
+ * The screen shows a chain, and a chain is read from the documents that belong to it.
+ *
+ * Each row carries what the next act needs. A returns order names the invoice it was priced from and how
+ * much of the request a returns delivery has already been given; a returns delivery names the outbound
+ * delivery the goods went out on, because that is the delivery whose line counts what has come back, and
+ * it names the material document the receipt posted.
+ */
+/** Quantities are read from sums, and a sum over nothing has no scale of its own: three decimals is what a quantity carries everywhere else in the chain. */
+function fixed3(value: string | number | null | undefined): string {
+  return Number(value ?? 0).toFixed(3);
+}
+
+export interface ReturnsOrderSummary {
+  orderNumber: string;
+  orderDate: string;
+  customerNumber: string;
+  /** The invoice the return was priced from; null only for a request raised before the reference was kept. */
+  billingNumber: string | null;
+  status: string;
+  currency: string;
+  grossValue: string;
+  headerText: string | null;
+  /** What the customer is sending back, over the lines of the request. */
+  requestedQuantity: string;
+  /** How much of that has already been handed to a returns delivery. */
+  committedQuantity: string;
+}
+
+export async function listReturnsOrders(
+  client: string,
+  filter: { customerNumber?: string } = {},
+): Promise<ReturnsOrderSummary[]> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value::text as gross_value,
+             o.status, o.header_text, o.reference_document_number,
+             coalesce(sum(l.order_quantity), 0)::text as requested,
+             coalesce(sum((
+               select coalesce(sum(dl.delivery_quantity), 0)
+                 from delivery_line dl
+                 join delivery d on d.client = dl.client and d.delivery_number = dl.delivery_number
+                where dl.client = ${client} and dl.order_number = o.order_number
+                  and dl.order_line_number = l.line_number
+                  and d.document_type = ${STANDARD_RETURNS_DELIVERY_TYPE}
+                  and d.status <> 'CANCELLED'
+             )), 0)::text as committed
+        from sales_order o
+        left join sales_order_line l
+               on l.client = o.client and l.order_number = o.order_number and l.status = 'OPEN'
+       where o.client = ${client}
+         and o.document_type = ${STANDARD_RETURNS_ORDER_TYPE}
+         and (${filter.customerNumber ?? null}::varchar is null
+              or o.customer_number = ${filter.customerNumber ?? null}::varchar)
+       group by o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value,
+                o.status, o.header_text, o.reference_document_number
+       order by o.order_number desc
+       limit 100
+    `) as unknown as Array<{
+      order_number: string; order_date: string; customer_number: string; currency: string;
+      gross_value: string; status: string; header_text: string | null; reference_document_number: string | null;
+      requested: string; committed: string;
+    }>;
+    return rows.map((row) => ({
+      orderNumber: row.order_number,
+      orderDate: typeof row.order_date === 'string' ? row.order_date : String(row.order_date).slice(0, 10),
+      customerNumber: row.customer_number,
+      billingNumber: row.reference_document_number,
+      status: row.status,
+      currency: row.currency,
+      grossValue: row.gross_value,
+      headerText: row.header_text,
+      requestedQuantity: fixed3(row.requested),
+      committedQuantity: fixed3(row.committed),
+    }));
+  });
+}
+
+export interface ReturnsDeliverySummary {
+  deliveryNumber: string;
+  deliveryDate: string;
+  /** The returns order the document was raised against, when it was raised against one. */
+  orderNumber: string | null;
+  /** The outbound delivery the goods went out on, which the receipt is answered against. */
+  referenceDeliveryNumber: string | null;
+  customerNumber: string;
+  status: string;
+  /** What is coming back on this document. */
+  quantity: string;
+  /** The 651 the receipt posted; null until the goods are received. */
+  materialDocumentNumber: string | null;
+}
+
+export async function listReturnsDeliveries(
+  client: string,
+  filter: { orderNumber?: string } = {},
+): Promise<ReturnsDeliverySummary[]> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select d.delivery_number, d.delivery_date, d.order_number, d.reference_delivery_number,
+             d.customer_number, d.status, d.material_document_number,
+             coalesce(sum(dl.delivery_quantity), 0)::text as quantity
+        from delivery d
+        left join delivery_line dl on dl.client = d.client and dl.delivery_number = d.delivery_number
+       where d.client = ${client}
+         and d.document_type = ${STANDARD_RETURNS_DELIVERY_TYPE}
+         and (${filter.orderNumber ?? null}::varchar is null
+              or d.order_number = ${filter.orderNumber ?? null}::varchar)
+       group by d.delivery_number, d.delivery_date, d.order_number, d.reference_delivery_number,
+                d.customer_number, d.status, d.material_document_number
+       order by d.delivery_number desc
+       limit 100
+    `) as unknown as Array<{
+      delivery_number: string; delivery_date: string; order_number: string | null;
+      reference_delivery_number: string | null; customer_number: string; status: string;
+      material_document_number: string | null; quantity: string;
+    }>;
+    return rows.map((row) => ({
+      deliveryNumber: row.delivery_number,
+      deliveryDate: typeof row.delivery_date === 'string' ? row.delivery_date : String(row.delivery_date).slice(0, 10),
+      orderNumber: row.order_number,
+      referenceDeliveryNumber: row.reference_delivery_number,
+      customerNumber: row.customer_number,
+      status: row.status,
+      quantity: fixed3(row.quantity),
+      materialDocumentNumber: row.material_document_number,
+    }));
   });
 }
