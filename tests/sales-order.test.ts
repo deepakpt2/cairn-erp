@@ -14,7 +14,7 @@ import {
   listSalesOrderDocuments,
   releaseSalesOrderCredit,
 } from '../src/modules/sales/sales-order';
-import { assignSalesAreaDimensions, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';
 
 const ACTOR = 'SD9190_SALES_TEST';
 const AREA = 'CCA1';
@@ -129,6 +129,13 @@ describe('sales order and its pricing', () => {
         values (${tenant.client}, 'KW', 'T10', 'Output tax 10 percent', 'VAT', 10, ${ACTOR}) on conflict do nothing
       `);
     });
+
+    // Both materials stand for sale in the sales area, which is what lets an order be raised against
+    // them at all: the plant says the warehouse can carry a material, and the sales view says it may
+    // be sold here. The unpriced material is maintained too, so the refusal it earns is the one under
+    // test — that no price stands for it — and not that nobody has maintained it for sale.
+    await maintainMaterialSales(tenant, { materialNumber: MATERIAL, deliveringPlant: '1000' });
+    await maintainMaterialSales(tenant, { materialNumber: UNPRICED_MATERIAL, deliveringPlant: '1000' });
     // The prices: 25.00 each for the standing record, and a generous limit for the customer.
     await saveSalesCondition({
       client: tenant.client, changedBy: ACTOR, salesOrg: '1000', distributionChannel: '10', division: '01',

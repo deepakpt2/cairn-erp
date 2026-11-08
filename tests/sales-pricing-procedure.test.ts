@@ -11,7 +11,7 @@ import {
   DELIVERED_CONDITION_TYPES, PRICING_PROCEDURE_ROUTE, STANDARD_DOCUMENT_PRICING_PROCEDURE,
   STANDARD_PRICING_PROCEDURE, pricingProcedureDeterminationRows, salesDocumentConditionsOf,
 } from '../src/modules/sales/pricing-procedure';
-import { assignSalesAreaDimensions, createTenant, destroyTenant, sql, type TestTenant } from './helpers';
+import { assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales, sql, type TestTenant } from './helpers';
 
 const ACTOR = 'SD9238_PRICING_TEST';
 const AREA = 'CCA1';
@@ -135,6 +135,11 @@ describe('the pricing procedure and the conditions it writes', () => {
       `);
     });
 
+    // The three materials stand for sale in the sales area, so a refusal in these tests is a refusal
+    // of the pricing and not a refusal of the master data.
+    for (const materialNumber of [MATERIAL_A, MATERIAL_B, MATERIAL_UNVALUED]) {
+      await maintainMaterialSales(tenant, { materialNumber, deliveringPlant: PLANT });
+    }
     const area = { salesOrg: '1000', distributionChannel: '10', division: '01' };
     const period = { validityFrom: '2026-01-01', validityTo: '2026-12-31', supersedeStanding: false };
     // The prices: 25.00 the first material, 40.00 the second.

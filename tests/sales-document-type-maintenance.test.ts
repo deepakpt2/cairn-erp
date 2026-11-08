@@ -40,6 +40,7 @@ import {
   createTenant,
   destroyTenant,
   type TestTenant,
+  maintainMaterialSales,
 } from './helpers';
 
 const ACTOR = 'SD9236_DOCTYPE_MAINTAIN';
@@ -178,6 +179,9 @@ describe('a sales document type is maintained rather than deployed (9236)', () =
         values (${tenant.client}, ${MATERIAL}, ${PLANT}, ${ACTOR}) on conflict do nothing
       `);
     });
+    // The material stands for sale in the sales area, as every material an order is raised against
+    // has to; the document type is what these tests are about.
+    await maintainMaterialSales(tenant, { materialNumber: MATERIAL, deliveringPlant: PLANT });
     await saveCustomerCredit({
       client: tenant.client, changedBy: ACTOR, customer: CUSTOMER, creditControlArea: AREA,
       creditLimit: '1000000.00', riskCategory: 'A', isBlocked: false,

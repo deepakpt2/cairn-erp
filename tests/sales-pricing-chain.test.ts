@@ -27,7 +27,8 @@ import {
 import { postBillingDocument } from '../src/modules/sales/billing';
 import { createCreditMemo } from '../src/modules/sales/credit-memo';
 import {
-  assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, type TestTenant,
+  assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
+  type TestTenant,
 } from './helpers';
 
 const ACTOR = 'SD9239_CHAIN_TEST';
@@ -216,6 +217,9 @@ describe('the conditions a document is priced by, through the chain that follows
       `);
     });
 
+    // The material stands for sale in the sales area: the plant says the warehouse can carry it, and
+    // the sales view says it may be sold there.
+    await maintainMaterialSales(tenant, { materialNumber: MATERIAL, deliveringPlant: PLANT });
     const area = { salesOrg: '1000', distributionChannel: '10', division: '01' };
     const period = { validityFrom: '2026-01-01', validityTo: '2026-12-31', supersedeStanding: false };
     // The price list this chain is sold under: 25.00 a unit, less ten per cent, plus 5.00 a unit of

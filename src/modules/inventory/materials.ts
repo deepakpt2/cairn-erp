@@ -7,8 +7,8 @@ import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { allocateNumber } from '../../platform/numbering';
 import { numberRange } from '../../platform/tables/numbering';
-import { companyCode, plant, purchasingGroup } from '../foundation/schema';
-import { material, materialPlant, materialValuation, materialType, materialTypeValuation, materialGroup, industrySector, valuationClass, valuationClassReference, accountCategoryReference, mrpController, planningFile } from './schema';
+import { companyCode, distributionChannel, plant, purchasingGroup, salesOrg } from '../foundation/schema';
+import { material, materialPlant, materialSales, materialUomConversion, materialValuation, materialType, materialTypeValuation, materialGroup, industrySector, valuationClass, valuationClassReference, accountCategoryReference, mrpController, planningFile } from './schema';
 import { valuationClassRefusal } from './valuation-class-definition';
 import { MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from './constants';
 
@@ -52,6 +52,10 @@ const materialInput = z.discriminatedUnion('view', [
     // before they existed keeps its behaviour and an untouched view writes no change.
     backflush: z.boolean().optional().default(false),
     automaticGoodsReceipt: z.boolean().optional().default(false) }),
+  common.extend({ view: z.literal('SALES'), salesOrg: z.string().min(1).max(4), distributionChannel: z.string().min(1).max(2),
+    salesUnit: z.string().max(6), itemCategoryGroup: z.string().min(2).max(4),
+    materialAccountAssignmentGroup: z.string().max(4), deliveringPlant: z.string().max(10),
+    loadingGroup: z.string().max(4), availabilityCheckGroup: z.string().max(4) }),
   common.extend({ view: z.literal('ACCOUNTING'), plant: z.string().min(1).max(10), valuationClass: z.string().max(20),
     priceControl: z.enum(PRICE_CONTROLS), standardPrice: money, movingAveragePrice: money, priceUnit: quantity.refine((s) => toScaled(s, 3) > 0n, 'Price unit must be positive.') }),
 ]);
@@ -59,6 +63,10 @@ export type MaterialInput = z.input<typeof materialInput>;
 export type MaterialResult = { materialNumber: string; view: MaterialInput['view']; status: string; version: number; changed: boolean };
 const key = (client: string, materialNumber: string) => and(eq(material.client, client), eq(material.materialNumber, materialNumber));
 const plantKey = (client: string, materialNumber: string, plant: string) => and(eq(materialPlant.client, client), eq(materialPlant.materialNumber, materialNumber), eq(materialPlant.plant, plant));
+const salesKey = (client: string, materialNumber: string, salesOrgCode: string, channel: string) => and(
+  eq(materialSales.client, client), eq(materialSales.materialNumber, materialNumber),
+  eq(materialSales.salesOrg, salesOrgCode), eq(materialSales.distributionChannel, channel),
+);
 function checkVersion(row: { version: number } | undefined, expected: number) {
   if ((row?.version ?? 0) !== expected) throw new MaterialError('This view changed after it was opened.', 'Reload the material, review the current values, then apply your change.');
 }
@@ -195,6 +203,56 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
       return { materialNumber, view, status, version, changed: true };
     }
     if (!base) throw new MaterialError(`Material ${materialNumber} does not exist.`, 'Create its basic view first.');
+    if (view === 'SALES') {
+      // The sales view is the one view that is not held for a plant: a material is maintained for sale
+      // in a sales area, and the plant it ships from is a default the order may carry of its own.
+      const [organisation] = await tx.select().from(salesOrg).where(and(eq(salesOrg.client, client), eq(salesOrg.salesOrg, input.salesOrg)));
+      if (!organisation) throw new MaterialError(`Sales organisation ${input.salesOrg} does not exist.`);
+      const [channel] = await tx.select().from(distributionChannel).where(and(eq(distributionChannel.client, client), eq(distributionChannel.distributionChannel, input.distributionChannel)));
+      if (!channel?.isActive) throw new MaterialError(`Distribution channel ${input.distributionChannel} does not exist or is inactive.`);
+      const [before] = await tx.select().from(materialSales).where(salesKey(client, materialNumber, input.salesOrg, input.distributionChannel)).for('update');
+      checkVersion(before, expectedVersion);
+      await checkUnit(tx, input.salesUnit);
+      // A quantity ordered is counted in the base unit, so a sales unit that is not the base unit is
+      // only sellable where the conversion stands. It is the same judgement a goods movement makes,
+      // and it is made here so that a view promising a unit the order cannot convert is never saved.
+      if (input.salesUnit && base.baseUnit && input.salesUnit !== base.baseUnit) {
+        const [conversion] = await tx.select().from(materialUomConversion).where(and(
+          eq(materialUomConversion.client, client), eq(materialUomConversion.materialNumber, materialNumber),
+          eq(materialUomConversion.alternativeUnit, input.salesUnit),
+        ));
+        if (!conversion) {
+          throw new MaterialError(
+            `Material ${materialNumber} carries no conversion from ${input.salesUnit} to its base unit ${base.baseUnit}, so it cannot be sold in that unit.`,
+            'Maintain the unit conversion for the material, or sell it in its base unit.',
+          );
+        }
+      }
+      if (input.deliveringPlant) {
+        const [source] = await tx.select().from(plant).where(and(eq(plant.client, client), eq(plant.plant, input.deliveringPlant)));
+        if (!source?.isActive) throw new MaterialError(`Delivering plant ${input.deliveringPlant} does not exist or is inactive.`);
+      }
+      const values = { salesUnit: input.salesUnit || null, itemCategoryGroup: input.itemCategoryGroup,
+        materialAccountAssignmentGroup: input.materialAccountAssignmentGroup || null,
+        deliveringPlant: input.deliveringPlant || null, loadingGroup: input.loadingGroup || null,
+        availabilityCheckGroup: input.availabilityCheckGroup || null };
+      if (before && same(before, values) && !(before.salesStatus === 'INCOMPLETE' && base.baseUnit && input.itemCategoryGroup)) {
+        return { materialNumber, view, status: before.salesStatus, version: before.version, changed: false };
+      }
+      // What a sales view has to say is what the material is sold as and what it is counted in. The
+      // rest is a default, a group, or a question the next phase asks.
+      const complete = !!base.baseUnit && !!input.itemCategoryGroup;
+      const status = viewStatus(before?.salesStatus, complete);
+      const version = (before?.version ?? 0) + 1;
+      if (before) await tx.update(materialSales).set({ ...values, salesStatus: status, version, changedBy, changedAt: new Date() }).where(salesKey(client, materialNumber, input.salesOrg, input.distributionChannel));
+      else await tx.insert(materialSales).values({ ...values, client, materialNumber, salesOrg: input.salesOrg, distributionChannel: input.distributionChannel, salesStatus: status, version, createdBy: changedBy });
+      await recordChange(tx, { client, objectClass: 'material_sales', objectKey: `${materialNumber}/${input.salesOrg}/${input.distributionChannel}`, changeType: before ? 'CHANGE' : 'CREATE', changedBy,
+        transactionCode: 'SD.MATERIAL.SALES.MAINTAIN', reason: input.reason,
+        before: before ? { ...subset(before, values), salesStatus: before.salesStatus } : undefined,
+        after: { ...values, salesStatus: status }, securityRelevantFields: ['materialAccountAssignmentGroup'],
+      });
+      return { materialNumber, view, status, version, changed: true };
+    }
     const [site] = await tx.select().from(plant).where(and(eq(plant.client, client), eq(plant.plant, input.plant)));
     if (!site?.isActive) throw new MaterialError(`Plant ${input.plant} does not exist or is inactive.`);
     const assignedCompanyCode = site.companyCode;
@@ -420,6 +478,8 @@ export async function materialChoices(client: string) {
     plants: await tx.select().from(plant).where(and(eq(plant.isActive, true), isNotNull(plant.companyCode))).orderBy(plant.plant),
     companies: await tx.select().from(companyCode).orderBy(companyCode.companyCode),
     purchasingGroups: await tx.select().from(purchasingGroup).orderBy(purchasingGroup.purchasingGroup),
+    salesOrgs: await tx.select().from(salesOrg).where(eq(salesOrg.client, client)).orderBy(salesOrg.salesOrg),
+    channels: await tx.select().from(distributionChannel).where(eq(distributionChannel.client, client)).orderBy(distributionChannel.distributionChannel),
   }));
 }
 export async function listMaterials(client: string, search = '') {
@@ -432,6 +492,7 @@ export async function getMaterialDetail(client: string, materialNumber: string) 
     return { base,
       plants: await tx.select().from(materialPlant).where(eq(materialPlant.materialNumber, materialNumber)).orderBy(materialPlant.plant),
       valuations: await tx.select().from(materialValuation).where(eq(materialValuation.materialNumber, materialNumber)).orderBy(materialValuation.valuationArea),
+      sales: await tx.select().from(materialSales).where(and(eq(materialSales.client, client), eq(materialSales.materialNumber, materialNumber))).orderBy(materialSales.salesOrg, materialSales.distributionChannel),
     };
   });
 }

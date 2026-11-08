@@ -16,7 +16,7 @@ import ShelfLifePanel from './ShelfLifePanel';
 export const dynamic = 'force-dynamic';
 
 export default async function MaterialsPage({ searchParams }: {
-  searchParams: Promise<{ material?: string; view?: string; plant?: string; q?: string; new?: string; copy?: string; history?: string; shelfLife?: string }>;
+  searchParams: Promise<{ material?: string; view?: string; plant?: string; salesOrg?: string; channel?: string; q?: string; new?: string; copy?: string; history?: string; shelfLife?: string }>;
 }) {
   const session = await requireSession('/inventory/materials');
   const client = session.user.client;
@@ -34,6 +34,12 @@ export default async function MaterialsPage({ searchParams }: {
   const plant = site?.plant ?? '';
   const org = detail?.plants.find((p) => p.plant === plant);
   const valuation = detail?.valuations.find((v) => v.valuationArea === plant);
+  // The sales view is held for a sales area and not for a plant: a material is maintained for sale
+  // where it is sold, and the plant it ships from is a default it carries rather than a scope it is
+  // held under.
+  const area = choices.salesOrgs.find((o) => o.salesOrg === params.salesOrg) ?? choices.salesOrgs[0];
+  const channel = choices.channels.find((c) => c.distributionChannel === params.channel) ?? choices.channels[0];
+  const sales = detail?.sales.find((s) => s.salesOrg === area?.salesOrg && s.distributionChannel === channel?.distributionChannel);
   const company = choices.companies.find((c) => c.companyCode === site?.companyCode);
   const canEditView = can(session, MATERIAL_VIEW_CAPABILITY[view]);
   const canDelete = can(session, MATERIAL_VIEW_CAPABILITY.BASIC);
@@ -50,7 +56,7 @@ export default async function MaterialsPage({ searchParams }: {
   const nonValuated = view === 'ACCOUNTING'
     && typeValuation.find((r) => r.materialType === detail?.base.materialType && r.plant === plant)?.valueUpdating === false;
   const base = detail?.base ?? source?.base;
-  const record = view === 'BASIC' ? detail?.base : view === 'ACCOUNTING' ? valuation : org;
+  const record = view === 'BASIC' ? detail?.base : view === 'ACCOUNTING' ? valuation : view === 'SALES' ? sales : org;
   // Pass only editable/view-context primitives, not technical timestamps/tenant keys.
   const initial: Record<string, string | number | boolean | null | undefined> = {};
   for (const [key, value] of Object.entries(record ?? (creating ? source?.base ?? {} : {}))) {
@@ -59,12 +65,14 @@ export default async function MaterialsPage({ searchParams }: {
   initial.materialType = base?.materialType ?? 'RAW'; initial.baseUnit = base?.baseUnit ?? null;
   initial.currency = valuation?.currency ?? company?.currency;
   if (creating) { initial.version = 0; initial.isBlocked = false; }
-  const url = (nextView: string) => `/inventory/materials?material=${encodeURIComponent(detail?.base.materialNumber ?? '')}&plant=${encodeURIComponent(plant)}&view=${nextView}`;
-  const statuses: Record<string, string> = { BASIC: detail?.base.basicStatus ?? 'NOT_CREATED', PURCHASING: org?.purchasingStatus ?? 'NOT_CREATED', MRP: org?.mrpStatus ?? 'NOT_CREATED', ACCOUNTING: valuation?.accountingStatus ?? 'NOT_CREATED' };
+  const url = (nextView: string) => `/inventory/materials?material=${encodeURIComponent(detail?.base.materialNumber ?? '')}&plant=${encodeURIComponent(plant)}&salesOrg=${encodeURIComponent(area?.salesOrg ?? '')}&channel=${encodeURIComponent(channel?.distributionChannel ?? '')}&view=${nextView}`;
+  const statuses: Record<string, string> = { BASIC: detail?.base.basicStatus ?? 'NOT_CREATED', PURCHASING: org?.purchasingStatus ?? 'NOT_CREATED', MRP: org?.mrpStatus ?? 'NOT_CREATED', ACCOUNTING: valuation?.accountingStatus ?? 'NOT_CREATED', SALES: sales?.salesStatus ?? 'NOT_CREATED' };
   const history = detail && params.history === '1' ? await withTenant(client, async (tx) => [
     ...await changeHistory(tx, client, 'material', detail.base.materialNumber),
     ...await changeHistory(tx, client, 'material_plant', `${detail.base.materialNumber}/${plant}`),
     ...(valuationReadable ? await changeHistory(tx, client, 'material_valuation', `${detail.base.materialNumber}/${plant}`) : []),
+    ...(view === 'SALES' && area && channel
+      ? await changeHistory(tx, client, 'material_sales', `${detail.base.materialNumber}/${area.salesOrg}/${channel.distributionChannel}`) : []),
   ]) : [];
 
   return <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -79,15 +87,16 @@ export default async function MaterialsPage({ searchParams }: {
     {source && <p className="border border-accent-line bg-accent-soft p-3 text-sm">{t('material.copyNote', { number: source.base.materialNumber })}</p>}
     {detail && <>
       <section className="panel grid gap-3 p-3 sm:grid-cols-4"><Summary label={t('material.number')} value={detail.base.materialNumber} /><Summary label={t('material.description')} value={detail.base.description || '—'} /><Summary label={t('material.type')} value={`${detail.base.materialType} / ${detail.base.baseUnit ?? '—'}`} /><Summary label={t('material.status')} value={t(`material.state.${detail.base.isBlocked ? 'BLOCKED' : detail.base.basicStatus}`)} /></section>
-      <div className="flex flex-wrap items-end justify-between gap-3">{!panelView && <form method="get" className="flex items-end gap-2"><input type="hidden" name="material" value={detail.base.materialNumber} /><input type="hidden" name="view" value={view} /><label><span className="field-label">{t('plant.code')}</span><select name="plant" defaultValue={plant} className="field-input code">{choices.plants.map((p) => <option key={p.plant} value={p.plant}>{p.plant} · {p.name}</option>)}</select></label><button className="btn btn-default">{t('material.choosePlant')}</button></form>}<Link href={`${url(view)}&history=1`} className="ms-auto text-sm text-accent underline">{t('material.history')}</Link></div>
-      <nav aria-label={t('material.views')} className="flex flex-wrap gap-1 border-b border-line pb-3">{MATERIAL_VIEWS.map((v) => <Link key={v} href={url(v)} className={`border px-3 py-2 text-sm ${v === view ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-ink-soft'}`}>{t(`material.view.${v}`)}{statuses[v] ? <span className="ms-2 text-2xs">{t(`material.state.${statuses[v]}`)}</span> : null}</Link>)}{['PRODUCTION', 'SALES', 'SALES_GENERAL', 'STORAGE', 'FORECASTING', 'QUALITY', 'WAREHOUSE'].map((v) => <span key={v} aria-disabled="true" className="border border-dashed border-line px-3 py-2 text-sm text-ink-faint">{t(`material.view.${v}`)} · {t('material.pending')}</span>)}</nav>
+      <div className="flex flex-wrap items-end justify-between gap-3">{!panelView && view !== 'SALES' && view !== 'BASIC' && <form method="get" className="flex items-end gap-2"><input type="hidden" name="material" value={detail.base.materialNumber} /><input type="hidden" name="view" value={view} /><label><span className="field-label">{t('plant.code')}</span><select name="plant" defaultValue={plant} className="field-input code">{choices.plants.map((p) => <option key={p.plant} value={p.plant}>{p.plant} · {p.name}</option>)}</select></label><button className="btn btn-default">{t('material.choosePlant')}</button></form>}
+      {!panelView && view === 'SALES' && <form method="get" className="flex items-end gap-2"><input type="hidden" name="material" value={detail.base.materialNumber} /><input type="hidden" name="view" value={view} /><label><span className="field-label">{t('sales.org')}</span><select name="salesOrg" defaultValue={area?.salesOrg ?? ''} className="field-input code">{choices.salesOrgs.map((o) => <option key={o.salesOrg} value={o.salesOrg}>{o.salesOrg}</option>)}</select></label><label><span className="field-label">{t('sales.channel')}</span><select name="channel" defaultValue={channel?.distributionChannel ?? ''} className="field-input code">{choices.channels.map((c) => <option key={c.distributionChannel} value={c.distributionChannel}>{c.distributionChannel} · {c.name}</option>)}</select></label><button className="btn btn-default">{t('material.chooseArea')}</button></form>}<Link href={`${url(view)}&history=1`} className="ms-auto text-sm text-accent underline">{t('material.history')}</Link></div>
+      <nav aria-label={t('material.views')} className="flex flex-wrap gap-1 border-b border-line pb-3">{MATERIAL_VIEWS.map((v) => <Link key={v} href={url(v)} className={`border px-3 py-2 text-sm ${v === view ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-ink-soft'}`}>{t(`material.view.${v}`)}{statuses[v] ? <span className="ms-2 text-2xs">{t(`material.state.${statuses[v]}`)}</span> : null}</Link>)}{['PRODUCTION', 'SALES_GENERAL', 'STORAGE', 'FORECASTING', 'QUALITY', 'WAREHOUSE'].map((v) => <span key={v} aria-disabled="true" className="border border-dashed border-line px-3 py-2 text-sm text-ink-faint">{t(`material.view.${v}`)} · {t('material.pending')}</span>)}</nav>
     </>}
     {detail && panelView === 'DELETION' && <DeletionFlags materialNumber={detail.base.materialNumber} clientFlagged={detail.base.markedForDeletion} clientStock={detail.valuations.reduce((sum, v) => sum + Number(v.totalStockQuantity), 0).toString()} plants={detail.plants.map((p) => ({ plant: p.plant, flagged: p.markedForDeletion, stock: detail.valuations.find((v) => v.valuationArea === p.plant)?.totalStockQuantity ?? '0' }))} canMaintain={canDelete && changeLock?.mode === 'CHANGE'} />}
     {detail && panelView === 'SHELF_LIFE' && <>{params.shelfLife ? <p className="text-sm text-ink-soft" role="status">{params.shelfLife === 'saved' ? 'Shelf life was stored. No batch date was changed.' : params.shelfLife}</p> : null}{shelfLife ? <ShelfLifePanel current={shelfLife} canMaintain={canDelete} /> : null}</>}
     {detail && view === 'ACCOUNTING' && !valuationReadable && <p className="panel p-4 text-sm text-ink-soft">{t('auth.missingAuthority', { authority: 'FIN.MATERIAL.VALUATION.DISPLAY' })}</p>}
     {detail && nonValuated && <p className="panel p-4 text-sm text-ink-soft">{t('material.nonValuated')}</p>}
-    {(creating || detail) && (view === 'BASIC' || site) && (view !== 'ACCOUNTING' || valuationReadable) && !nonValuated && !panelView && (editable
-      ? <MaterialForm key={`${detail?.base.materialNumber ?? 'new'}/${plant}/${view}/${params.copy ?? ''}`} view={view} number={creating ? '' : detail!.base.materialNumber} plant={plant} initial={initial} choices={choices} creating={creating} />
+    {(creating || detail) && (view === 'BASIC' || view === 'SALES' || site) && (view !== 'ACCOUNTING' || valuationReadable) && !nonValuated && !panelView && (editable
+      ? <MaterialForm key={`${detail?.base.materialNumber ?? 'new'}/${plant}/${area?.salesOrg ?? ''}/${channel?.distributionChannel ?? ''}/${view}/${params.copy ?? ''}`} view={view} number={creating ? '' : detail!.base.materialNumber} plant={plant} salesOrg={area?.salesOrg ?? ''} channel={channel?.distributionChannel ?? ''} initial={initial} choices={choices} creating={creating} />
       : <section className="panel p-4"><p className="text-sm text-ink-soft">{t('auth.readOnly', { authority: MATERIAL_VIEW_CAPABILITY[view] })}</p><dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">{Object.entries(initial).filter(([k]) => !['client','version','createdBy','changedBy'].includes(k)).map(([k, v]) => <div key={k}><dt className="text-2xs uppercase text-ink-faint">{k}</dt><dd className="code">{String(v ?? '—')}</dd></div>)}</dl></section>)}
     {detail && view !== 'BASIC' && !site && <p className="panel p-4 text-sm">{t('material.noPlant')}</p>}
     {!detail && !creating && <>

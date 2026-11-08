@@ -6,11 +6,11 @@ import { t } from '@/platform/i18n';
 import { materialFormValue } from '@/modules/inventory/form-values';
 import { classPermittedForType } from '@/modules/inventory/valuation-class-permission';
 import type { materialChoices } from '@/modules/inventory/materials';
-import { type MaterialView, MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from '@/modules/inventory/constants';
+import { type MaterialView, ITEM_CATEGORY_GROUPS, MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from '@/modules/inventory/constants';
 import { saveMaterialAction } from './actions';
 
-export function MaterialForm({ view, number, plant, initial, choices, creating }: {
-  view: MaterialView; number: string; plant: string;
+export function MaterialForm({ view, number, plant, salesOrg, channel, initial, choices, creating }: {
+  view: MaterialView; number: string; plant: string; salesOrg: string; channel: string;
   initial: Record<string, string | number | boolean | null | undefined>;
   choices: Awaited<ReturnType<typeof materialChoices>>; creating: boolean;
 }) {
@@ -36,7 +36,8 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
       <input type="hidden" name="existing" value={creating ? '' : '1'} />
       <input type="hidden" name="view" value={view} />
       <input type="hidden" name="expectedVersion" value={state.version ?? Number(initial.version ?? 0)} />
-      {view !== 'BASIC' && <><input type="hidden" name="materialNumber" value={number} /><input type="hidden" name="plant" value={plant} /></>}
+      {view !== 'BASIC' && view !== 'SALES' && <><input type="hidden" name="materialNumber" value={number} /><input type="hidden" name="plant" value={plant} /></>}
+      {view === 'SALES' && <><input type="hidden" name="materialNumber" value={number} /><input type="hidden" name="salesOrg" value={salesOrg} /><input type="hidden" name="distributionChannel" value={channel} /></>}
       {view === 'BASIC' && <>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label={t('material.number')}><input name="materialNumber" defaultValue={number} readOnly={!creating} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.toUpperCase(); }} required={!creating} maxLength={40} pattern="[A-Z0-9][A-Z0-9_.-]*" className="field-input code" />{creating && <span className="mt-1 block text-xs text-ink-soft">{t('material.numberHint')}</span>}</Field>
@@ -79,6 +80,18 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
         </div>
         <p className="text-2xs text-ink-soft">{t('material.mrpMovementNote')}</p>
         <p className="text-2xs text-ink-soft">{t('material.mrpNote')}</p>
+      </>}
+      {view === 'SALES' && <>
+        <p className="text-sm text-ink-soft">{t('material.salesScope', { area: `${salesOrg}/${channel}` })}</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {options('salesUnit', 'material.salesUnit', unitOptions, value('baseUnit'))}
+          {coded('itemCategoryGroup', 'material.itemCategoryGroup', ITEM_CATEGORY_GROUPS, 'NORM')}
+          {options('deliveringPlant', 'material.deliveringPlant', choices.plants.map((p) => ({ key: p.plant, text: p.name })))}
+          <Field label={t('material.accountAssignmentGroup')}><input name="materialAccountAssignmentGroup" defaultValue={value('materialAccountAssignmentGroup')} maxLength={4} className="field-input code" /></Field>
+          <Field label={t('material.loadingGroup')}><input name="loadingGroup" defaultValue={value('loadingGroup')} maxLength={4} className="field-input code" /></Field>
+          <Field label={t('material.availabilityCheckGroup')}><input name="availabilityCheckGroup" defaultValue={value('availabilityCheckGroup')} maxLength={4} className="field-input code" /></Field>
+        </div>
+        <p className="text-2xs text-ink-soft">{t('material.salesNote')}</p>
       </>}
       {view === 'ACCOUNTING' && <>
         <div className="grid gap-3 sm:grid-cols-3">

@@ -3,7 +3,7 @@ import { pgTable, varchar, text, boolean, integer, numeric, char, date, timestam
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { unitOfMeasure } from '../../platform/tables/reference';
-import { plant, purchasingGroup } from '../foundation/schema';
+import { plant, purchasingGroup, salesOrg, distributionChannel } from '../foundation/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
 const quantity = (name: string) => numeric(name, { precision: 23, scale: 3 });
@@ -270,6 +270,51 @@ export const materialPlant = pgTable('material_plant', {
   check('material_plant_quantities_ck', sql`${t.fixedLotSize} >= 0 and ${t.minimumLotSize} >= 0 and ${t.maximumLotSize} >= 0 and ${t.safetyStock} >= 0 and ${t.reorderPoint} >= 0 and ${t.plannedDeliveryDays} >= 0 and ${t.inHouseProductionDays} >= 0`),
   check('material_plant_tolerance_ck', sql`${t.overdeliveryTolerance} between 0 and 100 and ${t.underdeliveryTolerance} between 0 and 100`),
   check('material_plant_status_ck', sql`${t.purchasingStatus} in ('NOT_CREATED','INCOMPLETE','CREATED','MAINTAINED') and ${t.mrpStatus} in ('NOT_CREATED','INCOMPLETE','CREATED','MAINTAINED')`),
+]);
+
+/**
+ * The material's sales view — SAP's MVKE, one row per material and sales area.
+ *
+ * Until now a material was known to sales only by its plant extension, which is a purchasing and MRP
+ * question and not a sales one: nothing in the books said whether a material may be sold in a sales
+ * area, in what unit it is sold, what kind of order item it becomes, where it ships from, or which
+ * revenue account its sale belongs to. The pricing procedure prices a line without asking any of that,
+ * and the answers the later phases need — revenue determination here, shipping-point and availability
+ * determination in Phase 3 — are read from here.
+ *
+ * The sales area in SAP's sales view is the sales organisation and the distribution channel; the
+ * division sits on the material itself, so it is not part of the key.
+ */
+export const materialSales = pgTable('material_sales', {
+  client: tenant(), materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+  distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),
+  /** MVKE-VRKME. The unit the material is sold in. Blank is not an error: it means the base unit. */
+  salesUnit: varchar('sales_unit', { length: 6 }).references(() => unitOfMeasure.code),
+  /** MVKE-MTPOS. What kind of item this material becomes on an order — the question an item category
+   *  determination asks, and the reason a text item is not delivered and a standard item is. */
+  itemCategoryGroup: varchar('item_category_group', { length: 4 }).notNull().default('NORM'),
+  /** MVKE-KTGRM. The material half of revenue account determination. Blank is a key of its own and
+   *  is matched as one, never treated as a missing value. */
+  materialAccountAssignmentGroup: varchar('material_account_assignment_group', { length: 4 }),
+  /** MVKE-DWERK. The plant this material ships from for this sales area. A customer's own delivering
+   *  plant stands over it, as a customer's own master does. */
+  deliveringPlant: varchar('delivering_plant', { length: 10 }),
+  /** The loading group. Shipping-point determination reads it in Phase 3, with the plant and the
+   *  shipping conditions of the order. */
+  loadingGroup: varchar('loading_group', { length: 4 }),
+  /** The availability check group. What an availability check is allowed to look at, read in Phase 3. */
+  availabilityCheckGroup: varchar('availability_check_group', { length: 4 }),
+  salesStatus: varchar('sales_status', { length: 16 }).notNull().default('NOT_CREATED'),
+  version: integer('version').notNull().default(1), ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialNumber, t.salesOrg, t.distributionChannel] }),
+  foreignKey({ columns: [t.client, t.materialNumber], foreignColumns: [material.client, material.materialNumber] }).onDelete('cascade'),
+  foreignKey({ columns: [t.client, t.salesOrg], foreignColumns: [salesOrg.client, salesOrg.salesOrg] }),
+  foreignKey({ columns: [t.client, t.distributionChannel], foreignColumns: [distributionChannel.client, distributionChannel.distributionChannel] }),
+  foreignKey({ columns: [t.client, t.deliveringPlant], foreignColumns: [plant.client, plant.plant] }),
+  check('material_sales_status_ck', sql`${t.salesStatus} in ('NOT_CREATED','INCOMPLETE','CREATED','MAINTAINED')`),
+  check('material_sales_item_category_ck', sql`${t.itemCategoryGroup} ~ '^[A-Z0-9]{2,4}$'`),
 ]);
 
 export const materialValuation = pgTable('material_valuation', {

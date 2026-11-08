@@ -1,11 +1,14 @@
 /** Browser-safe vocabulary shared by view forms, validation and planning. */
-export const MATERIAL_VIEWS = ['BASIC', 'PURCHASING', 'MRP', 'ACCOUNTING', 'DELETION', 'SHELF_LIFE'] as const;
+export const MATERIAL_VIEWS = ['BASIC', 'PURCHASING', 'MRP', 'ACCOUNTING', 'SALES', 'DELETION', 'SHELF_LIFE'] as const;
 export type MaterialView = typeof MATERIAL_VIEWS[number];
 export const MATERIAL_VIEW_CAPABILITY: Record<MaterialView, string> = {
   BASIC: 'INV.MATERIAL.MAINTAIN',
   PURCHASING: 'PROC.MATERIAL.PURCHASING.MAINTAIN',
   MRP: 'PROD.MATERIAL.MRP.MAINTAIN',
   ACCOUNTING: 'FIN.MATERIAL.VALUATION.MAINTAIN',
+  // The sales view decides whether a material may be sold in a sales area at all, so it is an SD
+  // authority and not a material-master one: the same reason the purchasing view belongs to PROC.
+  SALES: 'SD.MATERIAL.SALES.MAINTAIN',
   // Both are maintained at client level, so the general material authority covers them.
   DELETION: 'INV.MATERIAL.MAINTAIN',
   SHELF_LIFE: 'INV.MATERIAL.MAINTAIN',
@@ -21,3 +24,9 @@ export const MRP_TYPES = ['REQUIREMENTS', 'REORDER', 'NONE'] as const;
 export const PROCUREMENT_TYPES = ['BUY', 'MAKE', 'BOTH'] as const;
 export const LOT_PROCEDURES = ['EXACT', 'FIXED'] as const;
 export const PRICE_CONTROLS = ['STANDARD', 'MOVING_AVERAGE'] as const;
+/**
+ * What kind of order item a material becomes. `NORM` is the standard item: priced, delivered and
+ * billed. The rest are the distinctions that decide whether a line is delivered at all, and they are
+ * vocabulary for now — no determination reads them until the item category is determined.
+ */
+export const ITEM_CATEGORY_GROUPS = ['NORM', 'TEXT', 'PACK', 'SERV'] as const;

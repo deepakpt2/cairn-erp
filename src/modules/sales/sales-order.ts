@@ -38,6 +38,7 @@ import {
 import { customerCredit } from '../finance/schema';
 import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
 import { PricingError, assertMaterialAtPlant, resolveCustomerSalesData } from './pricing';
+import { MaterialSalesError, assertMaterialSalesArea } from './material-sales';
 import { salesOrder, salesOrderLine } from './schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_ORDER_TYPE, salesDocumentTypeFor } from './document-type';
 import {
@@ -224,8 +225,20 @@ async function priceLines(
     const atPlant = await assertMaterialAtPlant(tx, client, line.materialNumber, line.plant).catch((error: PricingError) => {
       throw new SalesOrderError(error.message, error.remedy);
     });
+    // The plant says the warehouse can carry the material; the sales view says it may be sold here.
+    // Both are needed, and neither answers for the other: a material extended to every plant is not
+    // thereby offered in every sales area.
+    const forSale = await assertMaterialSalesArea(tx, client, {
+      materialNumber: line.materialNumber,
+      salesOrg: input.salesOrg,
+      distributionChannel: input.distributionChannel,
+    }).catch((error: MaterialSalesError) => {
+      throw new SalesOrderError(error.message, error.remedy);
+    });
 
-    const unit = (line.quantityUnit || materialRow.baseUnit || '').trim().toUpperCase();
+    // The unit the material is sold in stands over its base unit: a material maintained to be sold in
+    // boxes is ordered in boxes unless the item says otherwise.
+    const unit = (line.quantityUnit || forSale.salesUnit || materialRow.baseUnit || '').trim().toUpperCase();
     if (!unit) {
       throw new SalesOrderError(
         `Material ${line.materialNumber} carries no base unit, so no order unit can be inferred.`,

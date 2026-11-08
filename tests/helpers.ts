@@ -316,6 +316,54 @@ export async function assignSalesAreaDimensions(
 }
 
 /**
+ * Maintain the sales view of a material for a sales area.
+ *
+ * A material is sold in a sales area only where its sales view stands, so a fixture that raises an
+ * order has to say the material is for sale there — the same way it already has to extend the
+ * material to a plant before a delivery can be made from it. Both are master data the order reads,
+ * and neither is something an order may assume.
+ */
+export async function maintainMaterialSales(
+  tenant: TestTenant,
+  input: {
+    materialNumber: string;
+    salesOrg?: string;
+    distributionChannel?: string;
+    deliveringPlant?: string;
+    itemCategoryGroup?: string;
+    materialAccountAssignmentGroup?: string;
+    salesUnit?: string;
+    loadingGroup?: string;
+    availabilityCheckGroup?: string;
+  },
+): Promise<void> {
+  await withTenant(tenant.client, async (tx) => {
+    await tx.execute(sql`
+      insert into material_sales (
+        client, material_number, sales_org, distribution_channel,
+        sales_unit, item_category_group, material_account_assignment_group,
+        delivering_plant, loading_group, availability_check_group, sales_status, created_by, changed_by
+      )
+      values (
+        ${tenant.client}, ${input.materialNumber}, ${input.salesOrg ?? '1000'}, ${input.distributionChannel ?? '10'},
+        ${input.salesUnit ?? null}, ${input.itemCategoryGroup ?? 'NORM'}, ${input.materialAccountAssignmentGroup ?? null},
+        ${input.deliveringPlant ?? null}, ${input.loadingGroup ?? null}, ${input.availabilityCheckGroup ?? null},
+        'CREATED', 'TEST', 'TEST'
+      )
+      on conflict (client, material_number, sales_org, distribution_channel) do update set
+        sales_unit = excluded.sales_unit,
+        item_category_group = excluded.item_category_group,
+        material_account_assignment_group = excluded.material_account_assignment_group,
+        delivering_plant = excluded.delivering_plant,
+        loading_group = excluded.loading_group,
+        availability_check_group = excluded.availability_check_group,
+        sales_status = 'CREATED',
+        changed_by = 'TEST'
+    `);
+  });
+}
+
+/**
  * Remove a tenant and everything belonging to it. Cascades do the work.
  *
  * Runs INSIDE withTenant, and that is not incidental. An earlier version ran

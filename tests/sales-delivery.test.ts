@@ -44,13 +44,7 @@ import {
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
-import {
-  assignSalesAreaDimensions,
-  createTenant,
-  defineTestRanges,
-  destroyTenant,
-  type TestTenant,
-} from './helpers';
+import { assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';
 
 /**
  * DI-020 — the order-to-invoice chain on the services that own it.
@@ -298,6 +292,9 @@ describe('sales fulfillment and billing (DI-020)', () => {
         on conflict do nothing
       `);
     });
+    // The material stands for sale in the sales area. The plant says the warehouse can carry it; the
+    // sales view says it may be sold there, and an order is not raised without both.
+    await maintainMaterialSales(tenant, { materialNumber: MATERIAL, deliveringPlant: PLANT });
     await saveSalesCondition({
       client: tenant.client, changedBy: ACTOR, salesOrg: '1000', distributionChannel: '10', division: '01',
       customerNumber: '', materialNumber: MATERIAL, currency: 'USD', amount: 25, priceUnit: 1,
