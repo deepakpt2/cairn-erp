@@ -22,7 +22,12 @@ const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partne
   shippingCondition:z.string().trim().regex(/^([A-Z0-9]{1,2})?$/,'Shipping condition uses one or two capital letters or digits.').optional(),
   partialDeliveryIndicator:z.string().trim().regex(/^C?$/,'The partial delivery indicator is left blank when partial deliveries are allowed, or C when an item travels complete.').optional(),
   maxPartialDeliveries:z.number().int().min(0).max(9).optional(),
-  completeDelivery:z.boolean(),orderCombination:z.boolean(),isBlocked:z.boolean()});
+  completeDelivery:z.boolean(),orderCombination:z.boolean(),isBlocked:z.boolean(),
+  // How often this partner's invoices are grouped onto an invoice list (§4.6, SAP's invoicing-list
+  // dates on the payer master). Optional and defaulted, because every screen that maintains a sales
+  // area stood before the field did: leaving it out means NONE, which is what an absent factory
+  // calendar means in SAP — this payer's documents are released to accounting on their own.
+  invoiceListSchedule:z.enum(['NONE','WEEKLY','MONTHLY']).default('NONE')});
 export type CustomerSalesAreaInput=z.input<typeof inputSchema>;
 const key=(client:string,partner:string,org:string,channel:string,division:string)=>and(eq(customerSalesArea.client,client),eq(customerSalesArea.partnerNumber,partner),eq(customerSalesArea.salesOrg,org),eq(customerSalesArea.distributionChannel,channel),eq(customerSalesArea.division,division));
 /** Sales area, its organisation and company must be active; a delivering plant must belong to that company code. */
@@ -67,6 +72,7 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
       // refuses deliveries is not a default anybody asked for.
       partialDeliveryIndicator:(input.partialDeliveryIndicator ?? '').trim().toUpperCase(),
       maxPartialDeliveries:input.maxPartialDeliveries ?? 0,
+      invoiceListSchedule:input.invoiceListSchedule ?? 'NONE',
       completeDelivery:input.completeDelivery,orderCombination:input.orderCombination,isBlocked:input.isBlocked};
     await validateSalesArea(tx,client,org,channel,division,values.deliveringPlant,true);
     if(values.shippingCondition){
@@ -84,7 +90,7 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
     const snapshot=(row:Record<string,unknown>)=>Object.fromEntries(Object.keys(values).map(k=>[k,row[k]]));
     await recordChange(tx,{client,objectClass:'customer_sales_area',objectKey:`${partnerNumber}/${org}/${channel}/${division}`,changeType:!before?'CREATE':before.isBlocked!==input.isBlocked?input.isBlocked?'BLOCK':'UNBLOCK':'CHANGE',changedBy,reason,
       transactionCode:'SALES.CUSTOMER.SALESAREA.MAINTAIN',before:before?{...snapshot(before),salesStatus:before.salesStatus}:undefined,after:{...values,salesStatus},
-      securityRelevantFields:['deliveringPlant','pricingProcedure','accountAssignmentGroup','shippingCondition','completeDelivery','orderCombination','partialDeliveryIndicator','maxPartialDeliveries','isBlocked']});
+      securityRelevantFields:['deliveringPlant','pricingProcedure','accountAssignmentGroup','shippingCondition','completeDelivery','orderCombination','partialDeliveryIndicator','maxPartialDeliveries','isBlocked','invoiceListSchedule']});
     return {changed:true,version,status:salesStatus};
   });
 }

@@ -58,11 +58,30 @@ export const salesDocumentType = pgTable('sales_document_type', {
    * answer differently for two customers.
    */
   pricingProcedure: varchar('pricing_procedure', { length: 6 }).notNull().default('A'),
+  /**
+   * The invoice-list type this document type is grouped into — SAP's `OVV7`, which assigns a billing
+   * type to an invoice-list type (§4.6, gap G2).
+   *
+   * Together with the payer's schedule it is the whole of relevance: a billing document is listed only
+   * where **both** the type it was raised as and the payer it was raised for say so. Blank means what
+   * a blank `VBRK-FKART_RL` means — the document is released to accounting on its own, the day it is
+   * billed. Which is why nothing that stands today changes: no delivered type carries one until a
+   * tenant maintains it.
+   */
+  invoiceListType: varchar('invoice_list_type', { length: 4 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.documentType] }),
   foreignKey({
     columns: [t.client, t.cancellationDocumentType],
+    foreignColumns: [t.client, t.documentType],
+  }).onDelete('restrict'),
+  // The list type names a document type that must stand: an invoice list is a billing document, drawn
+  // from the same number ranges and carrying the same header, and a row that named a type that cannot
+  // be created would be a configuration that fails as a refusal at the worst moment.
+  foreignKey({
+    name: 'sales_document_type_invoice_list_fk',
+    columns: [t.client, t.invoiceListType],
     foreignColumns: [t.client, t.documentType],
   }).onDelete('restrict'),
 ]);
@@ -830,6 +849,25 @@ export const billingDocument = pgTable('billing_document', {
    */
   downPaymentClearingNumber: varchar('down_payment_clearing_number', { length: 20 }),
   downPaymentClearedAmount: numeric('down_payment_cleared_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  /**
+   * The invoice-list type this document is grouped into, and the date its list falls on — SAP's
+   * `VBRK-FKART_RL` and `VBRK-FKDAT_RL` (§4.6, gap G2).
+   *
+   * Both are stamped at creation and neither is revised, because relevance is a fact of the day the
+   * document was raised: a document that was listed does not stop being listed because the payer's
+   * schedule changed underneath it, and one that was not does not become listed because a
+   * configuration was amended after the fact.
+   */
+  invoiceListType: varchar('invoice_list_type', { length: 4 }),
+  invoiceListDate: date('invoice_list_date', { mode: 'string' }),
+  /**
+   * Where the document stands with its list: `NOT_RELEVANT` (it posts its own receivable, the day it
+   * is billed), `DUE` (it is waiting to be listed and has posted nothing) or `LISTED` (it is on a
+   * list, and the list's release is what posts the receivable).
+   */
+  invoiceListStatus: varchar('invoice_list_status', { length: 12 }).notNull().default('NOT_RELEVANT'),
+  /** The invoice list this document is on. Set the moment the list is created, and not before. */
+  invoiceListNumber: varchar('invoice_list_number', { length: 20 }),
   version: integer('version').notNull().default(1),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,
@@ -837,9 +875,26 @@ export const billingDocument = pgTable('billing_document', {
   primaryKey({ columns: [t.client, t.billingNumber] }),
   check('billing_document_status_ck', sql`${t.status} in ('OPEN', 'POSTED', 'CANCELLED')`),
   // A posted document names the accounting invoice behind it, because a document that bills posts a
-  // receivable — with one exception: a down payment request stands and was sent, and posts nothing.
-  // The noted item behind it is statistical: a drawn number and no journal.
-  check('billing_document_posted_needs_invoice_ck', sql`${t.status} <> 'POSTED' or ${t.documentType} = 'DP' or (${t.customerInvoiceNumber} is not null and ${t.journalDocumentNumber} is not null)`),
+  // A posted document names the accounting invoice behind it, because a document that bills posts a
+  // receivable — with two exceptions. A down payment request stands and was sent, and posts nothing:
+  // the noted item behind it is statistical, a drawn number and no journal. And a document that is on
+  // an invoice list posts its receivable through the list rather than through itself: the release
+  // posts one entry for the whole group, which is the only shape under which a list is not a second
+  // receivable for money the members already owed.
+  check('billing_document_posted_needs_invoice_ck', sql`${t.status} <> 'POSTED'
+    or ${t.documentType} = 'DP'
+    or ${t.invoiceListNumber} is not null
+    or (${t.customerInvoiceNumber} is not null and ${t.journalDocumentNumber} is not null)`),
+  // A document that is due for a list says when its list falls and what type of list groups it — both
+  // or neither, which is SAP's rule for relevance and the whole of it.
+  check('billing_document_invoice_list_relevance_ck',
+    sql`(${t.invoiceListType} is null) = (${t.invoiceListDate} is null)`),
+  check('billing_document_invoice_list_status_ck',
+    sql`${t.invoiceListStatus} in ('NOT_RELEVANT', 'DUE', 'LISTED')`),
+  // A listed document names the list it is on: a status that said LISTED with no list would be a
+  // document that posts nothing and refuses its own cancellation for no reason a reader can see.
+  check('billing_document_invoice_listed_ck',
+    sql`${t.invoiceListStatus} <> 'LISTED' or ${t.invoiceListNumber} is not null`),
   check('billing_document_cleared_amount_ck', sql`${t.downPaymentClearedAmount} >= 0`),
   // One *live* billing document per delivery. A cancelled document no longer occupies the slot — that is what
   // makes a cancelled invoice re-billable — and neither does a document that stands against another one,
@@ -850,6 +905,20 @@ export const billingDocument = pgTable('billing_document', {
   // A document is cancelled once.
   uniqueIndex('billing_document_cancellation_uq').on(t.client, t.cancellationOf)
     .where(sql`${t.cancellationOf} is not null`),
+  // The list this document is on has to stand: a document listing another document that was never
+  // created is a group with a hole in it, and the release would post a total nobody can prove.
+  foreignKey({
+    name: 'billing_document_invoice_list_fk',
+    columns: [t.client, t.invoiceListNumber],
+    foreignColumns: [t.client, t.billingNumber],
+  }).onDelete('restrict'),
+  // And the type of list it is due for has to stand, for the same reason a document type does: the
+  // run draws a number from it and posts against the payer it names.
+  foreignKey({
+    name: 'billing_document_invoice_list_type_fk',
+    columns: [t.client, t.invoiceListType],
+    foreignColumns: [salesDocumentType.client, salesDocumentType.documentType],
+  }).onDelete('restrict'),
 ]);
 
 /** One item of a billing document — VBRP. Written once, and one delivery line earns one of them, ever. */
@@ -975,6 +1044,54 @@ export const DELIVERED_SPLIT_CRITERIA: ReadonlyArray<{
  * A maintained split criterion. It is a row and not a constant because which of the five a tenant
  * splits by is a decision about how the customer is billed, and a decision belongs in the database.
  */
+/**
+ * One billing document on an invoice list — an item of SAP's `LR` document (§4.6, gap G2).
+ *
+ * An invoice list is a billing document whose items are **already-posted billing documents**: it carries
+ * no material, no quantity and no price of its own, and nothing is priced again by it. What stands on a
+ * row here is the member's number and the figures it contributes, written down at the moment the list is
+ * created so a list read years later still states what it sent the customer for, from rows that have
+ * moved since.
+ *
+ * A separate table rather than a row in `billing_document_line`, because a billing document line in this
+ * package is a priced line of goods — a material at a quantity at a price, with a condition behind it —
+ * and a member row is a reference to another document. One table holding both would be a schema that
+ * describes half its rows wrongly.
+ */
+export const salesInvoiceListItem = pgTable('sales_invoice_list_item', {
+  client: tenant(),
+  /** The invoice list: the billing document of type LR this row belongs to. */
+  invoiceListNumber: varchar('invoice_list_number', { length: 20 }).notNull(),
+  /** Where the member stands on the list. */
+  itemNumber: integer('item_number').notNull(),
+  /** The billing document being listed. */
+  billingNumber: varchar('billing_number', { length: 20 }).notNull(),
+  /** What the member contributes, written at the moment it was listed. */
+  netValue: numeric('net_value', { precision: 23, scale: 4 }).notNull(),
+  taxValue: numeric('tax_value', { precision: 23, scale: 4 }).notNull(),
+  grossValue: numeric('gross_value', { precision: 23, scale: 4 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.invoiceListNumber, t.itemNumber] }),
+  foreignKey({
+    name: 'sales_invoice_list_item_list_fk',
+    columns: [t.client, t.invoiceListNumber],
+    foreignColumns: [billingDocument.client, billingDocument.billingNumber],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'sales_invoice_list_item_member_fk',
+    columns: [t.client, t.billingNumber],
+    foreignColumns: [billingDocument.client, billingDocument.billingNumber],
+  }).onDelete('restrict'),
+  // A billing document stands on one list at a time, and never twice on the same one. A document on
+  // two lists would be sent to the customer twice and released to accounting twice, which is the one
+  // failure an invoice list must not have.
+  uniqueIndex('sales_invoice_list_item_member_uq').on(t.client, t.billingNumber),
+  uniqueIndex('sales_invoice_list_item_list_member_uq').on(t.client, t.invoiceListNumber, t.billingNumber),
+  check('sales_invoice_list_item_number_ck', sql`${t.itemNumber} > 0`),
+  index('sales_invoice_list_item_member_idx').on(t.client, t.billingNumber),
+]);
+
 export const salesBillingSplitCriterion = pgTable('sales_billing_split_criterion', {
   client: tenant(),
   criterion: varchar('criterion', { length: 24 }).notNull(),

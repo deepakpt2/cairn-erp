@@ -39,8 +39,8 @@ import {
 
 import {
   BILLING_SPLIT_CRITERIA, DELIVERED_SPLIT_CRITERIA, billingDocument, billingDocumentLine, delivery,
-  deliveryLine, salesBillingPlan, salesBillingPlanDate, salesBillingSplitCriterion, salesOrder,
-  salesOrderLine, type BillingSplitCriterion,
+  deliveryLine, salesBillingPlan, salesBillingPlanDate, salesBillingSplitCriterion, salesDocumentType,
+  salesOrder, salesOrderLine, type BillingSplitCriterion,
 } from './schema';
 import { materialSales } from '../inventory/schema';
 import { customerSalesArea } from '../foundation/customer-sales-area-schema';
@@ -492,6 +492,13 @@ export interface BillingView {
    */
   downPaymentClearedAmount: string;
   downPaymentClearingNumber: string | null;
+  /**
+   * Where the document stands with its invoice list: `NOT_RELEVANT`, `DUE` or `LISTED` (§4.6). A reader
+   * who sees DUE knows at once why the document posts nothing, without opening the list screen.
+   */
+  invoiceListStatus: string;
+  /** The list this document is on, where it is on one. */
+  invoiceListNumber: string | null;
   version: number;
   createdBy: string;
   lines: Array<{
@@ -542,6 +549,8 @@ function mapHeader(row: typeof billingDocument.$inferSelect): Omit<BillingView, 
     cancellationOf: row.cancellationOf,
     downPaymentClearedAmount: row.downPaymentClearedAmount,
     downPaymentClearingNumber: row.downPaymentClearingNumber,
+    invoiceListStatus: row.invoiceListStatus,
+    invoiceListNumber: row.invoiceListNumber,
     version: row.version,
     createdBy: row.createdBy,
   };
@@ -799,6 +808,8 @@ export async function listBillings(
       customerInvoiceNumber: row.customerInvoiceNumber,
       creditOf: row.creditOf,
       cancellationOf: row.cancellationOf,
+      invoiceListStatus: row.invoiceListStatus,
+      invoiceListNumber: row.invoiceListNumber,
       version: row.version,
     }));
   });
@@ -844,6 +855,12 @@ export interface BillingCreateResult {
   posted: boolean;
   /** Set when the delivery's credit determination is blocked: the document stands, the invoice is held. */
   heldForCredit: boolean;
+  /**
+   * Set when the document is due for an invoice list (§4.6): it stands, billed and complete, and posts
+   * nothing — the receivable is the list's, raised when the list is released. Not an error and not a
+   * block: it is the shape a document takes when the customer is billed by list.
+   */
+  awaitingInvoiceList: boolean;
   replayed: boolean;
   /**
    * The advance of this order the invoice consumed. Absent where there was no advance to settle.
@@ -877,16 +894,38 @@ async function postBuiltBilling(input: {
   const { built } = input;
   const view = await getBilling(input.client, built.billingNumber);
   if (!view) throw new BillingError(`Billing document ${built.billingNumber} could not be read back.`);
+  const waiting = built.replayed
+    ? view.status === 'OPEN' && view.invoiceListStatus === 'DUE'
+    : built.invoiceListStatus === 'DUE';
   if (built.replayed) {
-    return { billing: view, invoice: null, posted: view.status === 'POSTED', heldForCredit: false, replayed: true };
+    return {
+      billing: view, invoice: null, posted: view.status === 'POSTED', heldForCredit: false, replayed: true,
+      awaitingInvoiceList: waiting,
+    };
   }
   if (view.status !== 'OPEN') {
-    return { billing: view, invoice: null, posted: view.status === 'POSTED', heldForCredit: false, replayed: false };
+    return {
+      billing: view, invoice: null, posted: view.status === 'POSTED', heldForCredit: false, replayed: false,
+      awaitingInvoiceList: waiting,
+    };
   }
   if (built.held) {
     // The document stands, unbilled, and the release of the blocked document is what lets it post. Leaving it
     // OPEN is what makes that retry safe rather than a second invoice.
-    return { billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false };
+    return {
+      billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false,
+      awaitingInvoiceList: waiting,
+    };
+  }
+  // The document is due for an invoice list, so nothing is posted here. This is the rule that makes a
+  // list mean something: a document that is waiting for one has not been released to accounting, and
+  // the entry the customer will owe is the list's. Posting now would leave the customer owing the
+  // money twice — once here and once when the list is released.
+  if (built.invoiceListStatus === 'DUE') {
+    return {
+      billing: view, invoice: null, posted: false, heldForCredit: false, replayed: false,
+      awaitingInvoiceList: true,
+    };
   }
 
   // The receivable is raised against the payer, not against the customer that placed the order: it is
@@ -977,6 +1016,9 @@ async function postBuiltBilling(input: {
     invoice,
     posted: true,
     heldForCredit: false,
+    // A document that reaches here has posted its own receivable, so it is not waiting for a list:
+    // the two are mutually exclusive by construction, and saying so is what keeps them that way.
+    awaitingInvoiceList: false,
     replayed: false,
     rebates: rebates.length > 0 ? rebates : undefined,
     // Reported rather than thrown: the receivable stands and the document is posted, and an advance
@@ -1023,6 +1065,11 @@ type BuiltBilling =
       companyCode: string;
       customerNumber: string;
       currency: string;
+      /**
+       * Whether this document is waiting for an invoice list (§4.6). A document that is due for one
+       * posts no receivable of its own: the list's release posts one entry for the whole group.
+       */
+      invoiceListStatus: 'NOT_RELEVANT' | 'DUE';
     };
 
 /**
@@ -1383,6 +1430,63 @@ async function buildLinesForDelivery(
 }
 
 /**
+ * Whether a document is relevant for an invoice list, and when its list falls (§4.6, gap G2).
+ *
+ * SAP's rule, and the whole of it: a billing document is listed only where **both** the invoice-list
+ * type and the invoice-list date were filled on it at creation — `VBRK-FKART_RL` from the billing type
+ * (assigned in `OVV7`), `VBRK-FKDAT_RL` from the **payer master's** invoicing-list schedule. Either one
+ * alone leaves the document released to accounting on its own, which is what every document raised
+ * before this increment does, and what every document raised for a payer with no schedule still does.
+ *
+ * SAP reads the date out of a factory calendar on the payer master. The package has none, so the
+ * period is kept instead and the date is the end of the period the billing date falls in — the Sunday
+ * that closes the week, or the last day of the month.
+ */
+export const INVOICE_LIST_SCHEDULES = ['NONE', 'WEEKLY', 'MONTHLY'] as const;
+
+function endOfPeriod(billingDate: string, schedule: 'WEEKLY' | 'MONTHLY'): string {
+  const at = new Date(`${billingDate}T00:00:00Z`);
+  if (schedule === 'MONTHLY') {
+    return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 0))
+      .toISOString().slice(0, 10);
+  }
+  // ISO weeks run Monday to Sunday, and the week closes on the Sunday it ends with.
+  const day = at.getUTCDay() === 0 ? 7 : at.getUTCDay();
+  return new Date(at.getTime() + (7 - day) * 86_400_000).toISOString().slice(0, 10);
+}
+
+async function invoiceListRelevance(
+  tx: Tx,
+  client: string,
+  input: { documentType: string; payer: string; billingDate: string },
+): Promise<{ invoiceListType: string | null; invoiceListDate: string | null; status: 'NOT_RELEVANT' | 'DUE' }> {
+  const none = { invoiceListType: null, invoiceListDate: null, status: 'NOT_RELEVANT' as const };
+  const [type] = await tx.select({ invoiceListType: salesDocumentType.invoiceListType })
+    .from(salesDocumentType).where(and(
+      eq(salesDocumentType.client, client),
+      eq(salesDocumentType.documentType, input.documentType),
+      eq(salesDocumentType.isActive, true),
+    )).limit(1);
+  if (!type?.invoiceListType) return none;
+
+  // The payer's schedule, read from the sales area the document was raised in — the partner who pays,
+  // and not the partner who ordered: an invoice list is made out to the payer.
+  const [area] = await tx.select({ schedule: customerSalesArea.invoiceListSchedule })
+    .from(customerSalesArea).where(and(
+      eq(customerSalesArea.client, client),
+      eq(customerSalesArea.partnerNumber, input.payer),
+    )).orderBy(asc(customerSalesArea.salesOrg)).limit(1);
+  const schedule = (area?.schedule ?? 'NONE') as 'NONE' | 'WEEKLY' | 'MONTHLY';
+  if (schedule === 'NONE') return none;
+
+  return {
+    invoiceListType: type.invoiceListType,
+    invoiceListDate: endOfPeriod(input.billingDate, schedule),
+    status: 'DUE',
+  };
+}
+
+/**
  * Write the billing document and its lines, and say what it stands at.
  *
  * The one author of the document, whichever path raised it. A document raised against one delivery and
@@ -1435,6 +1539,16 @@ async function writeBillingDocument(
       );
     }
 
+    // Whether this document is one a list will group, decided on the day it is raised and never
+    // revised: SAP stamps `FKART_RL` and `FKDAT_RL` at creation and will not change them online, and
+    // for the same reason — a document that was listed does not stop being listed because the payer's
+    // schedule was amended after the fact.
+    const relevance = await invoiceListRelevance(tx, client, {
+      documentType: billingType.documentType,
+      payer: input.partners.payer,
+      billingDate: input.billingDate,
+    });
+
     let number: string;
     try {
       const drawn = await allocateNumber(tx, {
@@ -1469,6 +1583,9 @@ async function writeBillingDocument(
       grossValue: round2(input.netTotal + input.taxTotal),
       referenceDocumentText: input.referenceDocumentText.slice(0, 100),
       requestKey: input.requestKey || null,
+      invoiceListType: relevance.invoiceListType,
+      invoiceListDate: relevance.invoiceListDate,
+      invoiceListStatus: relevance.status,
       createdBy: changedBy,
     });
     // Who the invoice is made with: the order's partners, written down again on the billing document.
@@ -1520,6 +1637,7 @@ async function writeBillingDocument(
     companyCode: input.header.companyCode,
     customerNumber: input.header.customerNumber,
     currency: input.header.currency,
+    invoiceListStatus: relevance.status,
   };
 }
 
@@ -1886,6 +2004,7 @@ export async function createBillingFromPlanDate(
       grossTotal: round2(netTotal + taxTotal),
       orderNumber: order.orderNumber,
       orderNumbers: [order.orderNumber],
+      invoiceListStatus: 'NOT_RELEVANT',
       companyCode: order.companyCode,
       customerNumber: order.customerNumber,
       currency: order.currency,
@@ -1901,7 +2020,7 @@ export async function createBillingFromPlanDate(
   });
 }
 
-interface InvoiceLine {
+export interface InvoiceLine {
   /**
    * The account the whole line posts to. Absent where the line carries components, because a line whose
    * price, discount and freight each post somewhere of their own has no single account to name.
@@ -1927,7 +2046,7 @@ interface InvoiceLine {
  * carried when the invoice was posted. Both the create path and the release-then-post path come through here,
  * so there is one author of the link and no second writer of `POSTED`.
  */
-async function linkPostedInvoice(
+export async function linkPostedInvoice(
   client: string,
   changedBy: string,
   billingNumber: string,
@@ -2053,7 +2172,7 @@ async function postStandingBilling(input: {
   if (!prepared.post) {
     return {
       billing: view, invoice: null, posted: view.status === 'POSTED',
-      heldForCredit: prepared.held, replayed: true,
+      heldForCredit: prepared.held, replayed: true, awaitingInvoiceList: false,
     };
   }
 
@@ -2089,6 +2208,7 @@ async function postStandingBilling(input: {
     invoice,
     posted: true,
     heldForCredit: false,
+    awaitingInvoiceList: false,
     replayed: true,
   };
 }
@@ -2117,7 +2237,10 @@ export async function postBillingDocument(
   const view = await getBilling(parsed.client, existing);
   if (!view) throw new BillingError(`Billing document ${existing} could not be read.`);
   if (view.status === 'POSTED') {
-    return { billing: view, invoice: null, posted: true, heldForCredit: false, replayed: true };
+    return {
+      billing: view, invoice: null, posted: true, heldForCredit: false, replayed: true,
+      awaitingInvoiceList: false,
+    };
   }
   // An OPEN document is the one state that may still raise its invoice. Re-read the block, then post.
   const held = await (view.deliveryNumber
@@ -2126,7 +2249,10 @@ export async function postBillingDocument(
       ? standingDetermination(parsed.client, view.orderNumber)
       : null);
   if (held?.status === 'BLOCKED') {
-    return { billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false };
+    return {
+      billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false,
+      awaitingInvoiceList: false,
+    };
   }
   return postStandingBilling({
     client: parsed.client,

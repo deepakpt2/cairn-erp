@@ -17,6 +17,7 @@ export interface SalesDocumentTypeChoice {
   numberRangeObject: string;
   numberRangeSubObject: string;
   cancellationDocumentType: string | null;
+  invoiceListType: string | null;
   isActive: boolean;
   documentsStanding: number;
 }
@@ -152,6 +153,8 @@ export function SalesDocumentTypeSetup({ types }: { types: SalesDocumentTypeChoi
                     </dd>
                     <dt className="text-ink-faint">Cancels into</dt>
                     <dd className="font-mono">{chosen.cancellationDocumentType ?? '—'}</dd>
+                    <dt className="text-ink-faint">Invoice list type</dt>
+                    <dd className="font-mono">{chosen.invoiceListType ?? '—'}</dd>
                     <dt className="text-ink-faint">Status</dt>
                     <dd>{chosen.isActive ? 'Offered' : 'Withdrawn'}</dd>
                     <dt className="text-ink-faint">Documents standing</dt>
@@ -180,6 +183,24 @@ export function SalesDocumentTypeSetup({ types }: { types: SalesDocumentTypeChoi
                         className="field w-full font-mono uppercase"
                         placeholder="(none)"
                       />
+                    </label>
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-medium">Invoice list type</span>
+                      <input
+                        name="invoiceListType"
+                        maxLength={4}
+                        defaultValue={chosen.invoiceListType ?? ''}
+                        key={`lists-${chosen.documentType}`}
+                        className="field w-full font-mono uppercase"
+                        placeholder="(none)"
+                      />
+                      <span className="mt-1 block text-xs text-ink-faint">
+                        The type of invoice list documents of this one are grouped into. It must stand
+                        first, it cannot be this type, and it does nothing on its own — the payer has to
+                        carry a schedule as well before a single document is listed. Blank is what every
+                        delivered type carries, and it means what it has always meant: the document is
+                        released to accounting the day it is billed.
+                      </span>
                     </label>
                     <input type="hidden" name="documentType" value={chosen.documentType} />
                     <button type="submit" disabled={changePending} className="btn btn-default min-h-11 w-full">

@@ -82,6 +82,9 @@ export async function changeDocumentTypeAction(
       documentType: text(form, 'documentType'),
       name: text(form, 'name'),
       cancellationDocumentType: text(form, 'cancellationDocumentType') || null,
+      // Blank clears it: a tenant that stops billing a customer by list says so here, and the documents
+      // already waiting stay waiting — relevance is a fact of the day each one was billed.
+      invoiceListType: text(form, 'invoiceListType') || null,
     });
     revalidatePath(ROUTE);
     return { ok: true, message: `Document type ${documentType} now reads as configured.` };

@@ -48,6 +48,16 @@ export const STANDARD_CREDIT_MEMO_REQUEST_TYPE = 'CR';
  * against it.
  */
 export const STANDARD_DOWN_PAYMENT_REQUEST_TYPE = 'DP';
+/**
+ * The type an invoice list is raised as — SAP's `LR` (`OVV7`), and `IL` here because this package
+ * spends `LR` on the returns delivery (§3.4). A billing type points at it in `invoice_list_type`,
+ * and a tenant that wants lists maintained the pointer; no delivered type carries one, because the
+ * payer's schedule has to say so as well before anything is listed.
+ *
+ * It draws from the billing interval rather than one of its own: an invoice list is a billing
+ * document, and SAP numbers it out of the same range as the invoices it groups.
+ */
+export const STANDARD_INVOICE_LIST_TYPE = 'IL';
 
 /**
  * SAP's B1: the credit memo a rebate settlement is paid on. It is deliberately not a G2. A G2 credits an
@@ -114,6 +124,10 @@ export const STANDARD_SALES_DOCUMENT_TYPES: StandardSalesDocumentType[] = [
     documentType: STANDARD_REBATE_SETTLEMENT_TYPE, name: 'Rebate settlement',
     numberRangeObject: 'BILLING', numberRangeSubObject: 'B1',
   },
+  {
+    documentType: STANDARD_INVOICE_LIST_TYPE, name: 'Invoice list',
+    numberRangeObject: 'BILLING', numberRangeSubObject: STANDARD_BILLING_TYPE,
+  },
 ];
 
 export interface ResolvedSalesDocumentType {
@@ -129,6 +143,11 @@ export interface ResolvedSalesDocumentType {
    * pricing procedure as well, and the type contributes one of the three keys.
    */
   pricingProcedure: string;
+  /**
+   * The invoice-list type a document of this type is grouped into — SAP's `OVV7` (§4.6, gap G2).
+   * Null where the type is released to accounting on its own, which is every delivered type.
+   */
+  invoiceListType: string | null;
 }
 
 /**
@@ -153,6 +172,7 @@ export async function salesDocumentTypeFor(
        * which procedure answers depends on the sales area and the customer as well.
        */
       pricingProcedure: salesDocumentType.pricingProcedure,
+      invoiceListType: salesDocumentType.invoiceListType,
     })
     .from(salesDocumentType)
     .where(

@@ -51,6 +51,12 @@ export interface SalesDocumentTypeRow {
   numberRangeObject: string;
   numberRangeSubObject: string;
   cancellationDocumentType: string | null;
+  /**
+   * The invoice-list type documents of this type are grouped into — SAP's `OVV7` (§4.6). Blank on every
+   * delivered type: a document is listed only where this *and* the payer's schedule say so, so no tenant
+   * starts listing, and no document already billed changes what it posts.
+   */
+  invoiceListType: string | null;
   isActive: boolean;
   /** How many documents of this type stand, over orders, deliveries and billing documents. */
   documentsStanding: number;
@@ -66,7 +72,7 @@ export async function listSalesDocumentTypes(client: string): Promise<SalesDocum
   return withTenant(client, async (tx) => {
     const rows = await tx.execute(sql`
       select t.document_type, t.name, t.number_range_object, t.number_range_sub_object,
-             t.cancellation_document_type, t.is_active,
+             t.cancellation_document_type, t.invoice_list_type, t.is_active,
              (select count(*) from sales_order o
                where o.client = t.client and o.document_type = t.document_type)
              + (select count(*) from delivery d
@@ -83,7 +89,7 @@ export async function listSalesDocumentTypes(client: string): Promise<SalesDocum
        order by t.document_type
     `) as unknown as Array<{
       document_type: string; name: string; number_range_object: string; number_range_sub_object: string;
-      cancellation_document_type: string | null; is_active: boolean;
+      cancellation_document_type: string | null; invoice_list_type: string | null; is_active: boolean;
       documents_standing: string | number; range_stands: boolean;
     }>;
     return rows.map((row) => ({
@@ -92,6 +98,7 @@ export async function listSalesDocumentTypes(client: string): Promise<SalesDocum
       numberRangeObject: row.number_range_object,
       numberRangeSubObject: row.number_range_sub_object,
       cancellationDocumentType: row.cancellation_document_type,
+      invoiceListType: row.invoice_list_type,
       isActive: Boolean(row.is_active),
       documentsStanding: Number(row.documents_standing ?? 0),
       rangeStands: Boolean(row.range_stands),
@@ -210,6 +217,12 @@ export interface ChangeSalesDocumentTypeInput {
   documentType: string;
   name: string;
   cancellationDocumentType?: string | null;
+  /**
+   * The invoice-list type documents of this type are grouped into, or null for none (§4.6). Setting it
+   * does not by itself list anything: the payer has to carry a schedule as well, and the two are read
+   * when the document is billed, not when the type is maintained.
+   */
+  invoiceListType?: string | null;
 }
 
 /** Redefine a type that stands: the name a screen shows, and what it cancels into. */
@@ -219,8 +232,15 @@ export async function changeSalesDocumentType(
   const code = input.documentType.trim().toUpperCase();
   const name = input.name.trim();
   const cancels = input.cancellationDocumentType?.trim().toUpperCase() || null;
+  const lists = input.invoiceListType?.trim().toUpperCase() || null;
   if (!name) {
     throw new SalesDocumentTypeError('A document type carries the name a screen shows for it.');
+  }
+  if (lists === code) {
+    throw new SalesDocumentTypeError(
+      `Document type ${code} cannot be grouped onto a list of its own type: an invoice list is not itself listed.`,
+      'Name the invoice-list type documents of this one are grouped into, or leave it empty.',
+    );
   }
   if (cancels === code) {
     throw new SalesDocumentTypeError(
@@ -251,8 +271,20 @@ export async function changeSalesDocumentType(
         );
       }
     }
+    if (lists) {
+      const [counterpart] = await tx.select({ documentType: salesDocumentType.documentType }).from(salesDocumentType)
+        .where(and(
+          eq(salesDocumentType.client, input.client), eq(salesDocumentType.documentType, lists),
+        )).limit(1);
+      if (!counterpart) {
+        throw new SalesDocumentTypeError(
+          `Document type ${lists} does not stand, so ${code} cannot be listed under it.`,
+          `Define ${lists} as an invoice-list type first, then name it here.`,
+        );
+      }
+    }
     await tx.update(salesDocumentType).set({
-      name: name.slice(0, 40), cancellationDocumentType: cancels,
+      name: name.slice(0, 40), cancellationDocumentType: cancels, invoiceListType: lists,
       changedBy: input.changedBy, changedAt: new Date(),
     }).where(and(
       eq(salesDocumentType.client, input.client), eq(salesDocumentType.documentType, code),
@@ -260,9 +292,14 @@ export async function changeSalesDocumentType(
     await recordChange(tx, {
       client: input.client, objectClass: DOCUMENT_TYPE_OBJECT_CLASS, objectKey: code,
       changeType: 'CHANGE', changedBy: input.changedBy,
-      before: { name: row.name, cancellationDocumentType: row.cancellationDocumentType ?? '' },
-      after: { name: name.slice(0, 40), cancellationDocumentType: cancels ?? '' },
-      fieldLabels: { name: 'Name', cancellationDocumentType: 'Cancels into' },
+      before: {
+        name: row.name, cancellationDocumentType: row.cancellationDocumentType ?? '',
+        invoiceListType: row.invoiceListType ?? '',
+      },
+      after: {
+        name: name.slice(0, 40), cancellationDocumentType: cancels ?? '', invoiceListType: lists ?? '',
+      },
+      fieldLabels: { name: 'Name', cancellationDocumentType: 'Cancels into', invoiceListType: 'Invoice list type' },
     });
     // The table carries no version: a type is configuration, and two consultants saving the same type
     // is not the contention a document is. What is returned is the history's own count of the change.

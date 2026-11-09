@@ -2710,6 +2710,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/sales/invoice-lists",
+    path: "/sales/invoice-lists",
+    query: {},
+    code: "SALES.INVOICE_LIST.CREATE",
+    title: "Invoice lists",
+    area: "sales",
+    family: "sales-billing",
+    accepts: ["billing", "customer"],
+  },
+  {
     // Quality management has no screen area of its own yet: a `quality` entry in `ScreenArea` and
     // `SCREEN_AREAS` would also need its `nav.area.quality` label in src/platform/i18n/index.ts, a file with
     // uncommitted owner work in it. Until that label can land, the lot lives in the Inventory area, beside

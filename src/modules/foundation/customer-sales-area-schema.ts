@@ -44,6 +44,20 @@ export const customerSalesArea=pgTable('customer_sales_area',{
    * for.
    */
   maxPartialDeliveries:smallint('max_partial_deliveries').notNull().default(0),
+  /**
+   * How often this partner's invoices are grouped onto an invoice list — SAP's invoicing-list dates
+   * on the payer master (§4.6, audit gap G2).
+   *
+   * SAP keeps a factory-calendar key there and reads the list date out of it. The package has no
+   * factory calendar, so the period is kept instead and the list date is computed as the end of the
+   * period the billing date falls in. `NONE` is the default and means what an absent calendar means
+   * in SAP: this payer's documents are released to accounting on their own, the day they are billed,
+   * and no list ever asks for them. Which is why nothing that stands today changes.
+   *
+   * It is the **payer's** field and not the sold-to's, because an invoice list is made out to the
+   * partner who pays — the same partner the receivable is raised against.
+   */
+  invoiceListSchedule:varchar('invoice_list_schedule',{length:12}).notNull().default('NONE'),
   salesStatus:varchar('sales_status',{length:16}).notNull().default('INCOMPLETE'),
   isBlocked:boolean('is_blocked').notNull().default(false),version:integer('version').notNull().default(1),...auditColumns,
 },t=>[
@@ -58,5 +72,6 @@ export const customerSalesArea=pgTable('customer_sales_area',{
   check('customer_sales_account_group',sql`${t.accountAssignmentGroup} is null or ${t.accountAssignmentGroup} ~ '^[A-Z0-9]{1,4}$'`),
   check('customer_sales_shipping_condition',sql`${t.shippingCondition} is null or ${t.shippingCondition} ~ '^[A-Z0-9]{1,2}$'`),
   check('customer_sales_partial_delivery',sql`${t.partialDeliveryIndicator} in ('','C')`),
+  check('customer_sales_invoice_list',sql`${t.invoiceListSchedule} in ('NONE','WEEKLY','MONTHLY')`),
   check('customer_sales_max_partial',sql`${t.maxPartialDeliveries} between 0 and 9`),
 ]);

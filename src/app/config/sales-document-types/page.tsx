@@ -54,6 +54,7 @@ export default async function SalesDocumentTypesPage() {
                   <th>Name</th>
                   <th>Number range</th>
                   <th>Cancels into</th>
+                  <th>Invoice list type</th>
                   <th>Status</th>
                   <th>Documents standing</th>
                   <th>Range stands</th>
@@ -68,6 +69,7 @@ export default async function SalesDocumentTypesPage() {
                       {type.numberRangeObject} / {type.numberRangeSubObject}
                     </td>
                     <td className="font-mono">{type.cancellationDocumentType ?? '—'}</td>
+                    <td className="font-mono">{type.invoiceListType ?? '—'}</td>
                     <td>{type.isActive ? 'Offered' : 'Withdrawn'}</td>
                     <td>{type.documentsStanding}</td>
                     <td>
@@ -100,6 +102,7 @@ export default async function SalesDocumentTypesPage() {
             numberRangeObject: type.numberRangeObject,
             numberRangeSubObject: type.numberRangeSubObject,
             cancellationDocumentType: type.cancellationDocumentType,
+            invoiceListType: type.invoiceListType,
             isActive: type.isActive,
             documentsStanding: type.documentsStanding,
           }))}
