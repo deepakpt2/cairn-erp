@@ -38,8 +38,9 @@ import {
 } from '../finance/customer-invoice';
 
 import {
-  billingDocument, billingDocumentLine, delivery, deliveryLine, salesBillingPlan, salesBillingPlanDate,
-  salesOrder, salesOrderLine,
+  BILLING_SPLIT_CRITERIA, DELIVERED_SPLIT_CRITERIA, billingDocument, billingDocumentLine, delivery,
+  deliveryLine, salesBillingPlan, salesBillingPlanDate, salesBillingSplitCriterion, salesOrder,
+  salesOrderLine, type BillingSplitCriterion,
 } from './schema';
 import { materialSales } from '../inventory/schema';
 import { customerSalesArea } from '../foundation/customer-sales-area-schema';
@@ -67,6 +68,14 @@ export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
 export const BILLING_CANCEL_CAPABILITY = 'SALES.BILLING.CANCEL';
 export const BILLING_ROUTE = '/sales/billing';
 export const BILLING_OBJECT_CLASS = 'billing_document';
+/**
+ * Where the split criteria are maintained, and the authority that maintains them.
+ *
+ * Naming them here rather than in the screen is what lets a refusal say where the answer is: a run that
+ * came out as the wrong number of documents is answered on the configuration screen, not in the code.
+ */
+export const BILLING_SPLIT_ROUTE = '/config/billing-split';
+export const SPLIT_DEFINE_CAPABILITY = 'CFG.SALES.SPLIT.DEFINE';
 /** The revenue event the account is read from. A chart without it is a refusal, never a default. */
 export const REVENUE_EVENT = 'SALES_REVENUE';
 
@@ -105,6 +114,323 @@ export const billingCancelInput = z.object({
 export type BillingCreateInput = z.infer<typeof billingCreateInput>;
 export type BillingCancelInput = z.infer<typeof billingCancelInput>;
 
+/* ──────────────────────────────────────────────────────────────────────────────
+ * Collective billing — the month-end run (§4.5, audit gap G2).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A maintained split criterion, as a reader sees it: what the package delivers, what the tenant has
+ * said about it, and what it separates.
+ */
+export interface SplitCriterionView {
+  criterion: BillingSplitCriterion;
+  displayName: string;
+  meaning: string;
+  sequence: number;
+  isActive: boolean;
+  /** Where it stands in the group key among the ones that are maintained — 1-based, 0 when withdrawn. */
+  position: number;
+}
+
+/**
+ * The split criteria as this tenant maintains them.
+ *
+ * All five are returned whether or not a row stands, because a criterion is a field the package delivers
+ * and not a row a tenant invents: what is maintained is *whether* the run splits by it. What is not
+ * maintained does not disappear from the list — it stands there, off, and says so.
+ */
+export async function listSplitCriteria(client: string): Promise<SplitCriterionView[]> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.select().from(salesBillingSplitCriterion)
+      .where(eq(salesBillingSplitCriterion.client, client))
+      .orderBy(asc(salesBillingSplitCriterion.sequence), asc(salesBillingSplitCriterion.criterion));
+    const maintained = new Map(rows.map((row) => [row.criterion as BillingSplitCriterion, row]));
+    let position = 0;
+    return DELIVERED_SPLIT_CRITERIA.map((delivered) => {
+      const row = maintained.get(delivered.criterion);
+      const isActive = row?.isActive ?? false;
+      return {
+        criterion: delivered.criterion,
+        displayName: delivered.displayName,
+        meaning: delivered.meaning,
+        sequence: row?.sequence ?? 0,
+        isActive,
+        position: isActive ? ++position : 0,
+      };
+    }).sort((left, right) => (left.sequence - right.sequence)
+      || (DELIVERED_SPLIT_CRITERIA.findIndex((row) => row.criterion === left.criterion)
+        - DELIVERED_SPLIT_CRITERIA.findIndex((row) => row.criterion === right.criterion)));
+  });
+}
+
+/** The criteria the run reads, in sequence: what `groupDueList` is given. */
+async function activeSplitCriteria(client: string): Promise<BillingSplitCriterion[]> {
+  const rows = await listSplitCriteria(client);
+  return rows.filter((row) => row.isActive).map((row) => row.criterion);
+}
+
+export async function saveSplitCriterion(input: {
+  client: string; criterion: string; sequence?: number; isActive?: boolean; changedBy: string;
+}): Promise<SplitCriterionView> {
+  const parsed = z.object({
+    client: z.string().trim().min(1),
+    criterion: z.enum(BILLING_SPLIT_CRITERIA),
+    sequence: z.coerce.number().int().min(0).max(999).optional(),
+    isActive: z.boolean().optional(),
+    changedBy: z.string().trim().min(1),
+  }).parse(input);
+  await withTenant(parsed.client, async (tx) => {
+    await tx.insert(salesBillingSplitCriterion).values({
+      client: parsed.client,
+      criterion: parsed.criterion,
+      sequence: parsed.sequence ?? 0,
+      isActive: parsed.isActive ?? true,
+      createdBy: parsed.changedBy,
+    }).onConflictDoUpdate({
+      target: [salesBillingSplitCriterion.client, salesBillingSplitCriterion.criterion],
+      set: {
+        sequence: parsed.sequence ?? 0,
+        isActive: parsed.isActive ?? true,
+        changedBy: parsed.changedBy,
+        changedAt: new Date(),
+      },
+    });
+  });
+  const [row] = (await listSplitCriteria(parsed.client))
+    .filter((candidate) => candidate.criterion === parsed.criterion);
+  return row!;
+}
+
+/**
+ * Withdraw a criterion, or bring one back.
+ *
+ * Withdrawn rather than deleted: what was billed under it stands, and a reader asking why one month came
+ * out as eleven documents and the next as three is entitled to find the answer in the database.
+ */
+export async function setSplitCriterionStatus(input: {
+  client: string; criterion: string; isActive: boolean; changedBy: string;
+}): Promise<SplitCriterionView> {
+  return saveSplitCriterion({
+    client: input.client, criterion: input.criterion, isActive: input.isActive, changedBy: input.changedBy,
+  });
+}
+
+/** One group of the due list: what the run will bill as one billing document. */
+export interface BillingDueGroup {
+  /** What separates this group from the others, in the order the criteria stand. */
+  splitBy: Array<{ criterion: BillingSplitCriterion | 'PAYER' | 'CURRENCY' | 'COMPANY_CODE'; value: string }>;
+  payer: string;
+  currency: string;
+  companyCode: string;
+  deliveries: BillingDueRow[];
+  /** What the group is worth: the sum of what its deliveries are worth. */
+  value: string;
+}
+
+/**
+ * The value a row carries for a criterion. A criterion is a header field of the billing document, so
+ * this is a read of the row and not a lookup — which is what lets the grouping answer before anything
+ * is read from the database a second time.
+ */
+function criterionValue(row: BillingDueRow, criterion: BillingSplitCriterion | 'PAYER' | 'CURRENCY' | 'COMPANY_CODE'): string {
+  switch (criterion) {
+    case 'PAYER': return row.payer;
+    case 'CURRENCY': return row.currency;
+    case 'COMPANY_CODE': return row.companyCode;
+    case 'SALES_ORG': return row.salesOrg;
+    case 'DISTRIBUTION_CHANNEL': return row.distributionChannel;
+    case 'DIVISION': return row.division;
+    case 'SHIP_TO': return row.shipTo;
+    case 'PLANT': return row.plant;
+  }
+}
+
+/**
+ * Group the due list into the documents the run will raise.
+ *
+ * **Payer, currency and company code always split**, and they are not maintained, because they are not
+ * a decision: a billing document posts one receivable, against one payer, in one currency, in one
+ * company code. Two payers on one document would be a receivable owed by neither of them.
+ *
+ * Every maintained criterion splits after them. Where two deliveries differ in a field no criterion
+ * names, they stay together and the **first delivery in the group answers for the document's header** —
+ * which is what SAP does with the fields the criteria do not name, and which is why the screen shows
+ * the groups before the run rather than after.
+ */
+export function groupDueList(rows: BillingDueRow[], criteria: BillingSplitCriterion[]): BillingDueGroup[] {
+  const keys: Array<BillingSplitCriterion | 'PAYER' | 'CURRENCY' | 'COMPANY_CODE'> = [
+    'PAYER', 'CURRENCY', 'COMPANY_CODE', ...criteria,
+  ];
+  const groups = new Map<string, BillingDueGroup>();
+  for (const row of rows) {
+    const splitBy = keys.map((criterion) => ({ criterion, value: criterionValue(row, criterion) }));
+    const key = splitBy.map((part) => `${part.criterion}=${part.value}`).join('|');
+    const existing = groups.get(key);
+    if (existing) {
+      existing.deliveries.push(row);
+      existing.value = round2(Number(existing.value) + Number(row.value));
+    } else {
+      groups.set(key, {
+        splitBy, payer: row.payer, currency: row.currency, companyCode: row.companyCode,
+        deliveries: [row], value: row.value,
+      });
+    }
+  }
+  return [...groups.values()];
+}
+
+export interface CollectiveBillingResult {
+  /** The groups the run saw, whether or not every one of them was billed. */
+  groups: BillingDueGroup[];
+  /** One result per group, in the order the groups stand: what the run raised. */
+  documents: BillingCreateResult[];
+}
+
+const collectiveBillingInput = z.object({
+  client: z.string().trim().min(1),
+  changedBy: z.string().trim().min(1),
+  billingDate: z.string().trim().min(1),
+  postingDate: z.string().trim().min(1).optional(),
+  selection: z.object({
+    customerNumber: z.string().trim().min(1).optional(),
+    deliveryNumber: z.string().trim().min(1).optional(),
+    salesOrg: z.string().trim().min(1).optional(),
+    plant: z.string().trim().min(1).optional(),
+  }).optional(),
+});
+
+/**
+ * Bill the due list.
+ *
+ * The act SAP's `VF04` performs and the one the package never had: a month of goods-issued deliveries
+ * becomes the handful of invoices the criteria say it should be, in one submission.
+ *
+ * What one document *is* does not change. Every line still prices from the order line the delivery
+ * names, at the quantity that went out, on the account each condition key determines, and the whole
+ * document still posts one receivable against the payer. What changes is only how many deliveries reach
+ * one document, and who decided: the criteria, maintained, or the three that are not a decision at all.
+ *
+ * **A refusal fails the run, not the delivery.** Every gate a single delivery goes through — the goods
+ * must have gone out, no live document may stand for it, the movement must not have been reversed, the
+ * item must not carry a billing plan — fires again here, inside the transaction that would have written.
+ * Billing half a month and reporting which half went through is not a month-end run; it is two runs and
+ * a reconciliation. Nothing is written for a group that fails.
+ *
+ * **The run bills once, and it is the due list that says so.** A delivery that has been billed has
+ * earned its invoice and is no longer due, so a second run over the same month raises nothing at all.
+ * No submission key is taken here, and that is deliberate: a key names *one* document, and a run draws
+ * several — a key that answered for the whole run would have to be either a lie about the documents it
+ * covers or a second numbering scheme of its own. What covers the run instead is the lock each delivery
+ * is taken under and the refusal that reads it back: two runs over one month cannot both bill it.
+ *
+ * A run that failed partway is safe for the same reason. The groups it did bill are billed, and the
+ * retry bills what the due list still offers — which is the rest of the month, and no more.
+ */
+export async function billDueList(input: z.input<typeof collectiveBillingInput>): Promise<CollectiveBillingResult> {
+  const parsed = collectiveBillingInput.parse(input);
+  const criteria = await activeSplitCriteria(parsed.client);
+  const due = await billingDueList(parsed.client, parsed.selection ?? {});
+  const groups = groupDueList(due, criteria);
+  const documents: BillingCreateResult[] = [];
+
+  for (const group of groups) {
+    const built: BuiltBilling = await withTenant(parsed.client, async (tx) => {
+      const items: Array<typeof billingDocumentLine.$inferInsert> = [];
+      const billedLineConditions: Array<{ lineNumber: number; conditions: PricedCondition[] }> = [];
+      const invoice: InvoiceLine[] = [];
+      const orderNumbers = new Set<string>();
+      let netTotal = 0;
+      let taxTotal = 0;
+      let held = false;
+      let startLineNumber = 10;
+
+      for (const row of group.deliveries) {
+        const [deliveryHeader] = await tx.select().from(delivery).where(and(
+          eq(delivery.client, parsed.client), eq(delivery.deliveryNumber, row.deliveryNumber),
+        )).limit(1);
+        if (!deliveryHeader) {
+          throw new BillingError(
+            `Delivery ${row.deliveryNumber} was on the due list when the run read it and is gone now.`,
+            'Nothing was billed. Read the due list again and run it once more.',
+          );
+        }
+        const gate = await assertDeliveryBillable(tx, parsed.client, deliveryHeader);
+        held = held || gate.held;
+        const build = await buildLinesForDelivery(
+          tx, parsed.client, parsed.changedBy, deliveryHeader, startLineNumber,
+        );
+        startLineNumber += build.items.length * 10;
+        items.push(...build.items);
+        invoice.push(...build.invoice);
+        billedLineConditions.push(...build.billedLineConditions);
+        netTotal += build.netTotal;
+        taxTotal += build.taxTotal;
+        for (const orderNumber of build.orderNumbers) orderNumbers.add(orderNumber);
+      }
+
+      // The header. Company code and currency are the group's own facts — they split, so the whole group
+      // agrees on them. The sales area and the customer come from the first delivery in the group, which
+      // is what SAP does with the fields no criterion names: a reader who cares which sales organisation
+      // a document was raised in maintains the criterion and gets one document per organisation, and one
+      // who does not gets the value the first delivery carried.
+      const first = group.deliveries[0]!;
+      const [header] = await tx.select().from(delivery).where(and(
+        eq(delivery.client, parsed.client), eq(delivery.deliveryNumber, first.deliveryNumber),
+      )).limit(1);
+      if (!header) {
+        throw new BillingError(
+          `Delivery ${first.deliveryNumber} was on the due list when the run read it and is gone now.`,
+          'Nothing was billed. Read the due list again and run it once more.',
+        );
+      }
+      const partners = await documentPartners(tx, parsed.client, 'DELIVERY', header.deliveryNumber)
+        ?? await documentPartners(tx, parsed.client, 'ORDER', header.orderNumber)
+        ?? await resolvePartners(tx, parsed.client, {
+          partnerNumber: header.customerNumber, salesOrg: header.salesOrg,
+          distributionChannel: header.distributionChannel, division: header.division,
+        });
+
+      const single = group.deliveries.length === 1 ? first.deliveryNumber : null;
+      return writeBillingDocument(tx, parsed.client, parsed.changedBy, {
+        header: {
+          // A collective document names an order only where it has exactly one, and a delivery likewise.
+          // Every order it billed stands on the line that was priced from it, and a header that named
+          // one of them would be billing the others on its authority.
+          orderNumber: orderNumbers.size === 1 ? [...orderNumbers][0]! : null,
+          deliveryNumber: single,
+          salesOrg: first.salesOrg,
+          distributionChannel: first.distributionChannel,
+          division: first.division,
+          customerNumber: first.customerNumber,
+          companyCode: first.companyCode,
+          currency: first.currency,
+        },
+        partners,
+        items, billedLineConditions, invoice, netTotal, taxTotal, held,
+        billingDate: parsed.billingDate,
+        postingDate: parsed.postingDate,
+        referenceDocumentText: single
+          ? `Delivery ${single}`
+          : `${group.deliveries.length} deliveries, ${first.deliveryNumber} and after`,
+        orderNumbers: [...orderNumbers],
+        changeAfter: group.deliveries.length > 1
+          ? { deliveries: String(group.deliveries.length) }
+          : undefined,
+      });
+    });
+
+    documents.push(await postBuiltBilling({
+      client: parsed.client,
+      changedBy: parsed.changedBy,
+      billingDate: parsed.billingDate,
+      postingDate: parsed.postingDate,
+      built,
+    }));
+  }
+
+  return { groups, documents };
+}
+
 /**
  * Bill one date of an order item's billing plan.
  *
@@ -132,7 +458,12 @@ const roundQuantity = (value: number) => Math.round((value + Number.EPSILON) * 1
 export interface BillingView {
   billingNumber: string;
   documentType: string;
-  orderNumber: string;
+  /**
+   * The order this document was raised against, where it has one. A collective document that bills a
+   * month of deliveries carries several, every one of them on the line that was priced from it, and
+   * names none here rather than pretending to one (§4.5).
+   */
+  orderNumber: string | null;
   /**
    * The delivery this document bills. Null on an order-related document, which is raised against a
    * billing plan date and bills a share of an item rather than goods that went out.
@@ -166,6 +497,7 @@ export interface BillingView {
   lines: Array<{
     lineNumber: number;
     deliveryLineNumber: number | null;
+    orderNumber: string;
     orderLineNumber: number;
     materialNumber: string;
     billingQuantity: string;
@@ -228,6 +560,9 @@ async function loadBilling(tx: Tx, client: string, billingNumber: string): Promi
     lines: lines.map((line) => ({
       lineNumber: line.lineNumber,
       deliveryLineNumber: line.deliveryLineNumber,
+      // The order the line was priced from. A collective document names no order on its header, and
+      // this is where the ones it billed stand: the order has always been a fact of the line.
+      orderNumber: line.orderNumber,
       orderLineNumber: line.orderLineNumber,
       materialNumber: line.materialNumber,
       billingQuantity: line.billingQuantity,
@@ -245,7 +580,7 @@ async function loadBilling(tx: Tx, client: string, billingNumber: string): Promi
       ?? (header.deliveryNumber
         ? await documentPartners(tx, client, 'DELIVERY', header.deliveryNumber)
         : null)
-      ?? await documentPartners(tx, client, 'ORDER', header.orderNumber)
+      ?? (header.orderNumber ? await documentPartners(tx, client, 'ORDER', header.orderNumber) : null)
       ?? await resolvePartners(tx, client, {
         partnerNumber: header.customerNumber, salesOrg: header.salesOrg,
         distributionChannel: header.distributionChannel, division: header.division,
@@ -262,7 +597,9 @@ export async function getBilling(client: string, billingNumber: string): Promise
   // name: the order the plan hangs off.
   const determination = document.deliveryNumber
     ? await standingDetermination(client, document.deliveryNumber)
-    : await standingDetermination(client, document.orderNumber);
+    : document.orderNumber
+      ? await standingDetermination(client, document.orderNumber)
+      : null;
   return {
     ...document,
     credit: determination
@@ -275,31 +612,88 @@ export async function getBilling(client: string, billingNumber: string): Promise
  * The deliveries that have earned an invoice and have not yet had one: goods-issued, not cancelled, unbilled.
  * This is the due list VF04 works from, and it is the only set the screen offers to bill.
  */
-export async function listBillableDeliveries(
+/**
+ * One row of the billing due list: a delivery whose goods have gone out and which has earned an invoice
+ * it has not had — SAP's `VF04`.
+ *
+ * Every field a split criterion can be read from stands here, so the grouping is a read and not a
+ * second opinion: the payer the receivable is raised against, the sales area the sale was made in, the
+ * ship-to the goods went to, the plant they went from, and the company and currency the document will
+ * be accounted in.
+ */
+export interface BillingDueRow {
+  deliveryNumber: string;
+  orderNumber: string;
+  /** The sold-to: the partner the delivery was raised for. */
+  customerNumber: string;
+  /** Who pays. The receivable is raised against this one, and it is what always splits. */
+  payer: string;
+  shipTo: string;
+  salesOrg: string;
+  distributionChannel: string;
+  division: string;
+  companyCode: string;
+  currency: string;
+  plant: string;
+  goodsMovementDate: string | null;
+  materialDocumentNumber: string | null;
+  /** What the delivery is worth: the order's own price at the quantity that went out. */
+  value: string;
+}
+
+/**
+ * The billing due list.
+ *
+ * The one author of "has earned an invoice and has not had one". The single-delivery screen reads it,
+ * and the collective run reads it: a predicate maintained in two places would eventually disagree, and
+ * a run that billed what the screen withholds is the worst version of that disagreement.
+ *
+ * What is excluded is excluded for a reason, and each reason is in the query: a delivery whose goods
+ * have not gone out, one a live document already stands for, and one carrying an item that a billing
+ * plan answers for. A plan that asks only for advances is not such a plan — the advance is settled
+ * against the invoice the delivery earns.
+ */
+export async function billingDueList(
   client: string,
-  filter: { customerNumber?: string; deliveryNumber?: string } = {},
-): Promise<Array<{
-  deliveryNumber: string; orderNumber: string; customerNumber: string; plant: string;
-  goodsMovementDate: string | null; materialDocumentNumber: string | null; value: string;
-}>> {
+  filter: { customerNumber?: string; deliveryNumber?: string; salesOrg?: string; plant?: string } = {},
+): Promise<BillingDueRow[]> {
   return withTenant(client, async (tx) => {
     const rows = await tx.execute(sql`
       select d.delivery_number, d.order_number, d.customer_number, d.plant, d.goods_movement_date,
-             d.material_document_number,
+             d.material_document_number, d.sales_org, d.distribution_channel, d.division,
+             o.company_code, o.currency,
+             -- Who pays, and where the goods went. The receivable is raised against the payer and not
+             -- against the partner the order was placed with, so the group a delivery falls into is
+             -- read from the same row the invoice will be posted against and not from the header.
+             coalesce(p_py.partner_number, p_bp.partner_number, d.customer_number) as payer,
+             coalesce(p_sh.partner_number, d.customer_number) as ship_to,
              coalesce(sum(dl.delivery_quantity * (l.net_amount + l.tax_amount) / nullif(l.order_quantity, 0)), 0)::text as value
         from delivery d
+        join sales_order o on o.client = d.client and o.order_number = d.order_number
         join delivery_line dl on dl.client = d.client and dl.delivery_number = d.delivery_number
         join sales_order_line l
           on l.client = dl.client and l.order_number = dl.order_number and l.line_number = dl.order_line_number
-        left join billing_document bd
-          on bd.client = d.client
-         and bd.delivery_number = d.delivery_number
-         and bd.status <> 'CANCELLED'
-         and bd.credit_of is null
-         and bd.cancellation_of is null
+        left join sales_document_partner p_py
+          on p_py.client = d.client and p_py.document_category = 'DELIVERY'
+         and p_py.document_number = d.delivery_number and p_py.function_code = 'PY'
+        left join sales_document_partner p_bp
+          on p_bp.client = d.client and p_bp.document_category = 'DELIVERY'
+         and p_bp.document_number = d.delivery_number and p_bp.function_code = 'BP'
+        left join sales_document_partner p_sh
+          on p_sh.client = d.client and p_sh.document_category = 'DELIVERY'
+         and p_sh.document_number = d.delivery_number and p_sh.function_code = 'SH'
        where d.client = ${client}
          and d.status = 'GOODS_ISSUED'
-         and bd.billing_number is null
+         -- What has already been billed, read through the lines and not the header: a collective
+         -- document names no delivery of its own, and a list that read only the header would go on
+         -- offering a month that was billed yesterday. The same predicate the billing refusal uses.
+         and not exists (
+           select 1 from billing_document_line bl
+           join billing_document bd
+             on bd.client = bl.client and bd.billing_number = bl.billing_number
+          where bl.client = d.client and bl.delivery_number = d.delivery_number
+            and bd.status <> 'CANCELLED' and bd.credit_of is null and bd.cancellation_of is null
+         )
          -- An item that carries a billing plan is billed by the plan and not by what was delivered:
          -- a share of an item and the whole of it are two answers to one question, and an order
          -- that answered it twice would invoice the same value twice.
@@ -324,23 +718,59 @@ export async function listBillableDeliveries(
          )
          and (${filter.customerNumber || null}::text is null or d.customer_number = ${filter.customerNumber || null})
          and (${filter.deliveryNumber || null}::text is null or d.delivery_number = ${filter.deliveryNumber || null})
-       group by 1, 2, 3, 4, 5, 6
+         and (${filter.salesOrg || null}::text is null or d.sales_org = ${filter.salesOrg || null})
+         and (${filter.plant || null}::text is null or d.plant = ${filter.plant || null})
+       group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
        order by d.delivery_number
        limit 200
     `) as unknown as Array<{
       delivery_number: string; order_number: string; customer_number: string; plant: string;
       goods_movement_date: string | null; material_document_number: string | null; value: string;
+      sales_org: string; distribution_channel: string; division: string;
+      company_code: string; currency: string; payer: string; ship_to: string;
     }>;
     return rows.map((row) => ({
       deliveryNumber: row.delivery_number,
       orderNumber: row.order_number,
       customerNumber: row.customer_number,
+      payer: row.payer,
+      shipTo: row.ship_to,
+      salesOrg: row.sales_org,
+      distributionChannel: row.distribution_channel,
+      division: row.division,
+      companyCode: row.company_code,
+      currency: row.currency,
       plant: row.plant,
       goodsMovementDate: row.goods_movement_date,
       materialDocumentNumber: row.material_document_number,
       value: round2(Number(row.value)),
     }));
   });
+}
+
+/**
+ * The due list as the billing screen shows it: what is outstanding, and what it is worth.
+ *
+ * The narrower reading of the one list, so a screen that asks "what can I bill" and a run that asks
+ * "what will I bill" are never two queries that can disagree.
+ */
+export async function listBillableDeliveries(
+  client: string,
+  filter: { customerNumber?: string; deliveryNumber?: string } = {},
+): Promise<Array<{
+  deliveryNumber: string; orderNumber: string; customerNumber: string; plant: string;
+  goodsMovementDate: string | null; materialDocumentNumber: string | null; value: string;
+}>> {
+  const rows = await billingDueList(client, filter);
+  return rows.map((row) => ({
+    deliveryNumber: row.deliveryNumber,
+    orderNumber: row.orderNumber,
+    customerNumber: row.customerNumber,
+    plant: row.plant,
+    goodsMovementDate: row.goodsMovementDate,
+    materialDocumentNumber: row.materialDocumentNumber,
+    value: row.value,
+  }));
 }
 
 export async function listBillings(
@@ -361,7 +791,7 @@ export async function listBillings(
     return rows.map((row) => ({
       billingNumber: row.billingNumber,
       deliveryNumber: row.deliveryNumber,
-      orderNumber: row.orderNumber,
+      orderNumber: row.orderNumber ?? '',
       customerNumber: row.customerNumber,
       billingDate: row.billingDate,
       status: row.status,
@@ -494,19 +924,37 @@ async function postBuiltBilling(input: {
   // amount less down payment amount is what is still to pay. Nothing is cleared twice — what an
   // advance still stands at is read from the posted lines, and the clearing engine refuses an
   // allocation larger than either side.
-  const downPayment = invoice.journalDocumentNumber
-    ? await clearDownPaymentsForInvoice({
-      client: input.client,
-      changedBy: input.changedBy,
-      orderNumber: built.orderNumber,
-      billingNumber: built.billingNumber,
-      journalDocumentNumber: invoice.journalDocumentNumber,
-      customerNumber: billedPartners?.payer ?? built.customerNumber,
-      companyCode: built.companyCode,
-      currency: built.currency,
-      postingDate: input.postingDate || input.billingDate,
-    }).catch(() => null)
-    : null;
+  // One clearing per order the document billed. An advance belongs to the order that asked for it and
+  // to the customer who paid it, and a collective document that billed three orders is not thereby
+  // entitled to set the advance of one against the value of another: each is cleared against what is
+  // left of the receivable, in turn, and what none of them reach stays open.
+  let downPayment: DownPaymentClearing | null = null;
+  if (invoice.journalDocumentNumber) {
+    for (const orderNumber of built.orderNumbers) {
+      const cleared = await clearDownPaymentsForInvoice({
+        client: input.client,
+        changedBy: input.changedBy,
+        orderNumber,
+        billingNumber: built.billingNumber,
+        journalDocumentNumber: invoice.journalDocumentNumber,
+        customerNumber: billedPartners?.payer ?? built.customerNumber,
+        companyCode: built.companyCode,
+        currency: built.currency,
+        postingDate: input.postingDate || input.billingDate,
+      }).catch((caught: unknown) => ({
+        cleared: '0.00', clearingNumber: null,
+        error: (caught as { message?: string })?.message ?? 'the advance would not clear.',
+      }));
+      if (!downPayment) downPayment = cleared;
+      else if (Number(cleared.cleared) > 0 || cleared.error) {
+        downPayment = {
+          cleared: round2(Number(downPayment.cleared) + Number(cleared.cleared)),
+          clearingNumber: cleared.clearingNumber ?? downPayment.clearingNumber,
+          error: [downPayment.error, cleared.error].filter((row) => row).join(' ') || null,
+        };
+      }
+    }
+  }
 
   // The rebate this sale earned. A customer promised part of what they spend back has earned part of it
   // the moment the invoice is posted, and the books hear about it now rather than when the money is
@@ -564,27 +1012,44 @@ type BuiltBilling =
       netTotal: string;
       taxTotal: string;
       grossTotal: string;
-      /** The order the document was raised against — what the advances of it are looked up by. */
-      orderNumber: string;
+      /** The order the document was raised against, where it has exactly one. */
+      orderNumber: string | null;
+      /**
+       * Every order behind it. A collective document bills a month of deliveries and may carry several,
+       * and the advance each of them took is cleared against the document that earned it — an advance
+       * belongs to the order that asked for it, not to the invoice that happens to bill it (§4.5).
+       */
+      orderNumbers: string[];
       companyCode: string;
       customerNumber: string;
       currency: string;
     };
 
-export async function createBillingFromDelivery(input: BillingCreateInput): Promise<BillingCreateResult> {
-  const parsed = billingCreateInput.parse(input);
-  const built: BuiltBilling = await withTenant(parsed.client, async (tx) => {
-    const [deliveryHeader] = await tx.select().from(delivery).where(and(
-      eq(delivery.client, parsed.client), eq(delivery.deliveryNumber, parsed.deliveryNumber),
-    )).limit(1);
-    if (!deliveryHeader) {
-      throw new BillingError(
-        `Delivery ${parsed.deliveryNumber} does not exist in this tenant.`,
-        'Create the delivery at /sales/delivery and post its goods issue first.',
-      );
-    }
+/**
+ * Whether a delivery may be billed at all, and whether what it earns is held.
+ *
+ * The gate both billing paths go through — the one delivery a user names, and every delivery a
+ * collective run picks up — because a rule that held for one and not for the other would let a
+ * month-end run bill what the screen refuses by name.
+ *
+ * The lock is taken here rather than in either caller. Two runs over the same due list serialise on the
+ * delivery they both want, and the loser finds the document the winner drew instead of drawing a second
+ * one for the same goods. It is a transaction lock: it is held until the document stands, and it is
+ * released when the transaction that raised it decides.
+ *
+ * A block anywhere on the chain holds the receivable: the goods have gone, so the movement stands, but
+ * no invoice is raised over a block that has not been released. Held is a fact returned and not a
+ * refusal thrown — a document that is held stands, unposted, until somebody releases the credit.
+ */
+async function assertDeliveryBillable(
+  tx: Tx,
+  client: string,
+  deliveryHeader: typeof delivery.$inferSelect,
+): Promise<{ held: boolean }> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/delivery/${deliveryHeader.deliveryNumber}`}, 0))`);
+
     if (deliveryHeader.status === 'CANCELLED') {
-      throw new BillingError(`Delivery ${parsed.deliveryNumber} stands CANCELLED; nothing was shipped to bill.`);
+      throw new BillingError(`Delivery ${deliveryHeader.deliveryNumber} stands CANCELLED; nothing was shipped to bill.`);
     }
     // An issue that has been reversed puts the delivery back where it stood before the movement, but it
     // is not a delivery that has never gone out: it is one whose goods came back. Say that, rather than
@@ -597,46 +1062,84 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     }
     if (deliveryHeader.status !== 'GOODS_ISSUED') {
       throw new BillingError(
-        `Delivery ${parsed.deliveryNumber} stands ${deliveryHeader.status}; only a goods-issued delivery earns an invoice.`,
+        `Delivery ${deliveryHeader.deliveryNumber} stands ${deliveryHeader.status}; only a goods-issued delivery earns an invoice.`,
         'Post the goods issue at /sales/delivery first — a delivery that has not gone out bills nothing.',
       );
     }
 
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${parsed.client}/delivery/${deliveryHeader.deliveryNumber}`}, 0))`);
-
-    if (parsed.requestKey) {
-      const [existing] = await tx.select({ number: billingDocument.billingNumber }).from(billingDocument).where(and(
-        eq(billingDocument.client, parsed.client), eq(billingDocument.requestKey, parsed.requestKey),
-      )).limit(1);
-      if (existing) {
-        return { billingNumber: existing.number, replayed: true };
-      }
-    }
-
     // A cancelled document no longer occupies the delivery's slot, and neither does a document that stands
-    // against another one: the delivery is billable again, and the corrected document is a real one. This is
-    // the same predicate as billing_document_delivery_live_uq, because a service that disagreed with the
-    // index would refuse a document the database would have accepted, or the other way round.
-    const [standing] = await tx.select({ number: billingDocument.billingNumber }).from(billingDocument).where(and(
-      eq(billingDocument.client, parsed.client),
-      eq(billingDocument.deliveryNumber, deliveryHeader.deliveryNumber),
-      sql`${billingDocument.status} <> 'CANCELLED' and ${billingDocument.creditOf} is null and ${billingDocument.cancellationOf} is null`,
-    )).limit(1);
-    if (standing) {
+    // against another one: the delivery is billable again, and the corrected document is a real one.
+    //
+    // Read through the **lines** as well as the header, which is what a collective document demands: it
+    // names no delivery of its own, so a check that read only the header would happily bill a delivery a
+    // month-end invoice has already billed. This is the same predicate the due list uses, because a
+    // service that disagreed with the list it was run from would bill the month twice.
+    const standing = await tx.execute(sql`
+      select bd.billing_number
+        from billing_document bd
+       where bd.client = ${client}
+         and bd.status <> 'CANCELLED' and bd.credit_of is null and bd.cancellation_of is null
+         and (bd.delivery_number = ${deliveryHeader.deliveryNumber}
+              or exists (select 1 from billing_document_line bl
+                          where bl.client = bd.client
+                            and bl.billing_number = bd.billing_number
+                            and bl.delivery_number = ${deliveryHeader.deliveryNumber}))
+       limit 1
+    `) as unknown as Array<{ billing_number: string }>;
+    const standingNumber = standing[0]?.billing_number;
+    if (standingNumber) {
       throw new BillingError(
-        `Delivery ${deliveryHeader.deliveryNumber} is already billed as ${standing.number}.`,
+        `Delivery ${deliveryHeader.deliveryNumber} is already billed as ${standingNumber}.`,
         'A delivery earns one live billing document. Cancel it first, then bill the corrected value.',
       );
     }
 
     // A block anywhere on the chain holds the receivable: the goods have gone, so the movement stands, but no
     // invoice is raised over a block that has not been released.
-    const deliveryBlock = await standingDetermination(parsed.client, deliveryHeader.deliveryNumber);
-    const orderBlock = await standingDetermination(parsed.client, deliveryHeader.orderNumber);
+    const deliveryBlock = await standingDetermination(client, deliveryHeader.deliveryNumber);
+    const orderBlock = await standingDetermination(client, deliveryHeader.orderNumber);
     const held = deliveryBlock?.status === 'BLOCKED' || orderBlock?.status === 'BLOCKED';
 
+  return { held };
+}
+
+/**
+ * What one delivery contributes to a billing document: the lines, the accounting lines behind them, the
+ * conditions that priced them, the totals, and the order each line was priced from.
+ *
+ * Built for one delivery and returned as a set, which is what lets the same arithmetic serve a document
+ * that bills one delivery and one that bills a month of them. The document that receives them is the
+ * same document either way: the delivery and the order are facts of the **item**, which is where SAP
+ * keeps them too — a billing header in SAP names no order of its own.
+ *
+ * Nothing here writes. Refusals are refusals of the whole document: one delivery of a collective group
+ * that fails fails the run, and nothing is billed twice to get around it.
+ */
+interface DeliveryLinesBuild {
+  items: Array<typeof billingDocumentLine.$inferInsert>;
+  invoice: InvoiceLine[];
+  billedLineConditions: Array<{ lineNumber: number; conditions: PricedCondition[] }>;
+  netTotal: number;
+  taxTotal: number;
+  /** Every order these lines were priced from — what the advances of each are looked up by. */
+  orderNumbers: string[];
+  /** The company and currency the document is accounted in, read from the order behind the delivery. */
+  companyCode: string;
+  currency: string;
+  /** The order the delivery was raised against: the header's, where the document has exactly one. */
+  orderNumber: string;
+}
+
+async function buildLinesForDelivery(
+  tx: Tx,
+  client: string,
+  changedBy: string,
+  deliveryHeader: typeof delivery.$inferSelect,
+  /** Where this delivery's lines start, so a collective document numbers them straight through. */
+  startLineNumber: number,
+): Promise<DeliveryLinesBuild> {
     const lines = await tx.select().from(deliveryLine).where(and(
-      eq(deliveryLine.client, parsed.client), eq(deliveryLine.deliveryNumber, deliveryHeader.deliveryNumber),
+      eq(deliveryLine.client, client), eq(deliveryLine.deliveryNumber, deliveryHeader.deliveryNumber),
     )).orderBy(asc(deliveryLine.lineNumber));
     if (!lines.length) throw new BillingError(`Delivery ${deliveryHeader.deliveryNumber} carries no items.`);
 
@@ -647,7 +1150,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       const reversed = await tx.execute(sql`
         select count(*)::int as reversed
           from material_document_line rev
-         where rev.client = ${parsed.client}
+         where rev.client = ${client}
            and rev.reversal_of_document = ${deliveryHeader.materialDocumentNumber}
            and rev.material_number in (${sql.join(lines.map((line) => sql`${line.materialNumber}`), sql`, `)})
       `) as unknown as Array<{ reversed: number }>;
@@ -661,14 +1164,14 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
 
     const orderNumbers = [...new Set(lines.map((line) => line.orderNumber))];
     const orderLines = await tx.select().from(salesOrderLine).where(and(
-      eq(salesOrderLine.client, parsed.client), inArray(salesOrderLine.orderNumber, orderNumbers),
+      eq(salesOrderLine.client, client), inArray(salesOrderLine.orderNumber, orderNumbers),
     ));
 
     // An item that carries a billing plan is billed by its dates and not by what was delivered.
     // Refusing here rather than merely hiding the delivery from the due list is what makes the rule
     // hold for a delivery named directly: the plan is the answer to when that item is billed, and a
     // delivery that answered as well would bill the same value twice.
-    const planned = await plansForItems(tx, parsed.client, lines.map((line) => ({
+    const planned = await plansForItems(tx, client, lines.map((line) => ({
       orderNumber: line.orderNumber, orderLineNumber: line.orderLineNumber,
     })));
     const plannedItem = lines.find((line) => planned.get(itemKey(line.orderNumber, line.orderLineNumber))?.hasInvoiceDates);
@@ -686,12 +1189,12 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     ]));
 
     const [order] = await tx.select().from(salesOrder).where(and(
-      eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, deliveryHeader.orderNumber),
+      eq(salesOrder.client, client), eq(salesOrder.orderNumber, deliveryHeader.orderNumber),
     )).limit(1);
     if (!order) throw new BillingError(`Sales order ${deliveryHeader.orderNumber} could not be read.`);
     const country = order.companyCode
       ? (await tx.select({ country: companyCodeTable.country }).from(companyCodeTable).where(and(
-        eq(companyCodeTable.client, parsed.client), eq(companyCodeTable.companyCode, order.companyCode),
+        eq(companyCodeTable.client, client), eq(companyCodeTable.companyCode, order.companyCode),
       )).limit(1))[0]?.country
       : undefined;
     // Read when it is needed, not before. A document whose every line is determined has no need of
@@ -699,7 +1202,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     // not be made to maintain the older row as well before it can bill the first time.
     let revenueAccount: string | undefined;
     const revenueAccountOnce = async (): Promise<string> => {
-      revenueAccount ??= await revenueAccountFor(tx, parsed.client, order.companyCode);
+      revenueAccount ??= await revenueAccountFor(tx, client, order.companyCode);
       return revenueAccount;
     };
     // The conditions every order behind this delivery was priced by, so the invoice can bill the same
@@ -707,7 +1210,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     // document that agrees with its order has to read the same row the order wrote.
     const orderConditionSets = new Map<string, StoredCondition[]>();
     for (const orderNumber of orderNumbers) {
-      for (const condition of await documentConditionsOf(tx, parsed.client, 'ORDER', orderNumber)) {
+      for (const condition of await documentConditionsOf(tx, client, 'ORDER', orderNumber)) {
         const rows = orderConditionSets.get(orderNumber) ?? [];
         rows.push(condition);
         orderConditionSets.set(orderNumber, rows);
@@ -717,19 +1220,19 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     // customer's from its sales area, and each material's from its sales view.
     const [customerArea] = await tx.select({ group: customerSalesArea.accountAssignmentGroup })
       .from(customerSalesArea).where(and(
-        eq(customerSalesArea.client, parsed.client),
+        eq(customerSalesArea.client, client),
         eq(customerSalesArea.partnerNumber, deliveryHeader.customerNumber),
         eq(customerSalesArea.salesOrg, deliveryHeader.salesOrg),
         eq(customerSalesArea.distributionChannel, deliveryHeader.distributionChannel),
         eq(customerSalesArea.division, deliveryHeader.division),
       )).limit(1);
-    const companyChart = await chartOfAccountsFor(tx, parsed.client, order.companyCode);
+    const companyChart = await chartOfAccountsFor(tx, client, order.companyCode);
     const materialGroups = new Map<string, string | null>();
     for (const line of lines) {
       if (materialGroups.has(line.materialNumber)) continue;
       const [view] = await tx.select({ group: materialSales.materialAccountAssignmentGroup })
         .from(materialSales).where(and(
-          eq(materialSales.client, parsed.client),
+          eq(materialSales.client, client),
           eq(materialSales.materialNumber, line.materialNumber),
           eq(materialSales.salesOrg, deliveryHeader.salesOrg),
           eq(materialSales.distributionChannel, deliveryHeader.distributionChannel),
@@ -790,7 +1293,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
         rate = 0;
         if (orderLine.taxCode) {
           const [code] = await tx.select({ ratePercent: taxCodeTable.ratePercent }).from(taxCodeTable).where(and(
-            eq(taxCodeTable.client, parsed.client), eq(taxCodeTable.country, country ?? ''),
+            eq(taxCodeTable.client, client), eq(taxCodeTable.country, country ?? ''),
             eq(taxCodeTable.taxCode, orderLine.taxCode),
           )).limit(1);
           if (!code) {
@@ -805,9 +1308,9 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       }
       netTotal += netAmount;
       taxTotal += taxAmount;
-      const billingLineNumber = (items.length + 1) * 10;
+      const billingLineNumber = startLineNumber + items.length * 10;
       items.push({
-        client: parsed.client,
+        client: client,
         billingNumber: '',
         lineNumber: billingLineNumber,
         deliveryNumber: line.deliveryNumber,
@@ -823,7 +1326,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
         taxRate: rate.toFixed(4),
         taxAmount: round2(taxAmount),
         conditionNumber,
-        createdBy: parsed.changedBy,
+        createdBy: changedBy,
       });
       // What priced the invoice, beside the figures it states: an auditor reading it can name the record
       // the price came from without reading the order.
@@ -835,7 +1338,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       // with no conditions — one raised before 9238 — is posted whole to the revenue account the chart
       // has always held, which is what it was posted to the day it was raised.
       const accounts = billedConditions
-        ? await determineLineAccounts(tx, parsed.client, {
+        ? await determineLineAccounts(tx, client, {
           chartOfAccounts: companyChart,
           salesOrg: deliveryHeader.salesOrg,
           customerAccountAssignmentGroup: customerArea?.group,
@@ -872,8 +1375,59 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       invoice.push(invoiceLine);
     }
 
+  return {
+    items, invoice, billedLineConditions, netTotal, taxTotal,
+    orderNumbers, companyCode: order.companyCode, currency: order.currency,
+    orderNumber: deliveryHeader.orderNumber,
+  };
+}
+
+/**
+ * Write the billing document and its lines, and say what it stands at.
+ *
+ * The one author of the document, whichever path raised it. A document raised against one delivery and
+ * one raised against a month of them are the same rows: the header carries the customer, the company and
+ * the currency the receivable will be posted in, and every line carries the order and the delivery it
+ * was priced from. Where a document bills one delivery it also names it on the header, and where it
+ * bills one order it names that too — a convenience for the documents that have exactly one, and no
+ * pretence of one for the documents that have not.
+ */
+async function writeBillingDocument(
+  tx: Tx,
+  client: string,
+  changedBy: string,
+  input: {
+    header: {
+      orderNumber: string | null;
+      deliveryNumber: string | null;
+      salesOrg: string;
+      distributionChannel: string;
+      division: string;
+      customerNumber: string;
+      companyCode: string;
+      currency: string;
+    };
+    /** The partners the document is made with: the payer the receivable is raised against. */
+    partners: NonNullable<Awaited<ReturnType<typeof documentPartners>>>;
+    items: Array<typeof billingDocumentLine.$inferInsert>;
+    billedLineConditions: Array<{ lineNumber: number; conditions: PricedCondition[] }>;
+    invoice: InvoiceLine[];
+    netTotal: number;
+    taxTotal: number;
+    held: boolean;
+    billingDate: string;
+    postingDate?: string;
+    requestKey?: string;
+    /** What the document says it was raised for: one delivery, or the month's worth of them. */
+    referenceDocumentText: string;
+    /** Every order behind it — what the advances of each are cleared against. */
+    orderNumbers: string[];
+    /** Anything the change record should say beyond the figures, for a document that billed a list. */
+    changeAfter?: Record<string, string>;
+  },
+): Promise<Extract<BuiltBilling, { replayed: false }>> {
     // The document type is configuration now (9226); see the same note in sales-order.ts.
-    const billingType = await salesDocumentTypeFor(tx, parsed.client, STANDARD_BILLING_TYPE);
+    const billingType = await salesDocumentTypeFor(tx, client, STANDARD_BILLING_TYPE);
     if (!billingType) {
       throw new BillingError(
         `Sales document type ${STANDARD_BILLING_TYPE} does not stand for this tenant, so no billing number can be drawn and no billing document can be created.`,
@@ -884,8 +1438,8 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     let number: string;
     try {
       const drawn = await allocateNumber(tx, {
-        client: parsed.client, objectCode: billingType.numberRangeObject, companyCode: '*',
-        subObject: billingType.numberRangeSubObject, fiscalYear: 0, allocatedBy: parsed.changedBy,
+        client: client, objectCode: billingType.numberRangeObject, companyCode: '*',
+        subObject: billingType.numberRangeSubObject, fiscalYear: 0, allocatedBy: changedBy,
       });
       number = drawn.display;
     } catch {
@@ -896,79 +1450,137 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     }
 
     await tx.insert(billingDocument).values({
-      client: parsed.client,
+      client: client,
       billingNumber: number,
       documentType: billingType.documentType,
-      orderNumber: order.orderNumber,
-      deliveryNumber: deliveryHeader.deliveryNumber,
-      salesOrg: deliveryHeader.salesOrg,
-      distributionChannel: deliveryHeader.distributionChannel,
-      division: deliveryHeader.division,
-      customerNumber: deliveryHeader.customerNumber,
-      companyCode: order.companyCode,
-      currency: order.currency,
-      billingDate: parsed.billingDate,
-      postingDate: parsed.postingDate || null,
+      orderNumber: input.header.orderNumber,
+      deliveryNumber: input.header.deliveryNumber,
+      salesOrg: input.header.salesOrg,
+      distributionChannel: input.header.distributionChannel,
+      division: input.header.division,
+      customerNumber: input.header.customerNumber,
+      companyCode: input.header.companyCode,
+      currency: input.header.currency,
+      billingDate: input.billingDate,
+      postingDate: input.postingDate || null,
       status: 'OPEN',
-      netValue: round2(netTotal),
-      taxValue: round2(taxTotal),
-      grossValue: round2(netTotal + taxTotal),
-      referenceDocumentText: `Delivery ${deliveryHeader.deliveryNumber}`,
-      requestKey: parsed.requestKey || null,
-      createdBy: parsed.changedBy,
+      netValue: round2(input.netTotal),
+      taxValue: round2(input.taxTotal),
+      grossValue: round2(input.netTotal + input.taxTotal),
+      referenceDocumentText: input.referenceDocumentText.slice(0, 100),
+      requestKey: input.requestKey || null,
+      createdBy: changedBy,
     });
     // Who the invoice is made with: the order's partners, written down again on the billing document.
     // An invoice is addressed to the bill-to and raises the payer's receivable, and it says both on the
     // day it is raised rather than reading them back from a master somebody will change.
-    const partners = await documentPartners(tx, parsed.client, 'DELIVERY', deliveryHeader.deliveryNumber)
-      ?? await documentPartners(tx, parsed.client, 'ORDER', order.orderNumber)
-      ?? await resolvePartners(tx, parsed.client, {
-        partnerNumber: order.customerNumber, salesOrg: order.salesOrg,
-        distributionChannel: order.distributionChannel, division: order.division,
-      });
+    const partners = input.partners;
     await writeDocumentPartners(tx, {
-      client: parsed.client, documentCategory: 'BILLING', documentNumber: number,
-      partners, changedBy: parsed.changedBy,
+      client: client, documentCategory: 'BILLING', documentNumber: number,
+      partners, changedBy: changedBy,
     });
-    for (const item of items) {
+    for (const item of input.items) {
       await tx.insert(billingDocumentLine).values({ ...item, billingNumber: number });
     }
     // The conditions the invoice was priced by: the order's own, at the quantity that went out. Written
     // here so the credit memo that gives part of it back can be proved to be the same price, and so an
     // invoice read years from still carries the arithmetic behind its figures.
-    if (billedLineConditions.length > 0) {
+    if (input.billedLineConditions.length > 0) {
       await writeDocumentConditions(tx, {
-        client: parsed.client, documentCategory: 'BILLING', documentNumber: number,
-        currency: order.currency, items: billedLineConditions, changedBy: parsed.changedBy,
+        client: client, documentCategory: 'BILLING', documentNumber: number,
+        currency: input.header.currency, items: input.billedLineConditions, changedBy: changedBy,
       });
     }
     await recordChange(tx, {
-      client: parsed.client, objectClass: BILLING_OBJECT_CLASS, objectKey: number, changeType: 'CREATE',
-      changedBy: parsed.changedBy,
+      client: client, objectClass: BILLING_OBJECT_CLASS, objectKey: number, changeType: 'CREATE',
+      changedBy: changedBy,
       after: {
-        delivery: deliveryHeader.deliveryNumber,
-        customer: deliveryHeader.customerNumber,
-        items: items.length,
-        netValue: round2(netTotal),
-        taxValue: round2(taxTotal),
-        grossValue: round2(netTotal + taxTotal),
-        heldForCredit: held ? 'yes' : '',
+        ...input.changeAfter,
+        delivery: input.header.deliveryNumber ?? '',
+        customer: input.header.customerNumber,
+        items: input.items.length,
+        netValue: round2(input.netTotal),
+        taxValue: round2(input.taxTotal),
+        grossValue: round2(input.netTotal + input.taxTotal),
+        heldForCredit: input.held ? 'yes' : '',
       },
       fieldLabels: { heldForCredit: 'Held for credit' },
     });
-    return {
-      billingNumber: number,
-      replayed: false,
-      invoice,
+
+  return {
+    billingNumber: number,
+    replayed: false,
+    invoice: input.invoice,
+    held: input.held,
+    netTotal: round2(input.netTotal),
+    taxTotal: round2(input.taxTotal),
+    grossTotal: round2(input.netTotal + input.taxTotal),
+    orderNumber: input.header.orderNumber,
+    orderNumbers: input.orderNumbers,
+    companyCode: input.header.companyCode,
+    customerNumber: input.header.customerNumber,
+    currency: input.header.currency,
+  };
+}
+
+export async function createBillingFromDelivery(input: BillingCreateInput): Promise<BillingCreateResult> {
+  const parsed = billingCreateInput.parse(input);
+  const built: BuiltBilling = await withTenant(parsed.client, async (tx) => {
+    const [deliveryHeader] = await tx.select().from(delivery).where(and(
+      eq(delivery.client, parsed.client), eq(delivery.deliveryNumber, parsed.deliveryNumber),
+    )).limit(1);
+    if (!deliveryHeader) {
+      throw new BillingError(
+        `Delivery ${parsed.deliveryNumber} does not exist in this tenant.`,
+        'Create the delivery at /sales/delivery and post its goods issue first.',
+      );
+    }
+    if (parsed.requestKey) {
+      const [existing] = await tx.select({ number: billingDocument.billingNumber }).from(billingDocument).where(and(
+        eq(billingDocument.client, parsed.client), eq(billingDocument.requestKey, parsed.requestKey),
+      )).limit(1);
+      if (existing) {
+        return { billingNumber: existing.number, replayed: true };
+      }
+    }
+
+    const { held } = await assertDeliveryBillable(tx, parsed.client, deliveryHeader);
+
+    // The arithmetic: what went out, at the price the order was priced by, on the accounts the
+    // conditions name. Nothing is special about a document raised against one delivery — it is the
+    // collective run over a group of one.
+    const build = await buildLinesForDelivery(tx, parsed.client, parsed.changedBy, deliveryHeader, 10);
+    const partners = await documentPartners(tx, parsed.client, 'DELIVERY', deliveryHeader.deliveryNumber)
+      ?? await documentPartners(tx, parsed.client, 'ORDER', deliveryHeader.orderNumber)
+      ?? await resolvePartners(tx, parsed.client, {
+        partnerNumber: deliveryHeader.customerNumber, salesOrg: deliveryHeader.salesOrg,
+        distributionChannel: deliveryHeader.distributionChannel, division: deliveryHeader.division,
+      });
+
+    return writeBillingDocument(tx, parsed.client, parsed.changedBy, {
+      header: {
+        orderNumber: build.orderNumber,
+        deliveryNumber: deliveryHeader.deliveryNumber,
+        salesOrg: deliveryHeader.salesOrg,
+        distributionChannel: deliveryHeader.distributionChannel,
+        division: deliveryHeader.division,
+        customerNumber: deliveryHeader.customerNumber,
+        companyCode: build.companyCode,
+        currency: build.currency,
+      },
+      partners,
+      items: build.items,
+      billedLineConditions: build.billedLineConditions,
+      invoice: build.invoice,
+      netTotal: build.netTotal,
+      taxTotal: build.taxTotal,
       held,
-      netTotal: round2(netTotal),
-      taxTotal: round2(taxTotal),
-      grossTotal: round2(netTotal + taxTotal),
-      orderNumber: deliveryHeader.orderNumber,
-      companyCode: order.companyCode,
-      customerNumber: deliveryHeader.customerNumber,
-      currency: order.currency,
-    };
+      billingDate: parsed.billingDate,
+      postingDate: parsed.postingDate,
+      requestKey: parsed.requestKey,
+      referenceDocumentText: `Delivery ${deliveryHeader.deliveryNumber}`,
+      orderNumbers: build.orderNumbers,
+    });
   });
 
   return postBuiltBilling({
@@ -1273,6 +1885,7 @@ export async function createBillingFromPlanDate(
       taxTotal: round2(taxTotal),
       grossTotal: round2(netTotal + taxTotal),
       orderNumber: order.orderNumber,
+      orderNumbers: [order.orderNumber],
       companyCode: order.companyCode,
       customerNumber: order.customerNumber,
       currency: order.currency,
@@ -1390,27 +2003,36 @@ async function postStandingBilling(input: {
     if (header.status !== 'OPEN') {
       return { post: false as const, held: false, header };
     }
-    const deliveryBlock = header.deliveryNumber
-      ? await standingDetermination(input.client, header.deliveryNumber)
-      : null;
-    const orderBlock = await standingDetermination(input.client, header.orderNumber);
-    if (deliveryBlock?.status === 'BLOCKED' || orderBlock?.status === 'BLOCKED') {
-      return { post: false as const, held: true, header };
-    }
     const lines = await tx.select().from(billingDocumentLine).where(and(
       eq(billingDocumentLine.client, input.client), eq(billingDocumentLine.billingNumber, input.billingNumber),
     )).orderBy(asc(billingDocumentLine.lineNumber));
     if (!lines.length) throw new BillingError(`Billing document ${input.billingNumber} carries no items.`);
+
+    // The block is read from what the document *billed*, not from what its header names. A collective
+    // document names neither an order nor a delivery — every one of them stands on the line it was
+    // priced from — and a release that read only the header would release a blocked month on the
+    // strength of a header that names nothing.
+    const lineOrders = [...new Set(lines.map((line) => line.orderNumber))];
+    const lineDeliveries = [...new Set(lines.map((line) => line.deliveryNumber)
+      .filter((row): row is string => !!row))];
+    const blocks = await Promise.all([
+      ...lineDeliveries.map((number) => standingDetermination(input.client, number)),
+      ...lineOrders.map((number) => standingDetermination(input.client, number)),
+    ]);
+    if (blocks.some((row) => row?.status === 'BLOCKED')) {
+      return { post: false as const, held: true, header };
+    }
     const [order] = await tx.select().from(salesOrder).where(and(
-      eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, header.orderNumber),
+      eq(salesOrder.client, input.client), inArray(salesOrder.orderNumber, lineOrders),
     )).limit(1);
-    if (!order) throw new BillingError(`Sales order ${header.orderNumber} could not be read.`);
+    if (!order) throw new BillingError(`Sales order ${lineOrders[0]} could not be read.`);
     const revenueAccount = await revenueAccountFor(tx, input.client, header.companyCode);
     const orderLines = await tx.select().from(salesOrderLine).where(and(
-      eq(salesOrderLine.client, input.client), eq(salesOrderLine.orderNumber, header.orderNumber),
+      eq(salesOrderLine.client, input.client), inArray(salesOrderLine.orderNumber, lineOrders),
     ));
     const invoice: InvoiceLine[] = lines.map((line) => {
-      const orderLine = orderLines.find((row) => row.lineNumber === line.orderLineNumber);
+      const orderLine = orderLines.find((row) => row.orderNumber === line.orderNumber
+        && row.lineNumber === line.orderLineNumber);
       return {
         glAccount: revenueAccount,
         netAmount: Number(line.netAmount),
@@ -1420,7 +2042,7 @@ async function postStandingBilling(input: {
         // was raised against rather than a delivery that never stood.
         lineText: (line.deliveryNumber
           ? `Delivery ${line.deliveryNumber} item ${line.deliveryLineNumber}`
-          : `Order ${header.orderNumber} item ${line.orderLineNumber}`).slice(0, 50),
+          : `Order ${line.orderNumber} item ${line.orderLineNumber}`).slice(0, 50),
       };
     });
     return { post: true as const, held: false, header, invoice, currency: order.currency };
@@ -1500,7 +2122,9 @@ export async function postBillingDocument(
   // An OPEN document is the one state that may still raise its invoice. Re-read the block, then post.
   const held = await (view.deliveryNumber
     ? standingDetermination(parsed.client, view.deliveryNumber)
-    : standingDetermination(parsed.client, view.orderNumber));
+    : view.orderNumber
+      ? standingDetermination(parsed.client, view.orderNumber)
+      : null);
   if (held?.status === 'BLOCKED') {
     return { billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false };
   }
@@ -1794,7 +2418,17 @@ export async function salesDocumentFlow(
              (select count(*) from material_document_line rev
                where rev.client = d.client and rev.reversal_of_document = d.material_document_number) as reversed_lines
         from delivery d
-        left join billing_document bd on bd.client = d.client and bd.delivery_number = d.delivery_number
+        -- On the header or through the lines. A cancellation names the delivery on its header and
+        -- copies no lines, and a collective document names no delivery at all and carries every one of
+        -- them on its lines: a flow that read only the header would say a month-end invoice billed
+        -- nothing, and one that read only the lines would lose the cancellation that undid it.
+        left join billing_document bd
+          on bd.client = d.client
+         and (bd.delivery_number = d.delivery_number
+              or exists (select 1 from billing_document_line bl
+                          where bl.client = bd.client
+                            and bl.billing_number = bd.billing_number
+                            and bl.delivery_number = d.delivery_number))
        where d.client = ${client} and d.order_number = ${orderNumber}
        order by d.delivery_number, bd.created_at, bd.billing_number
     `) as unknown as Array<{

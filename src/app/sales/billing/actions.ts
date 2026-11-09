@@ -7,7 +7,9 @@ import {
   BILLING_CANCEL_CAPABILITY,
   BILLING_CAPABILITY,
   BILLING_ROUTE,
+  BILLING_SPLIT_ROUTE,
   BillingError,
+  billDueList,
   cancelBillingDocument,
   createBillingFromPlanDate,
   postBillingDocument,
@@ -84,6 +86,67 @@ export async function createBillingAction(
       remedy: result.invoice?.dueDate
         ? `The invoice is due ${result.invoice.dueDate}; it appears in the customer's open items and in ageing.`
         : undefined,
+    };
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+/**
+ * Bill the due list.
+ *
+ * One submission, one document per group the criteria produce. The capability is the same one billing a
+ * single delivery needs, because the run *is* billing: it raises documents and posts receivables, and a
+ * separate authority for doing it in bulk would be a second way to post the same money.
+ *
+ * What is reported back is what the run did to every group, not only to the first: eleven groups is
+ * eleven documents, and a reader told only that "the run finished" has no way to know whether the
+ * eleventh was held for credit and left standing.
+ */
+export async function billDueListAction(
+  _previous: BillingActionState,
+  form: FormData,
+): Promise<BillingActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, BILLING_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the billing capability.', remedy: 'Ask for SALES.BILLING.CREATE.' };
+  }
+  try {
+    const result = await billDueList({
+      client: session.user.client,
+      changedBy: session.user.username,
+      billingDate: text(form, 'billingDate'),
+      postingDate: optional(form, 'postingDate'),
+      selection: {
+        customerNumber: optional(form, 'customerNumber')?.toUpperCase(),
+        salesOrg: optional(form, 'salesOrg'),
+        plant: optional(form, 'plant'),
+      },
+    });
+    revalidatePath(ROUTE);
+    const documents = result.documents;
+    if (documents.length === 0) {
+      return {
+        ok: true,
+        message: 'Nothing on the due list was goods-issued and unbilled, so nothing was billed.',
+      };
+    }
+    const posted = documents.filter((row) => row.posted);
+    const held = documents.filter((row) => row.heldForCredit);
+    const replayed = documents.filter((row) => row.replayed);
+    const parts = [
+      `${posted.length} of ${documents.length} documents posted`,
+      held.length ? `${held.length} held for credit and left standing` : '',
+      replayed.length ? `${replayed.length} already billed under this submission` : '',
+    ].filter((row) => row);
+    return {
+      ok: held.length === 0,
+      billingNumber: documents[0]?.billing.billingNumber,
+      message: `The due list was billed as ${documents.length} `
+        + `${documents.length === 1 ? 'document' : 'documents'}: ${parts.join(', ')}.`,
+      remedy: held.length
+        ? `Release the blocked documents at /finance/credit-release, then bill again — the documents that stand post, and no second document is raised for them.`
+        : `Split them differently at ${BILLING_SPLIT_ROUTE}.`,
     };
   } catch (error) {
     return refuse(error);

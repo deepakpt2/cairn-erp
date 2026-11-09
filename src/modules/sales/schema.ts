@@ -785,7 +785,15 @@ export const billingDocument = pgTable('billing_document', {
   client: tenant(),
   billingNumber: varchar('billing_number', { length: 20 }).notNull(),
   documentType: varchar('document_type', { length: 2 }).notNull().default('F2'),
-  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  /**
+   * The order this document was raised against, where it has exactly one.
+   *
+   * A collective document bills a month of deliveries and may carry several orders — every one of them
+   * named on the line that was priced from it — and it names no order of its own rather than pretending
+   * to one. SAP's billing header carries no order at all for the same reason: the order is a fact of the
+   * item (§4.5, gap G2).
+   */
+  orderNumber: varchar('order_number', { length: 20 }),
   /**
    * The delivery this document bills. Null on an order-related document, which is raised against a
    * billing plan date and bills a share of an item rather than goods that went out.
@@ -872,12 +880,28 @@ export const billingDocumentLine = pgTable('billing_document_line', {
   check('billing_document_line_quantity_ck', sql`${t.billingQuantity} > 0 and ${t.priceUnit} > 0`),
   check('billing_document_line_amount_math_ck', sql`abs(${t.netAmount} - (${t.billingQuantity} * ${t.netPrice} / ${t.priceUnit})) < 0.005`),
   /**
-   * One line per delivery line *within a document*. The header's own index is what keeps a delivered line
-   * from being billed twice: only one live billing document may stand for a delivery, so only that
-   * document's lines bill its lines. Scoped to the document rather than to the delivery, because a cancelled
-   * document's lines stay where they are while the corrected document writes its own.
+   * One line per delivery line, of the delivery it came from, within a document.
+   *
+   * The header's own index is what keeps a delivered line from being billed twice: only one live billing
+   * document may stand for a delivery, so only that document's lines bill its lines. Scoped to the
+   * document rather than to the delivery, because a cancelled document's lines stay where they are while
+   * the corrected document writes its own.
+   *
+   * Keyed on the delivery as well as on its line (9253). A collective document bills a month of
+   * deliveries and every one of them numbers its own lines from ten: a key that named the line number
+   * alone would refuse the second delivery of a run for no better reason than that it too has a line 10,
+   * which is a rule about one delivery mistaken for a rule about a document.
    */
-  uniqueIndex('billing_document_line_delivery_line_uq').on(t.client, t.billingNumber, t.deliveryLineNumber),
+  uniqueIndex('billing_document_line_delivery_uq')
+    .on(t.client, t.billingNumber, t.deliveryNumber, t.deliveryLineNumber)
+    .where(sql`${t.deliveryNumber} is not null`),
+  /**
+   * The same rule for the document that names no delivery: what a plan-date document bills once is the
+   * order item. Two plan dates of one item are two documents, as two deliveries of one order are.
+   */
+  uniqueIndex('billing_document_line_plan_uq')
+    .on(t.client, t.billingNumber, t.orderNumber, t.orderLineNumber)
+    .where(sql`${t.deliveryNumber} is null`),
   foreignKey({
     name: 'billing_document_line_condition_fk',
     columns: [t.client, t.conditionNumber],
@@ -901,6 +925,70 @@ export const billingDocumentLine = pgTable('billing_document_line', {
  * share of an item and the whole of it are two different answers to one question, and an order that
  * answered it twice would invoice the same value twice.
  */
+/**
+ * The criteria a collective billing run splits the due list by — SAP's split criteria for billing
+ * documents (§4.5, gap G2).
+ *
+ * Three criteria always split and are not here, because they are not configuration: a billing document
+ * posts **one** receivable, against one payer, in one currency, in one company code. What stands here
+ * is the rest — the header fields a tenant may say "one invoice per …" about.
+ *
+ * Where a field is *not* a maintained criterion, its value on a collective document is the one the
+ * first delivery in the group carried, which is what SAP does with the fields the criteria do not name.
+ */
+export const BILLING_SPLIT_CRITERIA = [
+  'SALES_ORG', 'DISTRIBUTION_CHANNEL', 'DIVISION', 'SHIP_TO', 'PLANT',
+] as const;
+export type BillingSplitCriterion = (typeof BILLING_SPLIT_CRITERIA)[number];
+
+/**
+ * What each criterion separates, in words. Delivered with the package rather than entered, because a
+ * criterion is a field of the document and not a thing a tenant invents: the catalogue is what the
+ * grouping can be read against.
+ */
+export const DELIVERED_SPLIT_CRITERIA: ReadonlyArray<{
+  criterion: BillingSplitCriterion; displayName: string; meaning: string;
+}> = [
+  {
+    criterion: 'SALES_ORG', displayName: 'Sales organisation',
+    meaning: 'One invoice per sales organisation. A group that spans two of them is billed as two documents, each carrying the sales area it was sold from.',
+  },
+  {
+    criterion: 'DISTRIBUTION_CHANNEL', displayName: 'Distribution channel',
+    meaning: 'One invoice per channel: what was sold direct is not on the same document as what went through a distributor.',
+  },
+  {
+    criterion: 'DIVISION', displayName: 'Division',
+    meaning: 'One invoice per division, for a company that bills its product lines apart.',
+  },
+  {
+    criterion: 'SHIP_TO', displayName: 'Ship-to party',
+    meaning: 'One invoice per receiving party. A payer with several sites gets a document each, which is what a customer that reconciles deliveries by site asks for.',
+  },
+  {
+    criterion: 'PLANT', displayName: 'Plant',
+    meaning: 'One invoice per shipping plant, where the plant is what the document is accounted by.',
+  },
+];
+
+/**
+ * A maintained split criterion. It is a row and not a constant because which of the five a tenant
+ * splits by is a decision about how the customer is billed, and a decision belongs in the database.
+ */
+export const salesBillingSplitCriterion = pgTable('sales_billing_split_criterion', {
+  client: tenant(),
+  criterion: varchar('criterion', { length: 24 }).notNull(),
+  /** Where it stands in the group key, so a reader sees the order the split reads them in. */
+  sequence: integer('sequence').notNull().default(0),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.criterion] }),
+  check('sales_billing_split_criterion_code_ck',
+    sql`${t.criterion} in ('SALES_ORG', 'DISTRIBUTION_CHANNEL', 'DIVISION', 'SHIP_TO', 'PLANT')`),
+  check('sales_billing_split_criterion_sequence_ck', sql`${t.sequence} >= 0`),
+]);
+
 export const salesBillingPlanType = pgTable('sales_billing_plan_type', {
   client: tenant(),
   planType: varchar('plan_type', { length: 2 }).notNull(),

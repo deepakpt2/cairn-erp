@@ -2700,6 +2700,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/billing-split",
+    path: "/config/billing-split",
+    query: {},
+    code: "CFG.SALES.SPLIT.DEFINE",
+    title: "Billing split criteria",
+    area: "configuration",
+    family: "sales-billing-split",
+    accepts: [],
+  },
+  {
     // Quality management has no screen area of its own yet: a `quality` entry in `ScreenArea` and
     // `SCREEN_AREAS` would also need its `nav.area.quality` label in src/platform/i18n/index.ts, a file with
     // uncommitted owner work in it. Until that label can land, the lot lives in the Inventory area, beside

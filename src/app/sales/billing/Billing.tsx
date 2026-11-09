@@ -3,17 +3,27 @@
 import Link from 'next/link';
 import { useActionState, useId, useState } from 'react';
 
-import type { BillingView } from '@/modules/sales/billing';
-import type { listBillableDeliveries, listBillings, salesDocumentFlow } from '@/modules/sales/billing';
+import type {
+  BillingDueGroup, BillingView, SplitCriterionView, listBillings, salesDocumentFlow,
+} from '@/modules/sales/billing';
 import {
-  billPlanDateAction, cancelBillingAction, cancelDownPaymentAction, createBillingAction,
-  rebillDeliveryAction, requestDownPaymentAction, type BillingActionState,
+  billDueListAction, billPlanDateAction, cancelBillingAction, cancelDownPaymentAction,
+  createBillingAction, rebillDeliveryAction, requestDownPaymentAction, type BillingActionState,
 } from './actions';
 
 const EMPTY: BillingActionState = { ok: false };
 
 interface Props {
-  billable: Awaited<ReturnType<typeof listBillableDeliveries>>;
+  /** The due list as the criteria group it: what one run would bill, group by group. */
+  groups: BillingDueGroup[];
+  /** The criteria, maintained or not — what a reader changes to get a different number of documents. */
+  criteria: SplitCriterionView[];
+  /** Where the criteria are maintained. */
+  splitRoute: string;
+  billable: Array<{
+    deliveryNumber: string; orderNumber: string; customerNumber: string; plant: string;
+    goodsMovementDate: string | null; materialDocumentNumber: string | null; value: string;
+  }>;
   planDates: Awaited<ReturnType<typeof import('@/modules/sales/billing-plan').listBillablePlanDates>>;
   documents: Awaited<ReturnType<typeof listBillings>>;
   selected: BillingView | null;
@@ -48,6 +58,120 @@ function Notice({ state, label }: { state: BillingActionState; label?: string })
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The month-end run: bill the due list.
+ *
+ * The groups are shown before they are billed, which is the whole point of split criteria being
+ * configuration — a reader who maintains "one invoice per ship-to" sees here whether that gives four
+ * documents or forty, before anything is posted. Where no criterion is maintained the list is one group
+ * per payer, currency and company code, and saying so is what makes the default understandable rather
+ * than surprising.
+ */
+function BillDueList({
+  groups, criteria, splitRoute, allowed,
+}: {
+  groups: Props['groups']; criteria: Props['criteria']; splitRoute: string; allowed: boolean;
+}) {
+  const [state, action, pending] = useActionState(billDueListAction, EMPTY);
+  const id = useId();
+  const today = new Date().toISOString().slice(0, 10);
+  const maintained = criteria.filter((row) => row.isActive);
+  const total = groups.reduce((sum, group) => sum + Number(group.value), 0);
+
+  return (
+    <section className="panel space-y-3 p-4" aria-label="Bill the due list">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-medium">Bill the due list</p>
+        <Link className="link text-xs" href={splitRoute}>
+          {maintained.length === 0
+            ? 'No split criterion is maintained'
+            : `Splitting by ${maintained.map((row) => row.displayName).join(', ')}`}
+        </Link>
+      </div>
+      <p className="text-sm text-ink-soft">
+        {groups.length === 0
+          ? 'Nothing is goods-issued and unbilled, so there is nothing to run.'
+          : `The run bills the ${groups.length === 1 ? 'one group' : `${groups.length} groups`} below as `
+            + `${groups.length === 1 ? 'one billing document' : 'that many billing documents'}, each posting one `
+            + 'receivable against the payer it names. A refusal anywhere in a group fails the whole run: '
+            + 'nothing is half-billed.'}
+      </p>
+
+      {groups.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="grid-table text-sm">
+            <thead>
+              <tr className="text-left text-xs text-ink-faint">
+                <th>Payer</th><th>Company</th><th>Ccy</th>
+                {criteria.filter((row) => row.isActive).map((row) => (
+                  <th key={row.criterion}>{row.displayName}</th>
+                ))}
+                <th className="text-right">Deliveries</th>
+                <th className="text-right">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((group) => {
+                const byField = new Map(group.splitBy.map((part) => [part.criterion, part.value]));
+                return (
+                  <tr key={group.splitBy.map((part) => `${part.criterion}=${part.value}`).join('|')}>
+                    <td className="font-mono">{group.payer}</td>
+                    <td className="font-mono">{group.companyCode}</td>
+                    <td className="font-mono">{group.currency}</td>
+                    {criteria.filter((row) => row.isActive).map((row) => (
+                      <td key={row.criterion} className="font-mono">{byField.get(row.criterion)}</td>
+                    ))}
+                    <td className="text-right">{group.deliveries.length}</td>
+                    <td className="text-right">{money(group.value)}</td>
+                  </tr>
+                );
+              })}
+              {groups.length > 1 ? (
+                <tr className="border-t border-line font-medium">
+                  <td className="font-mono">{groups.length} groups</td>
+                  <td />
+                  <td />
+                  {criteria.filter((row) => row.isActive).map((row) => <td key={row.criterion} />)}
+                  <td className="text-right">
+                    {groups.reduce((sum, group) => sum + group.deliveries.length, 0)}
+                  </td>
+                  <td className="text-right">{money(String(total))}</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {groups.length > 0 && allowed ? (
+        <form action={action} className="flex flex-wrap items-end gap-3">
+          <label className="block text-xs text-ink-soft" htmlFor={`${id}-date`}>
+            Billing date
+            <input
+              className="input mt-1" id={`${id}-date`} name="billingDate"
+              defaultValue={today} autoComplete="off"
+            />
+          </label>
+          <label className="block text-xs text-ink-soft" htmlFor={`${id}-posting`}>
+            Posting date (optional)
+            <input className="input mt-1" id={`${id}-posting`} name="postingDate" autoComplete="off" />
+          </label>
+          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-9" disabled={pending}>
+            {pending ? 'Billing…' : `Bill ${groups.length === 1 ? 'the due list' : `${groups.length} groups`}`}
+          </button>
+        </form>
+      ) : null}
+      {groups.length > 0 && !allowed ? (
+        <p className="text-sm text-ink-soft">
+          Read-only for this session: the run creates and posts billing documents, which needs
+          SALES.BILLING.CREATE.
+        </p>
+      ) : null}
+      <Notice state={state} label="The run" />
+    </section>
   );
 }
 
@@ -224,6 +348,9 @@ function SelectedBilling({
   // its order, consumes it: what is still to pay is the billed value less the advance cleared.
   const isRequest = selected.documentType === 'DP';
   const cleared = Number(selected.downPaymentClearedAmount);
+  // The orders this document billed, read from its lines: a collective document names none on its
+  // header and stands on what its lines say, which is where the order has always been a fact.
+  const orders = [...new Set(selected.lines.map((line) => line.orderNumber))];
   return (
     <section className="panel p-4" aria-labelledby={`${id}-heading`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -238,8 +365,10 @@ function SelectedBilling({
         ) : (
           <>Billing plan date{' · '}</>
         )}
-        order <Link className="link" href={`/sales/orders?order=${selected.orderNumber}`}>{selected.orderNumber}</Link>
-        {' · '}customer {selected.customerNumber}
+        {selected.orderNumber
+          ? <>order <Link className="link" href={`/sales/orders?order=${selected.orderNumber}`}>{selected.orderNumber}</Link>{' · '}</>
+          : <>{orders.length > 1 ? `${orders.length} orders` : 'no one order'}{' · '}</>}
+        customer {selected.customerNumber}
         {' · '}company {selected.companyCode}
         {selected.customerInvoiceNumber
           ? <> · receivable <Link className="link" href={`/finance/customer-invoice?invoice=${selected.customerInvoiceNumber}`}>{selected.customerInvoiceNumber}</Link></>
@@ -266,7 +395,7 @@ function SelectedBilling({
       ) : null}
       {advances.length ? (
         <details className="mt-3" open>
-          <summary className="text-sm text-ink-soft">Advances of order {selected.orderNumber}</summary>
+          <summary className="text-sm text-ink-soft">Advances of order {selected.orderNumber ?? orders[0]}</summary>
           <table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs text-ink-faint">
@@ -543,6 +672,12 @@ function SelectedBilling({
 export default function Billing(props: Props) {
   return (
     <div className="space-y-4">
+      <BillDueList
+        groups={props.groups}
+        criteria={props.criteria}
+        splitRoute={props.splitRoute}
+        allowed={props.canCreate}
+      />
       <CreateBilling billable={props.billable} deliveryNumber={props.deliveryNumber} allowed={props.canCreate} />
       <section className="panel p-4" aria-label="Billing plan dates due">
         <p className="text-sm font-medium">Billing plan dates due</p>

@@ -6,9 +6,12 @@ import {
   BILLING_CANCEL_CAPABILITY,
   BILLING_CAPABILITY,
   BILLING_ROUTE,
+  BILLING_SPLIT_ROUTE,
+  billingDueList,
   getBilling,
-  listBillableDeliveries,
+  groupDueList,
   listBillings,
+  listSplitCriteria,
   salesDocumentFlow,
 } from '@/modules/sales/billing';
 import { listBillablePlanDates } from '@/modules/sales/billing-plan';
@@ -37,8 +40,28 @@ export default async function SalesBillingPage({ searchParams }: {
   const deliveryNumber = (params.delivery ?? '').trim().toUpperCase();
   const customerNumber = (params.customer ?? '').trim().toUpperCase();
   const orderNumber = (params.order ?? '').trim().toUpperCase();
-  const [billable, planDates, documents, selected] = await Promise.all([
-    listBillableDeliveries(client, { deliveryNumber: deliveryNumber || undefined, customerNumber: customerNumber || undefined }),
+  // The due list as the run will group it. Read with the same filter the single-delivery form uses, so
+  // what the screen shows and what the run bills cannot be two different lists.
+  const [due, criteria] = await Promise.all([
+    billingDueList(client, {
+      deliveryNumber: deliveryNumber || undefined,
+      customerNumber: customerNumber || undefined,
+    }),
+    listSplitCriteria(client),
+  ]);
+  const groups = groupDueList(due, criteria.filter((row) => row.isActive).map((row) => row.criterion));
+  // The due list as the single-delivery form wants it: a projection of the one reading above, so the
+  // screen never holds two lists that can disagree about what is billable.
+  const billable = due.map((row) => ({
+    deliveryNumber: row.deliveryNumber,
+    orderNumber: row.orderNumber,
+    customerNumber: row.customerNumber,
+    plant: row.plant,
+    goodsMovementDate: row.goodsMovementDate,
+    materialDocumentNumber: row.materialDocumentNumber,
+    value: row.value,
+  }));
+  const [planDates, documents, selected] = await Promise.all([
     listBillablePlanDates(client, {
       ...(customerNumber ? { customerNumber } : {}),
       ...(orderNumber ? { orderNumber } : {}),
@@ -46,10 +69,12 @@ export default async function SalesBillingPage({ searchParams }: {
     listBillings(client, customerNumber ? { customerNumber } : {}),
     billingNumber ? getBilling(client, billingNumber) : Promise.resolve(null),
   ]);
-  const flow = selected ? await salesDocumentFlow(client, selected.orderNumber) : [];
+  // A collective document names no order of its own, and the flow is a chain read from one order: what
+  // it bills stands on its lines, and the screen says so rather than showing an empty chain.
+  const flow = selected?.orderNumber ? await salesDocumentFlow(client, selected.orderNumber) : [];
   // What the customer was asked to pay in advance on this order, and what of it arrived: the register
   // beside the document that will consume it.
-  const advances = selected
+  const advances = selected?.orderNumber
     ? await orderDownPayments(client, selected.orderNumber)
     : [];
   // The rebate this document earned: a provision posted beside the receivable and settled later, on a
@@ -85,6 +110,9 @@ export default async function SalesBillingPage({ searchParams }: {
         </p>
       </header>
       <Billing
+        groups={groups}
+        criteria={criteria}
+        splitRoute={BILLING_SPLIT_ROUTE}
         billable={billable}
         planDates={planDates}
         documents={documents}
