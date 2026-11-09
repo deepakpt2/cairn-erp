@@ -2680,6 +2680,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/incompletion",
+    path: "/config/incompletion",
+    query: {},
+    code: "CFG.SALES.INCOMPLETION.DEFINE",
+    title: "Incompletion",
+    area: "configuration",
+    family: "sales-incompletion",
+    accepts: ["order", "delivery", "customer"],
+  },
+  {
     id: "/config/shipping-points",
     path: "/config/shipping-points",
     query: {},
@@ -2708,6 +2718,16 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-billing-split",
     accepts: [],
+  },
+  {
+    id: "/sales/incomplete",
+    path: "/sales/incomplete",
+    query: {},
+    code: "SALES.INCOMPLETION.PROCESS",
+    title: "Incomplete documents",
+    area: "sales",
+    family: "sales-billing",
+    accepts: ["order", "delivery", "customer"],
   },
   {
     id: "/sales/invoice-lists",

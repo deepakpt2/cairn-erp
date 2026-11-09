@@ -36,6 +36,7 @@ import {
   type CreditDeterminationView, type ReleaseOutcome,
 } from '../finance/credit';
 import { customerCredit } from '../finance/schema';
+import { evaluateIncompletion } from './incompletion';
 import { recordSalesOutputs } from './output';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 import { DeliveringPlantError, deliveringPlantFor } from './delivering-plant';
@@ -800,6 +801,14 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
         items: lines.length, netValue, taxValue, grossValue,
       },
     });
+    // What it is missing. Judged here, inside the transaction that wrote the order and after every
+    // part of it stands, for the same reason the output is: an order never stands without the
+    // statement about its completeness. A type assigned no procedure is complete, which is what
+    // every order in the books is until a tenant configures otherwise.
+    await evaluateIncompletion(tx, {
+      client: parsed.client, changedBy: parsed.changedBy,
+      documentCategory: 'ORDER', documentNumber: number, documentType: orderType.documentType,
+    });
     // What the customer receives. Determined here, inside the transaction that wrote the order, so
     // an order never stands with its confirmation missing because the process died between the two.
     // It earns nothing unless a condition record says it does: no record, no output.
@@ -1036,6 +1045,12 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
       changedBy: parsed.changedBy,
       before: { netValue: before.netValue, grossValue: before.grossValue, openItems: openRows.length },
       after: { netValue: net, grossValue: gross, submittedItems: lines.length, rejectedItems: rejected.size },
+    });
+    // Re-judged against what the order now says. A change that filled in the field the log named
+    // takes the entry with it, and a change that emptied one writes it.
+    await evaluateIncompletion(tx, {
+      client: parsed.client, changedBy: parsed.changedBy,
+      documentCategory: 'ORDER', documentNumber: parsed.orderNumber, documentType: before.documentType,
     });
     return { orderDate: before.orderDate };
   });

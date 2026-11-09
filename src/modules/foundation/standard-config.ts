@@ -49,7 +49,9 @@ import {
   STANDARD_PRICING_PROCEDURE,
 } from '../sales/pricing-procedure';
 import { DELIVERED_ACCOUNT_DETERMINATION } from '../sales/account-determination';
-import { DELIVERED_BILLING_PLAN_TYPES, DELIVERED_PARTNER_FUNCTIONS } from '../sales/schema';
+import {
+  DELIVERED_BILLING_PLAN_TYPES, DELIVERED_INCOMPLETION_GROUPS, DELIVERED_PARTNER_FUNCTIONS,
+} from '../sales/schema';
 import {
   salesConditionType,
   salesPricingProcedure,
@@ -58,6 +60,7 @@ import {
   salesAccountDetermination,
   salesPartnerFunction,
   salesBillingPlanType,
+  incompletionGroup,
 } from '../sales/schema';
 import { DELIVERED_RETURNS_RECEIPT_MOVEMENT, ensureReturnsMovements } from '../sales/returns';
 import {
@@ -743,6 +746,19 @@ export async function applyStandardPackage(
     await tx
       .insert(salesPartnerFunction)
       .values({ client, ...row, isActive: true, createdBy: activatedBy })
+      .onConflictDoNothing();
+  }
+
+  /* ── Incompletion groups ────────────────────────────────────────────────────── */
+  // The six places a sales or delivery document can be incomplete. Delivered here as well as by
+  // 9255 so a tenant provisioned later carries them from the moment it stands. What is *not*
+  // delivered is everything else: no procedure, no field, no status group and no assignment, so a
+  // document written the day this is applied is written exactly as it was the day before, and
+  // stays that way until a tenant says which fields a complete document must carry.
+  for (const row of DELIVERED_INCOMPLETION_GROUPS) {
+    await tx
+      .insert(incompletionGroup)
+      .values({ client, ...row, createdBy: activatedBy })
       .onConflictDoNothing();
   }
 

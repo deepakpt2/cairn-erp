@@ -43,6 +43,7 @@ import {
 import { deliveredOf, orderLineProgress } from './fulfillment-quantities';
 import { creditAreaFor } from './sales-order';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
+import { blockingEntries, describeBlocked, evaluateIncompletion } from './incompletion';
 import { recordSalesOutputs } from './output';
 import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
 import { CUSTOMER_MASTER_ROUTE, deliveryTermsFor } from './delivering-plant';
@@ -440,6 +441,23 @@ export async function listDeliverableOrderLines(
          -- asked for: a line confirmed six of ten offers six, and a line that was never
          -- checked offers what it always did.
          and least(l.order_quantity, coalesce(l.confirmed_quantity, l.order_quantity)) > coalesce(d.delivered, 0)
+         -- What the order is missing and cannot deliver without. A line that is incomplete in a way
+         -- that stops delivery is not due: offering it here would send a clerk to raise a delivery
+         -- the service is going to refuse, and the remedy is on the order, not in the warehouse.
+         -- An entry on the header, or on a partner function, blocks every line of the document.
+         and not exists (
+           select 1 from sales_incompletion_log lg
+            where lg.client = l.client
+              and lg.document_category = 'ORDER'
+              and lg.document_number = l.order_number
+              and (lg.line_number = 0 or lg.line_number = l.line_number)
+              and lg.is_warning = false
+              and exists (
+                select 1 from incompletion_status_group sg
+                 where sg.client = lg.client and sg.status_group = lg.status_group
+                   and sg.blocks_delivery = true
+              )
+         )
          and (${filter.orderNumber || null}::text is null or o.order_number = ${filter.orderNumber || null})
          and (${filter.customerNumber || null}::text is null or o.customer_number = ${filter.customerNumber || null})
        order by o.order_number, l.line_number
@@ -638,6 +656,23 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       linesByOrder.set(orderNumber, await tx.select().from(salesOrderLine).where(and(
         eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, orderNumber),
       )).orderBy(asc(salesOrderLine.lineNumber)));
+    }
+
+    // What the order is missing. The due list leaves a blocked line out, and naming one by hand is
+    // refused the same way: a delivery is not how a document gets completed, and the remedy is on
+    // the order rather than in the warehouse.
+    for (const item of parsed.items) {
+      const itemOrder = item.orderNumber ?? parsed.orderNumber;
+      const blocked = await blockingEntries(tx, parsed.client, {
+        documentCategory: 'ORDER', documentNumber: itemOrder,
+        lineNumber: item.orderLineNumber, fn: 'DELIVERY',
+      });
+      if (blocked.length > 0) {
+        throw new DeliveryError(
+          `Sales order ${itemOrder} line ${item.orderLineNumber} is incomplete: it is missing ${describeBlocked(blocked)}.`,
+          `Complete the order at /sales/orders, or read what every incomplete document is missing at /sales/incomplete.`,
+        );
+      }
     }
 
     // Who it is made with, resolved here because the customer's own terms govern how much of this
@@ -976,6 +1011,14 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
         value: round2(value),
       },
     });
+    // What the delivery is missing, judged inside the transaction that wrote it, as the order is.
+    // A delivery type assigned no procedure is complete, which every delivery is until a tenant says
+    // otherwise.
+    await evaluateIncompletion(tx, {
+      client: parsed.client, changedBy: parsed.changedBy,
+      documentCategory: 'DELIVERY', documentNumber: number,
+      documentType: deliveryType.documentType,
+    });
     const creditArea = await creditAreaFor(tx, parsed.client, order.customerNumber, order.companyCode);
     return { deliveryNumber: number, replayed: false, order, creditArea, value: round2(value) };
   });
@@ -1159,6 +1202,13 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
       },
       fieldLabels: { itemsConfirmed: 'Items confirmed' },
     });
+    // Re-judged, because a pick is the act that answers one of the questions a delivery procedure
+    // can ask: where in the plant the goods came from is not knowable until they were taken.
+    await evaluateIncompletion(tx, {
+      client: parsed.client, changedBy: parsed.changedBy,
+      documentCategory: 'DELIVERY', documentNumber: header.deliveryNumber,
+      documentType: header.documentType,
+    });
   });
 
   const view = await getDelivery(parsed.client, parsed.deliveryNumber);
@@ -1246,6 +1296,18 @@ export async function postDeliveryGoodsIssue(input: DeliveryIssueInput): Promise
       );
     }
     await refuseStandingBlock(parsed.client, header.orderNumber, `Sales order ${header.orderNumber}`, 'issued');
+    // What the delivery is still missing, where the tenant said a missing field stops goods leaving
+    // the plant. The goods issue is the last act inside the warehouse, and it is the last moment at
+    // which completing the document is cheap.
+    const unissued = await blockingEntries(tx, parsed.client, {
+      documentCategory: 'DELIVERY', documentNumber: header.deliveryNumber, fn: 'GOODS_ISSUE',
+    });
+    if (unissued.length > 0) {
+      throw new DeliveryError(
+        `Delivery ${header.deliveryNumber} is incomplete: it is missing ${describeBlocked(unissued)}.`,
+        `Complete the delivery at /sales/delivery, or read what every incomplete document is missing at /sales/incomplete.`,
+      );
+    }
     await lockDelivery(tx, parsed.client, header.deliveryNumber);
 
     const lines = await tx.select().from(deliveryLine).where(and(

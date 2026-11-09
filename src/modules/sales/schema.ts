@@ -1498,3 +1498,223 @@ export const salesDocumentPartner = pgTable('sales_document_partner', {
   }).onDelete('restrict'),
   check('sales_document_partner_category_ck', sql`${t.documentCategory} in ('ORDER', 'DELIVERY', 'BILLING')`),
 ]);
+
+/**
+ * The incompletion procedure and the log of incomplete items — §5.1, SAP's OVA2, OVA0, VUA2, VUA4
+ * and the table they write, VBUV.
+ *
+ * A document is refused today when it is wrong and saved when it is not, and there is no third
+ * state. The log is the third state: the document stands, it is simply not complete, and what it
+ * is missing is recorded against it field by field. That is what lets a clerk save an order with
+ * the customer's purchase-order number still to come, and what stops the warehouse raising a
+ * delivery for an order with no requested date.
+ *
+ * Two things are deliberate about the shape.
+ *
+ * There is **no status column beside the document**. SAP carries `VBUK-UVALL` and `VBUP` because
+ * `VBUV` was expensive to ask; here the log *is* the state, and an indexed existence query answers
+ * "is this order blocked for delivery" inside the transaction that would have read the column. A
+ * second copy of the answer is a second thing to keep true.
+ *
+ * And there is **no item category**, so no `VUP2`, `VUE2` or `VUPA`. A procedure is assigned to a
+ * document type, and its own group says which level it checks.
+ */
+export const INCOMPLETION_GROUPS = ['A', 'B', 'C', 'D', 'G', 'H'] as const;
+export type IncompletionGroup = (typeof INCOMPLETION_GROUPS)[number];
+/** The documents a procedure may be assigned to, and the documents the log is written for. */
+export const INCOMPLETION_DOCUMENT_CATEGORIES = ['ORDER', 'DELIVERY'] as const;
+export type IncompletionDocumentCategory = (typeof INCOMPLETION_DOCUMENT_CATEGORIES)[number];
+
+/**
+ * The six places a document can be incomplete, delivered with the package and not extended by a
+ * tenant — the same reason the partner functions are a delivered list: what a group means is what
+ * the evaluator does with it, and a seventh group would be a row that answered nothing.
+ */
+export const DELIVERED_INCOMPLETION_GROUPS: ReadonlyArray<{
+  groupCode: IncompletionGroup; name: string; meaning: string;
+}> = [
+  {
+    groupCode: 'A', name: 'Sales header',
+    meaning: "What the order itself must carry: the customer's purchase order reference, the date the goods were asked for.",
+  },
+  {
+    groupCode: 'B', name: 'Sales item',
+    meaning: 'What each line must carry: when it is wanted, how it is taxed, and where the profit belongs.',
+  },
+  {
+    groupCode: 'C', name: 'Sales schedule line',
+    meaning: 'What each schedule line must carry: the date and the quantity of the instalment.',
+  },
+  {
+    groupCode: 'D', name: 'Partner',
+    meaning: 'Which partner functions the document must name. The field is the function code.',
+  },
+  {
+    groupCode: 'G', name: 'Delivery header',
+    meaning: 'What the delivery itself must carry: where it loads from, when it goes, and where it is going.',
+  },
+  {
+    groupCode: 'H', name: 'Delivery item',
+    meaning: 'What each delivery line must carry: the plant, the unit, and the storage location the goods were picked from.',
+  },
+];
+
+export const incompletionGroup = pgTable('incompletion_group', {
+  client: tenant(),
+  groupCode: varchar('group_code', { length: 1 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  meaning: varchar('meaning', { length: 240 }).notNull().default(''),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.groupCode] }),
+  check('incompletion_group_code_ck', sql`${t.groupCode} in ('A', 'B', 'C', 'D', 'G', 'H')`),
+]);
+
+/**
+ * What a missing field stops — SAP's OVA0, and TVUVS.
+ *
+ * A status group is the whole of the consequence. It is not that a field is important; it is that
+ * a named function will not run for a document missing it. A group that blocks nothing is how a
+ * tenant says *record this, stop nothing*, which is what a plain warning used to be.
+ */
+export const incompletionStatusGroup = pgTable('incompletion_status_group', {
+  client: tenant(),
+  statusGroup: varchar('status_group', { length: 2 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  blocksDelivery: boolean('blocks_delivery').notNull().default(false),
+  blocksGoodsIssue: boolean('blocks_goods_issue').notNull().default(false),
+  blocksBilling: boolean('blocks_billing').notNull().default(false),
+  blocksOutput: boolean('blocks_output').notNull().default(false),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.statusGroup] }),
+  check('incompletion_status_group_code_ck', sql`${t.statusGroup} ~ '^[A-Z0-9]{1,2}$'`),
+]);
+
+/**
+ * A named list of the fields a document of one group must carry — SAP's TVUV.
+ *
+ * It belongs to exactly one group, because a header check and an item check are not the same
+ * question and are not answered from the same row. It means nothing until it is assigned.
+ */
+export const incompletionProcedure = pgTable('incompletion_procedure', {
+  client: tenant(),
+  procedureCode: varchar('procedure_code', { length: 4 }).notNull(),
+  groupCode: varchar('group_code', { length: 1 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.procedureCode] }),
+  check('incompletion_procedure_code_ck', sql`${t.procedureCode} ~ '^[A-Z0-9]{1,4}$'`),
+  foreignKey({
+    name: 'incompletion_procedure_group_fk',
+    columns: [t.client, t.groupCode],
+    foreignColumns: [incompletionGroup.client, incompletionGroup.groupCode],
+  }).onDelete('restrict'),
+]);
+
+/**
+ * One field a document must carry — SAP's TVUVF.
+ *
+ * The table and the field name are what SAP stores, and they are validated here against the set
+ * the evaluator knows how to look at: a field nothing evaluates would leave a document silently
+ * never complete. The sequence is the order the fields are reported in, which is the order a clerk
+ * fills them in.
+ */
+export const incompletionProcedureField = pgTable('incompletion_procedure_field', {
+  client: tenant(),
+  procedureCode: varchar('procedure_code', { length: 4 }).notNull(),
+  tableName: varchar('table_name', { length: 30 }).notNull(),
+  fieldName: varchar('field_name', { length: 30 }).notNull(),
+  sequence: integer('sequence').notNull(),
+  statusGroup: varchar('status_group', { length: 2 }).notNull(),
+  isWarning: boolean('is_warning').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.procedureCode, t.tableName, t.fieldName] }),
+  foreignKey({
+    name: 'incompletion_procedure_field_procedure_fk',
+    columns: [t.client, t.procedureCode],
+    foreignColumns: [incompletionProcedure.client, incompletionProcedure.procedureCode],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'incompletion_procedure_field_status_fk',
+    columns: [t.client, t.statusGroup],
+    foreignColumns: [incompletionStatusGroup.client, incompletionStatusGroup.statusGroup],
+  }).onDelete('restrict'),
+  check('incompletion_procedure_field_sequence_ck', sql`${t.sequence} > 0`),
+  index('incompletion_procedure_field_procedure_idx').on(t.client, t.procedureCode, t.sequence),
+]);
+
+/**
+ * Which procedure answers for a document type — SAP's VUA2 and VUA4, in one table.
+ *
+ * A type with no row here is not checked at all, which is what keeps this inert: every document
+ * written before a tenant configures anything is written exactly as it is today.
+ */
+export const incompletionAssignment = pgTable('incompletion_assignment', {
+  client: tenant(),
+  documentCategory: varchar('document_category', { length: 16 }).notNull(),
+  documentType: varchar('document_type', { length: 4 }).notNull(),
+  procedureCode: varchar('procedure_code', { length: 4 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentCategory, t.documentType, t.procedureCode] }),
+  check('incompletion_assignment_category_ck',
+    sql`${t.documentCategory} in ('ORDER', 'DELIVERY')`),
+  foreignKey({
+    name: 'incompletion_assignment_procedure_fk',
+    columns: [t.client, t.procedureCode],
+    foreignColumns: [incompletionProcedure.client, incompletionProcedure.procedureCode],
+  }).onDelete('restrict'),
+  foreignKey({
+    name: 'incompletion_assignment_type_fk',
+    columns: [t.client, t.documentType],
+    foreignColumns: [salesDocumentType.client, salesDocumentType.documentType],
+  }).onDelete('restrict'),
+  index('incompletion_assignment_type_idx').on(t.client, t.documentCategory, t.documentType),
+]);
+
+/**
+ * One field a document is missing — SAP's VBUV.
+ *
+ * Rewritten whole every time the document is evaluated: the rows that stand now, not the rows that
+ * stood last time. It carries no foreign key to the procedure or the status group, because what it
+ * records is what stood when the document was written, and a configuration row deleted next year
+ * cannot take a document's history with it.
+ *
+ * The key is the whole address of a missing thing — which document, which line, which schedule
+ * line, which partner function, and which field. The line number, the schedule number and the
+ * partner function are zero and blank for a header entry, as they are in SAP.
+ */
+export const salesIncompletionLog = pgTable('sales_incompletion_log', {
+  client: tenant(),
+  documentCategory: varchar('document_category', { length: 16 }).notNull(),
+  documentNumber: varchar('document_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull().default(0),
+  scheduleNumber: integer('schedule_number').notNull().default(0),
+  partnerFunction: varchar('partner_function', { length: 4 }).notNull().default(''),
+  tableName: varchar('table_name', { length: 30 }).notNull(),
+  fieldName: varchar('field_name', { length: 30 }).notNull(),
+  procedureCode: varchar('procedure_code', { length: 4 }).notNull(),
+  statusGroup: varchar('status_group', { length: 2 }).notNull(),
+  isWarning: boolean('is_warning').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({
+    columns: [
+      t.client, t.documentCategory, t.documentNumber, t.lineNumber, t.scheduleNumber,
+      t.partnerFunction, t.tableName, t.fieldName,
+    ],
+  }),
+  check('sales_incompletion_log_category_ck',
+    sql`${t.documentCategory} in ('ORDER', 'DELIVERY')`),
+  check('sales_incompletion_log_line_ck', sql`${t.lineNumber} >= 0`),
+  check('sales_incompletion_log_schedule_ck', sql`${t.scheduleNumber} >= 0`),
+  // The question every follow-on function asks: is this document blocked, and for what.
+  index('sales_incompletion_log_document_idx').on(t.client, t.documentCategory, t.documentNumber),
+  index('sales_incompletion_log_blocking_idx')
+    .on(t.client, t.documentCategory, t.documentNumber, t.isWarning, t.statusGroup),
+]);

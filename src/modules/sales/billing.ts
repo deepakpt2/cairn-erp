@@ -62,6 +62,7 @@ import {
   type RebateAccrualPosted, accrueRebatesForBilling, reverseRebateAccrualsForBilling,
 } from './rebate';
 import { standingDetermination } from './delivery';
+import { blockingEntries, describeBlocked } from './incompletion';
 import { recordSalesOutputs } from './output';
 
 export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
@@ -724,6 +725,24 @@ export async function billingDueList(
                  and dp.billing_rule = 'INVOICE'
                  and dp.status <> 'WITHDRAWN'
             )
+         )
+         -- What is still missing, where the tenant said a missing field stops billing. Both
+         -- documents are asked: an order that is incomplete for billing does not become billable
+         -- because its goods have left the plant, and offering it here would only send a clerk to
+         -- raise an invoice the service is going to refuse.
+         and not exists (
+           select 1 from sales_incompletion_log lg
+            where lg.client = d.client
+              and (
+                (lg.document_category = 'DELIVERY' and lg.document_number = d.delivery_number)
+             or (lg.document_category = 'ORDER' and lg.document_number = d.order_number)
+              )
+              and lg.is_warning = false
+              and exists (
+                select 1 from incompletion_status_group sg
+                 where sg.client = lg.client and sg.status_group = lg.status_group
+                   and sg.blocks_billing = true
+              )
          )
          and (${filter.customerNumber || null}::text is null or d.customer_number = ${filter.customerNumber || null})
          and (${filter.deliveryNumber || null}::text is null or d.delivery_number = ${filter.deliveryNumber || null})
@@ -1674,6 +1693,24 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     }
 
     const { held } = await assertDeliveryBillable(tx, parsed.client, deliveryHeader);
+
+    // What the documents are missing, where the tenant said a missing field stops billing. The due
+    // list leaves these out; naming one by hand is refused the same way, and the refusal names the
+    // field and the screen it is entered on, because "incomplete" sends a clerk nowhere.
+    const unbillable = [
+      ...await blockingEntries(tx, parsed.client, {
+        documentCategory: 'DELIVERY', documentNumber: deliveryHeader.deliveryNumber, fn: 'BILLING',
+      }),
+      ...await blockingEntries(tx, parsed.client, {
+        documentCategory: 'ORDER', documentNumber: deliveryHeader.orderNumber, fn: 'BILLING',
+      }),
+    ];
+    if (unbillable.length > 0) {
+      throw new BillingError(
+        `Delivery ${parsed.deliveryNumber} cannot be billed: it is missing ${describeBlocked(unbillable)}.`,
+        `Complete the document at /sales/delivery, or read what every incomplete document is missing at /sales/incomplete.`,
+      );
+    }
 
     // The arithmetic: what went out, at the price the order was priced by, on the accounts the
     // conditions name. Nothing is special about a document raised against one delivery — it is the
