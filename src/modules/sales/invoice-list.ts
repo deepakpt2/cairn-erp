@@ -727,6 +727,9 @@ export async function releaseInvoiceList(input: InvoiceListReleaseInput): Promis
     lines: lines.map((line) => ({
       components: line.components,
       netAmount: line.netAmount,
+      // What the members were taxed, and not what a second reading of the code would give: the tax was
+      // determined when each document was billed, and the list carries it (§4.7).
+      taxAmount: line.tax,
       taxCode: line.taxCode ?? undefined,
       taxAccount: line.taxAccount ?? undefined,
       lineText: line.lineText,

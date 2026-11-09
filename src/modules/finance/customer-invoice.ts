@@ -181,6 +181,18 @@ export interface PostCustomerInvoiceInput {
     /** Where the tax on this line posts, when the document determined it. Otherwise the standing tax account. */
     taxAccount?: string;
     netAmount: number; taxCode?: string;
+    /**
+     * The tax this line was priced at, for a line a pricing procedure taxed (§4.7).
+     *
+     * Given, it is what posts, and nothing is worked out here: a sales document's tax is determined
+     * once, by the `MWST` step of its procedure, over the subtotal that step spans — which is what makes
+     * a discount take its tax with it. Recomputing it from the code would be a second answer to one
+     * question, and the two answers differ the moment a discount or a freight charge moves the base.
+     *
+     * Omitted, the tax is computed from the code as it always was: a line entered by hand names no
+     * procedure, and the rate on the master is the only figure there is.
+     */
+    taxAmount?: number;
     profitCenter?: string; lineText?: string;
   }>;
 }
@@ -272,7 +284,16 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       }
       const code = (line.taxCode ?? '').toUpperCase() || null;
       let tax = 0;
-      if (code) {
+      if (line.taxAmount !== undefined) {
+        // Priced already, and priced once: what posts is what the document was taxed by (§4.7).
+        tax = round2(line.taxAmount);
+        if (tax !== 0 && !code) {
+          throw new CustomerInvoiceError(
+            'A line that carries tax names the code it was taxed under.',
+            'Tax is determined by a pricing step against a tax code; name the code the step used.',
+          );
+        }
+      } else if (code) {
         const rate = rates.get(code);
         if (rate === undefined) {
           throw new CustomerInvoiceError(
@@ -350,15 +371,15 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       }
     }
     if (taxByCode.size > 0) {
-      // The standing tax account is read only where the document determined none: a tenant that
-      // maintains MWS in the determination table has said where its tax goes, and is not asked to
-      // say it a second time in a table it no longer posts through.
-      const undetermined = [...taxByCode.keys()].filter((code) => !taxByAccount.has(code));
-      const fallback = undetermined.length > 0 ? await taxAccount(tx, input.client, chart) : null;
+      // The standing tax account the chart carries is a fallback for a document that determined none. A
+      // document that *did* determine one — by the account key its tax condition carries (§4.7) — is
+      // posted where it determined, and the chart's standing account is never consulted for it.
+      let fallback: string | null = null;
       for (const [code, amount] of taxByCode) {
+        const determined = taxByAccount.get(code) ?? null;
+        const glAccount = determined ?? (fallback ?? (fallback = await taxAccount(tx, input.client, chart)));
         journalLines.push({
-          glAccount: taxByAccount.get(code) ?? fallback as string,
-          debitCredit: 'H', amount: amount.toFixed(2), taxCode: code,
+          glAccount, debitCredit: 'H', amount: amount.toFixed(2), taxCode: code,
         });
       }
     }

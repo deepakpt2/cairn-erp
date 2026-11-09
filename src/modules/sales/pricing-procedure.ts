@@ -619,6 +619,70 @@ function distribute(total: number, weights: number[]): { parts: number[]; weight
 }
 
 /**
+ * The tax step, and the only place output tax is computed (§4.7).
+ *
+ * Tax is a pricing step — `MWST`, class `TAX`, account key `MWS` — and not a figure a document looks up
+ * beside its price. Which is why this one function is the whole of the rule, and why the billing
+ * service calls it too: a line whose order predates the procedure has no conditions to scale, but it is
+ * taxed by the same step, over the same base, from the same master. Two implementations of one tax rule
+ * is how a document's tax comes to depend on the year its order was raised in.
+ *
+ * The base is the caller's, and the caller is what makes the difference: the procedure passes the
+ * subtotal the step spans, so a discount takes its tax with it; billing passes the line's own net,
+ * which for an order with no conditions is the only base there is. Same rule, and the same answer.
+ *
+ * `undefined` means the tax code named does not stand for the company's country. A line that names no
+ * code at all is not an error — it is a line nobody is taxed on.
+ */
+export async function taxStep(
+  tx: Tx,
+  input: { client: string; country: string; taxCode?: string | null; base: number },
+): Promise<{ amount: number; base: number; rate: number } | undefined> {
+  const code = (input.taxCode ?? '').trim().toUpperCase();
+  if (!code) return { amount: 0, base: input.base, rate: 0 };
+  const [row] = await tx.select({ ratePercent: taxCodeTable.ratePercent }).from(taxCodeTable).where(and(
+    eq(taxCodeTable.client, input.client),
+    eq(taxCodeTable.country, input.country),
+    eq(taxCodeTable.taxCode, code),
+  )).limit(1);
+  if (!row) return undefined;
+  const rate = Number(row.ratePercent);
+  return { amount: (input.base * rate) / 100, base: input.base, rate };
+}
+
+/** The step of the procedure that carries tax, and the key its account is determined by. */
+export const TAX_CONDITION_TYPE = 'MWST';
+export const TAX_ACCOUNT_KEY = 'MWS';
+export const TAX_STEP_NUMBER = 40;
+
+/**
+ * A tax condition in the shape the document stores, for a line that was taxed by `taxStep`. Used where
+ * a document carries tax but no conditions of its own — an order priced before the procedure stood — so
+ * that what it posts is written down and can be read back, and so account key `MWS` reaches
+ * determination for every document rather than only for the ones the procedure priced.
+ */
+export function taxConditionFor(input: {
+  lineNumber: number; base: number; rate: number; amount: number; currency: string;
+}): PricedCondition {
+  return {
+    lineNumber: input.lineNumber,
+    stepNumber: TAX_STEP_NUMBER,
+    conditionType: TAX_CONDITION_TYPE,
+    conditionClass: 'TAX',
+    origin: 'ITEM',
+    baseValue: input.base.toFixed(2),
+    rate: input.rate.toFixed(4),
+    amount: input.amount.toFixed(2),
+    priceUnit: 1,
+    // A tax names the rate it was charged at and no record: there is no condition record to point at.
+    conditionNumber: null,
+    accountKey: TAX_ACCOUNT_KEY,
+    isStatistical: false,
+    access: null,
+  };
+}
+
+/**
  * What one step contributes.
  *
  * `undefined` means the step contributed nothing and was allowed to: no record stood and the step was
@@ -646,22 +710,19 @@ async function evaluateStep(
 } | undefined> {
   if (step.conditionClass === 'TAX') {
     const base = sumSpan(context.stepValues, step.fromStep, step.toStep);
-    let rate = 0;
-    if (context.taxCode) {
-      const [code] = await tx.select({ ratePercent: taxCodeTable.ratePercent }).from(taxCodeTable).where(and(
-        eq(taxCodeTable.client, input.client),
-        eq(taxCodeTable.country, country),
-        eq(taxCodeTable.taxCode, context.taxCode),
-      )).limit(1);
-      if (!code) {
-        throw new PricingProcedureError(
-          `Tax code ${context.taxCode} does not stand for country ${country || '(none)'}, the country of company code ${input.companyCode}.`,
-          'Maintain the tax code in that country, or leave the item free of tax if that is what the customer is billed at.',
-        );
-      }
-      rate = Number(code.ratePercent);
+    const taxed = await taxStep(tx, {
+      client: input.client, country, taxCode: context.taxCode, base,
+    });
+    if (!taxed) {
+      throw new PricingProcedureError(
+        `Tax code ${context.taxCode} does not stand for country ${country || '(none)'}, the country of company code ${input.companyCode}.`,
+        'Maintain the tax code in that country, or leave the item free of tax if that is what the customer is billed at.',
+      );
     }
-    return { amount: (base * rate) / 100, base, rate, priceUnit: 1, conditionNumber: null, access: null };
+    return {
+      amount: taxed.amount, base: taxed.base, rate: taxed.rate,
+      priceUnit: 1, conditionNumber: null, access: null,
+    };
   }
 
   if (step.calculationType === 'MATERIAL_COST') {

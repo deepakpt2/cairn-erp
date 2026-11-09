@@ -603,10 +603,89 @@ describe('the conditions a document is priced by, through the chain that follows
     expect(Number(line.netAmount)).toBe(116);
     expect(Number(line.taxAmount)).toBe(11.6);
     expect(Number(invoicedHistoric.billing.grossValue)).toBe(127.6);
-    // Nothing was invented for it: a document with no conditions is billed without them.
-    expect(await salesDocumentConditionsOf(
+    // No pricing condition was invented for it: a line that carries none is billed on the price it has
+    // always carried. What the document does record is the tax, because tax is a step of the procedure
+    // that ran over the line's subtotal (§4.7) — and on a line with no other condition the subtotal is
+    // the line, which is why the figure is the one this document has always carried.
+    const historic = await salesDocumentConditionsOf(
       tenant.client, 'BILLING', invoicedHistoric.billing.billingNumber,
-    )).toEqual([]);
+    );
+    expect(historic.map((row) => [row.conditionType, row.conditionClass])).toEqual([['MWST', 'TAX']]);
+    expect(Number(historic[0].amount)).toBe(11.6);
+    expect(Number(historic[0].baseValue)).toBe(116);
+    expect(Number(historic[0].rate)).toBe(10);
+    expect(historic[0].accountKey).toBe('MWS');
+  });
+
+  it('posts the tax the document stored, on the account the tax key named', async () => {
+    // Tax is determined once, by pricing (§4.7). What the receivable posts is the figure the document
+    // stored — not a rate the accounting-invoice service looked up again for itself — and it lands on
+    // the account MWS determined, not on the standing tax account the chart happens to carry.
+    const billed = await invoicedChain('stored-tax', 3, 3);
+    const stored = Number(billed.billing.lines[0].taxAmount);
+    expect(Number(billed.invoice?.taxAmount)).toBe(stored);
+    const journal = await withTenant(tenant.client, async (tx) => tx.execute(sql`
+      select jl.gl_account, jl.amount_local::text as amount
+        from journal_entry_line jl
+       where jl.client = ${tenant.client} and jl.document_number = ${billed.invoice?.journalDocumentNumber ?? ''}
+       order by jl.gl_account
+    `) as unknown as Promise<Array<{ gl_account: string; amount: string }>>);
+    expect(Number(journal.find((row) => row.gl_account === '220000')?.amount)).toBe(stored);
+    // 240000 is the account this tenant maintains for the tax event by chart. It was not asked.
+    expect(journal.some((row) => row.gl_account === '240000')).toBe(false);
+  });
+
+  it('refuses, at the moment it is billed, a tax code that no longer stands for the country', async () => {
+    // The refusal the fallback has always made, and the reason it cannot simply read a rate: a code that
+    // stood when the order was raised need not stand when the delivery is invoiced (§4.7).
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('lapsed-order'),
+      lines: [{
+        lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
+        orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
+      }],
+    });
+    // Stripped of its conditions, which is the state a document carries no pricing for: the tax is then
+    // priced at the moment of billing, from the master as it stands at that moment.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update sales_document_condition set document_number = 'SD9239-LAPSED', changed_by = ${ACTOR}
+        where client = ${tenant.client} and document_category = 'ORDER' and document_number = ${placed.orderNumber}
+      `);
+    });
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('lapsed-delivery'),
+    });
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('lapsed-pick'),
+    });
+    const standing = await getDelivery(tenant.client, shipped.deliveryNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      expectedVersion: standing!.version, postingDate: DATE,
+    });
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        delete from tax_code where client = ${tenant.client} and country = 'KW' and tax_code = 'T10'
+      `);
+    });
+    try {
+      await expect(postBillingDocument({
+        client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+        requestKey: key('lapsed-invoice'),
+      })).rejects.toThrow(/T10 no longer stands for country KW/);
+    } finally {
+      await withTenant(tenant.client, async (tx) => {
+        await tx.execute(sql`
+          insert into tax_code (client, country, tax_code, name, tax_type, rate_percent, created_by)
+          values (${tenant.client}, 'KW', 'T10', 'Output tax 10 percent', 'VAT', 10, ${ACTOR})
+          on conflict do nothing
+        `);
+      });
+    }
   });
 
   it('leaves a document standing at the price it was priced at when the price list moves', async () => {

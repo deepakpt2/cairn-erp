@@ -32,7 +32,7 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
-import { accountDetermination, companyCode as companyCodeTable, taxCode as taxCodeTable } from '../foundation/schema';
+import { accountDetermination, companyCode as companyCodeTable } from '../foundation/schema';
 import {
   cancelCustomerInvoice, postCustomerInvoice, type CustomerInvoiceView,
 } from '../finance/customer-invoice';
@@ -47,7 +47,7 @@ import { customerSalesArea } from '../foundation/customer-sales-area-schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_BILLING_TYPE, salesDocumentTypeFor } from './document-type';
 import {
   type PricedCondition, type StoredCondition, documentConditionsOf, roundAmount, scaleLineConditions,
-  writeDocumentConditions,
+  taxConditionFor, taxStep, writeDocumentConditions,
 } from './pricing-procedure';
 import {
   type DocumentPartners, documentPartners, partnersForDocument, resolvePartners, writeDocumentPartners,
@@ -1334,24 +1334,26 @@ async function buildLinesForDelivery(
         billedConditions = scaled.conditions;
       } else {
         netAmount = (billed * Number(orderLine.netPrice)) / orderLine.priceUnit;
-        // The tax code is judged by the tax master as it stands on the billing date — the same rule and the
-        // same formula the order was priced by, so the invoice and this document cannot disagree about the
-        // tax.
-        rate = 0;
-        if (orderLine.taxCode) {
-          const [code] = await tx.select({ ratePercent: taxCodeTable.ratePercent }).from(taxCodeTable).where(and(
-            eq(taxCodeTable.client, client), eq(taxCodeTable.country, country ?? ''),
-            eq(taxCodeTable.taxCode, orderLine.taxCode),
-          )).limit(1);
-          if (!code) {
-            throw new BillingError(
-              `Tax code ${orderLine.taxCode} no longer stands for country ${country || '(none)'}, which item ${line.lineNumber} is billed under.`,
-              'Maintain the tax code, or change the order line to a code that stands.',
-            );
-          }
-          rate = Number(code.ratePercent);
+        // Tax is priced here and not looked up beside the document: the same step the procedure runs,
+        // from the same master, over the only base an order with no conditions has — the line's own net.
+        // Two implementations of one tax rule is how a document's tax comes to depend on the year its
+        // order was raised in (§4.7).
+        const taxed = await taxStep(tx, {
+          client, country: country ?? '', taxCode: orderLine.taxCode, base: netAmount,
+        });
+        if (!taxed) {
+          throw new BillingError(
+            `Tax code ${orderLine.taxCode} no longer stands for country ${country || '(none)'}, which item ${line.lineNumber} is billed under.`,
+            'Maintain the tax code, or change the order line to a code that stands.',
+          );
         }
-        taxAmount = rate ? Number(round2((netAmount * rate) / 100)) : 0;
+        rate = taxed.rate;
+        taxAmount = Number(round2(taxed.amount));
+        // Written down, so what the document posts can be read back from it: account key MWS reaches
+        // determination for every document, and not only for the ones the procedure priced.
+        billedConditions = [taxConditionFor({
+          lineNumber: 0, base: taxed.base, rate: taxed.rate, amount: taxAmount, currency: order.currency,
+        })];
       }
       netTotal += netAmount;
       taxTotal += taxAmount;
@@ -1407,14 +1409,23 @@ async function buildLinesForDelivery(
         : undefined;
       const invoiceLine: InvoiceLine = {
         netAmount: Number(round2(netAmount)),
+        // Priced, not recomputed: what the accounting-invoice service posts is what this document was
+        // taxed by the step that taxed it (§4.7).
+        taxAmount: Number(round2(taxAmount)),
         taxCode: orderLine.taxCode || undefined,
         profitCenter: orderLine.profitCenter || undefined,
         lineText: `Delivery ${line.deliveryNumber} item ${line.lineNumber}`.slice(0, 50),
       };
       if (accounts) {
-        invoiceLine.components = accounts.components.map((component) => ({
-          glAccount: component.glAccount, amount: Number(component.amount),
-        }));
+        if (accounts.components.length > 0) {
+          invoiceLine.components = accounts.components.map((component) => ({
+            glAccount: component.glAccount, amount: Number(component.amount),
+          }));
+        } else {
+          // A line whose only condition is its tax has no price, discount or freight to split: it posts
+          // whole to revenue, as it did the day it was raised.
+          invoiceLine.glAccount = await revenueAccountOnce();
+        }
         if (accounts.taxAccount) invoiceLine.taxAccount = accounts.taxAccount;
       } else {
         invoiceLine.glAccount = await revenueAccountOnce();
@@ -1795,26 +1806,24 @@ export async function createBillingFromPlanDate(
       billedConditions = scaled.conditions;
     } else {
       netAmount = (billed * Number(orderLine.netPrice)) / orderLine.priceUnit;
-      // The tax code is judged by the tax master as it stands, and by the rate the order's own condition
-      // states where one stands — a tax looked up again would be today's rate on yesterday's agreement.
-      rate = 0;
-      if (orderLine.taxCode) {
-        const country = (await tx.select({ country: companyCodeTable.country }).from(companyCodeTable).where(and(
-          eq(companyCodeTable.client, parsed.client), eq(companyCodeTable.companyCode, order.companyCode),
-        )).limit(1))[0]?.country;
-        const [code] = await tx.select({ ratePercent: taxCodeTable.ratePercent }).from(taxCodeTable).where(and(
-          eq(taxCodeTable.client, parsed.client), eq(taxCodeTable.country, country ?? ''),
-          eq(taxCodeTable.taxCode, orderLine.taxCode),
-        )).limit(1);
-        if (!code) {
-          throw new BillingError(
-            `Tax code ${orderLine.taxCode} no longer stands for country ${country || '(none)'}, which item ${orderLine.lineNumber} is billed under.`,
-            'Maintain the tax code, or change the order line to a code that stands.',
-          );
-        }
-        rate = Number(code.ratePercent);
+      const planCountry = (await tx.select({ country: companyCodeTable.country }).from(companyCodeTable).where(and(
+        eq(companyCodeTable.client, parsed.client), eq(companyCodeTable.companyCode, order.companyCode),
+      )).limit(1))[0]?.country;
+      // The same step the procedure runs, over the only base an order with no conditions has (§4.7).
+      const taxed = await taxStep(tx, {
+        client: parsed.client, country: planCountry ?? '', taxCode: orderLine.taxCode, base: netAmount,
+      });
+      if (!taxed) {
+        throw new BillingError(
+          `Tax code ${orderLine.taxCode} no longer stands for country ${planCountry || '(none)'}, which item ${orderLine.lineNumber} is billed under.`,
+          'Maintain the tax code, or change the order line to a code that stands.',
+        );
       }
-      taxAmount = rate ? Number(round2((netAmount * rate) / 100)) : 0;
+      rate = taxed.rate;
+      taxAmount = Number(round2(taxed.amount));
+      billedConditions = [taxConditionFor({
+        lineNumber: 0, base: taxed.base, rate: taxed.rate, amount: taxAmount, currency: order.currency,
+      })];
     }
     const netTotal = Number(round2(netAmount));
     const taxTotal = Number(round2(taxAmount));
@@ -1861,14 +1870,19 @@ export async function createBillingFromPlanDate(
       : undefined;
     const invoiceLine: InvoiceLine = {
       netAmount: netTotal,
+      taxAmount: taxTotal,
       taxCode: orderLine.taxCode || undefined,
       profitCenter: orderLine.profitCenter || undefined,
       lineText: `Order ${order.orderNumber} item ${orderLine.lineNumber} date ${date.dateNumber}`.slice(0, 50),
     };
     if (accounts) {
-      invoiceLine.components = accounts.components.map((component) => ({
-        glAccount: component.glAccount, amount: Number(component.amount),
-      }));
+      if (accounts.components.length > 0) {
+        invoiceLine.components = accounts.components.map((component) => ({
+          glAccount: component.glAccount, amount: Number(component.amount),
+        }));
+      } else {
+        invoiceLine.glAccount = await revenueAccountFor(tx, parsed.client, order.companyCode);
+      }
       if (accounts.taxAccount) invoiceLine.taxAccount = accounts.taxAccount;
     } else {
       invoiceLine.glAccount = await revenueAccountFor(tx, parsed.client, order.companyCode);
@@ -2034,6 +2048,12 @@ export interface InvoiceLine {
   components?: Array<{ glAccount: string; amount: number }>;
   /** Where the tax on this line posts, determined by the account key the tax condition carried. */
   taxAccount?: string;
+  /**
+   * The tax this line was priced at (§4.7). Present, the accounting-invoice service posts this figure
+   * and works nothing out for itself; absent — a line entered by hand, which no procedure priced — it
+   * computes the tax from the code as it always has. Tax is determined once, by pricing.
+   */
+  taxAmount?: number;
   /** A number, because that is what the accounting-invoice service declares on its line input. */
   netAmount: number;
   taxCode?: string;
