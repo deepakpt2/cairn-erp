@@ -58,11 +58,17 @@ export async function saveCustomerPartnerAction(
   }
 }
 
-/** Withdraw a partner function, or restore one. The row is never deleted: it is evidence. */
+/**
+ * Withdraw a partner function, or restore one. The row is never deleted: it is evidence.
+ *
+ * The second argument is the state the screen is showing, and not a form: the values this action
+ * acts on are the row the button stands beside, bound to it, so nothing is read back out of the
+ * fields a browser posted.
+ */
 export async function changeCustomerPartnerStatusAction(input: {
   partnerNumber: string; functionCode: string; salesOrg: string;
   distributionChannel: string; division: string; isActive: boolean;
-}, _form: FormData): Promise<CustomerPartnerActionState> {
+}, _previous: CustomerPartnerActionState): Promise<CustomerPartnerActionState> {
   const session = await requireSession('/foundation/partners');
   try {
     await requireCapability('CFG.SALES.PARTNER.DEFINE', session);

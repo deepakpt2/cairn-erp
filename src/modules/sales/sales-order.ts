@@ -40,7 +40,10 @@ import { type DocumentPartners, documentPartners, resolvePartners, writeDocument
 import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
 import { PricingError, assertMaterialAtPlant, resolveCustomerSalesData } from './pricing';
 import { MaterialSalesError, assertMaterialSalesArea } from './material-sales';
-import { salesOrder, salesOrderLine } from './schema';
+import {
+  AvailabilityError, ORDER_CHECKING_RULE, confirmOrderLines, writeScheduleLines,
+} from './availability';
+import { salesOrder, salesOrderLine, salesOrderSchedule } from './schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_ORDER_TYPE, salesDocumentTypeFor } from './document-type';
 import {
   PricingProcedureError, STANDARD_DOCUMENT_PRICING_PROCEDURE, type PricedDocument, priceDocument,
@@ -387,6 +390,22 @@ export interface SalesOrderView {
     conditionNumber: string;
     status: string;
     rejectionReason: string | null;
+    /**
+     * What the availability check confirmed against this item — the promise the plant made. Null is
+     * not zero: it is an item that was never checked.
+     */
+    confirmedQuantity: string | null;
+    /**
+     * The schedule lines of this item: what the customer asked for and by when, and what the check
+     * confirmed against it. Empty on an item raised before the check stood.
+     */
+    schedule: Array<{
+      scheduleNumber: number;
+      requestedDate: string;
+      requestedQuantity: string;
+      confirmedQuantity: string;
+      confirmedDate: string | null;
+    }>;
   }>;
   /** The determination that stands against this number, or null when none has been raised. */
   credit: CreditDeterminationView | null;
@@ -398,7 +417,7 @@ export interface SalesOrderView {
   partners: DocumentPartners;
 }
 
-function mapHeader(row: typeof salesOrder.$inferSelect): Omit<SalesOrderView, 'lines' | 'credit'> {
+function mapHeader(row: typeof salesOrder.$inferSelect): Omit<SalesOrderView, 'lines' | 'credit' | 'partners'> {
   return {
     orderNumber: row.orderNumber,
     documentType: row.documentType,
@@ -439,6 +458,17 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
   const lines = await tx.select().from(salesOrderLine)
     .where(and(eq(salesOrderLine.client, client), eq(salesOrderLine.orderNumber, orderNumber)))
     .orderBy(asc(salesOrderLine.lineNumber));
+  // What the plant promised, read from the schedule lines the check wrote. An item raised before the
+  // check stood carries none, and reads as it always did: nothing confirmed, nothing withheld.
+  const schedule = await tx.select().from(salesOrderSchedule).where(and(
+    eq(salesOrderSchedule.client, client), eq(salesOrderSchedule.orderNumber, orderNumber),
+  )).orderBy(asc(salesOrderSchedule.orderLineNumber), asc(salesOrderSchedule.scheduleNumber));
+  const scheduleOf = new Map<number, Array<(typeof schedule)[number]>>();
+  for (const row of schedule) {
+    const bucket = scheduleOf.get(row.orderLineNumber) ?? [];
+    bucket.push(row);
+    scheduleOf.set(row.orderLineNumber, bucket);
+  }
   // An order raised before the partners stood carries none, and reads as the four-in-one customer it
   // always was: the number on its header.
   const partners = await resolvePartners(tx, client, {
@@ -467,6 +497,14 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
       conditionNumber: l.conditionNumber,
       status: l.status,
       rejectionReason: l.rejectionReason,
+      confirmedQuantity: l.confirmedQuantity,
+      schedule: (scheduleOf.get(l.lineNumber) ?? []).map((row) => ({
+        scheduleNumber: row.scheduleNumber,
+        requestedDate: row.requestedDate,
+        requestedQuantity: row.requestedQuantity,
+        confirmedQuantity: row.confirmedQuantity,
+        confirmedDate: row.confirmedDate,
+      })),
     })),
   };
 }
@@ -483,6 +521,72 @@ export interface CreateSalesOrderResult extends SalesOrderView {
   replayed: boolean;
   /** A create always raises a determination, so the caller never has to look one up. */
   credit: NonNullable<SalesOrderView['credit']>;
+}
+
+/**
+ * Ask the plant what it can promise for these items.
+ *
+ * A confirmation is not a decision somebody makes on a screen. It is the answer the availability
+ * check returns, asked once per material and plant and consumed in the order the items stand in, so
+ * the first order to ask is the first to be promised. It is written down at the moment it was asked
+ * because a document read in a month must still say what the plant promised on the day, not what it
+ * happens to hold now.
+ *
+ * A material that carries no checking group is confirmed in full: it was never to be checked, and a
+ * promise of nothing to a customer nobody configured a check for is a broken promise made by a
+ * configuration the tenant never asked for.
+ */
+async function confirmQuantities(
+  tx: Tx,
+  client: string,
+  input: {
+    orderNumber: string; salesOrg: string; distributionChannel: string;
+    /** What has already gone out against an item, in the unit it was ordered in. */
+    delivered: (lineNumber: number) => number;
+    lines: PricedLine[]; fallbackDate: string;
+    /** A change re-asks the check for an order whose own promise must not be counted against it. */
+    excludeSelf?: boolean;
+  },
+): Promise<Map<number, number>> {
+  return confirmOrderLines(tx, client, {
+    salesOrg: input.salesOrg,
+    distributionChannel: input.distributionChannel,
+    checkingRule: ORDER_CHECKING_RULE,
+    ...(input.excludeSelf ? { exclude: { orderNumber: input.orderNumber } } : {}),
+    lines: input.lines.map((line) => ({
+      lineNumber: line.lineNumber,
+      materialNumber: line.materialNumber,
+      plant: line.plant,
+      orderQuantity: Number(line.orderQuantity),
+      baseQuantity: Number(line.baseQuantity),
+      requestedDate: line.requestedDeliveryDate ?? input.fallbackDate,
+      deliveredQuantity: input.delivered(line.lineNumber),
+    })),
+  }).catch((error) => {
+    // A scope the check cannot count, a group that does not stand: the refusal names the screen the
+    // configuration is missing from, because "unavailable" is not an answer a plant can act on.
+    if (error instanceof AvailabilityError) throw new SalesOrderError(error.message, error.remedy);
+    throw error;
+  });
+}
+
+/** Record what was asked for and what was promised, on the schedule lines the delivery reads. */
+async function recordSchedule(
+  tx: Tx,
+  input: {
+    client: string; orderNumber: string; changedBy: string;
+    lines: PricedLine[]; confirmed: Map<number, number>; fallbackDate: string;
+  },
+): Promise<void> {
+  await writeScheduleLines(tx, {
+    client: input.client, orderNumber: input.orderNumber, changedBy: input.changedBy,
+    lines: input.lines.map((line) => ({
+      lineNumber: line.lineNumber,
+      requestedQuantity: Number(line.orderQuantity),
+      confirmedQuantity: input.confirmed.get(line.lineNumber) ?? Number(line.orderQuantity),
+      requestedDate: line.requestedDeliveryDate ?? input.fallbackDate,
+    })),
+  });
 }
 
 /**
@@ -617,11 +721,24 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
       createdBy: parsed.changedBy,
     });
 
+    // What the plant can promise. Asked before the items are written, because the answer is part of
+    // what an order is: an order that says ten where the plant can supply six is not an order for ten.
+    const confirmed = await confirmQuantities(tx, parsed.client, {
+      orderNumber: number, salesOrg: parsed.salesOrg, distributionChannel: parsed.distributionChannel,
+      delivered: () => 0, lines, fallbackDate: parsed.requestedDate ?? parsed.orderDate,
+    });
+
     for (const line of lines) {
       await tx.insert(salesOrderLine).values({
-        client: parsed.client, orderNumber: number, ...line, status: 'OPEN', createdBy: parsed.changedBy,
+        client: parsed.client, orderNumber: number, ...line, status: 'OPEN',
+        confirmedQuantity: confirmed.get(line.lineNumber)?.toFixed(3) ?? null,
+        createdBy: parsed.changedBy,
       });
     }
+    await recordSchedule(tx, {
+      client: parsed.client, orderNumber: number, changedBy: parsed.changedBy, lines, confirmed,
+      fallbackDate: parsed.requestedDate ?? parsed.orderDate,
+    });
 
     // Who it is made with. The order carries the partners it was created with, determined once and
     // written down: the ship-to the delivery will be raised for, the bill-to the invoice will be
@@ -774,15 +891,28 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
           eq(salesOrderLine.lineNumber, lineNumber)));
     }
 
+    // What the plant can promise now, re-asked for what has not gone out. This order's own promise is
+    // not counted against itself, and a quantity already delivered is not asked for twice: the check
+    // answers for the six that are still owed, not for the four the plant has already shipped.
+    const confirmedOnChange = await confirmQuantities(tx, parsed.client, {
+      orderNumber: parsed.orderNumber, salesOrg: before.salesOrg,
+      distributionChannel: before.distributionChannel, excludeSelf: true,
+      delivered: (lineNumber) => deliveredOf(progress, lineNumber), lines,
+      fallbackDate: parsed.requestedDate ?? before.requestedDate ?? before.orderDate,
+    });
+
     for (const line of lines) {
       const [standing] = await tx.select({ status: salesOrderLine.status }).from(salesOrderLine)
         .where(and(eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, parsed.orderNumber),
           eq(salesOrderLine.lineNumber, line.lineNumber)))
         .limit(1);
       if (!standing) {
-        // A change may add an item; it may not rename or reuse one, and it may not drop one.
+        // A change may add an item; it may not rename or reuse one, and it may not drop one. An item it
+        // adds is confirmed like any other: the check answers for what has not gone out.
         await tx.insert(salesOrderLine).values({
-          client: parsed.client, orderNumber: parsed.orderNumber, ...line, status: 'OPEN', createdBy: parsed.changedBy,
+          client: parsed.client, orderNumber: parsed.orderNumber, ...line, status: 'OPEN',
+          confirmedQuantity: confirmedOnChange.get(line.lineNumber)?.toFixed(3) ?? null,
+          createdBy: parsed.changedBy,
         });
         continue;
       }
@@ -792,10 +922,18 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
           'Add the item under the next free number so the rejected line stays readable.',
         );
       }
-      await tx.update(salesOrderLine).set({ ...line, changedBy: parsed.changedBy, changedAt: new Date() })
-        .where(and(eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, parsed.orderNumber),
-          eq(salesOrderLine.lineNumber, line.lineNumber)));
+      await tx.update(salesOrderLine).set({
+        ...line,
+        confirmedQuantity: confirmedOnChange.get(line.lineNumber)?.toFixed(3) ?? null,
+        changedBy: parsed.changedBy, changedAt: new Date(),
+      }).where(and(eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, parsed.orderNumber),
+        eq(salesOrderLine.lineNumber, line.lineNumber)));
     }
+    await recordSchedule(tx, {
+      client: parsed.client, orderNumber: parsed.orderNumber, changedBy: parsed.changedBy,
+      lines, confirmed: confirmedOnChange,
+      fallbackDate: parsed.requestedDate ?? before.requestedDate ?? before.orderDate,
+    });
 
     // Who it is made with, re-determined: a customer's master may have named a payer since the order
     // was raised, and an order that is still open is judged by the master as it stands. What has

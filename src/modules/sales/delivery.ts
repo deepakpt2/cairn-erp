@@ -34,6 +34,7 @@ import { GoodsIssueError, postGoodsIssue } from '../inventory/goods-issue';
 import { StorageLocationError, resolveStorageLocation, storageLocationRequired } from '../inventory/storage-location';
 import { UnitConversionError } from '../inventory/unit-conversion';
 
+import { AvailabilityError, DELIVERY_CHECKING_RULE, availableToPromise } from './availability';
 import { delivery, deliveryLine, deliveryPicking, salesOrder, salesOrderLine } from './schema';
 import {
   DOCUMENT_TYPE_REMEDY, STANDARD_DELIVERY_TYPE, STANDARD_RETURNS_DELIVERY_TYPE,
@@ -225,8 +226,11 @@ export interface DeliveryView {
     plant: string;
     quantityUnit: string;
     orderedQuantity: string;
+    /** What the check had confirmed when this delivery was made; null on a delivery from before. */
+    confirmedQuantity: string | null;
     deliveredBefore: string;
     deliveryQuantity: string;
+    /** What the order line still has open against what was asked for. Not what may still be shipped. */
     remainingQuantity: string;
     pickedQuantity: string;
     goodsIssueQuantity: string;
@@ -332,6 +336,7 @@ async function loadDelivery(tx: Tx, client: string, deliveryNumber: string): Pro
       plant: line.plant,
       quantityUnit: line.quantityUnit,
       orderedQuantity: line.orderedQuantity,
+      confirmedQuantity: line.confirmedQuantity,
       deliveredBefore: line.deliveredBefore,
       deliveryQuantity: line.deliveryQuantity,
       remainingQuantity: line.remainingQuantity,
@@ -380,11 +385,13 @@ export async function listDeliverableOrderLines(
   orderedQuantity: string;
   deliveredQuantity: string;
   remainingQuantity: string;
+  /** What the check confirmed against the line; null on a line that was never checked. */
+  confirmedQuantity: string | null;
 }>> {
   return withTenant(client, async (tx) => {
     const rows = await tx.execute(sql`
       select o.order_number, o.customer_number, o.order_date, l.line_number, l.material_number, l.plant,
-             l.quantity_unit, l.requested_delivery_date, l.order_quantity,
+             l.quantity_unit, l.requested_delivery_date, l.order_quantity, l.confirmed_quantity,
              coalesce(d.delivered, 0)::text as delivered
         from sales_order_line l
         join sales_order o on o.client = l.client and o.order_number = l.order_number
@@ -406,7 +413,10 @@ export async function listDeliverableOrderLines(
          -- coming back, and offering it here would promise the plant's stock to a shipment that is a
          -- receipt wearing the wrong coat.
          and o.document_type <> ${STANDARD_RETURNS_ORDER_TYPE}
-         and l.order_quantity > coalesce(d.delivered, 0)
+         -- What the plant confirmed is what the delivery is created from, not what the customer
+         -- asked for: a line confirmed six of ten offers six, and a line that was never
+         -- checked offers what it always did.
+         and least(l.order_quantity, coalesce(l.confirmed_quantity, l.order_quantity)) > coalesce(d.delivered, 0)
          and (${filter.orderNumber || null}::text is null or o.order_number = ${filter.orderNumber || null})
          and (${filter.customerNumber || null}::text is null or o.customer_number = ${filter.customerNumber || null})
        order by o.order_number, l.line_number
@@ -414,11 +424,12 @@ export async function listDeliverableOrderLines(
     `) as unknown as Array<{
       order_number: string; customer_number: string; order_date: string; line_number: number;
       material_number: string; plant: string; quantity_unit: string; requested_delivery_date: string | null;
-      order_quantity: string; delivered: string;
+      order_quantity: string; confirmed_quantity: string | null; delivered: string;
     }>;
     return rows.map((row) => {
       const ordered = Number(row.order_quantity);
       const delivered = Number(row.delivered);
+      const confirmed = row.confirmed_quantity === null ? null : Number(row.confirmed_quantity);
       return {
         orderNumber: row.order_number,
         lineNumber: row.line_number,
@@ -430,7 +441,8 @@ export async function listDeliverableOrderLines(
         requestedDeliveryDate: row.requested_delivery_date,
         orderedQuantity: round3(ordered),
         deliveredQuantity: round3(delivered),
-        remainingQuantity: round3(ordered - delivered),
+        remainingQuantity: round3(Math.max(0, Math.min(ordered, confirmed ?? ordered) - delivered)),
+        confirmedQuantity: row.confirmed_quantity,
       };
     });
   });
@@ -567,7 +579,16 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
         );
       }
       const already = deliveredOf(progress, item.orderLineNumber);
+      // What the plant confirmed is the ceiling on a delivery, not what the customer asked for. A
+      // line that was never checked carries no confirmation, and delivers as it always did. The open
+      // quantity of the order is a different figure, and stays what it always was: ten ordered and six
+      // gone leaves four open, whether or not the plant has promised to supply them.
+      const confirmed = Number(line.confirmedQuantity ?? line.orderQuantity);
+      const deliverable = Math.max(0, Math.min(Number(line.orderQuantity), confirmed) - already);
       const remaining = Number(line.orderQuantity) - already;
+      // What the check withheld, if it withheld anything: a line confirmed in full has nothing to
+      // quote, and a material nobody configured a check for has no confirmation to quote at all.
+      const withheld = line.confirmedQuantity !== null && confirmed < Number(line.orderQuantity) - 1e-9;
       const wanted = Number(item.quantity);
       if (!(wanted > 0)) {
         throw new DeliveryError(
@@ -576,10 +597,12 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
         );
       }
       await assertUnitScale(tx, parsed.client, line.quantityUnit, item.quantity, `Item ${item.orderLineNumber}'s delivery quantity`);
-      if (wanted > remaining + 1e-9) {
+      if (wanted > deliverable + 1e-9) {
         throw new DeliveryError(
-          `Item ${item.orderLineNumber} carries ${round3(remaining)} ${line.quantityUnit.trim()} open of ${line.orderQuantity} ordered, and ${item.quantity} was entered.`,
-          'Reduce the quantity to what the order line still has open, or change the order first.',
+          `Item ${item.orderLineNumber} carries ${round3(deliverable)} ${line.quantityUnit.trim()} open of ${line.orderQuantity} ordered${withheld ? ` and ${round3(confirmed)} confirmed` : ''}, and ${item.quantity} was entered.`,
+          withheld
+            ? 'Reduce the quantity to what the plant confirmed, or change the order to have the check run again.'
+            : 'Reduce the quantity to what the order line still has open, or change the order first.',
         );
       }
       if (plant && line.plant !== plant) {
@@ -600,11 +623,50 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
         plant: line.plant,
         quantityUnit: line.quantityUnit,
         orderedQuantity: line.orderQuantity,
+        confirmedQuantity: line.confirmedQuantity ?? null,
         deliveredBefore: round3(already),
         deliveryQuantity: item.quantity,
         remainingQuantity: round3(remaining - wanted),
         createdBy: parsed.changedBy,
       });
+    }
+
+    // The check is asked again at the door. A promise made when the order was entered is a promise
+    // about that day's stock, and the goods have to be there on the day they leave. This order's own
+    // promise is not counted against itself — it is the promise being kept — and a returns order is
+    // not checked at all, because its quantity is coming back rather than going out.
+    if (order.documentType !== STANDARD_RETURNS_ORDER_TYPE) {
+      const wanted = new Map();
+      for (const item of parsed.items) {
+        const itemLine = byNumber.get(item.orderLineNumber);
+        if (!itemLine) continue;
+        const ordered = Number(itemLine.orderQuantity);
+        const rate = ordered > 0 ? Number(itemLine.baseQuantity) / ordered : 1;
+        const key = `${itemLine.materialNumber}/${itemLine.plant}`;
+        const bucket = wanted.get(key) ?? {
+          materialNumber: itemLine.materialNumber, plant: itemLine.plant,
+          unit: itemLine.quantityUnit.trim(), rate, base: 0, order: 0,
+        };
+        bucket.base += Number(item.quantity) * rate;
+        bucket.order += Number(item.quantity) * (rate / bucket.rate);
+        wanted.set(key, bucket);
+      }
+      for (const bucket of wanted.values()) {
+        const result = await availableToPromise(tx, parsed.client, {
+          materialNumber: bucket.materialNumber, plant: bucket.plant,
+          salesOrg: order.salesOrg, distributionChannel: order.distributionChannel,
+          checkingRule: DELIVERY_CHECKING_RULE, exclude: { orderNumber: order.orderNumber },
+        }).catch((error: unknown) => {
+          if (error instanceof AvailabilityError) throw new DeliveryError(error.message, error.remedy);
+          throw error;
+        });
+        // A material that carries no checking group is not checked here either: it was never to be.
+        if (!result || bucket.base <= result.available + 1e-9) continue;
+        throw new DeliveryError(
+          `Plant ${bucket.plant} can promise ${round3(result.available / bucket.rate)} ${bucket.unit} of ${bucket.materialNumber} on this delivery date, and ${round3(bucket.order)} ${bucket.unit} was entered.`,
+          'Reduce the quantity to what the plant can promise today, or change the order so the check runs again.',
+        );
+      }
     }
 
     // The document type is configuration now (9226); see the same note in sales-order.ts.

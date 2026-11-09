@@ -134,6 +134,7 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
             <thead>
               <tr className="text-left text-xs text-ink-faint">
                 <th>Item</th><th>Material</th><th>Plant</th><th className="text-right">Quantity</th>
+                <th className="text-right">Confirmed</th>
                 <th>Unit</th><th className="text-right">Price</th><th className="text-right">Net</th>
                 <th className="text-right">Tax</th><th>Priced from</th><th>Status</th>
               </tr>
@@ -145,6 +146,8 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
                   <td>{line.materialNumber}</td>
                   <td>{line.plant}</td>
                   <td className="text-right num">{Number(line.orderQuantity).toFixed(3)}</td>
+                  {/* Nothing confirmed is not zero confirmed: it is an item the check was never asked about. */}
+                  <td className="text-right num">{line.confirmedQuantity === null ? '—' : Number(line.confirmedQuantity).toFixed(3)}</td>
                   <td>{line.quantityUnit.trim()}</td>
                   <td className="text-right num">{Number(line.netPrice).toFixed(4)} / {line.priceUnit}</td>
                   <td className="text-right num">{Number(line.netAmount).toFixed(2)}</td>
@@ -155,6 +158,23 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
               ))}
             </tbody>
           </table>
+
+          {selected.lines.some((line) => line.schedule.length) ? (
+            <details className="mt-3">
+              <summary className="text-sm text-ink-soft">
+                Schedule lines ({selected.lines.reduce((count, line) => count + line.schedule.length, 0)} rows)
+              </summary>
+              <ul className="mt-2 space-y-1 text-sm text-ink-soft">
+                {selected.lines.flatMap((line) => line.schedule.map((row) => (
+                  <li key={`${line.lineNumber}-${row.scheduleNumber}`}>
+                    Item {line.lineNumber} · {Number(row.requestedQuantity).toFixed(3)} asked for {row.requestedDate}
+                    {' · '}{Number(row.confirmedQuantity).toFixed(3)} {line.quantityUnit.trim()}
+                    {row.confirmedDate ? ` confirmed for ${row.confirmedDate}` : ' confirmed, and the plant promised none of it'}
+                  </li>
+                )))}
+              </ul>
+            </details>
+          ) : null}
 
           {selected.credit ? (
             <div className={selected.credit.status === 'BLOCKED' ? 'panel panel-danger mt-3 p-3 text-sm' : 'panel mt-3 p-3 text-sm'}>

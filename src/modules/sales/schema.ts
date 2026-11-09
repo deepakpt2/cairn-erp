@@ -195,6 +195,13 @@ export const salesOrderLine = pgTable('sales_order_line', {
   orderQuantity: numeric('order_quantity', { precision: 13, scale: 3 }).notNull(),
   quantityUnit: char('quantity_unit', { length: 6 }).notNull().references(() => unitOfMeasure.code),
   baseQuantity: numeric('base_quantity', { precision: 13, scale: 3 }).notNull(),
+  /**
+   * What the availability check confirmed against this line: the promise the plant made. Null is
+   * not zero — it is a line that was never checked, and a line that was never checked delivers as
+   * an unchecked line always did. It is never re-derived from stock: it says what the plant
+   * promised on the day, not what it happens to hold now.
+   */
+  confirmedQuantity: numeric('confirmed_quantity', { precision: 13, scale: 3 }),
   netPrice: numeric('net_price', { precision: 23, scale: 4 }).notNull().default('0'),
   priceUnit: integer('price_unit').notNull().default(1),
   netAmount: numeric('net_amount', { precision: 23, scale: 4 }).notNull().default('0'),
@@ -223,6 +230,39 @@ export const salesOrderLine = pgTable('sales_order_line', {
     columns: [t.client, t.materialNumber],
     foreignColumns: [material.client, material.materialNumber],
   }).onDelete('cascade'),
+]);
+
+/**
+ * A schedule line: what an order line asked for and by when, and what the availability check
+ * confirmed against it (SAP VBEP).
+ *
+ * A confirmation is not a decision somebody makes on a screen. It is the answer the check returned,
+ * written down at the moment it was asked, so a document read in a month still says what the plant
+ * promised on the day. The delivery is created from the confirmed quantity and not from the ordered
+ * one, so a plant that can supply six of the ten a customer ordered ships six and owes four.
+ *
+ * Confirmed zero is not a missing confirmation. It is a refusal made in arithmetic.
+ */
+export const salesOrderSchedule = pgTable('sales_order_schedule', {
+  client: tenant(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  orderLineNumber: integer('order_line_number').notNull(),
+  scheduleNumber: integer('schedule_number').notNull(),
+  requestedDate: date('requested_date', { mode: 'string' }).notNull(),
+  requestedQuantity: numeric('requested_quantity', { precision: 13, scale: 3 }).notNull(),
+  confirmedQuantity: numeric('confirmed_quantity', { precision: 13, scale: 3 }).notNull().default('0'),
+  confirmedDate: date('confirmed_date', { mode: 'string' }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber, t.orderLineNumber, t.scheduleNumber] }),
+  foreignKey({
+    name: 'sales_order_schedule_line_fk',
+    columns: [t.client, t.orderNumber, t.orderLineNumber],
+    foreignColumns: [salesOrderLine.client, salesOrderLine.orderNumber, salesOrderLine.lineNumber],
+  }).onDelete('cascade'),
+  check('sales_order_schedule_number_ck', sql`${t.scheduleNumber} > 0`),
+  check('sales_order_schedule_quantity_ck', sql`${t.requestedQuantity} > 0`),
+  check('sales_order_schedule_confirmed_ck', sql`${t.confirmedQuantity} >= 0 and ${t.confirmedQuantity} <= ${t.requestedQuantity}`),
 ]);
 
 /**
@@ -577,6 +617,13 @@ export const deliveryLine = pgTable('delivery_line', {
   plant: varchar('plant', { length: 10 }).notNull(),
   quantityUnit: char('quantity_unit', { length: 6 }).notNull().references(() => unitOfMeasure.code),
   orderedQuantity: numeric('ordered_quantity', { precision: 13, scale: 3 }).notNull(),
+  /**
+   * What the availability check had confirmed on the order line when this delivery was made. Null
+   * is not zero: it is a delivery raised before a check stood. It is written down, not re-read,
+   * so a delivery read in a year still says what the plant had promised when the goods went out —
+   * the difference between a plant that kept a promise of six and one that shorted a customer by four.
+   */
+  confirmedQuantity: numeric('confirmed_quantity', { precision: 13, scale: 3 }),
   deliveredBefore: numeric('delivered_before', { precision: 13, scale: 3 }).notNull().default('0'),
   deliveryQuantity: numeric('delivery_quantity', { precision: 13, scale: 3 }).notNull(),
   remainingQuantity: numeric('remaining_quantity', { precision: 13, scale: 3 }).notNull(),

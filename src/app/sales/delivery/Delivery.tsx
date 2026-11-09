@@ -99,8 +99,9 @@ function CreateDelivery({
       </div>
       <input type="hidden" name="requestKey" value={`DL-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`} />
       <div className="space-y-1">
-        <div className="grid grid-cols-2 gap-2 text-xs font-medium text-ink-soft sm:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 text-xs font-medium text-ink-soft sm:grid-cols-7">
           <span>Item</span><span>Material</span><span>Plant</span><span className="text-right">Open</span>
+          <span className="text-right">Confirmed</span>
           <span className="text-right">Quantity this time</span><span>Unit</span>
         </div>
         {lines.length === 0 ? (
@@ -109,11 +110,12 @@ function CreateDelivery({
           </p>
         ) : null}
         {lines.map((line, index) => (
-          <div key={`${line.orderNumber}-${line.lineNumber}`} className="grid grid-cols-2 items-center gap-2 sm:grid-cols-6">
+          <div key={`${line.orderNumber}-${line.lineNumber}`} className="grid grid-cols-2 items-center gap-2 sm:grid-cols-7">
             <span className="text-sm">{line.orderNumber} / {line.lineNumber}</span>
             <span className="truncate text-sm">{line.materialNumber}</span>
             <span className="text-sm">{line.plant}</span>
             <span className="text-right text-sm">{quantity(line.remainingQuantity)}</span>
+            <span className="text-right text-sm">{line.confirmedQuantity === null ? '—' : quantity(line.confirmedQuantity)}</span>
             <input
               className="input" name={`line-${index + 1}-quantity`} inputMode="decimal"
               defaultValue={line.remainingQuantity} aria-label={`Delivery quantity for order item ${line.lineNumber}`}
@@ -128,7 +130,8 @@ function CreateDelivery({
           {pending ? 'Creating…' : 'Create delivery'}
         </button>
         <span className="text-xs text-ink-faint">
-          A smaller quantity than the line has open is a partial delivery; more than it is refused.
+          A smaller quantity than the line has open is a partial delivery; more than it is refused. What is
+          open is what the plant confirmed and has not shipped.
         </span>
       </div>
       <Notice state={state} />
@@ -203,6 +206,7 @@ function SelectedDelivery({
         <thead>
           <tr className="text-left text-xs text-ink-faint">
             <th>Item</th><th>Material</th><th className="text-right">Ordered</th>
+            <th className="text-right">Confirmed</th>
             <th className="text-right">Delivered before</th><th className="text-right">This delivery</th>
             <th className="text-right">Still open</th><th className="text-right">Picked</th>
             <th className="text-right">Issued</th><th>Status</th>
@@ -214,6 +218,7 @@ function SelectedDelivery({
               <td>{line.lineNumber}<span className="text-ink-faint"> / {line.orderLineNumber}</span></td>
               <td>{line.materialNumber}</td>
               <td className="text-right">{quantity(line.orderedQuantity)}</td>
+              <td className="text-right">{line.confirmedQuantity === null ? '—' : quantity(line.confirmedQuantity)}</td>
               <td className="text-right">{quantity(line.deliveredBefore)}</td>
               <td className="text-right">{quantity(line.deliveryQuantity)}</td>
               <td className="text-right">{quantity(line.remainingQuantity)}</td>

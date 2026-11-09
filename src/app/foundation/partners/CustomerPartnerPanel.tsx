@@ -13,6 +13,9 @@ type FunctionRow = Awaited<ReturnType<typeof listCustomerPartners>>['functions']
 
 const EMPTY: CustomerPartnerActionState = { ok: false };
 
+/** Nothing stands to be withdrawn or restored. The hook wants an action, and this one is a no-op. */
+const noToggle = async (state: CustomerPartnerActionState): Promise<CustomerPartnerActionState> => state;
+
 /**
  * Who a sale is made with (SAP: KNVP). Three functions are assignable; the sold-to is the customer
  * whose master this is and is never assigned. Each row is maintained for a sales area or for all of
@@ -57,6 +60,17 @@ function FunctionCard({ partner, area, fn, rows, editable }: {
   const specific = rows.filter(row => row.salesOrg === area.org
     && row.distributionChannel === area.channel && row.division === area.division);
   const answering = specific[0] ?? rows.filter(row => row.salesOrg === '')[0] ?? null;
+  // The second hook is called whether or not a row stands, because a hook is not called behind a
+  // condition: with no row to withdraw, its action is the one that does nothing. The answer it gives
+  // is the one shown, and the save's answer otherwise — one notice, from whichever form was used.
+  const [toggled, toggleAction] = useActionState(answering
+    ? changeCustomerPartnerStatusAction.bind(null, {
+      partnerNumber: partner, functionCode: fn.functionCode, salesOrg: answering.salesOrg,
+      distributionChannel: answering.distributionChannel, division: answering.division,
+      isActive: !answering.isActive,
+    })
+    : noToggle, EMPTY);
+  const notice = toggled.message ? toggled : saved;
 
   return <article className="border border-line p-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -101,15 +115,11 @@ function FunctionCard({ partner, area, fn, rows, editable }: {
         </label>
         <button className="btn btn-default">{t('csp.save')}</button>
       </form>
-      {answering && <form action={changeCustomerPartnerStatusAction.bind(null, {
-        partnerNumber: partner, functionCode: fn.functionCode, salesOrg: answering.salesOrg,
-        distributionChannel: answering.distributionChannel, division: answering.division,
-        isActive: !answering.isActive,
-      })} className="mt-2">
+      {answering && <form action={toggleAction} className="mt-2">
         <button className="btn btn-default">{answering.isActive ? t('csp.withdraw') : t('csp.restore')}</button>
       </form>}
     </>}
-    {!saved.ok && saved.message && <p className="mt-2 text-xs text-signal-warn">{saved.message}{saved.remedy ? ` ${saved.remedy}` : ''}</p>}
-    {saved.ok && saved.message && <p className="mt-2 text-xs">{saved.message}</p>}
+    {!notice.ok && notice.message && <p className="mt-2 text-xs text-signal-warn">{notice.message}{notice.remedy ? ` ${notice.remedy}` : ''}</p>}
+    {notice.ok && notice.message && <p className="mt-2 text-xs">{notice.message}</p>}
   </article>;
 }
