@@ -103,13 +103,14 @@ function MaintainPlan({
       </p>
 
       <div className="space-y-1">
-        <div className="grid grid-cols-3 gap-2 text-xs font-medium text-ink-soft sm:grid-cols-4">
+        <div className="grid grid-cols-4 gap-2 text-xs font-medium text-ink-soft sm:grid-cols-5">
           <span>Day it falls on</span><span className="text-right">Share of the item</span>
+          <span />
         </div>
         {Array.from({ length: DATE_SLOTS }, (_, index) => index + 1).map((slot) => {
           const date = editable[slot - 1];
           return (
-            <div key={slot} className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div key={slot} className="grid grid-cols-4 gap-2 sm:grid-cols-5">
               <input type="hidden" name={`date-${slot}-dateNumber`} value={date?.dateNumber ?? ''} />
               <input
                 className="input" name={`date-${slot}-billingDate`} defaultValue={date?.billingDate ?? ''}
@@ -117,15 +118,25 @@ function MaintainPlan({
               />
               <input
                 className="input text-right" name={`date-${slot}-percentage`} defaultValue={date?.percentage ?? ''}
-                placeholder="0" aria-label={`Share billed by date ${slot}`} autoComplete="off"
+                placeholder="0" aria-label={`Share carried by date ${slot}`} autoComplete="off"
               />
+              <select
+                className="input" name={`date-${slot}-billingRule`}
+                defaultValue={date?.billingRule ?? 'INVOICE'}
+                aria-label={`What date ${slot} does with its share`}
+              >
+                <option value="INVOICE">Invoice it</option>
+                <option value="DOWN_PAYMENT">Ask in advance</option>
+              </select>
             </div>
           );
         })}
       </div>
       <p className="text-xs text-ink-faint">
-        The shares of the dates total a hundred per cent, and every date is billed on the day it names or
-        later — a plan is a promise about a day.
+        The dates that invoice share a hundred per cent between them, and every date is billed on the day it
+        names or later — a plan is a promise about a day. A date that asks in advance raises a request for
+        that share and posts nothing: the money arrives as an advance, and the invoice that settles it is
+        raised from the dates that invoice.
       </p>
       <input type="hidden" name="expectedVersion" value={selected?.version ?? ''} />
       <input type="hidden" name="requestKey" value={`BP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`} />
@@ -205,7 +216,7 @@ export default function BillingPlans({
             <thead>
               <tr>
                 <th>Date</th><th>Day it falls on</th><th className="text-right">Share</th>
-                <th>Status</th><th>Billed as</th>
+                <th>What it does</th><th>Status</th><th>Document</th>
               </tr>
             </thead>
             <tbody>
@@ -214,6 +225,7 @@ export default function BillingPlans({
                   <td>{date.dateNumber}</td>
                   <td>{date.billingDate}</td>
                   <td className="text-right">{Number(date.percentage).toFixed(3)}%</td>
+                  <td>{date.billingRule === 'DOWN_PAYMENT' ? 'asks in advance' : 'invoices'}</td>
                   <td>{date.status === 'WITHDRAWN' ? 'withdrawn' : date.status.toLowerCase()}</td>
                   <td>
                     {date.billingNumber
@@ -226,7 +238,9 @@ export default function BillingPlans({
           </table>
           <p className="mt-2 text-sm text-ink-soft">
             A withdrawn date answers nothing from the day it was withdrawn, and it stays on the record: a plan
-            is part of what was agreed about this order.
+            is part of what was agreed about this order. A date that asks in advance raises a request, and the
+            invoice that settles it is raised from the dates that invoice — the advance is then cleared against
+            that invoice, and what is still to pay is the billed value less it.
           </p>
         </section>
       ) : null}

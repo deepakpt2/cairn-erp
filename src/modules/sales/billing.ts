@@ -53,8 +53,10 @@ import {
 } from './partners';
 import { determineLineAccounts } from './account-determination';
 import {
-  BILLING_PLAN_ROUTE, itemKey, markPlanDateBilled, plansForItems, releasePlanDateForBilling,
+  BILLING_PLAN_ROUTE, itemKey, loadBillablePlanDate, markPlanDateBilled, plansForItems,
+  releasePlanDateForBilling,
 } from './billing-plan';
+import { type DownPaymentClearing, clearDownPaymentsForInvoice } from './down-payment';
 import { standingDetermination } from './delivery';
 
 export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
@@ -148,6 +150,13 @@ export interface BillingView {
   journalDocumentNumber: string | null;
   creditOf: string | null;
   cancellationOf: string | null;
+  /**
+   * The advances of this order this invoice consumed, and the clearing that consumed them. A customer
+   * who paid part of the order in advance has already given that money, so what is still to pay is the
+   * gross value less this. Zero on a down payment request, which asks for an advance and posts nothing.
+   */
+  downPaymentClearedAmount: string;
+  downPaymentClearingNumber: string | null;
   version: number;
   createdBy: string;
   lines: Array<{
@@ -195,6 +204,8 @@ function mapHeader(row: typeof billingDocument.$inferSelect): Omit<BillingView, 
     journalDocumentNumber: row.journalDocumentNumber,
     creditOf: row.creditOf,
     cancellationOf: row.cancellationOf,
+    downPaymentClearedAmount: row.downPaymentClearedAmount,
+    downPaymentClearingNumber: row.downPaymentClearingNumber,
     version: row.version,
     createdBy: row.createdBy,
   };
@@ -295,6 +306,17 @@ export async function listBillableDeliveries(
             and p.order_number = dl2.order_number
             and p.order_line_number = dl2.order_line_number
           where dl2.client = d.client and dl2.delivery_number = d.delivery_number
+            -- A plan that asks only for advances does not answer when the item is billed: the
+            -- advance is settled against the invoice the delivery earns. A plan carrying an invoice
+            -- date that answers — one that was not withdrawn — bills the item itself.
+            and exists (
+              select 1 from sales_billing_plan_date dp
+               where dp.client = p.client
+                 and dp.order_number = p.order_number
+                 and dp.order_line_number = p.order_line_number
+                 and dp.billing_rule = 'INVOICE'
+                 and dp.status <> 'WITHDRAWN'
+            )
          )
          and (${filter.customerNumber || null}::text is null or d.customer_number = ${filter.customerNumber || null})
          and (${filter.deliveryNumber || null}::text is null or d.delivery_number = ${filter.deliveryNumber || null})
@@ -389,6 +411,12 @@ export interface BillingCreateResult {
   /** Set when the delivery's credit determination is blocked: the document stands, the invoice is held. */
   heldForCredit: boolean;
   replayed: boolean;
+  /**
+   * The advance of this order the invoice consumed. Absent where there was no advance to settle.
+   * `error` set and `cleared` zero says the clearing was refused: the receivable stands and the
+   * advance remains where it is, to be settled when whatever blocked it is put right.
+   */
+  downPayment?: DownPaymentClearing;
 }
 
 /**
@@ -451,12 +479,37 @@ async function postBuiltBilling(input: {
 
   await linkPostedInvoice(input.client, input.changedBy, built.billingNumber, invoice);
 
+  // The advance this invoice consumed. A customer who paid part of the order before anything was
+  // delivered has already given that money, and the receivable has to be settled with it: billed
+  // amount less down payment amount is what is still to pay. Nothing is cleared twice — what an
+  // advance still stands at is read from the posted lines, and the clearing engine refuses an
+  // allocation larger than either side.
+  const downPayment = invoice.journalDocumentNumber
+    ? await clearDownPaymentsForInvoice({
+      client: input.client,
+      changedBy: input.changedBy,
+      orderNumber: built.orderNumber,
+      billingNumber: built.billingNumber,
+      journalDocumentNumber: invoice.journalDocumentNumber,
+      customerNumber: billedPartners?.payer ?? built.customerNumber,
+      companyCode: built.companyCode,
+      currency: built.currency,
+      postingDate: input.postingDate || input.billingDate,
+    }).catch(() => null)
+    : null;
+
   return {
     billing: (await getBilling(input.client, built.billingNumber)) ?? view,
     invoice,
     posted: true,
     heldForCredit: false,
     replayed: false,
+    // Reported rather than thrown: the receivable stands and the document is posted, and an advance
+    // that would not clear is left where it is, to be settled by hand as an accountant would. Saying
+    // so here is what stops the money being quietly forgotten.
+    downPayment: downPayment && (Number(downPayment.cleared) > 0 || downPayment.error)
+      ? downPayment
+      : undefined,
   };
 }
 
@@ -484,6 +537,8 @@ type BuiltBilling =
       netTotal: string;
       taxTotal: string;
       grossTotal: string;
+      /** The order the document was raised against — what the advances of it are looked up by. */
+      orderNumber: string;
       companyCode: string;
       customerNumber: string;
       currency: string;
@@ -589,7 +644,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     const planned = await plansForItems(tx, parsed.client, lines.map((line) => ({
       orderNumber: line.orderNumber, orderLineNumber: line.orderLineNumber,
     })));
-    const plannedItem = lines.find((line) => planned.has(itemKey(line.orderNumber, line.orderLineNumber)));
+    const plannedItem = lines.find((line) => planned.get(itemKey(line.orderNumber, line.orderLineNumber))?.hasInvoiceDates);
     if (plannedItem) {
       const plan = planned.get(itemKey(plannedItem.orderNumber, plannedItem.orderLineNumber))!;
       throw new BillingError(
@@ -882,6 +937,7 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
       netTotal: round2(netTotal),
       taxTotal: round2(taxTotal),
       grossTotal: round2(netTotal + taxTotal),
+      orderNumber: deliveryHeader.orderNumber,
       companyCode: order.companyCode,
       customerNumber: deliveryHeader.customerNumber,
       currency: order.currency,
@@ -926,83 +982,24 @@ export async function createBillingFromPlanDate(
       if (existing) return { billingNumber: existing.number, replayed: true };
     }
 
-    const [order] = await tx.select().from(salesOrder).where(and(
-      eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, parsed.orderNumber),
-    )).limit(1);
-    if (!order) {
+    // The refusals every path that bills a plan date shares, in one place: a rule that held for an
+    // invoice and not for an advance asked from the same date would not be a rule.
+    const { order, orderLine, date } = await loadBillablePlanDate(tx, {
+      client: parsed.client,
+      orderNumber: parsed.orderNumber,
+      orderLineNumber: parsed.orderLineNumber,
+      dateNumber: parsed.dateNumber,
+      billingDate: parsed.billingDate,
+      action: 'billed',
+    });
+    // A date maintained to ask for an advance is not billed: the advance is settled against the
+    // invoice, and an invoice raised from the same date would ask the customer for the money twice.
+    if (date.billingRule === 'DOWN_PAYMENT') {
       throw new BillingError(
-        `Sales order ${parsed.orderNumber} does not exist in this tenant.`,
-        'Create the order at /sales/orders first; a plan date is billed against an order that stands.',
+        `Date ${parsed.dateNumber} of order ${parsed.orderNumber} item ${parsed.orderLineNumber} asks ${date.percentage} per cent of the item in advance, so it raises a request and not an invoice.`,
+        'Ask for the advance from the billing screen, which is SALES.BILLING.CREATE; the invoice that settles it is raised from the dates maintained to invoice.',
       );
     }
-    if (order.status === 'CANCELLED') {
-      throw new BillingError(
-        `Sales order ${parsed.orderNumber} stands CANCELLED, and a cancelled order is billed by nothing at all.`,
-        'A cancelled order is not reopened by a plan date — raise a new order.',
-      );
-    }
-    const [orderLine] = await tx.select().from(salesOrderLine).where(and(
-      eq(salesOrderLine.client, parsed.client),
-      eq(salesOrderLine.orderNumber, parsed.orderNumber),
-      eq(salesOrderLine.lineNumber, parsed.orderLineNumber),
-    )).limit(1);
-    if (!orderLine) {
-      throw new BillingError(
-        `Sales order ${parsed.orderNumber} carries no item ${parsed.orderLineNumber}.`,
-        'Bill an item the order states.',
-      );
-    }
-    if (orderLine.status === 'REJECTED') {
-      throw new BillingError(
-        `Item ${parsed.orderLineNumber} of order ${parsed.orderNumber} is rejected${orderLine.rejectionReason ? ` (reason ${orderLine.rejectionReason})` : ''}, and a rejected item is billed on no schedule at all.`,
-        'Re-enter the item on the order to lift the rejection, or leave it rejected.',
-      );
-    }
-
-    const [plan] = await tx.select().from(salesBillingPlan).where(and(
-      eq(salesBillingPlan.client, parsed.client),
-      eq(salesBillingPlan.orderNumber, parsed.orderNumber),
-      eq(salesBillingPlan.orderLineNumber, parsed.orderLineNumber),
-    )).limit(1);
-    if (!plan) {
-      throw new BillingError(
-        `Order ${parsed.orderNumber} item ${parsed.orderLineNumber} carries no billing plan, so it is billed by its deliveries and not by dates.`,
-        `Maintain a plan for the item at ${BILLING_PLAN_ROUTE} first: an item with no plan has no date to bill.`,
-      );
-    }
-    const [date] = await tx.select().from(salesBillingPlanDate).where(and(
-      eq(salesBillingPlanDate.client, parsed.client),
-      eq(salesBillingPlanDate.orderNumber, parsed.orderNumber),
-      eq(salesBillingPlanDate.orderLineNumber, parsed.orderLineNumber),
-      eq(salesBillingPlanDate.dateNumber, parsed.dateNumber),
-    )).limit(1);
-    if (!date) {
-      throw new BillingError(
-        `The plan of order ${parsed.orderNumber} item ${parsed.orderLineNumber} carries no date ${parsed.dateNumber}.`,
-        `Read the plan at ${BILLING_PLAN_ROUTE} and bill a date it states.`,
-      );
-    }
-    if (date.status === 'BILLED') {
-      throw new BillingError(
-        `Date ${parsed.dateNumber} of order ${parsed.orderNumber} item ${parsed.orderLineNumber} was billed as ${date.billingNumber}, and a date is billed once.`,
-        'Cancel that document first: a cancelled document releases its date, as it releases the delivery it stands against.',
-      );
-    }
-    if (date.status === 'WITHDRAWN') {
-      throw new BillingError(
-        `Date ${parsed.dateNumber} of order ${parsed.orderNumber} item ${parsed.orderLineNumber} was withdrawn, so it bills nothing.`,
-        `Maintain the plan at ${BILLING_PLAN_ROUTE}: a withdrawn date answers nothing, and what it once said stays on the record.`,
-      );
-    }
-    // A plan is a promise about a day. The day is the point of it, and a date billed before its own day
-    // is not an early invoice — it is a promise broken by the person who made it.
-    if (parsed.billingDate < date.billingDate) {
-      throw new BillingError(
-        `Date ${parsed.dateNumber} of order ${parsed.orderNumber} item ${parsed.orderLineNumber} falls on ${date.billingDate}, and ${parsed.billingDate} was entered.`,
-        `A date is billed on or after the day it names: bill it on ${date.billingDate} or later, or move the date on the plan.`,
-      );
-    }
-
     const orderBlock = await standingDetermination(parsed.client, order.orderNumber);
     const held = orderBlock?.status === 'BLOCKED';
 
@@ -1248,6 +1245,7 @@ export async function createBillingFromPlanDate(
       netTotal: round2(netTotal),
       taxTotal: round2(taxTotal),
       grossTotal: round2(netTotal + taxTotal),
+      orderNumber: order.orderNumber,
       companyCode: order.companyCode,
       customerNumber: order.customerNumber,
       currency: order.currency,

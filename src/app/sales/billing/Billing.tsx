@@ -6,8 +6,8 @@ import { useActionState, useId, useState } from 'react';
 import type { BillingView } from '@/modules/sales/billing';
 import type { listBillableDeliveries, listBillings, salesDocumentFlow } from '@/modules/sales/billing';
 import {
-  billPlanDateAction, cancelBillingAction, createBillingAction, rebillDeliveryAction,
-  type BillingActionState,
+  billPlanDateAction, cancelBillingAction, cancelDownPaymentAction, createBillingAction,
+  rebillDeliveryAction, requestDownPaymentAction, type BillingActionState,
 } from './actions';
 
 const EMPTY: BillingActionState = { ok: false };
@@ -18,6 +18,8 @@ interface Props {
   documents: Awaited<ReturnType<typeof listBillings>>;
   selected: BillingView | null;
   flow: Awaited<ReturnType<typeof salesDocumentFlow>>;
+  /** The advances of the selected document's order: what was asked, what arrived, what was cleared. */
+  advances: Awaited<ReturnType<typeof import('@/modules/sales/down-payment').orderDownPayments>>;
   deliveryNumber: string;
   canCreate: boolean;
   canCancel: boolean;
@@ -103,10 +105,15 @@ function CreateBilling({
  */
 function PlanDatesDue({ planDates, allowed }: { planDates: Props['planDates']; allowed: boolean }) {
   const [state, action, pending] = useActionState(billPlanDateAction, EMPTY);
+  const [advanceState, advanceAction, advancePending] = useActionState(requestDownPaymentAction, EMPTY);
   const [slot, setSlot] = useState(0);
   const id = useId();
   const today = new Date().toISOString().slice(0, 10);
   const chosen = planDates[Math.min(slot, planDates.length - 1)] ?? null;
+  // A date says what it is for. One that invoices is billed; one that asks for an advance raises a
+  // request instead, and the two are different acts with different consequences for the customer's
+  // account, so the button says which one it is about to do.
+  const advance = chosen?.billingRule === 'DOWN_PAYMENT';
   if (!allowed) {
     return (
       <p className="mt-2 text-sm text-ink-soft">
@@ -115,8 +122,14 @@ function PlanDatesDue({ planDates, allowed }: { planDates: Props['planDates']; a
     );
   }
   return (
-    <form action={action} className="panel space-y-3 p-4" aria-label="Bill a billing plan date">
-      <p className="text-sm font-medium">Bill a date that has come due</p>
+    <form
+      action={advance ? advanceAction : action}
+      className="panel space-y-3 p-4"
+      aria-label={advance ? 'Ask for the advance a plan date carries' : 'Bill a billing plan date'}
+    >
+      <p className="text-sm font-medium">
+        {advance ? 'Ask for an advance a date carries' : 'Bill a date that has come due'}
+      </p>
       {planDates.length === 0 ? (
         <p className="text-sm text-ink-soft">
           No plan date has come due. A date is offered on the day it names and every day after it, and only
@@ -136,6 +149,7 @@ function PlanDatesDue({ planDates, allowed }: { planDates: Props['planDates']; a
                   <option key={`${row.orderNumber}-${row.orderLineNumber}-${row.dateNumber}`} value={index}>
                     {row.orderNumber} / {row.orderLineNumber} date {row.dateNumber} · {row.billingDate}
                     {' · '}{row.percentage}% · {row.value} {row.currency.trim()}
+                    {row.billingRule === 'DOWN_PAYMENT' ? ' · advance' : ''}
                   </option>
                 ))}
               </select>
@@ -152,31 +166,59 @@ function PlanDatesDue({ planDates, allowed }: { planDates: Props['planDates']; a
           <input type="hidden" name="orderLineNumber" value={chosen?.orderLineNumber ?? ''} />
           <input type="hidden" name="dateNumber" value={chosen?.dateNumber ?? ''} />
           <input type="hidden" name="requestKey" value={`BL-PD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`} />
+          {advance ? (
+            <label className="block text-xs text-ink-soft" htmlFor={`${id}-due`}>
+              Day the advance is expected
+              <input
+                className="input mt-1" id={`${id}-due`} name="dueDate" defaultValue={chosen?.billingDate ?? today}
+                autoComplete="off"
+              />
+            </label>
+          ) : null}
           {chosen ? (
             <p className="text-xs text-ink-faint">
               {chosen.materialNumber} · {chosen.quantity} {chosen.quantityUnit} · customer {chosen.customerNumber}
               {' · '}value {chosen.value} {chosen.currency.trim()}
             </p>
           ) : null}
-          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-9" disabled={pending || !chosen}>
-            {pending ? 'Billing…' : 'Create and post'}
+          <button
+            type="submit" className="btn btn-primary min-h-11 sm:min-h-9"
+            disabled={(advance ? advancePending : pending) || !chosen}
+          >
+            {advance
+              ? (advancePending ? 'Asking…' : 'Ask for the advance')
+              : (pending ? 'Billing…' : 'Create and post')}
           </button>
+          {advance ? (
+            <p className="text-xs text-ink-faint">
+              Nothing is posted by this: the request stands behind a noted item in accounting, and the money
+              arrives through the receipt. The advance is settled when the invoice that earns it is raised.
+            </p>
+          ) : null}
         </>
       )}
-      <Notice state={state} label="Billing plan date" />
+      <Notice state={advance ? advanceState : state} label={advance ? 'Down payment request' : 'Billing plan date'} />
     </form>
   );
 }
 
 function SelectedBilling({
-  selected, flow, canCancel, canCreate,
-}: { selected: BillingView; flow: Props['flow']; canCancel: boolean; canCreate: boolean }) {
+  selected, flow, advances, canCancel, canCreate,
+}: {
+  selected: BillingView; flow: Props['flow']; advances: Props['advances'];
+  canCancel: boolean; canCreate: boolean;
+}) {
   const [state, action, pending] = useActionState(cancelBillingAction, EMPTY);
   const [rebillState, rebillAction, rebillPending] = useActionState(rebillDeliveryAction, EMPTY);
+  const [withdrawState, withdrawAction, withdrawPending] = useActionState(cancelDownPaymentAction, EMPTY);
   const id = useId();
   const today = new Date().toISOString().slice(0, 10);
   const held = selected.credit?.status === 'BLOCKED';
   const cancelled = selected.status === 'CANCELLED';
+  // A request asks for money and posts nothing. An invoice bills and, where an advance stood against
+  // its order, consumes it: what is still to pay is the billed value less the advance cleared.
+  const isRequest = selected.documentType === 'DP';
+  const cleared = Number(selected.downPaymentClearedAmount);
   return (
     <section className="panel p-4" aria-labelledby={`${id}-heading`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -199,10 +241,56 @@ function SelectedBilling({
           : null}
       </p>
       <p className="mt-2 text-sm">
-        <span className="text-ink-soft">Net</span> {money(selected.netValue)}{' · '}
+        <span className="text-ink-soft">{isRequest ? 'Asked for · net' : 'Net'}</span> {money(selected.netValue)}{' · '}
         <span className="text-ink-soft">Tax</span> {money(selected.taxValue)}{' · '}
-        <span className="text-ink-soft">Gross</span> {money(selected.grossValue)} {selected.currency.trim()}
+        <span className="text-ink-soft">{isRequest ? 'Total' : 'Gross'}</span> {money(selected.grossValue)} {selected.currency.trim()}
+        {cleared > 0 ? (
+          <>
+            {' · '}<span className="text-ink-soft">advance cleared</span> {money(selected.downPaymentClearedAmount)}
+            {' · '}<span className="text-ink-soft">still to pay</span>{' '}
+            {money(String(Number(selected.grossValue) - cleared))}
+          </>
+        ) : null}
       </p>
+      {isRequest ? (
+        <p className="mt-1 text-sm text-ink-soft">
+          This is a request for an advance and not an invoice: nothing was posted, no receivable stands and no
+          revenue was recognised. The money arrives through the receipt, and the invoice that earns it clears
+          the advance — what is then still to pay is the billed value less it.
+        </p>
+      ) : null}
+      {advances.length ? (
+        <details className="mt-3" open>
+          <summary className="text-sm text-ink-soft">Advances of order {selected.orderNumber}</summary>
+          <table className="grid-table mt-2 text-sm">
+            <thead>
+              <tr className="text-left text-xs text-ink-faint">
+                <th>Request</th><th>Date</th><th>Accounting request</th>
+                <th className="text-right">Asked</th><th className="text-right">Received</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {advances.map((row) => (
+                <tr key={row.billingNumber}>
+                  <td>
+                    <Link className="link" href={`/sales/billing?billing=${row.billingNumber}`}>{row.billingNumber}</Link>
+                  </td>
+                  <td>{row.dateNumber}</td>
+                  <td>{row.requestNumber}</td>
+                  <td className="text-right">{money(row.amount)} {row.currency.trim()}</td>
+                  <td className="text-right">{money(row.received)} {row.currency.trim()}</td>
+                  <td>{row.status.toLowerCase()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-ink-faint">
+            An advance is asked for before anything is delivered, arrives through the receipt, and is cleared
+            against the invoice that earns it — so what the customer then pays is the billed value less it.
+          </p>
+        </details>
+      ) : null}
+
       {held ? (
         <div className="panel panel-danger mt-3 p-3 text-sm" role="status">
           <p className="font-medium">
@@ -306,7 +394,28 @@ function SelectedBilling({
         </div>
       ) : null}
 
-      {canCancel && selected.status !== 'CANCELLED' ? (
+      {isRequest && canCancel && selected.status !== 'CANCELLED' ? (
+        <form action={withdrawAction} className="mt-4 space-y-2" aria-label="Withdraw this down payment request">
+          <input type="hidden" name="billingNumber" value={selected.billingNumber} />
+          <label className="block text-xs text-ink-soft" htmlFor={`${id}-withdraw-reason`}>
+            Reason
+            <input
+              className="input mt-1" id={`${id}-withdraw-reason`} name="cancelReason"
+              placeholder="The advance is no longer being asked for" autoComplete="off"
+            />
+          </label>
+          <button type="submit" className="btn btn-default min-h-11 sm:min-h-9" disabled={withdrawPending}>
+            {withdrawPending ? 'Withdrawing…' : 'Withdraw the request'}
+          </button>
+          <p className="text-xs text-ink-faint">
+            Withdrawing is refused once money has arrived: a paid advance is settled by clearing it against the
+            invoice that earns it. An unpaid one stops answering, and the date stands open again.
+          </p>
+          <Notice state={withdrawState} label="Withdrawal" />
+        </form>
+      ) : null}
+
+      {!isRequest && canCancel && selected.status !== 'CANCELLED' ? (
         <form action={action} className="mt-4 space-y-2" aria-label="Cancel billing document">
           <input type="hidden" name="billingNumber" value={selected.billingNumber} />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -350,7 +459,7 @@ export default function Billing(props: Props) {
               <tr className="text-left text-xs text-ink-faint">
                 <th>Order</th><th>Item</th><th>Date</th><th>Day it falls on</th><th>Material</th>
                 <th className="text-right">Share</th><th className="text-right">Quantity</th>
-                <th className="text-right">Value</th><th>Customer</th>
+                <th className="text-right">Value</th><th>Customer</th><th>What it does</th>
               </tr>
             </thead>
             <tbody>
@@ -371,6 +480,7 @@ export default function Billing(props: Props) {
                   <td className="text-right">{row.quantity} {row.quantityUnit}</td>
                   <td className="text-right">{row.value} {row.currency.trim()}</td>
                   <td>{row.customerNumber}</td>
+                  <td>{row.billingRule === 'DOWN_PAYMENT' ? 'asks in advance' : 'invoices'}</td>
                 </tr>
               ))}
             </tbody>
@@ -417,6 +527,7 @@ export default function Billing(props: Props) {
         <SelectedBilling
           selected={props.selected}
           flow={props.flow}
+          advances={props.advances}
           canCancel={props.canCancel}
           canCreate={props.canCreate}
         />

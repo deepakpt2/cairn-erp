@@ -9,6 +9,7 @@ import {
   BillingPlanError,
   saveBillingPlan,
 } from '@/modules/sales/billing-plan';
+import type { BillingPlanDateRule } from '@/modules/sales/schema';
 
 const ROUTE = BILLING_PLAN_ROUTE;
 /** How many dates a plan may be made of on the screen. The service holds ninety-nine. */
@@ -43,18 +44,27 @@ function refuse(error: unknown): BillingPlanActionState {
 /**
  * The dates a form submitted: one row per date, and a row with no day or no share is not a date —
  * the form leaves the slots it does not want empty rather than submitting zeroes.
+ *
+ * What a date does with its share is named by the form, and a date that names nothing invoices its
+ * share, which is what every date has always done.
  */
-function datesFrom(form: FormData): Array<{ dateNumber?: number; billingDate: string; percentage: number }> {
-  const dates: Array<{ dateNumber?: number; billingDate: string; percentage: number }> = [];
+function datesFrom(form: FormData): Array<{
+  dateNumber?: number; billingDate: string; percentage: number; billingRule?: BillingPlanDateRule;
+}> {
+  const dates: Array<{
+    dateNumber?: number; billingDate: string; percentage: number; billingRule?: BillingPlanDateRule;
+  }> = [];
   for (let slot = 1; slot <= DATE_SLOTS; slot += 1) {
     const billingDate = text(form, `date-${slot}-billingDate`);
     const percentage = text(form, `date-${slot}-percentage`);
     if (!billingDate || !percentage) continue;
     const dateNumber = text(form, `date-${slot}-dateNumber`);
+    const rule = text(form, `date-${slot}-billingRule`).toUpperCase();
     dates.push({
       ...(dateNumber ? { dateNumber: Number(dateNumber) } : {}),
       billingDate,
       percentage: Number(percentage),
+      billingRule: rule === 'DOWN_PAYMENT' ? 'DOWN_PAYMENT' : 'INVOICE',
     });
   }
   return dates;

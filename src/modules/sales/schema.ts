@@ -16,7 +16,7 @@
  * the figures they produced. The access strategy is fixed and the execution is hardcoded — no scales, no
  * dynamic condition tables, no requirement routines — which is the line this phase drew.
  */
-import { pgTable, timestamp, varchar, char, integer, numeric, boolean, date, primaryKey, foreignKey, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import { pgTable, timestamp, varchar, char, integer, numeric, boolean, date, primaryKey, foreignKey, uniqueIndex, index, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
@@ -810,13 +810,25 @@ export const billingDocument = pgTable('billing_document', {
    * legitimately hold two credit memos against one invoice.
    */
   cancellationOf: varchar('cancellation_of', { length: 20 }),
+  /**
+   * The advances of this order this invoice consumed, and the clearing that consumed them. A customer
+   * who paid part of the order in advance has already given that money, and the document has to be
+   * able to say so: billed, less the advance, is what is still owed. Zero on a down payment request,
+   * which is an advance asked for and not a receivable.
+   */
+  downPaymentClearingNumber: varchar('down_payment_clearing_number', { length: 20 }),
+  downPaymentClearedAmount: numeric('down_payment_cleared_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   version: integer('version').notNull().default(1),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.billingNumber] }),
   check('billing_document_status_ck', sql`${t.status} in ('OPEN', 'POSTED', 'CANCELLED')`),
-  check('billing_document_posted_needs_invoice_ck', sql`${t.status} <> 'POSTED' or (${t.customerInvoiceNumber} is not null and ${t.journalDocumentNumber} is not null)`),
+  // A posted document names the accounting invoice behind it, because a document that bills posts a
+  // receivable — with one exception: a down payment request stands and was sent, and posts nothing.
+  // The noted item behind it is statistical: a drawn number and no journal.
+  check('billing_document_posted_needs_invoice_ck', sql`${t.status} <> 'POSTED' or ${t.documentType} = 'DP' or (${t.customerInvoiceNumber} is not null and ${t.journalDocumentNumber} is not null)`),
+  check('billing_document_cleared_amount_ck', sql`${t.downPaymentClearedAmount} >= 0`),
   // One *live* billing document per delivery. A cancelled document no longer occupies the slot — that is what
   // makes a cancelled invoice re-billable — and neither does a document that stands against another one,
   // because the document it stands against already did. Two live documents for one delivery stay impossible.
@@ -912,6 +924,15 @@ export const DELIVERED_BILLING_PLAN_TYPES = [
 
 export const BILLING_PLAN_DATE_STATUSES = ['OPEN', 'BILLED', 'WITHDRAWN'] as const;
 
+/**
+ * What billing a date does (SAP FPLT-AFARE / the date's billing rule). A plan draws this line at the
+ * date and not at the plan type, because one plan asks the customer for an advance on one date and
+ * bills the whole of the item on another. `DOWN_PAYMENT` raises a request — money asked for early,
+ * posted as a noted item, no revenue — and `INVOICE` bills the share that has been earned.
+ */
+export const BILLING_PLAN_DATE_RULES = ['DOWN_PAYMENT', 'INVOICE'] as const;
+export type BillingPlanDateRule = (typeof BILLING_PLAN_DATE_RULES)[number];
+
 export const salesBillingPlan = pgTable('sales_billing_plan', {
   client: tenant(),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),
@@ -943,6 +964,13 @@ export const salesBillingPlanDate = pgTable('sales_billing_plan_date', {
   /** The share of the item's value this date bills. The shares of one plan total a hundred. */
   percentage: numeric('percentage', { precision: 6, scale: 3 }).notNull(),
   /**
+   * What this date does with that share: ask for it as an advance, or bill it. `INVOICE` is what every
+   * date has always done and is the default, so every plan standing keeps its meaning. A date that
+   * asks for an advance stands outside the hundred the invoice dates total: an advance is money asked
+   * early, not a share of the billing schedule, and the final invoice still bills the whole.
+   */
+  billingRule: varchar('billing_rule', { length: 12 }).notNull().default('INVOICE'),
+  /**
    * Where this date stands: open, billed by the document below, or withdrawn. A date is withdrawn
    * rather than deleted — it answers nothing from then on, and leaves behind what was once planned,
    * because a plan is part of what was agreed about this order.
@@ -965,11 +993,58 @@ export const salesBillingPlanDate = pgTable('sales_billing_plan_date', {
   check('sales_billing_plan_date_status_ck', sql`${t.status} in ('OPEN', 'BILLED', 'WITHDRAWN')`),
   check('sales_billing_plan_date_number_ck', sql`${t.dateNumber} > 0`),
   check('sales_billing_plan_date_percentage_ck', sql`${t.percentage} > 0 and ${t.percentage} <= 100`),
+  check('sales_billing_plan_date_rule_ck', sql`${t.billingRule} in ('DOWN_PAYMENT', 'INVOICE')`),
   // A billed date names the document that billed it, and every other date names none: the two columns
   // cannot disagree about whether the date was billed.
   check('sales_billing_plan_date_billed_ck', sql`(${t.status} = 'BILLED' and ${t.billingNumber} is not null)
       or (${t.status} <> 'BILLED' and ${t.billingNumber} is null)`),
 ]);
+
+/**
+ * An advance asked for on a sales order before anything was delivered (SAP F-37). The money itself is
+ * accounting's: the request is a *noted item* — a drawn number, no journal, no balance — and the
+ * receipt is posted under a special G/L indicator onto an alternative reconciliation account. What
+ * stands here is the link, so a reader of the order can see what was asked, what arrived and what was
+ * cleared without leaving the sale, and so final billing knows which advances of this order it may
+ * consume.
+ */
+export const salesDownPaymentRequest = pgTable('sales_down_payment_request', {
+  client: tenant(),
+  /** The billing document that asked for it: a document of type DP, raised against a plan date. */
+  billingNumber: varchar('billing_number', { length: 20 }).notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  orderLineNumber: integer('order_line_number').notNull(),
+  dateNumber: integer('date_number').notNull(),
+  /** The accounting noted item behind it. Statistical: no journal, no balance. */
+  requestNumber: varchar('request_number', { length: 20 }).notNull(),
+  customerNumber: varchar('customer_number', { length: 40 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  /**
+   * What was asked, as money: the date's share of the item's *gross* value, because what the customer
+   * pays is net plus tax.
+   */
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  /**
+   * `OPEN` while it stands, `CLEARED` once an invoice of the order has consumed it, `CANCELLED` where
+   * it was withdrawn before any money arrived.
+   */
+  status: varchar('status', { length: 12 }).notNull().default('OPEN'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.billingNumber] }),
+  foreignKey({
+    name: 'sales_down_payment_request_document_fk',
+    columns: [t.client, t.billingNumber],
+    foreignColumns: [billingDocument.client, billingDocument.billingNumber],
+  }).onDelete('cascade'),
+  check('sales_down_payment_request_amount_ck', sql`${t.amount} > 0`),
+  check('sales_down_payment_request_status_ck', sql`${t.status} in ('OPEN', 'CLEARED', 'CANCELLED')`),
+  index('sales_down_payment_request_order_idx').on(t.client, t.orderNumber),
+]);
+
+export const DOWN_PAYMENT_REQUEST_STATUSES = ['OPEN', 'CLEARED', 'CANCELLED'] as const;
+export type DownPaymentRequestStatus = (typeof DOWN_PAYMENT_REQUEST_STATUSES)[number];
 
 /**
  * The four partner functions a sale is made with — SAP's PARVW, delivered with the package and not

@@ -40,6 +40,14 @@ export const STANDARD_RETURNS_ORDER_TYPE = 'RE';
 export const STANDARD_CREDIT_MEMO_TYPE = 'G2';
 /** SAP's CR: the complaint a credit memo is raised from, held for billing until it is released. */
 export const STANDARD_CREDIT_MEMO_REQUEST_TYPE = 'CR';
+/**
+ * The down payment request: money asked for before anything was delivered. It draws from the billing
+ * interval rather than an interval of its own, because a second interval is configuration a tenant may
+ * make and not a prerequisite for asking for an advance. It names no cancellation counterpart: a
+ * request is not undone by a second document, it is withdrawn, and only while no money has arrived
+ * against it.
+ */
+export const STANDARD_DOWN_PAYMENT_REQUEST_TYPE = 'DP';
 
 /**
  * The three types every tenant is delivered with, in the shape the standard configuration package writes
@@ -89,6 +97,10 @@ export const STANDARD_SALES_DOCUMENT_TYPES: StandardSalesDocumentType[] = [
     documentType: STANDARD_BILLING_TYPE, name: 'Invoice',
     numberRangeObject: 'BILLING', numberRangeSubObject: 'F2',
     cancellationDocumentType: STANDARD_BILLING_CANCELLATION_TYPE,
+  },
+  {
+    documentType: STANDARD_DOWN_PAYMENT_REQUEST_TYPE, name: 'Down payment request',
+    numberRangeObject: 'BILLING', numberRangeSubObject: 'F2',
   },
 ];
 

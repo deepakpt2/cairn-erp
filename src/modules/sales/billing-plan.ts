@@ -24,6 +24,12 @@
  * an order whose plan changed twice was agreed three times. A tenant that stops wanting a date does
  * not get to pretend it never stood — for the same reason an order line is rejected rather than
  * removed and a partner function withdrawn rather than erased.
+ *
+ * Every date carries what it does with its share: bill it, or ask the customer for it as an advance
+ * before anything is delivered. The line is drawn at the date and not at the plan type, because one
+ * plan asks for an advance on one date and bills the whole of the item on another — and an advance is
+ * money asked early, not a share of the billing schedule, so the dates that invoice still total a
+ * hundred and the dates that ask stand outside them.
  */
 import { and, asc, eq, inArray, isNull, lte } from 'drizzle-orm';
 import { z } from 'zod';
@@ -32,7 +38,8 @@ import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { salesOrder, salesOrderLine } from './schema';
 import {
-  BILLING_PLAN_DATE_STATUSES, salesBillingPlan, salesBillingPlanDate, salesBillingPlanType,
+  BILLING_PLAN_DATE_RULES, BILLING_PLAN_DATE_STATUSES, type BillingPlanDateRule,
+  salesBillingPlan, salesBillingPlanDate, salesBillingPlanType,
 } from './schema';
 
 export const BILLING_PLAN_ROUTE = '/sales/billing-plans';
@@ -60,6 +67,12 @@ export const billingPlanDateInput = z.object({
   billingDate: isoDate,
   /** The share of the item's value this date bills, as a percentage. */
   percentage: z.coerce.number().gt(0).max(100),
+  /**
+   * What the date does with that share: `DOWN_PAYMENT` asks the customer for it as an advance before
+   * anything is delivered; `INVOICE` — which is what is meant where nothing is named, and is what
+   * every date has always done — bills it.
+   */
+  billingRule: z.union([z.undefined(), z.enum(BILLING_PLAN_DATE_RULES)]),
 });
 
 export const billingPlanSaveInput = z.object({
@@ -81,6 +94,8 @@ export interface BillingPlanDateView {
   dateNumber: number;
   billingDate: string;
   percentage: number;
+  /** What this date does with its share: bill it, or ask for it in advance. */
+  billingRule: BillingPlanDateRule;
   status: (typeof BILLING_PLAN_DATE_STATUSES)[number];
   billingNumber: string | null;
 }
@@ -92,8 +107,14 @@ export interface BillingPlanView {
   planType: string;
   planTypeName: string;
   version: number;
-  /** The shares of the dates that still stand, as a percentage. A hundred on a complete plan. */
+  /**
+   * The shares of the dates that invoice, as a percentage. A hundred on a complete plan. The dates
+   * that ask for an advance stand outside this total: the money is asked for early, and the invoice
+   * still bills the whole.
+   */
   totalPercentage: number;
+  /** The shares of the dates that ask for an advance, as a percentage. Never more than a hundred. */
+  totalDownPaymentPercentage: number;
   dates: BillingPlanDateView[];
 }
 
@@ -108,9 +129,21 @@ export const itemKey = (orderNumber: string, orderLineNumber: number) => `${orde
 
 export interface StandingPlan {
   planType: string;
-  /** The earliest date of the plan that still stands open, and its number. */
+  /**
+   * The earliest *invoice* date of the plan that still stands open, and its number. Null where the
+   * plan asks only for advances, or where every invoice date has been billed: such a plan does not
+   * say when the item is billed next, and whether the item may be billed by delivery at all is
+   * `hasInvoiceDates`, not this.
+   */
   dateNumber: number | null;
   nextDate: string | null;
+  /**
+   * True where the plan carries an invoice date that answers — one that was not withdrawn. Such an
+   * item is billed by its plan and not by its deliveries, whether the date has been billed or not: a
+   * plan that has settled an item has still settled it. A plan that asks only for advances leaves the
+   * item to its deliveries, and the advance is settled against the invoice those deliveries earn.
+   */
+  hasInvoiceDates: boolean;
 }
 
 /**
@@ -133,12 +166,13 @@ export async function plansForItems(
     planType: salesBillingPlan.planType,
     dateNumber: salesBillingPlanDate.dateNumber,
     billingDate: salesBillingPlanDate.billingDate,
+    billingRule: salesBillingPlanDate.billingRule,
+    dateStatus: salesBillingPlanDate.status,
   }).from(salesBillingPlan)
     .leftJoin(salesBillingPlanDate, and(
       eq(salesBillingPlanDate.client, salesBillingPlan.client),
       eq(salesBillingPlanDate.orderNumber, salesBillingPlan.orderNumber),
       eq(salesBillingPlanDate.orderLineNumber, salesBillingPlan.orderLineNumber),
-      eq(salesBillingPlanDate.status, 'OPEN'),
     ))
     .where(and(
       eq(salesBillingPlan.client, client),
@@ -148,14 +182,20 @@ export async function plansForItems(
       asc(salesBillingPlanDate.billingDate));
   for (const row of rows) {
     const key = itemKey(row.orderNumber, row.orderLineNumber);
-    // The earliest open date is the one that is due, and the join is ordered by it, so the first row
-    // of an item is the answer and the rest are history.
-    if (found.has(key)) continue;
-    found.set(key, {
-      planType: row.planType,
-      dateNumber: row.dateNumber ?? null,
-      nextDate: row.billingDate ?? null,
-    });
+    if (!found.has(key)) {
+      found.set(key, {
+        planType: row.planType, dateNumber: null, nextDate: null, hasInvoiceDates: false,
+      });
+    }
+    const plan = found.get(key)!;
+    if (row.dateNumber === null) continue;
+    if (row.billingRule === 'INVOICE' && row.dateStatus !== 'WITHDRAWN') plan.hasInvoiceDates = true;
+    // The earliest open invoice date is the one that is due, and the rows are ordered by the day, so
+    // the first one seen is the answer and the rest are history.
+    if (row.billingRule === 'INVOICE' && row.dateStatus === 'OPEN' && plan.dateNumber === null) {
+      plan.dateNumber = row.dateNumber;
+      plan.nextDate = row.billingDate;
+    }
   }
   return found;
 }
@@ -212,6 +252,9 @@ export async function listBillingPlans(
  * both: a share of an item and the whole of it are two answers to one question, and an order that
  * answered it twice would invoice the same value twice.
  *
+ * A date says what it is for. One that invoices is billed; one that asks for an advance raises a
+ * request instead, and the caller that answers this list answers it differently for the two.
+ *
  * An order held for billing is not offered — its block is there to be released, and a date that vanished
  * from this list and reappeared the moment somebody lifted the block is a worse answer than a list that
  * says what it is waiting for. A date is offered on the day it names and every day after it: the day has
@@ -222,8 +265,8 @@ export async function listBillablePlanDates(
   filter: { customerNumber?: string; orderNumber?: string; onDate?: string } = {},
 ): Promise<Array<{
   orderNumber: string; orderLineNumber: number; dateNumber: number; billingDate: string;
-  percentage: number; materialNumber: string; customerNumber: string; quantity: string;
-  quantityUnit: string; value: string; currency: string;
+  percentage: number; billingRule: BillingPlanDateRule; materialNumber: string;
+  customerNumber: string; quantity: string; quantityUnit: string; value: string; currency: string;
 }>> {
   // Today, unless the caller names the day it is asking about — a screen asks about today, and a test
   // asks about a day it can state.
@@ -235,6 +278,7 @@ export async function listBillablePlanDates(
       dateNumber: salesBillingPlanDate.dateNumber,
       billingDate: salesBillingPlanDate.billingDate,
       percentage: salesBillingPlanDate.percentage,
+      billingRule: salesBillingPlanDate.billingRule,
       materialNumber: salesOrderLine.materialNumber,
       orderQuantity: salesOrderLine.orderQuantity,
       quantityUnit: salesOrderLine.quantityUnit,
@@ -273,6 +317,7 @@ export async function listBillablePlanDates(
         dateNumber: row.dateNumber,
         billingDate: row.billingDate,
         percentage: round3(Number(row.percentage)),
+        billingRule: row.billingRule as BillingPlanDateRule,
         materialNumber: row.materialNumber,
         customerNumber: row.customerNumber,
         quantity: round3(Number(row.orderQuantity) * share).toFixed(3),
@@ -309,23 +354,136 @@ async function readPlan(
     eq(salesBillingPlanDate.orderNumber, orderNumber),
     eq(salesBillingPlanDate.orderLineNumber, orderLineNumber),
   )).orderBy(asc(salesBillingPlanDate.dateNumber));
+  const live = dates.filter((row) => row.status !== 'WITHDRAWN');
+  const share = (rule: BillingPlanDateRule) => round3(live
+    .filter((row) => row.billingRule === rule)
+    .reduce((sum, row) => sum + Number(row.percentage), 0));
   return {
     orderNumber, orderLineNumber,
     materialNumber: line?.materialNumber ?? '',
     planType: plan.planType,
     planTypeName: type?.displayName ?? plan.planType,
     version: plan.version,
-    totalPercentage: round3(dates
-      .filter((row) => row.status !== 'WITHDRAWN')
-      .reduce((sum, row) => sum + Number(row.percentage), 0)),
+    totalPercentage: share('INVOICE'),
+    totalDownPaymentPercentage: share('DOWN_PAYMENT'),
     dates: dates.map((row) => ({
       dateNumber: row.dateNumber,
       billingDate: row.billingDate,
       percentage: round3(Number(row.percentage)),
+      billingRule: row.billingRule as BillingPlanDateRule,
       status: row.status as BillingPlanDateView['status'],
       billingNumber: row.billingNumber,
     })),
   };
+}
+
+/**
+ * Read a plan date that is about to be billed, with every refusal both paths share.
+ *
+ * Billing a date and asking for the advance a date carries are two different acts, and they are judged
+ * by the same ladder: the order stands, the item stands, the plan and the date exist, the date has not
+ * been billed and was not withdrawn, and the day it names has come. One ladder, because a rule that
+ * held for an invoice and not for an advance asked from the same date is not a rule — it is a loophole
+ * with a date on it.
+ *
+ * `action` names what the caller is about to do, so the refusal says "billed" to a clerk billing and
+ * "asked for" to a clerk asking for an advance.
+ */
+export interface BillablePlanDateContext {
+  order: typeof salesOrder.$inferSelect;
+  orderLine: typeof salesOrderLine.$inferSelect;
+  plan: typeof salesBillingPlan.$inferSelect;
+  date: typeof salesBillingPlanDate.$inferSelect;
+}
+
+export async function loadBillablePlanDate(tx: Tx, input: {
+  client: string;
+  orderNumber: string;
+  orderLineNumber: number;
+  dateNumber: number;
+  /** The day the caller is acting on, judged against the day the date names. */
+  billingDate: string;
+  /** `billed` or `asked for`, so a refusal names what was being done. */
+  action: 'billed' | 'asked for';
+}): Promise<BillablePlanDateContext> {
+  const { client, orderNumber, orderLineNumber, dateNumber, action } = input;
+  const [order] = await tx.select().from(salesOrder).where(and(
+    eq(salesOrder.client, client), eq(salesOrder.orderNumber, orderNumber),
+  )).limit(1);
+  if (!order) {
+    throw new BillingPlanError(
+      `Sales order ${orderNumber} does not exist in this tenant.`,
+      'Create the order at /sales/orders first; a plan date is billed against an order that stands.',
+    );
+  }
+  if (order.status === 'CANCELLED') {
+    throw new BillingPlanError(
+      `Sales order ${orderNumber} stands CANCELLED, and a cancelled order is billed by nothing at all.`,
+      'A cancelled order is not reopened by a plan date — raise a new order.',
+    );
+  }
+  const [orderLine] = await tx.select().from(salesOrderLine).where(and(
+    eq(salesOrderLine.client, client),
+    eq(salesOrderLine.orderNumber, orderNumber),
+    eq(salesOrderLine.lineNumber, orderLineNumber),
+  )).limit(1);
+  if (!orderLine) {
+    throw new BillingPlanError(
+      `Sales order ${orderNumber} carries no item ${orderLineNumber}.`,
+      'Bill an item the order states.',
+    );
+  }
+  if (orderLine.status === 'REJECTED') {
+    throw new BillingPlanError(
+      `Item ${orderLineNumber} of order ${orderNumber} is rejected${orderLine.rejectionReason ? ` (reason ${orderLine.rejectionReason})` : ''}, and a rejected item is billed on no schedule at all.`,
+      'Re-enter the item on the order to lift the rejection, or leave it rejected.',
+    );
+  }
+
+  const [plan] = await tx.select().from(salesBillingPlan).where(and(
+    eq(salesBillingPlan.client, client),
+    eq(salesBillingPlan.orderNumber, orderNumber),
+    eq(salesBillingPlan.orderLineNumber, orderLineNumber),
+  )).limit(1);
+  if (!plan) {
+    throw new BillingPlanError(
+      `Order ${orderNumber} item ${orderLineNumber} carries no billing plan, so it is billed by its deliveries and not by dates.`,
+      `Maintain a plan for the item at ${BILLING_PLAN_ROUTE} first: an item with no plan has no date to bill.`,
+    );
+  }
+  const [date] = await tx.select().from(salesBillingPlanDate).where(and(
+    eq(salesBillingPlanDate.client, client),
+    eq(salesBillingPlanDate.orderNumber, orderNumber),
+    eq(salesBillingPlanDate.orderLineNumber, orderLineNumber),
+    eq(salesBillingPlanDate.dateNumber, dateNumber),
+  )).limit(1);
+  if (!date) {
+    throw new BillingPlanError(
+      `The plan of order ${orderNumber} item ${orderLineNumber} carries no date ${dateNumber}.`,
+      `Read the plan at ${BILLING_PLAN_ROUTE} and bill a date it states.`,
+    );
+  }
+  if (date.status === 'BILLED') {
+    throw new BillingPlanError(
+      `Date ${dateNumber} of order ${orderNumber} item ${orderLineNumber} was ${action} as ${date.billingNumber}, and a date is ${action} once.`,
+      'Cancel that document first: a cancelled document releases its date, as it releases the delivery it stands against.',
+    );
+  }
+  if (date.status === 'WITHDRAWN') {
+    throw new BillingPlanError(
+      `Date ${dateNumber} of order ${orderNumber} item ${orderLineNumber} was withdrawn, so it is ${action} nothing.`,
+      `Maintain the plan at ${BILLING_PLAN_ROUTE}: a withdrawn date answers nothing, and what it once said stays on the record.`,
+    );
+  }
+  // A plan is a promise about a day. The day is the point of it, and a date billed before its own day
+  // is not an early invoice — it is a promise broken by the person who made it.
+  if (input.billingDate < date.billingDate) {
+    throw new BillingPlanError(
+      `Date ${dateNumber} of order ${orderNumber} item ${orderLineNumber} falls on ${date.billingDate}, and ${input.billingDate} was entered.`,
+      `A date is ${action} on or after the day it names: ${action === 'billed' ? 'bill it' : 'ask for it'} on ${date.billingDate} or later, or move the date on the plan.`,
+    );
+  }
+  return { order, orderLine, plan, date };
 }
 
 /**
@@ -342,13 +500,32 @@ async function readPlan(
 export async function saveBillingPlan(raw: BillingPlanSaveInput): Promise<{ version: number }> {
   const parsed = billingPlanSaveInput.parse(raw);
   const { client, orderNumber, orderLineNumber, planType, changedBy } = parsed;
-  const total = parsed.dates.reduce((sum, date) => sum + date.percentage, 0);
-  if (Math.abs(total - 100) > 0.001) {
+  // The dates that invoice share a hundred between them: that is what makes the plan an answer to when
+  // the item is billed. The dates that ask for an advance stand outside the hundred — an advance is
+  // money asked early and the invoice still bills the whole — but they cannot ask for more than the
+  // order carries, and a plan of advances alone is one that leaves the item to its deliveries.
+  // What a date does where the plan does not say is invoice it, which is what every date has always
+  // done: a plan maintained before advances existed keeps its meaning unchanged.
+  const ruleOf = (date: { billingRule?: BillingPlanDateRule }) => date.billingRule ?? 'INVOICE';
+  const total = parsed.dates
+    .filter((date) => ruleOf(date) === 'INVOICE')
+    .reduce((sum, date) => sum + date.percentage, 0);
+  const advances = parsed.dates
+    .filter((date) => ruleOf(date) === 'DOWN_PAYMENT')
+    .reduce((sum, date) => sum + date.percentage, 0);
+  const invoices = parsed.dates.filter((date) => ruleOf(date) === 'INVOICE').length;
+  if (invoices > 0 && Math.abs(total - 100) > 0.001) {
     throw new BillingPlanError(
-      `The dates of a billing plan share a hundred per cent between them, and these share ${round3(total)}.`,
+      `The dates of a billing plan that invoice share a hundred per cent between them, and these share ${round3(total)}.`,
       total < 100
         ? `Add the missing ${round3(100 - total)} per cent to a date, or raise one of them to cover it.`
         : `Take ${round3(total - 100)} per cent off one of the dates.`,
+    );
+  }
+  if (advances - 100 > 0.001) {
+    throw new BillingPlanError(
+      `The dates of this plan ask ${round3(advances)} per cent of the item in advance, and no plan asks for more than the whole of it.`,
+      `Take ${round3(advances - 100)} per cent off one of the dates that ask for an advance.`,
     );
   }
 
@@ -457,6 +634,7 @@ export async function saveBillingPlan(raw: BillingPlanSaveInput): Promise<{ vers
         await tx.update(salesBillingPlanDate).set({
           billingDate: date.billingDate,
           percentage: String(date.percentage),
+          billingRule: ruleOf(date),
           status: 'OPEN',
           changedBy, changedAt: new Date(),
         }).where(and(
@@ -471,6 +649,7 @@ export async function saveBillingPlan(raw: BillingPlanSaveInput): Promise<{ vers
           dateNumber,
           billingDate: date.billingDate,
           percentage: String(date.percentage),
+          billingRule: ruleOf(date),
           status: 'OPEN',
           createdBy: changedBy,
         });
@@ -502,7 +681,7 @@ export async function saveBillingPlan(raw: BillingPlanSaveInput): Promise<{ vers
         : undefined,
       after: {
         planType,
-        dates: parsed.dates.map((date) => `${date.dateNumber ?? ''}:${date.billingDate}:${date.percentage}`).join(' '),
+        dates: parsed.dates.map((date) => `${date.dateNumber ?? ''}:${date.billingDate}:${date.percentage}:${ruleOf(date)}`).join(' '),
       },
       securityRelevantFields: ['planType', 'dates'],
     });

@@ -146,70 +146,86 @@ export async function createCustomerDownPaymentRequest(input: {
   if (input.reference && input.reference.length > 16) {
     throw new CustomerDownPaymentRequestError('The reference may be at most 16 characters.', 'Shorten the request reference.');
   }
-  return withTenant(input.client, async (tx) => {
-    const replay = await byRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/custdpreq/${input.companyCode}/${input.customerNumber}`}, 0))`);
-    const replayLocked = await byRequestKey(tx, input.client, input.requestKey);
-    if (replayLocked) return replayLocked;
+  return withTenant(input.client, (tx) => createCustomerDownPaymentRequestTx(tx, input));
+}
 
-    await judgeCustomer(tx, input.client, input.customerNumber, input.companyCode);
-    const targetIndicator = await resolveRequestTarget(tx, input.client, input.companyCode, input.specialGlIndicator);
-    // The target must stand as an actual (non-request) indicator.
-    await resolveSpecialGlAccount(tx, input.client, input.companyCode, targetIndicator, 'AR')
-      .catch((error: unknown) => {
-        if (error instanceof Error) throw new CustomerDownPaymentRequestError(error.message);
-        throw error;
-      });
+/**
+ * The same act, inside a transaction the caller already holds.
+ *
+ * Sales asks for an advance from inside the transaction that raises the request document, and a noted
+ * item written on a second connection would be a second thing that has to be undone: the request, the
+ * document and the date they were raised from are one act and commit together, or not at all.
+ */
+export async function createCustomerDownPaymentRequestTx(tx: Tx, input: {
+  client: string; changedBy: string;
+  customerNumber: string; companyCode: string;
+  documentDate: string; postingDate: string; dueDate: string;
+  amount: number; currency: string;
+  specialGlIndicator: string; documentType: string;
+  reference?: string; requestKey: string;
+}): Promise<CreatedDownPaymentRequest> {
+  const replay = await byRequestKey(tx, input.client, input.requestKey);
+  if (replay) return replay;
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/custdpreq/${input.companyCode}/${input.customerNumber}`}, 0))`);
+  const replayLocked = await byRequestKey(tx, input.client, input.requestKey);
+  if (replayLocked) return replayLocked;
 
-    const [typeRow] = await tx.select().from(documentType).where(and(
-      eq(documentType.client, input.client), eq(documentType.documentType, input.documentType.toUpperCase()),
-    ));
-    if (!typeRow) {
-      throw new CustomerDownPaymentRequestError(
-        `Document type ${input.documentType.toUpperCase()} is not configured for this tenant.`,
-        'Configure the document type, then post again.',
-      );
-    }
-    if (!typeRow.allowedAccountTypes.includes('D')) {
-      throw new CustomerDownPaymentRequestError(
-        `Document type ${input.documentType.toUpperCase()} does not permit customer postings.`,
-        'Choose a document type that permits the customer account type.',
-      );
-    }
-
-    const company = await getCompanyCode(tx, input.client, input.companyCode);
-    if (!company?.fiscalYearVariant || !company.postingPeriodVariant) {
-      throw new CustomerDownPaymentRequestError(`Company code ${input.companyCode} is not configured.`);
-    }
-    const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
-    const verdict = await checkPostingAllowed(tx, input.client, company.postingPeriodVariant, 'D', position);
-    if (!verdict.allowed) throw new CustomerDownPaymentRequestError(verdict.reason!, verdict.remedy);
-
-    const allocated = await allocateNumber(tx, {
-      client: input.client, objectCode: 'CUSTDPREQ', allocatedBy: input.changedBy,
+  await judgeCustomer(tx, input.client, input.customerNumber, input.companyCode);
+  const targetIndicator = await resolveRequestTarget(tx, input.client, input.companyCode, input.specialGlIndicator);
+  // The target must stand as an actual (non-request) indicator.
+  await resolveSpecialGlAccount(tx, input.client, input.companyCode, targetIndicator, 'AR')
+    .catch((error: unknown) => {
+      if (error instanceof Error) throw new CustomerDownPaymentRequestError(error.message);
+      throw error;
     });
-    const requestNumber = allocated.display;
-    await tx.insert(customerDownPaymentRequest).values({
-      client: input.client, requestNumber, fiscalYear: position.fiscalYear,
-      customerNumber: input.customerNumber, companyCode: input.companyCode,
-      specialGlIndicator: input.specialGlIndicator,
-      targetSpecialGlIndicator: targetIndicator,
-      documentDate: input.documentDate, postingDate: input.postingDate, dueDate: input.dueDate,
-      documentType: input.documentType.toUpperCase(),
-      currency: input.currency.toUpperCase(), reference: input.reference ?? null,
-      requestedAmount: String(round2(input.amount)),
-      status: 'OPEN',
-      requestKey: input.requestKey, createdBy: input.changedBy,
-    });
-    await recordChange(tx, {
-      client: input.client, objectClass: REQUEST_CLASS,
-      objectKey: `${input.companyCode}/${input.customerNumber}/${requestNumber}`,
-      changeType: 'CREATE', changedBy: input.changedBy, transactionCode: CUSTOMER_DOWN_PAYMENT_REQUEST_CAPABILITY,
-      after: { amount: round2(input.amount), indicator: input.specialGlIndicator, targetIndicator, dueDate: input.dueDate },
-    });
-    return (await byRequestKey(tx, input.client, input.requestKey))!;
+
+  const [typeRow] = await tx.select().from(documentType).where(and(
+    eq(documentType.client, input.client), eq(documentType.documentType, input.documentType.toUpperCase()),
+  ));
+  if (!typeRow) {
+    throw new CustomerDownPaymentRequestError(
+      `Document type ${input.documentType.toUpperCase()} is not configured for this tenant.`,
+      'Configure the document type, then post again.',
+    );
+  }
+  if (!typeRow.allowedAccountTypes.includes('D')) {
+    throw new CustomerDownPaymentRequestError(
+      `Document type ${input.documentType.toUpperCase()} does not permit customer postings.`,
+      'Choose a document type that permits the customer account type.',
+    );
+  }
+
+  const company = await getCompanyCode(tx, input.client, input.companyCode);
+  if (!company?.fiscalYearVariant || !company.postingPeriodVariant) {
+    throw new CustomerDownPaymentRequestError(`Company code ${input.companyCode} is not configured.`);
+  }
+  const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
+  const verdict = await checkPostingAllowed(tx, input.client, company.postingPeriodVariant, 'D', position);
+  if (!verdict.allowed) throw new CustomerDownPaymentRequestError(verdict.reason!, verdict.remedy);
+
+  const allocated = await allocateNumber(tx, {
+    client: input.client, objectCode: 'CUSTDPREQ', allocatedBy: input.changedBy,
   });
+  const requestNumber = allocated.display;
+  await tx.insert(customerDownPaymentRequest).values({
+    client: input.client, requestNumber, fiscalYear: position.fiscalYear,
+    customerNumber: input.customerNumber, companyCode: input.companyCode,
+    specialGlIndicator: input.specialGlIndicator,
+    targetSpecialGlIndicator: targetIndicator,
+    documentDate: input.documentDate, postingDate: input.postingDate, dueDate: input.dueDate,
+    documentType: input.documentType.toUpperCase(),
+    currency: input.currency.toUpperCase(), reference: input.reference ?? null,
+    requestedAmount: String(round2(input.amount)),
+    status: 'OPEN',
+    requestKey: input.requestKey, createdBy: input.changedBy,
+  });
+  await recordChange(tx, {
+    client: input.client, objectClass: REQUEST_CLASS,
+    objectKey: `${input.companyCode}/${input.customerNumber}/${requestNumber}`,
+    changeType: 'CREATE', changedBy: input.changedBy, transactionCode: CUSTOMER_DOWN_PAYMENT_REQUEST_CAPABILITY,
+    after: { amount: round2(input.amount), indicator: input.specialGlIndicator, targetIndicator, dueDate: input.dueDate },
+  });
+  return (await byRequestKey(tx, input.client, input.requestKey))!;
 }
 
 /** Fulfilled amount of a request, derived from its ACTIVE fulfillment rows. */
@@ -355,6 +371,68 @@ export async function applyRequestFulfillment(tx: Tx, input: {
     eq(customerDownPaymentRequest.requestNumber, input.requestNumber),
   ));
   return { requestNumber: input.requestNumber, fulfilledAmount: amount, remainingAfter, status };
+}
+
+/**
+ * Withdraw a request that no money has arrived against.
+ *
+ * A request is a thing asked for and not yet owed, and it is withdrawn rather than posted away: there
+ * is no journal to reverse, because none was ever written. What the reversal does is stop the request
+ * answering — a noted item that stands would let a receipt be allocated to it for years, and a customer
+ * asked for money that is no longer wanted must not be able to pay it.
+ *
+ * Money that has arrived cannot be withdrawn away: the advance stands on the customer's special G/L
+ * account and is settled the way an advance is settled, by clearing it against what is owed.
+ */
+export async function reverseCustomerDownPaymentRequest(input: {
+  client: string; changedBy: string; requestNumber: string; reason?: string;
+}): Promise<{ requestNumber: string; status: string }> {
+  return withTenant(input.client, (tx) => reverseCustomerDownPaymentRequestTx(tx, input));
+}
+
+/** The same act, inside a transaction the caller already holds. */
+export async function reverseCustomerDownPaymentRequestTx(tx: Tx, input: {
+  client: string; changedBy: string; requestNumber: string; reason?: string;
+}): Promise<{ requestNumber: string; status: string }> {
+  const [request] = await tx.select().from(customerDownPaymentRequest).where(and(
+    eq(customerDownPaymentRequest.client, input.client),
+    eq(customerDownPaymentRequest.requestNumber, input.requestNumber),
+  )).for('update');
+  if (!request) {
+    throw new CustomerDownPaymentRequestError(
+      `Down payment request ${input.requestNumber} does not stand in this tenant.`,
+      'Choose a standing request, then withdraw it.',
+    );
+  }
+  if (request.status === 'REVERSED') {
+    throw new CustomerDownPaymentRequestError(
+      `Down payment request ${input.requestNumber} already stands withdrawn.`,
+      'A withdrawn request answers nothing, and is not withdrawn twice.',
+    );
+  }
+  const fulfilled = await fulfilledSoFar(tx, input.client, input.requestNumber);
+  if (fulfilled > 0.005) {
+    throw new CustomerDownPaymentRequestError(
+      `Down payment request ${input.requestNumber} has ${fulfilled.toFixed(2)} ${request.currency} of receipts standing against it, so it cannot be withdrawn.`,
+      'Clear the advance against an invoice of the order, which is how a paid advance is settled.',
+    );
+  }
+  await tx.update(customerDownPaymentRequest).set({
+    status: 'REVERSED', changedBy: input.changedBy, changedAt: new Date(),
+  }).where(and(
+    eq(customerDownPaymentRequest.client, input.client),
+    eq(customerDownPaymentRequest.requestNumber, input.requestNumber),
+  ));
+  await recordChange(tx, {
+    client: input.client, objectClass: REQUEST_CLASS,
+    objectKey: `${request.companyCode}/${request.customerNumber}/${request.requestNumber}`,
+    changeType: 'CHANGE', changedBy: input.changedBy, reason: input.reason,
+    transactionCode: CUSTOMER_DOWN_PAYMENT_REQUEST_CAPABILITY,
+    before: { status: request.status, requestedAmount: round2(Number(request.requestedAmount)) },
+    after: { status: 'REVERSED' },
+    fieldLabels: { requestedAmount: 'Amount asked', status: 'Where it stands' },
+  });
+  return { requestNumber: input.requestNumber, status: 'REVERSED' };
 }
 
 /** The receipt line a fulfillment must point at: the down payment's credit line. */

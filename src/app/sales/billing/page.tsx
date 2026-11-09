@@ -11,6 +11,7 @@ import {
   salesDocumentFlow,
 } from '@/modules/sales/billing';
 import { listBillablePlanDates } from '@/modules/sales/billing-plan';
+import { orderDownPayments } from '@/modules/sales/down-payment';
 import Billing from './Billing';
 
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,11 @@ export default async function SalesBillingPage({ searchParams }: {
     billingNumber ? getBilling(client, billingNumber) : Promise.resolve(null),
   ]);
   const flow = selected ? await salesDocumentFlow(client, selected.orderNumber) : [];
+  // What the customer was asked to pay in advance on this order, and what of it arrived: the register
+  // beside the document that will consume it.
+  const advances = selected
+    ? await orderDownPayments(client, selected.orderNumber)
+    : [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -69,6 +75,7 @@ export default async function SalesBillingPage({ searchParams }: {
         documents={documents}
         selected={selected}
         flow={flow}
+        advances={advances}
         deliveryNumber={deliveryNumber}
         canCreate={can(session, BILLING_CAPABILITY)}
         canCancel={can(session, BILLING_CANCEL_CAPABILITY)}
