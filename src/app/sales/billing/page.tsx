@@ -10,6 +10,7 @@ import {
   listBillings,
   salesDocumentFlow,
 } from '@/modules/sales/billing';
+import { listBillablePlanDates } from '@/modules/sales/billing-plan';
 import Billing from './Billing';
 
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,7 @@ export const dynamic = 'force-dynamic';
  * once.
  */
 export default async function SalesBillingPage({ searchParams }: {
-  searchParams: Promise<{ billing?: string; delivery?: string; customer?: string }>;
+  searchParams: Promise<{ billing?: string; delivery?: string; customer?: string; order?: string }>;
 }) {
   const session = await requireSession(BILLING_ROUTE);
   const params = await searchParams;
@@ -32,8 +33,13 @@ export default async function SalesBillingPage({ searchParams }: {
   const billingNumber = (params.billing ?? '').trim().toUpperCase();
   const deliveryNumber = (params.delivery ?? '').trim().toUpperCase();
   const customerNumber = (params.customer ?? '').trim().toUpperCase();
-  const [billable, documents, selected] = await Promise.all([
+  const orderNumber = (params.order ?? '').trim().toUpperCase();
+  const [billable, planDates, documents, selected] = await Promise.all([
     listBillableDeliveries(client, { deliveryNumber: deliveryNumber || undefined, customerNumber: customerNumber || undefined }),
+    listBillablePlanDates(client, {
+      ...(customerNumber ? { customerNumber } : {}),
+      ...(orderNumber ? { orderNumber } : {}),
+    }),
     listBillings(client, customerNumber ? { customerNumber } : {}),
     billingNumber ? getBilling(client, billingNumber) : Promise.resolve(null),
   ]);
@@ -51,13 +57,15 @@ export default async function SalesBillingPage({ searchParams }: {
           </div>
         </div>
         <p className="mt-2 text-sm text-ink-soft">
-          A billing document is created from the quantity a goods issue actually moved. It quotes the price the
-          order line was priced at, from the condition record named on it, and it posts the receivable through
-          the accounting-invoice service. A delivery is billed once.
+          A billing document is created from the quantity a goods issue actually moved, or from the date of a
+          billing plan whose day has come. Either way it quotes the price the order line was priced at, from
+          the condition record named on it, and posts the receivable through the accounting-invoice service. A
+          delivery is billed once, and so is a plan date.
         </p>
       </header>
       <Billing
         billable={billable}
+        planDates={planDates}
         documents={documents}
         selected={selected}
         flow={flow}

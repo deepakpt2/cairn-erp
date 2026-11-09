@@ -49,7 +49,7 @@ import {
   STANDARD_PRICING_PROCEDURE,
 } from '../sales/pricing-procedure';
 import { DELIVERED_ACCOUNT_DETERMINATION } from '../sales/account-determination';
-import { DELIVERED_PARTNER_FUNCTIONS } from '../sales/schema';
+import { DELIVERED_BILLING_PLAN_TYPES, DELIVERED_PARTNER_FUNCTIONS } from '../sales/schema';
 import {
   salesConditionType,
   salesPricingProcedure,
@@ -57,6 +57,7 @@ import {
   salesProcedureDetermination,
   salesAccountDetermination,
   salesPartnerFunction,
+  salesBillingPlanType,
 } from '../sales/schema';
 import { DELIVERED_RETURNS_RECEIPT_MOVEMENT, ensureReturnsMovements } from '../sales/returns';
 import {
@@ -741,6 +742,17 @@ export async function applyStandardPackage(
   for (const row of DELIVERED_PARTNER_FUNCTIONS) {
     await tx
       .insert(salesPartnerFunction)
+      .values({ client, ...row, isActive: true, createdBy: activatedBy })
+      .onConflictDoNothing();
+  }
+
+  /* ── Billing plan types ─────────────────────────────────────────────────────── */
+  // When an item is billed, for the sales that are never delivered: a repeating schedule, or the
+  // stages of a piece of work. Delivered here as well as by 9248 so a tenant provisioned later
+  // carries both kinds from the moment it stands — a plan that cannot be typed cannot be maintained.
+  for (const row of DELIVERED_BILLING_PLAN_TYPES) {
+    await tx
+      .insert(salesBillingPlanType)
       .values({ client, ...row, isActive: true, createdBy: activatedBy })
       .onConflictDoNothing();
   }

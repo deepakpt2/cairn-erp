@@ -25,7 +25,8 @@ export default function CreditMemo({
   invoice, billings, taxes, billingNumber, canPost, today,
 }: {
   invoice: CustomerCreditMemoView | null;
-  billings: Array<{ billingNumber: string; deliveryNumber: string; orderNumber: string; customerNumber: string; billingDate: string; grossValue: string; customerInvoiceNumber: string | null; status: string }>;
+  /** An order-related document names no delivery: it was raised against a billing plan date. */
+  billings: Array<{ billingNumber: string; deliveryNumber: string | null; orderNumber: string; customerNumber: string; billingDate: string; grossValue: string; customerInvoiceNumber: string | null; status: string }>;
   taxes: Array<{ code: string; ratePercent: string; name: string }>;
   billingNumber: string;
   canPost: boolean;

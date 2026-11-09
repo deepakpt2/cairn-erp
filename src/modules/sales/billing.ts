@@ -37,7 +37,10 @@ import {
   cancelCustomerInvoice, postCustomerInvoice, type CustomerInvoiceView,
 } from '../finance/customer-invoice';
 
-import { billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine } from './schema';
+import {
+  billingDocument, billingDocumentLine, delivery, deliveryLine, salesBillingPlan, salesBillingPlanDate,
+  salesOrder, salesOrderLine,
+} from './schema';
 import { materialSales } from '../inventory/schema';
 import { customerSalesArea } from '../foundation/customer-sales-area-schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_BILLING_TYPE, salesDocumentTypeFor } from './document-type';
@@ -49,6 +52,9 @@ import {
   type DocumentPartners, documentPartners, partnersForDocument, resolvePartners, writeDocumentPartners,
 } from './partners';
 import { determineLineAccounts } from './account-determination';
+import {
+  BILLING_PLAN_ROUTE, itemKey, markPlanDateBilled, plansForItems, releasePlanDateForBilling,
+} from './billing-plan';
 import { standingDetermination } from './delivery';
 
 export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
@@ -93,13 +99,39 @@ export const billingCancelInput = z.object({
 export type BillingCreateInput = z.infer<typeof billingCreateInput>;
 export type BillingCancelInput = z.infer<typeof billingCancelInput>;
 
+/**
+ * Bill one date of an order item's billing plan.
+ *
+ * The instruction is the order, the item and the date — nothing else, and above all not a value. What the
+ * date bills is the share the plan says it bills, of the value the order says the item has; a caller that
+ * could name its own amount could bill the item twice without ever being contradicted.
+ */
+export const billingPlanDateBillingInput = z.object({
+  client: z.string().trim().length(4),
+  changedBy: key(60),
+  orderNumber: key(20),
+  orderLineNumber: z.coerce.number().int().positive(),
+  dateNumber: z.coerce.number().int().positive(),
+  billingDate: isoDate,
+  postingDate: z.union([z.undefined(), z.literal(''), isoDate]).optional(),
+  requestKey: optionalText(64).optional(),
+});
+
+export type BillingPlanDateBillingInput = z.infer<typeof billingPlanDateBillingInput>;
+
 const round2 = (value: number) => (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+/** A share of a quantity, kept to the three decimal places the sales documents carry. */
+const roundQuantity = (value: number) => Math.round((value + Number.EPSILON) * 1000) / 1000;
 
 export interface BillingView {
   billingNumber: string;
   documentType: string;
   orderNumber: string;
-  deliveryNumber: string;
+  /**
+   * The delivery this document bills. Null on an order-related document, which is raised against a
+   * billing plan date and bills a share of an item rather than goods that went out.
+   */
+  deliveryNumber: string | null;
   salesOrg: string;
   distributionChannel: string;
   division: string;
@@ -120,7 +152,7 @@ export interface BillingView {
   createdBy: string;
   lines: Array<{
     lineNumber: number;
-    deliveryLineNumber: number;
+    deliveryLineNumber: number | null;
     orderLineNumber: number;
     materialNumber: string;
     billingQuantity: string;
@@ -195,7 +227,9 @@ async function loadBilling(tx: Tx, client: string, billingNumber: string): Promi
     // Written when the document was created; a document raised before the partners stood reads as the
     // four-in-one customer on its header.
     partners: await documentPartners(tx, client, 'BILLING', billingNumber)
-      ?? await documentPartners(tx, client, 'DELIVERY', header.deliveryNumber)
+      ?? (header.deliveryNumber
+        ? await documentPartners(tx, client, 'DELIVERY', header.deliveryNumber)
+        : null)
       ?? await documentPartners(tx, client, 'ORDER', header.orderNumber)
       ?? await resolvePartners(tx, client, {
         partnerNumber: header.customerNumber, salesOrg: header.salesOrg,
@@ -209,7 +243,11 @@ export async function getBilling(client: string, billingNumber: string): Promise
   const trimmed = billingNumber.trim().toUpperCase();
   const document = await withTenant(client, (tx) => loadBilling(tx, client, trimmed));
   if (!document) return null;
-  const determination = await standingDetermination(client, document.deliveryNumber);
+  // A document that bills a plan date names no delivery, and is judged by the only thing it does
+  // name: the order the plan hangs off.
+  const determination = document.deliveryNumber
+    ? await standingDetermination(client, document.deliveryNumber)
+    : await standingDetermination(client, document.orderNumber);
   return {
     ...document,
     credit: determination
@@ -247,6 +285,17 @@ export async function listBillableDeliveries(
        where d.client = ${client}
          and d.status = 'GOODS_ISSUED'
          and bd.billing_number is null
+         -- An item that carries a billing plan is billed by the plan and not by what was delivered:
+         -- a share of an item and the whole of it are two answers to one question, and an order
+         -- that answered it twice would invoice the same value twice.
+         and not exists (
+           select 1 from delivery_line dl2
+           join sales_billing_plan p
+             on p.client = dl2.client
+            and p.order_number = dl2.order_number
+            and p.order_line_number = dl2.order_line_number
+          where dl2.client = d.client and dl2.delivery_number = d.delivery_number
+         )
          and (${filter.customerNumber || null}::text is null or d.customer_number = ${filter.customerNumber || null})
          and (${filter.deliveryNumber || null}::text is null or d.delivery_number = ${filter.deliveryNumber || null})
        group by 1, 2, 3, 4, 5, 6
@@ -272,7 +321,7 @@ export async function listBillings(
   client: string,
   filter: { orderNumber?: string; customerNumber?: string; status?: string } = {},
 ): Promise<Array<{
-  billingNumber: string; deliveryNumber: string; orderNumber: string; customerNumber: string;
+  billingNumber: string; deliveryNumber: string | null; orderNumber: string; customerNumber: string;
   billingDate: string; status: string; grossValue: string; customerInvoiceNumber: string | null; version: number;
   creditOf: string | null; cancellationOf: string | null;
 }>> {
@@ -340,6 +389,75 @@ export interface BillingCreateResult {
   /** Set when the delivery's credit determination is blocked: the document stands, the invoice is held. */
   heldForCredit: boolean;
   replayed: boolean;
+}
+
+/**
+ * Post the receivable a built billing document earned, and link it back — the one author of `POSTED`.
+ *
+ * Both create paths end here, and that is the point of it: a document raised against a delivery and one
+ * raised against a plan date are the same document from here on. The same payer answers, the same request
+ * key is used, and a retry whose first attempt posted the invoice but lost the link-back raises no second
+ * receivable.
+ */
+async function postBuiltBilling(input: {
+  client: string;
+  changedBy: string;
+  billingDate: string;
+  postingDate?: string;
+  built: BuiltBilling;
+}): Promise<BillingCreateResult> {
+  const { built } = input;
+  const view = await getBilling(input.client, built.billingNumber);
+  if (!view) throw new BillingError(`Billing document ${built.billingNumber} could not be read back.`);
+  if (built.replayed) {
+    return { billing: view, invoice: null, posted: view.status === 'POSTED', heldForCredit: false, replayed: true };
+  }
+  if (view.status !== 'OPEN') {
+    return { billing: view, invoice: null, posted: view.status === 'POSTED', heldForCredit: false, replayed: false };
+  }
+  if (built.held) {
+    // The document stands, unbilled, and the release of the blocked document is what lets it post. Leaving it
+    // OPEN is what makes that retry safe rather than a second invoice.
+    return { billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false };
+  }
+
+  // The receivable is raised against the payer, not against the customer that placed the order: it is
+  // the payer who owes the money, whose reconciliation account the entry is posted to and whose open
+  // items the invoice appears in. Where no payer stands, the bill-to answers, and where neither does,
+  // the sold-to — which is every invoice raised before the partners stood, unchanged.
+  const billedPartners = await partnersForDocument(input.client, 'BILLING', built.billingNumber);
+  const invoice = await postCustomerInvoice({
+    client: input.client,
+    changedBy: input.changedBy,
+    customerNumber: billedPartners?.payer ?? built.customerNumber,
+    companyCode: built.companyCode,
+    documentDate: input.billingDate,
+    postingDate: input.postingDate || input.billingDate,
+    // The billing number is the invoice's reference: it is unique, and it is what makes the AR document
+    // point back at the sales document that raised it.
+    reference: built.billingNumber,
+    currency: built.currency,
+    grossAmount: Number(built.grossTotal),
+    headerText: `Billing ${built.billingNumber}`.slice(0, 50),
+    requestKey: `sd-bl-${input.client}-${built.billingNumber}`.slice(0, 64),
+    lines: built.invoice,
+  }).catch(async (caught: unknown) => {
+    const error = caught as { message?: string; remedy?: string };
+    throw new BillingError(
+      `The billing document stands as ${built.billingNumber}, but the receivable was refused: ${error?.message ?? 'the accounting-invoice service would not post it.'}`,
+      `${error?.remedy ?? 'Correct the customer or the accounting data, then bill again.'} The retry under the same submission raises no second invoice.`,
+    );
+  });
+
+  await linkPostedInvoice(input.client, input.changedBy, built.billingNumber, invoice);
+
+  return {
+    billing: (await getBilling(input.client, built.billingNumber)) ?? view,
+    invoice,
+    posted: true,
+    heldForCredit: false,
+    replayed: false,
+  };
 }
 
 /**
@@ -463,6 +581,23 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     const orderLines = await tx.select().from(salesOrderLine).where(and(
       eq(salesOrderLine.client, parsed.client), inArray(salesOrderLine.orderNumber, orderNumbers),
     ));
+
+    // An item that carries a billing plan is billed by its dates and not by what was delivered.
+    // Refusing here rather than merely hiding the delivery from the due list is what makes the rule
+    // hold for a delivery named directly: the plan is the answer to when that item is billed, and a
+    // delivery that answered as well would bill the same value twice.
+    const planned = await plansForItems(tx, parsed.client, lines.map((line) => ({
+      orderNumber: line.orderNumber, orderLineNumber: line.orderLineNumber,
+    })));
+    const plannedItem = lines.find((line) => planned.has(itemKey(line.orderNumber, line.orderLineNumber)));
+    if (plannedItem) {
+      const plan = planned.get(itemKey(plannedItem.orderNumber, plannedItem.orderLineNumber))!;
+      throw new BillingError(
+        `Order ${plannedItem.orderNumber} item ${plannedItem.orderLineNumber} carries a billing plan, so it is billed by its plan dates and not by delivery ${deliveryHeader.deliveryNumber}.`,
+        `Bill the plan date that has fallen due at ${BILLING_PLAN_ROUTE}`
+        + (plan.nextDate ? ` — date ${plan.dateNumber} on ${plan.nextDate} is the one that stands open.` : '.'),
+      );
+    }
     const orderLineKey = (orderNumber: string, lineNumber: number) => `${orderNumber}|${lineNumber}`;
     const priced = new Map(orderLines.map((line) => [
       orderLineKey(line.orderNumber, line.lineNumber), line,
@@ -753,57 +888,379 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
     };
   });
 
-  const view = await getBilling(parsed.client, built.billingNumber);
-  if (!view) throw new BillingError(`Billing document ${built.billingNumber} could not be read back.`);
-  if (built.replayed) {
-    return { billing: view, invoice: null, posted: view.status === 'POSTED', heldForCredit: false, replayed: true };
-  }
-  if (view.status !== 'OPEN') {
-    return { billing: view, invoice: null, posted: view.status === 'POSTED', heldForCredit: false, replayed: false };
-  }
-  if (built.held) {
-    // The document stands, unbilled, and the release of the blocked document is what lets it post. Leaving it
-    // OPEN is what makes that retry safe rather than a second invoice.
-    return { billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false };
-  }
-
-  // The receivable is raised against the payer, not against the customer that placed the order: it is
-  // the payer who owes the money, whose reconciliation account the entry is posted to and whose open
-  // items the invoice appears in. Where no payer stands, the bill-to answers, and where neither does,
-  // the sold-to — which is every invoice raised before the partners stood, unchanged.
-  const billedPartners = await partnersForDocument(parsed.client, 'BILLING', built.billingNumber);
-  const invoice = await postCustomerInvoice({
+  return postBuiltBilling({
     client: parsed.client,
     changedBy: parsed.changedBy,
-    customerNumber: billedPartners?.payer ?? built.customerNumber,
-    companyCode: built.companyCode,
-    documentDate: parsed.billingDate,
-    postingDate: parsed.postingDate || parsed.billingDate,
-    // The billing number is the invoice's reference: it is unique, and it is what makes the AR document
-    // point back at the sales document that raised it.
-    reference: built.billingNumber,
-    currency: built.currency,
-    grossAmount: Number(built.grossTotal),
-    headerText: `Billing ${built.billingNumber}`.slice(0, 50),
-    requestKey: `sd-bl-${parsed.client}-${built.billingNumber}`.slice(0, 64),
-    lines: built.invoice,
-  }).catch(async (caught: unknown) => {
-    const error = caught as { message?: string; remedy?: string };
-    throw new BillingError(
-      `The billing document stands as ${built.billingNumber}, but the receivable was refused: ${error?.message ?? 'the accounting-invoice service would not post it.'}`,
-      `${error?.remedy ?? 'Correct the customer or the accounting data, then bill again.'} The retry under the same submission raises no second invoice.`,
-    );
+    billingDate: parsed.billingDate,
+    postingDate: parsed.postingDate,
+    built,
+  });
+}
+
+/**
+ * Bill one date of an order item's billing plan.
+ *
+ * Nothing is priced again here. The value is the order's own arithmetic — every condition the item was
+ * priced by, scaled to the share this date carries — which is the same call a delivery-related invoice
+ * makes with the quantity that went out. That is what lets the two documents agree to the cent, and what
+ * lets an invoice read years later still name the condition record that priced it.
+ *
+ * Nothing is delivered by this act and nothing moves: the plan date is the instruction. An item is billed
+ * by its plan or by its deliveries and never by both, and the delivery path refuses the moment an item
+ * carries a plan. The credit block on the order holds the receivable exactly as it does on a delivery —
+ * the work may be done, but no invoice is raised over a block that has not been released.
+ */
+export async function createBillingFromPlanDate(
+  input: BillingPlanDateBillingInput,
+): Promise<BillingCreateResult> {
+  const parsed = billingPlanDateBillingInput.parse(input);
+  const built: BuiltBilling = await withTenant(parsed.client, async (tx) => {
+    // One date, one document. Two clerks billing the same date at the same moment is the whole reason
+    // the lock is taken before the date is read rather than after it.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${parsed.client}/plan/${parsed.orderNumber}/${parsed.orderLineNumber}/${parsed.dateNumber}`}, 0))`);
+
+    if (parsed.requestKey) {
+      const [existing] = await tx.select({ number: billingDocument.billingNumber }).from(billingDocument).where(and(
+        eq(billingDocument.client, parsed.client), eq(billingDocument.requestKey, parsed.requestKey),
+      )).limit(1);
+      if (existing) return { billingNumber: existing.number, replayed: true };
+    }
+
+    const [order] = await tx.select().from(salesOrder).where(and(
+      eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, parsed.orderNumber),
+    )).limit(1);
+    if (!order) {
+      throw new BillingError(
+        `Sales order ${parsed.orderNumber} does not exist in this tenant.`,
+        'Create the order at /sales/orders first; a plan date is billed against an order that stands.',
+      );
+    }
+    if (order.status === 'CANCELLED') {
+      throw new BillingError(
+        `Sales order ${parsed.orderNumber} stands CANCELLED, and a cancelled order is billed by nothing at all.`,
+        'A cancelled order is not reopened by a plan date — raise a new order.',
+      );
+    }
+    const [orderLine] = await tx.select().from(salesOrderLine).where(and(
+      eq(salesOrderLine.client, parsed.client),
+      eq(salesOrderLine.orderNumber, parsed.orderNumber),
+      eq(salesOrderLine.lineNumber, parsed.orderLineNumber),
+    )).limit(1);
+    if (!orderLine) {
+      throw new BillingError(
+        `Sales order ${parsed.orderNumber} carries no item ${parsed.orderLineNumber}.`,
+        'Bill an item the order states.',
+      );
+    }
+    if (orderLine.status === 'REJECTED') {
+      throw new BillingError(
+        `Item ${parsed.orderLineNumber} of order ${parsed.orderNumber} is rejected${orderLine.rejectionReason ? ` (reason ${orderLine.rejectionReason})` : ''}, and a rejected item is billed on no schedule at all.`,
+        'Re-enter the item on the order to lift the rejection, or leave it rejected.',
+      );
+    }
+
+    const [plan] = await tx.select().from(salesBillingPlan).where(and(
+      eq(salesBillingPlan.client, parsed.client),
+      eq(salesBillingPlan.orderNumber, parsed.orderNumber),
+      eq(salesBillingPlan.orderLineNumber, parsed.orderLineNumber),
+    )).limit(1);
+    if (!plan) {
+      throw new BillingError(
+        `Order ${parsed.orderNumber} item ${parsed.orderLineNumber} carries no billing plan, so it is billed by its deliveries and not by dates.`,
+        `Maintain a plan for the item at ${BILLING_PLAN_ROUTE} first: an item with no plan has no date to bill.`,
+      );
+    }
+    const [date] = await tx.select().from(salesBillingPlanDate).where(and(
+      eq(salesBillingPlanDate.client, parsed.client),
+      eq(salesBillingPlanDate.orderNumber, parsed.orderNumber),
+      eq(salesBillingPlanDate.orderLineNumber, parsed.orderLineNumber),
+      eq(salesBillingPlanDate.dateNumber, parsed.dateNumber),
+    )).limit(1);
+    if (!date) {
+      throw new BillingError(
+        `The plan of order ${parsed.orderNumber} item ${parsed.orderLineNumber} carries no date ${parsed.dateNumber}.`,
+        `Read the plan at ${BILLING_PLAN_ROUTE} and bill a date it states.`,
+      );
+    }
+    if (date.status === 'BILLED') {
+      throw new BillingError(
+        `Date ${parsed.dateNumber} of order ${parsed.orderNumber} item ${parsed.orderLineNumber} was billed as ${date.billingNumber}, and a date is billed once.`,
+        'Cancel that document first: a cancelled document releases its date, as it releases the delivery it stands against.',
+      );
+    }
+    if (date.status === 'WITHDRAWN') {
+      throw new BillingError(
+        `Date ${parsed.dateNumber} of order ${parsed.orderNumber} item ${parsed.orderLineNumber} was withdrawn, so it bills nothing.`,
+        `Maintain the plan at ${BILLING_PLAN_ROUTE}: a withdrawn date answers nothing, and what it once said stays on the record.`,
+      );
+    }
+    // A plan is a promise about a day. The day is the point of it, and a date billed before its own day
+    // is not an early invoice — it is a promise broken by the person who made it.
+    if (parsed.billingDate < date.billingDate) {
+      throw new BillingError(
+        `Date ${parsed.dateNumber} of order ${parsed.orderNumber} item ${parsed.orderLineNumber} falls on ${date.billingDate}, and ${parsed.billingDate} was entered.`,
+        `A date is billed on or after the day it names: bill it on ${date.billingDate} or later, or move the date on the plan.`,
+      );
+    }
+
+    const orderBlock = await standingDetermination(parsed.client, order.orderNumber);
+    const held = orderBlock?.status === 'BLOCKED';
+
+    // The share of the item this date bills. Nothing else is asked for and nothing else is accepted:
+    // the quantity is the order's, and the value follows from it.
+    const ordered = Number(orderLine.orderQuantity);
+    const billed = roundQuantity(ordered * (Number(date.percentage) / 100));
+    if (!(ordered > 0) || !(billed > 0)) {
+      throw new BillingError(
+        `Date ${parsed.dateNumber} bills ${date.percentage} per cent of ${ordered} ${orderLine.quantityUnit.trim()}, which is nothing the documents can carry.`,
+        'Raise the share this date carries, or the quantity on the order item.',
+      );
+    }
+
+    // The conditions the order priced this item by, scaled to the share that falls due today. Where the
+    // order carries none — a document created before 9238 — the line's own figures are billed, exactly
+    // as they always were: a historic document is not moved by a rule it was never priced under.
+    const standing = (await documentConditionsOf(tx, parsed.client, 'ORDER', order.orderNumber))
+      .filter((condition) => condition.lineNumber === orderLine.lineNumber);
+    const scaled = standing.length > 0
+      ? scaleLineConditions(standing, billed / ordered, { lineNumber: 0, quantity: billed })
+      : undefined;
+
+    let netAmount: number;
+    let taxAmount: number;
+    let rate: number;
+    let priceUnit = orderLine.priceUnit;
+    let conditionNumber = orderLine.conditionNumber;
+    let billedConditions = undefined as PricedCondition[] | undefined;
+    if (scaled) {
+      netAmount = Number(scaled.netAmount);
+      taxAmount = Number(scaled.taxAmount);
+      rate = Number(scaled.taxRate);
+      priceUnit = scaled.priceUnit;
+      conditionNumber = scaled.conditionNumber || orderLine.conditionNumber;
+      billedConditions = scaled.conditions;
+    } else {
+      netAmount = (billed * Number(orderLine.netPrice)) / orderLine.priceUnit;
+      // The tax code is judged by the tax master as it stands, and by the rate the order's own condition
+      // states where one stands — a tax looked up again would be today's rate on yesterday's agreement.
+      rate = 0;
+      if (orderLine.taxCode) {
+        const country = (await tx.select({ country: companyCodeTable.country }).from(companyCodeTable).where(and(
+          eq(companyCodeTable.client, parsed.client), eq(companyCodeTable.companyCode, order.companyCode),
+        )).limit(1))[0]?.country;
+        const [code] = await tx.select({ ratePercent: taxCodeTable.ratePercent }).from(taxCodeTable).where(and(
+          eq(taxCodeTable.client, parsed.client), eq(taxCodeTable.country, country ?? ''),
+          eq(taxCodeTable.taxCode, orderLine.taxCode),
+        )).limit(1);
+        if (!code) {
+          throw new BillingError(
+            `Tax code ${orderLine.taxCode} no longer stands for country ${country || '(none)'}, which item ${orderLine.lineNumber} is billed under.`,
+            'Maintain the tax code, or change the order line to a code that stands.',
+          );
+        }
+        rate = Number(code.ratePercent);
+      }
+      taxAmount = rate ? Number(round2((netAmount * rate) / 100)) : 0;
+    }
+    const netTotal = Number(round2(netAmount));
+    const taxTotal = Number(round2(taxAmount));
+
+    // Where the money lands: the account key each condition carried, exactly as a delivery-related line
+    // is determined. A line the order priced before the conditions existed is posted whole to the revenue
+    // account the chart holds, which is where it was posted the day it was raised.
+    const [customerArea] = await tx.select({ group: customerSalesArea.accountAssignmentGroup })
+      .from(customerSalesArea).where(and(
+        eq(customerSalesArea.client, parsed.client),
+        eq(customerSalesArea.partnerNumber, order.customerNumber),
+        eq(customerSalesArea.salesOrg, order.salesOrg),
+        eq(customerSalesArea.distributionChannel, order.distributionChannel),
+        eq(customerSalesArea.division, order.division),
+      )).limit(1);
+    const [materialRow] = await tx.select({ group: materialSales.materialAccountAssignmentGroup })
+      .from(materialSales).where(and(
+        eq(materialSales.client, parsed.client),
+        eq(materialSales.materialNumber, orderLine.materialNumber),
+        eq(materialSales.salesOrg, order.salesOrg),
+        eq(materialSales.distributionChannel, order.distributionChannel),
+      )).limit(1);
+    const companyChart = await chartOfAccountsFor(tx, parsed.client, order.companyCode);
+    const accounts = billedConditions
+      ? await determineLineAccounts(tx, parsed.client, {
+        chartOfAccounts: companyChart,
+        salesOrg: order.salesOrg,
+        customerAccountAssignmentGroup: customerArea?.group,
+        materialAccountAssignmentGroup: materialRow?.group,
+        conditions: billedConditions.map((condition) => ({
+          accountKey: condition.accountKey,
+          amount: condition.amount,
+          isStatistical: condition.isStatistical,
+          conditionClass: condition.conditionClass,
+          conditionType: condition.conditionType,
+        })),
+      }).catch((error: unknown) => {
+        const caught = error as { message?: string; remedy?: string };
+        throw new BillingError(
+          `The billing document stands priced, but its revenue accounts could not be determined: ${caught.message ?? 'no account stands for one of the keys this document carries.'}`,
+          `${caught.remedy ?? 'Maintain the account determination, then bill again.'} The retry under the same submission raises no second document.`,
+        );
+      })
+      : undefined;
+    const invoiceLine: InvoiceLine = {
+      netAmount: netTotal,
+      taxCode: orderLine.taxCode || undefined,
+      profitCenter: orderLine.profitCenter || undefined,
+      lineText: `Order ${order.orderNumber} item ${orderLine.lineNumber} date ${date.dateNumber}`.slice(0, 50),
+    };
+    if (accounts) {
+      invoiceLine.components = accounts.components.map((component) => ({
+        glAccount: component.glAccount, amount: Number(component.amount),
+      }));
+      if (accounts.taxAccount) invoiceLine.taxAccount = accounts.taxAccount;
+    } else {
+      invoiceLine.glAccount = await revenueAccountFor(tx, parsed.client, order.companyCode);
+    }
+
+    // The document type is configuration now (9226); see the same note in sales-order.ts.
+    const billingType = await salesDocumentTypeFor(tx, parsed.client, STANDARD_BILLING_TYPE);
+    if (!billingType) {
+      throw new BillingError(
+        `Sales document type ${STANDARD_BILLING_TYPE} does not stand for this tenant, so no billing number can be drawn and no billing document can be created.`,
+        DOCUMENT_TYPE_REMEDY,
+      );
+    }
+
+    let number: string;
+    try {
+      const drawn = await allocateNumber(tx, {
+        client: parsed.client, objectCode: billingType.numberRangeObject, companyCode: '*',
+        subObject: billingType.numberRangeSubObject, fiscalYear: 0, allocatedBy: parsed.changedBy,
+      });
+      number = drawn.display;
+    } catch {
+      throw new BillingError(
+        `No active internal ${billingType.numberRangeObject} number range stands for sub-object ${billingType.numberRangeSubObject} of sales document type ${billingType.documentType}, so no billing number can be drawn.`,
+        'Define or unblock the interval on the number ranges screen, then bill again.',
+      );
+    }
+
+    await tx.insert(billingDocument).values({
+      client: parsed.client,
+      billingNumber: number,
+      documentType: billingType.documentType,
+      orderNumber: order.orderNumber,
+      // No delivery stands behind this document and none is invented. The plan date is what it was
+      // raised for, and a delivery number that answered nothing would only make the document lie.
+      deliveryNumber: null,
+      salesOrg: order.salesOrg,
+      distributionChannel: order.distributionChannel,
+      division: order.division,
+      customerNumber: order.customerNumber,
+      companyCode: order.companyCode,
+      currency: order.currency,
+      billingDate: parsed.billingDate,
+      postingDate: parsed.postingDate || null,
+      status: 'OPEN',
+      netValue: round2(netTotal),
+      taxValue: round2(taxTotal),
+      grossValue: round2(netTotal + taxTotal),
+      referenceDocumentText: `Order ${order.orderNumber} item ${orderLine.lineNumber} date ${date.dateNumber}`.slice(0, 100),
+      requestKey: parsed.requestKey || null,
+      createdBy: parsed.changedBy,
+    });
+
+    // Who the invoice is made with: the order's partners, written down again on the billing document.
+    // An order-related document has no delivery to carry them, so they are read from the order itself.
+    const partners = await documentPartners(tx, parsed.client, 'ORDER', order.orderNumber)
+      ?? await resolvePartners(tx, parsed.client, {
+        partnerNumber: order.customerNumber, salesOrg: order.salesOrg,
+        distributionChannel: order.distributionChannel, division: order.division,
+      });
+    await writeDocumentPartners(tx, {
+      client: parsed.client, documentCategory: 'BILLING', documentNumber: number,
+      partners, changedBy: parsed.changedBy,
+    });
+
+    await tx.insert(billingDocumentLine).values({
+      client: parsed.client,
+      billingNumber: number,
+      lineNumber: 10,
+      deliveryNumber: null,
+      deliveryLineNumber: null,
+      orderNumber: order.orderNumber,
+      orderLineNumber: orderLine.lineNumber,
+      materialNumber: orderLine.materialNumber,
+      billingQuantity: billed.toFixed(3),
+      netPrice: roundAmount((netTotal * priceUnit) / billed, 4),
+      priceUnit,
+      netAmount: round2(netTotal),
+      taxCode: orderLine.taxCode,
+      taxRate: rate.toFixed(4),
+      taxAmount: round2(taxTotal),
+      conditionNumber,
+      createdBy: parsed.changedBy,
+    });
+    // What priced the invoice, beside the figures it states: an auditor reading it can name the record
+    // the price came from without reading the order.
+    if (billedConditions) {
+      await writeDocumentConditions(tx, {
+        client: parsed.client, documentCategory: 'BILLING', documentNumber: number,
+        currency: order.currency,
+        items: [{ lineNumber: 10, conditions: billedConditions }],
+        changedBy: parsed.changedBy,
+      });
+    }
+
+    // The date is billed inside the transaction that raised the document: a document that stood while
+    // its date stayed open would be billed again the next time the due list was read.
+    await markPlanDateBilled(tx, {
+      client: parsed.client,
+      orderNumber: parsed.orderNumber,
+      orderLineNumber: parsed.orderLineNumber,
+      dateNumber: parsed.dateNumber,
+      billingNumber: number,
+      changedBy: parsed.changedBy,
+    });
+
+    await recordChange(tx, {
+      client: parsed.client, objectClass: BILLING_OBJECT_CLASS, objectKey: number, changeType: 'CREATE',
+      changedBy: parsed.changedBy,
+      after: {
+        order: order.orderNumber,
+        item: String(orderLine.lineNumber),
+        planDate: String(date.dateNumber),
+        share: `${date.percentage}%`,
+        customer: order.customerNumber,
+        netValue: round2(netTotal),
+        taxValue: round2(taxTotal),
+        grossValue: round2(netTotal + taxTotal),
+        heldForCredit: held ? 'yes' : '',
+      },
+      fieldLabels: {
+        planDate: 'Plan date', share: 'Share of the item', heldForCredit: 'Held for credit',
+      },
+    });
+
+    return {
+      billingNumber: number,
+      replayed: false,
+      invoice: [invoiceLine],
+      held,
+      netTotal: round2(netTotal),
+      taxTotal: round2(taxTotal),
+      grossTotal: round2(netTotal + taxTotal),
+      companyCode: order.companyCode,
+      customerNumber: order.customerNumber,
+      currency: order.currency,
+    };
   });
 
-  await linkPostedInvoice(parsed.client, parsed.changedBy, built.billingNumber, invoice);
-
-  return {
-    billing: (await getBilling(parsed.client, built.billingNumber)) ?? view,
-    invoice,
-    posted: true,
-    heldForCredit: false,
-    replayed: false,
-  };
+  return postBuiltBilling({
+    client: parsed.client,
+    changedBy: parsed.changedBy,
+    billingDate: parsed.billingDate,
+    postingDate: parsed.postingDate,
+    built,
+  });
 }
 
 interface InvoiceLine {
@@ -900,7 +1357,9 @@ async function postStandingBilling(input: {
     if (header.status !== 'OPEN') {
       return { post: false as const, held: false, header };
     }
-    const deliveryBlock = await standingDetermination(input.client, header.deliveryNumber);
+    const deliveryBlock = header.deliveryNumber
+      ? await standingDetermination(input.client, header.deliveryNumber)
+      : null;
     const orderBlock = await standingDetermination(input.client, header.orderNumber);
     if (deliveryBlock?.status === 'BLOCKED' || orderBlock?.status === 'BLOCKED') {
       return { post: false as const, held: true, header };
@@ -924,7 +1383,11 @@ async function postStandingBilling(input: {
         netAmount: Number(line.netAmount),
         taxCode: line.taxCode || undefined,
         profitCenter: orderLine?.profitCenter || undefined,
-        lineText: `Delivery ${line.deliveryNumber} item ${line.deliveryLineNumber}`.slice(0, 50),
+        // A document raised against a plan date names no delivery, and a released one says what it
+        // was raised against rather than a delivery that never stood.
+        lineText: (line.deliveryNumber
+          ? `Delivery ${line.deliveryNumber} item ${line.deliveryLineNumber}`
+          : `Order ${header.orderNumber} item ${line.orderLineNumber}`).slice(0, 50),
       };
     });
     return { post: true as const, held: false, header, invoice, currency: order.currency };
@@ -1002,7 +1465,9 @@ export async function postBillingDocument(
     return { billing: view, invoice: null, posted: true, heldForCredit: false, replayed: true };
   }
   // An OPEN document is the one state that may still raise its invoice. Re-read the block, then post.
-  const held = await standingDetermination(parsed.client, view.deliveryNumber);
+  const held = await (view.deliveryNumber
+    ? standingDetermination(parsed.client, view.deliveryNumber)
+    : standingDetermination(parsed.client, view.orderNumber));
   if (held?.status === 'BLOCKED') {
     return { billing: view, invoice: null, posted: false, heldForCredit: true, replayed: false };
   }
@@ -1220,6 +1685,12 @@ export async function cancelBillingDocument(
     if (!applied.length) {
       throw new BillingError('The billing document changed while it was being cancelled. Reload and try again.');
     }
+    // The plan date this document billed stands open again. A cancelled document is history, not a
+    // door: the date is released so the corrected document can be raised against it, which is what a
+    // cancelled document does for the delivery it stands against.
+    await releasePlanDateForBilling(tx, {
+      client: parsed.client, billingNumber: parsed.billingNumber, changedBy: parsed.changedBy,
+    });
     await recordChange(tx, {
       client: parsed.client, objectClass: BILLING_OBJECT_CLASS, objectKey: parsed.billingNumber,
       changeType: 'CHANGE', changedBy: parsed.changedBy,

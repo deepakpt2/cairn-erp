@@ -1,16 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useId } from 'react';
+import { useActionState, useId, useState } from 'react';
 
 import type { BillingView } from '@/modules/sales/billing';
 import type { listBillableDeliveries, listBillings, salesDocumentFlow } from '@/modules/sales/billing';
-import { cancelBillingAction, createBillingAction, rebillDeliveryAction, type BillingActionState } from './actions';
+import {
+  billPlanDateAction, cancelBillingAction, createBillingAction, rebillDeliveryAction,
+  type BillingActionState,
+} from './actions';
 
 const EMPTY: BillingActionState = { ok: false };
 
 interface Props {
   billable: Awaited<ReturnType<typeof listBillableDeliveries>>;
+  planDates: Awaited<ReturnType<typeof import('@/modules/sales/billing-plan').listBillablePlanDates>>;
   documents: Awaited<ReturnType<typeof listBillings>>;
   selected: BillingView | null;
   flow: Awaited<ReturnType<typeof salesDocumentFlow>>;
@@ -89,6 +93,81 @@ function CreateBilling({
   );
 }
 
+/**
+ * The dates that have come due: the second half of the billing due list.
+ *
+ * The first half offers deliveries whose goods have gone out. This one offers shares of items that
+ * are never delivered at all, and the two never name the same item — an item with a plan is billed by
+ * its dates, and the delivery that carries it is refused by name. The value shown is the share the
+ * date bills, of what the order says the item is worth; nothing is priced again here.
+ */
+function PlanDatesDue({ planDates, allowed }: { planDates: Props['planDates']; allowed: boolean }) {
+  const [state, action, pending] = useActionState(billPlanDateAction, EMPTY);
+  const [slot, setSlot] = useState(0);
+  const id = useId();
+  const today = new Date().toISOString().slice(0, 10);
+  const chosen = planDates[Math.min(slot, planDates.length - 1)] ?? null;
+  if (!allowed) {
+    return (
+      <p className="mt-2 text-sm text-ink-soft">
+        Billing a plan date is closed for this session: it needs SALES.BILLING.CREATE.
+      </p>
+    );
+  }
+  return (
+    <form action={action} className="panel space-y-3 p-4" aria-label="Bill a billing plan date">
+      <p className="text-sm font-medium">Bill a date that has come due</p>
+      {planDates.length === 0 ? (
+        <p className="text-sm text-ink-soft">
+          No plan date has come due. A date is offered on the day it names and every day after it, and only
+          while it stands open.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <label className="block text-xs text-ink-soft" htmlFor={`${id}-date`}>
+              Plan date
+              <select
+                className="input mt-1" id={`${id}-date`}
+                value={Math.min(slot, planDates.length - 1)}
+                onChange={(event) => setSlot(Number(event.target.value))}
+              >
+                {planDates.map((row, index) => (
+                  <option key={`${row.orderNumber}-${row.orderLineNumber}-${row.dateNumber}`} value={index}>
+                    {row.orderNumber} / {row.orderLineNumber} date {row.dateNumber} · {row.billingDate}
+                    {' · '}{row.percentage}% · {row.value} {row.currency.trim()}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs text-ink-soft" htmlFor={`${id}-billing-date`}>
+              Billing date
+              <input
+                className="input mt-1" id={`${id}-billing-date`} name="billingDate"
+                defaultValue={today} autoComplete="off"
+              />
+            </label>
+          </div>
+          <input type="hidden" name="orderNumber" value={chosen?.orderNumber ?? ''} />
+          <input type="hidden" name="orderLineNumber" value={chosen?.orderLineNumber ?? ''} />
+          <input type="hidden" name="dateNumber" value={chosen?.dateNumber ?? ''} />
+          <input type="hidden" name="requestKey" value={`BL-PD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`} />
+          {chosen ? (
+            <p className="text-xs text-ink-faint">
+              {chosen.materialNumber} · {chosen.quantity} {chosen.quantityUnit} · customer {chosen.customerNumber}
+              {' · '}value {chosen.value} {chosen.currency.trim()}
+            </p>
+          ) : null}
+          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-9" disabled={pending || !chosen}>
+            {pending ? 'Billing…' : 'Create and post'}
+          </button>
+        </>
+      )}
+      <Notice state={state} label="Billing plan date" />
+    </form>
+  );
+}
+
 function SelectedBilling({
   selected, flow, canCancel, canCreate,
 }: { selected: BillingView; flow: Props['flow']; canCancel: boolean; canCreate: boolean }) {
@@ -105,8 +184,14 @@ function SelectedBilling({
         <span className="code text-ink-faint">{selected.status} · version {selected.version}</span>
       </div>
       <p className="mt-1 text-sm text-ink-soft">
-        Delivery <Link className="link" href={`/sales/delivery?delivery=${selected.deliveryNumber}`}>{selected.deliveryNumber}</Link>
-        {' · '}order <Link className="link" href={`/sales/orders?order=${selected.orderNumber}`}>{selected.orderNumber}</Link>
+        {/* A document raised against a plan date names no delivery: nothing was shipped, and a link to a
+            delivery that never stood is a lie the screen need not tell. */}
+        {selected.deliveryNumber ? (
+          <>Delivery <Link className="link" href={`/sales/delivery?delivery=${selected.deliveryNumber}`}>{selected.deliveryNumber}</Link>{' · '}</>
+        ) : (
+          <>Billing plan date{' · '}</>
+        )}
+        order <Link className="link" href={`/sales/orders?order=${selected.orderNumber}`}>{selected.orderNumber}</Link>
         {' · '}customer {selected.customerNumber}
         {' · '}company {selected.companyCode}
         {selected.customerInvoiceNumber
@@ -187,7 +272,7 @@ function SelectedBilling({
         </details>
       ) : null}
 
-      {cancelled ? (
+      {cancelled && selected.deliveryNumber ? (
         <div className="panel mt-4 space-y-3 p-4" aria-label="Bill this delivery again">
           <p className="text-sm font-medium">This document is cancelled</p>
           <p className="text-sm text-ink-soft">
@@ -252,6 +337,47 @@ export default function Billing(props: Props) {
   return (
     <div className="space-y-4">
       <CreateBilling billable={props.billable} deliveryNumber={props.deliveryNumber} allowed={props.canCreate} />
+      <section className="panel p-4" aria-label="Billing plan dates due">
+        <p className="text-sm font-medium">Billing plan dates due</p>
+        {props.planDates.length === 0 ? (
+          <p className="mt-2 text-sm text-ink-soft">
+            No plan date stands due. An item that carries a billing plan is billed by its dates and not by a
+            delivery, so it appears here rather than above.
+          </p>
+        ) : (
+          <table className="grid-table mt-3 text-sm">
+            <thead>
+              <tr className="text-left text-xs text-ink-faint">
+                <th>Order</th><th>Item</th><th>Date</th><th>Day it falls on</th><th>Material</th>
+                <th className="text-right">Share</th><th className="text-right">Quantity</th>
+                <th className="text-right">Value</th><th>Customer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.planDates.map((row) => (
+                <tr key={`${row.orderNumber}-${row.orderLineNumber}-${row.dateNumber}`}>
+                  <td>
+                    <Link className="link" href={`/sales/orders?order=${row.orderNumber}`}>{row.orderNumber}</Link>
+                  </td>
+                  <td>
+                    <Link className="link" href={`/sales/billing-plans?order=${row.orderNumber}&item=${row.orderLineNumber}`}>
+                      {row.orderLineNumber}
+                    </Link>
+                  </td>
+                  <td>{row.dateNumber}</td>
+                  <td>{row.billingDate}</td>
+                  <td>{row.materialNumber}</td>
+                  <td className="text-right">{row.percentage}%</td>
+                  <td className="text-right">{row.quantity} {row.quantityUnit}</td>
+                  <td className="text-right">{row.value} {row.currency.trim()}</td>
+                  <td>{row.customerNumber}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <PlanDatesDue planDates={props.planDates} allowed={props.canCreate} />
+      </section>
       <section className="panel p-4" aria-label="Billing documents">
         <p className="text-sm font-medium">Billing documents</p>
         {props.documents.length === 0 ? (
@@ -270,7 +396,11 @@ export default function Billing(props: Props) {
                   <td>
                     <Link className="link" href={`/sales/billing?billing=${row.billingNumber}`}>{row.billingNumber}</Link>
                   </td>
-                  <td><Link className="link" href={`/sales/delivery?delivery=${row.deliveryNumber}`}>{row.deliveryNumber}</Link></td>
+                  <td>
+                    {row.deliveryNumber
+                      ? <Link className="link" href={`/sales/delivery?delivery=${row.deliveryNumber}`}>{row.deliveryNumber}</Link>
+                      : <span className="text-ink-faint">plan date</span>}
+                  </td>
                   <td><Link className="link" href={`/sales/orders?order=${row.orderNumber}`}>{row.orderNumber}</Link></td>
                   <td>{row.customerNumber}</td>
                   <td>{row.billingDate}</td>

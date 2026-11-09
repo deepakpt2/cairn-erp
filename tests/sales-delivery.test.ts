@@ -44,6 +44,7 @@ import {
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { listBillablePlanDates, saveBillingPlan } from '../src/modules/sales/billing-plan';
 import { assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';
 
 /**
@@ -2170,5 +2171,83 @@ describe('sales fulfillment and billing (DI-020)', () => {
     expect(row(cancelled.cancellation!.billingNumber).billingCancels).toBe(first.billing.billingNumber);
     expect(row(second.billing.billingNumber).billingStatus).toBe('POSTED');
     expect(row(second.billing.billingNumber).billingCancels).toBeNull();
+  });
+
+  /**
+   * The one rule that keeps the two billing paths from billing the same value twice: an item that
+   * carries a plan is billed by its dates and not by what was delivered. Not a restriction invented
+   * for convenience — a share of an item and the whole of it are two answers to one question, and an
+   * order that answered it twice would invoice the same value twice.
+   */
+  it('bills an item that carries a plan by its dates, and refuses the delivery by name', async () => {
+    // Its own shelf: everything before this test has drawn on the opening balance, and the second
+    // batch is earned by a document of its own rather than written into the projection.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        insert into material_document (client, material_document_number, document_year, document_date,
+                                       posting_date, header_text, status, created_by)
+        values (${tenant.client}, 'MD-OPEN002', 2026, ${DATE}, ${DATE}, 'Second opening balance', 'POSTED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (client, material_document_number, line_number, movement_type,
+                                            material_number, plant, storage_location, stock_type, line_direction,
+                                            entry_quantity, entry_unit, base_quantity, base_unit, created_by)
+        values (${tenant.client}, 'MD-OPEN002', 1, 'OPENING_BALANCE', ${MATERIAL}, ${PLANT}, ${STORE},
+                'UNRESTRICTED', 'RECEIPT', 4, 'UNT', 4, 'UNT', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        update stock_quantity set quantity = quantity + 4
+        where client = ${tenant.client} and material_number = ${MATERIAL} and plant = ${PLANT}
+          and storage_location = ${STORE} and stock_type = 'UNRESTRICTED'
+      `);
+      await tx.execute(sql`
+        update material_valuation set total_stock_quantity = total_stock_quantity + 4, stock_value = stock_value + 40
+        where client = ${tenant.client} and material_number = ${MATERIAL} and valuation_area = ${PLANT}
+      `);
+    });
+
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('plan-order'),
+      lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
+    });
+    // The item is billed by a plan: one date, the whole of it, on the day the order was raised.
+    await saveBillingPlan({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, orderLineNumber: 10,
+      planType: 'MS', dates: [{ billingDate: DATE, percentage: 100 }],
+      reason: 'Paid in one stage, on delivery.',
+    });
+
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    const shipped = await createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('plan-delivery'),
+    });
+    await confirmDeliveryPicks({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('plan-pick'),
+    });
+    const issued = await getDelivery(tenant.client, shipped.deliveryNumber);
+    await postDeliveryGoodsIssue({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
+      expectedVersion: issued!.version, postingDate: DATE,
+    });
+
+    // The goods went out, and the delivery is still not offered: the plan is the answer to when this
+    // item is billed, and a delivery that answered as well would bill the same value twice.
+    const billable = await listBillableDeliveries(tenant.client, { deliveryNumber: shipped.deliveryNumber });
+    expect(billable.map((row) => row.deliveryNumber)).not.toContain(shipped.deliveryNumber);
+
+    // Naming the delivery directly is refused, and the refusal says where the item is billed instead.
+    await expect(createBillingFromDelivery({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
+      requestKey: key('plan-billing'),
+    })).rejects.toThrow(/billing plan/);
+
+    // What is offered in its place: the date, from the due list the billing screen reads.
+    const due = await listBillablePlanDates(tenant.client, { orderNumber: placed.orderNumber, onDate: DATE });
+    expect(due.map((row) => row.dateNumber)).toEqual([10]);
+    expect(due[0].percentage).toBe(100);
   });
 });

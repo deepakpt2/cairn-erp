@@ -9,6 +9,7 @@ import {
   BILLING_ROUTE,
   BillingError,
   cancelBillingDocument,
+  createBillingFromPlanDate,
   postBillingDocument,
 } from '@/modules/sales/billing';
 
@@ -75,6 +76,62 @@ export async function createBillingAction(
       remedy: result.invoice?.dueDate
         ? `The invoice is due ${result.invoice.dueDate}; it appears in the customer's open items and in ageing.`
         : undefined,
+    };
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+/**
+ * Bill a date of an order item's billing plan: the second way a billing document comes to be.
+ *
+ * Nothing is delivered by it and nothing moves. The value is the order's own arithmetic at the share
+ * the plan names — the same conditions, scaled the same way a delivered quantity scales them — so a
+ * document raised here is the same document the delivery path would have raised, with no delivery
+ * behind it. An item that carries a plan is billed here and nowhere else: the delivery path refuses
+ * it by name.
+ */
+export async function billPlanDateAction(
+  _previous: BillingActionState,
+  form: FormData,
+): Promise<BillingActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, BILLING_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the billing capability.', remedy: 'Ask for SALES.BILLING.CREATE.' };
+  }
+  const orderNumber = text(form, 'orderNumber').toUpperCase();
+  const orderLineNumber = Number(text(form, 'orderLineNumber') || '0');
+  const dateNumber = Number(text(form, 'dateNumber') || '0');
+  try {
+    const result = await createBillingFromPlanDate({
+      client: session.user.client,
+      changedBy: session.user.username,
+      orderNumber,
+      orderLineNumber,
+      dateNumber,
+      billingDate: text(form, 'billingDate'),
+      requestKey: text(form, 'requestKey') || `BL-PD-${session.user.username}-${Date.now()}`,
+    });
+    revalidatePath(ROUTE);
+    if (result.heldForCredit) {
+      return {
+        ok: false,
+        billingNumber: result.billing.billingNumber,
+        message: `Billing document ${result.billing.billingNumber} stands, but the receivable is held: order ${orderNumber} is credit-blocked.`,
+        remedy: 'Release the blocked document at /finance/credit-release, then bill the same date again — the same document posts, not a second one.',
+      };
+    }
+    return {
+      ok: true,
+      billingNumber: result.billing.billingNumber,
+      message: result.posted
+        ? `Date ${dateNumber} of order ${orderNumber} item ${orderLineNumber} billed as ${result.billing.billingNumber}, receivable posted as invoice ${result.billing.customerInvoiceNumber}.`
+        : `Billing document ${result.billing.billingNumber} stands open for date ${dateNumber} of order ${orderNumber} item ${orderLineNumber}.`,
+      remedy: result.replayed
+        ? 'This submission had already raised it; nothing was billed twice.'
+        : result.invoice?.dueDate
+          ? `The invoice is due ${result.invoice.dueDate}. The date is billed and is not offered again.`
+          : 'The date is billed and is not offered again.',
     };
   } catch (error) {
     return refuse(error);

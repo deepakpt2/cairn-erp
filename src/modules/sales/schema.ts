@@ -782,7 +782,11 @@ export const billingDocument = pgTable('billing_document', {
   billingNumber: varchar('billing_number', { length: 20 }).notNull(),
   documentType: varchar('document_type', { length: 2 }).notNull().default('F2'),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),
-  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
+  /**
+   * The delivery this document bills. Null on an order-related document, which is raised against a
+   * billing plan date and bills a share of an item rather than goods that went out.
+   */
+  deliveryNumber: varchar('delivery_number', { length: 20 }),
   salesOrg: varchar('sales_org', { length: 4 }).notNull(),
   distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),
   division: varchar('division', { length: 2 }).notNull(),
@@ -817,7 +821,8 @@ export const billingDocument = pgTable('billing_document', {
   // makes a cancelled invoice re-billable — and neither does a document that stands against another one,
   // because the document it stands against already did. Two live documents for one delivery stay impossible.
   uniqueIndex('billing_document_delivery_live_uq').on(t.client, t.deliveryNumber)
-    .where(sql`${t.status} <> 'CANCELLED' and ${t.creditOf} is null and ${t.cancellationOf} is null`),
+    .where(sql`${t.deliveryNumber} is not null and ${t.status} <> 'CANCELLED'
+      and ${t.creditOf} is null and ${t.cancellationOf} is null`),
   // A document is cancelled once.
   uniqueIndex('billing_document_cancellation_uq').on(t.client, t.cancellationOf)
     .where(sql`${t.cancellationOf} is not null`),
@@ -828,8 +833,8 @@ export const billingDocumentLine = pgTable('billing_document_line', {
   client: tenant(),
   billingNumber: varchar('billing_number', { length: 20 }).notNull(),
   lineNumber: integer('line_number').notNull(),
-  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
-  deliveryLineNumber: integer('delivery_line_number').notNull(),
+  deliveryNumber: varchar('delivery_number', { length: 20 }),
+  deliveryLineNumber: integer('delivery_line_number'),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),
   orderLineNumber: integer('order_line_number').notNull(),
   materialNumber: varchar('material_number', { length: 40 }).notNull(),
@@ -862,6 +867,108 @@ export const billingDocumentLine = pgTable('billing_document_line', {
     columns: [t.client, t.conditionNumber],
     foreignColumns: [salesConditionRecord.client, salesConditionRecord.conditionNumber],
   }).onDelete('restrict'),
+]);
+
+/**
+ * When an order item is billed (SAP FPLA) — for the sales that are never shipped.
+ *
+ * A delivery earns an invoice when its goods go out. A year of maintenance, a piece of work paid in
+ * stages and a licence renewed every quarter are not delivered at all, and until this increment they
+ * could not be billed: a billing document named a delivery, and a document that named none could not
+ * stand.
+ *
+ * A plan hangs off the order item and is made of dates, each carrying a share of the item's value.
+ * The shares of one plan total a hundred, because a plan that promises ninety has not said when the
+ * last tenth is billed. A date is billed once, and only on or after the day it names.
+ *
+ * An item that carries a plan is billed by the plan and not by its deliveries — never by both. A
+ * share of an item and the whole of it are two different answers to one question, and an order that
+ * answered it twice would invoice the same value twice.
+ */
+export const salesBillingPlanType = pgTable('sales_billing_plan_type', {
+  client: tenant(),
+  planType: varchar('plan_type', { length: 2 }).notNull(),
+  displayName: varchar('display_name', { length: 80 }).notNull(),
+  /** What the type is for, in words, so no screen and no report has to guess at PE and MS. */
+  meaning: varchar('meaning', { length: 240 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.planType] }),
+  check('sales_billing_plan_type_code_ck', sql`${t.planType} in ('PE', 'MS')`),
+]);
+
+/** The two kinds of plan, delivered with the package and not extended — see the note above. */
+export const DELIVERED_BILLING_PLAN_TYPES = [
+  {
+    planType: 'PE', displayName: 'Periodic',
+    meaning: 'Billing on a repeating schedule: dates proposed from a start date and a frequency in months, each carrying an equal share or a share the maintainer names.',
+  },
+  {
+    planType: 'MS', displayName: 'Milestone',
+    meaning: 'Billing when a piece of work is reached: dates entered one by one, each carrying the share that falls due when that stage is met.',
+  },
+] as const;
+
+export const BILLING_PLAN_DATE_STATUSES = ['OPEN', 'BILLED', 'WITHDRAWN'] as const;
+
+export const salesBillingPlan = pgTable('sales_billing_plan', {
+  client: tenant(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  orderLineNumber: integer('order_line_number').notNull(),
+  planType: varchar('plan_type', { length: 2 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber, t.orderLineNumber] }),
+  foreignKey({
+    name: 'sales_billing_plan_item_fk',
+    columns: [t.client, t.orderNumber, t.orderLineNumber],
+    foreignColumns: [salesOrderLine.client, salesOrderLine.orderNumber, salesOrderLine.lineNumber],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'sales_billing_plan_type_fk',
+    columns: [t.client, t.planType],
+    foreignColumns: [salesBillingPlanType.client, salesBillingPlanType.planType],
+  }).onDelete('restrict'),
+  check('sales_billing_plan_version_ck', sql`${t.version} > 0`),
+]);
+
+export const salesBillingPlanDate = pgTable('sales_billing_plan_date', {
+  client: tenant(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  orderLineNumber: integer('order_line_number').notNull(),
+  dateNumber: integer('date_number').notNull(),
+  billingDate: date('billing_date', { mode: 'string' }).notNull(),
+  /** The share of the item's value this date bills. The shares of one plan total a hundred. */
+  percentage: numeric('percentage', { precision: 6, scale: 3 }).notNull(),
+  /**
+   * Where this date stands: open, billed by the document below, or withdrawn. A date is withdrawn
+   * rather than deleted — it answers nothing from then on, and leaves behind what was once planned,
+   * because a plan is part of what was agreed about this order.
+   */
+  status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+  /**
+   * The document that billed this date. Null while the date stands open, and cleared again when that
+   * document is cancelled: a cancelled invoice releases the date, as it releases the delivery it
+   * stands against, so the corrected document can be raised.
+   */
+  billingNumber: varchar('billing_number', { length: 20 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber, t.orderLineNumber, t.dateNumber] }),
+  foreignKey({
+    name: 'sales_billing_plan_date_plan_fk',
+    columns: [t.client, t.orderNumber, t.orderLineNumber],
+    foreignColumns: [salesBillingPlan.client, salesBillingPlan.orderNumber, salesBillingPlan.orderLineNumber],
+  }).onDelete('cascade'),
+  check('sales_billing_plan_date_status_ck', sql`${t.status} in ('OPEN', 'BILLED', 'WITHDRAWN')`),
+  check('sales_billing_plan_date_number_ck', sql`${t.dateNumber} > 0`),
+  check('sales_billing_plan_date_percentage_ck', sql`${t.percentage} > 0 and ${t.percentage} <= 100`),
+  // A billed date names the document that billed it, and every other date names none: the two columns
+  // cannot disagree about whether the date was billed.
+  check('sales_billing_plan_date_billed_ck', sql`(${t.status} = 'BILLED' and ${t.billingNumber} is not null)
+      or (${t.status} <> 'BILLED' and ${t.billingNumber} is null)`),
 ]);
 
 /**

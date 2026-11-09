@@ -2600,6 +2600,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["billing", "customer", "delivery"],
   },
   {
+    id: "/sales/billing-plans",
+    path: "/sales/billing-plans",
+    query: {},
+    code: "SALES.BILLING_PLAN.MAINTAIN",
+    title: "Billing plans",
+    area: "sales",
+    family: "sales-billing",
+    accepts: ["order", "item", "customer"],
+  },
+  {
     id: "/sales/returns",
     path: "/sales/returns",
     query: {},
