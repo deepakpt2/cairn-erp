@@ -12,6 +12,7 @@ import {
 } from '@/modules/sales/billing';
 import { listBillablePlanDates } from '@/modules/sales/billing-plan';
 import { orderDownPayments } from '@/modules/sales/down-payment';
+import { rebateAccrualsForBilling } from '@/modules/sales/rebate';
 import Billing from './Billing';
 
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,11 @@ export default async function SalesBillingPage({ searchParams }: {
   const advances = selected
     ? await orderDownPayments(client, selected.orderNumber)
     : [];
+  // The rebate this document earned: a provision posted beside the receivable and settled later, on a
+  // credit memo of its own. It changed nothing the customer was charged here.
+  const rebates = selected
+    ? await rebateAccrualsForBilling(client, selected.billingNumber)
+    : [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -76,6 +82,7 @@ export default async function SalesBillingPage({ searchParams }: {
         selected={selected}
         flow={flow}
         advances={advances}
+        rebates={rebates}
         deliveryNumber={deliveryNumber}
         canCreate={can(session, BILLING_CAPABILITY)}
         canCancel={can(session, BILLING_CANCEL_CAPABILITY)}

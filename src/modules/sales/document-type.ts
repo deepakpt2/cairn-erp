@@ -50,6 +50,14 @@ export const STANDARD_CREDIT_MEMO_REQUEST_TYPE = 'CR';
 export const STANDARD_DOWN_PAYMENT_REQUEST_TYPE = 'DP';
 
 /**
+ * SAP's B1: the credit memo a rebate settlement is paid on. It is deliberately not a G2. A G2 credits an
+ * invoice — the invariant on the table is that a credit memo names the document it credits, and a
+ * settlement credits no invoice at all: the invoices it was earned by stand in full, and what is being
+ * paid out is a promise made beside them. It gets a type of its own rather than an invented reference.
+ */
+export const STANDARD_REBATE_SETTLEMENT_TYPE = 'B1';
+
+/**
  * The three types every tenant is delivered with, in the shape the standard configuration package writes
  * them. One list, because the package and the migration that backfilled existing tenants must not drift
  * apart: a type added to one and not the other is a tenant that refuses to create a document nobody can
@@ -101,6 +109,10 @@ export const STANDARD_SALES_DOCUMENT_TYPES: StandardSalesDocumentType[] = [
   {
     documentType: STANDARD_DOWN_PAYMENT_REQUEST_TYPE, name: 'Down payment request',
     numberRangeObject: 'BILLING', numberRangeSubObject: 'F2',
+  },
+  {
+    documentType: STANDARD_REBATE_SETTLEMENT_TYPE, name: 'Rebate settlement',
+    numberRangeObject: 'BILLING', numberRangeSubObject: 'B1',
   },
 ];
 

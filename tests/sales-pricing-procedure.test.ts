@@ -337,7 +337,10 @@ describe('the pricing procedure and the conditions it writes', () => {
       .orderBy(asc(salesConditionType.conditionType)));
     expect(types.map((row) => row.conditionType).sort())
       .toEqual(DELIVERED_CONDITION_TYPES.map((row) => row.conditionType).sort());
-    expect(types.filter((row) => row.isStatistical).map((row) => row.conditionType)).toEqual(['VPRS']);
+    // VPRS is the cost the document shows and never charges; BO01 is the rebate it has earned and not
+    // yet given back. Both stand beside the price without changing what the customer is asked to pay.
+    expect(types.filter((row) => row.isStatistical).map((row) => row.conditionType))
+      .toEqual(['BO01', 'VPRS']);
 
     const determination = await pricingProcedureDeterminationRows(tenant.client);
     expect(determination[0]).toMatchObject({

@@ -2610,6 +2610,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["order", "item", "customer"],
   },
   {
+    id: "/sales/rebate-agreements",
+    path: "/sales/rebate-agreements",
+    query: {},
+    code: "SALES.REBATE.MAINTAIN",
+    title: "Rebate agreements",
+    area: "sales",
+    family: "sales-rebate",
+    accepts: ["customer", "agreement", "billing"],
+  },
+  {
     id: "/sales/returns",
     path: "/sales/returns",
     query: {},

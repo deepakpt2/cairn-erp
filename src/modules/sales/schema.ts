@@ -303,8 +303,12 @@ export const salesConditionType = pgTable('sales_condition_type', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.conditionType] }),
+  // REBATE is the sixth class. It is not a price — it does not say what the customer pays — and it is
+  // not a discount, which the customer never pays in the first place. It is revenue the company has
+  // earned and promised to hand back: shown on the document, accrued as a provision when the document
+  // is posted, and paid out later on a settlement credit memo.
   check('sales_condition_type_class_ck',
-    sql`${t.conditionClass} in ('PRICE', 'DISCOUNT', 'FREIGHT', 'TAX', 'COST')`),
+    sql`${t.conditionClass} in ('PRICE', 'DISCOUNT', 'FREIGHT', 'TAX', 'COST', 'REBATE')`),
   check('sales_condition_type_calculation_ck',
     sql`${t.calculationType} in ('FIXED', 'PERCENTAGE', 'MATERIAL_COST')`),
 ]);
@@ -1045,6 +1049,123 @@ export const salesDownPaymentRequest = pgTable('sales_down_payment_request', {
 
 export const DOWN_PAYMENT_REQUEST_STATUSES = ['OPEN', 'CLEARED', 'CANCELLED'] as const;
 export type DownPaymentRequestStatus = (typeof DOWN_PAYMENT_REQUEST_STATUSES)[number];
+
+/**
+ * Where a rebate agreement stands (SAP's rebate agreement status). An agreement is maintained open and
+ * **released**: a provision nobody authorised is worse than no provision, and the release is the act
+ * that says somebody with authority over the company's money agreed to it. It settles when the final
+ * settlement has been paid out, and it is closed where it is abandoned without ever having accrued.
+ */
+export const REBATE_AGREEMENT_STATUSES = ['OPEN', 'RELEASED', 'SETTLED', 'CLOSED'] as const;
+export type RebateAgreementStatus = (typeof REBATE_AGREEMENT_STATUSES)[number];
+
+/**
+ * A rebate agreement: a promise to give a payer part of what they spend back (SAP VBO1).
+ *
+ * It names who it is with, the sales area it covers, the period it runs for and the rebate condition
+ * type its rates are maintained under. It carries no total: what has accrued, what was reversed and
+ * what was settled are read from the accrual rows, as a receivable is read from its open items.
+ */
+export const salesRebateAgreement = pgTable('sales_rebate_agreement', {
+  client: tenant(),
+  agreementNumber: varchar('agreement_number', { length: 20 }).notNull(),
+  /** The payer the promise was made to: it is the payer who is paid the rebate, not the ship-to. */
+  customerNumber: varchar('customer_number', { length: 40 }).notNull(),
+  salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+  distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),
+  division: varchar('division', { length: 2 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull().references(() => currency.code),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }).notNull(),
+  /**
+   * The rebate condition type the agreement's rates are maintained under. A tenant may maintain
+   * several — one for a volume rebate, one for a listing fee — and the agreement says which.
+   */
+  conditionType: varchar('condition_type', { length: 4 }).notNull().default('BO01'),
+  status: varchar('status', { length: 12 }).notNull().default('OPEN'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.agreementNumber] }),
+  foreignKey({
+    name: 'sales_rebate_agreement_condition_type_fk',
+    columns: [t.client, t.conditionType],
+    foreignColumns: [salesConditionType.client, salesConditionType.conditionType],
+  }).onDelete('restrict'),
+  check('sales_rebate_agreement_status_ck', sql`${t.status} in ('OPEN', 'RELEASED', 'SETTLED', 'CLOSED')`),
+  check('sales_rebate_agreement_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
+  index('sales_rebate_agreement_customer_idx').on(t.client, t.customerNumber, t.salesOrg),
+]);
+
+/**
+ * Where one accrual stands. It is accrued when the billing document that earned it is posted, reversed
+ * when that document is cancelled — a provision built on a sale that was undone is an overstatement
+ * that never corrects itself — and settled when the credit memo that paid it out was posted.
+ */
+export const REBATE_ACCRUAL_STATUSES = ['ACCRUED', 'REVERSED', 'SETTLED'] as const;
+export type RebateAccrualStatus = (typeof REBATE_ACCRUAL_STATUSES)[number];
+
+/**
+ * One rebate accrued by one line of one billing document against one agreement (SAP's rebate accrual,
+ * the figure VB03 shows beside the business volume).
+ *
+ * Several agreements can accrue on the same sale, which is why the agreement is part of the key. The
+ * rebate is computed on the line's net value — SAP's rebate basis — and it is a provision: the
+ * customer still pays the whole invoice, and the rebate is given back on a document of its own.
+ */
+export const salesRebateAccrual = pgTable('sales_rebate_accrual', {
+  client: tenant(),
+  agreementNumber: varchar('agreement_number', { length: 20 }).notNull(),
+  /** The billing document that earned it. */
+  billingNumber: varchar('billing_number', { length: 20 }).notNull(),
+  /** The line of that document it was earned by. */
+  lineNumber: integer('line_number').notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  orderLineNumber: integer('order_line_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  /** What the rebate was computed on: the line's net value. */
+  basisAmount: numeric('basis_amount', { precision: 23, scale: 4 }).notNull(),
+  /** What was provided for. */
+  rebateAmount: numeric('rebate_amount', { precision: 23, scale: 4 }).notNull(),
+  /** The record that priced it, so a reader can name the rate without reading the agreement. */
+  conditionNumber: varchar('condition_number', { length: 18 }).notNull(),
+  /** The journal that carried the provision to the ledger. */
+  journalDocumentNumber: varchar('journal_document_number', { length: 20 }),
+  /** The journal that took it back when the billing document was cancelled. */
+  reversalJournalDocumentNumber: varchar('reversal_journal_document_number', { length: 20 }),
+  /**
+   * How much of the provision has been paid out, and by which credit memo. A settlement may pay part
+   * of what stands and leave the rest accruing, so the two figures are kept apart: what was provided
+   * for is the provision, what was paid out of it is the history, and the difference is what is still
+   * owed to the customer.
+   */
+  settledAmount: numeric('settled_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  /** The credit memo that last paid part of it out. */
+  settlementNumber: varchar('settlement_number', { length: 20 }),
+  status: varchar('status', { length: 12 }).notNull().default('ACCRUED'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.agreementNumber, t.billingNumber, t.lineNumber] }),
+  foreignKey({
+    name: 'sales_rebate_accrual_agreement_fk',
+    columns: [t.client, t.agreementNumber],
+    foreignColumns: [salesRebateAgreement.client, salesRebateAgreement.agreementNumber],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'sales_rebate_accrual_condition_fk',
+    columns: [t.client, t.conditionNumber],
+    foreignColumns: [salesConditionRecord.client, salesConditionRecord.conditionNumber],
+  }).onDelete('restrict'),
+  check('sales_rebate_accrual_status_ck', sql`${t.status} in ('ACCRUED', 'REVERSED', 'SETTLED')`),
+  check('sales_rebate_accrual_amount_ck', sql`${t.rebateAmount} >= 0`),
+  // What was paid out of a provision can never be more than the provision, and can never be less than
+  // nothing: a settlement that gave the customer more than the company provided for is not a partial
+  // settlement of a rebate, it is money given away against nothing.
+  check('sales_rebate_accrual_settled_ck',
+    sql`${t.settledAmount} >= 0 and ${t.settledAmount} <= ${t.rebateAmount}`),
+  index('sales_rebate_accrual_billing_idx').on(t.client, t.billingNumber),
+  index('sales_rebate_accrual_agreement_idx').on(t.client, t.agreementNumber, t.status),
+]);
 
 /**
  * The four partner functions a sale is made with — SAP's PARVW, delivered with the package and not

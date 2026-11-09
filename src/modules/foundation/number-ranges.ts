@@ -14,6 +14,7 @@ export const NUMBER_OBJECTS = [
   'RF_BELEG', 'MATDOC', 'PURCHORD', 'PURCHREQ',
   'SALESORD', 'DELIVERY', 'BILLING', 'PRODORDER',
   'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST', 'QUOTAARR', 'RFQEVENT', 'RFQ', 'QUOTATION', 'PARKINV', 'MRPRUN', 'PLANORD', 'BATCH_CLT',
+  'REBATE_AGR',
 ] as const;
 export const NUMBER_RANGE_ACTIVITY = 'CFG.PLT.NUMBERRANGE.DEFINE';
 
@@ -58,6 +59,7 @@ export const NUMBER_OBJECT_DEFAULTS: ReadonlyArray<{
   { objectCode: 'MRPRUN', description: 'MRP runs', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'PLANORD', description: 'Planned orders', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'BATCH_CLT', description: 'Internal batch numbers', numberLength: 10, yearRelevant: false, subobjectHint: 'Interval 01' },
+  { objectCode: 'REBATE_AGR', description: 'Rebate agreements', numberLength: 10, yearRelevant: false, subobjectHint: null },
 ];
 
 /** Seed the object registry for a tenant being provisioned. */

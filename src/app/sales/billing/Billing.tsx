@@ -20,6 +20,8 @@ interface Props {
   flow: Awaited<ReturnType<typeof salesDocumentFlow>>;
   /** The advances of the selected document's order: what was asked, what arrived, what was cleared. */
   advances: Awaited<ReturnType<typeof import('@/modules/sales/down-payment').orderDownPayments>>;
+  /** What this document earned against the rebate agreements it fell inside. */
+  rebates: Awaited<ReturnType<typeof import('@/modules/sales/rebate').rebateAccrualsForBilling>>;
   deliveryNumber: string;
   canCreate: boolean;
   canCancel: boolean;
@@ -203,10 +205,10 @@ function PlanDatesDue({ planDates, allowed }: { planDates: Props['planDates']; a
 }
 
 function SelectedBilling({
-  selected, flow, advances, canCancel, canCreate,
+  selected, flow, advances, rebates, canCancel, canCreate,
 }: {
   selected: BillingView; flow: Props['flow']; advances: Props['advances'];
-  canCancel: boolean; canCreate: boolean;
+  rebates: Props['rebates']; canCancel: boolean; canCreate: boolean;
 }) {
   const [state, action, pending] = useActionState(cancelBillingAction, EMPTY);
   const [rebillState, rebillAction, rebillPending] = useActionState(rebillDeliveryAction, EMPTY);
@@ -287,6 +289,52 @@ function SelectedBilling({
           <p className="mt-2 text-xs text-ink-faint">
             An advance is asked for before anything is delivered, arrives through the receipt, and is cleared
             against the invoice that earns it — so what the customer then pays is the billed value less it.
+          </p>
+        </details>
+      ) : null}
+
+      {rebates.length ? (
+        <details className="mt-3" open>
+          <summary className="text-sm text-ink-soft">
+            Rebate this document accrued · {money(String(rebates.reduce(
+              (sum, row) => sum + Number(row.rebateAmount), 0,
+            )))} {rebates[0].currency.trim()}
+          </summary>
+          <table className="grid-table mt-2 text-sm">
+            <thead>
+              <tr className="text-left text-xs text-ink-faint">
+                <th>Agreement</th><th>Item</th><th>Material</th>
+                <th className="text-right">Basis</th><th className="text-right">Provided for</th>
+                <th className="text-right">Paid out</th><th>Status</th><th>Settled by</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rebates.map((row) => (
+                <tr key={`${row.agreementNumber}-${row.lineNumber}`}>
+                  <td>
+                    <Link className="link" href={`/sales/rebate-agreements?agreement=${row.agreementNumber}`}>
+                      {row.agreementNumber}
+                    </Link>
+                  </td>
+                  <td>{row.lineNumber}</td>
+                  <td>{row.materialNumber}</td>
+                  <td className="text-right">{money(row.basisAmount)}</td>
+                  <td className="text-right">{money(row.rebateAmount)}</td>
+                  <td className="text-right">{money(row.settledAmount)}</td>
+                  <td>{row.status.toLowerCase()}</td>
+                  <td>
+                    {row.settlementNumber
+                      ? <Link className="link" href={`/sales/billing?billing=${row.settlementNumber}`}>{row.settlementNumber}</Link>
+                      : <span className="text-ink-faint">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-ink-faint">
+            The rebate is a provision: the customer was charged the whole of this invoice, and what the sale
+            earned against its agreements is given back on a credit memo raised by the settlement. A line that
+            stands reversed is one whose document was cancelled — the provision went with it.
           </p>
         </details>
       ) : null}
@@ -528,6 +576,7 @@ export default function Billing(props: Props) {
           selected={props.selected}
           flow={props.flow}
           advances={props.advances}
+          rebates={props.rebates}
           canCancel={props.canCancel}
           canCreate={props.canCreate}
         />

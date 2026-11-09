@@ -57,6 +57,9 @@ import {
   releasePlanDateForBilling,
 } from './billing-plan';
 import { type DownPaymentClearing, clearDownPaymentsForInvoice } from './down-payment';
+import {
+  type RebateAccrualPosted, accrueRebatesForBilling, reverseRebateAccrualsForBilling,
+} from './rebate';
 import { standingDetermination } from './delivery';
 
 export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
@@ -417,6 +420,12 @@ export interface BillingCreateResult {
    * advance remains where it is, to be settled when whatever blocked it is put right.
    */
   downPayment?: DownPaymentClearing;
+  /**
+   * What the rebate agreements this sale fell inside provided for. Absent where no agreement answered:
+   * a sale inside no agreement is not a rebate of zero, it is a sale with no rebate. It changes nothing
+   * the customer pays — the provision is settled later, on a credit memo of its own.
+   */
+  rebates?: RebateAccrualPosted[];
 }
 
 /**
@@ -498,12 +507,29 @@ async function postBuiltBilling(input: {
     }).catch(() => null)
     : null;
 
+  // The rebate this sale earned. A customer promised part of what they spend back has earned part of it
+  // the moment the invoice is posted, and the books hear about it now rather than when the money is
+  // handed over months later: the sale is charged with the deduction and a provision is built for it.
+  // The customer still pays the whole invoice. Where no released agreement answers for this payer, this
+  // sales area and this day, nothing accrues and nothing is said.
+  const rebates = await withTenant(input.client, (tx) => accrueRebatesForBilling(tx, {
+    client: input.client,
+    changedBy: input.changedBy,
+    billingNumber: built.billingNumber,
+    billingDate: input.billingDate,
+    postingDate: input.postingDate || input.billingDate,
+    customerNumber: billedPartners?.payer ?? built.customerNumber,
+    companyCode: built.companyCode,
+    currency: built.currency,
+  })).catch(() => []);
+
   return {
     billing: (await getBilling(input.client, built.billingNumber)) ?? view,
     invoice,
     posted: true,
     heldForCredit: false,
     replayed: false,
+    rebates: rebates.length > 0 ? rebates : undefined,
     // Reported rather than thrown: the receivable stands and the document is posted, and an advance
     // that would not clear is left where it is, to be settled by hand as an accountant would. Saying
     // so here is what stops the money being quietly forgotten.
@@ -1688,6 +1714,16 @@ export async function cancelBillingDocument(
     // cancelled document does for the delivery it stands against.
     await releasePlanDateForBilling(tx, {
       client: parsed.client, billingNumber: parsed.billingNumber, changedBy: parsed.changedBy,
+    });
+    // And the provision this document built is taken back with it. A rebate accrued on a sale that has
+    // been undone is an overstatement that never corrects itself, so the cancellation mirrors the
+    // accrual. What has already been paid out is left standing: the credit memo that paid it is a
+    // document of its own, and undoing that is a separate act somebody has to take.
+    await reverseRebateAccrualsForBilling(tx, {
+      client: parsed.client,
+      changedBy: parsed.changedBy,
+      billingNumber: parsed.billingNumber,
+      postingDate: parsed.postingDate,
     });
     await recordChange(tx, {
       client: parsed.client, objectClass: BILLING_OBJECT_CLASS, objectKey: parsed.billingNumber,

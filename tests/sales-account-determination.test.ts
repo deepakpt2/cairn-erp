@@ -48,7 +48,7 @@ describe('revenue account determination', () => {
     if (tenant) await destroyTenant(tenant.client);
   });
 
-  it('delivers the four keys the standard procedure can produce, and no more', async () => {
+  it('delivers the five keys the package determines an account for, and no more', async () => {
     const configuration = await listAccountDetermination(tenant.client);
     expect(configuration.rows.map((row) => row.accountKey).sort())
       .toEqual(DELIVERED_ACCOUNT_DETERMINATION.map((row) => row.accountKey).sort());
@@ -58,10 +58,11 @@ describe('revenue account determination', () => {
       expect(row.accountStands).toBe(true);
       expect(configuration.keys.some((key) => key.key === row.accountKey)).toBe(true);
     }
-    // The rebate accrual is a key the package understands and no delivered condition type produces, so
-    // it stands undetermined rather than maintained against an account nothing has ever earned.
+    // The rebate accrual stands determined, because the delivered rebate condition type BO01 produces
+    // it: a billing document inside a released agreement provides for the rebate it earned, in the
+    // accrued-liabilities account, until the settlement releases it.
     expect(configuration.keys.map((key) => key.key)).toContain('ERU');
-    expect(configuration.rows.some((row) => row.accountKey === 'ERU')).toBe(false);
+    expect(configuration.rows.some((row) => row.accountKey === 'ERU')).toBe(true);
   });
 
   it('answers with the most specific row that fits, in one order', async () => {

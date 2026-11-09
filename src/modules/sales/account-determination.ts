@@ -53,14 +53,16 @@ export type AccountKey = typeof ACCOUNT_KEYS[number]['key'];
  * cannot post an invoice at all — and maintained from then on by whoever owns the revenue accounts,
  * which is the one place a tenant is expected to disagree with the package.
  *
- * `ERU`, the rebate accrual, is deliberately absent: no delivered condition type produces it yet, and a
- * row maintained for a key nothing produces is a promise the ledger cannot keep.
+ * `ERU`, the rebate accrual, stands in the list because BO01 produces it: the rebate a billing
+ * document earns is provided for now, in the accrued-liabilities account the standard chart carries,
+ * and released when the settlement pays it out.
  */
 export const DELIVERED_ACCOUNT_DETERMINATION = [
   { salesOrg: '', customerAccountAssignmentGroup: '', materialAccountAssignmentGroup: '', accountKey: 'ERL', glAccount: '300000' },
   { salesOrg: '', customerAccountAssignmentGroup: '', materialAccountAssignmentGroup: '', accountKey: 'ERS', glAccount: '310000' },
   { salesOrg: '', customerAccountAssignmentGroup: '', materialAccountAssignmentGroup: '', accountKey: 'ERF', glAccount: '320000' },
   { salesOrg: '', customerAccountAssignmentGroup: '', materialAccountAssignmentGroup: '', accountKey: 'MWS', glAccount: '220000' },
+  { salesOrg: '', customerAccountAssignmentGroup: '', materialAccountAssignmentGroup: '', accountKey: 'ERU', glAccount: '230000' },
 ] as const;
 
 export class SalesAccountDeterminationError extends Error {

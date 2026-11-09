@@ -63,6 +63,12 @@ export const DELIVERED_CONDITION_TYPES = [
   { conditionType: 'HD00', name: 'Header freight', conditionClass: 'FREIGHT', calculationType: 'FIXED', isNegative: false, isStatistical: false, accountKey: 'ERF' },
   { conditionType: 'VPRS', name: 'Cost', conditionClass: 'COST', calculationType: 'MATERIAL_COST', isNegative: false, isStatistical: true, accountKey: null },
   { conditionType: 'MWST', name: 'Output tax', conditionClass: 'TAX', calculationType: 'PERCENTAGE', isNegative: false, isStatistical: false, accountKey: 'MWS' },
+  // A rebate accrual, SAP's BO01. Statistical, because it changes nothing the customer is charged on
+  // the document it appears on, and carrying the ERU key because that is the key whose account holds
+  // the provision. It is deliberately **not** a step in the delivered procedure: a rebate is earned
+  // over a period and not by a document, so the rebate module calls it up at billing — which is what
+  // SAP's requirement routine 24 is for — rather than having every order priced with it.
+  { conditionType: 'BO01', name: 'Rebate accrual', conditionClass: 'REBATE', calculationType: 'PERCENTAGE', isNegative: false, isStatistical: true, accountKey: 'ERU' },
 ] as const;
 
 /**
@@ -954,43 +960,20 @@ export interface StoredCondition {
 }
 
 /**
- * Scale a set of amounts by one factor, so the parts still sum to the whole, to the cent.
+ * A follow-on document's line, priced by repeating the arithmetic of the document it follows at a
+ * different quantity.
  *
- * A document that stands for half of another is worth half of it — in every condition, not only in the
- * total. Scaling the total and dividing it up again would be a second arithmetic; scaling each condition
- * and letting the rounding fall where the largest remainder says keeps the one the document was priced
- * by, and keeps the parts adding to the figure they were scaled to.
- */
-export function scaleAmounts(amounts: number[], factor: number): number[] {
-  if (amounts.length === 0) return [];
-  const exact = amounts.map((amount) => amount * factor);
-  const total = exact.reduce((sum, value) => sum + value, 0);
-  const targetCents = Math.round(Number(round2(total)) * 100);
-  const cents = exact.map((value) => {
-    const whole = Math.trunc(Number(round4(value)) * 100);
-    return Object.is(whole, -0) ? 0 : whole;
-  });
-  let remaining = targetCents - cents.reduce((sum, value) => sum + value, 0);
-  const order = exact
-    .map((value, index) => ({ index, fraction: Math.abs(Number(round4(value)) * 100 - cents[index]) }))
-    .sort((a, b) => b.fraction - a.fraction || a.index - b.index);
-  for (const entry of order) {
-    if (remaining === 0) break;
-    // Each remainder cent goes the way the whole went, so a credit's parts stay negative.
-    const step = remaining > 0 ? 1 : -1;
-    cents[entry.index] += step;
-    remaining -= step;
-  }
-  return cents.map((value) => value / 100);
-}
-
-/**
- * A follow-on document's line, priced by scaling the conditions of the document it follows.
+ * This is what makes a billing document match its order and a credit memo match its invoice. Neither is
+ * priced again — a price looked up today would be today's price — and neither is a scaled copy of a
+ * total, which would leave a tax unrelated to the value it is charged on. Each condition is worked out
+ * again from its own base and its own rate at the new quantity, so the tax on a credit for two of six is
+ * the tax on two of six and not a third of the tax on all six.
  *
- * This is what makes a billing document match its order and a credit memo match its invoice: neither is
- * priced again. A price looked up today would be today's price, and a document that gives money back has
- * to give back what was actually charged. `undefined` means the earlier document carried no conditions,
- * so the caller falls back to the figures it has always used.
+ * The one exception is the share of a condition the header carried: its base is not a quantity but the
+ * value it was distributed in proportion to, so its share is scaled rather than recomputed.
+ *
+ * `undefined` means the earlier document carried no conditions, so the caller falls back to the figures
+ * it has always used — an order raised before the conditions existed is billed as it always was.
  */
 export function scaleLineConditions(
   conditions: StoredCondition[],
@@ -1007,45 +990,56 @@ export function scaleLineConditions(
   conditionNumber: string;
 } | undefined {
   if (conditions.length === 0) return undefined;
-  const amounts = scaleAmounts(conditions.map((condition) => Number(condition.amount)), factor);
-  const scaled: PricedCondition[] = conditions.map((condition, index) => ({
-    lineNumber: input.lineNumber,
-    stepNumber: condition.stepNumber,
-    conditionType: condition.conditionType,
-    conditionClass: condition.conditionClass,
-    origin: condition.origin,
-    baseValue: round2((Number(condition.baseValue) * factor) / 1),
-    rate: condition.rate,
-    amount: round2(amounts[index] ?? 0),
-    priceUnit: condition.priceUnit,
-    conditionNumber: condition.conditionNumber,
-    accountKey: condition.accountKey,
-    isStatistical: condition.isStatistical,
-    access: null,
-  }));
+  const magnitude = Math.abs(factor);
+  const flip = factor < 0 ? -1 : 1;
+
+  const scaled: PricedCondition[] = conditions.map((condition) => {
+    const base = Number(condition.baseValue) * magnitude;
+    const rate = Number(condition.rate);
+    const distributedShare = condition.origin === 'DISTRIBUTED' && condition.calculationType !== 'PERCENTAGE';
+    const value = distributedShare
+      ? Math.abs(Number(condition.amount)) * magnitude
+      : condition.calculationType === 'PERCENTAGE' || condition.conditionClass === 'TAX'
+        ? (base * rate) / 100
+        : base * rate;
+    // The sign is the condition's own, turned round by the document: a credit gives everything back.
+    const amount = value * (Number(condition.amount) < 0 ? -1 : 1) * flip;
+    return {
+      lineNumber: input.lineNumber,
+      stepNumber: condition.stepNumber,
+      conditionType: condition.conditionType,
+      conditionClass: condition.conditionClass,
+      origin: condition.origin,
+      baseValue: round2(base),
+      rate: condition.rate,
+      amount: round2(amount),
+      priceUnit: condition.priceUnit,
+      conditionNumber: condition.conditionNumber,
+      accountKey: condition.accountKey,
+      isStatistical: condition.isStatistical,
+      access: null,
+    };
+  });
 
   let net = 0;
   let tax = 0;
   let priceUnit = 1;
   let pricedBy = '';
   let taxRate = '0.0000';
-  for (const [index, condition] of conditions.entries()) {
-    const amount = amounts[index] ?? 0;
-    if (condition.isStatistical) continue;
-    if (condition.conditionClass === 'TAX') {
-      tax += amount;
-      if (!taxRate.startsWith('0.0000') === false) taxRate = Number(condition.rate).toFixed(4);
-    } else {
-      net += amount;
-    }
+  for (const condition of conditions) {
     if (condition.conditionClass === 'PRICE') {
       priceUnit = condition.priceUnit;
       pricedBy = condition.conditionNumber ?? '';
-      if (Number(condition.rate) !== 0) {
-        // The rate a price was charged at is what the credit states, sign and all.
-        void 0;
-      }
     }
+    if (condition.conditionClass === 'TAX') {
+      taxRate = Number(condition.rate).toFixed(4);
+    }
+  }
+  for (const [index, condition] of conditions.entries()) {
+    const amount = Number(scaled[index]?.amount ?? 0);
+    if (condition.isStatistical) continue;
+    if (condition.conditionClass === 'TAX') tax += amount;
+    else net += amount;
   }
   const netAmount = round2(net);
   const taxAmount = round2(tax);

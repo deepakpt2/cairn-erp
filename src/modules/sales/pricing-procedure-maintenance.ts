@@ -40,7 +40,7 @@ export const PRICING_PROCEDURE_OBJECT_CLASS = 'sales_pricing_procedure';
 export const CONDITION_TYPE_OBJECT_CLASS = 'sales_condition_type';
 export const DETERMINATION_OBJECT_CLASS = 'sales_procedure_determination';
 
-export const CONDITION_CLASSES = ['PRICE', 'DISCOUNT', 'FREIGHT', 'TAX', 'COST'] as const;
+export const CONDITION_CLASSES = ['PRICE', 'DISCOUNT', 'FREIGHT', 'TAX', 'COST', 'REBATE'] as const;
 export const CALCULATION_TYPES = ['FIXED', 'PERCENTAGE', 'MATERIAL_COST'] as const;
 export const CONDITION_LEVELS = ['ITEM', 'HEADER'] as const;
 
