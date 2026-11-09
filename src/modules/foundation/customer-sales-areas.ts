@@ -20,6 +20,8 @@ const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partne
   pricingProcedure:z.string().trim().regex(/^([A-Z0-9]{1,6})?$/,'Pricing procedure uses up to six capital letters or digits.'),
   accountAssignmentGroup:z.string().trim().regex(/^([A-Z0-9]{1,4})?$/,'Account assignment group uses up to four capital letters or digits.'),
   shippingCondition:z.string().trim().regex(/^([A-Z0-9]{1,2})?$/,'Shipping condition uses one or two capital letters or digits.').optional(),
+  partialDeliveryIndicator:z.string().trim().regex(/^C?$/,'The partial delivery indicator is left blank when partial deliveries are allowed, or C when an item travels complete.').optional(),
+  maxPartialDeliveries:z.number().int().min(0).max(9).optional(),
   completeDelivery:z.boolean(),orderCombination:z.boolean(),isBlocked:z.boolean()});
 export type CustomerSalesAreaInput=z.input<typeof inputSchema>;
 const key=(client:string,partner:string,org:string,channel:string,division:string)=>and(eq(customerSalesArea.client,client),eq(customerSalesArea.partnerNumber,partner),eq(customerSalesArea.salesOrg,org),eq(customerSalesArea.distributionChannel,channel),eq(customerSalesArea.division,division));
@@ -60,6 +62,11 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
       // The customer's half of shipping point determination. Null is a customer who has said
       // nothing, and those are answered by the rows that name no condition.
       shippingCondition:input.shippingCondition||null,
+      // How much of an item may go out at once. Both default to the value that binds nobody: a
+      // tenant that has never opened this screen has made no promise, and a default that
+      // refuses deliveries is not a default anybody asked for.
+      partialDeliveryIndicator:(input.partialDeliveryIndicator ?? '').trim().toUpperCase(),
+      maxPartialDeliveries:input.maxPartialDeliveries ?? 0,
       completeDelivery:input.completeDelivery,orderCombination:input.orderCombination,isBlocked:input.isBlocked};
     await validateSalesArea(tx,client,org,channel,division,values.deliveringPlant,true);
     if(values.shippingCondition){
@@ -77,7 +84,7 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
     const snapshot=(row:Record<string,unknown>)=>Object.fromEntries(Object.keys(values).map(k=>[k,row[k]]));
     await recordChange(tx,{client,objectClass:'customer_sales_area',objectKey:`${partnerNumber}/${org}/${channel}/${division}`,changeType:!before?'CREATE':before.isBlocked!==input.isBlocked?input.isBlocked?'BLOCK':'UNBLOCK':'CHANGE',changedBy,reason,
       transactionCode:'SALES.CUSTOMER.SALESAREA.MAINTAIN',before:before?{...snapshot(before),salesStatus:before.salesStatus}:undefined,after:{...values,salesStatus},
-      securityRelevantFields:['deliveringPlant','pricingProcedure','accountAssignmentGroup','shippingCondition','completeDelivery','orderCombination','isBlocked']});
+      securityRelevantFields:['deliveringPlant','pricingProcedure','accountAssignmentGroup','shippingCondition','completeDelivery','orderCombination','partialDeliveryIndicator','maxPartialDeliveries','isBlocked']});
     return {changed:true,version,status:salesStatus};
   });
 }

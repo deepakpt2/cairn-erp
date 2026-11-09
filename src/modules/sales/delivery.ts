@@ -44,6 +44,7 @@ import { deliveredOf, orderLineProgress } from './fulfillment-quantities';
 import { creditAreaFor } from './sales-order';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
+import { CUSTOMER_MASTER_ROUTE, deliveryTermsFor } from './delivering-plant';
 
 export const DELIVERY_CAPABILITY = 'SALES.DELIVERY.CREATE';
 export const DELIVERY_PICK_CAPABILITY = 'SALES.DELIVERY.PICK';
@@ -70,6 +71,11 @@ const optionalText = (max: number) =>
   z.union([z.undefined(), z.literal(''), z.string().trim().pipe(z.string().max(max))]);
 
 export const deliveryItemInput = z.object({
+  /**
+   * Which order this item belongs to. Left out, it is the order named on the delivery — which is
+   * every delivery raised before two orders could be combined, and most of them after.
+   */
+  orderNumber: key(20).optional(),
   orderLineNumber: z.coerce.number().int().positive(),
   /** What this delivery carries of the order line, in the order line's own unit. */
   quantity: positiveQuantity,
@@ -517,7 +523,30 @@ export async function listDeliveries(
 }
 
 /**
- * Create a delivery from the open quantities of one order, at one plant.
+ * How many deliveries already stand against one order item.
+ *
+ * This is the count the maximum number of partial deliveries counts: how many times these goods
+ * have gone out in pieces. A cancelled delivery was never a delivery of anything, and a returns
+ * delivery carries goods coming back rather than going out, so neither is counted.
+ */
+async function partialDeliveriesOf(
+  tx: Tx, client: string, orderNumber: string, orderLineNumber: number,
+): Promise<number> {
+  const rows = await tx.execute(sql`
+    select count(distinct dl.delivery_number)::int as deliveries
+      from delivery_line dl
+      join delivery d on d.client = dl.client and d.delivery_number = dl.delivery_number
+     where dl.client = ${client}
+       and dl.order_number = ${orderNumber}
+       and dl.order_line_number = ${orderLineNumber}
+       and d.status <> 'CANCELLED'
+       and d.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
+  `) as unknown as Array<{ deliveries: number }>;
+  return Number(rows[0]?.deliveries ?? 0);
+}
+
+/**
+ * Create a delivery from the open quantities of one or more orders, at one plant.
  *
  * A smaller quantity than the order line has open is a partial delivery and leaves the order open for the
  * rest, which is all the model permits (§11.2). Zero, unknown, rejected and over-quantity items are refused
@@ -548,6 +577,38 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
         'Receive the goods on a returns delivery, which is what a returns order is delivered by.',
       );
     }
+    // Every order the items name, loaded once and locked in a fixed order, so two deliveries being
+    // raised at the same moment cannot hold each other's orders and wait.
+    const orderNumbers = [...new Set([parsed.orderNumber,
+      ...parsed.items.map((item) => item.orderNumber ?? parsed.orderNumber)])].sort();
+    const orders = new Map<string, typeof salesOrder.$inferSelect>();
+    const linesByOrder = new Map<string, Array<typeof salesOrderLine.$inferSelect>>();
+    const progressByOrder = new Map<string, Awaited<ReturnType<typeof orderLineProgress>>>();
+    for (const orderNumber of orderNumbers) {
+      const [row] = orderNumber === parsed.orderNumber ? [order] : await tx.select().from(salesOrder).where(and(
+        eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, orderNumber),
+      )).limit(1);
+      if (!row) {
+        throw new DeliveryError(
+          `Sales order ${orderNumber} does not exist in this tenant.`,
+          'Create the order at /sales/orders first.',
+        );
+      }
+      if (row.status !== 'OPEN') {
+        throw new DeliveryError(
+          `Sales order ${orderNumber} stands ${row.status}; a ${row.status.toLowerCase()} order delivers nothing.`,
+          'A cancelled order is not reopened by a delivery — create a new order.',
+        );
+      }
+      if (row.documentType === STANDARD_RETURNS_ORDER_TYPE) {
+        throw new DeliveryError(
+          `Sales order ${orderNumber} is a returns order, and goods on a returns order come back rather than go out.`,
+          'Receive the goods on a returns delivery, which is what a returns order is delivered by.',
+        );
+      }
+      orders.set(orderNumber, row);
+    }
+
     if (parsed.requestKey) {
       const [existing] = await tx.select({ number: delivery.deliveryNumber }).from(delivery).where(and(
         eq(delivery.client, parsed.client), eq(delivery.requestKey, parsed.requestKey),
@@ -558,33 +619,98 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
     }
 
     await lockOrder(tx, parsed.client, order.orderNumber);
+    for (const orderNumber of orderNumbers) {
+      if (orderNumber === parsed.orderNumber) continue;
+      await lockOrder(tx, parsed.client, orderNumber);
+    }
 
     // The block that already stands is what refuses here; a breach this delivery itself causes is recorded and
     // refused at the billing release, because the goods have not left the plant yet.
     await refuseStandingBlock(parsed.client, order.orderNumber, `Sales order ${order.orderNumber}`, 'delivered');
+    for (const orderNumber of orderNumbers) {
+      if (orderNumber === parsed.orderNumber) continue;
+      await refuseStandingBlock(parsed.client, orderNumber, `Sales order ${orderNumber}`, 'delivered');
+    }
 
-    const progress = await orderLineProgress(tx, parsed.client, order.orderNumber);
-    const orderLines = await tx.select().from(salesOrderLine).where(and(
-      eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, order.orderNumber),
-    )).orderBy(asc(salesOrderLine.lineNumber));
-    const byNumber = new Map(orderLines.map((line) => [line.lineNumber, line]));
+    for (const orderNumber of orderNumbers) {
+      progressByOrder.set(orderNumber, await orderLineProgress(tx, parsed.client, orderNumber));
+      linesByOrder.set(orderNumber, await tx.select().from(salesOrderLine).where(and(
+        eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, orderNumber),
+      )).orderBy(asc(salesOrderLine.lineNumber)));
+    }
+
+    // Who it is made with, resolved here because the customer's own terms govern how much of this
+    // order may go out at once. The partners the order carries win over the master, as they do
+    // everywhere else: a delivery is raised for the ship-to named on the order.
+    const partners = await documentPartners(tx, parsed.client, 'ORDER', order.orderNumber)
+      ?? await resolvePartners(tx, parsed.client, {
+        partnerNumber: order.customerNumber, salesOrg: order.salesOrg,
+        distributionChannel: order.distributionChannel, division: order.division,
+      });
+    const terms = await deliveryTermsFor(tx, parsed.client, {
+      shipTo: partners.shipTo, soldTo: partners.soldTo,
+      salesOrg: order.salesOrg, distributionChannel: order.distributionChannel,
+      division: order.division,
+    });
+    /** Whose terms bind: the customer whose sales area answered, or the ship-to where none did. */
+    const customer = terms.partnerNumber ?? partners.shipTo;
+
+    // Two orders in one delivery, and the customer's own say on whether that is allowed. A
+    // combined delivery is still one delivery: one sales area, one address, one dock.
+    if (orderNumbers.length > 1) {
+      for (const orderNumber of orderNumbers) {
+        const row = orders.get(orderNumber)!;
+        if (row.salesOrg !== order.salesOrg || row.distributionChannel !== order.distributionChannel
+            || row.division !== order.division) {
+          throw new DeliveryError(
+            `Sales order ${orderNumber} belongs to sales area ${row.salesOrg}/${row.distributionChannel}/${row.division}, and this delivery belongs to ${order.salesOrg}/${order.distributionChannel}/${order.division}.`,
+            'Combine orders of one sales area: a delivery carries one set of sales terms.',
+          );
+        }
+        const rowPartners = await documentPartners(tx, parsed.client, 'ORDER', orderNumber)
+          ?? await resolvePartners(tx, parsed.client, {
+            partnerNumber: row.customerNumber, salesOrg: row.salesOrg,
+            distributionChannel: row.distributionChannel, division: row.division,
+          });
+        if (rowPartners.shipTo !== partners.shipTo) {
+          throw new DeliveryError(
+            `Sales order ${orderNumber} ships to ${rowPartners.shipTo}, and this delivery ships to ${partners.shipTo}.`,
+            'Combine orders for one ship-to: a delivery goes to one address.',
+          );
+        }
+        const rowTerms = await deliveryTermsFor(tx, parsed.client, {
+          shipTo: rowPartners.shipTo, soldTo: rowPartners.soldTo,
+          salesOrg: row.salesOrg, distributionChannel: row.distributionChannel,
+          division: row.division,
+        });
+        if (!rowTerms.orderCombination) {
+          throw new DeliveryError(
+            `Customer ${rowTerms.partnerNumber ?? rowPartners.shipTo} does not allow their orders to be combined, so order ${orderNumber} travels alone.`,
+            `Allow order combination for that customer at ${CUSTOMER_MASTER_ROUTE}, or deliver the orders separately.`,
+          );
+        }
+      }
+    }
 
     const items: Array<typeof deliveryLine.$inferInsert> = [];
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     let plant = '';
     let value = 0;
     for (const item of parsed.items) {
-      if (seen.has(item.orderLineNumber)) {
+      const itemOrderNumber = item.orderNumber ?? parsed.orderNumber;
+      const itemLines = linesByOrder.get(itemOrderNumber)!;
+      const itemKey = `${itemOrderNumber}/${item.orderLineNumber}`;
+      if (seen.has(itemKey)) {
         throw new DeliveryError(
-          `Order item ${item.orderLineNumber} was named twice.`,
+          `Order item ${item.orderLineNumber} of order ${itemOrderNumber} was named twice.`,
           'Enter each order item once on the delivery.',
         );
       }
-      seen.add(item.orderLineNumber);
-      const line = byNumber.get(item.orderLineNumber);
+      seen.add(itemKey);
+      const line = itemLines.find((candidate) => candidate.lineNumber === item.orderLineNumber);
       if (!line) {
         throw new DeliveryError(
-          `Sales order ${order.orderNumber} carries no item ${item.orderLineNumber}.`,
+          `Sales order ${itemOrderNumber} carries no item ${item.orderLineNumber}.`,
           'Deliver an item the order states.',
         );
       }
@@ -594,7 +720,7 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
           'Re-enter the item on the order to lift the rejection, or leave it rejected.',
         );
       }
-      const already = deliveredOf(progress, item.orderLineNumber);
+      const already = deliveredOf(progressByOrder.get(itemOrderNumber)!, item.orderLineNumber);
       // What the plant confirmed is the ceiling on a delivery, not what the customer asked for. A
       // line that was never checked carries no confirmation, and delivers as it always did. The open
       // quantity of the order is a different figure, and stays what it always was: ten ordered and six
@@ -621,6 +747,31 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
             : 'Reduce the quantity to what the order line still has open, or change the order first.',
         );
       }
+      // How much of this item may go out at once, as the customer's own master has it. The order
+      // was made with them and the goods are going to them, so the terms that bind are theirs.
+      // "The whole item" is the whole of what can travel today — what the plant confirmed, less
+      // what has already gone: a customer who wants it complete is not a customer nobody serves.
+      if (terms.completeDelivery && wanted < deliverable - 1e-9) {
+        throw new DeliveryError(
+          `Customer ${customer} requires a complete delivery, and ${item.quantity} of the ${round3(deliverable)} ${line.quantityUnit.trim()} open on item ${item.orderLineNumber} was entered.`,
+          `Deliver the whole ${round3(deliverable)} ${line.quantityUnit.trim()}, or clear the complete delivery requirement at ${CUSTOMER_MASTER_ROUTE}.`,
+        );
+      }
+      if (terms.partialDeliveryIndicator === 'C' && wanted < deliverable - 1e-9) {
+        throw new DeliveryError(
+          `Customer ${customer} allows no partial deliveries, and ${item.quantity} of the ${round3(deliverable)} ${line.quantityUnit.trim()} open on item ${item.orderLineNumber} was entered.`,
+          `Deliver the whole ${round3(deliverable)} ${line.quantityUnit.trim()}, or clear the partial delivery indicator at ${CUSTOMER_MASTER_ROUTE}.`,
+        );
+      }
+      if (terms.maxPartialDeliveries > 0) {
+        const partials = await partialDeliveriesOf(tx, parsed.client, itemOrderNumber, item.orderLineNumber);
+        if (partials >= terms.maxPartialDeliveries && wanted < deliverable - 1e-9) {
+          throw new DeliveryError(
+            `Customer ${customer} allows ${terms.maxPartialDeliveries} partial delivery${terms.maxPartialDeliveries === 1 ? '' : 's'} of an item, and ${partials} already stand against item ${item.orderLineNumber}.`,
+            `Deliver the whole ${round3(deliverable)} ${line.quantityUnit.trim()} that is left, or raise the limit at ${CUSTOMER_MASTER_ROUTE}.`,
+          );
+        }
+      }
       if (plant && line.plant !== plant) {
         throw new DeliveryError(
           `Item ${item.orderLineNumber} ships from plant ${line.plant}, and this is a plant ${plant} delivery.`,
@@ -633,7 +784,7 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
         client: parsed.client,
         deliveryNumber: '', // replaced below, once the number is drawn
         lineNumber: (items.length + 1) * 10,
-        orderNumber: order.orderNumber,
+        orderNumber: itemOrderNumber,
         orderLineNumber: line.lineNumber,
         materialNumber: line.materialNumber,
         plant: line.plant,
@@ -647,6 +798,26 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       });
     }
 
+    // A customer who asked for the whole order at once gets the whole order at once: nothing that
+    // can travel today may be left behind for a second delivery.
+    if (terms.completeDelivery) {
+      for (const orderNumber of orderNumbers) {
+        const itemProgress = progressByOrder.get(orderNumber)!;
+        const left = (linesByOrder.get(orderNumber) ?? []).filter((line) => {
+          if (line.status !== 'OPEN') return false;
+          const open = Math.min(Number(line.orderQuantity), Number(line.confirmedQuantity ?? line.orderQuantity))
+            - deliveredOf(itemProgress, line.lineNumber);
+          return open > 1e-9 && !seen.has(`${orderNumber}/${line.lineNumber}`);
+        });
+        if (left.length > 0) {
+          throw new DeliveryError(
+            `Customer ${customer} requires a complete delivery of order ${orderNumber}, and item ${left[0].lineNumber} is being left behind.`,
+            `Put every open item of the order on this delivery, or clear the complete delivery requirement at ${CUSTOMER_MASTER_ROUTE}.`,
+          );
+        }
+      }
+    }
+
     // The check is asked again at the door. A promise made when the order was entered is a promise
     // about that day's stock, and the goods have to be there on the day they leave. This order's own
     // promise is not counted against itself — it is the promise being kept — and a returns order is
@@ -654,12 +825,15 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
     if (order.documentType !== STANDARD_RETURNS_ORDER_TYPE) {
       const wanted = new Map();
       for (const item of parsed.items) {
-        const itemLine = byNumber.get(item.orderLineNumber);
+        const itemOrderNumber = item.orderNumber ?? parsed.orderNumber;
+        const itemLine = (linesByOrder.get(itemOrderNumber) ?? [])
+          .find((candidate) => candidate.lineNumber === item.orderLineNumber);
         if (!itemLine) continue;
         const ordered = Number(itemLine.orderQuantity);
         const rate = ordered > 0 ? Number(itemLine.baseQuantity) / ordered : 1;
-        const key = `${itemLine.materialNumber}/${itemLine.plant}`;
+        const key = `${itemOrderNumber}/${itemLine.materialNumber}/${itemLine.plant}`;
         const bucket = wanted.get(key) ?? {
+          orderNumber: itemOrderNumber,
           materialNumber: itemLine.materialNumber, plant: itemLine.plant,
           unit: itemLine.quantityUnit.trim(), rate, base: 0, order: 0,
         };
@@ -671,7 +845,7 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
         const result = await availableToPromise(tx, parsed.client, {
           materialNumber: bucket.materialNumber, plant: bucket.plant,
           salesOrg: order.salesOrg, distributionChannel: order.distributionChannel,
-          checkingRule: DELIVERY_CHECKING_RULE, exclude: { orderNumber: order.orderNumber },
+          checkingRule: DELIVERY_CHECKING_RULE, exclude: { orderNumber: bucket.orderNumber },
         }).catch((error: unknown) => {
           if (error instanceof AvailabilityError) throw new DeliveryError(error.message, error.remedy);
           throw error;
@@ -711,11 +885,6 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
     // Who it is made with: the order's partners, written down again on the delivery. The delivery is
     // raised for the ship-to, and it is the ship-to's address the goods go to — not the sold-to's, and
     // not whatever that customer's master says next month.
-    const partners = await documentPartners(tx, parsed.client, 'ORDER', order.orderNumber)
-      ?? await resolvePartners(tx, parsed.client, {
-        partnerNumber: order.customerNumber, salesOrg: order.salesOrg,
-        distributionChannel: order.distributionChannel, division: order.division,
-      });
     await writeDocumentPartners(tx, {
       client: parsed.client, documentCategory: 'DELIVERY', documentNumber: number,
       partners, changedBy: parsed.changedBy,

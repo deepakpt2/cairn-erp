@@ -56,7 +56,13 @@ function LineSlots({ numbered }: { numbered: boolean }) {
       {Array.from({ length: LINE_SLOTS }, (_, index) => index + 1).map((slot) => (
         <div key={slot} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
           <input className="input" name={`line-${slot}-material`} placeholder="Material" autoComplete="off" />
-          <input className="input" name={`line-${slot}-plant`} placeholder="Plant" autoComplete="off" />
+          <input
+            className="input"
+            name={`line-${slot}-plant`}
+            placeholder="Plant"
+            autoComplete="off"
+            title="Blank: determined from the customer's sales area, then the material's own sales view."
+          />
           <input className="input" name={`line-${slot}-quantity`} placeholder="Quantity" inputMode="decimal" autoComplete="off" />
           <input className="input" name={`line-${slot}-unit`} placeholder="Unit" autoComplete="off" />
           <input className="input" name={`line-${slot}-tax`} placeholder="Tax" autoComplete="off" />
@@ -64,6 +70,10 @@ function LineSlots({ numbered }: { numbered: boolean }) {
           {numbered ? <input type="hidden" name={`line-${slot}-lineNumber`} value={slot * 10} /> : null}
         </div>
       ))}
+      <p className="mt-2 text-xs text-ink-soft">
+        A plant a person names stands. Left blank, the delivering plant is determined: the
+        ship-to’s sales area first, then the sold-to’s, then the material’s own sales view.
+      </p>
     </div>
   );
 }

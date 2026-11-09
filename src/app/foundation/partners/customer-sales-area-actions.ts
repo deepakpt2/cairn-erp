@@ -15,6 +15,7 @@ export async function saveCustomerSalesAreaAction(_previous:SalesAreaState,form:
       deliveringPlant:read('deliveringPlant').toUpperCase(),pricingProcedure:read('pricingProcedure').toUpperCase(),salesDistrict:read('salesDistrict').toUpperCase(),
       accountAssignmentGroup:read('accountAssignmentGroup').toUpperCase(),
 shippingCondition:read('shippingCondition').toUpperCase(),
+partialDeliveryIndicator:read('partialDeliveryIndicator').toUpperCase(),maxPartialDeliveries:Number(read('maxPartialDeliveries')||'0'),
       completeDelivery:form.get('completeDelivery')==='on',orderCombination:form.get('orderCombination')==='on',isBlocked:form.get('isBlocked')==='on',reason:read('reason')});
     revalidatePath('/foundation/partners');
     return {ok:true,message:t(result.changed?'csa.saved':'csa.unchanged',{status:t(`bp.status.${result.status}`)}),version:result.version,status:result.status};

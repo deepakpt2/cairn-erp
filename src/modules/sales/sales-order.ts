@@ -37,6 +37,7 @@ import {
 } from '../finance/credit';
 import { customerCredit } from '../finance/schema';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
+import { DeliveringPlantError, deliveringPlantFor } from './delivering-plant';
 import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
 import { PricingError, assertMaterialAtPlant, resolveCustomerSalesData } from './pricing';
 import { MaterialSalesError, assertMaterialSalesArea } from './material-sales';
@@ -72,7 +73,12 @@ export const orderLineInput = z.object({
   /** Present only to address an existing item on a change; a new item leaves it out. */
   lineNumber: z.union([z.undefined(), z.coerce.number().int().positive()]),
   materialNumber: key(40),
-  plant: key(10),
+  /**
+   * Where the goods come from. Left out — and blank — the master answers: the customer's sales
+   * area first, then the material's own sales view. Named, it stands, because a person who chose
+   * a plant did not choose it by accident.
+   */
+  plant: optionalKey(10),
   orderQuantity: z.coerce.number().gt(0),
   /** Absent means the material's base unit. */
   quantityUnit: optionalKey(6),
@@ -212,11 +218,19 @@ async function priceLines(
   },
   firstLineNumber: number,
 ): Promise<{ lines: PricedLine[]; priced: PricedDocument }> {
-  const judged: Array<{ line: z.infer<typeof orderLineInput>; lineNumber: number; quantity: string; unit: string; baseQuantity: number }> = [];
+  const judged: Array<{ line: z.infer<typeof orderLineInput>; plant: string; lineNumber: number; quantity: string; unit: string; baseQuantity: number }> = [];
   let fallbackNumber = firstLineNumber;
   // The first pass judges: a material that does not stand, a plant that does not carry it, a unit or a
   // quantity that will not do. Nothing is priced until every item has passed, so a refusal is never a
   // half-priced document.
+  // The goods are going to the ship-to where the customer names one, and it is the ship-to's master
+  // that says where they come from. A customer whose partners cannot be read yet is not refused
+  // here: the plant falls back to the sold-to, and the save is judged by the checks that follow.
+  const shipTo = await resolvePartners(tx, client, {
+    partnerNumber: input.customerNumber, salesOrg: input.salesOrg,
+    distributionChannel: input.distributionChannel, division: input.division,
+  }).then((partners) => partners.shipTo).catch(() => input.customerNumber);
+
   for (const line of input.lines) {
     const [materialRow] = await tx.select().from(material).where(and(
       eq(material.client, client), eq(material.materialNumber, line.materialNumber),
@@ -226,7 +240,20 @@ async function priceLines(
       `Material ${line.materialNumber} does not stand in this client.`,
       'The sales view of a material does not create it; maintain the material first.',
     );
-    const atPlant = await assertMaterialAtPlant(tx, client, line.materialNumber, line.plant).catch((error: PricingError) => {
+    // Where the goods come from. The item may name a plant, and a plant a person named is not
+    // second-guessed. Where it names none, the master answers — the customer's sales area first,
+    // then the material's own sales view — and where neither stands the refusal names both
+    // screens rather than borrowing a plant from somewhere.
+    const namedPlant = (line.plant ?? '').trim().toUpperCase();
+    const plant = namedPlant || await deliveringPlantFor(tx, client, {
+      shipTo, soldTo: input.customerNumber, materialNumber: line.materialNumber,
+      salesOrg: input.salesOrg, distributionChannel: input.distributionChannel,
+      division: input.division,
+    }).then((answer) => answer.plant).catch((error: unknown) => {
+      if (error instanceof DeliveringPlantError) throw new SalesOrderError(error.message, error.remedy);
+      throw error;
+    });
+    const atPlant = await assertMaterialAtPlant(tx, client, line.materialNumber, plant).catch((error: PricingError) => {
       throw new SalesOrderError(error.message, error.remedy);
     });
     // The plant says the warehouse can carry the material; the sales view says it may be sold here.
@@ -278,7 +305,7 @@ async function priceLines(
 
     const lineNumber = line.lineNumber ?? fallbackNumber;
     fallbackNumber = lineNumber + 10;
-    judged.push({ line, lineNumber, quantity: raw, unit, baseQuantity });
+    judged.push({ line, plant, lineNumber, quantity: raw, unit, baseQuantity });
     void atPlant;
   }
 
@@ -301,7 +328,7 @@ async function priceLines(
       items: judged.map((entry) => ({
         lineNumber: entry.lineNumber,
         materialNumber: entry.line.materialNumber,
-        plant: entry.line.plant,
+        plant: entry.plant,
         quantity: Number(entry.quantity),
         taxCode: entry.line.taxCode ?? null,
       })),
@@ -324,7 +351,7 @@ async function priceLines(
     pricedLines.push({
       lineNumber: entry.lineNumber,
       materialNumber: entry.line.materialNumber,
-      plant: entry.line.plant,
+      plant: entry.plant,
       orderQuantity: Number(entry.quantity).toFixed(3),
       quantityUnit: entry.unit,
       baseQuantity: entry.baseQuantity.toFixed(3),

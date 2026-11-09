@@ -1,5 +1,5 @@
 /** Customer sales-area defaults (pricing/delivery master only). No order, delivery or billing data lives here. */
-import { pgTable,varchar,boolean,integer,primaryKey,foreignKey,check } from 'drizzle-orm/pg-core';
+import { pgTable,varchar,boolean,integer,smallint,primaryKey,foreignKey,check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client,auditColumns } from '../../platform/tables/tenancy';
 import { salesArea,plant } from './schema';
@@ -29,6 +29,21 @@ export const customerSalesArea=pgTable('customer_sales_area',{
    */
   shippingCondition:varchar('shipping_condition',{length:2}),
   completeDelivery:boolean('complete_delivery').notNull().default(false),orderCombination:boolean('order_combination').notNull().default(false),
+  /**
+   * KNVV-KZTLF. How much of an item may go out at once: blank leaves it free to travel in pieces,
+   * 'C' says an item is delivered complete or not at all. It is a rule about the item, where the
+   * complete-delivery flag beside it is a rule about the order — and it is the one a warehouse
+   * feels, because two boxes today and three on Thursday is not the same work as one pallet on
+   * Friday.
+   */
+  partialDeliveryIndicator:varchar('partial_delivery_indicator',{length:1}).notNull().default(''),
+  /**
+   * KNVV-ANTLF. How many times an item may be split across deliveries before the rest has to
+   * travel together. Zero is a customer who has said nothing about it, and it is read as no limit:
+   * a limit of zero would be a customer who can never be served, which is what indicator 'C' is
+   * for.
+   */
+  maxPartialDeliveries:smallint('max_partial_deliveries').notNull().default(0),
   salesStatus:varchar('sales_status',{length:16}).notNull().default('INCOMPLETE'),
   isBlocked:boolean('is_blocked').notNull().default(false),version:integer('version').notNull().default(1),...auditColumns,
 },t=>[
@@ -42,4 +57,6 @@ export const customerSalesArea=pgTable('customer_sales_area',{
   check('customer_sales_pricing_procedure',sql`${t.pricingProcedure} is null or ${t.pricingProcedure} ~ '^[A-Z0-9]{1,6}$'`),
   check('customer_sales_account_group',sql`${t.accountAssignmentGroup} is null or ${t.accountAssignmentGroup} ~ '^[A-Z0-9]{1,4}$'`),
   check('customer_sales_shipping_condition',sql`${t.shippingCondition} is null or ${t.shippingCondition} ~ '^[A-Z0-9]{1,2}$'`),
+  check('customer_sales_partial_delivery',sql`${t.partialDeliveryIndicator} in ('','C')`),
+  check('customer_sales_max_partial',sql`${t.maxPartialDeliveries} between 0 and 9`),
 ]);
