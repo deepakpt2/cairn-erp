@@ -43,6 +43,7 @@ import {
 import { deliveredOf, orderLineProgress } from './fulfillment-quantities';
 import { creditAreaFor } from './sales-order';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
+import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
 
 export const DELIVERY_CAPABILITY = 'SALES.DELIVERY.CREATE';
 export const DELIVERY_PICK_CAPABILITY = 'SALES.DELIVERY.PICK';
@@ -202,6 +203,12 @@ export interface DeliveryView {
   customerNumber: string;
   companyCode: string;
   plant: string;
+  /**
+   * Where the goods are loaded. Determined when the delivery was created, from the ship-to's
+   * shipping condition, the material's loading group and the delivering plant. Null on a delivery
+   * raised before the determination stood.
+   */
+  shippingPoint: string | null;
   deliveryDate: string;
   goodsMovementDate: string | null;
   status: string;
@@ -249,9 +256,9 @@ export interface DeliveryView {
   /** Who this delivery is made with, written when it was created. */
   partners: DocumentPartners;
   /**
-   * Where the goods are going: the ship-to's own master, read at display time. A delivery raised for a
-   * ship-to carries that customer's address and not the sold-to's, which is the whole reason the
-   * function exists.
+   * Where the goods are going: the address the delivery was raised with. A delivery carries its
+   * own copy, so remaking a customer next month does not move this month's goods. A delivery
+   * raised before that copy stood reads the ship-to's master, as it always did.
    */
   shipTo: {
     partnerNumber: string; name: string; street: string | null; city: string | null;
@@ -271,6 +278,7 @@ function mapHeader(row: typeof delivery.$inferSelect): Omit<DeliveryView, 'lines
     customerNumber: row.customerNumber,
     companyCode: row.companyCode,
     plant: row.plant,
+    shippingPoint: row.shippingPoint,
     deliveryDate: row.deliveryDate,
     goodsMovementDate: row.goodsMovementDate,
     status: row.status,
@@ -323,11 +331,19 @@ async function loadDelivery(tx: Tx, client: string, deliveryNumber: string): Pro
   return {
     ...mapHeader(header),
     partners,
-    shipTo: shipToRow ? {
-      partnerNumber: shipToRow.partnerNumber, name: shipToRow.name, street: shipToRow.street,
-      city: shipToRow.city, region: shipToRow.region, postalCode: shipToRow.postalCode,
-      country: shipToRow.country,
-    } : null,
+    shipTo: header.shipToName
+      ? {
+        partnerNumber: partners.shipTo, name: header.shipToName, street: header.shipToStreet,
+        city: header.shipToCity, region: header.shipToRegion,
+        postalCode: header.shipToPostalCode, country: header.shipToCountry,
+      }
+      : shipToRow
+        ? {
+          partnerNumber: shipToRow.partnerNumber, name: shipToRow.name, street: shipToRow.street,
+          city: shipToRow.city, region: shipToRow.region, postalCode: shipToRow.postalCode,
+          country: shipToRow.country,
+        }
+        : null,
     value: await deliveryValue(tx, client, deliveryNumber),
     lines: lines.map((line) => ({
       lineNumber: line.lineNumber,
@@ -692,25 +708,6 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       );
     }
 
-    await tx.insert(delivery).values({
-      client: parsed.client,
-      deliveryNumber: number,
-      documentType: deliveryType.documentType,
-      orderNumber: order.orderNumber,
-      salesOrg: order.salesOrg,
-      distributionChannel: order.distributionChannel,
-      division: order.division,
-      customerNumber: order.customerNumber,
-      companyCode: order.companyCode,
-      plant,
-      deliveryDate: parsed.deliveryDate,
-      goodsMovementDate: parsed.goodsMovementDate || null,
-      headerText: parsed.headerText || null,
-      status: 'OPEN',
-      requestKey: parsed.requestKey || null,
-      createdBy: parsed.changedBy,
-    });
-
     // Who it is made with: the order's partners, written down again on the delivery. The delivery is
     // raised for the ship-to, and it is the ship-to's address the goods go to — not the sold-to's, and
     // not whatever that customer's master says next month.
@@ -724,6 +721,76 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       partners, changedBy: parsed.changedBy,
     });
 
+    // Where the goods are going, written down as the delivery's own address. A customer whose master
+    // is remade next month does not move this month's goods.
+    const [shipToRow] = await tx.select().from(businessPartner).where(and(
+      eq(businessPartner.client, parsed.client),
+      eq(businessPartner.partnerNumber, partners.shipTo),
+    )).limit(1);
+    if (!shipToRow) {
+      throw new DeliveryError(
+        `Customer ${partners.shipTo} does not stand, so this delivery has nowhere to send the goods.`,
+        'Maintain the customer the goods are shipped to before raising the delivery.',
+      );
+    }
+
+    // Where the goods leave from. The ship-to's shipping condition, each material's loading group
+    // and the delivering plant name a dock, and a delivery loads from one dock — which is what the
+    // plant check above already says about plants. Items that disagree are refused here rather than
+    // split in silence: the tenant decides how the goods are divided, not the document.
+    const condition = await shippingConditionOf(tx, parsed.client, {
+      shipTo: partners.shipTo, soldTo: partners.soldTo,
+      salesOrg: order.salesOrg, distributionChannel: order.distributionChannel,
+      division: order.division,
+    });
+    let shippingPoint = '';
+    for (const item of items) {
+      const group = await loadingGroupOf(tx, parsed.client, {
+        materialNumber: item.materialNumber, salesOrg: order.salesOrg,
+        distributionChannel: order.distributionChannel,
+      });
+      const determined = await shippingPointFor(tx, parsed.client, {
+        deliveringPlant: item.plant, shippingCondition: condition, loadingGroup: group,
+      }).catch((error: unknown) => {
+        if (error instanceof ShippingPointError) throw new DeliveryError(error.message, error.remedy);
+        throw error;
+      });
+      if (shippingPoint && determined !== shippingPoint) {
+        throw new DeliveryError(
+          `Item ${item.orderLineNumber} loads through shipping point ${determined}, and this delivery loads through ${shippingPoint}.`,
+          'Create one delivery per shipping point: a delivery loads from a single dock.',
+        );
+      }
+      shippingPoint = determined;
+    }
+
+    await tx.insert(delivery).values({
+      client: parsed.client,
+      deliveryNumber: number,
+      documentType: deliveryType.documentType,
+      orderNumber: order.orderNumber,
+      salesOrg: order.salesOrg,
+      distributionChannel: order.distributionChannel,
+      division: order.division,
+      customerNumber: order.customerNumber,
+      companyCode: order.companyCode,
+      plant,
+      shippingPoint,
+      shipToName: shipToRow.name,
+      shipToStreet: shipToRow.street,
+      shipToCity: shipToRow.city,
+      shipToRegion: shipToRow.region,
+      shipToPostalCode: shipToRow.postalCode,
+      shipToCountry: shipToRow.country,
+      deliveryDate: parsed.deliveryDate,
+      goodsMovementDate: parsed.goodsMovementDate || null,
+      headerText: parsed.headerText || null,
+      status: 'OPEN',
+      requestKey: parsed.requestKey || null,
+      createdBy: parsed.changedBy,
+    });
+
+
     for (const item of items) {
       await tx.insert(deliveryLine).values({ ...item, deliveryNumber: number });
     }
@@ -734,6 +801,7 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       after: {
         order: order.orderNumber,
         plant,
+        shippingPoint,
         items: items.length,
         value: round2(value),
       },

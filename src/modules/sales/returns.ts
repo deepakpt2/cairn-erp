@@ -41,6 +41,7 @@ import { resolveStorageLocation, StorageLocationError } from '../inventory/stora
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { RETURNS } from '../inventory/warehouse-stocks';
 import { plant as plantTable } from '../foundation/schema';
+import { businessPartner } from '../foundation/business-partner-schema';
 import {
   salesDocumentTypeFor,
 } from './document-type';
@@ -49,6 +50,7 @@ import {
   billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine,
 } from './schema';
 import { documentPartners, resolvePartners, writeDocumentPartners } from './partners';
+import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
 
 /** The transaction code this posting records. No screen offers it yet, so no capability is bound. */
 export const RETURNS_RECEIPT_TRANSACTION = 'SALES.RETURNS.RECEIPT';
@@ -888,12 +890,65 @@ export async function createReturnsDelivery(
     });
     const number = drawn.display;
 
+    // Where the goods come back from, and the dock they come back through. A returns delivery is
+    // a delivery: it names the customer the goods are received from and the place they are
+    // received, and both are determined the way an outbound delivery determines them — from the
+    // customer's shipping condition, the material's loading group and the delivering plant.
+    const partners = await documentPartners(tx, input.client, 'ORDER', orderNumber)
+      ?? await documentPartners(tx, input.client, 'DELIVERY', origin.deliveryNumber)
+      ?? await resolvePartners(tx, input.client, {
+        partnerNumber: origin.customerNumber, salesOrg: origin.salesOrg,
+        distributionChannel: origin.distributionChannel, division: origin.division,
+      });
+    const [shipToRow] = await tx.select().from(businessPartner).where(and(
+      eq(businessPartner.client, input.client),
+      eq(businessPartner.partnerNumber, partners.shipTo),
+    )).limit(1);
+    if (!shipToRow) {
+      throw new ReturnsError(
+        `Customer ${partners.shipTo} does not stand, so this returns delivery has nobody to receive the goods from.`,
+        'Maintain the customer the goods are coming back from before raising the delivery.',
+      );
+    }
+    const condition = await shippingConditionOf(tx, input.client, {
+      shipTo: partners.shipTo, soldTo: partners.soldTo,
+      salesOrg: origin.salesOrg, distributionChannel: origin.distributionChannel,
+      division: origin.division,
+    });
+    let shippingPoint = '';
+    for (const row of rows) {
+      const group = await loadingGroupOf(tx, input.client, {
+        materialNumber: row.materialNumber, salesOrg: origin.salesOrg,
+        distributionChannel: origin.distributionChannel,
+      });
+      const determined = await shippingPointFor(tx, input.client, {
+        deliveringPlant: row.plant, shippingCondition: condition, loadingGroup: group,
+      }).catch((error: unknown) => {
+        if (error instanceof ShippingPointError) throw new ReturnsError(error.message, error.remedy);
+        throw error;
+      });
+      if (shippingPoint && determined !== shippingPoint) {
+        throw new ReturnsError(
+          `Line ${row.lineNumber} is received through shipping point ${determined}, and this delivery receives through ${shippingPoint}.`,
+          'Raise one returns delivery per shipping point: a delivery is received at a single dock.',
+        );
+      }
+      shippingPoint = determined;
+    }
+
     await tx.insert(delivery).values({
       client: input.client, deliveryNumber: number,
       documentType: type.documentType, referenceDeliveryNumber: origin.deliveryNumber,
       orderNumber,
       salesOrg: origin.salesOrg, distributionChannel: origin.distributionChannel, division: origin.division,
       customerNumber: origin.customerNumber, companyCode: origin.companyCode, plant: origin.plant,
+      shippingPoint,
+      shipToName: shipToRow.name,
+      shipToStreet: shipToRow.street,
+      shipToCity: shipToRow.city,
+      shipToRegion: shipToRow.region,
+      shipToPostalCode: shipToRow.postalCode,
+      shipToCountry: shipToRow.country,
       deliveryDate: input.deliveryDate, goodsMovementDate: null,
       headerText: input.headerText?.trim() || null,
       status: 'OPEN',
@@ -909,6 +964,7 @@ export async function createReturnsDelivery(
       after: {
         documentType: type.documentType, returnOf: origin.deliveryNumber,
         raisedAgainst: raisedAgainstOrder ? `returns order ${orderNumber}` : `delivery ${origin.deliveryNumber}`,
+        shippingPoint,
         items: rows.length, status: 'OPEN',
       },
     });

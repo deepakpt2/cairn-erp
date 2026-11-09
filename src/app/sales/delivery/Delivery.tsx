@@ -150,6 +150,11 @@ function SelectedDelivery({
   const today = new Date().toISOString().slice(0, 10);
   const blocked = selected.credit?.status === 'BLOCKED';
   const allPicked = selected.lines.every((line) => Number(line.pickedQuantity) >= Number(line.deliveryQuantity));
+  const shipToAddress = selected.shipTo
+    ? [selected.shipTo.street, [selected.shipTo.postalCode, selected.shipTo.city].filter(Boolean).join(' '),
+        selected.shipTo.region, selected.shipTo.country]
+      .filter((part) => part && part.trim()).join(', ')
+    : '';
   return (
     <section className="panel p-4" aria-labelledby={`${id}-heading`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -160,6 +165,9 @@ function SelectedDelivery({
         Order <Link className="link" href={`/sales/orders?order=${selected.orderNumber}`}>{selected.orderNumber}</Link>
         {' · '}customer {selected.customerNumber}
         {' · '}plant {selected.plant}
+        {' · '}{selected.shippingPoint
+          ? <>shipping point {selected.shippingPoint}</>
+          : <span className="text-red-700">no shipping point</span>}
         {' · '}sales area {selected.salesOrg}/{selected.distributionChannel}/{selected.division}
         {selected.materialDocumentNumber ? (
           <>
@@ -173,6 +181,16 @@ function SelectedDelivery({
           </>
         ) : null}
       </p>
+      {selected.shipTo ? (
+        <p className="mt-1 text-sm text-ink-soft">
+          Goods {selected.documentType === 'LR' ? 'received from' : 'delivered to'} 
+          {selected.shipTo.name}
+          {selected.shipTo.partnerNumber !== selected.customerNumber
+            ? ` (customer ${selected.shipTo.partnerNumber})`
+            : ''}
+          {shipToAddress ? ` — ${shipToAddress}` : ''}.
+        </p>
+      ) : null}
       {selected.credit ? (
         <div className={blocked ? 'panel panel-danger mt-3 p-3 text-sm' : 'panel mt-3 p-3 text-sm'}>
           <p className="font-medium">

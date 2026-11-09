@@ -16,6 +16,18 @@ export const customerSalesArea=pgTable('customer_sales_area',{
    * revenue accounts yet expects.
    */
   accountAssignmentGroup:varchar('account_assignment_group',{length:4}),
+  /**
+   * KNVV-VSBED. How this customer wants goods to reach them, and the customer half of shipping
+   * point determination: with the material's loading group and the delivering plant it names the
+   * dock a delivery loads from.
+   *
+   * Null is a customer who has said nothing, and it is matched as a value — those are answered
+   * by the determination rows that name no condition, never by a condition invented for them.
+   * The database holds the foreign key to the shipping condition master; it is not repeated
+   * here because that table is declared by the sales schema, which this file reaches through
+   * the foundation schema that re-exports it.
+   */
+  shippingCondition:varchar('shipping_condition',{length:2}),
   completeDelivery:boolean('complete_delivery').notNull().default(false),orderCombination:boolean('order_combination').notNull().default(false),
   salesStatus:varchar('sales_status',{length:16}).notNull().default('INCOMPLETE'),
   isBlocked:boolean('is_blocked').notNull().default(false),version:integer('version').notNull().default(1),...auditColumns,
@@ -29,4 +41,5 @@ export const customerSalesArea=pgTable('customer_sales_area',{
   check('customer_sales_district',sql`${t.salesDistrict} is null or ${t.salesDistrict} ~ '^[A-Z0-9]{1,6}$'`),
   check('customer_sales_pricing_procedure',sql`${t.pricingProcedure} is null or ${t.pricingProcedure} ~ '^[A-Z0-9]{1,6}$'`),
   check('customer_sales_account_group',sql`${t.accountAssignmentGroup} is null or ${t.accountAssignmentGroup} ~ '^[A-Z0-9]{1,4}$'`),
+  check('customer_sales_shipping_condition',sql`${t.shippingCondition} is null or ${t.shippingCondition} ~ '^[A-Z0-9]{1,2}$'`),
 ]);

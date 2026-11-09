@@ -6,6 +6,8 @@ import { recordChange } from '../../platform/change';
 import { companyCode,salesOrg,salesArea,plant,salesOrgText } from './schema';
 import { businessPartner,bpRole } from './business-partner-schema';
 import { customerSalesArea } from './customer-sales-area-schema';
+import { shippingCondition } from '../sales/schema';
+import { SHIPPING_POINT_ROUTE } from '../sales/shipping-point';
 import { requireGeneralPartner } from './business-partners';
 export class CustomerSalesAreaError extends Error{
   constructor(message:string,readonly remedy='Review the customer sales-area defaults and try again.'){super(message);}
@@ -17,6 +19,7 @@ const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partne
   deliveringPlant:z.string().trim().regex(/^([A-Z0-9]{1,10})?$/,'Delivering plant uses up to ten capital letters or digits.'),
   pricingProcedure:z.string().trim().regex(/^([A-Z0-9]{1,6})?$/,'Pricing procedure uses up to six capital letters or digits.'),
   accountAssignmentGroup:z.string().trim().regex(/^([A-Z0-9]{1,4})?$/,'Account assignment group uses up to four capital letters or digits.'),
+  shippingCondition:z.string().trim().regex(/^([A-Z0-9]{1,2})?$/,'Shipping condition uses one or two capital letters or digits.').optional(),
   completeDelivery:z.boolean(),orderCombination:z.boolean(),isBlocked:z.boolean()});
 export type CustomerSalesAreaInput=z.input<typeof inputSchema>;
 const key=(client:string,partner:string,org:string,channel:string,division:string)=>and(eq(customerSalesArea.client,client),eq(customerSalesArea.partnerNumber,partner),eq(customerSalesArea.salesOrg,org),eq(customerSalesArea.distributionChannel,channel),eq(customerSalesArea.division,division));
@@ -54,8 +57,15 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
       // The customer's half of revenue determination. Blank is the group that names none, and rows
       // maintained with a blank group answer for it — it is never treated as a value nobody set.
       accountAssignmentGroup:input.accountAssignmentGroup||null,
+      // The customer's half of shipping point determination. Null is a customer who has said
+      // nothing, and those are answered by the rows that name no condition.
+      shippingCondition:input.shippingCondition||null,
       completeDelivery:input.completeDelivery,orderCombination:input.orderCombination,isBlocked:input.isBlocked};
     await validateSalesArea(tx,client,org,channel,division,values.deliveringPlant,true);
+    if(values.shippingCondition){
+      const [condition]=await tx.select().from(shippingCondition).where(and(eq(shippingCondition.client,client),eq(shippingCondition.shippingCondition,values.shippingCondition),eq(shippingCondition.isActive,true))).limit(1);
+      if(!condition)throw new CustomerSalesAreaError(`Shipping condition ${values.shippingCondition} does not stand.`,`Maintain it at ${SHIPPING_POINT_ROUTE} before naming it here: a condition nobody defined is not a requirement anybody can serve.`);
+    }
     const [before]=await tx.select().from(customerSalesArea).where(key(client,partnerNumber,org,channel,division)).for('update');
     if((before?.version??0)!==expectedVersion)throw new CustomerSalesAreaError('Customer sales-area view changed after it was opened.','Reload the current sales-area view before saving.');
     if(before&&Object.entries(values).every(([k,v])=>(before as Record<string,unknown>)[k]===v))return {changed:false,version:before.version,status:before.salesStatus};
@@ -67,7 +77,7 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
     const snapshot=(row:Record<string,unknown>)=>Object.fromEntries(Object.keys(values).map(k=>[k,row[k]]));
     await recordChange(tx,{client,objectClass:'customer_sales_area',objectKey:`${partnerNumber}/${org}/${channel}/${division}`,changeType:!before?'CREATE':before.isBlocked!==input.isBlocked?input.isBlocked?'BLOCK':'UNBLOCK':'CHANGE',changedBy,reason,
       transactionCode:'SALES.CUSTOMER.SALESAREA.MAINTAIN',before:before?{...snapshot(before),salesStatus:before.salesStatus}:undefined,after:{...values,salesStatus},
-      securityRelevantFields:['deliveringPlant','pricingProcedure','accountAssignmentGroup','completeDelivery','orderCombination','isBlocked']});
+      securityRelevantFields:['deliveringPlant','pricingProcedure','accountAssignmentGroup','shippingCondition','completeDelivery','orderCombination','isBlocked']});
     return {changed:true,version,status:salesStatus};
   });
 }
@@ -105,6 +115,8 @@ export async function customerSalesAreaChoices(client:string,selectedKey:string,
     const assignedAreas=areas.filter((row): row is typeof row & {companyCode:string} => row.companyCode!==null);
     const selected=assignedAreas.find(row=>row.key===selectedKey)??assignedAreas[0]??null;
     const plants=selected?await tx.select({code:plant.plant,name:plant.name}).from(plant).where(and(eq(plant.isActive,true),eq(plant.companyCode,selected.companyCode))).orderBy(asc(plant.plant)):[];
-    return {areas:assignedAreas,selected,plants};
+    const conditions=await tx.select({code:shippingCondition.shippingCondition,description:shippingCondition.description}).from(shippingCondition)
+      .where(and(eq(shippingCondition.client,client),eq(shippingCondition.isActive,true))).orderBy(asc(shippingCondition.shippingCondition));
+    return {areas:assignedAreas,selected,plants,shippingConditions:conditions};
   });
 }

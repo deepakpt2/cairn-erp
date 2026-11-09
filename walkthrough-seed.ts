@@ -82,6 +82,7 @@ import { listSalesConditions, saveSalesCondition } from './src/modules/sales/con
 import { createSalesOrder, getSalesOrder } from './src/modules/sales/sales-order';
 import { confirmDeliveryPicks, createDelivery, getDelivery, postDeliveryGoodsIssue } from './src/modules/sales/delivery';
 import { createBillingFromDelivery } from './src/modules/sales/billing';
+import { assignShippingPoint, defineShippingPoint, listShippingPointConfiguration } from './src/modules/sales/shipping-point-maintenance';
 import { postCustomerCreditMemo } from './src/modules/finance/customer-credit-memo';
 import { getCustomerInvoice } from './src/modules/finance/customer-invoice';
 import { getPayables, postOutgoingPayment } from './src/modules/finance/outgoing-payment';
@@ -732,6 +733,43 @@ async function ensureCreditRiskCategory(tenant: string, summary: WalkthroughSumm
   }
 }
 
+/**
+ * Where the walkthrough's goods leave from.
+ *
+ * The dock is maintained here rather than seeded, because a tenant that has not said where its
+ * goods leave from is refused a delivery until it does: the walkthrough is a person walking the
+ * screens, and this is the row they would have written.
+ */
+async function ensureShippingPoint(tenant: string, summary: WalkthroughSummary) {
+  // The dock carries no plant of its own, so it is named after the one it loads for here.
+  const shippingPoint = '1000';
+  const name = 'Walkthrough Main dock';
+
+  const before = await listShippingPointConfiguration(tenant);
+  const point = before.points.find((row) => row.shippingPoint === shippingPoint);
+  if (!point) {
+    await defineShippingPoint({ client: tenant, changedBy: ACTOR, shippingPoint, name });
+    record(summary, `shipping point ${shippingPoint}`, true);
+  } else if (point.name !== name || !point.isActive) {
+    throw new Error(`Shipping point ${shippingPoint} is customized or withdrawn; refusing to change it.`);
+  } else {
+    record(summary, `shipping point ${shippingPoint}`, false);
+  }
+
+  const after = await listShippingPointConfiguration(tenant);
+  const assigned = after.assignments.find((row) => row.deliveringPlant === PLANT
+    && row.shippingCondition === '' && row.loadingGroup === '');
+  if (!assigned) {
+    await assignShippingPoint({ client: tenant, changedBy: ACTOR, deliveringPlant: PLANT, shippingPoint });
+    record(summary, `shipping point ${shippingPoint} for plant ${PLANT}`, true);
+    return;
+  }
+  if (assigned.shippingPoint !== shippingPoint || !assigned.isActive) {
+    throw new Error(`Plant ${PLANT} already loads through shipping point ${assigned.shippingPoint}; refusing to change it.`);
+  }
+  record(summary, `shipping point ${shippingPoint} for plant ${PLANT}`, false);
+}
+
 async function runChecks(tenant: string, fiscalYear: number, summary: WalkthroughSummary) {
   const stock = await reconcileStock(tenant, { plant: PLANT });
   if (!stock.balanced) throw new Error(`Stock ledger/projection mismatch: ${JSON.stringify(stock.drift)}`);
@@ -1239,6 +1277,7 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     await ensureProductionMasters(tenant, asOf, summary);
     await ensureMrpSafetyStock(tenant, summary);
     await ensureSalesPrice(tenant, dates.sales, summary);
+    await ensureShippingPoint(tenant, summary);
 
     // Purchase order creation has no request-key field, so the order is found by what it
     // buys: the two walkthrough materials, and nothing else in the tenant buys either of

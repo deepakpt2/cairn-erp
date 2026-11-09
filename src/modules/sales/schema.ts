@@ -21,7 +21,7 @@ import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
 import { bpRole, businessPartner } from '../foundation/business-partner-schema';
-import { chartOfAccounts, companyCode, salesArea } from '../foundation/schema';
+import { chartOfAccounts, companyCode, plant, salesArea } from '../foundation/schema';
 import { material, movementType } from '../inventory/schema';
 import { glAccount } from '../finance/schema';
 
@@ -556,6 +556,88 @@ export const salesTableNames = [
  * once the movement has run, the material document that did it. No quantity counter of the order is kept
  * here or there: what stands delivered is read from the delivery lines that reference the order line.
  */
+/**
+ * How a customer wants goods to reach them — SAP's VSBED, the shipping conditions of the customer
+ * master's shipping view. It is a requirement of the customer and not of the material: the same
+ * goods go by road for one customer and by air for another, and it is the customer's half of the
+ * shipping point determination.
+ *
+ * Two characters, as SAP carries them. A customer maintained with none is not an omission to be
+ * filled in — it is a customer who has said nothing, and the determination rows that name no
+ * condition are the ones maintained for them.
+ */
+export const shippingCondition = pgTable('shipping_condition', {
+  client: tenant(),
+  shippingCondition: varchar('shipping_condition', { length: 2 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull().default(''),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.shippingCondition] }),
+  check('shipping_condition_code_ck', sql`${t.shippingCondition} ~ '^[A-Z0-9]{1,2}$'`),
+]);
+
+/**
+ * The place a delivery is loaded — SAP's VSTEL, and the table behind it TVST: a dock, a depot, a
+ * gate, with its own working times and its own way of loading.
+ *
+ * A shipping point carries no plant of its own. Which plant it loads from is answered by every row
+ * that assigns it, because the assignment is the determination: one dock may load for several
+ * plants, and a plant may be served by several docks. A plant column here could only contradict
+ * the rows that actually do the work.
+ */
+export const shippingPoint = pgTable('shipping_point', {
+  client: tenant(),
+  shippingPoint: varchar('shipping_point', { length: 4 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull().default(''),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.shippingPoint] }),
+  check('shipping_point_code_ck', sql`${t.shippingPoint} ~ '^[A-Z0-9]{1,4}$'`),
+]);
+
+/**
+ * Shipping condition + loading group + delivering plant to the shipping point that loads them —
+ * SAP's OVL2, and the table it maintains, TVSTZ.
+ *
+ * It is a determination, so it is built like the others in this package: rows, blank as a value
+ * that is matched, most specific first. The row naming both the condition and the group answers
+ * before a row naming one of them, and the row naming neither is the plant's own answer for every
+ * combination it has no opinion about. Where the condition and the group disagree and no row names
+ * both, the material's loading group stands: a dock that cannot lift the goods is no answer at
+ * all, whereas a customer who wants them quickly can be served from anywhere that can load them.
+ *
+ * There is no delete. A row here is the rule a delivery was raised under.
+ */
+export const shippingPointDetermination = pgTable('shipping_point_determination', {
+  client: tenant(),
+  deliveringPlant: varchar('delivering_plant', { length: 10 }).notNull(),
+  /** Blank means the customer carries no shipping condition. It is matched as a value. */
+  shippingCondition: varchar('shipping_condition', { length: 2 }).notNull().default(''),
+  /** Blank means the material carries no loading group. It is matched as a value. */
+  loadingGroup: varchar('loading_group', { length: 4 }).notNull().default(''),
+  shippingPoint: varchar('shipping_point', { length: 4 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.deliveringPlant, t.shippingCondition, t.loadingGroup] }),
+  foreignKey({
+    name: 'shipping_point_determination_plant_fk',
+    columns: [t.client, t.deliveringPlant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  foreignKey({
+    name: 'shipping_point_determination_point_fk',
+    columns: [t.client, t.shippingPoint],
+    foreignColumns: [shippingPoint.client, shippingPoint.shippingPoint],
+  }).onDelete('restrict'),
+  check('shipping_point_determination_condition_ck',
+    sql`${t.shippingCondition} = '' or ${t.shippingCondition} ~ '^[A-Z0-9]{1,2}$'`),
+  check('shipping_point_determination_group_ck',
+    sql`${t.loadingGroup} = '' or ${t.loadingGroup} ~ '^[A-Z0-9]{1,4}$'`),
+]);
+
 export const DELIVERY_STATUSES = ['OPEN', 'PICKED', 'GOODS_ISSUED', 'CANCELLED'] as const;
 
 export const delivery = pgTable('delivery', {
@@ -575,6 +657,25 @@ export const delivery = pgTable('delivery', {
   customerNumber: varchar('customer_number', { length: 40 }).notNull(),
   companyCode: varchar('company_code', { length: 10 }).notNull(),
   plant: varchar('plant', { length: 10 }).notNull(),
+  /**
+   * Where the goods are loaded. Determined when the delivery was created, from the ship-to's
+   * shipping condition, the material's loading group and the delivering plant — never entered
+   * by the person raising the delivery, because a dock nobody chose is not a dock.
+   *
+   * Null on a delivery raised before the determination stood; those read as they always did.
+   */
+  shippingPoint: varchar('shipping_point', { length: 4 }),
+  /**
+   * Where the goods went, written when the delivery was created and read as the delivery's own
+   * address since. A customer whose master is remade next month does not move last month's
+   * goods: the address a delivery carries is the one it was raised with.
+   */
+  shipToName: varchar('ship_to_name', { length: 160 }).notNull().default(''),
+  shipToStreet: varchar('ship_to_street', { length: 180 }),
+  shipToCity: varchar('ship_to_city', { length: 100 }),
+  shipToRegion: varchar('ship_to_region', { length: 80 }),
+  shipToPostalCode: varchar('ship_to_postal_code', { length: 20 }),
+  shipToCountry: char('ship_to_country', { length: 2 }),
   deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
   goodsMovementDate: date('goods_movement_date', { mode: 'string' }),
   status: varchar('status', { length: 16 }).notNull().default('OPEN'),
@@ -600,6 +701,11 @@ export const delivery = pgTable('delivery', {
     columns: [t.client, t.orderNumber],
     foreignColumns: [salesOrder.client, salesOrder.orderNumber],
   }).onDelete('cascade'),
+  foreignKey({
+    name: 'delivery_shipping_point_fk',
+    columns: [t.client, t.shippingPoint],
+    foreignColumns: [shippingPoint.client, shippingPoint.shippingPoint],
+  }).onDelete('restrict'),
 ]);
 
 /**

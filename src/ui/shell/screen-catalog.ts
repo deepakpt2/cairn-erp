@@ -2650,6 +2650,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/shipping-points",
+    path: "/config/shipping-points",
+    query: {},
+    code: "CFG.SALES.SHIPPING_POINT.DEFINE",
+    title: "Shipping points",
+    area: "configuration",
+    family: "shipping-point",
+    accepts: ["plant", "material", "customer"],
+  },
+  {
     id: "/config/sales-returns",
     path: "/config/sales-returns",
     query: {},

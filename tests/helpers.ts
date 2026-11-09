@@ -140,6 +140,16 @@ export async function createTenant(
           country: 'KW',
           changedBy: 'TEST',
         });
+
+        // The standard plant's own dock, and the row that says it loads for that plant whatever
+        // the customer asked for and whatever the material takes to load. The product seeds
+        // nothing — an unconfigured plant is refused, as it should be — but a fixture that raises
+        // deliveries needs a tenant that can ship.
+        await tx.execute(sql`insert into shipping_point (client, shipping_point, name, created_by)
+          values (${candidate}, '1000', 'Main dock', 'TEST') on conflict do nothing`);
+        await tx.execute(sql`insert into shipping_point_determination
+          (client, delivering_plant, shipping_condition, loading_group, shipping_point, created_by)
+          values (${candidate}, '1000', '', '', '1000', 'TEST') on conflict do nothing`);
       }
 
       return 'claimed';
