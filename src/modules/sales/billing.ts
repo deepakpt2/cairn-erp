@@ -61,6 +61,7 @@ import {
   type RebateAccrualPosted, accrueRebatesForBilling, reverseRebateAccrualsForBilling,
 } from './rebate';
 import { standingDetermination } from './delivery';
+import { recordSalesOutputs } from './output';
 
 export const BILLING_CAPABILITY = 'SALES.BILLING.CREATE';
 export const BILLING_CANCEL_CAPABILITY = 'SALES.BILLING.CANCEL';
@@ -1357,6 +1358,14 @@ async function linkPostedInvoice(
       },
       fieldLabels: { invoice: 'Customer invoice', journal: 'Accounting document', dueDate: 'Due date' },
     });
+
+    // The invoice exists, so the customer gets it. Both the create path and the release-then-post path
+    // come through here — the same reason this is the only writer of POSTED — and the output is
+    // determined inside the transaction that posted the receivable.
+    await recordSalesOutputs(tx, {
+      client, changedBy, documentCategory: 'BILLING', documentNumber: billingNumber,
+    });
+
     return header.version + 1;
   });
 }

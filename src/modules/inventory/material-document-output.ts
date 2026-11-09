@@ -22,16 +22,29 @@
  * PROCESSED message, and posting-period checks (a document that stands passed its
  * own at posting; this screen reads history). Deferred by name: the scheduler,
  * condition technology beyond direction, spool files and the transport.
+ *
+ * The queue it writes to is the shared one in `foundation/output-schema` (§4.4):
+ * material documents carry the category MATERIAL_DOCUMENT there, and this module
+ * reads only what it wrote. What it still owns is its own determination — the
+ * direction the lines move in, which is Inventory's test and no one else's.
  */
 import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import type { Tx } from '../../platform/db/client';
 import { plant as plantTable } from '../foundation/schema';
+import { outputMessage, outputType } from '../foundation/output-schema';
 import {
   material, materialDocument, materialDocumentLine, movementType,
-  outputMessage, outputType,
 } from './schema';
+
+/**
+ * The document category a material document's outputs carry in the shared queue. The queue itself no
+ * longer belongs to Inventory: a goods receipt slip and an invoice are both documents a company sends,
+ * and one queue holds them both (§4.4). What Inventory still owns is its own determination — the
+ * direction a document's lines move in — and its own rendering.
+ */
+const DOCUMENT_CATEGORY = 'MATERIAL_DOCUMENT';
 
 export const MATERIAL_DOC_OUTPUT_CAPABILITY = 'INV.MATERIALDOC.RECEIVEPRINT';
 export const MATERIAL_DOC_OUTPUT_ALIAS = 'MB90';
@@ -119,6 +132,8 @@ export interface OutputMessageView {
   printerQueue: string | null;
   lastProcessedAt: string | null;
   errorText: string | null;
+  /** What was rendered and sent, kept so a copy printed later is the document as it went out. */
+  renderedDocument: string | null;
   plants: string[];
   companyCodes: string[];
 }
@@ -184,6 +199,8 @@ export async function recordOutputsForDocument(
   const directions = await directionsOf(tx, client, documentNumber);
   const types = await tx.select().from(outputType).where(and(
     eq(outputType.client, client), eq(outputType.isActive, true),
+    // Only this application's types: a sales invoice output is not determined for a goods receipt.
+    eq(outputType.application, 'IN'),
   ));
 
   let created = 0;
@@ -194,7 +211,9 @@ export async function recordOutputsForDocument(
     if (directions.has(opposite)) continue;
     const inserted = await tx.insert(outputMessage).values({
       client,
-      materialDocumentNumber: header.materialDocumentNumber,
+      documentCategory: DOCUMENT_CATEGORY,
+      documentNumber: header.materialDocumentNumber,
+      issueNumber: 1,
       documentYear: header.documentYear,
       outputType: type.outputType,
       transmissionMedium: type.transmissionMedium,
@@ -212,7 +231,8 @@ export async function recordOutputsForDocument(
 async function dispatchImmediateInTx(tx: Tx, client: string, documentNumber: string, changedBy: string) {
   const due = await tx.select().from(outputMessage).where(and(
     eq(outputMessage.client, client),
-    eq(outputMessage.materialDocumentNumber, documentNumber),
+    eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+    eq(outputMessage.documentNumber, documentNumber),
     eq(outputMessage.status, 'PENDING'),
     eq(outputMessage.dispatchTime, 'IMMEDIATE'),
   ));
@@ -222,18 +242,24 @@ async function dispatchImmediateInTx(tx: Tx, client: string, documentNumber: str
     ));
     if (!type?.isActive) continue;
     if (message.transmissionMedium === 'EMAIL' && !message.recipient) continue;
+    // Rendered here, inside the posting transaction: a separate connection would not see a document
+    // that is not committed yet, and what is stored is what was sent.
+    const slip = await renderSlipIn(tx, client, documentNumber);
     await tx.update(outputMessage).set({
       status: 'PROCESSED',
       sendCount: message.sendCount + 1,
       lastProcessedAt: new Date(),
       errorText: null,
+      renderedDocument: slip,
       changedBy,
       changedAt: new Date(),
     }).where(and(
       eq(outputMessage.client, client),
-      eq(outputMessage.materialDocumentNumber, documentNumber),
+      eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+      eq(outputMessage.documentNumber, documentNumber),
       eq(outputMessage.outputType, message.outputType),
       eq(outputMessage.transmissionMedium, message.transmissionMedium),
+      eq(outputMessage.issueNumber, message.issueNumber),
     ));
   }
 }
@@ -251,7 +277,10 @@ export async function recordOutputsForPostedDocument(
 }
 
 async function selectionClause(client: string, s: OutputSelection) {
-  const clauses = [eq(outputMessage.client, client)];
+  const clauses = [
+    eq(outputMessage.client, client),
+    eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+  ];
   if (s.status) {
     if (!(OUTPUT_STATUSES as readonly string[]).includes(s.status)) {
       throw new MaterialDocumentOutputError(
@@ -281,8 +310,8 @@ async function selectionClause(client: string, s: OutputSelection) {
     clauses.push(eq(outputMessage.dispatchTime, s.dispatchTime));
   }
   if (s.outputType) clauses.push(eq(outputMessage.outputType, s.outputType.trim().toUpperCase()));
-  if (s.documentFrom) clauses.push(gte(outputMessage.materialDocumentNumber, s.documentFrom.trim()));
-  if (s.documentTo) clauses.push(lte(outputMessage.materialDocumentNumber, s.documentTo.trim()));
+  if (s.documentFrom) clauses.push(gte(outputMessage.documentNumber, s.documentFrom.trim()));
+  if (s.documentTo) clauses.push(lte(outputMessage.documentNumber, s.documentTo.trim()));
   if (s.documentYear) {
     if (!/^\d{4}$/.test(s.documentYear)) {
       throw new MaterialDocumentOutputError(
@@ -311,7 +340,7 @@ async function selectionClause(client: string, s: OutputSelection) {
     clauses.push(sql`exists (
       select 1 from material_document_line l
       where l.client = ${client}
-        and l.material_document_number = ${outputMessage.materialDocumentNumber}
+        and l.material_document_number = ${outputMessage.documentNumber}
         and l.plant between ${from} and ${to}
     )`);
   }
@@ -336,14 +365,14 @@ export async function listOutputMessages(input: {
     }).from(outputMessage)
       .innerJoin(materialDocument, and(
         eq(materialDocument.client, outputMessage.client),
-        eq(materialDocument.materialDocumentNumber, outputMessage.materialDocumentNumber),
+        eq(materialDocument.materialDocumentNumber, outputMessage.documentNumber),
       ))
       .innerJoin(outputType, and(
         eq(outputType.client, outputMessage.client),
         eq(outputType.outputType, outputMessage.outputType),
       ))
       .where(where)
-      .orderBy(desc(outputMessage.createdAt), asc(outputMessage.materialDocumentNumber))
+      .orderBy(desc(outputMessage.createdAt), asc(outputMessage.documentNumber))
       .limit(maxHits + 1);
 
     const counts = await tx.select({
@@ -352,13 +381,13 @@ export async function listOutputMessages(input: {
     }).from(outputMessage)
       .innerJoin(materialDocument, and(
         eq(materialDocument.client, outputMessage.client),
-        eq(materialDocument.materialDocumentNumber, outputMessage.materialDocumentNumber),
+        eq(materialDocument.materialDocumentNumber, outputMessage.documentNumber),
       ))
       .where(await selectionClause(input.client, { ...selection, status: undefined }))
       .groupBy(outputMessage.status);
 
     const shown = rows.slice(0, maxHits);
-    const numbers = [...new Set(shown.map((r) => r.message.materialDocumentNumber))];
+    const numbers = [...new Set(shown.map((r) => r.message.documentNumber))];
     const places = new Map<string, { plants: Set<string>; companies: Set<string> }>();
     if (numbers.length > 0) {
       const lines = await tx.select({
@@ -393,9 +422,9 @@ export async function listOutputMessages(input: {
       capability: MATERIAL_DOC_OUTPUT_CAPABILITY,
       selection,
       rows: shown.map((r) => {
-        const place = places.get(r.message.materialDocumentNumber);
+        const place = places.get(r.message.documentNumber);
         return {
-          documentNumber: r.message.materialDocumentNumber,
+          documentNumber: r.message.documentNumber,
           documentYear: r.message.documentYear,
           postingDate: r.header.postingDate,
           documentDate: r.header.documentDate,
@@ -410,6 +439,7 @@ export async function listOutputMessages(input: {
           printerQueue: r.message.printerQueue,
           lastProcessedAt: r.message.lastProcessedAt ? new Date(r.message.lastProcessedAt).toISOString() : null,
           errorText: r.message.errorText,
+          renderedDocument: r.message.renderedDocument,
           plants: [...(place?.plants ?? [])].sort(),
           companyCodes: [...(place?.companies ?? [])].sort(),
         };
@@ -450,7 +480,8 @@ export async function determineOutputs(input: {
     for (const document of documents) {
       const before = await tx.select({ count: sql<number>`count(*)::int` }).from(outputMessage).where(and(
         eq(outputMessage.client, input.client),
-        eq(outputMessage.materialDocumentNumber, document.number),
+        eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+        eq(outputMessage.documentNumber, document.number),
       ));
       const written = await recordOutputsForDocument(tx, input.client, document.number, input.changedBy);
       created += written;
@@ -476,20 +507,25 @@ export interface DispatchResult {
  * Render the slip from the document as posted. Pure reading: no writes, no period
  * check, no valuation judgement.
  */
-export async function renderSlip(input: {
-  client: string; documentNumber: string;
-}): Promise<string> {
-  return withTenant(input.client, async (tx) => {
+/**
+ * Render the slip for a document inside a transaction the caller already holds. Rendering happens here
+ * rather than on its own connection because the posting hook dispatches before it commits, and a
+ * separate connection would not see a document that does not exist yet.
+ */
+export async function renderSlipIn(
+  tx: Tx, client: string, documentNumber: string,
+): Promise<string> {
+  {
     const [header] = await tx.select().from(materialDocument).where(and(
-      eq(materialDocument.client, input.client),
-      eq(materialDocument.materialDocumentNumber, input.documentNumber),
+      eq(materialDocument.client, client),
+      eq(materialDocument.materialDocumentNumber, documentNumber),
     ));
     if (!header) {
-      throw new MaterialDocumentOutputError(`Material document ${input.documentNumber} does not exist.`);
+      throw new MaterialDocumentOutputError(`Material document ${documentNumber} does not exist.`);
     }
     const lines = await tx.select().from(materialDocumentLine).where(and(
-      eq(materialDocumentLine.client, input.client),
-      eq(materialDocumentLine.materialDocumentNumber, input.documentNumber),
+      eq(materialDocumentLine.client, client),
+      eq(materialDocumentLine.materialDocumentNumber, documentNumber),
     )).orderBy(materialDocumentLine.lineNumber);
 
     const numbers = [...new Set(lines.map((l) => l.materialNumber))];
@@ -498,7 +534,7 @@ export async function renderSlip(input: {
       const masters = await tx.select({
         materialNumber: material.materialNumber, description: material.description,
       }).from(material).where(and(
-        eq(material.client, input.client), inArray(material.materialNumber, numbers),
+        eq(material.client, client), inArray(material.materialNumber, numbers),
       ));
       for (const m of masters) if (m.description) descriptions.set(m.materialNumber, m.description);
     }
@@ -508,7 +544,7 @@ export async function renderSlip(input: {
       const found = await tx.select({
         movementType: movementType.movementType, description: movementType.description,
       }).from(movementType).where(and(
-        eq(movementType.client, input.client), inArray(movementType.movementType, codes),
+        eq(movementType.client, client), inArray(movementType.movementType, codes),
       ));
       for (const m of found) movements.set(m.movementType, m.description);
     }
@@ -537,7 +573,14 @@ export async function renderSlip(input: {
     out.push(rule);
     out.push(`Items ${lines.length}`);
     return out.join('\n');
-  });
+  }
+}
+
+/** Render the slip from the document as posted, on its own read. */
+export async function renderSlip(input: {
+  client: string; documentNumber: string;
+}): Promise<string> {
+  return withTenant(input.client, (tx) => renderSlipIn(tx, input.client, input.documentNumber));
 }
 
 /**
@@ -554,7 +597,9 @@ export async function dispatchMessage(input: {
   return withTenant(input.client, async (tx) => {
     const [message] = await tx.select().from(outputMessage).where(and(
       eq(outputMessage.client, input.client),
-      eq(outputMessage.materialDocumentNumber, input.documentNumber),
+      eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+      eq(outputMessage.documentNumber, input.documentNumber),
+      eq(outputMessage.issueNumber, 1),
       eq(outputMessage.outputType, input.outputType),
       eq(outputMessage.transmissionMedium, input.transmissionMedium),
     ));
@@ -580,12 +625,14 @@ export async function dispatchMessage(input: {
         changedBy: input.changedBy, changedAt: now,
       }).where(and(
         eq(outputMessage.client, input.client),
-        eq(outputMessage.materialDocumentNumber, input.documentNumber),
+        eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+        eq(outputMessage.documentNumber, input.documentNumber),
+        eq(outputMessage.issueNumber, 1),
         eq(outputMessage.outputType, input.outputType),
         eq(outputMessage.transmissionMedium, input.transmissionMedium),
       )).returning();
       return {
-        documentNumber: failed.materialDocumentNumber,
+        documentNumber: failed.documentNumber,
         outputType: failed.outputType,
         transmissionMedium: failed.transmissionMedium,
         status: 'ERROR' as OutputStatus,
@@ -601,16 +648,19 @@ export async function dispatchMessage(input: {
       sendCount: message.sendCount + 1,
       lastProcessedAt: now,
       errorText: null,
+      renderedDocument: slip,
       changedBy: input.changedBy, changedAt: now,
     }).where(and(
       eq(outputMessage.client, input.client),
-      eq(outputMessage.materialDocumentNumber, input.documentNumber),
+      eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+      eq(outputMessage.documentNumber, input.documentNumber),
+      eq(outputMessage.issueNumber, 1),
       eq(outputMessage.outputType, input.outputType),
       eq(outputMessage.transmissionMedium, input.transmissionMedium),
     )).returning();
 
     return {
-      documentNumber: done.materialDocumentNumber,
+      documentNumber: done.documentNumber,
       outputType: done.outputType,
       transmissionMedium: done.transmissionMedium,
       status: 'PROCESSED' as OutputStatus,
@@ -662,9 +712,11 @@ export async function setRecipient(input: {
   return withTenant(input.client, async (tx) => {
     const [message] = await tx.select().from(outputMessage).where(and(
       eq(outputMessage.client, input.client),
-      eq(outputMessage.materialDocumentNumber, input.documentNumber),
+      eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+      eq(outputMessage.documentNumber, input.documentNumber),
       eq(outputMessage.outputType, input.outputType),
       eq(outputMessage.transmissionMedium, input.transmissionMedium),
+      eq(outputMessage.issueNumber, 1),
     ));
     if (!message) {
       throw new MaterialDocumentOutputError(
@@ -678,13 +730,15 @@ export async function setRecipient(input: {
       changedBy: input.changedBy, changedAt: new Date(),
     }).where(and(
       eq(outputMessage.client, input.client),
-      eq(outputMessage.materialDocumentNumber, input.documentNumber),
+      eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+      eq(outputMessage.documentNumber, input.documentNumber),
       eq(outputMessage.outputType, input.outputType),
       eq(outputMessage.transmissionMedium, input.transmissionMedium),
+      eq(outputMessage.issueNumber, 1),
     )).returning();
 
     return {
-      documentNumber: updated.materialDocumentNumber,
+      documentNumber: updated.documentNumber,
       documentYear: updated.documentYear,
       postingDate: '',
       documentDate: '',
@@ -699,6 +753,7 @@ export async function setRecipient(input: {
       printerQueue: updated.printerQueue,
       lastProcessedAt: updated.lastProcessedAt ? new Date(updated.lastProcessedAt).toISOString() : null,
       errorText: updated.errorText,
+      renderedDocument: updated.renderedDocument,
       plants: [],
       companyCodes: [],
     };

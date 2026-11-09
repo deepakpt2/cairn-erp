@@ -2620,6 +2620,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["customer", "agreement", "billing"],
   },
   {
+    id: "/sales/output",
+    path: "/sales/output",
+    query: {},
+    code: "SALES.OUTPUT.PROCESS",
+    title: "Output: what the customer receives",
+    area: "sales",
+    family: "sales-output",
+    accepts: ["order", "delivery", "billing", "customer", "invoice"],
+  },
+  {
     id: "/sales/returns",
     path: "/sales/returns",
     query: {},

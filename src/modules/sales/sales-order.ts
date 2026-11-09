@@ -36,6 +36,7 @@ import {
   type CreditDeterminationView, type ReleaseOutcome,
 } from '../finance/credit';
 import { customerCredit } from '../finance/schema';
+import { recordSalesOutputs } from './output';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 import { DeliveringPlantError, deliveringPlantFor } from './delivering-plant';
 import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
@@ -799,6 +800,14 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
         items: lines.length, netValue, taxValue, grossValue,
       },
     });
+    // What the customer receives. Determined here, inside the transaction that wrote the order, so
+    // an order never stands with its confirmation missing because the process died between the two.
+    // It earns nothing unless a condition record says it does: no record, no output.
+    await recordSalesOutputs(tx, {
+      client: parsed.client, changedBy: parsed.changedBy,
+      documentCategory: 'SALES_ORDER', documentNumber: number,
+    });
+
     return { orderNumber: number, replayed: false, creditArea, orderDate: parsed.orderDate };
   });
 

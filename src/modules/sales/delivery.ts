@@ -43,6 +43,7 @@ import {
 import { deliveredOf, orderLineProgress } from './fulfillment-quantities';
 import { creditAreaFor } from './sales-order';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
+import { recordSalesOutputs } from './output';
 import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
 import { CUSTOMER_MASTER_ROUTE, deliveryTermsFor } from './delivering-plant';
 
@@ -1373,6 +1374,13 @@ export async function postDeliveryGoodsIssue(input: DeliveryIssueInput): Promise
         movementValue: 'Movement value',
       },
     });
+    // The goods are out, so the customer gets the note that travels with them - determined inside
+    // the transaction that posted the movement, and only if a condition record says so.
+    await recordSalesOutputs(tx, {
+      client: parsed.client, changedBy: parsed.changedBy,
+      documentCategory: 'DELIVERY', documentNumber: header.deliveryNumber,
+    });
+
     return { issue, header };
   });
 

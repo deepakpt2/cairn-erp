@@ -13,6 +13,12 @@ export * from './tables';
  */
 export * from '../modules/finance/schema';
 export * from '../modules/foundation/schema';
+/**
+ * Output — types, condition records and messages. It stands outside the inventory module that first
+ * carried it, because a goods receipt slip and an invoice are both documents a company sends and one
+ * queue has to hold them both (§4.4, audit gap C7).
+ */
+export * from '../modules/foundation/output-schema';
 
 export * from '../modules/inventory/schema';
 export * from '../modules/people/schema';

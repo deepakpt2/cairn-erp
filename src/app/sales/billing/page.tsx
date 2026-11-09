@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { listSalesOutput } from '@/modules/sales/output';
 import {
   BILLING_CANCEL_CAPABILITY,
   BILLING_CAPABILITY,
@@ -56,6 +57,14 @@ export default async function SalesBillingPage({ searchParams }: {
   const rebates = selected
     ? await rebateAccrualsForBilling(client, selected.billingNumber)
     : [];
+  // What the customer was sent from this document. An invoice is not finished when it is posted; it is
+  // finished when the customer has it, and the message is where that stands recorded.
+  const outputs = selected
+    ? (await listSalesOutput({
+      client,
+      selection: { documentCategory: 'BILLING', documentNumber: selected.billingNumber },
+    })).rows
+    : [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -83,6 +92,7 @@ export default async function SalesBillingPage({ searchParams }: {
         flow={flow}
         advances={advances}
         rebates={rebates}
+        outputs={outputs}
         deliveryNumber={deliveryNumber}
         canCreate={can(session, BILLING_CAPABILITY)}
         canCancel={can(session, BILLING_CANCEL_CAPABILITY)}

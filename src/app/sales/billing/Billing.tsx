@@ -22,6 +22,8 @@ interface Props {
   advances: Awaited<ReturnType<typeof import('@/modules/sales/down-payment').orderDownPayments>>;
   /** What this document earned against the rebate agreements it fell inside. */
   rebates: Awaited<ReturnType<typeof import('@/modules/sales/rebate').rebateAccrualsForBilling>>;
+  /** What was sent from this document, and the state each issue reached. */
+  outputs: Awaited<ReturnType<typeof import('@/modules/sales/output').listSalesOutput>>['rows'];
   deliveryNumber: string;
   canCreate: boolean;
   canCancel: boolean;
@@ -205,10 +207,11 @@ function PlanDatesDue({ planDates, allowed }: { planDates: Props['planDates']; a
 }
 
 function SelectedBilling({
-  selected, flow, advances, rebates, canCancel, canCreate,
+  selected, flow, advances, rebates, outputs, canCancel, canCreate,
 }: {
   selected: BillingView; flow: Props['flow']; advances: Props['advances'];
-  rebates: Props['rebates']; canCancel: boolean; canCreate: boolean;
+  rebates: Props['rebates']; outputs: Props['outputs'];
+  canCancel: boolean; canCreate: boolean;
 }) {
   const [state, action, pending] = useActionState(cancelBillingAction, EMPTY);
   const [rebillState, rebillAction, rebillPending] = useActionState(rebillDeliveryAction, EMPTY);
@@ -335,6 +338,53 @@ function SelectedBilling({
             The rebate is a provision: the customer was charged the whole of this invoice, and what the sale
             earned against its agreements is given back on a credit memo raised by the settlement. A line that
             stands reversed is one whose document was cancelled — the provision went with it.
+          </p>
+        </details>
+      ) : null}
+
+      {outputs.length ? (
+        <details className="mt-3" open>
+          <summary className="text-sm text-ink-soft">
+            Sent to the customer · {outputs.length === 1
+              ? `one output, ${outputs[0].status.toLowerCase()}`
+              : `${outputs.length} issues, ${outputs.filter((row) => row.status === 'PROCESSED').length} processed`}
+          </summary>
+          <table className="grid-table mt-2 text-sm">
+            <thead>
+              <tr className="text-left text-xs text-ink-faint">
+                <th>Output</th><th>Medium</th><th>Dispatch</th><th>Issue</th>
+                <th>Status</th><th className="text-right">Sends</th><th>Recipient</th><th>Last processed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {outputs.map((row) => (
+                <tr key={`${row.outputType}/${row.transmissionMedium}/${row.issueNumber}`}>
+                  <td>{row.outputType} <span className="text-ink-soft">{row.outputTypeDescription}</span></td>
+                  <td>{row.transmissionMedium}</td>
+                  <td>{row.dispatchTime.toLowerCase()}</td>
+                  <td>
+                    {row.issueNumber}
+                    {row.reissueReason ? <div className="text-xs text-ink-faint">{row.reissueReason}</div> : null}
+                  </td>
+                  <td>
+                    {row.status.toLowerCase()}
+                    {row.errorText ? <div className="text-xs text-red-700">{row.errorText}</div> : null}
+                  </td>
+                  <td className="text-right">{row.sendCount}</td>
+                  <td>{row.recipient ?? '—'}</td>
+                  <td className="code text-xs">{row.lastProcessedAt ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-ink-faint">
+            Determined from the output condition records that stood for this document’s sales area, type and
+            customer on the day it bears — no record, no output. Each issue keeps the document as it was
+            rendered and sent, and a copy is issued beside the first rather than over it.
+            {' '}
+            <Link className="link" href={`/sales/output?documentCategory=BILLING&documentNumber=${selected.billingNumber}`}>
+              Open the queue
+            </Link>
           </p>
         </details>
       ) : null}
@@ -577,6 +627,7 @@ export default function Billing(props: Props) {
           flow={props.flow}
           advances={props.advances}
           rebates={props.rebates}
+          outputs={props.outputs}
           canCancel={props.canCancel}
           canCreate={props.canCreate}
         />

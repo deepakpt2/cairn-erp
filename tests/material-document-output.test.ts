@@ -155,9 +155,10 @@ describe('SCR-135 material document output (MB90)', () => {
     await withTenant(client, async (tx) => {
       await recordOutputsForPostedDocument(tx, client, emailDoc, ACTOR);
       await tx.execute(sql`
-        insert into output_message (client, material_document_number, document_year, output_type,
-                                    transmission_medium, dispatch_time, status, created_by)
-        values (${client}, ${emailDoc}, 2026, 'WE01', 'EMAIL', 'PERIODIC', 'PENDING', ${ACTOR})
+        insert into output_message (client, document_category, document_number, document_year, output_type,
+                                    transmission_medium, dispatch_time, issue_number, status, created_by)
+        values (${client}, 'MATERIAL_DOCUMENT', ${emailDoc}, 2026, 'WE01', 'EMAIL', 'PERIODIC', 1,
+                'PENDING', ${ACTOR})
         on conflict do nothing
       `);
     });
