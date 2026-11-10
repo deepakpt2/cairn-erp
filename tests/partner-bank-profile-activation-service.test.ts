@@ -22,6 +22,7 @@ function session(capabilities: string[] = [PARTNER_BANK_PROFILE_ACTIVATE_CAPABIL
       email: null,
       mustChangePassword: false,
       capabilities,
+      grants: [],
     },
     expiresAt: new Date('2026-10-12T00:00:00.000Z'),
     renewed: false,

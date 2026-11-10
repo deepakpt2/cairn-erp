@@ -26,6 +26,7 @@ function session(capabilities: string[], client = 'T123'): SessionContext {
       email: null,
       mustChangePassword: false,
       capabilities,
+      grants: [],
     },
     expiresAt: new Date('2030-01-01T00:00:00Z'),
     renewed: false,

@@ -56,8 +56,12 @@
 import { and, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 
 import { withTenant, type Tx } from '../db/client';
-// The one pattern matcher. See `patternMatches` for why this is not reimplemented.
-import { hasCapability } from './session';
+// The one pattern matcher. It lives in a leaf module so `session.ts` and this file share it
+// without importing each other. See `patternMatches` for why it is not reimplemented.
+import { patternMatches } from './pattern';
+
+// Re-exported so callers import the matcher from one place, wherever they found it.
+export { patternMatches } from './pattern';
 import { employee, positionAssignment } from '../../modules/people/schema';
 import {
   authOrgRestriction,
@@ -165,8 +169,22 @@ export interface AuthorityGrant {
  * Two matchers that disagree is the difference between an authorisation check
  * and a decoration, so there is one, and it is the existing one.
  */
-export function patternMatches(pattern: string, capability: string): boolean {
-  return hasCapability([pattern], capability);
+
+
+/**
+ * The pattern list behind a set of grants: what the pre-existing one-argument checks
+ * take, and what `AuthenticatedUser.capabilities` has always held.
+ *
+ * This is the bridge that wires the new authority sources into the 53 modules that
+ * still call `hasCapability` with a plain array. Nothing in those modules changes;
+ * the array they are handed simply answers for positions and direct grants too.
+ *
+ * The caveat it carries: a pattern list cannot express scope, so a grant restricted to
+ * one plant looks unrestricted here. Scope is enforced by `can()` and `canWith`, which
+ * is why anything making a decision about a document in a place must ask through them.
+ */
+export function patternsOf(grants: readonly AuthorityGrant[]): string[] {
+  return [...new Set(grants.map((grant) => grant.pattern))];
 }
 
 /**
@@ -234,10 +252,6 @@ function dayOf(asOf: string | Date): string {
   return asOf instanceof Date ? asOf.toISOString().slice(0, 10) : asOf.slice(0, 10);
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 /** `valid_to` is null for an open grant, which is the common case. */
 function openOn(column: unknown, day: string) {
   return or(isNull(column as never), gte(column as never, day));
@@ -254,9 +268,16 @@ export async function effectiveGrants(
   tx: Tx,
   client: string,
   userId: string,
-  asOf: string | Date = todayIso(),
+  asOf: string | Date = new Date(),
 ): Promise<AuthorityGrant[]> {
   const day = dayOf(asOf);
+
+  // The instant a role must still be live at. Asking about "now" uses the instant,
+  // because revoking a role writes valid_to as the moment it happened — a role revoked
+  // a minute ago must not keep answering for the rest of the day. Naming a date asks
+  // about the whole day instead, so a grant that ends on the 14th is live on the 14th.
+  const boundary = asOf instanceof Date ? asOf.toISOString() : `${day} 23:59:59.999`;
+
   const grants: AuthorityGrant[] = [];
 
   // ── Through a role. Unrestricted: a role's scope, if it has one, is the
@@ -274,12 +295,14 @@ export async function effectiveGrants(
         eq(userRole.client, client),
         eq(userRole.userId, userId),
         eq(role.isActive, true),
-        // Compared as dates, not instants. `user_role.valid_from` defaults to
-        // `now()`, so a role granted at four in the afternoon would otherwise be
-        // invisible all day: 16:00 today is not before midnight today. A grant
-        // is either live on a given day or it is not.
-        sql`${userRole.validFrom}::date <= ${day}::date`,
-        sql`(${userRole.validTo} is null or ${userRole.validTo}::date >= ${day}::date)`,
+        // Compared as instants. `user_role.valid_from` defaults to `now()`, so a role
+        // granted four minutes ago must be live, and a role revoked four minutes ago
+        // must not be — which is why this is not date-granular. An earlier version of
+        // this compared against midnight and both went wrong in opposite directions:
+        // a role granted today was invisible all day, and one revoked today outlived
+        // its revocation until midnight.
+        sql`${userRole.validFrom} <= ${boundary}::timestamptz`,
+        sql`(${userRole.validTo} is null or ${userRole.validTo} >= ${boundary}::timestamptz)`,
       ),
     );
 
@@ -475,7 +498,7 @@ export async function can(
   who: AuthoritySubject,
   capability: string,
   org: OrgScope = {},
-  asOf: string | Date = todayIso(),
+  asOf: string | Date = new Date(),
 ): Promise<boolean> {
   return withTenant(who.client, async (tx) => {
     const [grants, restrictions] = await Promise.all([
@@ -493,7 +516,7 @@ export async function canTx(
   userId: string,
   capability: string,
   org: OrgScope = {},
-  asOf: string | Date = todayIso(),
+  asOf: string | Date = new Date(),
 ): Promise<boolean> {
   const [grants, restrictions] = await Promise.all([
     effectiveGrants(tx, client, userId, asOf),

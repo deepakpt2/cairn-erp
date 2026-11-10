@@ -56,7 +56,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await destroyTenant(alpha.client); await destroyTenant(beta.client); await closeDb(); });
 function signedIn(capabilities = ['*']) {
-  request.session = { sessionId: 'action-security-session', user: { client: alpha.client, userId: 'action-user', username: 'real.operator', fullName: 'Real Operator', email: null, mustChangePassword: false, capabilities }, expiresAt: new Date(Date.now() + 100000), renewed: false };
+  request.session = { sessionId: 'action-security-session', user: { client: alpha.client, userId: 'action-user', username: 'real.operator', fullName: 'Real Operator', email: null, mustChangePassword: false, grants: [], capabilities }, expiresAt: new Date(Date.now() + 100000), renewed: false };
 }
 function form(values: Record<string, string>) {
   const data = new FormData(); for (const [k, v] of Object.entries(values)) data.set(k, v); return data;
@@ -368,7 +368,7 @@ describe('a save is judged by the session that opened the record', () => {
     request.session = {
       user: {
         client: alpha.client, userId: 'action-user', username: 'real.operator',
-        fullName: 'Real Operator', email: null, mustChangePassword: false, capabilities,
+        fullName: 'Real Operator', email: null, mustChangePassword: false, capabilities, grants: [],
       },
       expiresAt: new Date(Date.now() + 100000),
       renewed: false,

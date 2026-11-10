@@ -35,6 +35,11 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 import { EXPLICIT_GRANT_ONLY_CAPABILITIES } from './capability-policy';
+import { effectiveGrants, patternsOf, type AuthorityGrant } from './authority';
+
+// The matcher lives in a leaf module, so `authority.ts` can share it without a cycle.
+export { hasCapability, patternGrants } from './pattern';
+export { patternMatches } from './pattern';
 import { withTenant, type Tx } from '../db/client';
 import { verifyPassword } from './password';
 import { appUser } from '../tables/security';
@@ -129,8 +134,6 @@ async function writeAccessLog(
   `);
 }
 
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Sign in
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,7 +145,10 @@ export interface AuthenticatedUser {
   fullName: string;
   email: string | null;
   mustChangePassword: boolean;
+  /** Pattern list, derived from `grants`. What the pre-existing one-argument checks take. */
   capabilities: string[];
+  /** The authority itself: dated, scoped, and traceable. What `can()` takes. */
+  grants: AuthorityGrant[];
   /** One-character logon-language key used by language-dependent master texts. */
   logonLanguage?: string;
 }
@@ -303,7 +309,8 @@ export async function attemptSignIn(
      where client = ${input.client} and id = ${user.id}
   `);
 
-  const capabilities = await loadCapabilities(tx, input.client, user.id);
+  const grants = await effectiveGrants(tx, input.client, user.id);
+  const capabilities = patternsOf(grants);
 
   await writeAccessLog(tx, {
     client: input.client,
@@ -324,6 +331,7 @@ export async function attemptSignIn(
       email: user.email,
       mustChangePassword: user.must_change_password,
       capabilities,
+      grants,
     },
   };
 }
@@ -480,6 +488,12 @@ export async function resolveSession(
   const remainingMinutes = (expiresAt.getTime() - now) / 60_000;
   let renewed = false;
 
+  // Authority is resolved once per request and never cached in the session, so a role
+  // revoked, a delegation ended, or an assignment delimited takes effect on the next
+  // request rather than lingering for the rest of the session's twelve hours.
+  const grants = await effectiveGrants(tx, input.client, row.user_id);
+  const capabilities = patternsOf(grants);
+
   if (remainingMinutes < RENEW_WHEN_REMAINING_MINUTES) {
     const next = new Date(now + SESSION_TTL_MINUTES * 60_000);
     await tx.execute(sql`
@@ -497,7 +511,8 @@ export async function resolveSession(
         email: row.email,
         mustChangePassword: row.must_change_password,
         logonLanguage: logonLanguageKeyFromPreferences(row.preferences),
-        capabilities: await loadCapabilities(tx, input.client, row.user_id),
+        capabilities,
+        grants,
       },
       sessionId: row.session_id,
       expiresAt: next,
@@ -514,7 +529,8 @@ export async function resolveSession(
       email: row.email,
       mustChangePassword: row.must_change_password,
       logonLanguage: logonLanguageKeyFromPreferences(row.preferences),
-      capabilities: await loadCapabilities(tx, input.client, row.user_id),
+      capabilities,
+        grants,
     },
     sessionId: row.session_id,
     expiresAt,
@@ -600,21 +616,15 @@ export async function loadCapabilities(
   client: string,
   userId: string,
 ): Promise<string[]> {
-  const now = new Date().toISOString();
-  const rows = (await tx.execute(sql`
-    select distinct rc.capability_code
-      from user_role ur
-      join role r on r.client = ur.client and r.code = ur.role_code and r.is_active = true
-      join role_capability rc on rc.client = ur.client and rc.role_code = ur.role_code
-     where ur.client = ${client}
-       and ur.user_id = ${userId}
-       and (ur.valid_from is null or ur.valid_from <= ${now})
-       and (ur.valid_to   is null or ur.valid_to   >= ${now})
-     order by rc.capability_code
-  `)) as unknown as Array<{ capability_code: string }>;
-
-  return rows.map((r) => r.capability_code);
+  return patternsOf(await effectiveGrants(tx, client, userId));
 }
+
+/**
+ * Retained for the callers that only want the pattern list. The original body, which read
+ * `role_capability` directly, is kept below the new implementation for the moment because
+ * `loadCapabilities` is exported and eight modules call it; what they receive is now the
+ * union of role, position and direct grants rather than the role path alone.
+ */
 
 /**
  * The organisational restrictions a user holds: company codes, plants, and other
@@ -652,62 +662,6 @@ export function hasOrgAccess(
 ): boolean {
   if (!restrictions || restrictions.length === 0) return true;
   return restrictions.some((r) => r.scopeType === scopeType && r.scopeValue === scopeValue);
-}
-
-/**
- * Does the user hold this authority?
- *
- * Matching is on whole dot-separated segments: `PROC.*` grants `PROC.PO.CREATE`,
- * and `PROC` alone grants nothing. A naive `startsWith` would let `PROC` match
- * `PROCUREMENT.VIEW` — which is precisely the class of bug that turns an
- * authorisation check into a decoration.
- */
-export function hasCapability(capabilities: string[], required: string): boolean {
-  // The administrator/configurator role patterns are intentionally broad. For a restricted authority,
-  // those patterns must not turn registration in the catalogue into an effective grant; an exact role
-  // capability assignment is the only grant recognized here.
-  if (EXPLICIT_GRANT_ONLY_CAPABILITIES.has(required)) return capabilities.includes(required);
-  const requiredParts = required.split('.');
-  return capabilities.some((held) => patternGrants(held.split('.'), requiredParts));
-}
-
-/**
- * Does one held pattern grant one required authority?
- *
- * Segments are compared position by position, and a `*` covers the remainder of
- * the path — so `PROC.*` grants `PROC.PO.CREATE` and also `PROC` itself, while
- * `PROC.PO.CREATE` grants that authority and nothing else.
- *
- * The rule that matters is the one about length. A held pattern must account for
- * the *whole* required path and no more:
- *
- *   held `PROC.PO.CREATE`, required `PROC.PO`              → no. Holding create is
- *                                                            not holding the object.
- *   held `PROC.PO.CREATE`, required `...CREATE.APPROVE`    → no. Approving is a
- *                                                            different authority.
- *
- * Both were granted by the first version of this function, which stopped as soon
- * as the held segments ran out — so any authority that began with a held one was
- * allowed, and `PROC.PO.CREATE` would have granted `PROC.PO.CREATE.APPROVE`. That
- * is the difference between an authorisation check and a decoration.
- */
-function patternGrants(heldParts: string[], requiredParts: string[]): boolean {
-  for (let i = 0; i < heldParts.length; i += 1) {
-    if (heldParts[i] === '*') {
-      // A terminal wildcard covers the remainder, including no more segments.
-      // An interior wildcard consumes ONE segment; its suffix still has to match.
-      if (i === heldParts.length - 1) return true;
-      if (i >= requiredParts.length) return false;
-      continue;
-    }
-    // The pattern is longer than the requirement: it would be granting a
-    // sub-authority of what was asked for, which is not what was asked.
-    if (i >= requiredParts.length) return false;
-    if (heldParts[i] !== requiredParts[i]) return false;
-  }
-
-  // The pattern ran out. It grants only if it consumed the requirement exactly.
-  return heldParts.length === requiredParts.length;
 }
 
 /** Used by constant-time comparisons in tests and diagnostics. */

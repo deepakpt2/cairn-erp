@@ -64,7 +64,7 @@ function signedIn(who: { user: string; session: string }, capabilities: string[]
     sessionId: who.session,
     user: {
       client: tenant.client, userId: `u-${who.user}`, username: who.user, fullName: who.user,
-      email: null, mustChangePassword: false, capabilities,
+      email: null, mustChangePassword: false, capabilities, grants: [],
     },
     expiresAt: new Date(Date.now() + 100000),
     renewed: false,
@@ -143,6 +143,7 @@ describe('the display-only notice carries a remedy the operator can act on', () 
       user: {
         client: tenant.client, userId: 'u-lock.one', username: 'lock.one', fullName: 'lock.one',
         email: null, mustChangePassword: false, capabilities: ['*'],
+ grants: [],
       },
       expiresAt: new Date(Date.now() + 100000),
       renewed: false,
