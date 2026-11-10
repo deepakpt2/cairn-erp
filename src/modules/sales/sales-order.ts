@@ -40,7 +40,7 @@ import { evaluateIncompletion } from './incompletion';
 import { recordSalesOutputs } from './output';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 import { DeliveringPlantError, deliveringPlantFor } from './delivering-plant';
-import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
+import { billedOf, deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
 import { PricingError, assertMaterialAtPlant, resolveCustomerSalesData } from './pricing';
 import { MaterialSalesError, assertMaterialSalesArea } from './material-sales';
 import {
@@ -105,7 +105,12 @@ const documentFields = {
   /** Needed only when the customer is monitored in more than one area. */
   creditControlArea: optionalKey(4),
   requestKey: z.union([z.undefined(), z.string().trim().min(8).max(64)]),
-  lines: z.array(orderLineInput).min(1).max(100),
+  /**
+   * An order's items, as many as the order has. This was a hundred and the grid that typed them was
+   * ten, and the two disagreed about how large a large order was; the grid grows now (§5.4), so the
+   * service stands at the number a sales order has always been allowed to carry.
+   */
+  lines: z.array(orderLineInput).min(1).max(999),
 };
 
 export const orderCreateInput = z.object(documentFields);
@@ -425,6 +430,19 @@ export interface SalesOrderView {
      */
     confirmedQuantity: string | null;
     /**
+     * What the chain has taken off this item: what has gone out, and what has been billed (§5.4).
+     *
+     * Both are read from the documents that stand rather than from a counter on the line, and both
+     * come from `fulfillment-quantities.ts` — the module the delivery and the billing services refuse
+     * things from. An order that called a line open when the delivery service calls it drawn down
+     * would be worse than an order that said nothing at all, which is why there is one author of this
+     * arithmetic and this screen is not it.
+     */
+    deliveredQuantity: string;
+    billedQuantity: string;
+    /** What is still to come: what was ordered less what has gone out. */
+    openQuantity: string;
+    /**
      * The schedule lines of this item: what the customer asked for and by when, and what the check
      * confirmed against it. Empty on an item raised before the check stood.
      */
@@ -498,6 +516,11 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
     bucket.push(row);
     scheduleOf.set(row.orderLineNumber, bucket);
   }
+  // What the deliveries and the billing documents have already taken off each item. Read here, on
+  // every read of the order, so the quantities a planner sees are the quantities the chain will act
+  // on — and so the backlog in the analysis (§5.3) and the screen in front of the planner are the
+  // same arithmetic rather than two readings of it.
+  const progress = await orderLineProgress(tx, client, orderNumber);
   // An order raised before the partners stood carries none, and reads as the four-in-one customer it
   // always was: the number on its header.
   const partners = await resolvePartners(tx, client, {
@@ -527,6 +550,9 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
       status: l.status,
       rejectionReason: l.rejectionReason,
       confirmedQuantity: l.confirmedQuantity,
+      deliveredQuantity: String(deliveredOf(progress, l.lineNumber)),
+      billedQuantity: String(billedOf(progress, l.lineNumber)),
+      openQuantity: String(Math.max(Number(l.orderQuantity) - deliveredOf(progress, l.lineNumber), 0)),
       schedule: (scheduleOf.get(l.lineNumber) ?? []).map((row) => ({
         scheduleNumber: row.scheduleNumber,
         requestedDate: row.requestedDate,

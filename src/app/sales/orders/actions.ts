@@ -16,7 +16,12 @@ import {
 } from '@/modules/sales/sales-order';
 
 const ROUTE = SALES_ORDER_ROUTE;
-const LINE_SLOTS = 10;
+/**
+ * The most rows the grid may post. There is no cap on an order's items any more — the grid grows —
+ * but a form can say anything, and a server that believed it would loop until it fell over. The
+ * bound is the one the service puts on an order's items, so the grid and the service agree.
+ */
+const MAX_POSTED_ROWS = 999;
 
 export interface OrderActionState {
   ok: boolean;
@@ -36,13 +41,23 @@ function optional(form: FormData, name: string): string | undefined {
 }
 
 /**
+ * How many rows the grid sent. It says so itself, because the grid is no longer a fixed number of
+ * slots that the action and the screen could disagree about.
+ */
+function postedRows(form: FormData): number {
+  const raw = Number(text(form, 'lineCount') || '0');
+  if (!Number.isFinite(raw) || raw < 1) return 0;
+  return Math.min(Math.trunc(raw), MAX_POSTED_ROWS);
+}
+
+/**
  * The grid posts its items as numbered slots. A slot with no material is not an item: the form leaves
  * blank rows empty rather than submitting zeroes, and a half-filled row is refused by the service
  * rather than dropped, because a silently dropped line is an order that does not say what was asked.
  */
 function linesFrom(form: FormData): OrderCreateInput['lines'] {
   const lines: OrderCreateInput['lines'] = [];
-  for (let slot = 1; slot <= LINE_SLOTS; slot += 1) {
+  for (let slot = 1; slot <= postedRows(form); slot += 1) {
     const materialNumber = text(form, `line-${slot}-material`);
     if (!materialNumber) continue;
     const entry: OrderCreateInput['lines'][number] = {

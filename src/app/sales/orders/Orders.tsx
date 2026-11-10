@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useId } from 'react';
+import { useActionState, useId, useRef, useState } from 'react';
 
 import type { SalesOrderView } from '@/modules/sales/sales-order';
 import {
@@ -13,7 +13,10 @@ import {
 } from './actions';
 
 const EMPTY: OrderActionState = { ok: false };
-const LINE_SLOTS = 5;
+/** How many blank rows a new grid opens with. Not a cap: the grid grows as it is filled. */
+const OPENING_ROWS = 5;
+/** How many spare rows sit under the ones in use, so adding an item is one click and not two. */
+const SPARE_ROWS = 2;
 
 interface Props {
   documents: Array<{
@@ -47,35 +50,127 @@ function Notice({ state }: { state: OrderActionState }) {
   );
 }
 
-function LineSlots({ numbered }: { numbered: boolean }) {
+interface GridRow {
+  id: number;
+  /** The item this row addresses, or null on a row that has never been saved. */
+  lineNumber: number | null;
+  materialNumber: string;
+  plant: string;
+  quantity: string;
+  unit: string;
+  tax: string;
+  needed: string;
+}
+
+const blankRow = (id: number, lineNumber: number | null = null): GridRow => ({
+  id, lineNumber, materialNumber: '', plant: '', quantity: '', unit: '', tax: '', needed: '',
+});
+
+/**
+ * The item grid.
+ *
+ * It grows. An order is not limited to ten items and the grid is not either: a clerk adds a row and
+ * types into it, and the form posts however many rows stand. This used to be five rows on the screen
+ * and ten in the action, which is the worse of both — a large order could not be entered at all, and
+ * the two numbers disagreed about how large a large order was.
+ *
+ * Rows are numbered in tens, as the service numbers items. A row carrying a number changes that
+ * item; a row carrying none is new, and is given the next free number — which is why a change can
+ * add an item to an order that already has some.
+ *
+ * A blank row is not an item. The grid submits everything it has and the service ignores a row that
+ * names no material, so a clerk can leave rows they decided not to use.
+ */
+function ItemGrid({ initialRows, numbered }: { initialRows?: GridRow[]; numbered: boolean }) {
+  const [rows, setRows] = useState<GridRow[]>(() => {
+    const start = initialRows && initialRows.length > 0
+      ? [...initialRows, ...Array.from({ length: SPARE_ROWS }, (_, n) => blankRow(-(n + 1)))]
+      : Array.from({ length: OPENING_ROWS }, (_, n) => blankRow(n + 1));
+    return start;
+  });
+  const nextId = useRef(0);
+  // The number a new item takes: ten past the highest item that stands, which is the numbering the
+  // service uses and the reason a new row never lands on an item that is already there.
+  const nextNumber = useRef(
+    Math.max(0, ...rows.map((row) => row.lineNumber ?? 0)) + 10,
+  );
+
+  const add = () => {
+    nextId.current -= 1;
+    setRows((standing) => [...standing, blankRow(nextId.current, numbered ? nextNumber.current : null)]);
+    nextNumber.current += 10;
+  };
+  const remove = (id: number) => setRows((standing) => (
+    standing.length > 1 ? standing.filter((row) => row.id !== id) : standing
+  ));
+  const set = (id: number, field: keyof Omit<GridRow, 'id' | 'lineNumber'>, value: string) => (
+    setRows((standing) => standing.map((row) => (row.id === id ? { ...row, [field]: value } : row)))
+  );
+
   return (
     <div className="mt-3 space-y-2">
       <div className="grid grid-cols-2 gap-2 text-xs font-medium text-ink-soft sm:grid-cols-6">
         <span>Material</span><span>Plant</span><span>Quantity</span><span>Unit</span><span>Tax code</span><span>Needed by</span>
       </div>
-      {Array.from({ length: LINE_SLOTS }, (_, index) => index + 1).map((slot) => (
-        <div key={slot} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-          <input className="input" name={`line-${slot}-material`} placeholder="Material" autoComplete="off" />
-          <input
-            className="input"
-            name={`line-${slot}-plant`}
-            placeholder="Plant"
-            autoComplete="off"
-            title="Blank: determined from the customer's sales area, then the material's own sales view."
-          />
-          <input className="input" name={`line-${slot}-quantity`} placeholder="Quantity" inputMode="decimal" autoComplete="off" />
-          <input className="input" name={`line-${slot}-unit`} placeholder="Unit" autoComplete="off" />
-          <input className="input" name={`line-${slot}-tax`} placeholder="Tax" autoComplete="off" />
-          <input className="input" name={`line-${slot}-needed`} placeholder="YYYY-MM-DD" autoComplete="off" />
-          {numbered ? <input type="hidden" name={`line-${slot}-lineNumber`} value={slot * 10} /> : null}
-        </div>
-      ))}
-      <p className="mt-2 text-xs text-ink-soft">
-        A plant a person names stands. Left blank, the delivering plant is determined: the
-        ship-to’s sales area first, then the sold-to’s, then the material’s own sales view.
-      </p>
+      {rows.map((row, index) => {
+        const slot = index + 1;
+        const name = (field: string) => `line-${slot}-${field}`;
+        return (
+          <div key={row.id} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+            <input className="input" name={name('material')} placeholder="Material" autoComplete="off"
+              value={row.materialNumber} onChange={(e) => set(row.id, 'materialNumber', e.target.value)} />
+            <input className="input" name={name('plant')} placeholder="Plant" autoComplete="off"
+              value={row.plant} onChange={(e) => set(row.id, 'plant', e.target.value)} />
+            <input className="input" name={name('quantity')} placeholder="Quantity" inputMode="decimal" autoComplete="off"
+              value={row.quantity} onChange={(e) => set(row.id, 'quantity', e.target.value)} />
+            <input className="input" name={name('unit')} placeholder="Unit" autoComplete="off"
+              value={row.unit} onChange={(e) => set(row.id, 'unit', e.target.value)} />
+            <input className="input" name={name('tax')} placeholder="Tax" autoComplete="off"
+              value={row.tax} onChange={(e) => set(row.id, 'tax', e.target.value)} />
+            <div className="flex gap-2">
+              <input className="input min-w-0 flex-1" name={name('needed')} placeholder="YYYY-MM-DD" autoComplete="off"
+                value={row.needed} onChange={(e) => set(row.id, 'needed', e.target.value)} />
+              <button type="button" className="btn btn-default min-h-11 shrink-0 px-3 sm:min-h-8"
+                onClick={() => remove(row.id)} disabled={rows.length === 1}
+                aria-label={`Remove item row ${slot}`} title="Remove this row">×</button>
+            </div>
+            {numbered && row.lineNumber !== null
+              ? <input type="hidden" name={name('lineNumber')} value={row.lineNumber} />
+              : null}
+          </div>
+        );
+      })}
+      <input type="hidden" name="lineCount" value={String(rows.length)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={add}>
+          Add another item
+        </button>
+        <span className="text-xs text-ink-faint">
+          {rows.length} row{rows.length === 1 ? '' : 's'}. A row that names no material is not an item.
+        </span>
+      </div>
     </div>
   );
+}
+
+/**
+ * The rows a change starts from: the items that stand, so a change does not mean retyping the order.
+ * A rejected item is left out, because a rejected item number is not reused — the service refuses it,
+ * and a grid that offered it would be offering a refusal.
+ */
+function rowsOf(selected: SalesOrderView): GridRow[] {
+  return selected.lines
+    .filter((line) => line.status !== 'REJECTED')
+    .map((line, index) => ({
+      id: index + 1,
+      lineNumber: line.lineNumber,
+      materialNumber: line.materialNumber,
+      plant: line.plant,
+      quantity: String(Number(line.orderQuantity)),
+      unit: line.quantityUnit.trim(),
+      tax: line.taxCode ?? '',
+      needed: line.requestedDeliveryDate ?? '',
+    }));
 }
 
 function HeaderFields({ choices, selected }: { choices: Props['choices']; selected: SalesOrderView | null }) {
@@ -144,7 +239,8 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
             <thead>
               <tr className="text-left text-xs text-ink-faint">
                 <th>Item</th><th>Material</th><th>Plant</th><th className="text-right">Quantity</th>
-                <th className="text-right">Confirmed</th>
+                <th className="text-right">Confirmed</th><th className="text-right">Delivered</th>
+                <th className="text-right">Billed</th><th className="text-right">Open</th>
                 <th>Unit</th><th className="text-right">Price</th><th className="text-right">Net</th>
                 <th className="text-right">Tax</th><th>Priced from</th><th>Status</th>
               </tr>
@@ -156,8 +252,10 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
                   <td>{line.materialNumber}</td>
                   <td>{line.plant}</td>
                   <td className="text-right num">{Number(line.orderQuantity).toFixed(3)}</td>
-                  {/* Nothing confirmed is not zero confirmed: it is an item the check was never asked about. */}
                   <td className="text-right num">{line.confirmedQuantity === null ? '—' : Number(line.confirmedQuantity).toFixed(3)}</td>
+                  <td className="text-right num">{Number(line.deliveredQuantity).toFixed(3)}</td>
+                  <td className="text-right num">{Number(line.billedQuantity).toFixed(3)}</td>
+                  <td className="text-right num">{Number(line.openQuantity).toFixed(3)}</td>
                   <td>{line.quantityUnit.trim()}</td>
                   <td className="text-right num">{Number(line.netPrice).toFixed(4)} / {line.priceUnit}</td>
                   <td className="text-right num">{Number(line.netAmount).toFixed(2)}</td>
@@ -168,23 +266,6 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
               ))}
             </tbody>
           </table>
-
-          {selected.lines.some((line) => line.schedule.length) ? (
-            <details className="mt-3">
-              <summary className="text-sm text-ink-soft">
-                Schedule lines ({selected.lines.reduce((count, line) => count + line.schedule.length, 0)} rows)
-              </summary>
-              <ul className="mt-2 space-y-1 text-sm text-ink-soft">
-                {selected.lines.flatMap((line) => line.schedule.map((row) => (
-                  <li key={`${line.lineNumber}-${row.scheduleNumber}`}>
-                    Item {line.lineNumber} · {Number(row.requestedQuantity).toFixed(3)} asked for {row.requestedDate}
-                    {' · '}{Number(row.confirmedQuantity).toFixed(3)} {line.quantityUnit.trim()}
-                    {row.confirmedDate ? ` confirmed for ${row.confirmedDate}` : ' confirmed, and the plant promised none of it'}
-                  </li>
-                )))}
-              </ul>
-            </details>
-          ) : null}
 
           {selected.credit ? (
             <div className={selected.credit.status === 'BLOCKED' ? 'panel panel-danger mt-3 p-3 text-sm' : 'panel mt-3 p-3 text-sm'}>
@@ -223,7 +304,7 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
                 <input type="hidden" name="orderNumber" value={selected.orderNumber} />
                 <input type="hidden" name="expectedVersion" value={String(selected.version)} />
                 <HeaderFields choices={choices} selected={selected} />
-                <LineSlots numbered />
+                <ItemGrid numbered initialRows={rowsOf(selected)} />
                 <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Save changes</button>
               </form>
               <form action={cancelAction} className="space-y-2">
@@ -248,7 +329,7 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
           <h2 className="text-lg font-semibold">Create sales order</h2>
           <Notice state={notice} />
           <HeaderFields choices={choices} selected={null} />
-          <LineSlots numbered={false} />
+          <ItemGrid numbered={false} />
           <input type="hidden" name="requestKey" value={`SO-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`} />
           <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Create order</button>
         </form>
