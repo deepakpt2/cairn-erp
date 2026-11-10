@@ -2720,6 +2720,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/sales/documents",
+    path: "/sales/documents",
+    query: {},
+    code: "SALES.DOCUMENTS.LIST",
+    title: "Sales documents",
+    area: "sales",
+    family: "sales-billing",
+    accepts: ["order", "delivery", "billing", "customer", "material"],
+  },
+  {
     id: "/sales/incomplete",
     path: "/sales/incomplete",
     query: {},

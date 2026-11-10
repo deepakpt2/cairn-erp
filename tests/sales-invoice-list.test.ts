@@ -5,7 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { getCustomerInvoice } from '../src/modules/finance/customer-invoice';
-import { billDueList, getBilling } from '../src/modules/sales/billing';
+import { billDueList, cancelBillingDocument, getBilling, postBillingDocument } from '../src/modules/sales/billing';
 import {
   INVOICE_LIST_TYPE,
   cancelInvoiceList,
@@ -645,5 +645,77 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const read = await getBilling(tenant.client, document.billing.billingNumber);
     expect(read?.invoiceListStatus).toBe('DUE');
     expect(read?.customerInvoiceNumber).toBeNull();
+  });
+  // ── A listed document is settled with its list, not underneath it ─────────
+
+  it('a document waiting for a list posts nothing, whoever asks', async () => {
+    // The rule a list rests on, from the other door. `billDueList` already answers this way on the day
+    // the document is raised; this is the same document being asked again, later, through the call a
+    // screen makes for one delivery. A document that is DUE is not a document that failed to post —
+    // it is one that has deliberately not posted yet.
+    await setSchedule(tenant.client, CUSTOMER, 'MONTHLY');
+    await setBillingListType(tenant.client, INVOICE_LIST_TYPE);
+
+    const { deliveryNumber } = await issuedDelivery(tenant.client, { customerNumber: CUSTOMER, quantity: 4 });
+    const [document] = (await billDueList({
+      client: tenant.client, changedBy: ACTOR, billingDate: DATE,
+      selection: { deliveryNumber },
+    })).documents;
+    expect(document.billing.invoiceListStatus).toBe('DUE');
+
+    const asked = await postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber, billingDate: DATE,
+    });
+    expect(asked.posted).toBe(false);
+    expect(asked.awaitingInvoiceList).toBe(true);
+    // Still no receivable of its own. That is the whole property.
+    const read = await getBilling(tenant.client, document.billing.billingNumber);
+    expect(read?.customerInvoiceNumber).toBeNull();
+    expect(read?.status).toBe('OPEN');
+  });
+
+  it('a listed document refuses to be released or cancelled on its own', async () => {
+    await setSchedule(tenant.client, CUSTOMER, 'MONTHLY');
+    await setBillingListType(tenant.client, INVOICE_LIST_TYPE);
+
+    const { deliveryNumber } = await issuedDelivery(tenant.client, { customerNumber: CUSTOMER, quantity: 5 });
+    const [document] = (await billDueList({
+      client: tenant.client, changedBy: ACTOR, billingDate: DATE,
+      selection: { deliveryNumber },
+    })).documents;
+    const { list } = await createInvoiceList({
+      client: tenant.client, changedBy: ACTOR, billingNumbers: [document.billing.billingNumber],
+    });
+    const number = document.billing.billingNumber;
+    expect((await getBilling(tenant.client, number))?.invoiceListStatus).toBe('LISTED');
+
+    // Neither door is open. The list is the document the customer was sent, and this document's value
+    // is one of its items: release it here and the customer owes the money twice, cancel it here and
+    // the list asks for money its own rows no longer add up to.
+    await expect(postBillingDocument({
+      client: tenant.client, changedBy: ACTOR, deliveryNumber, billingDate: DATE,
+    })).rejects.toThrow(/stands on invoice list/i);
+    await expect(cancelBillingDocument({
+      client: tenant.client, changedBy: ACTOR, billingNumber: number, postingDate: DATE,
+    })).rejects.toThrow(/stands on invoice list/i);
+
+    // And the refusal changed nothing: the document stands exactly as it did.
+    const after = await getBilling(tenant.client, number);
+    expect(after?.invoiceListStatus).toBe('LISTED');
+    expect(after?.invoiceListNumber).toBe(list.header.billingNumber);
+    expect(after?.customerInvoiceNumber).toBeNull();
+    expect(after?.status).toBe('OPEN');
+
+    // Cancelling the list gives it back, and then both doors open again — the guard is about the list,
+    // not about the document for ever after.
+    await cancelInvoiceList({
+      client: tenant.client, changedBy: ACTOR, invoiceListNumber: list.header.billingNumber,
+      reason: 'Guard',
+    });
+    const freed = await getBilling(tenant.client, number);
+    expect(freed?.invoiceListStatus).toBe('DUE');
+    await expect(cancelBillingDocument({
+      client: tenant.client, changedBy: ACTOR, billingNumber: number, postingDate: DATE,
+    })).resolves.toBeTruthy();
   });
 });

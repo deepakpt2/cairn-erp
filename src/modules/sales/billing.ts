@@ -665,7 +665,10 @@ export interface BillingDueRow {
  */
 export async function billingDueList(
   client: string,
-  filter: { customerNumber?: string; deliveryNumber?: string; salesOrg?: string; plant?: string } = {},
+  filter: {
+    customerNumber?: string; deliveryNumber?: string; orderNumber?: string; materialNumber?: string;
+    salesOrg?: string; plant?: string; dateFrom?: string; dateTo?: string;
+  } = {},
 ): Promise<BillingDueRow[]> {
   return withTenant(client, async (tx) => {
     const rows = await tx.execute(sql`
@@ -746,6 +749,12 @@ export async function billingDueList(
          )
          and (${filter.customerNumber || null}::text is null or d.customer_number = ${filter.customerNumber || null})
          and (${filter.deliveryNumber || null}::text is null or d.delivery_number = ${filter.deliveryNumber || null})
+         -- What a billing clerk works a month by: the order, the material and the period the goods
+         -- left the plant. Every one is optional, and every one narrows rather than widens.
+         and (${filter.orderNumber || null}::text is null or d.order_number = ${filter.orderNumber || null})
+         and (${filter.materialNumber || null}::text is null or dl.material_number = ${filter.materialNumber || null})
+         and (${filter.dateFrom || null}::text is null or d.goods_movement_date >= ${filter.dateFrom || null})
+         and (${filter.dateTo || null}::text is null or d.goods_movement_date <= ${filter.dateTo || null})
          and (${filter.salesOrg || null}::text is null or d.sales_org = ${filter.salesOrg || null})
          and (${filter.plant || null}::text is null or d.plant = ${filter.plant || null})
        group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
@@ -2293,6 +2302,26 @@ export async function postBillingDocument(
 
   const view = await getBilling(parsed.client, existing);
   if (!view) throw new BillingError(`Billing document ${existing} could not be read.`);
+  // A document that is waiting for an invoice list is answered the way creation answers it: nothing is
+  // posted, and the caller is told why. That is the rule that makes a list mean something — the
+  // receivable the customer owes is the list's, and a member released here would be owed twice.
+  if (view.invoiceListStatus === 'DUE') {
+    return {
+      billing: view, invoice: null, posted: false, heldForCredit: false, replayed: false,
+      awaitingInvoiceList: true,
+    };
+  }
+  // A document that stands on a list is not this caller's to release at all. The list is the document
+  // the customer receives, and the receivable for every member is raised once, when the list is
+  // released (SAP's VF21) — a member posting on its own would put that money on the account twice.
+  if (view.invoiceListStatus === 'LISTED') {
+    throw new BillingError(
+      `Billing document ${existing} stands on invoice list ${view.invoiceListNumber ?? ''} `
+      + 'and cannot be released on its own.',
+      'Release or cancel the invoice list it stands on. A listed document is settled together '
+      + 'with the list, not on its own.',
+    );
+  }
   if (view.status === 'POSTED') {
     return {
       billing: view, invoice: null, posted: true, heldForCredit: false, replayed: true,
@@ -2453,8 +2482,24 @@ export async function cancelBillingDocument(
       status: header.status,
       invoiceNumber: header.customerInvoiceNumber,
       deliveryNumber: header.deliveryNumber,
+      invoiceListStatus: header.invoiceListStatus,
+      invoiceListNumber: header.invoiceListNumber,
     };
   });
+
+  // The list is what the customer was sent, and it still names this document's value on one of its
+  // items. Cancelling the member underneath it would leave a list that asks for money its own rows
+  // no longer add up to, so the list has to be dealt with first (§4.6). A document that is merely
+  // *due* for a list has posted nothing and stands on no list, and cancelling it is the ordinary way
+  // a list-relevant document goes away.
+  if (target.invoiceListStatus === 'LISTED') {
+    throw new BillingError(
+      `Billing document ${parsed.billingNumber} stands on invoice list `
+      + `${target.invoiceListNumber ?? ''} and cannot be cancelled on its own.`,
+      'Cancel or release the invoice list it stands on. A listed document is corrected through '
+      + 'the list, not underneath it.',
+    );
+  }
 
   let invoice: CustomerInvoiceView | null = null;
   if (target.status === 'CANCELLED') {

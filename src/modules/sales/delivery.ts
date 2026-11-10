@@ -396,7 +396,10 @@ export async function getDelivery(client: string, deliveryNumber: string): Promi
  */
 export async function listDeliverableOrderLines(
   client: string,
-  filter: { orderNumber?: string; customerNumber?: string } = {},
+  filter: {
+    orderNumber?: string; customerNumber?: string; materialNumber?: string;
+    salesOrg?: string; plant?: string; dateFrom?: string; dateTo?: string;
+  } = {},
 ): Promise<Array<{
   orderNumber: string;
   lineNumber: number;
@@ -460,6 +463,13 @@ export async function listDeliverableOrderLines(
          )
          and (${filter.orderNumber || null}::text is null or o.order_number = ${filter.orderNumber || null})
          and (${filter.customerNumber || null}::text is null or o.customer_number = ${filter.customerNumber || null})
+         -- What a planner works a day by: the material, the sales organisation, the plant and the
+         -- period. Every one is optional, and every one narrows rather than widens.
+         and (${filter.materialNumber || null}::text is null or l.material_number = ${filter.materialNumber || null})
+         and (${filter.salesOrg || null}::text is null or o.sales_org = ${filter.salesOrg || null})
+         and (${filter.plant || null}::text is null or l.plant = ${filter.plant || null})
+         and (${filter.dateFrom || null}::text is null or o.order_date >= ${filter.dateFrom || null})
+         and (${filter.dateTo || null}::text is null or o.order_date <= ${filter.dateTo || null})
        order by o.order_number, l.line_number
        limit 200
     `) as unknown as Array<{
