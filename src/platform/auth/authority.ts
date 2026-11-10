@@ -487,14 +487,14 @@ export interface AuthoritySubject {
 }
 
 /**
- * May this person do this, here, on this day?
+ * May this person do this, here, on this day? Loads their authority first.
  *
  * The organisation is optional, and omitting it asks only "do you hold this at
  * all" — which is exactly what every existing `hasCapability` call site means,
  * so those call sites carry over unchanged. Naming a level narrows the question
  * to that place.
  */
-export async function can(
+export async function canUser(
   who: AuthoritySubject,
   capability: string,
   org: OrgScope = {},

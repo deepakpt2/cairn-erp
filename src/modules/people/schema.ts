@@ -55,6 +55,11 @@ export const ASSIGNMENT_ROUTE = '/people/assignments';
 export const ORG_UNIT_CAPABILITY = 'PEOPLE.ORGUNIT.CREATE';
 export const POSITION_CAPABILITY = 'PEOPLE.POSITION.CREATE';
 export const ASSIGNMENT_CAPABILITY = 'PEOPLE.ASSIGNMENT.MAINTAIN';
+
+/** Reading authority is its own capability: seeing what someone holds is not the same as
+ * granting it, and the two are granted separately. */
+export const AUTHORITY_ROUTE = '/people/authority';
+export const AUTHORITY_VIEW_CAPABILITY = 'PEOPLE.AUTHORITY.VIEW';
 export const ORG_UNIT_OBJECT_CLASS = 'org_unit';
 export const JOB_OBJECT_CLASS = 'job';
 export const POSITION_OBJECT_CLASS = 'position';

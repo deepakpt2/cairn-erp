@@ -2864,6 +2864,18 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["employee", "position", "q"],
   },
   {
+    // The chart of authority sits with the other organisation screens: it is read by a
+    // superior before delegating, which is the same audience and the same structure.
+    id: "/people/authority",
+    path: "/people/authority",
+    query: {},
+    code: "PEOPLE.AUTHORITY.VIEW",
+    title: "Authority",
+    area: "foundation",
+    family: "people-organization",
+    accepts: ["user"],
+  },
+  {
     // Time and leave sits in the foundation area beside the other People
     // transaction screens: a `people` ScreenArea needs a nav label in
     // src/platform/i18n/index.ts, which carries uncommitted owner work.

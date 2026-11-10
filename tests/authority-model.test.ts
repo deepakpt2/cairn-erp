@@ -46,7 +46,7 @@ import {
   definePosition as definePositionService,
 } from '../src/modules/people/org-structure';
 import {
-  can,
+  canUser,
   canTx,
   canWith,
   effectiveGrants,
@@ -265,12 +265,12 @@ afterAll(async () => {
 
 describe('authority — the three questions the plan set out', () => {
   it('a role grant still answers the one-argument question, with nothing copied', async () => {
-    expect(await can({ client: tenant.client, userId: alice.userId }, READ)).toBe(true);
-    expect(await can({ client: tenant.client, userId: alice.userId }, WRITE)).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: alice.userId }, READ)).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: alice.userId }, WRITE)).toBe(true);
     // Outside her area entirely. A pattern covers what hangs beneath it, so the
     // negative case has to name a different area, not a deeper code in hers.
-    expect(await can({ client: tenant.client, userId: alice.userId }, 'FINANCE.GL.POST')).toBe(false);
-    expect(await can({ client: tenant.client, userId: alice.userId }, 'AUTHTESTX.READ')).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: alice.userId }, 'FINANCE.GL.POST')).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: alice.userId }, 'AUTHTESTX.READ')).toBe(false);
 
     // The role path is read live, so there is no second row to drift out of step.
     const rows = await withTenant(tenant.client, async (tx) =>
@@ -283,16 +283,16 @@ describe('authority — the three questions the plan set out', () => {
   });
 
   it('a grant scoped to plant 1000 is refused on a plant 2000 document', async () => {
-    expect(await can({ client: tenant.client, userId: bob.userId }, WRITE, { plant: '1000' })).toBe(true);
-    expect(await can({ client: tenant.client, userId: bob.userId }, WRITE, { plant: '2000' })).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, WRITE, { plant: '1000' })).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, WRITE, { plant: '2000' })).toBe(false);
     // Naming no place at all asks only "do you hold this", which the grant does answer.
-    expect(await can({ client: tenant.client, userId: bob.userId }, WRITE)).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, WRITE)).toBe(true);
   });
 
   it('an expired grant stops matching, and nothing sweeps the table', async () => {
-    expect(await can({ client: tenant.client, userId: bob.userId }, APPROVE, {}, '2020-03-01')).toBe(true);
-    expect(await can({ client: tenant.client, userId: bob.userId }, APPROVE, {}, '2020-07-01')).toBe(false);
-    expect(await can({ client: tenant.client, userId: bob.userId }, APPROVE)).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, APPROVE, {}, '2020-03-01')).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, APPROVE, {}, '2020-07-01')).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, APPROVE)).toBe(false);
 
     // The row is still there. Dating is a filter, never a cleanup job.
     const surviving = await withTenant(tenant.client, async (tx) =>
@@ -307,34 +307,34 @@ describe('authority — the three questions the plan set out', () => {
   it('a grant that has not begun yet does not match', async () => {
     const future = await directGrant(bob.userId, 'AUTHTEST.LATER', { from: '2099-01-01' });
     expect(future).toBeTruthy();
-    expect(await can({ client: tenant.client, userId: bob.userId }, 'AUTHTEST.LATER')).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, 'AUTHTEST.LATER')).toBe(false);
   });
 });
 
 describe('authority — where a grant applies', () => {
   it('a position carries authority, scoped to the place the assignment names', async () => {
-    expect(await can({ client: tenant.client, userId: carol.userId }, READ, { plant: '1000' })).toBe(true);
-    expect(await can({ client: tenant.client, userId: carol.userId }, READ, { plant: '2000' })).toBe(false);
-    expect(await can({ client: tenant.client, userId: carol.userId }, READ)).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: carol.userId }, READ, { plant: '1000' })).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: carol.userId }, READ, { plant: '2000' })).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: carol.userId }, READ)).toBe(true);
   });
 
   it('a level a grant does not name cannot refuse the question', async () => {
     // Bob's AUTHTEST.SUB.CREATE is scoped to a sales org, so it says nothing
     // about plants and must not be refused on one.
-    expect(await can({ client: tenant.client, userId: bob.userId }, DEEP, { plant: '2000' })).toBe(true);
-    expect(await can({ client: tenant.client, userId: bob.userId }, DEEP, { salesOrg: 'S001' })).toBe(true);
-    expect(await can({ client: tenant.client, userId: bob.userId }, DEEP, { salesOrg: 'S002' })).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, DEEP, { plant: '2000' })).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, DEEP, { salesOrg: 'S001' })).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: bob.userId }, DEEP, { salesOrg: 'S002' })).toBe(false);
   });
 
   it('a user restriction still narrows everything the person holds', async () => {
     // Unrestricted until a moment ago.
-    expect(await can({ client: tenant.client, userId: dave.userId }, WRITE, { plant: '2000' })).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: dave.userId }, WRITE, { plant: '2000' })).toBe(true);
 
     await restrict(dave.userId, 'PLANT', '1000');
 
-    expect(await can({ client: tenant.client, userId: dave.userId }, WRITE, { plant: '1000' })).toBe(true);
-    expect(await can({ client: tenant.client, userId: dave.userId }, WRITE, { plant: '2000' })).toBe(false);
-    expect(await can({ client: tenant.client, userId: dave.userId }, WRITE)).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: dave.userId }, WRITE, { plant: '1000' })).toBe(true);
+    expect(await canUser({ client: tenant.client, userId: dave.userId }, WRITE, { plant: '2000' })).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: dave.userId }, WRITE)).toBe(true);
   });
 });
 
@@ -362,13 +362,13 @@ describe('authority — provenance', () => {
 describe('authority — isolation', () => {
   it("one tenant's grants are invisible to another", async () => {
     // Eve holds a grant, but in the other tenant.
-    expect(await can({ client: other.client, userId: eve.userId }, WRITE)).toBe(true);
+    expect(await canUser({ client: other.client, userId: eve.userId }, WRITE)).toBe(true);
 
     // The very same user id, read inside this tenant, holds nothing at all —
     // row-level security hides the row rather than any code branching on client.
     const leaked = await withTenant(tenant.client, (tx) => effectiveGrants(tx, tenant.client, eve.userId));
     expect(leaked).toEqual([]);
-    expect(await can({ client: tenant.client, userId: eve.userId }, WRITE)).toBe(false);
+    expect(await canUser({ client: tenant.client, userId: eve.userId }, WRITE)).toBe(false);
   });
 
   it('asks the same question inside a transaction the caller already owns', async () => {
