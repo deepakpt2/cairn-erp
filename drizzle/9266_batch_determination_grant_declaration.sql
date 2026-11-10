@@ -1,0 +1,22 @@
+-- ── Declare the batch determination rule's runtime grants in plain SQL ────────
+--
+-- Since 9186 every migration that creates a table has to say, in the file, what
+-- the application role may do with it. The audit in tests/migration-grant-policy
+-- reads the migration files themselves; a grant the file only builds at run time
+-- is invisible to it, and an invisible grant is no declaration at all.
+--
+-- 9259 created sales_batch_determination_rule and declared nothing. 9260 supplied
+-- the row level security, the tenant policy and the grants the application needs
+-- — but it issued them inside a `do` block with `execute format(...)`, so the
+-- audit sees a migration that grants nothing and reports the table as created
+-- with no cairn_app privilege declaration. 9260 is applied, so it cannot be
+-- edited; this migration states the same intent in the literal form the audit
+-- reads.
+--
+-- The rule is maintained: its rows are created, changed and deactivated by the
+-- batch determination maintenance service, so update is required. Delete goes
+-- with it for the same reason 9260 granted it — a rule that was created by
+-- mistake has to be removable, and the service deletes rather than leaving an
+-- orphan. That is the mutable declaration, not the append-only one.
+
+grant select, insert, update, delete on table public.sales_batch_determination_rule to cairn_app;
