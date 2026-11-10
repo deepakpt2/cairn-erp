@@ -27,7 +27,7 @@ import {
   saveEmployeeToleranceGroup,
   type ToleranceGroupInput,
 } from '@/modules/foundation/employee-tolerance-definition';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createTenant, destroyTenant, type TestTenant, resetActivityStatus } from './helpers';
 
 const TEST_ACTOR = 'SCR039_STAGE5';
 const REASON = 'SCR-039 automated backend test';
@@ -258,7 +258,12 @@ describe('OBA4 define employee tolerance groups', () => {
   });
 
   it('refuses when the Company Code prerequisite is not complete', async () => {
+    // A second tenant, built like any other and then blanked: it keeps its company code and its
+    // structure, but no activity counts as complete, so no prerequisite can be shown as satisfied.
+    // Leaving it as createTenant leaves it is no longer enough — a tenant built with the standard
+    // package evidences most activities, so the prerequisite holds and the refusal never comes.
     prerequisiteTenant = await createTenant('scr039-oba4-prerequisites');
+    await resetActivityStatus(prerequisiteTenant.client);
     const error = await saveEmployeeToleranceGroup(creation({ client: prerequisiteTenant.client }))
       .then(() => null, (caught: unknown) => caught);
 

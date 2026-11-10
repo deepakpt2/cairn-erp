@@ -28,7 +28,7 @@ import {
   type TaxCodeDeleteInput,
   type TaxCodeInput,
 } from '@/modules/foundation/tax-code-definition';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createTenant, destroyTenant, type TestTenant, resetActivityStatus } from './helpers';
 
 const TEST_ACTOR = 'SCR035_STAGE5';
 const REASON = 'SCR-035 automated backend test';
@@ -278,7 +278,12 @@ describe('FTXP define tax codes', () => {
   });
 
   it('refuses when the Company Code prerequisite is not complete', async () => {
+    // A second tenant, built like any other and then blanked: it keeps its company code and its
+    // structure, but no activity counts as complete, so no prerequisite can be shown as satisfied.
+    // Leaving it as createTenant leaves it is no longer enough — a tenant built with the standard
+    // package evidences most activities, so the prerequisite holds and the refusal never comes.
     prerequisiteTenant = await createTenant('scr035-ftxp-prerequisites');
+    await resetActivityStatus(prerequisiteTenant.client);
     const error = await saveTaxCode(creation({ client: prerequisiteTenant.client }))
       .then(() => null, (caught: unknown) => caught);
 

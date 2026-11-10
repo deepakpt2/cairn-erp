@@ -35,7 +35,7 @@ import {
   type BankAccountInput,
   type HouseBankInput,
 } from '@/modules/foundation/house-bank-definition';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createTenant, destroyTenant, type TestTenant, resetActivityStatus } from './helpers';
 
 const TEST_ACTOR = 'SCR037_STAGE5';
 const REASON = 'SCR-037 automated backend test';
@@ -332,7 +332,12 @@ describe('FI12 define house banks and accounts', () => {
     await expect(saveHouseBank(houseCreation({ houseBankKey: 'NOPE1', reason: '  ' })))
       .rejects.toThrow(/A reason is required/);
 
+    // A second tenant, built like any other and then blanked: it keeps its company code and its
+    // structure, but no activity counts as complete, so no prerequisite can be shown as satisfied.
+    // Leaving it as createTenant leaves it is no longer enough — a tenant built with the standard
+    // package evidences most activities, so the prerequisite holds and the refusal never comes.
     prerequisiteTenant = await createTenant('scr037-fi12-prerequisites');
+    await resetActivityStatus(prerequisiteTenant.client);
     const error = await saveHouseBank(houseCreation({ client: prerequisiteTenant.client }))
       .then(() => null, (caught: unknown) => caught);
     expect(error).toBeInstanceOf(HouseBankError);

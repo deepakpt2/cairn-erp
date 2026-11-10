@@ -6,6 +6,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { closeDb, db, withTenant } from '@/platform/db/client';
 import { client as clientTable, clientSettings } from '@/platform/tables/tenancy';
+import { configActivityStatus } from '@/platform/tables/registry';
 import { defineRange } from '@/platform/numbering';
 import { applyStandardPackage, STANDARD_ACCOUNT_GROUP } from '@/modules/foundation/standard-config';
 import { applyStandardStructureInTransaction } from '@/platform/tenancy/standard-structure';
@@ -140,16 +141,6 @@ export async function createTenant(
           country: 'KW',
           changedBy: 'TEST',
         });
-
-        // The standard plant's own dock, and the row that says it loads for that plant whatever
-        // the customer asked for and whatever the material takes to load. The product seeds
-        // nothing — an unconfigured plant is refused, as it should be — but a fixture that raises
-        // deliveries needs a tenant that can ship.
-        await tx.execute(sql`insert into shipping_point (client, shipping_point, name, created_by)
-          values (${candidate}, '1000', 'Main dock', 'TEST') on conflict do nothing`);
-        await tx.execute(sql`insert into shipping_point_determination
-          (client, delivering_plant, shipping_condition, loading_group, shipping_point, created_by)
-          values (${candidate}, '1000', '', '', '1000', 'TEST') on conflict do nothing`);
       }
 
       return 'claimed';
@@ -401,6 +392,37 @@ export async function destroyTenant(client: string): Promise<void> {
 }
 
 export { db, withTenant, closeDb, and, eq, sql };
+
+/**
+ * Put a tenant's configuration workbench back to a blank slate.
+ *
+ * Several tests assert that a service refuses because a prerequisite activity is
+ * incomplete, and they do it with a second tenant "left exactly as createTenant
+ * leaves it". That used to mean a tenant with no `config_activity_status` rows at
+ * all, because `createTenant` created none. Since the activity catalogue was
+ * completed, `createTenant` derives a status row for every activity the tenant
+ * can evidence, and a tenant built with the standard package has most of them
+ * marked COMPLETED — so the refusal these tests assert never comes, and they
+ * fail by proving the opposite of what they claim to be testing.
+ *
+ * Clearing the statuses to NOT_STARTED is the state those tests actually meant:
+ * the tenant still has its company code, its variants and its structure, but no
+ * activity counts as done. The rows it holds stop being an accident of how the
+ * tenant was built and become an explicit fact of the fixture.
+ *
+ * This is deliberately not `withConfiguration: false`. A tenant built without
+ * the standard package has no company code to name, and a service that checks
+ * the company code exists before it checks the prerequisite then refuses for a
+ * different reason — which is the state a *different* test is about.
+ */
+export async function resetActivityStatus(client: string): Promise<void> {
+  await withTenant(client, (tx) =>
+    tx
+      .update(configActivityStatus)
+      .set({ status: 'NOT_STARTED', completedAt: null, completedBy: null })
+      .where(eq(configActivityStatus.client, client)),
+  );
+}
 
 /** Await an operation that must reject, returning its Error without casts. */
 export async function expectRejectedError(operation: Promise<unknown>): Promise<Error & { remedy?: string }> {

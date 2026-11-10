@@ -34,7 +34,7 @@ import {
   type DeterminationDeleteInput,
   type DeterminationInput,
 } from '@/modules/foundation/account-determination';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createTenant, destroyTenant, type TestTenant, resetActivityStatus } from './helpers';
 
 const TEST_ACTOR = 'SCR040_STAGE5';
 const REASON = 'SCR-040 automated backend test';
@@ -329,7 +329,12 @@ describe('OBYC define account determination', () => {
     await expect(saveAccountDetermination(creation({ valuationClass: 'SEMI_INVENTORY', reason: '  ' })))
       .rejects.toThrow(/A reason is required/);
 
+    // A second tenant, built like any other and then blanked: it keeps its company code and its
+    // structure, but no activity counts as complete, so no prerequisite can be shown as satisfied.
+    // Leaving it as createTenant leaves it is no longer enough — a tenant built with the standard
+    // package evidences most activities, so the prerequisite holds and the refusal never comes.
     prerequisiteTenant = await createTenant('scr040-obyc-prerequisites');
+    await resetActivityStatus(prerequisiteTenant.client);
     const error = await saveAccountDetermination(creation({ client: prerequisiteTenant.client }))
       .then(() => null, (caught: unknown) => caught);
     expect(error).toBeInstanceOf(AccountDeterminationError);

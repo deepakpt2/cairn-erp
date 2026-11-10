@@ -24,7 +24,7 @@ import {
   PostingPeriodVariantAssignmentError,
   type PostingPeriodVariantAssignmentInput,
 } from '@/modules/foundation/posting-period-variant-assignment';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createTenant, destroyTenant, type TestTenant, resetActivityStatus } from './helpers';
 
 const TEST_ACTOR = 'SCR033_STAGE5';
 const REASON = 'SCR-033 automated backend test';
@@ -314,9 +314,12 @@ describe('OBBP assign a posting period variant', () => {
   });
 
   it('refuses when the workbench prerequisites are not complete', async () => {
-    // A second tenant, left exactly as createTenant leaves it: no activity status at all, so
-    // neither prerequisite can be shown as complete.
+    // A second tenant, built like any other and then blanked: it keeps its company code and its
+    // structure, but no activity counts as complete, so no prerequisite can be shown as satisfied.
+    // Leaving it as createTenant leaves it is no longer enough — a tenant built with the standard
+    // package evidences most activities, so the prerequisite holds and the refusal never comes.
     prerequisiteTenant = await createTenant('scr033-obbp-prerequisites');
+    await resetActivityStatus(prerequisiteTenant.client);
     const error = await assignPostingPeriodVariant({
       client: prerequisiteTenant.client,
       changedBy: TEST_ACTOR,
