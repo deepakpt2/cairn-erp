@@ -272,7 +272,11 @@ describe('OB08 maintain exchange rates', () => {
   });
 
   it('refuses when the Company Code prerequisite is not complete', async () => {
-    prerequisiteTenant = await createTenant('scr034-ob08-prerequisites');
+    // Without the standard package, so the tenant genuinely holds no company code. A configured
+    // tenant has one: `CFG.ORG.COMPANYCODE.DEFINE` is evidenced by the rows in `company_code`, so
+    // `recomputeActivityStatus` marks it complete at creation and the prerequisite is satisfied —
+    // which is the correct behaviour, and not the state this test is about.
+    prerequisiteTenant = await createTenant('scr034-ob08-prerequisites', { withConfiguration: false });
     const error = await saveExchangeRate(creation({ client: prerequisiteTenant.client }))
       .then(() => null, (caught: unknown) => caught);
 

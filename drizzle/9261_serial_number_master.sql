@@ -43,7 +43,7 @@
 -- material and is told it has none standing, which is the truth.
 
 create table serial_number (
-  client varchar(4) not null references client (client) on delete cascade,
+  client varchar(4) not null references client (client),
   material_number varchar(40) not null,
   serial_number varchar(40) not null,
   -- Where the unit stands. Blank plant is a serial that has been created but not
@@ -93,7 +93,7 @@ create index serial_number_whereabouts_ix
 -- What a pick captured. One row per unit that went out on one pick row, so the
 -- pick history can say which units went and not merely how many.
 create table delivery_picking_serial (
-  client varchar(4) not null references client (client) on delete cascade,
+  client varchar(4) not null references client (client),
   delivery_number varchar(20) not null,
   line_number integer not null,
   pick_number integer not null,
