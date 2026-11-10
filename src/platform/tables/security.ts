@@ -11,11 +11,14 @@ import {
   text,
   boolean,
   timestamp,
+  date,
   jsonb,
   primaryKey,
   index,
   uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { auditColumns, client } from './tenancy';
 
 /** A person who can sign in. Scoped to a client; the same person may exist in two clients. */
@@ -160,6 +163,118 @@ export const authOrgRestriction = pgTable(
   },
   (t) => [index('auth_org_restriction_user_idx').on(t.client, t.userId)],
 );
+
+/**
+ * What a position may do — the join between the reporting line and authority.
+ *
+ * A position is where the structure meets a person, so it is the natural place to
+ * say what a job is allowed to do: the clerk's position and the manager's differ
+ * in authority, not in who happens to hold them this year. Without this table
+ * "what may this job do" had no answer at all, and authority could only ever
+ * reach a person through a role.
+ *
+ * Where it may be done is deliberately NOT here. That belongs to the assignment,
+ * because the same position in two plants is two assignments, not one.
+ *
+ * There is no foreign key to the position table, matching how this repository
+ * treats cross-module references throughout: they are plain columns
+ * (src/modules/finance/schema.ts stores cost_center the same way).
+ */
+export const positionCapability = pgTable(
+  'position_capability',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    positionCode: varchar('position_code', { length: 10 }).notNull(),
+    /** A pattern, not necessarily a concrete code: PROC.* covers every purchasing capability. */
+    capabilityCode: varchar('capability_code', { length: 64 }).notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.positionCode, t.capabilityCode] }),
+    index('position_capability_position_idx').on(t.client, t.positionCode),
+  ],
+);
+
+/**
+ * A grant of authority that cannot be derived from a role or a position.
+ *
+ * This is the table delegation writes to, and it exists because the other two
+ * paths cannot carry what a delegation needs: a date it stops on, a reason it was
+ * given, and the person who gave it. Deliberately NOT used to copy role or
+ * position grants — a copy is a second source of truth, and it drifts the moment
+ * a role changes. Revoke a role and a copied grant would outlive it, silently.
+ *
+ * An expired grant matches nothing. No job sweeps this table; dating is a filter.
+ */
+export const userCapability = pgTable(
+  'user_capability',
+  {
+    id: varchar('id', { length: 36 }).primaryKey(),
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    userId: varchar('user_id', { length: 36 })
+      .notNull()
+      .references(() => appUser.id, { onDelete: 'cascade' }),
+    capabilityCode: varchar('capability_code', { length: 64 }).notNull(),
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    validTo: date('valid_to', { mode: 'string' }),
+    /** DIRECT | DELEGATION | TEMPORARY — never ROLE or POSITION, which are derived and must not be copied. */
+    reason: varchar('reason', { length: 24 }).notNull(),
+    /** Who gave it. A delegation names the delegator, so a grant reads back to a person. */
+    granter: varchar('granter', { length: 60 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    index('user_capability_user_idx').on(t.client, t.userId),
+    index('user_capability_span_idx').on(t.client, t.userId, t.validFrom, t.validTo),
+    check('user_capability_span_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+    check('user_capability_reason_ck', sql`${t.reason} in ('DIRECT', 'DELEGATION', 'TEMPORARY')`),
+  ],
+);
+
+/**
+ * Where a direct grant applies.
+ *
+ * Rows rather than columns, because authority over one plant and authority over
+ * four are the same question and should not change the shape of the grant. No
+ * rows means unrestricted, which is the common case and must stay cheap to
+ * answer. A level the grant does not name is one it does not restrict.
+ *
+ * No audit columns: a scope row is part of its grant's identity, not a record of
+ * its own history.
+ */
+export const userCapabilityScope = pgTable(
+  'user_capability_scope',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    grantId: varchar('grant_id', { length: 36 })
+      .notNull()
+      .references(() => userCapability.id, { onDelete: 'cascade' }),
+    /**
+     * One of the nine organisational levels: PLANT, COMPANY_CODE, PURCHASING_ORG,
+     * PURCHASING_GROUP, SALES_ORG, DISTRIBUTION_CHANNEL, DIVISION,
+     * CREDIT_CONTROL_AREA, CONTROLLING_AREA.
+     */
+    scopeType: varchar('scope_type', { length: 32 }).notNull(),
+    scopeValue: varchar('scope_value', { length: 40 }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.grantId, t.scopeType, t.scopeValue] }),
+    index('user_capability_scope_grant_idx').on(t.client, t.grantId),
+    check(
+      'user_capability_scope_type_ck',
+      sql`${t.scopeType} in ('PLANT', 'COMPANY_CODE', 'PURCHASING_ORG', 'PURCHASING_GROUP',
+        'SALES_ORG', 'DISTRIBUTION_CHANNEL', 'DIVISION', 'CREDIT_CONTROL_AREA', 'CONTROLLING_AREA')`,
+    ),
+  ],
+);
+
 
 /** Server-side sessions (D-005). The token is stored hashed, never raw. */
 export const userSession = pgTable(

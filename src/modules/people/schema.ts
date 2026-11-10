@@ -327,6 +327,18 @@ export const positionAssignment = pgTable(
     positionCode: varchar('position_code', { length: 10 }).notNull(),
     controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
     costCenter: varchar('cost_center', { length: 10 }).notNull(),
+    // Where the assignment is made, across the nine organisational levels. Every one is
+    // nullable, and null means the position is not restricted at that level here — not that
+    // the holder may see nothing there. Scope belongs to the assignment and not to the
+    // position, because the same position in two plants is two assignments, not one.
+    plant: varchar('plant', { length: 4 }),
+    companyCode: varchar('company_code', { length: 4 }),
+    purchasingOrg: varchar('purchasing_org', { length: 4 }),
+    purchasingGroup: varchar('purchasing_group', { length: 3 }),
+    salesOrg: varchar('sales_org', { length: 4 }),
+    distributionChannel: varchar('distribution_channel', { length: 2 }),
+    division: varchar('division', { length: 2 }),
+    creditControlArea: varchar('credit_control_area', { length: 4 }),
     validFrom: date('valid_from', { mode: 'string' }).notNull(),
     validTo: date('valid_to', { mode: 'string' }),
     requestKey: varchar('request_key', { length: 64 }),
