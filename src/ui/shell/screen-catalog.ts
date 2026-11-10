@@ -1660,6 +1660,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/inventory/serial-numbers",
+    path: "/inventory/serial-numbers",
+    query: {},
+    code: "INV.SERIAL.MAINTAIN",
+    title: "Serial numbers",
+    area: "inventory",
+    family: "inventory-serial-numbers",
+    accepts: ["material", "customer", "delivery"],
+  },
+  {
     id: "/inventory/batch-classes",
     path: "/inventory/batch-classes",
     query: {},

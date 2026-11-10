@@ -23,7 +23,7 @@
 import { z } from 'zod';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { businessPartner } from '../foundation/business-partner-schema';
-import { and, asc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
@@ -48,6 +48,8 @@ import { recordSalesOutputs } from './output';
 import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
 import { CUSTOMER_MASTER_ROUTE, deliveryTermsFor } from './delivering-plant';
 import { determineBatchesOn } from './batch-determination';
+import { material } from '../inventory/schema';
+import { capturePickSerialsOn, releasePickSerialsOn } from '../inventory/serial-number';
 
 export const DELIVERY_CAPABILITY = 'SALES.DELIVERY.CREATE';
 export const DELIVERY_PICK_CAPABILITY = 'SALES.DELIVERY.PICK';
@@ -101,6 +103,12 @@ export const deliveryPickItemInput = z.object({
   quantity: signedQuantity,
   storageLocation: optionalText(10).optional(),
   batchNumber: optionalText(40).optional(),
+  /**
+   * The units that came off the shelf, where the material is counted in serials (§5.5b). A
+   * serialised item is counted in whole units, so the pick names which ones. Not judged here
+   * beyond the shape: what makes a serial valid is the master's business.
+   */
+  serialNumbers: z.array(z.string().trim().max(40)).optional(),
   reason: optionalText(60).optional(),
 });
 
@@ -1113,6 +1121,15 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
         eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, header.orderNumber),
       )).limit(1)
       : [undefined];
+    // Which of these materials are counted in serials at all (§5.5b). Read once for the whole
+    // delivery, from the material master — the only place the question is asked. A material that
+    // demands serials asks the picker which units came off the shelf; one that does not is untouched.
+    const serialised = new Map(await tx.select({
+      materialNumber: material.materialNumber, serialManaged: material.serialManaged,
+    }).from(material).where(and(
+      eq(material.client, parsed.client),
+      inArray(material.materialNumber, [...new Set(lines.map((line) => line.materialNumber))]),
+    )).then((rows) => rows.map((row) => [row.materialNumber, row.serialManaged] as const)));
     const touched: number[] = [];
 
     for (const item of parsed.items) {
@@ -1200,12 +1217,17 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
       // pick number, so an item taken from three batches is three rows that say so rather than one row
       // pretending the goods came from one place.
       let nextPickNumber = Number(pickNumber?.value ?? 1);
+      // Where the material is counted in serials the units are handed to the pick rows in the order
+      // the rows are written, so an item taken from two shelves records which unit came from each.
+      const serials = (item.serialNumbers ?? []).map((value) => value.trim().toUpperCase());
+      let taken = 0;
       for (const [index, entry] of picks.entries()) {
+        const pickNumberWritten = nextPickNumber;
         await tx.insert(deliveryPicking).values({
           client: parsed.client,
           deliveryNumber: header.deliveryNumber,
           lineNumber: line.lineNumber,
-          pickNumber: nextPickNumber,
+          pickNumber: pickNumberWritten,
           quantityDelta: round3(entry.quantity),
           storageLocation: entry.storageLocation,
           batchNumber: entry.batchNumber,
@@ -1219,6 +1241,24 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
           createdBy: parsed.changedBy,
         });
         nextPickNumber += 1;
+
+        // Serial numbers (§5.5b). Only a material that demands them asks, and a material that does
+        // not is not slowed down by a master it has nothing to do with.
+        if (!serialised.get(line.materialNumber)) continue;
+        const units = Math.abs(Math.round(entry.quantity));
+        const theirs = serials.slice(taken, taken + units);
+        taken += units;
+        const shared = {
+          client: parsed.client, changedBy: parsed.changedBy, materialNumber: line.materialNumber,
+          plant: line.plant, deliveryNumber: header.deliveryNumber,
+          orderNumber: header.orderNumber, customerNumber: order?.customerNumber ?? '',
+          lineNumber: line.lineNumber, pickNumber: pickNumberWritten,
+        };
+        if (entry.quantity > 0) {
+          await capturePickSerialsOn(tx, { ...shared, quantity: units, serials: theirs });
+        } else {
+          await releasePickSerialsOn(tx, { ...shared, quantity: units, serials: theirs });
+        }
       }
 
       // The line's picked quantity is the history summed, never the form added: that is what makes a

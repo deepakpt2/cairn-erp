@@ -795,6 +795,26 @@ export const deliveryPicking = pgTable('delivery_picking', {
 ]);
 
 /**
+ * Which serialised unit went out on which pick row — §5.5b.
+ *
+ * Append-only, as the picking history beside it is: a correction is a row of the opposite sign, not
+ * an edit of this one. The serial master carries the delivery the unit went on, so this table is the
+ * pick's side of the record — the answer to "what did we actually hand over" that a picking quantity
+ * cannot give.
+ */
+export const deliveryPickingSerial = pgTable('delivery_picking_serial', {
+  client: tenant(),
+  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  pickNumber: integer('pick_number').notNull(),
+  serialNumber: varchar('serial_number', { length: 40 }).notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.deliveryNumber, t.lineNumber, t.pickNumber, t.serialNumber] }),
+]);
+
+/**
  * The billing document — VBRK. It posts nothing of its own: the receivable is the accounting-invoice
  * service's work, and this row keeps the document number it returned so the link reads both ways.
  */

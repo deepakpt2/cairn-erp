@@ -178,10 +178,12 @@ async function resolveScenario(
       'Canon has no in-transit stock dimension; post a one-step transfer instead.',
     );
   }
-  // Serial, special stock and valuation type still have no master. A batch requirement is
-  // judged after the entered batch is resolved, not refused here as a missing master.
+  // A batch requirement is judged after the entered batch is resolved, not refused here as a missing
+  // master. Serial numbers have had a master since §5.5b, but this screen does not ask for them: a
+  // transfer moves a quantity, and there is nowhere on the form to name which units moved. Say that
+  // rather than claiming the master does not exist, which stopped being true.
   const unmet: string[] = [];
-  if (row.requiresSerial) unmet.push('serial numbers (canon carries no serial-number master)');
+  if (row.requiresSerial) unmet.push('serial numbers (a transfer posting does not capture them)');
   if (row.requiresSpecialStock) unmet.push('a special-stock category (canon carries stock as a named stock type)');
   if (row.requiresValuationType) unmet.push('a valuation type (canon carries no split valuation)');
   if (unmet.length > 0) {

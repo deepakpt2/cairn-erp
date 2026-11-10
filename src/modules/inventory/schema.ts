@@ -182,6 +182,13 @@ export const material = pgTable('material', {
   /** MARA-XCHPF. Used when the batch level is material or client. Existing materials stay non-batch. */
   batchManaged: boolean('batch_managed').notNull().default(false),
   /**
+   * Whether this material is counted one unit at a time — §5.5b, and the one question this canon
+   * takes from SAP's MARC-SERNP. Where it is set, a delivery pick has to name which units came off
+   * the shelf. False for every material that stands, so nothing asks for a serial until a tenant
+   * says the material is counted in them.
+   */
+  serialManaged: boolean('serial_managed').notNull().default(false),
+  /**
    * MARA shelf-life data, client level, shown on the plant storage view in SAP.
    * Null means not maintained. A plant does not store a second copy.
    * MB5M reads these fields and does not calculate a batch date from them.
@@ -977,6 +984,47 @@ export const batchLevelConversion = pgTable('batch_level_conversion', {
  * Batch identity. MSC1N is not this table's screen. Partial unique indexes
  * enforce the level that was current when the row was written.
  */
+/**
+ * One serialised unit of one material — §5.5b.
+ *
+ * A batch is a kind of goods; a serial is one thing, and it keeps its identity for the rest of its
+ * life: which customer holds it, and which one came back.
+ *
+ * This master is a record of what was captured where a serial is captured. It is not the stock
+ * ledger, and it does not reconcile itself against it: making the serial the unit of stock would
+ * mean every goods movement in the system writing a serial row it has no place to be given one.
+ */
+export const SERIAL_STATUSES_DB = ['AVAILABLE', 'IN_STOCK', 'DELIVERED', 'SCRAPPED'] as const;
+
+export const serialNumber = pgTable('serial_number', {
+  client: tenant(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  serialNumber: varchar('serial_number', { length: 40 }).notNull(),
+  /** Null is a unit that has been created and not put away. */
+  plant: varchar('plant', { length: 10 }),
+  storageLocation: varchar('storage_location', { length: 10 }).notNull().default(''),
+  stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
+  status: varchar('status', { length: 16 }).notNull().default('AVAILABLE'),
+  /**
+   * Where the unit went, written when it is delivered and cleared when it comes back. A serial is
+   * the only thing in this canon that can name the customer holding a particular piece of an order.
+   */
+  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull().default(''),
+  orderNumber: varchar('order_number', { length: 20 }).notNull().default(''),
+  customerNumber: varchar('customer_number', { length: 40 }).notNull().default(''),
+  requestKey: varchar('request_key', { length: 64 }),
+  /** Optimistic token. A change must send the version it opened. */
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialNumber, t.serialNumber] }),
+  check('serial_number_status_ck', sql`${t.status} in ('AVAILABLE', 'IN_STOCK', 'DELIVERED', 'SCRAPPED')`),
+  check('serial_number_delivered_ck', sql`${t.status} <> 'DELIVERED' or ${t.deliveryNumber} <> ''`),
+  index('serial_number_capture_ix').on(t.client, t.materialNumber, t.plant, t.status),
+  index('serial_number_whereabouts_ix').on(t.client, t.customerNumber, t.deliveryNumber),
+]);
+
 export const batch = pgTable('batch', {
   id: varchar('id', { length: 36 }).primaryKey(),
   client: tenant(),
