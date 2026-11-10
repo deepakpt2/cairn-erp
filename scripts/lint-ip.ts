@@ -70,6 +70,11 @@ const MARKED_TERMS: Array<{ term: string; rationale: string }> = [
  * one of them; the alias list is the other.
  */
 const EXEMPT_FILES = [
+  // Generated, not authored: the schema baseline is a pg_dump of the database.
+  // Every comment in it is copied verbatim from the migrations that produced
+  // it, so scanning it reports the same findings a second time and blames a
+  // file nobody can edit. The originals are still scanned under drizzle/history/.
+  'drizzle/0000_baseline.sql',
   'src/platform/registry/index.ts',
   'scripts/seed-reference.ts',
   'scripts/lint-ip.ts',
@@ -87,35 +92,35 @@ const EXEMPT_FILES = [
  * allowlisted here.
  *
  * The allowlist is deliberately narrow and self-verifying:
- * - entries may name only `drizzle/NNNN_*.sql` files, so it can never exempt app code;
+ * - entries may name only `drizzle/NNNN_*.sql` files (now under `drizzle/history/`), so it can never exempt app code;
  * - matching is on exact line content, so adding a new occurrence to those files, or
  *   editing an existing one, fails the lint again instead of passing quietly.
  */
 const HISTORICAL_MIGRATION_ALLOWLIST: Array<{ file: string; text: string; rationale: string }> = [
   {
-    file: 'drizzle/0033_chart_of_accounts_ob13.sql',
+    file: 'drizzle/history/0033_chart_of_accounts_ob13.sql',
     text: "-- SCR-026 / OB13: migrate Chart of Accounts to SAP's four-character key and",
     rationale: 'Applied migration header comment; immutable once run, no deployed effect.',
   },
   {
-    file: 'drizzle/0034_group_coa_registry_ob13.sql',
+    file: 'drizzle/history/0034_group_coa_registry_ob13.sql',
     text: '-- role, so forced row-level security keeps it scoped to the current SAP client.',
     rationale: 'Applied migration comment; immutable once run, no deployed effect.',
   },
   {
-    file: 'drizzle/0034_group_coa_registry_ob13.sql',
+    file: 'drizzle/history/0034_group_coa_registry_ob13.sql',
     text: "RAISE EXCEPTION 'Chart of Accounts key % is reserved as a Group CoA in this SAP client', reserved_key",
     rationale: 'Superseded by 0035, which restates the function with compliant message text.',
   },
   {
-    file: 'drizzle/0034_group_coa_registry_ob13.sql',
+    file: 'drizzle/history/0034_group_coa_registry_ob13.sql',
     text: "RAISE EXCEPTION 'Group CoA key % is reserved as an operational Chart of Accounts in this SAP client', reserved_key",
     rationale: 'Superseded by 0035, which restates the function with compliant message text.',
   },
 ];
 
 /** The allowlist may only ever name applied migration files. */
-const ALLOWLIST_FILE_PATTERN = /^drizzle\/\d{4}_[a-z0-9_]+\.sql$/;
+const ALLOWLIST_FILE_PATTERN = /^drizzle\/(history\/)?\d{4}_[a-z0-9_]+\.sql$/;
 
 /** True when this exact line of this exact applied migration is on the allowlist. */
 function isAllowlistedHistoricalLine(file: string, trimmedLine: string): boolean {

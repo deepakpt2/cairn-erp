@@ -24,9 +24,9 @@ const digest = (path: string): string =>
   createHash('sha256').update(readFileSync(join(ROOT, path))).digest('hex');
 
 const LINT_IP = 'scripts/lint-ip.ts';
-const M_0033 = 'drizzle/0033_chart_of_accounts_ob13.sql';
-const M_0034 = 'drizzle/0034_group_coa_registry_ob13.sql';
-const M_0035 = 'drizzle/0035_vendor_free_coa_key_messages.sql';
+const M_0033 = 'drizzle/history/0033_chart_of_accounts_ob13.sql';
+const M_0034 = 'drizzle/history/0034_group_coa_registry_ob13.sql';
+const M_0035 = 'drizzle/history/0035_vendor_free_coa_key_messages.sql';
 
 /**
  * Digests of the two applied migrations that carry historical wording. Editing either
@@ -82,7 +82,7 @@ describe('IP lint — the applied-migration allowlist stays narrow', () => {
 
   it('names only applied migration files, never application code', () => {
     for (const entry of entries) {
-      expect(entry.file, entry.file).toMatch(/^drizzle\/\d{4}_[a-z0-9_]+\.sql$/);
+      expect(entry.file, entry.file).toMatch(/^drizzle\/(history\/)?\d{4}_[a-z0-9_]+\.sql$/);
     }
   });
 

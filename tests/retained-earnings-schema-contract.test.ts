@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
-const migration = readFileSync('drizzle/0121_retained_earnings_indicator.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0121_retained_earnings_indicator.sql', 'utf8');
 const determination = readFileSync('src/modules/foundation/account-determination.ts', 'utf8');
 const vocabulary = readFileSync('src/modules/foundation/retained-earnings-vocabulary.ts', 'utf8');
 

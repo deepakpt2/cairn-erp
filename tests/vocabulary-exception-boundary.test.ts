@@ -153,7 +153,7 @@ describe('data-dictionary vocabulary exception boundary', () => {
 
   it('leaves the stored vocabulary, the validation list and the fingerprint shape alone', () => {
     // The names the exception tolerates are exactly the names the constraint accepts.
-    const ddl = read('drizzle/9135_oma1_condition_table.sql');
+    const ddl = read('drizzle/history/9135_oma1_condition_table.sql');
     const constraint = /batch_condition_table_field_name_ck CHECK \(field_name in \(([^)]*)\)\)/.exec(ddl);
     expect(constraint).not.toBeNull();
     const permitted = constraint![1].match(/'([A-Z]+)'/g)!.map((value) => value.replaceAll("'", ''));
@@ -177,7 +177,7 @@ describe('data-dictionary vocabulary exception boundary', () => {
 
     // The strategy key table still keys on field_name, the fingerprint column is still the stored
     // width, and the fingerprint is still `field=value` pairs ordered by position.
-    const strategyDdl = read('drizzle/9140_mbc1_search_strategy.sql');
+    const strategyDdl = read('drizzle/history/9140_mbc1_search_strategy.sql');
     expect(strategyDdl).toMatch(/batch_search_strategy_key \([\s\S]*?PRIMARY KEY \(client, record_number, field_name\)/);
     const schema = read('src/modules/inventory/schema.ts');
     expect(schema).toMatch(/keyFingerprint: varchar\('key_fingerprint', \{ length: 500 \}\)/);

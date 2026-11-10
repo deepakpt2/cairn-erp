@@ -37,7 +37,7 @@ describe('SCR-158 quotation display screen contract', () => {
     expect(service).not.toContain('.update(');
     expect(service).not.toContain('.delete(');
     expect(existsSync(join(root, 'src/app/purchasing/quotation-display/actions.ts'))).toBe(false);
-    expect(existsSync(join(root, 'drizzle/9098_purchasing_quotation_display.sql'))).toBe(false);
+    expect(existsSync(join(root, 'drizzle/history/9098_purchasing_quotation_display.sql'))).toBe(false);
   });
 
   it('keeps the search alias out of identifiers and does not reopen the maintain screen', () => {

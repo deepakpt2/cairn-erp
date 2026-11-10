@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const schema = readFileSync('src/modules/foundation/schema.ts', 'utf8');
 const plantSchema = schema.slice(schema.indexOf("export const plant = pgTable("), schema.indexOf('/** Storage location'));
-const migration = readFileSync('drizzle/0020_plant_logistics_fields.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0020_plant_logistics_fields.sql', 'utf8');
 
 describe('Plant logistics field migration contract', () => {
   it('adds the structured address and Factory Calendar fields as nullable columns', () => {

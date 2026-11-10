@@ -6,8 +6,8 @@ import { holdsProductionCogiAuthority } from '../src/modules/production/producti
 const read = (path: string) => readFileSync(join(__dirname, '..', path), 'utf8');
 
 describe('COGI-style CO11N movement recovery contract', () => {
-  const migration = read('drizzle/9213_cogi_postprocessing.sql');
-  const failureMigration = read('drizzle/9212_production_goods_movement_failure.sql');
+  const migration = read('drizzle/history/9213_cogi_postprocessing.sql');
+  const failureMigration = read('drizzle/history/9212_production_goods_movement_failure.sql');
   const service = read('src/modules/production/production-cogi.ts');
   const auth = read('src/modules/production/production-cogi-auth.ts');
   const failures = read('src/modules/production/production-goods-movement-failures.ts');

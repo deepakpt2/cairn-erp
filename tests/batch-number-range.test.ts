@@ -447,7 +447,7 @@ describe('OMAD batch number ranges', () => {
     expect(manual).toMatch(/CFG\.INV\.BATCHRANGE\.DEFINE/);
     expect(manual).toMatch(/\/config\/batch-number-ranges/);
     expect(manual).toMatch(/Opening the screen does not create `01`/);
-    const migration = readFileSync('drizzle/9125_omad_batch_number_ranges.sql', 'utf8');
+    const migration = readFileSync('drizzle/history/9125_omad_batch_number_ranges.sql', 'utf8');
     expect(migration).not.toMatch(/insert into number_range/i);
     const receipt = readFileSync('src/modules/inventory/goods-receipt.ts', 'utf8');
     const production = readFileSync('src/modules/inventory/production-orders.ts', 'utf8');

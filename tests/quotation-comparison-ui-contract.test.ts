@@ -46,7 +46,7 @@ describe('SCR-159 quotation comparison screen contract', () => {
     expect(service).not.toContain('unit-conversion');
     expect(service).not.toMatch(/from ['"].*exchange/);
     expect(existsSync(join(root, 'src/app/purchasing/quotation-comparison/actions.ts'))).toBe(false);
-    expect(existsSync(join(root, 'drizzle/9098_purchasing_quotation_comparison.sql'))).toBe(false);
+    expect(existsSync(join(root, 'drizzle/history/9098_purchasing_quotation_comparison.sql'))).toBe(false);
   });
 
   it('keeps the alias in the catalogue and the code line, and out of the maintain screen', () => {

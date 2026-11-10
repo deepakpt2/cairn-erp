@@ -24,8 +24,8 @@ import {
 } from '@/modules/finance/gl-account-vocabulary';
 import { DEFAULT_FIELD_STATUS, resolveFieldStatus } from '@/app/config/gl-accounts/fieldStatus';
 
-const migration = readFileSync('drizzle/0036_gl_account_master_fs00.sql', 'utf8');
-const policies = readFileSync('drizzle/9026_gl_account_master_policies_fs00.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0036_gl_account_master_fs00.sql', 'utf8');
+const policies = readFileSync('drizzle/history/9026_gl_account_master_policies_fs00.sql', 'utf8');
 const groupSchema = readFileSync('src/modules/finance/gl-account-group-schema.ts', 'utf8');
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const services = readFileSync('src/modules/foundation/services.ts', 'utf8');

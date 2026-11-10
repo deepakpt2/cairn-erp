@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const schema = readFileSync('src/modules/foundation/schema.ts', 'utf8');
-const migration = readFileSync('drizzle/0023_purchasing_org_company_code_fk.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0023_purchasing_org_company_code_fk.sql', 'utf8');
 
 describe('SCR-018 Purchasing Organisation Company Code FK contract', () => {
   it('keeps pending assignments nullable while enforcing a same-tenant Company Code reference', () => {

@@ -8,8 +8,8 @@ import {
 
 const service = readFileSync('src/modules/foundation/sales-organization-maintenance.ts', 'utf8');
 const schema = readFileSync('src/modules/foundation/schema.ts', 'utf8');
-const migration = readFileSync('drizzle/0025_sales_organization_definition.sql', 'utf8');
-const activityMigration = readFileSync('drizzle/0026_sales_org_activity_code.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0025_sales_organization_definition.sql', 'utf8');
+const activityMigration = readFileSync('drizzle/history/0026_sales_org_activity_code.sql', 'utf8');
 
 describe('SCR-020 Sales Organization definition contract', () => {
   it('validates the OVX5 field lengths, defaults, nested CAM address and definition-only request', () => {

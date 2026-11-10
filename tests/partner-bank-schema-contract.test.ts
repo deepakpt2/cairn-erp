@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { partnerBank } from '../src/platform/schema';
 
 const partnerBankConfig = getTableConfig(partnerBank);
-const tableMigration = readFileSync('drizzle/0013_partner_bank_master.sql', 'utf8');
-const envelopeBoundMigration = readFileSync('drizzle/0014_partner_bank_envelope_bound.sql', 'utf8');
-const policyMigration = readFileSync('drizzle/9016_partner_bank_policies.sql', 'utf8');
+const tableMigration = readFileSync('drizzle/history/0013_partner_bank_master.sql', 'utf8');
+const envelopeBoundMigration = readFileSync('drizzle/history/0014_partner_bank_envelope_bound.sql', 'utf8');
+const policyMigration = readFileSync('drizzle/history/9016_partner_bank_policies.sql', 'utf8');
 
 describe('partner-bank schema migration contract', () => {
   it('registers a tenant-scoped typed table with ciphertext-only identifier columns', () => {

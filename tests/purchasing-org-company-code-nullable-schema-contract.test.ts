@@ -6,7 +6,7 @@ const purchasingOrgSchema = schema.slice(
   schema.indexOf("export const purchasingOrg = pgTable("),
   schema.indexOf('/** Assignment: which purchasing organisations may buy for which plants. */'),
 );
-const migration = readFileSync('drizzle/0022_purchasing_org_company_code_nullable.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0022_purchasing_org_company_code_nullable.sql', 'utf8');
 const supplierPurchasing = readFileSync('src/modules/foundation/supplier-purchasing.ts', 'utf8');
 
 describe('Purchasing Organisation separate Company Code assignment contract', () => {

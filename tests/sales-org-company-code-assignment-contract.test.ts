@@ -5,7 +5,7 @@ import { hasCapability } from '../src/platform/auth/session';
 const capability = 'CFG.ORG.SALESORG.ASSIGN_COMPANY';
 const placeholder = 'CFG.SALES.SALESORG.ASSIGN_COMPANY';
 const service = readFileSync('src/modules/foundation/sales-org-company-code-assignment.ts', 'utf8');
-const migration = readFileSync('drizzle/0027_sales_org_assign_activity_code.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0027_sales_org_assign_activity_code.sql', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
 const tenancy = readFileSync('src/platform/tenancy/index.ts', 'utf8');
 const action = readFileSync('src/app/config/sales-orgs/assign-company/actions.ts', 'utf8');

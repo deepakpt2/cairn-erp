@@ -32,7 +32,7 @@ const page = readFileSync('src/app/config/sales-document-types/page.tsx', 'utf8'
 const setup = readFileSync('src/app/config/sales-document-types/SalesDocumentTypeSetup.tsx', 'utf8');
 const maintenance = readFileSync('src/modules/sales/document-type-maintenance.ts', 'utf8');
 const resolver = readFileSync('src/modules/sales/document-type.ts', 'utf8');
-const migration = readFileSync('drizzle/9236_sales_document_type_maintenance.sql', 'utf8');
+const migration = readFileSync('drizzle/history/9236_sales_document_type_maintenance.sql', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
 
 function bodyOf(source: string, exported: string): string {

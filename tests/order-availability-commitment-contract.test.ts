@@ -12,7 +12,7 @@ import {
 } from '../src/modules/production/order-availability-commitment';
 
 describe('CO09 Slice 2 commitment contract', () => {
-  const migration = readFileSync('drizzle/9214_co09_requirement_commitments.sql', 'utf8');
+  const migration = readFileSync('drizzle/history/9214_co09_requirement_commitments.sql', 'utf8');
   const service = readFileSync('src/modules/production/order-availability-commitment.ts', 'utf8');
   const availability = readFileSync('src/modules/production/order-availability.ts', 'utf8');
   const orderSchema = readFileSync('src/modules/inventory/schema.ts', 'utf8');

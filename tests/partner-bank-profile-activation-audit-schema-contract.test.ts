@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { partnerBankProfileActivationAudit } from '../src/platform/schema';
 
 const auditConfig = getTableConfig(partnerBankProfileActivationAudit);
-const tableMigration = readFileSync('drizzle/0016_partner_bank_profile_activation_audit.sql', 'utf8');
-const accessMigration = readFileSync('drizzle/9018_partner_bank_profile_activation_audit_policies.sql', 'utf8');
+const tableMigration = readFileSync('drizzle/history/0016_partner_bank_profile_activation_audit.sql', 'utf8');
+const accessMigration = readFileSync('drizzle/history/9018_partner_bank_profile_activation_audit_policies.sql', 'utf8');
 
 describe('partner-bank profile activation audit schema contract', () => {
   it('registers a global, fixed-field audit table with actor and transition versions', () => {

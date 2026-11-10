@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const schema = readFileSync('src/modules/foundation/schema.ts', 'utf8');
-const migration = readFileSync('drizzle/0021_storage_location_plant_fk.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0021_storage_location_plant_fk.sql', 'utf8');
 const storageLocationSchema = schema.slice(
   schema.indexOf("export const storageLocation = pgTable("),
   schema.indexOf('/** Purchasing organisation'),

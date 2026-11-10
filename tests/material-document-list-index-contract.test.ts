@@ -8,8 +8,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const migration = readFileSync('drizzle/9065_material_document_posting_date.sql', 'utf8');
-const ledgerMigration = readFileSync('drizzle/0073_material_document.sql', 'utf8');
+const migration = readFileSync('drizzle/history/9065_material_document_posting_date.sql', 'utf8');
+const ledgerMigration = readFileSync('drizzle/history/0073_material_document.sql', 'utf8');
 
 describe('SCR-125 stage 2: the material document date path stands', () => {
   it('adds exactly one index, on the header posting date, tenant first', () => {

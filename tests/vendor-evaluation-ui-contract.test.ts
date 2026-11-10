@@ -17,7 +17,7 @@ describe('SCR-165 vendor evaluation screen contract', () => {
   const actions = read('src/app/purchasing/vendor-evaluation/actions.ts');
   const service = read('src/modules/purchasing/vendor-evaluation.ts');
   const seed = read('scripts/seed.ts');
-  const sql = read('drizzle/9101_vendor_evaluation.sql');
+  const sql = read('drizzle/history/9101_vendor_evaluation.sql');
 
   it('reads a period and stores only a manual score', () => {
     expect(page).toContain('checkVendorEvaluation(');

@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 const walkthrough = readFileSync('walkthrough-seed.ts', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
-const deliveryMigration = readFileSync('drizzle/9191_sales_delivery_billing.sql', 'utf8');
-const roleAdminMigration = readFileSync('drizzle/9209_platform_role_capability_administration.sql', 'utf8');
+const deliveryMigration = readFileSync('drizzle/history/9191_sales_delivery_billing.sql', 'utf8');
+const roleAdminMigration = readFileSync('drizzle/history/9209_platform_role_capability_administration.sql', 'utf8');
 
 describe('walkthrough role capability catalogue contract', () => {
   it('has all 20 distinct required capability codes in the global registration sources', () => {

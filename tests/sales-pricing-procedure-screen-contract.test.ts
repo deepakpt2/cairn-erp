@@ -30,7 +30,7 @@ const page = readFileSync('src/app/config/pricing-procedure/page.tsx', 'utf8');
 const setup = readFileSync('src/app/config/pricing-procedure/PricingProcedureSetup.tsx', 'utf8');
 const maintenance = readFileSync('src/modules/sales/pricing-procedure-maintenance.ts', 'utf8');
 const engine = readFileSync('src/modules/sales/pricing-procedure.ts', 'utf8');
-const migration = readFileSync('drizzle/9238_sales_pricing_procedure.sql', 'utf8');
+const migration = readFileSync('drizzle/history/9238_sales_pricing_procedure.sql', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
 const catalog = readFileSync('src/ui/shell/screen-catalog.ts', 'utf8');
 

@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const migration = readFileSync('drizzle/0033_chart_of_accounts_ob13.sql', 'utf8');
-const amendment = readFileSync('drizzle/0034_group_coa_registry_ob13.sql', 'utf8');
-const policies = readFileSync('drizzle/9025_group_chart_of_accounts_policies.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0033_chart_of_accounts_ob13.sql', 'utf8');
+const amendment = readFileSync('drizzle/history/0034_group_coa_registry_ob13.sql', 'utf8');
+const policies = readFileSync('drizzle/history/9025_group_chart_of_accounts_policies.sql', 'utf8');
 const foundationSchema = readFileSync('src/modules/foundation/schema.ts', 'utf8');
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 

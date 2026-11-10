@@ -31,6 +31,7 @@ import * as schemaRoot from '../src/platform/schema';
 import { closeDb } from './helpers';
 
 const MIGRATION_DIR = join(process.cwd(), 'drizzle');
+const HISTORY_DIR = join(MIGRATION_DIR, 'history');
 const RUNTIME_ROLE = 'cairn_app';
 const OWNER_ROLE = 'cairn_integration_migrator';
 
@@ -399,8 +400,8 @@ describe('future-table grant policy', () => {
 
   it('every table a migration declares immutable is denied mutation live', async () => {
     const declared = new Map<string, string>();
-    for (const file of readdirSync(MIGRATION_DIR).filter((name) => name.endsWith('.sql')).sort()) {
-      for (const table of revokedTables(readFileSync(join(MIGRATION_DIR, file), 'utf8'))) {
+    for (const file of readdirSync(HISTORY_DIR).filter((name) => name.endsWith('.sql')).sort()) {
+      for (const table of revokedTables(readFileSync(join(HISTORY_DIR, file), 'utf8'))) {
         declared.set(table, file);
       }
     }

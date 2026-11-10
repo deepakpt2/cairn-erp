@@ -17,7 +17,7 @@ describe('SCR-163 GR/IR clearing screen contract', () => {
   const actions = read('src/app/purchasing/grir-clearing/actions.ts');
   const service = read('src/modules/purchasing/grir-clearing.ts');
   const seed = read('scripts/seed.ts');
-  const migration = read('drizzle/9100_gr_ir_maintenance_link.sql');
+  const migration = read('drizzle/history/9100_gr_ir_maintenance_link.sql');
 
   it('lists a residual and posts through the journal, not through stock', () => {
     expect(page).toContain('listGrIrResiduals(');

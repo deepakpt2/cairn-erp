@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const functionSql = readFileSync('drizzle/9019_partner_bank_profile_activation_function.sql', 'utf8');
+const functionSql = readFileSync('drizzle/history/9019_partner_bank_profile_activation_function.sql', 'utf8');
 
 describe('partner-bank profile activation database function contract', () => {
   it('is a fixed-signature SECURITY DEFINER routine with a locked-down search path', () => {

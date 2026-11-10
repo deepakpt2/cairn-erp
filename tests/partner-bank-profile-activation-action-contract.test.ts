@@ -6,7 +6,7 @@ const actionSource = readFileSync(
   'utf8',
 );
 const runtimeGrantSql = readFileSync(
-  'drizzle/9020_partner_bank_profile_activation_function_runtime.sql',
+  'drizzle/history/9020_partner_bank_profile_activation_function_runtime.sql',
   'utf8',
 );
 const executableGrantSql = runtimeGrantSql

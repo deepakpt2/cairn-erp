@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
 
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const vocabulary = readFileSync('src/modules/finance/consolidated-statements-vocabulary.ts', 'utf8');
-const workbenchMigration = readFileSync('drizzle/0119_consolidation_workbench.sql', 'utf8');
-const monitorMigration = readFileSync('drizzle/0120_consolidation_monitor.sql', 'utf8');
+const workbenchMigration = readFileSync('drizzle/history/0119_consolidation_workbench.sql', 'utf8');
+const monitorMigration = readFileSync('drizzle/history/0120_consolidation_monitor.sql', 'utf8');
 
 describe('SCR-118 stage 2: standing paths carry the statement read', () => {
   it('aggregates journal lines on the company/year/period paths', () => {

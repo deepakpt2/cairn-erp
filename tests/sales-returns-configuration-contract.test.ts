@@ -31,7 +31,7 @@ const module = readFileSync('src/modules/sales/returns-configuration.ts', 'utf8'
 const returns = readFileSync('src/modules/sales/returns.ts', 'utf8');
 const creditMemo = readFileSync('src/modules/sales/credit-memo.ts', 'utf8');
 const package_ = readFileSync('src/modules/foundation/standard-config.ts', 'utf8');
-const migration = readFileSync('drizzle/9237_sales_returns_configuration.sql', 'utf8');
+const migration = readFileSync('drizzle/history/9237_sales_returns_configuration.sql', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
 
 describe('returns chain configuration contract', () => {

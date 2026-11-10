@@ -25,7 +25,7 @@ const actions = readFileSync('src/app/sales/credit-memo-request/actions.ts', 'ut
 const page = readFileSync('src/app/sales/credit-memo-request/page.tsx', 'utf8');
 const shell = readFileSync('src/app/sales/credit-memo-request/CreditMemoRequest.tsx', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
-const migration = readFileSync('drizzle/9235_sales_credit_request_capabilities.sql', 'utf8');
+const migration = readFileSync('drizzle/history/9235_sales_credit_request_capabilities.sql', 'utf8');
 
 const ACTS: Array<{ capability: string; constant: string; action: string; service: string }> = [
   {

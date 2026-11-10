@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const migration = readFileSync('drizzle/0118_journal_profit_center_index.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0118_journal_profit_center_index.sql', 'utf8');
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const vocabulary = readFileSync('src/modules/foundation/profit-center-report.ts', 'utf8');
 

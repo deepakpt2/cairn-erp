@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { PRODUCTION_ORDER_COST_REPORT_CAPABILITY, holdsProductionOrderCostReportAuthority } from '../src/modules/production/order-cost-report';
 
 const root = process.cwd();
-const migration = readFileSync(path.join(root, 'drizzle/9215_production_order_cost_report.sql'), 'utf8');
+const migration = readFileSync(path.join(root, 'drizzle/history/9215_production_order_cost_report.sql'), 'utf8');
 const service = readFileSync(path.join(root, 'src/modules/production/order-cost-report.ts'), 'utf8');
 const page = readFileSync(path.join(root, 'src/app/production/order-cost-report/page.tsx'), 'utf8');
 const catalog = readFileSync(path.join(root, 'src/ui/shell/screen-catalog.ts'), 'utf8');

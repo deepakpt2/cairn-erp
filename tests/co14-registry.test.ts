@@ -11,7 +11,7 @@ afterAll(async () => {
 });
 
 describe('CO14 registry migration contract', () => {
-  const migration = readFileSync('drizzle/9211_co14_registry_alias.sql', 'utf8');
+  const migration = readFileSync('drizzle/history/9211_co14_registry_alias.sql', 'utf8');
   const seed = readFileSync('scripts/seed.ts', 'utf8');
 
   it('adds CO14 to the existing PROD.ORDER.DISPLAY entry without introducing authorization data', () => {

@@ -34,7 +34,7 @@ describe('SCR-114 stage 2: clearing canon stands, nothing added', () => {
 });
 
 describe('SCR-114 advanced clearing (B-808): normalized allocation and residual lineage', () => {
-  const migration = readFileSync('drizzle/9062_gl_clearing_advanced.sql', 'utf8');
+  const migration = readFileSync('drizzle/history/9062_gl_clearing_advanced.sql', 'utf8');
 
   it('adds the allocation record, the residual lineage and the reason master', () => {
     expect(migration).toContain('create table public.gl_clearing_allocation');
@@ -67,7 +67,7 @@ describe('SCR-114 advanced clearing (B-808): normalized allocation and residual 
 });
 
 describe('SCR-114 follow-up (B-816): line-level terms for residual items', () => {
-  const termMigration = readFileSync('drizzle/9063_journal_line_terms.sql', 'utf8');
+  const termMigration = readFileSync('drizzle/history/9063_journal_line_terms.sql', 'utf8');
 
   it('adds payment terms and baseline date to the canonical journal line', () => {
     expect(termMigration).toContain('alter table public.journal_entry_line');

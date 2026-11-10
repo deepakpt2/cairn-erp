@@ -15,7 +15,7 @@ const standardStructure = readFileSync('src/platform/tenancy/standard-structure.
 const workbench = readFileSync('src/app/config/page.tsx', 'utf8');
 const workbenchTree = readFileSync('src/app/config/WorkbenchTree.tsx', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
-const migration = readFileSync('drizzle/0032_controlling_area_company_ox19.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0032_controlling_area_company_ox19.sql', 'utf8');
 const locale = readFileSync('src/platform/i18n/index.ts', 'utf8');
 
 const valid = {

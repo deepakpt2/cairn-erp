@@ -10,7 +10,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const migration = readFileSync('drizzle/0119_consolidation_workbench.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0119_consolidation_workbench.sql', 'utf8');
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const vocabulary = readFileSync('src/modules/finance/consolidation-vocabulary.ts', 'utf8');
 

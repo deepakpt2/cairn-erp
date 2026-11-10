@@ -241,7 +241,7 @@ describe('OMCU plant batch status', () => {
     expect(manual).toMatch(/CFG\.INV\.BATCHSTATUSPLANT\.DEFINE/);
     expect(manual).toMatch(/\/config\/batch-status-plants/);
     expect(manual).toMatch(/Opening the screen does not select one/);
-    const migration = readFileSync('drizzle/9126_omcu_batch_status_plant.sql', 'utf8');
+    const migration = readFileSync('drizzle/history/9126_omcu_batch_status_plant.sql', 'utf8');
     expect(migration).not.toMatch(/insert into batch_status_plant\b/i);
   });
 });

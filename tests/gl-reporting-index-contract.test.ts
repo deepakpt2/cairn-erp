@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const lineMigration = readFileSync('drizzle/0098_journal_item_report_indexes.sql', 'utf8');
+const lineMigration = readFileSync('drizzle/history/0098_journal_item_report_indexes.sql', 'utf8');
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const balances = readFileSync('src/modules/finance/gl-balances.ts', 'utf8');
 const items = readFileSync('src/modules/finance/journal-items.ts', 'utf8');

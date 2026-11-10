@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const schema = readFileSync('src/modules/foundation/schema.ts', 'utf8');
 const plantSchema = schema.slice(schema.indexOf("export const plant = pgTable("), schema.indexOf('/** Storage location'));
-const migration = readFileSync('drizzle/0019_plant_company_code_nullable.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0019_plant_company_code_nullable.sql', 'utf8');
 const materials = readFileSync('src/modules/inventory/materials.ts', 'utf8');
 const customerSalesAreas = readFileSync('src/modules/foundation/customer-sales-areas.ts', 'utf8');
 const supplierPurchasing = readFileSync('src/modules/foundation/supplier-purchasing.ts', 'utf8');

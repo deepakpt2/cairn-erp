@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const migration = readFileSync('drizzle/9064_intercompany.sql', 'utf8');
+const migration = readFileSync('drizzle/history/9064_intercompany.sql', 'utf8');
 const schema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const foundation = readFileSync('src/modules/foundation/schema.ts', 'utf8');
 

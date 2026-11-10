@@ -55,10 +55,10 @@ describe('OCHA batch management IMG', () => {
     expect(page).not.toMatch(/<form/);
     expect(page).not.toMatch(/saveCharacteristic|saveClass|saveBatch/);
     expect(page).not.toMatch(/OICQ|VCH1/);
-    const created = readFileSync('drizzle/9127_ocha_batch_img_term.sql', 'utf8');
+    const created = readFileSync('drizzle/history/9127_ocha_batch_img_term.sql', 'utf8');
     expect(created).not.toMatch(/CREATE TABLE/i);
     expect(created).toMatch(/'OCHA'/);
-    const sql = readFileSync('drizzle/9128_ocha_term_description.sql', 'utf8');
+    const sql = readFileSync('drizzle/history/9128_ocha_term_description.sql', 'utf8');
     expect(sql).not.toMatch(/CREATE TABLE/i);
     expect(sql).not.toMatch(/insert into characteristic/i);
     expect(sql).not.toMatch(/CT04|OMCE|OMCS|OMCU|OMCZ|OMAD|341|342/);

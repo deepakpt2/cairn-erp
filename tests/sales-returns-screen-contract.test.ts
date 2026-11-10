@@ -28,7 +28,7 @@ const page = readFileSync('src/app/sales/returns/page.tsx', 'utf8');
 const shell = readFileSync('src/app/sales/returns/Returns.tsx', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
 const roles = readFileSync('src/platform/tenancy/index.ts', 'utf8');
-const migration = readFileSync('drizzle/9234_sales_returns_capabilities.sql', 'utf8');
+const migration = readFileSync('drizzle/history/9234_sales_returns_capabilities.sql', 'utf8');
 
 const ACTS: Array<{ capability: string; constant: string; action: string; service: string }> = [
   {

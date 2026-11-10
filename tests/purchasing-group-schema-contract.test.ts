@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 const foundation = readFileSync('src/modules/foundation/schema.ts', 'utf8');
 const inventory = readFileSync('src/modules/inventory/schema.ts', 'utf8');
 const supplier = readFileSync('src/modules/foundation/supplier-purchasing-schema.ts', 'utf8');
-const migration = readFileSync('drizzle/0024_purchasing_group_definition.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0024_purchasing_group_definition.sql', 'utf8');
 
 describe('SCR-019 Purchasing Group persistence contract', () => {
   it('uses the three-character key and preserves composite client-scoped references', () => {

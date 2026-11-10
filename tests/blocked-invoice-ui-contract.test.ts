@@ -18,7 +18,7 @@ describe('SCR-162 blocked invoice screen contract', () => {
   const service = read('src/modules/purchasing/blocked-invoice.ts');
   const paymentRun = read('src/modules/finance/payment-run.ts');
   const seed = read('scripts/seed.ts');
-  const migration = read('drizzle/9099_supplier_invoice_payment_block.sql');
+  const migration = read('drizzle/history/9099_supplier_invoice_payment_block.sql');
 
   it('lists a manual hold and does not post', () => {
     expect(page).toContain('listBlockedInvoices(');

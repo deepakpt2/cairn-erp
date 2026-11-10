@@ -12,8 +12,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const headerMigration = readFileSync('drizzle/0115_financial_statement_version.sql', 'utf8');
-const lineMigration = readFileSync('drizzle/0098_journal_item_report_indexes.sql', 'utf8');
+const headerMigration = readFileSync('drizzle/history/0115_financial_statement_version.sql', 'utf8');
+const lineMigration = readFileSync('drizzle/history/0098_journal_item_report_indexes.sql', 'utf8');
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const service = readFileSync('src/modules/finance/trial-balance.ts', 'utf8');
 const balanceSheetService = readFileSync('src/modules/finance/balance-sheet.ts', 'utf8');

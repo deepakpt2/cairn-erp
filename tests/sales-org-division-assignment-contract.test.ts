@@ -4,8 +4,8 @@ import { STANDARD_STRUCTURE } from '../src/platform/tenancy/standard-structure';
 
 const service = readFileSync('src/modules/foundation/sales-org-division-assignment.ts', 'utf8');
 const schema = readFileSync('src/modules/foundation/schema.ts', 'utf8');
-const migration = readFileSync('drizzle/0029_sales_org_division_assignment.sql', 'utf8');
-const rlsMigration = readFileSync('drizzle/9024_sales_org_division_policies.sql', 'utf8');
+const migration = readFileSync('drizzle/history/0029_sales_org_division_assignment.sql', 'utf8');
+const rlsMigration = readFileSync('drizzle/history/9024_sales_org_division_policies.sql', 'utf8');
 const standardConfig = readFileSync('src/modules/foundation/standard-config.ts', 'utf8');
 const standardStructure = readFileSync('src/platform/tenancy/standard-structure.ts', 'utf8');
 const tenancy = readFileSync('src/platform/tenancy/index.ts', 'utf8');

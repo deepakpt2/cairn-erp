@@ -8,9 +8,9 @@ describe('CO13 screen and migration contract', () => {
   const page = read('src/app/production/confirmation-cancel/page.tsx');
   const form = read('src/app/production/confirmation-cancel/ConfirmationCancelWorkbench.tsx');
   const service = read('src/modules/production/confirmation-cancel.ts');
-  const migration = read('drizzle/9172_co13_confirmation_cancel.sql');
-  const guard = read('drizzle/9173_co13_cancellation_guard.sql');
-  const reasonMigration = read('drizzle/9210_co13_cancellation_reason_required.sql');
+  const migration = read('drizzle/history/9172_co13_confirmation_cancel.sql');
+  const guard = read('drizzle/history/9173_co13_cancellation_guard.sql');
+  const reasonMigration = read('drizzle/history/9210_co13_cancellation_reason_required.sql');
   const display = read('src/app/production/production-order-display/page.tsx');
   const ticket = read('src/app/production/time-ticket/TimeTicketWorkbench.tsx');
 

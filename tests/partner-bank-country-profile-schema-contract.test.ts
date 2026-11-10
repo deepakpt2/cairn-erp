@@ -5,8 +5,8 @@ import { partnerBankCountryProfile } from '../src/platform/schema';
 import { PARTNER_BANK_PROFILE_POLICIES } from '../src/platform/security/partner-bank-profile-readiness';
 
 const profileConfig = getTableConfig(partnerBankCountryProfile);
-const tableMigration = readFileSync('drizzle/0015_partner_bank_country_profile.sql', 'utf8');
-const accessMigration = readFileSync('drizzle/9017_partner_bank_country_profile_policies.sql', 'utf8');
+const tableMigration = readFileSync('drizzle/history/0015_partner_bank_country_profile.sql', 'utf8');
+const accessMigration = readFileSync('drizzle/history/9017_partner_bank_country_profile_policies.sql', 'utf8');
 const referenceSeed = readFileSync('scripts/standard-reference-data.ts', 'utf8');
 
 describe('global partner-bank profile registry contract', () => {
