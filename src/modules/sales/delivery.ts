@@ -23,7 +23,7 @@
 import { z } from 'zod';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { businessPartner } from '../foundation/business-partner-schema';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, or, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
@@ -47,6 +47,7 @@ import { blockingEntries, describeBlocked, evaluateIncompletion } from './incomp
 import { recordSalesOutputs } from './output';
 import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
 import { CUSTOMER_MASTER_ROUTE, deliveryTermsFor } from './delivering-plant';
+import { determineBatchesOn } from './batch-determination';
 
 export const DELIVERY_CAPABILITY = 'SALES.DELIVERY.CREATE';
 export const DELIVERY_PICK_CAPABILITY = 'SALES.DELIVERY.PICK';
@@ -1087,8 +1088,14 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
     await lockDelivery(tx, parsed.client, header.deliveryNumber);
 
     if (parsed.requestKey) {
+      // A submission that took goods from two batches wrote two rows, and the second carries the key
+      // with the pick number after it, because the key is unique per row. Both are this submission.
       const [existing] = await tx.select({ number: deliveryPicking.pickNumber }).from(deliveryPicking).where(and(
-        eq(deliveryPicking.client, parsed.client), eq(deliveryPicking.requestKey, parsed.requestKey),
+        eq(deliveryPicking.client, parsed.client),
+        or(
+          eq(deliveryPicking.requestKey, parsed.requestKey),
+          sql`${deliveryPicking.requestKey} like ${`${parsed.requestKey}#%`}`,
+        ),
       )).limit(1);
       // The same submission is already in the history, so it is not appended twice.
       if (existing) return;
@@ -1098,6 +1105,14 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
       eq(deliveryLine.client, parsed.client), eq(deliveryLine.deliveryNumber, header.deliveryNumber),
     )).orderBy(asc(deliveryLine.lineNumber));
     const byNumber = new Map(lines.map((line) => [line.lineNumber, line]));
+    // Who the goods are going to, which is the customer a batch determination rule may name. Read
+    // from the order the delivery was raised against, not from the partner function, because a rule
+    // is maintained against the customer the sale was made to.
+    const [order] = header.orderNumber
+      ? await tx.select({ customerNumber: salesOrder.customerNumber }).from(salesOrder).where(and(
+        eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, header.orderNumber),
+      )).limit(1)
+      : [undefined];
     const touched: number[] = [];
 
     for (const item of parsed.items) {
@@ -1142,7 +1157,30 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
         );
       }
 
-      const storageLocation = await resolvePickLocation(tx, parsed.client, line, item.storageLocation, delta);
+      // Batch determination (§5.5a). A picker who names a batch keeps it: the rule answers only where
+      // the pick names none, and a clerk who knows better than the rule is not overruled by it. A
+      // correction takes goods back off a pick that already states which batch they came from, so it
+      // is never re-determined underneath the person making it.
+      const named = (item.batchNumber ?? '').trim().toUpperCase();
+      const determined = named || delta < 0
+        ? []
+        : (await determineBatchesOn(tx, parsed.client, {
+          materialNumber: line.materialNumber,
+          plant: line.plant,
+          quantity: delta,
+          documentDate: header.deliveryDate,
+          ...(item.storageLocation ? { storageLocation: item.storageLocation } : {}),
+          salesOrg: header.salesOrg,
+          distributionChannel: header.distributionChannel,
+          customerNumber: order?.customerNumber ?? '',
+        })).proposals;
+
+      // Where a rule answers it names the shelf as well as the batch, because it read the stock that
+      // stands in one. Where no rule answers, nothing has changed: the location still has to come from
+      // the delivery item or from the picker, as it always did.
+      const fallbackLocation = determined.length > 0 && determined.every((row) => row.storageLocation)
+        ? ''
+        : await resolvePickLocation(tx, parsed.client, line, item.storageLocation, delta);
       const [pickNumber] = await tx.select({ value: sql<number>`coalesce(max(pick_number), 0) + 1` })
         .from(deliveryPicking).where(and(
           eq(deliveryPicking.client, parsed.client),
@@ -1150,18 +1188,38 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
           eq(deliveryPicking.lineNumber, line.lineNumber),
         ));
 
-      await tx.insert(deliveryPicking).values({
-        client: parsed.client,
-        deliveryNumber: header.deliveryNumber,
-        lineNumber: line.lineNumber,
-        pickNumber: Number(pickNumber?.value ?? 1),
-        quantityDelta: round3(delta),
-        storageLocation,
-        batchNumber: (item.batchNumber ?? '').trim().toUpperCase(),
-        reason: (item.reason ?? '').trim() || null,
-        requestKey: parsed.requestKey || null,
-        createdBy: parsed.changedBy,
-      });
+      const picks = determined.length > 0
+        ? determined.map((row) => ({
+          storageLocation: row.storageLocation || fallbackLocation,
+          batchNumber: row.batchNumber,
+          quantity: Number(row.quantity),
+        }))
+        : [{ storageLocation: fallbackLocation, batchNumber: named, quantity: delta }];
+
+      // One pick row per batch the determination took. The pick history is append-only and keyed by a
+      // pick number, so an item taken from three batches is three rows that say so rather than one row
+      // pretending the goods came from one place.
+      let nextPickNumber = Number(pickNumber?.value ?? 1);
+      for (const [index, entry] of picks.entries()) {
+        await tx.insert(deliveryPicking).values({
+          client: parsed.client,
+          deliveryNumber: header.deliveryNumber,
+          lineNumber: line.lineNumber,
+          pickNumber: nextPickNumber,
+          quantityDelta: round3(entry.quantity),
+          storageLocation: entry.storageLocation,
+          batchNumber: entry.batchNumber,
+          reason: (item.reason ?? '').trim() || null,
+          // The key is unique per row, so where one submission writes several rows the pick number
+          // goes after it. A single row keeps the key exactly as it was submitted, so nothing that
+          // reads these rows today sees a key it did not write.
+          requestKey: parsed.requestKey
+            ? (picks.length === 1 ? parsed.requestKey : `${parsed.requestKey}#${index + 1}`)
+            : null,
+          createdBy: parsed.changedBy,
+        });
+        nextPickNumber += 1;
+      }
 
       // The line's picked quantity is the history summed, never the form added: that is what makes a
       // correction and a confirmation leave the same answer.

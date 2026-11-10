@@ -1718,3 +1718,33 @@ export const salesIncompletionLog = pgTable('sales_incompletion_log', {
   index('sales_incompletion_log_blocking_idx')
     .on(t.client, t.documentCategory, t.documentNumber, t.isWarning, t.statusGroup),
 ]);
+
+/**
+ * Which batch a delivery item is picked from, and in what order (§5.5a).
+ *
+ * The empty position is the general rule, which is why those columns default to '' rather than to
+ * null — null in a unique key would let two "any customer" rows stand side by side. Nothing is
+ * seeded, so a tenant that maintains no rule picks exactly as it did before this table existed.
+ */
+export const salesBatchDeterminationRule = pgTable('sales_batch_determination_rule', {
+  client: tenant(),
+  ruleNumber: varchar('rule_number', { length: 10 }).notNull(),
+  salesOrg: varchar('sales_org', { length: 4 }).notNull().default(''),
+  distributionChannel: varchar('distribution_channel', { length: 2 }).notNull().default(''),
+  customerNumber: varchar('customer_number', { length: 40 }).notNull().default(''),
+  materialNumber: varchar('material_number', { length: 40 }).notNull().default(''),
+  plant: varchar('plant', { length: 10 }).notNull().default(''),
+  sortRule: varchar('sort_rule', { length: 12 }).notNull().default('FIFO'),
+  isActive: boolean('is_active').notNull().default(true),
+  validityFrom: date('validity_from', { mode: 'string' }).notNull(),
+  validityTo: date('validity_to', { mode: 'string' }).notNull(),
+  name: varchar('name', { length: 40 }).notNull().default(''),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.ruleNumber] }),
+  check('sales_batch_determination_sort_ck',
+    sql`${t.sortRule} in ('FIFO', 'LIFO', 'EXPIRY', 'BATCH_NUMBER')`),
+  check('sales_batch_determination_validity_ck', sql`${t.validityTo} >= ${t.validityFrom}`),
+  index('sales_batch_determination_lookup_ix')
+    .on(t.client, t.materialNumber, t.customerNumber, t.plant),
+]);

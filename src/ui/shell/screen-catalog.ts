@@ -170,6 +170,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/batch-determination",
+    path: "/config/batch-determination",
+    query: {},
+    code: "CFG.SALES.BATCHDETERMINATION.DEFINE",
+    title: "Batch determination",
+    area: "configuration",
+    family: "sales-batch-determination",
+    accepts: ["customer", "material", "delivery"],
+  },
+  {
     id: "/config/batch-conversion",
     path: "/config/batch-conversion",
     query: {},
