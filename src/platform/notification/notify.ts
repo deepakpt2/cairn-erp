@@ -20,7 +20,7 @@ import { withTenantAs } from '@/platform/db/client';
 import { t } from '@/platform/i18n';
 import { notification } from '@/platform/tables/system';
 
-import type { NotifyInput, NotificationView } from './types';
+import type { NotifyInput, NotificationRow, NotificationView } from './types';
 
 /**
  * Tell one person one thing, inside the caller's transaction.
@@ -141,5 +141,33 @@ export async function unreadCount(client: string, userId: string): Promise<numbe
       .from(notification)
       .where(and(eq(notification.client, client), isNull(notification.seenAt)));
     return row?.count ?? 0;
+  });
+}
+
+/**
+ * One row, for whoever it was sent to.
+ *
+ * Used when opening a notification to work out where it points. Scoped to the
+ * recipient by RLS, so asking about somebody else's row returns null rather
+ * than a row that should not have been readable — the caller then falls back
+ * to the inbox, which is the same as being told nothing.
+ */
+export async function getNotification(
+  client: string,
+  userId: string,
+  notificationId: string,
+): Promise<NotificationRow | null> {
+  return withTenantAs(client, userId, async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(notification)
+      .where(
+        and(
+          eq(notification.client, client),
+          eq(notification.notificationId, notificationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   });
 }

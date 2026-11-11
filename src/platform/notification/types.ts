@@ -33,6 +33,8 @@ export type NotificationKind =
 export type NotificationObjectClass =
   | 'purchase_requisition'
   | 'purchase_order'
+  | 'purchase_contract'
+  | 'scheduling_agreement'
   | 'sales_order'
   | 'output_message'
   | 'job_run'

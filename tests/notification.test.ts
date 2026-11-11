@@ -19,6 +19,7 @@ import { db, withTenant, withTenantAs } from '@/platform/db/client';
 import { sql } from 'drizzle-orm';
 
 import {
+  getNotification,
   listInbox,
   markAllSeen,
   markSeen,
@@ -27,7 +28,12 @@ import {
   unreadCount,
 } from '@/platform/notification/notify';
 import { resolveRecipients } from '@/platform/notification/recipients';
+import {
+  NOTIFICATION_ROUTES,
+  routeForNotification,
+} from '@/platform/notification/routing';
 import { notification } from '@/platform/tables/system';
+import { SCREENS } from '@/ui/shell/screen-catalog';
 import { and, eq } from 'drizzle-orm';
 
 import { parseCron, nextDueAfter } from '@/platform/job/cron';
@@ -336,5 +342,166 @@ describe('the sweep does not repeat itself', () => {
 
     const after = (await listInbox(client, clerk)).filter((r) => r.objectKey === grantExp).length;
     expect(after).toBe(before + 1);
+  });
+});
+
+describe('opening a notification takes you to the thing it is about', () => {
+  /**
+   * The routing table is data that rots. A screen gets renamed, a parameter
+   * gets dropped, and the table keeps pointing at a URL that now 404s or —
+   * worse — quietly ignores the parameter and opens an unfiltered list that
+   * looks like the right document. These two assertions are the ones that
+   * catch that, and they are why the table can be a plain object: the
+   * coupling to the catalogue is checked here rather than imported there.
+   */
+  it('points every route at a screen that exists', () => {
+    const known = new Set(SCREENS.map((screen) => screen.path));
+    for (const [objectClass, entry] of Object.entries(NOTIFICATION_ROUTES)) {
+      expect(known.has(entry.path), `${objectClass} -> ${entry.path}`).toBe(true);
+    }
+  });
+
+  it('only uses parameters the target screen declares it accepts', () => {
+    const byPath = new Map(SCREENS.map((screen) => [screen.path, screen]));
+    for (const [objectClass, entry] of Object.entries(NOTIFICATION_ROUTES)) {
+      const screen = byPath.get(entry.path)!;
+      if (!entry.param) continue;
+      expect(
+        screen.accepts.includes(entry.param),
+        `${objectClass} -> ${entry.path}?${entry.param}`,
+      ).toBe(true);
+    }
+  });
+
+  it('routes a document class to the screen that shows that document', () => {
+    expect(
+      routeForNotification({
+        objectClass: 'purchase_requisition',
+        objectKey: '1000000007',
+        recipient: 'someone',
+      }),
+    ).toBe('/purchasing/requisitions?req=1000000007');
+
+    expect(
+      routeForNotification({
+        objectClass: 'purchase_order',
+        objectKey: '4500000001',
+        recipient: 'someone',
+      }),
+    ).toBe('/purchasing/purchase-order-display?order=4500000001');
+
+    expect(
+      routeForNotification({
+        objectClass: 'sales_order',
+        objectKey: '20000001',
+        recipient: 'someone',
+      }),
+    ).toBe('/sales/orders?order=20000001');
+  });
+
+  it('falls back rather than guessing for a class with no obvious home', () => {
+    // Both are deliberately absent from the table. An output message has no
+    // screen keyed by message, and a closed session has nothing to show.
+    expect(
+      routeForNotification({
+        objectClass: 'output_message',
+        objectKey: 'x',
+        recipient: 'someone',
+      }),
+    ).toBeNull();
+
+    expect(
+      routeForNotification({
+        objectClass: 'user_session',
+        objectKey: 'x',
+        recipient: 'someone',
+      }),
+    ).toBeNull();
+
+    expect(
+      routeForNotification({
+        objectClass: 'something_not_invented_yet',
+        objectKey: 'x',
+        recipient: 'someone',
+      }),
+    ).toBeNull();
+  });
+
+  it('sends an expiring grant to the person who holds it, not to the grant id', () => {
+    // The authority screen filters by user. The object key is the grant, which
+    // that screen has never heard of, so the row's recipient is what names the
+    // person — no lookup needed to answer a question the row already answers.
+    expect(
+      routeForNotification({
+        objectClass: 'user_capability',
+        objectKey: 'grant-abc',
+        recipient: 'u-holder',
+      }),
+    ).toBe('/people/authority?user=u-holder');
+  });
+
+  it('lands a job on the jobs page without pretending to open the run', () => {
+    // The jobs screen accepts no filter, so a run id in the query would be
+    // silently dropped and the page would look like it had opened the wrong run.
+    expect(
+      routeForNotification({ objectClass: 'job_run', objectKey: 'run-9', recipient: 'someone' }),
+    ).toBe('/platform/jobs');
+  });
+
+  it('encodes a key that is not safe in a query string', () => {
+    // What matters is that a key cannot inject a second parameter: &, = and
+    // space are escaped, so the value stays one value. encodeURIComponent
+    // leaves the apostrophe alone, which is correct rather than an oversight —
+    // it is legal in a query value and needs no escaping there.
+    expect(
+      routeForNotification({
+        objectClass: 'purchase_order',
+        objectKey: "45'0000 001&x=1",
+        recipient: 'someone',
+      }),
+    ).toBe("/purchasing/purchase-order-display?order=45'0000%20001%26x%3D1");
+  });
+
+  it('has nothing to route when there is no key', () => {
+    expect(
+      routeForNotification({ objectClass: 'purchase_order', objectKey: '', recipient: 'someone' }),
+    ).toBeNull();
+  });
+
+  it('takes you to the document, having read the row back', async () => {
+    const id = await withTenant(client, async (tx) =>
+      notifyOn(tx, {
+        client,
+        recipient: managerA,
+        kind: 'DOC.RELEASED',
+        objectClass: 'purchase_requisition',
+        objectKey: '1000000009',
+        messageKey: 'notification.kind.DOC.RELEASED',
+        messageParams: { document: '1000000009' },
+      }),
+    );
+
+    const row = await getNotification(client, managerA, id!);
+    expect(row).toBeTruthy();
+    expect(routeForNotification(row!)).toBe('/purchasing/requisitions?req=1000000009');
+  });
+
+  it('gives you nothing to route when the row is not yours', async () => {
+    const id = await withTenant(client, async (tx) =>
+      notifyOn(tx, {
+        client,
+        recipient: clerk,
+        kind: 'JOB.COMPLETED',
+        objectClass: 'job_run',
+        objectKey: 'run-private',
+        messageKey: 'notification.kind.JOB.COMPLETED',
+        messageParams: { job: 'X' },
+      }),
+    );
+
+    // The recipient term of the policy makes this null rather than a row that
+    // should not have been readable. The caller falls back to the inbox, which
+    // is the same as being told nothing.
+    expect(await getNotification(client, managerA, id!)).toBeNull();
   });
 });
