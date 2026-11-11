@@ -144,6 +144,7 @@ const ACTIVITIES: Activity[] = [
 
 const CAPABILITIES: Array<{ code: string; module: string; action: string; posting: boolean; description: string }> = [
   { code: 'CFG.PLT.CLIENT.ONBOARD', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Provision a tenant with deployment-owner authorization' },
+  { code: 'PLT.NOTIFY.DISPLAY', module: 'PLT', action: 'DISPLAY', posting: false, description: 'Display the notification inbox: messages about documents you own or can act on, marked seen when opened' },
   { code: 'PLT.JOB.DISPLAY', module: 'PLT', action: 'DISPLAY', posting: false, description: 'Display the background job status page: what is running, what finished, and what stopped' },
   { code: 'PLT.JOB.CANCEL', module: 'PLT', action: 'EXECUTE', posting: false, description: 'Ask a background job to stop. The worker finishes the chunk in hand and then stops' },
   { code: 'PLT.JOB.RETRY', module: 'PLT', action: 'EXECUTE', posting: false, description: 'Put a failed, cancelled or dead-lettered job back on the queue' },

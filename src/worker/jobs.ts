@@ -13,10 +13,11 @@
  */
 
 // ── Jobs ───────────────────────────────────────────────────────────────────
-// None have been written yet. Phase 4 builds the runtime and its proof; the
-// first real job arrives with the first feature that needs one, and lands here.
+// Phase 7 landed the first two: the grant-expiry sweep, and the fan-out that
+// resolves who may act on a document before telling them about it.
 //
-//   import '../modules/sales/jobs/reprice-open-orders';
+import '../modules/people/jobs/grant-expiring';
+import '../platform/notification/jobs/fanout';
 //
 // Adding a job means adding its import here. A job that is not imported is not
 // a job — it is a run that will fail the moment a worker claims it.

@@ -10,6 +10,7 @@ import {
   timestamp,
   jsonb,
   index,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { auditColumns, client } from './tenancy';
 
@@ -167,6 +168,44 @@ export const jobLog = pgTable(
     loggedAt: timestamp('logged_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('job_log_run_idx').on(t.jobRunId, t.loggedAt)],
+);
+
+/**
+ * A message to one user about one thing that happened — Phase 7.
+ *
+ * Not the attention panel. That is a live query about what is waiting; this is
+ * a stored row about what happened. Different mechanisms, and they are not
+ * merged.
+ *
+ * Written through the `notification_deliver` definer function, never by a
+ * plain insert: the recipient term of the policy is what keeps one person out
+ * of another's inbox, and it would equally stop anybody writing to another
+ * person's inbox — including the worker resolving a pool. See the migration.
+ */
+export const notification = pgTable(
+  'notification',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    notificationId: varchar('notification_id', { length: 36 }).notNull(),
+    /** app_user.id of the person being told. Resolved, never caller-supplied. */
+    recipient: varchar('recipient', { length: 60 }).notNull(),
+    kind: varchar('kind', { length: 40 }).notNull(),
+    /** What it points at: purchase_requisition, job_run, user_session. Not a foreign key. */
+    objectClass: varchar('object_class', { length: 60 }).notNull(),
+    objectKey: varchar('object_key', { length: 80 }).notNull(),
+    /** i18n key, resolved at render. No user-visible text is stored (R-19, D-008). */
+    messageKey: varchar('message_key', { length: 120 }).notNull(),
+    messageParams: jsonb('message_params').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Null means unseen, which is the only state the inbox distinguishes. */
+    seenAt: timestamp('seen_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.notificationId] }),
+    index('notification_inbox_idx').on(t.client, t.recipient, t.seenAt, t.createdAt),
+  ],
 );
 
 /**

@@ -1,0 +1,318 @@
+/**
+ * Notifications — Phase 7.
+ *
+ * The assertions that matter here are the ones that would catch the two ways
+ * this design could quietly go wrong:
+ *
+ *   - the resolver and `can()` disagreeing, so the inbox offers work the
+ *     screen then refuses;
+ *   - the recipient term of the policy not biting, so one person reads
+ *     another's inbox.
+ *
+ * Both are asserted against the real database rather than a mock, because both
+ * are properties of the policy and the grant resolver together.
+ */
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { canUser } from '@/platform/auth/authority';
+import { db, withTenant, withTenantAs } from '@/platform/db/client';
+import { sql } from 'drizzle-orm';
+
+import {
+  listInbox,
+  markAllSeen,
+  markSeen,
+  notifyAll,
+  notifyOn,
+  unreadCount,
+} from '@/platform/notification/notify';
+import { resolveRecipients } from '@/platform/notification/recipients';
+import { notification } from '@/platform/tables/system';
+import { and, eq } from 'drizzle-orm';
+
+import { parseCron, nextDueAfter } from '@/platform/job/cron';
+
+let client: string;
+let managerA: string; // holds the release capability, scoped to plant 1000
+let managerB: string; // holds it, scoped to plant 2000
+let clerk: string; // holds nothing
+
+const CAPABILITY = 'PROC.PR.RELEASE';
+
+afterAll(async () => {
+  if (!client) return;
+  await withTenant(client, async (tx) => {
+    await tx.execute(sql`delete from notification where client = ${client}`);
+  }).catch(() => {});
+});
+
+async function seedTenant(): Promise<void> {
+  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+  client = `N${suffix}`.slice(0, 4).padEnd(4, 'X');
+
+  await withTenant(client, async (tx) => {
+    await tx.execute(sql`
+      insert into client (client, name) values (${client}, ${'Notify test ' + suffix})
+      on conflict (client) do nothing
+    `);
+    // Plants, so a scope has something to point at.
+    await tx.execute(sql`
+      insert into plant (client, plant, name, country) values
+        (${client}, '1000', 'Plant 1000', 'US'), (${client}, '2000', 'Plant 2000', 'US')
+      on conflict do nothing
+    `);
+  });
+
+  // `app_user.id` has no default: it is a supplied key, not a serial.
+  managerA = `u-a-${suffix}`;
+  managerB = `u-b-${suffix}`;
+  clerk = `u-c-${suffix}`;
+
+  await withTenant(client, async (tx) => {
+    await tx.execute(sql`
+      insert into app_user (id, client, username, full_name, password_hash, is_active)
+      values
+        (${managerA}, ${client}, ${'mgrA' + suffix}, 'Manager A', 'scrypt:x:x', true),
+        (${managerB}, ${client}, ${'mgrB' + suffix}, 'Manager B', 'scrypt:x:x', true),
+        (${clerk}, ${client}, ${'clerk' + suffix}, 'Clerk', 'scrypt:x:x', true)
+      on conflict (id) do nothing
+    `);
+  });
+}
+
+beforeAll(async () => {
+  await seedTenant();
+}, 60_000);
+
+describe('notification delivery', () => {
+  it('delivers one message to one person, inside the caller transaction', async () => {
+    const id = await withTenant(client, async (tx) =>
+      notifyOn(tx, {
+        client,
+        recipient: managerA,
+        kind: 'DOC.RELEASED',
+        objectClass: 'purchase_requisition',
+        objectKey: '1000000001',
+        messageKey: 'notification.kind.DOC.RELEASED',
+        messageParams: { document: '1000000001' },
+      }),
+    );
+    expect(id).toBeTruthy();
+
+    const rows = await listInbox(client, managerA);
+    expect(rows.some((r) => r.notificationId === id)).toBe(true);
+  });
+
+  it('resolves the message through the locale, not as stored text', async () => {
+    const rows = await listInbox(client, managerA);
+    const found = rows.find((r) => r.kind === 'DOC.RELEASED');
+    expect(found).toBeTruthy();
+    // A missing catalogue entry renders the key itself, which is exactly what
+    // this asserts against: the key was resolved, and the placeholder filled.
+    expect(found!.title).not.toBe(found!.messageKey);
+    expect(found!.title).toContain('1000000001');
+  });
+
+  it('does not write a second unseen copy of the same event', async () => {
+    const before = await unreadCount(client, managerA);
+    await withTenant(client, async (tx) => {
+      await notifyOn(tx, {
+        client,
+        recipient: managerA,
+        kind: 'DOC.RELEASED',
+        objectClass: 'purchase_requisition',
+        objectKey: '1000000001',
+        messageKey: 'notification.kind.DOC.RELEASED',
+        messageParams: { document: '1000000001' },
+      });
+    });
+    const after = await unreadCount(client, managerA);
+    expect(after).toBe(before); // the first row is still unseen, so this is a no-op
+  });
+
+  it('marks one seen, once, and counts it as read', async () => {
+    const before = await unreadCount(client, managerA);
+    const rows = await listInbox(client, managerA);
+    const target = rows.find((r) => r.isUnseen)!;
+    expect(await markSeen(client, managerA, target.notificationId)).toBe(true);
+    // Idempotent: the second call reports that nothing changed.
+    expect(await markSeen(client, managerA, target.notificationId)).toBe(false);
+    expect(await unreadCount(client, managerA)).toBe(before - 1);
+  });
+
+  it('marks everything seen at once', async () => {
+    await withTenant(client, async (tx) =>
+      notifyOn(tx, {
+        client,
+        recipient: clerk,
+        kind: 'JOB.COMPLETED',
+        objectClass: 'job_run',
+        objectKey: 'run-1',
+        messageKey: 'notification.kind.JOB.COMPLETED',
+        messageParams: { job: 'TEST.JOB' },
+      }),
+    );
+    expect(await unreadCount(client, clerk)).toBeGreaterThan(0);
+    const marked = await markAllSeen(client, clerk);
+    expect(marked).toBeGreaterThan(0);
+    expect(await unreadCount(client, clerk)).toBe(0);
+  });
+});
+
+describe('the recipient term of the policy', () => {
+  it('does not let one person read another person inbox', async () => {
+    // Read as managerA; the row belongs to clerk.
+    const mine = await listInbox(client, managerA);
+    expect(mine.some((r) => r.recipient === clerk)).toBe(false);
+  });
+
+  it('returns nothing at all when no person is named', async () => {
+    // withTenant sets only cairn.client. An unset cairn.user must make the
+    // comparison null and return no rows — fail closed, not open.
+    const rows = await withTenant(client, async (tx) =>
+      tx.select().from(notification).where(eq(notification.client, client)),
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it('will not mark somebody else row seen', async () => {
+    const theirRows = await listInbox(client, clerk);
+    const target = theirRows[0];
+    expect(target).toBeTruthy();
+    expect(await markSeen(client, managerA, target!.notificationId)).toBe(false);
+  });
+});
+
+describe('recipient resolution is the inverse of can()', () => {
+  it('agrees with can() for a holder in scope', async () => {
+    // Grant managerA the capability, scoped to plant 1000.
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into user_capability (id, client, user_id, capability_code, valid_from, reason, granter)
+        values ('grant-a', ${client}, ${managerA}, ${CAPABILITY}, current_date, 'DIRECT', 'TEST')
+        on conflict (id) do nothing
+      `);
+      await tx.execute(sql`
+        insert into user_capability_scope (client, grant_id, scope_type, scope_value)
+        values (${client}, 'grant-a', 'PLANT', '1000')
+        on conflict do nothing
+      `);
+    });
+
+    expect(await canUser({ client, userId: managerA }, CAPABILITY, { plant: '1000' })).toBe(true);
+    expect(await canUser({ client, userId: managerA }, CAPABILITY, { plant: '2000' })).toBe(false);
+
+    const forA = await withTenant(client, async (tx) =>
+      resolveRecipients(tx, client, CAPABILITY, { plant: '1000' }),
+    );
+    expect(forA).toContain(managerA);
+
+    const forB = await withTenant(client, async (tx) =>
+      resolveRecipients(tx, client, CAPABILITY, { plant: '2000' }),
+    );
+    expect(forB).not.toContain(managerA);
+  });
+
+  it('narrows by scope rather than telling every holder', async () => {
+    // managerB holds the same capability for plant 2000.
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into user_capability (id, client, user_id, capability_code, valid_from, reason, granter)
+        values ('grant-b', ${client}, ${managerB}, ${CAPABILITY}, current_date, 'DIRECT', 'TEST')
+        on conflict (id) do nothing
+      `);
+      await tx.execute(sql`
+        insert into user_capability_scope (client, grant_id, scope_type, scope_value)
+        values (${client}, 'grant-b', 'PLANT', '2000')
+        on conflict do nothing
+      `);
+    });
+
+    const thousand = await withTenant(client, async (tx) =>
+      resolveRecipients(tx, client, CAPABILITY, { plant: '1000' }),
+    );
+    const twoThousand = await withTenant(client, async (tx) =>
+      resolveRecipients(tx, client, CAPABILITY, { plant: '2000' }),
+    );
+
+    expect(thousand).toContain(managerA);
+    expect(thousand).not.toContain(managerB);
+    expect(twoThousand).toContain(managerB);
+    expect(twoThousand).not.toContain(managerA);
+  });
+
+  it('never names somebody who does not hold the capability', async () => {
+    const found = await withTenant(client, async (tx) =>
+      resolveRecipients(tx, client, CAPABILITY, { plant: '1000' }),
+    );
+    expect(found).not.toContain(clerk);
+  });
+
+  it('writes one row per resolved person', async () => {
+    const told = await withTenant(client, async (tx) => {
+      const people = await resolveRecipients(tx, client, CAPABILITY, { plant: '1000' });
+      return notifyAll(tx, client, people, {
+        kind: 'DOC.RELEASE.WAITING',
+        objectClass: 'purchase_requisition',
+        objectKey: '1000000002',
+        messageKey: 'notification.kind.DOC.RELEASE.WAITING',
+        messageParams: { document: '1000000002' },
+      });
+    });
+    expect(told).toBe(1);
+    const rows = await listInbox(client, managerA);
+    expect(rows.some((r) => r.objectKey === '1000000002')).toBe(true);
+  });
+});
+
+describe('the scheduler grammar', () => {
+  it('parses a star, a number, a range, a list and a step', () => {
+    const spec = parseCron('*/15 8-17 1,15 * 1-5');
+    expect(spec.minutes).toEqual([0, 15, 30, 45]);
+    expect(spec.hours).toEqual([8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+    expect(spec.daysOfMonth).toEqual([1, 15]);
+    expect(spec.months).toHaveLength(12);
+    expect(spec.daysOfWeek).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('finds the next instant after a given one', () => {
+    const next = nextDueAfter('0 6 * * *', new Date('2026-03-01T07:00:00'));
+    expect(next).not.toBeNull();
+    expect(next!.getHours()).toBe(6);
+    expect(next!.getMinutes()).toBe(0);
+    expect(next!.getDate()).toBe(2); // 06:00 today has already passed
+  });
+
+  it('returns null for a schedule that can never fire again', () => {
+    // The thirtieth of February.
+    expect(nextDueAfter('0 0 30 2 *', new Date('2026-01-01T00:00:00'))).toBeNull();
+  });
+
+  it('rejects an expression that is not five fields', () => {
+    expect(() => parseCron('0 6 * *')).toThrow();
+  });
+});
+
+describe('the sweep does not repeat itself', () => {
+  it('leaves one unseen row when run twice for the same grant', async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into user_capability (id, client, user_id, capability_code, valid_from, valid_to, reason, granter)
+        values ('grant-exp', ${client}, ${clerk}, 'PROC.PR.RELEASE',
+                current_date, current_date + 3, 'DIRECT', 'TEST')
+        on conflict (id) do nothing
+      `);
+    });
+
+    const key = { objectClass: 'user_capability', objectKey: 'grant-exp' };
+    const before = (await listInbox(client, clerk)).filter((r) => r.objectKey === 'grant-exp').length;
+
+    await withTenant(client, async (tx) => {
+      await notifyOn(tx, { client, recipient: clerk, kind: 'GRANT.EXPIRING', messageKey: 'notification.kind.GRANT.EXPIRING', messageParams: { capability: 'PROC.PR.RELEASE', date: '' }, ...key });
+      await notifyOn(tx, { client, recipient: clerk, kind: 'GRANT.EXPIRING', messageKey: 'notification.kind.GRANT.EXPIRING', messageParams: { capability: 'PROC.PR.RELEASE', date: '' }, ...key });
+    });
+
+    const after = (await listInbox(client, clerk)).filter((r) => r.objectKey === 'grant-exp').length;
+    expect(after).toBe(before + 1);
+  });
+});

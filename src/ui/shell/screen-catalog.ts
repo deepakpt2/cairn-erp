@@ -2010,6 +2010,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/platform/notifications",
+    path: "/platform/notifications",
+    query: {},
+    code: "PLT.NOTIFY.DISPLAY",
+    title: "Notifications",
+    area: "platform",
+    family: "platform",
+    accepts: [],
+  },
+  {
     id: "/platform/locks",
     path: "/platform/locks",
     query: {},

@@ -14,6 +14,8 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { creatorOf } from '../../platform/notification/creator';
+import { notifyOn } from '../../platform/notification/notify';
 import { criterionMatches, type ReleaseAttributes } from '../foundation/release-strategy-definition';
 import {
   characteristic, releaseGroup, releaseStrategy, releaseStrategyCriterion, releaseStrategyStep,
@@ -312,9 +314,10 @@ export async function releaseDocument(input: ReleaseActInput): Promise<DocumentR
     if (input.documentCategory === 'PURCHASE_ORDER') {
       await syncOrderHeader(tx, input.client, input.documentNumber, released, input.changedBy);
     }
+    const objectClass = OBJECT_CLASS_BY_CATEGORY[input.documentCategory];
     await recordChange(tx, {
       client: input.client,
-      objectClass: OBJECT_CLASS_BY_CATEGORY[input.documentCategory],
+      objectClass,
       objectKey: input.documentNumber,
       changeType: 'CHANGE',
       changedBy: input.changedBy,
@@ -326,6 +329,21 @@ export async function releaseDocument(input: ReleaseActInput): Promise<DocumentR
         strategy: state.strategyCode,
       },
     });
+    // Tell whoever raised the document. Guessing a recipient is worse than
+    // telling nobody, so with no change-document trail nothing is sent.
+    const author = await creatorOf(tx, input.client, objectClass, input.documentNumber);
+    if (author) {
+      await notifyOn(tx, {
+        client: input.client,
+        recipient: author,
+        kind: 'DOC.RELEASED',
+        objectClass,
+        objectKey: input.documentNumber,
+        messageKey: 'notification.kind.DOC.RELEASED',
+        messageParams: { document: input.documentNumber },
+      });
+    }
+
     return { ...state, currentStep: nextStep, status: released ? 'RELEASED' : 'PENDING' };
   });
 }
@@ -357,6 +375,20 @@ export async function cancelDocumentRelease(input: Omit<ReleaseActInput, 'releas
       changedBy: input.changedBy,
       after: { release: 'PENDING', step: 0, cancelled: true, strategy: state.strategyCode },
     });
+    const cancelledClass = OBJECT_CLASS_BY_CATEGORY[input.documentCategory];
+    const author = await creatorOf(tx, input.client, cancelledClass, input.documentNumber);
+    if (author) {
+      await notifyOn(tx, {
+        client: input.client,
+        recipient: author,
+        kind: 'DOC.REFUSED',
+        objectClass: cancelledClass,
+        objectKey: input.documentNumber,
+        messageKey: 'notification.kind.DOC.REFUSED',
+        messageParams: { document: input.documentNumber },
+      });
+    }
+
     return { ...state, currentStep: 0, status: 'PENDING' };
   });
 }

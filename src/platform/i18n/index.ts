@@ -5098,6 +5098,35 @@ const en: Catalogue = {
   'attention.missingDetailMany': '{n} fields missing',
   'attention.creditMemoDetail': '{customer} — held for {block}',
 
+  // ── Notifications — Phase 7 ──────────────────────────────────────────────
+  'notification.inbox.title': 'Notifications',
+  'notification.inbox.subtitle': 'Things that happened to documents you own or can act on.',
+  'notification.inbox.empty': 'Nothing has been sent to you yet.',
+  'notification.inbox.emptyHint': 'Messages appear here when a document you own is released, refused or blocked, and when something is waiting for you to act on it.',
+  'notification.unseen': '{count} unseen',
+  'notification.markSeen': 'Mark seen',
+  'notification.markAllSeen': 'Mark all seen',
+  'notification.bell.label': 'Notifications',
+  'notification.bell.unseen': '{count} unseen notifications',
+  'notification.bell.none': 'No notifications',
+  'notification.age.today': 'Today',
+  'notification.age.days': '{days}d ago',
+  'notification.open': 'Open',
+
+  'notification.kind.DOC.RELEASE.WAITING': '{document} is waiting for your release',
+  'notification.kind.DOC.RELEASED': 'Your document {document} was released',
+  'notification.kind.DOC.REFUSED': 'Your document {document} was refused',
+  'notification.kind.CREDIT.BLOCKED': '{document} was credit-blocked',
+  'notification.kind.CREDIT.RELEASED': 'The credit block on {document} was released',
+  'notification.kind.DOC.INCOMPLETE': '{document} is incomplete',
+  'notification.kind.POSTING.FAILED': 'A posting failed and needs reprocessing',
+  'notification.kind.OUTPUT.FAILED': 'Output for {document} could not be produced',
+  'notification.kind.GRANT.EXPIRING': 'Your {capability} authority ends on {date}',
+  'notification.kind.SESSION.CLOSED': 'Your session was closed by {job}',
+  'notification.kind.JOB.COMPLETED': '{job} finished',
+  'notification.kind.JOB.FAILED': '{job} failed',
+  'notification.kind.JOB.BLOCKED': '{job} is blocked',
+
 };
 
 const CATALOGUES: Record<Locale, Catalogue> = { en };
