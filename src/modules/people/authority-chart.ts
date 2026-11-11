@@ -37,7 +37,7 @@ import { withTenant, type Tx } from '../../platform/db/client';
  * hundred expanded codes is a wall nobody reads.
  */
 
-import { sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { effectiveGrants, type AuthorityGrant, type ScopeKey } from '../../platform/auth/authority';
 import {
@@ -48,6 +48,8 @@ import {
   positionsOfUser,
   type PositionRef,
 } from './chain-of-command';
+import { appUser } from '../../platform/tables/security';
+import { delegationsForUser, type DelegationView } from './delegation';
 
 export const AUTHORITY_CHART_ROUTE = '/people/authority';
 
@@ -145,6 +147,70 @@ const LEVEL_LABEL: Record<ScopeKey, string> = {
   creditControlArea: 'Credit control area',
   controllingArea: 'Controlling area',
 };
+
+/**
+ * The three delegation panels, now filled — Phase 5.
+ *
+ * They were declared empty in Phase 3 on purpose: a superior reading an empty
+ * panel learns that nothing is delegated, where a superior reading nothing
+ * learns only that the screen is unfinished. The shape did not change to fill
+ * them, which is the whole point of declaring it early.
+ *
+ * A delegation is not a capability and does not name one, so the "pattern"
+ * column carries what was actually handed over: one position, or every position
+ * the delegator holds.
+ */
+async function delegationLines(
+  tx: Tx,
+  client: string,
+  subjectUserId: string,
+): Promise<Pick<SubjectCard, 'delegatedToThem' | 'delegatedAway' | 'pendingAcceptance'>> {
+  const rows = await delegationsForUser(tx, client, subjectUserId);
+  if (rows.length === 0) {
+    return { delegatedToThem: [], delegatedAway: [], pendingAcceptance: [] };
+  }
+
+  // One lookup for every counterparty, rather than one per row.
+  const ids = new Set<string>();
+  for (const row of rows) {
+    ids.add(row.delegatorUserId);
+    ids.add(row.delegateUserId);
+  }
+  const people = await tx
+    .select({ id: appUser.id, fullName: appUser.fullName })
+    .from(appUser)
+    .where(and(eq(appUser.client, client), inArray(appUser.id, [...ids])));
+  const nameOf = new Map(people.map((person) => [person.id, person.fullName]));
+
+  const line = (row: DelegationView): DelegationLine => {
+    const isDelegator = row.delegatorUserId === subjectUserId;
+    const counterparty = isDelegator ? row.delegateUserId : row.delegatorUserId;
+    return {
+      delegationId: row.delegationId,
+      counterpartyName: nameOf.get(counterparty) ?? counterparty,
+      // What was handed over: one hat, or the whole person.
+      capabilityPattern: row.positionCode ?? `every position (${row.delegatorUserId})`,
+      granter: nameOf.get(row.delegatorUserId) ?? row.delegatorUserId,
+      validFrom: row.validFrom,
+      validTo: row.validTo,
+      status: row.effectiveStatus,
+    };
+  };
+
+  const pending = rows.filter(
+    (row) => row.effectiveStatus === 'PENDING_ACCEPTANCE' && !row.isLive,
+  );
+
+  return {
+    // What was given to them, and what they gave away: both show the live and
+    // the ended, because "who covered this last quarter" is a real question.
+    delegatedToThem: rows.filter((r) => r.delegateUserId === subjectUserId).map(line),
+    delegatedAway: rows.filter((r) => r.delegatorUserId === subjectUserId).map(line),
+    // What is waiting on them: either to accept, or — for a superior — to
+    // approve. Both are "something needs you before this can start".
+    pendingAcceptance: pending.map(line),
+  };
+}
 
 /**
  * One grant becomes one line per level it names, and a single `TENANT` line when
@@ -286,9 +352,7 @@ export async function authorityChart(
     positions: await Promise.all(held.map((p) => withUnit(tx, client, p))),
     superiorLine,
     grants: grants.flatMap(grantLines),
-    delegatedToThem: [],
-    delegatedAway: [],
-    pendingAcceptance: [],
+    ...(await delegationLines(tx, client, subjectUserId)),
   };
 
   return chart;

@@ -62,6 +62,14 @@ import { patternMatches } from './pattern';
 
 // Re-exported so callers import the matcher from one place, wherever they found it.
 export { patternMatches } from './pattern';
+import {
+  delegation,
+  delegationApproval,
+  delegationScope,
+} from '../../modules/people/schema';
+// The pure predicates live in their own leaf so the resolver can use them
+// without importing the delegation service, which imports this file.
+import { isLive } from '../../modules/people/delegation-status';
 import { employee, positionAssignment } from '../../modules/people/schema';
 import {
   authOrgRestriction,
@@ -130,7 +138,7 @@ export type Restrictions = Map<ScopeKey, string[]>;
  * a span that is not theirs.
  */
 export interface AuthorityGrant {
-  source: 'ROLE' | 'POSITION' | 'DIRECT';
+  source: 'ROLE' | 'POSITION' | 'DIRECT' | 'DELEGATION';
   /** A capability code, or a pattern such as `PROC.*`. */
   pattern: string;
   roleCode?: string;
@@ -143,6 +151,15 @@ export interface AuthorityGrant {
   validFrom: string | null;
   validTo: string | null;
   scope: ScopeMap;
+  /**
+   * The delegation this grant came from, when it came from one — Phase 5.
+   *
+   * "Who did this, under what authority" is the question asked after something
+   * goes wrong. Carrying the id on the grant is what makes the answer
+   * retrievable by anything that already holds the grants, without a second
+   * lookup and without the 53 modules that check authority having to ask.
+   */
+  delegationId?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -269,6 +286,7 @@ export async function effectiveGrants(
   client: string,
   userId: string,
   asOf: string | Date = new Date(),
+  depth = 0,
 ): Promise<AuthorityGrant[]> {
   const day = dayOf(asOf);
 
@@ -435,8 +453,154 @@ export async function effectiveGrants(
     });
   }
 
+  // ── Through a delegation. Derived from the delegator at this instant, never
+  // copied. See delegatedGrants below for why that is the whole design.
+  if (depth < MAX_DELEGATION_DEPTH) {
+    grants.push(...(await delegatedGrants(tx, client, userId, day, depth)));
+  }
+
   return grants;
 }
+
+/**
+ * Authority a person holds because somebody delegated to them.
+ *
+ * The delegator's grants are resolved afresh and then narrowed, rather than
+ * being copied into `user_capability` when the delegation activates. A copy
+ * would be a second source of truth and would drift the moment the delegator's
+ * own authority changed — revoke the delegator's role and a copied grant would
+ * outlive it, silently, which is the exact failure the direct-grant table was
+ * written to avoid.
+ *
+ * Deriving also gives three things for free: revocation and expiry take effect
+ * with no sweep job, a delegation can never grant more than the delegator
+ * currently has, and a chain of delegations resolves correctly because each
+ * link asks the link above it.
+ *
+ * The depth guard is what stops a ring in the data — A delegates to B and B to
+ * A, which nothing in the schema forbids — from becoming an infinite loop.
+ */
+async function delegatedGrants(
+  tx: Tx,
+  client: string,
+  userId: string,
+  day: string,
+  depth: number,
+): Promise<AuthorityGrant[]> {
+  const rows = await tx
+    .select()
+    .from(delegation)
+    .where(
+      and(
+        eq(delegation.client, client),
+        eq(delegation.delegateUserId, userId),
+        lte(delegation.validFrom, day),
+        openOn(delegation.validTo, day),
+        notInTerminalDelegation,
+      ),
+    );
+
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((r) => r.delegationId);
+  const [approvals, scopes] = await Promise.all([
+    tx
+      .select({
+        delegationId: delegationApproval.delegationId,
+        side: delegationApproval.side,
+        status: delegationApproval.status,
+      })
+      .from(delegationApproval)
+      .where(and(eq(delegationApproval.client, client), inArray(delegationApproval.delegationId, ids))),
+    tx
+      .select({
+        delegationId: delegationScope.delegationId,
+        scopeType: delegationScope.scopeType,
+        scopeValue: delegationScope.scopeValue,
+      })
+      .from(delegationScope)
+      .where(and(eq(delegationScope.client, client), inArray(delegationScope.delegationId, ids))),
+  ]);
+
+  const out: AuthorityGrant[] = [];
+
+  for (const row of rows) {
+    if (!isLive(row, approvals.filter((a) => a.delegationId === row.delegationId), day)) continue;
+
+    const narrowing = narrowMapFor(scopes.filter((s) => s.delegationId === row.delegationId));
+    const upstream = await effectiveGrants(tx, client, row.delegatorUserId, day, depth + 1);
+
+    for (const grant of upstream) {
+      // A delegation naming one position hands over that hat, not the person.
+      if (row.positionCode && grant.positionCode && grant.positionCode !== row.positionCode) continue;
+
+      const scope = narrowScope(grant.scope, narrowing);
+      // Nothing left to act on: the delegation asked for a place the grant does
+      // not reach, so this grant contributes nothing rather than everything.
+      if (scope === null) continue;
+
+      out.push({
+        source: 'DELEGATION',
+        pattern: grant.pattern,
+        positionCode: grant.positionCode ?? row.positionCode ?? undefined,
+        reason: 'DELEGATION',
+        granter: row.delegatorUserId,
+        delegationId: row.delegationId,
+        validFrom: row.validFrom,
+        validTo: row.validTo,
+        scope,
+      });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Narrow a grant's scope by where the delegation applies.
+ *
+ * An empty narrowing means the delegator's scope is inherited unchanged, which
+ * is the common case. Where the delegation does name a level:
+ *
+ *   - an unrestricted grant becomes restricted to those values;
+ *   - a restricted grant is intersected with them;
+ *   - an empty intersection returns null, meaning the grant yields nothing here.
+ */
+function narrowScope(grantScope: ScopeMap, narrowing: ScopeMap): ScopeMap | null {
+  if (Object.keys(narrowing).length === 0) return grantScope;
+
+  const out: ScopeMap = { ...grantScope };
+  for (const [level, wanted] of Object.entries(narrowing)) {
+    const key = level as keyof ScopeMap;
+    const held = grantScope[key];
+    if (!held || held.length === 0) {
+      out[key] = [...(wanted ?? [])];
+      continue;
+    }
+    const kept = held.filter((v) => (wanted ?? []).includes(v));
+    if (kept.length === 0) return null;
+    out[key] = kept;
+  }
+  return out;
+}
+
+function narrowMapFor(rows: { scopeType: string; scopeValue: string }[]): ScopeMap {
+  const map: ScopeMap = {};
+  for (const row of rows) {
+    const key = KEY_OF_LEVEL[row.scopeType as OrgLevel];
+    if (!key) continue;
+    const list = map[key] ?? [];
+    list.push(row.scopeValue);
+    map[key] = list;
+  }
+  return map;
+}
+
+/** How far a chain of delegations will be followed before it is assumed to be a ring. */
+const MAX_DELEGATION_DEPTH = 5;
+
+/** A delegation that has been refused, closed or revoked grants nothing at all. */
+const notInTerminalDelegation = sql`${delegation.status} not in ('REFUSED', 'CLOSED', 'REVOKED')`;
 
 /** Collapse a row of nullable org columns into the levels it actually names. */
 function scopeOf(values: Record<ScopeKey, string | null>): ScopeMap {

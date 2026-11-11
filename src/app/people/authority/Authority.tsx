@@ -35,6 +35,7 @@ const SOURCES: Record<GrantLine['source'], string> = {
   ROLE: 'Role',
   POSITION: 'Position',
   DIRECT: 'Direct',
+  DELEGATION: 'Delegated',
 };
 
 function Empty({ children }: { children: string }) {

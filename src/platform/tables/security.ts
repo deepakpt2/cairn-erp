@@ -316,6 +316,13 @@ export const auditAccessLog = pgTable(
     objectType: varchar('object_type', { length: 64 }),
     objectKey: varchar('object_key', { length: 120 }),
     detail: text('detail'),
+    /**
+     * The delegation this action was performed under, when it was performed
+     * under one — Phase 5. Null for the ordinary case, which is the common case
+     * and costs nothing. "Who did this, under what authority" is the question
+     * asked after something goes wrong, and the answer has to exist.
+     */
+    delegationId: varchar('delegation_id', { length: 36 }),
     ipAddress: varchar('ip_address', { length: 64 }),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
   },

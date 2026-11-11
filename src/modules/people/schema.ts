@@ -29,7 +29,21 @@
  * a cost centre carries it — and it is a definition rather than a calculation: R-11 keeps payroll simplified
  * and DV-001 refuses to ship guessed statutory rules, so nothing in People computes an amount.
  */
-import { boolean, check, date, foreignKey, integer, numeric, pgTable, primaryKey, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  date,
+  foreignKey,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 import { auditColumns, client } from '../../platform/tables/tenancy';
@@ -324,6 +338,166 @@ export const orgHierarchy = pgTable(
  * refused by the service, in the transaction, for the same reason `employee_record`'s overlap is. A change
  * appends a row and delimits the one it replaces — `valid_to` is the only write history ever takes.
  */
+
+/**
+ * Delegation — CAIRN.md §16.6, addendum §1. Phase 5.
+ *
+ * Three tables, because a delegation is three different facts and collapsing
+ * them is what makes delegation systems unanswerable later:
+ *
+ *   `delegation`           the agreement, its dates, and its recorded status
+ *   `delegation_scope`     where it applies, narrowed from the delegator's own
+ *   `delegation_approval`  who in the chain of command must authorise it
+ *
+ * The authority itself is **not stored here**. It is derived from the delegator
+ * at the moment of every check, so a delegation can never outlive the authority
+ * it came from and revoking needs no sweep. See
+ * `src/modules/people/delegation.ts` for the state machine and the three flows.
+ */
+export const delegation = pgTable(
+  'delegation',
+  {
+    client: tenant(),
+    delegationId: varchar('delegation_id', { length: 36 }).notNull(),
+
+    /**
+     * Who is giving the authority away. The delegator keeps it: delegating is
+     * not transferring, and they retain revocation at every level.
+     */
+    delegatorUserId: varchar('delegator_user_id', { length: 36 }).notNull(),
+    /** Who receives the capacity to act. */
+    delegateUserId: varchar('delegate_user_id', { length: 36 }).notNull(),
+
+    /**
+     * Null means every position the delegator holds. A named position narrows
+     * it, so a superior can hand over one hat and not the whole person.
+     */
+    positionCode: varchar('position_code', { length: 10 }),
+
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    /** Null means open-ended. Allowed, but it must stay closable — hence CLOSED. */
+    validTo: date('valid_to', { mode: 'string' }),
+
+    status: varchar('status', { length: 20 }).notNull().default('DRAFT'),
+    /**
+     * SUPERIOR — a superior created it directly. SELF — the delegator proposed
+     * it and the chain approved. This records who *initiated*, not who
+     * authorised; they are different people in two of the three flows.
+     */
+    initiatorKind: varchar('initiator_kind', { length: 10 }).notNull().default('SELF'),
+
+    reason: text('reason').notNull(),
+
+    /**
+     * Acceptance by both parties is required in every flow. A delegation nobody
+     * accepted is not authority — it is an unread email. Approvals are a
+     * separate thing, in `delegation_approval`.
+     */
+    delegatorAcceptedAt: timestamp('delegator_accepted_at', { withTimezone: true }),
+    delegateAcceptedAt: timestamp('delegate_accepted_at', { withTimezone: true }),
+
+    refusedAt: timestamp('refused_at', { withTimezone: true }),
+    refusedBy: varchar('refused_by', { length: 36 }),
+    refusalReason: text('refusal_reason'),
+
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    closedBy: varchar('closed_by', { length: 36 }),
+    closureReason: text('closure_reason'),
+
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokedBy: varchar('revoked_by', { length: 36 }),
+    revocationReason: text('revocation_reason'),
+
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.delegationId] }),
+    index('delegation_delegator_idx').on(t.client, t.delegatorUserId, t.status),
+    index('delegation_delegate_idx').on(t.client, t.delegateUserId, t.status),
+    index('delegation_span_idx').on(t.client, t.validFrom, t.validTo),
+    check(
+      'delegation_status_ck',
+      sql`${t.status} in ('DRAFT', 'PENDING_ACCEPTANCE', 'ACTIVE', 'REFUSED', 'EXPIRED', 'CLOSED', 'REVOKED')`,
+    ),
+    check('delegation_initiator_ck', sql`${t.initiatorKind} in ('SUPERIOR', 'SELF')`),
+    check('delegation_span_dates_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+    check('delegation_distinct_ck', sql`${t.delegatorUserId} <> ${t.delegateUserId}`),
+  ],
+);
+
+/**
+ * Where a delegation applies.
+ *
+ * Rows, not columns, for the same reason as `userCapabilityScope`: authority
+ * over one plant and authority over four are the same question and must not
+ * change the shape of the row. No rows means the delegator's own scope is
+ * inherited unchanged, which is the common case. A level the delegation does
+ * not name is one it does not restrict.
+ */
+export const delegationScope = pgTable(
+  'delegation_scope',
+  {
+    client: tenant(),
+    delegationId: varchar('delegation_id', { length: 36 }).notNull(),
+    /** One of the nine organisational levels, in the LEVEL_OF_KEY spelling. */
+    scopeType: varchar('scope_type', { length: 32 }).notNull(),
+    scopeValue: varchar('scope_value', { length: 40 }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.delegationId, t.scopeType, t.scopeValue] }),
+    index('delegation_scope_delegation_idx').on(t.client, t.delegationId),
+  ],
+);
+
+/**
+ * Who in the chain of command must authorise a delegation.
+ *
+ * The rule, from the design:
+ *
+ *     superiorOf(delegator) === superiorOf(delegatee)  ->  one approval
+ *     otherwise                                        ->  both sides
+ *
+ * Modelled as two sides rather than a flat list, because a person holding two
+ * positions has two superiors and **any one of them will do** — so a side is
+ * satisfied when any of its rows is approved, not when all are. Both sides must
+ * be satisfied. A superior appearing on both sides approves both at once.
+ *
+ * A side with no rows needs nothing: the reporting line ended in an org unit,
+ * which has no holder. That is the apex, and the apex is self-approving.
+ */
+export const delegationApproval = pgTable(
+  'delegation_approval',
+  {
+    client: tenant(),
+    approvalId: varchar('approval_id', { length: 36 }).notNull(),
+    delegationId: varchar('delegation_id', { length: 36 }).notNull(),
+    /** Which party's chain of command this approval answers for. */
+    side: varchar('side', { length: 10 }).notNull(),
+
+    /**
+     * Who may approve. Exactly one of the two is set — a person holding the
+     * superior position, or the org unit the line ends in. The check in the
+     * migration refuses both and neither, because an approval row that requires
+     * nobody to act is a hole.
+     */
+    approverUserId: varchar('approver_user_id', { length: 36 }),
+    approverOrgUnit: varchar('approver_org_unit', { length: 10 }),
+
+    status: varchar('status', { length: 10 }).notNull().default('PENDING'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decisionNote: text('decision_note'),
+
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.approvalId] }),
+    index('delegation_approval_delegation_idx').on(t.client, t.delegationId, t.side),
+    index('delegation_approval_approver_idx').on(t.client, t.approverUserId, t.status),
+    check('delegation_approval_side_ck', sql`${t.side} in ('DELEGATOR', 'DELEGATEE')`),
+    check('delegation_approval_status_ck', sql`${t.status} in ('PENDING', 'APPROVED', 'REFUSED')`),
+  ],
+);
+
 export const positionAssignment = pgTable(
   'position_assignment',
   {
