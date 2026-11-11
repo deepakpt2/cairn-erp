@@ -33,6 +33,8 @@ import {
   routeForNotification,
 } from '@/platform/notification/routing';
 import { notification } from '@/platform/tables/system';
+import { changeDocument } from '@/platform/tables/audit-trail';
+import { creatorOf } from '@/platform/notification/creator';
 import { SCREENS } from '@/ui/shell/screen-catalog';
 import { and, eq } from 'drizzle-orm';
 
@@ -42,6 +44,7 @@ let client: string;
 let managerA: string; // holds the release capability, scoped to plant 1000
 let managerB: string; // holds it, scoped to plant 2000
 let clerk: string; // holds nothing
+let usernameA: string; // what the change trail records for managerA — not the same string as managerA
 let grantA: string;
 let grantB: string;
 let grantExp: string;
@@ -64,6 +67,7 @@ afterAll(async () => {
     await tx.execute(
       sql`delete from user_capability where client = ${client} and id in (${grantA}, ${grantB}, ${grantExp})`,
     );
+    await tx.execute(sql`delete from change_document where client = ${client}`);
     await tx.execute(
       sql`delete from app_user where client = ${client} and id in (${managerA}, ${managerB}, ${clerk})`,
     );
@@ -92,6 +96,7 @@ async function seedTenant(): Promise<void> {
   managerA = `u-a-${suffix}`;
   managerB = `u-b-${suffix}`;
   clerk = `u-c-${suffix}`;
+  usernameA = `mgrA${suffix}`;
   grantA = `grant-a-${suffix}`;
   grantB = `grant-b-${suffix}`;
   grantExp = `grant-exp-${suffix}`;
@@ -503,5 +508,68 @@ describe('opening a notification takes you to the thing it is about', () => {
     // should not have been readable. The caller falls back to the inbox, which
     // is the same as being told nothing.
     expect(await getNotification(client, managerA, id!)).toBeNull();
+  });
+});
+
+describe('naming a recipient from the change trail', () => {
+  /**
+   * Every module records `changed_by` as `session.user.username` — there are
+   * some 400 such call sites. The inbox is keyed by `app_user.id`, because
+   * that is what the session carries and what the recipient term of the
+   * policy compares against.
+   *
+   * The two are not the same string, and confusing them fails silently rather
+   * than loudly: the notification is written, stored and counted as delivered,
+   * and no session can ever read it. These assertions exist because that bug
+   * shipped once.
+   */
+  const OBJECT = 'purchase_requisition';
+  const KEY = '1000000021';
+
+  async function recordCreation(): Promise<void> {
+    await withTenant(client, async (tx) => {
+      await tx.insert(changeDocument).values({
+        id: `cd-${Math.random().toString(36).slice(2, 10)}`,
+        client,
+        objectClass: OBJECT,
+        objectKey: KEY,
+        changeType: 'CREATE',
+        changedBy: usernameA,
+      });
+    });
+  }
+
+  it('resolves the username the trail records to the id the inbox is keyed by', async () => {
+    await recordCreation();
+    const who = await withTenant(client, async (tx) => creatorOf(tx, client, OBJECT, KEY));
+    expect(who).toBe(managerA);
+  });
+
+  it('writes a row that person can actually read', async () => {
+    await recordCreation();
+    const id = await withTenant(client, async (tx) => {
+      const who = await creatorOf(tx, client, OBJECT, KEY);
+      expect(who).toBeTruthy();
+      return notifyOn(tx, {
+        client,
+        recipient: who!,
+        kind: 'DOC.RELEASED',
+        objectClass: OBJECT,
+        objectKey: KEY,
+        messageKey: 'notification.kind.DOC.RELEASED',
+        messageParams: { document: KEY },
+      });
+    });
+    expect(id).toBeTruthy();
+    // Read back as the person, through the policy, which is the only way to
+    // know the row is reachable rather than merely present.
+    expect(await getNotification(client, managerA, id!)).toBeTruthy();
+  });
+
+  it('returns nothing for a document with no trail, rather than guessing', async () => {
+    const who = await withTenant(client, async (tx) =>
+      creatorOf(tx, client, OBJECT, '9999999999'),
+    );
+    expect(who).toBeNull();
   });
 });
