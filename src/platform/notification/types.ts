@@ -36,6 +36,7 @@ export type NotificationObjectClass =
   | 'purchase_contract'
   | 'scheduling_agreement'
   | 'sales_order'
+  | 'delivery'
   | 'output_message'
   /**
    * A failed output, named by application rather than by the queue row it

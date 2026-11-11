@@ -74,6 +74,7 @@ export const NOTIFICATION_ROUTES: Readonly<Record<string, RouteEntry>> = {
     param: 'agreement',
   },
   sales_order: { path: '/sales/orders', param: 'order' },
+  delivery: { path: '/sales/delivery', param: 'delivery' },
   // A failed output is routed to the document, because that is what the screen
   // filters by and what the message names.
   sales_output: { path: '/sales/output', param: 'documentNumber' },

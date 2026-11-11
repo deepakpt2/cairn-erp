@@ -834,6 +834,7 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
     await evaluateIncompletion(tx, {
       client: parsed.client, changedBy: parsed.changedBy,
       documentCategory: 'ORDER', documentNumber: number, documentType: orderType.documentType,
+      objectClass: SALES_ORDER_OBJECT_CLASS,
     });
     // What the customer receives. Determined here, inside the transaction that wrote the order, so
     // an order never stands with its confirmation missing because the process died between the two.
@@ -1077,6 +1078,7 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
     await evaluateIncompletion(tx, {
       client: parsed.client, changedBy: parsed.changedBy,
       documentCategory: 'ORDER', documentNumber: parsed.orderNumber, documentType: before.documentType,
+      objectClass: SALES_ORDER_OBJECT_CLASS,
     });
     return { orderDate: before.orderDate };
   });

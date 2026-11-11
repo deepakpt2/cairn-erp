@@ -17,6 +17,7 @@ import {
   postDeliveryGoodsIssue,
 } from '../src/modules/sales/delivery';
 import { billingDueList, postBillingDocument } from '../src/modules/sales/billing';
+import { listInbox } from '../src/platform/notification/notify';
 import { assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales, sql, type TestTenant } from './helpers';
 
 const ACTOR = 'SD9255_INCOMPLETION_TEST';
@@ -684,4 +685,83 @@ describe('the incompletion procedure and the log it writes', () => {
       documentType: 'OR', procedureCode: 'ZAS',
     });
   });
+
+  it('tells the person who raised it that their document is incomplete, and says so only once', async () => {
+    // Somebody real, so there is somebody to tell: the order's own header names
+    // whoever raised it, and a name that is not a person reaches nobody.
+    const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const clerk = `u-clerk-${suffix}`;
+    const clerkUsername = `clerk${suffix}`;
+    const bystander = `u-bystander-${suffix}`;
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      insert into app_user (id, client, username, full_name, password_hash, is_active)
+      values
+        (${clerk}, ${tenant.client}, ${clerkUsername}, 'Sales clerk', 'scrypt:x:x', true),
+        (${bystander}, ${tenant.client}, ${'by' + suffix}, 'Another clerk', 'scrypt:x:x', true)
+      on conflict (id) do nothing
+    `));
+
+    await saveIncompletionStatusGroup({
+      client: tenant.client, changedBy: ACTOR, statusGroup: '30', name: 'Stops delivery for the notice test',
+      blocksDelivery: true,
+    });
+    await saveIncompletionProcedure({
+      client: tenant.client, changedBy: ACTOR, procedureCode: 'ZNT', groupCode: 'A',
+      name: 'Notice test completeness',
+    });
+    await saveIncompletionProcedureField({
+      client: tenant.client, changedBy: ACTOR, procedureCode: 'ZNT',
+      tableName: 'salesOrder', fieldName: 'purchaseOrderReference',
+      sequence: 1, statusGroup: '30',
+    });
+    await assignIncompletionProcedure({
+      client: tenant.client, changedBy: ACTOR, documentCategory: 'ORDER',
+      documentType: 'OR', procedureCode: 'ZNT',
+    });
+    try {
+      const placed = await createSalesOrder({
+        ...base, changedBy: clerkUsername, requestKey: key('notice-order'),
+        lines: [{
+          lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
+          orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
+        }],
+      });
+      expect(await readIncompletion(tenant.client, 'ORDER', placed.orderNumber)).toHaveLength(1);
+
+      const told = await inboxOf(clerk, 'DOC.INCOMPLETE', placed.orderNumber);
+      expect(told).toHaveLength(1);
+      expect(told[0]!.objectClass).toBe('sales_order');
+      expect(told[0]!.isUnseen).toBe(true);
+      expect(told[0]!.title).toContain(placed.orderNumber);
+
+      // Not a message to the world. Somebody who did not raise the document has
+      // no missing field of theirs to fill in.
+      expect(await inboxOf(bystander, 'DOC.INCOMPLETE', placed.orderNumber)).toHaveLength(0);
+
+      // Saved again, still incomplete. That is the same episode: the clerk
+      // already holds the message, unread, and a second copy of it would make
+      // the inbox a change log instead of a list of things to do.
+      const before = (await getSalesOrder(tenant.client, placed.orderNumber))!;
+      await changeSalesOrder({
+        ...base, changedBy: clerkUsername, orderNumber: placed.orderNumber,
+        expectedVersion: before.version, requestKey: key('still-missing'),
+        rejectLines: [], lines: [{
+          lineNumber: before.lines[0].lineNumber, materialNumber: MATERIAL, plant: PLANT,
+          orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
+        }],
+      });
+      expect(await readIncompletion(tenant.client, 'ORDER', placed.orderNumber)).toHaveLength(1);
+      expect(await inboxOf(clerk, 'DOC.INCOMPLETE', placed.orderNumber)).toHaveLength(1);
+    } finally {
+      await withdrawIncompletionAssignment({
+        client: tenant.client, changedBy: ACTOR, documentCategory: 'ORDER',
+        documentType: 'OR', procedureCode: 'ZNT',
+      });
+    }
+  });
+
+  async function inboxOf(userId: string, kind: string, objectKey: string) {
+    return listInbox(tenant.client, userId).then((rows) =>
+      rows.filter((row) => row.kind === kind && row.objectKey === objectKey));
+  }
 });

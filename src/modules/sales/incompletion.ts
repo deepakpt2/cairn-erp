@@ -31,6 +31,8 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { notifyOn } from '../../platform/notification/notify';
+import { recipientFor } from '../../platform/notification/creator';
 import {
   type IncompletionDocumentCategory, type IncompletionGroup,
   delivery, deliveryLine, deliveryPicking,
@@ -95,6 +97,8 @@ const HEADER_ONLY: MissingAt = { lineNumber: 0, scheduleNumber: 0, partnerFuncti
  * question, and the group is what keeps it from being asked.
  */
 export interface IncompletionSubject {
+  /** Who made the document, as its own header records them. */
+  createdBy: string;
   orderHeader?: {
     purchaseOrderReference: string | null;
     requestedDate: string | null;
@@ -333,6 +337,8 @@ async function subjectFor(
       eq(salesDocumentPartner.documentNumber, documentNumber),
     ));
     return {
+      /** Who made the document. Their own header names them; no other record has to. */
+      createdBy: header.createdBy,
       orderHeader: {
         purchaseOrderReference: header.purchaseOrderReference,
         requestedDate: header.requestedDate,
@@ -374,6 +380,7 @@ async function subjectFor(
     .map((row) => (row.lineNumber === lineNumber ? row.storageLocation : null))
     .find((value) => value !== null && value.trim() !== '') ?? null;
   return {
+    createdBy: header.createdBy,
     deliveryHeader: {
       shippingPoint: header.shippingPoint,
       deliveryDate: header.deliveryDate,
@@ -425,14 +432,29 @@ export async function evaluateIncompletion(
     documentCategory: IncompletionDocumentCategory;
     documentNumber: string;
     documentType: string;
+    /**
+     * The class this document carries in the change trail, and so the class its
+     * notification is routed by. The caller names it because the caller is the
+     * module that owns the document: an order is `sales_order` and a delivery is
+     * `delivery`, and neither is a fact about incompletion.
+     */
+    objectClass: string;
   },
 ): Promise<void> {
-  const { client, documentCategory, documentNumber, documentType } = input;
+  const { client, documentCategory, documentNumber, documentType, objectClass } = input;
   const assignments = await tx.select().from(incompletionAssignment).where(and(
     eq(incompletionAssignment.client, client),
     eq(incompletionAssignment.documentCategory, documentCategory),
     eq(incompletionAssignment.documentType, documentType),
   ));
+  // What stood before this judgement, which is the only way to tell "this
+  // document has become incomplete" from "this document still is". The log is
+  // rewritten whole below, so this is read while the old rows are still there.
+  const standing = await tx.select({ fieldName: salesIncompletionLog.fieldName }).from(salesIncompletionLog).where(and(
+    eq(salesIncompletionLog.client, client),
+    eq(salesIncompletionLog.documentCategory, documentCategory),
+    eq(salesIncompletionLog.documentNumber, documentNumber),
+  )).limit(1);
   await tx.delete(salesIncompletionLog).where(and(
     eq(salesIncompletionLog.client, client),
     eq(salesIncompletionLog.documentCategory, documentCategory),
@@ -496,6 +518,34 @@ export async function evaluateIncompletion(
     createdBy: input.changedBy,
     createdAt: now,
   })));
+
+  // DOC.INCOMPLETE — a document that was complete and is not any more.
+  //
+  // The one piece of news here is the transition. A document that stood
+  // incomplete and is saved again, still incomplete, has told its owner
+  // nothing they do not already hold unread; saying it on every save would
+  // make the inbox a change log and the message worth nothing. So this fires
+  // on the way in, and only on the way in.
+  //
+  // It goes to the person who made the document, because a missing field is
+  // theirs to fill in: they know what the customer said, and a clerk who has
+  // never seen the order cannot. Their own header names them, so no second
+  // record of ownership has to be kept — and where it names somebody who is
+  // not a person, nothing is sent, which is better than guessing.
+  if (standing.length === 0) {
+    const owner = await recipientFor(tx, client, subject.createdBy);
+    if (owner) {
+      await notifyOn(tx, {
+        client,
+        recipient: owner,
+        kind: 'DOC.INCOMPLETE',
+        objectClass,
+        objectKey: documentNumber,
+        messageKey: 'notification.kind.DOC.INCOMPLETE',
+        messageParams: { document: documentNumber },
+      });
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1037,6 +1037,7 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       client: parsed.client, changedBy: parsed.changedBy,
       documentCategory: 'DELIVERY', documentNumber: number,
       documentType: deliveryType.documentType,
+      objectClass: DELIVERY_OBJECT_CLASS,
     });
     const creditArea = await creditAreaFor(tx, parsed.client, order.customerNumber, order.companyCode);
     return { deliveryNumber: number, replayed: false, order, creditArea, value: round2(value) };
@@ -1316,6 +1317,7 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
       client: parsed.client, changedBy: parsed.changedBy,
       documentCategory: 'DELIVERY', documentNumber: header.deliveryNumber,
       documentType: header.documentType,
+      objectClass: DELIVERY_OBJECT_CLASS,
     });
   });
 
