@@ -1184,7 +1184,15 @@ export async function checkOrderAvailability(input: {
       continue;
     }
 
-    if (elements.length === 0) {
+    // A zero-quantity element is nothing counted. The stock/requirements list always draws
+    // its opening line, even at zero, because a list starts from a position; but a component
+    // every one of whose elements is zero has no stock, and no receipt or requirement the
+    // scope switches on, standing behind it at all. Answering SHORT there would claim the
+    // opposite of the truth — that supply was found and fell short — so the verdict is
+    // NO_ELEMENTS. The element list is still reported as the list returned it, zero rows
+    // included: the verdict is what the zero changes, not what the screen shows.
+    const nothingCounted = elements.every((element) => element.quantity === 0);
+    if (nothingCounted) {
       rows.push({
         ...base,
         outcome: 'NO_ELEMENTS',
