@@ -29,7 +29,7 @@ import { eq, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant, withTenantAs } from '../src/platform/db/client';
-import { jobRun } from '../src/platform/tables/system';
+import { jobRun, jobDefinition } from '../src/platform/tables/system';
 import { listInbox } from '../src/platform/notification/notify';
 import { registerJob, clearJobRegistry } from '../src/platform/job/registry';
 import { enqueue, ensureDefinition, requestCancel } from '../src/platform/job/queue';
@@ -37,7 +37,13 @@ import { claimNext, runClaimed } from '../src/platform/job/execute';
 import { openForChange } from '../src/platform/lock/enqueue';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
-import type { ChunkResult, JobContext, LockRef } from '../src/platform/job/types';
+import {
+  DEFAULT_CHUNK_SIZE,
+  DEFAULT_GRACE_SECONDS,
+  type ChunkResult,
+  type JobContext,
+  type LockRef,
+} from '../src/platform/job/types';
 
 const WORKER = 'test-worker';
 
@@ -191,9 +197,27 @@ function scopedJob(scope: LockRef[]) {
   });
 }
 
-async function queueRun(code: string, triggeredBy: string): Promise<string> {
+async function queueRun(
+  code: string,
+  triggeredBy: string,
+  over: { chunkSize?: number; gracePeriodSeconds?: number; mayTerminateSessions?: boolean } = {},
+): Promise<string> {
   return withTenant(tenant.client, async (tx) => {
     await ensureDefinition(tx, { code, name: `Test ${code}`, module: 'SYS', maxRetries: 0 });
+    // ensureDefinition is deliberately idempotent, so a code reused across
+    // tests would keep whichever flags were set the first time. Terminating
+    // sessions is the one flag that changes the meaning of a blocked run, so it
+    // has to be exactly what the test asked for.
+    await tx
+      .update(jobDefinition)
+      .set({
+        maxRetries: 0,
+        chunkSize: over.chunkSize ?? DEFAULT_CHUNK_SIZE,
+        gracePeriodSeconds: over.gracePeriodSeconds ?? DEFAULT_GRACE_SECONDS,
+        mayTerminateSessions: over.mayTerminateSessions ?? false,
+        isEnabled: true,
+      })
+      .where(eq(jobDefinition.code, code));
     const { id } = await enqueue(tx, {
       client: tenant.client,
       jobCode: code,
@@ -346,6 +370,44 @@ describe('a run nobody asked for', () => {
     // A blocked run is not going to clear itself; somebody has to release the
     // document or stop waiting.
     expect(await kindsFor(monitor)).toContain('JOB.BLOCKED');
+  });
+
+  it('tells the person whose session it closed, and which job closed it', async () => {
+    scopedJob([{ lockObject: 'PURCHASE_ORDER', argument: 'PO-9' }]);
+    const id = await queueRun('JOBNOTIFY.SCOPED', SCHEDULER, {
+      mayTerminateSessions: true,
+      gracePeriodSeconds: 60,
+    });
+    await holdDocument({ lockObject: 'PURCHASE_ORDER', argument: 'PO-9' });
+
+    // First contact is a warning. Nothing has been closed and no work is lost,
+    // so there is nothing to tell the holder yet.
+    expect(await runClaimed(WORKER, (await claimNext(WORKER, null))!)).toBe('BLOCKED');
+    expect(await kindsFor(holder)).toEqual([]);
+
+    // Wind the warning back past the grace period and let the job look again.
+    // Driven by run id rather than claimed off the queue: a blocked run carries
+    // a next-attempt time, so `claimNext` would decline to hand it back and the
+    // test would be measuring a null.
+    await withTenant(tenant.client, (tx) =>
+      tx
+        .update(jobRun)
+        .set({ warnedAt: sql`now() - interval '10 minutes'` })
+        .where(eq(jobRun.id, id)),
+    );
+    await runClaimed(WORKER, { runId: id, client: tenant.client, jobCode: 'JOBNOTIFY.SCOPED' });
+
+    // The document is through: terminating the session is what released it.
+    expect(processed).toContain('PO-9');
+
+    const found = (await listInbox(tenant.client, holder)).find((r) => r.kind === 'SESSION.CLOSED');
+    expect(found).toBeTruthy();
+    expect(found!.objectClass).toBe('user_session');
+    // The session id. There is no screen to route to — the message is the whole
+    // content — which is why routing leaves this class alone.
+    expect(found!.objectKey).toBe(holder);
+    // The reason has to name the job, or the message is just bad news.
+    expect(found!.title).toContain('JOBNOTIFY.SCOPED');
   });
 
   it('reaches the watchers and nobody else', async () => {

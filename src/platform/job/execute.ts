@@ -37,7 +37,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db, withTenant, type Tx } from '../db/client';
 import { jobDefinition, jobRun, type BlockedOn } from '../tables/system';
-import { appUser } from '../tables/security';
+import { appUser, userSession } from '../tables/security';
 import { notifyAll, notifyOn } from '../notification/notify';
 import { resolveRecipients } from '../notification/recipients';
 import { enqueueEntry } from '../tables/lock';
@@ -416,12 +416,39 @@ async function terminateHolders(claimed: ClaimedRun, documents: HeldDocument[]):
     const sessionIds = await sessionIdsFor(tx, claimed.client, documents);
     let closed = 0;
     for (const sessionId of sessionIds) {
+      // The owner is read before the session goes. The session row is what
+      // names the person, and once it is revoked there is nothing left to ask
+      // who it belonged to.
+      const [owner] = await tx
+        .select({ userId: userSession.userId })
+        .from(userSession)
+        .where(and(eq(userSession.client, claimed.client), eq(userSession.id, sessionId)))
+        .limit(1);
+
       const did = await revokeSessionById(tx, {
         client: claimed.client,
         sessionId,
         reason: `Scheduled job ${claimed.jobCode} needs documents this session holds`,
       });
       if (did) closed += 1;
+
+      // Closing a session under somebody is the one thing the platform does to
+      // a user that they cannot see coming, and it destroys the work they had
+      // open. They are owed the reason, and owed it durably: by the time they
+      // could look at a screen, the session that would have shown it is gone.
+      // Addressed to the person whose session it was, so the recipient term of
+      // the policy keeps it from anyone else.
+      if (did && owner?.userId) {
+        await notifyOn(tx, {
+          client: claimed.client,
+          recipient: owner.userId,
+          kind: 'SESSION.CLOSED',
+          objectClass: 'user_session',
+          objectKey: sessionId,
+          messageKey: 'notification.kind.SESSION.CLOSED',
+          messageParams: { job: claimed.jobCode },
+        });
+      }
     }
     return closed;
   });
