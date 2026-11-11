@@ -5042,6 +5042,62 @@ const en: Catalogue = {
   'status.working': 'Working…',
   'status.environment': 'Environment',
   'status.noTenant': 'No tenant selected',
+  // ── Attention — Phase 6 ───────────────────────────────────────────────────
+  // The panel above the Launchpad tiles. Every string here is a label; the
+  // document numbers, customers and amounts are parameters, never prose.
+  'attention.title': 'What waits on you',
+  'attention.count': '{n} item',
+  'attention.countMany': '{n} items',
+  'attention.more': 'and {n} more',
+  'attention.blocked': 'Blocked',
+  'attention.today': 'today',
+  'attention.day': '{n} day',
+  'attention.days': '{n} days',
+  'attention.dueIn': 'due in {n}d',
+
+  // What each source is called. The registry carries the key and not the word,
+  // because a screen may not hold a hardcoded label and the registry is data.
+  'attention.source.prRelease': 'Purchase requisitions to release',
+  'attention.source.poRelease': 'Purchase orders to release',
+  'attention.source.contractRelease': 'Purchase contracts to release',
+  'attention.source.schedAgreeRelease': 'Scheduling agreements to release',
+  'attention.source.pick': 'Deliveries to pick',
+  'attention.source.goodsIssue': 'Deliveries to goods-issue',
+  'attention.source.creditHeld': 'Deliveries held for credit',
+  'attention.source.deliver': 'Orders to deliver',
+  'attention.source.bill': 'Deliveries to bill',
+  'attention.source.invoiceList': 'Invoice lists to create',
+  'attention.source.incomplete': 'Incomplete sales documents',
+  'attention.source.creditMemo': 'Credit memo requests to release',
+
+  // What a document is called, and why it waits.
+  'attention.noun.requisition': 'Purchase requisition {number}',
+  'attention.noun.purchaseOrder': 'Purchase order {number}',
+  'attention.noun.contract': 'Purchase contract {number}',
+  'attention.noun.agreement': 'Scheduling agreement {number}',
+  'attention.noun.delivery': 'Delivery {number}',
+  'attention.noun.salesOrder': 'Order {number}',
+  'attention.noun.creditMemo': 'Credit memo request {number}',
+
+  'attention.releaseStep': 'Awaiting release — step {step} of {total}',
+  'attention.releasePlain': 'Awaiting release',
+  'attention.pickDetail': '{customer} — against order {order}',
+  'attention.issueDetail': 'Picked — {customer}',
+  'attention.creditOpenDetail': 'Credit block — {customer} cannot be picked',
+  'attention.creditPickedDetail': 'Credit block — {customer} is picked but cannot leave',
+  'attention.lineDetail': '{material} — {quantity} {unit} to deliver',
+  'attention.billingDetail': '{payer} — {value} {currency}',
+  'attention.invoiceListTitle': '{type} — {payer}',
+  'attention.invoiceListPlainTitle': 'Invoice list — {payer}',
+  'attention.invoiceListDetail': '{count} · {gross} {currency}',
+  'attention.incompleteOrder': 'Order {number}',
+  'attention.incompleteDelivery': 'Delivery {number}',
+  'attention.blockingDetail': '{n} field stopping the next step',
+  'attention.blockingDetailMany': '{n} fields stopping the next step',
+  'attention.missingDetail': '{n} field missing',
+  'attention.missingDetailMany': '{n} fields missing',
+  'attention.creditMemoDetail': '{customer} — held for {block}',
+
 };
 
 const CATALOGUES: Record<Locale, Catalogue> = { en };

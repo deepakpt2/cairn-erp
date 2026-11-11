@@ -4,6 +4,8 @@ import { listTenants } from '@/platform/tenancy';
 import { requireSession } from '@/platform/auth/current';
 import { SCREEN_AREAS } from '@/ui/shell/screen-catalog';
 import { screenHref, screensInArea } from '@/ui/shell/screen-links';
+import { attentionFor } from '@/platform/attention/panel';
+import { AttentionPanel } from '@/ui/attention/AttentionPanel';
 
 /**
  * Launchpad — CAIRN.md §19.3.
@@ -15,6 +17,13 @@ export default async function LaunchpadPage() {
   const session = process.env.CAIRN_ENV === 'development' ? null : await requireSession('/');
   const allTenants = await listTenants();
   const tenants = session ? allTenants.filter((tenant) => tenant.client === session.user.client) : allTenants;
+
+  // What waits on this person, read on every visit. A query, never stored rows:
+  // nothing here can go stale, and there is nothing to clean up.
+  const today = new Date().toISOString().slice(0, 10);
+  const attention = session
+    ? await attentionFor({ client: session.user.client, userId: session.user.userId }, today)
+    : [];
 
   const tiles = [
     { href: '/foundation/partners', code: 'FND.PARTNER.DISPLAY', title: t('bp.title'), body: t('bp.subtitle'), meta: t('bp.general') },
@@ -59,6 +68,8 @@ export default async function LaunchpadPage() {
         <h1 className="text-xl font-semibold tracking-tight">{t('launchpad.title')}</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('launchpad.subtitle')}</p>
       </header>
+
+      <AttentionPanel groups={attention} today={today} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {tiles.map((tile) => (
