@@ -141,7 +141,12 @@ const en: Catalogue = {
   'onboard.creationType.copy.refused': 'Copying a tenant is not available yet.',
   'onboard.creationType.copy.remedy':
     'Create an empty tenant or one with the standard general data, then configure its company on the company code, chart of accounts and fiscal year variant screens. Copying needs a ruling on each table it would carry.',
-  'onboard.section.admin': 'First administrator',
+  'onboard.section.platformAdmin': 'Platform administrator',
+  'onboard.section.platformAdmin.hint':
+    'Creates users and administers roles. Holds no authority over documents, so the day-to-day work is done by the account below.',
+  'onboard.section.tenantAdmin': 'Tenant administrator',
+  'onboard.section.tenantAdmin.hint':
+    'Runs the tenant: configuration and posting. Holds the administrator wildcard, which is why it is created here — a protected role cannot be assigned afterwards.',
   'onboard.clientKey': 'Tenant key',
   'onboard.clientKey.hint': 'Two to four letters or digits. Cannot be changed later.',
   'onboard.name': 'Tenant name',

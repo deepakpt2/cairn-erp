@@ -1,15 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { assertProvisioningToken, assertProvisioningSession, authorizeProvisioning } from '../src/platform/tenancy/provisioning';
-import type { SessionContext } from '../src/platform/auth/session';
+import { assertProvisioningToken, authorizeProvisioning } from '../src/platform/tenancy/provisioning';
 import type { Tx } from '../src/platform/db/client';
-const TOKEN = 'OwnerTokenForTestsOnly'.repeat(3);
-const admin = { user: { username: 'owner.admin', capabilities: ['*'] } } as SessionContext;
-const viewer = { user: { username: 'viewer', capabilities: ['INV.*'] } } as SessionContext;
 
-function transaction(initialized: boolean) {
-  const execute = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ initialized }]);
+const TOKEN = 'OwnerTokenForTestsOnly'.repeat(3);
+
+function transaction() {
+  const execute = vi.fn().mockResolvedValue([]);
   return { execute, tx: { execute } as unknown as Tx };
 }
+
 describe('deployment-owner tenant admission', () => {
   it('rejects anonymous production POSTs without the token', () => {
     expect(() => assertProvisioningToken('production', TOKEN, '')).toThrow('restricted');
@@ -33,29 +32,39 @@ describe('deployment-owner tenant admission', () => {
   it('allows the explicit development fixture path', () => {
     expect(() => assertProvisioningToken('development', undefined, '')).not.toThrow();
   });
-  it('permits first setup without a session only after token verification', () => {
-    expect(() => assertProvisioningSession('production', false, null)).not.toThrow();
+
+  it('takes the global provisioning lock for a production tenant creation', async () => {
+    const { tx, execute } = transaction();
+    await expect(
+      authorizeProvisioning(tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: TOKEN }),
+    ).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(1);
   });
-  it('rejects later anonymous setup even with a valid owner token', async () => {
-    const { tx, execute } = transaction(true);
-    await expect(authorizeProvisioning(tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: TOKEN, session: null })).rejects.toThrow('restricted');
-    expect(execute).toHaveBeenCalledTimes(2);
+
+  it('admits a later tenant on the same token that admitted the first, and nothing else', async () => {
+    const first = transaction();
+    await expect(
+      authorizeProvisioning(first.tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: TOKEN }),
+    ).resolves.toBeUndefined();
+    const later = transaction();
+    await expect(
+      authorizeProvisioning(later.tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: TOKEN }),
+    ).resolves.toBeUndefined();
   });
-  it('rejects later authenticated users without the provisioning capability', () => {
-    expect(() => assertProvisioningSession('production', true, viewer)).toThrow('restricted');
+
+  it('refuses before the lock is taken when the token is wrong', async () => {
+    const { tx, execute } = transaction();
+    await expect(
+      authorizeProvisioning(tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: '' }),
+    ).rejects.toThrow('restricted');
+    expect(execute).not.toHaveBeenCalled();
   });
-  it('allows later authorized admins only with the separately checked token', async () => {
-    const { tx } = transaction(true);
-    await expect(authorizeProvisioning(tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: TOKEN, session: admin })).resolves.toBeUndefined();
-    const invalid = transaction(true);
-    await expect(authorizeProvisioning(invalid.tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: '', session: admin })).rejects.toThrow('restricted');
-    expect(invalid.execute).not.toHaveBeenCalled();
-  });
-  it('rechecks initialization after the global lock; a stale first-setup page cannot admit a second anonymous tenant', async () => {
-    const first = transaction(false);
-    await expect(authorizeProvisioning(first.tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: TOKEN, session: null })).resolves.toBeUndefined();
-    expect(first.execute).toHaveBeenCalledTimes(2);
-    const afterFirstCommit = transaction(true);
-    await expect(authorizeProvisioning(afterFirstCommit.tx, { environment: 'production', configuredToken: TOKEN, suppliedToken: TOKEN, session: null })).rejects.toThrow('restricted');
+
+  it('takes no lock on the development fixture path', async () => {
+    const { tx, execute } = transaction();
+    await expect(
+      authorizeProvisioning(tx, { environment: 'development', configuredToken: undefined, suppliedToken: '' }),
+    ).resolves.toBeUndefined();
+    expect(execute).not.toHaveBeenCalled();
   });
 });

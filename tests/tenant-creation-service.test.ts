@@ -32,6 +32,12 @@ function input(clientKey: string, name: string) {
       email: 'first.admin@cairn.local',
       password: PASSWORD,
     },
+    tenantAdministrator: {
+      username: 'second.admin',
+      fullName: 'Second Administrator',
+      email: 'second.admin@cairn.local',
+      password: PASSWORD,
+    },
     createdBy: 'TEST',
   };
 }
@@ -80,9 +86,10 @@ describe('tenant creation without a company', () => {
     expect(result.packageVersion).toBeUndefined();
     expect(result.accountsCreated).toBeUndefined();
 
-    // The tenant and its first user exist; no configuration does.
+    // The tenant and both of its accounts exist; no configuration does. Two, not one:
+    // the second holds the administrator wildcard, which cannot be granted later.
     expect(await count('ZT01', 'client')).toBe(1);
-    expect(await count('ZT01', 'app_user')).toBe(1);
+    expect(await count('ZT01', 'app_user')).toBe(2);
     expect(await count('ZT01', 'company_code')).toBe(0);
     expect(await count('ZT01', 'chart_of_accounts')).toBe(0);
     expect(await count('ZT01', 'gl_account')).toBe(0);

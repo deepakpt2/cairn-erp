@@ -183,7 +183,26 @@ export interface CreateTenantInput {
    * belongs to whichever company code the tenant defines later on its own screen.
    */
   creationType?: TenantCreationType;
+  /**
+   * The tenant's platform administrator. Holds no wildcard: it exists to create users
+   * and to administer roles, and it is the first account of the tenant.
+   */
   administrator: {
+    username: string;
+    fullName: string;
+    email?: string;
+    password: string;
+  };
+  /**
+   * The tenant's working administrator. Holds the ADMINISTRATOR wildcard and does the
+   * day-to-day configuration and posting.
+   *
+   * It has to be created here, in the same transaction as the platform administrator,
+   * because ADMINISTRATOR is a protected system role: role-admin.ts refuses to assign
+   * any seeded role through routine administration, so this is the only moment the
+   * assignment can still be made. A tenant created without one can never be given one.
+   */
+  tenantAdministrator: {
     username: string;
     fullName: string;
     email?: string;
@@ -239,6 +258,17 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
   const policyIssue = checkPasswordPolicy(input.administrator.password);
   if (policyIssue) {
     throw new TenancyError(policyIssue, 'Choose a longer password containing letters and digits.');
+  }
+  const tenantAdminPolicyIssue = checkPasswordPolicy(input.tenantAdministrator.password);
+  if (tenantAdminPolicyIssue) {
+    throw new TenancyError(tenantAdminPolicyIssue, 'Choose a longer password containing letters and digits.');
+  }
+  // Two accounts that share a username are one account with an ambiguous audit trail.
+  if (input.administrator.username.trim().toUpperCase() === input.tenantAdministrator.username.trim().toUpperCase()) {
+    throw new TenancyError(
+      'The platform administrator and the tenant administrator cannot share a username.',
+      'Give the working administrator its own username; the two accounts hold different authority.',
+    );
   }
 
   const clientKey = input.clientKey.toUpperCase();
@@ -324,9 +354,41 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
       createdBy: input.createdBy,
     });
 
-    await tx.insert(userRole).values({
+    // ── Platform administrator ──────────────────────────────────────────────
+    // The first user of a tenant is that tenant's platform administrator, and holds
+    // no wildcard: the tenant's administrator is an account this one creates
+    // afterwards. The role cannot be granted through routine administration —
+    // role-admin refuses to grant the two authorities it carries to any role, and
+    // every routine mutation needs a live session that already holds it — so it is
+    // created here, inside the transaction that creates the user, at the one moment
+    // the deployment owner has just proved they hold the owner token.
+    const { bootstrapPlatformAdminInTransaction } = await import('../../modules/platform/platform-admin-bootstrap');
+    await bootstrapPlatformAdminInTransaction(tx, {
       client: clientKey,
       userId,
+      username: input.administrator.username,
+      actor: input.createdBy,
+    });
+
+    // ── Tenant administrator ────────────────────────────────────────────────
+    // The working administrator, holding the ADMINISTRATOR wildcard. Inserted here
+    // rather than granted, because no routine service may assign a protected system
+    // role and there is no later moment at which it could be.
+    const tenantAdminUserId = crypto.randomUUID();
+    await tx.insert(appUser).values({
+      id: tenantAdminUserId,
+      client: clientKey,
+      username: input.tenantAdministrator.username,
+      fullName: input.tenantAdministrator.fullName,
+      email: input.tenantAdministrator.email,
+      passwordHash: await hashPassword(input.tenantAdministrator.password),
+      isActive: true,
+      mustChangePassword: false,
+      createdBy: input.createdBy,
+    });
+    await tx.insert(userRole).values({
+      client: clientKey,
+      userId: tenantAdminUserId,
       roleCode: 'ADMINISTRATOR',
       createdBy: input.createdBy,
     });

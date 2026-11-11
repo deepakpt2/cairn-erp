@@ -34,6 +34,12 @@ function input(clientKey: string, name: string) {
       email: 'first.admin@cairn.local',
       password: PASSWORD,
     },
+    tenantAdministrator: {
+      username: 'second.admin',
+      fullName: 'Second Administrator',
+      email: 'second.admin@cairn.local',
+      password: PASSWORD,
+    },
     createdBy: 'TEST',
   };
 }

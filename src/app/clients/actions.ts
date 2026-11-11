@@ -55,8 +55,14 @@ export async function createTenantAction(
         email: read('email') || undefined,
         password: String(formData.get('password') ?? ''),
       },
+      tenantAdministrator: {
+        username: read('adminUsername'),
+        fullName: read('adminFullName'),
+        email: read('adminEmail') || undefined,
+        password: String(formData.get('adminPassword') ?? ''),
+      },
       createdBy: session?.user.username ?? (environment === 'development' ? 'ONBOARDING' : 'OWNER_BOOTSTRAP'),
-    }, (tx) => authorizeProvisioning(tx, { environment, configuredToken, suppliedToken, session }));
+    }, (tx) => authorizeProvisioning(tx, { environment, configuredToken, suppliedToken }));
 
     revalidatePath('/clients');
 

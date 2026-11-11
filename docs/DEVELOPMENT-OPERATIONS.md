@@ -554,7 +554,20 @@ Docker availability and the image/container execution were not verified in this 
 
 ## 9. One-time tenant-local platform-admin bootstrap
 
-Role and user-role mutations require a separate, deployment-owner-bootstrapped `PLATFORM_ADMIN` role. Tenant wildcard `ADMINISTRATOR` and `CFG.PLT.USER.MAINTAIN` are not substitutes. This is tenant-local authority, not a deployment-wide identity.
+Role and user-role mutations require the tenant-local `PLATFORM_ADMIN` role. Tenant wildcard `ADMINISTRATOR` and `CFG.PLT.USER.MAINTAIN` are not substitutes. This is tenant-local authority, not a deployment-wide identity.
+
+**Every tenant now receives it at creation.** `createTenant` creates two accounts in one transaction:
+
+- the **platform administrator** — the first account, named on the onboarding form. Holds `PLATFORM_ADMIN` and no wildcard. It creates users, creates roles, grants capabilities and assigns roles; it cannot post or configure.
+- the **tenant administrator** — the second account, also named on the form. Holds `ADMINISTRATOR` and does the day-to-day work. It is created here because `ADMINISTRATOR` is a protected system role: `role-admin.ts` refuses to assign any seeded role through routine administration, so this transaction is the only moment at which the assignment can be made. A tenant created without one can never be given one.
+
+`PLATFORM_ADMIN` carries `CFG.PLT.ROLE.MAINTAIN`, `CFG.PLT.USER.ROLE.MAINTAIN`, `CFG.PLT.USER.CREATE` and `CFG.PLT.USER.MAINTAIN`. The last two were required: `createUser` refuses without `USER.CREATE`, and granting a company or plant scope refuses without `USER.MAINTAIN`, so a platform administrator could not otherwise create the administrator it exists to create.
+
+Tenant creation is admitted by one gate: the deployment owner token (`CAIRN_PROVISIONING_TOKEN`). There is no longer a second rule requiring later tenants to also present a signed-in session holding `CFG.PLT.CLIENT.ONBOARD`. Development keeps its exemption — `CAIRN_ENV=development` needs no configured token.
+
+### Repair path: tenants created before this change
+
+The CLI below is now only for nominating a platform administrator in a tenant that was created before tenant creation granted the role. It shares the same in-transaction helper, so the two paths cannot drift apart.
 
 ### Preconditions and trust boundary
 - Apply migration `9209_platform_role_capability_administration.sql` to the intended authorized database first.

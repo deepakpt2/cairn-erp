@@ -42,11 +42,20 @@ async function main() {
     currency: 'USD',
     timezone: 'Asia/Kuwait',
     isDevelopment: true,
+    // The first account is the tenant's platform administrator: it creates users and
+    // administers roles and holds no authority over documents. dev.admin below is the
+    // account that does the work, and it keeps the documented development credential.
     administrator: {
+      username: 'dev.owner',
+      fullName: 'Development Platform Administrator',
+      email: 'dev.owner@cairn.local',
+      // Development-only credential. The environment check lives in .env.
+      password: 'cairn-dev-2026',
+    },
+    tenantAdministrator: {
       username: 'dev.admin',
       fullName: 'Development Administrator',
       email: 'dev@cairn.local',
-      // Development-only credential. The environment check lives in .env.
       password: 'cairn-dev-2026',
     },
     creationType: 'standard',
@@ -71,7 +80,8 @@ async function main() {
   console.log('Development tenant created:');
   console.log(`  Tenant key        ${result.client}`);
   console.log('  Company code      1000 (built by the standard structure builder)');
-  console.log(`  Administrator     ${result.administratorUsername}`);
+  console.log(`  Platform admin    ${result.administratorUsername}`);
+  console.log(`  Administrator     dev.admin (ADMINISTRATOR wildcard)`);
   console.log(`  Roles             ${result.rolesCreated}`);
   console.log(`  Number ranges     ${result.rangesCreated} operational + 1 accounting`);
   console.log(`  Workbench steps   ${result.onboardingActivities}`);

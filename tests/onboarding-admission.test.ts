@@ -16,7 +16,7 @@ vi.mock('@/platform/tenancy', () => ({
 }));
 import { createTenantAction } from '../src/app/clients/actions';
 const TOKEN = 'PrivateOwnerSetupTokenTestsOnly'.repeat(2);
-function form(token = '') { const data = new FormData(); for (const [k,v] of Object.entries({ provisioningToken: token, clientKey: '0200', companyCode: '1000', name: 'Test company', companyName: 'Test company', username: 'admin', password: 'StrongTestPassword123', createdBy: 'FORGED' })) data.set(k,v); return data; }
+function form(token = '') { const data = new FormData(); for (const [k,v] of Object.entries({ provisioningToken: token, clientKey: '0200', companyCode: '1000', name: 'Test company', companyName: 'Test company', username: 'owner', password: 'StrongTestPassword123', adminUsername: 'admin', adminFullName: 'System Administrator', adminPassword: 'StrongTestPassword123', createdBy: 'FORGED' })) data.set(k,v); return data; }
 beforeEach(() => {
   vi.stubEnv('CAIRN_ENV', 'production'); vi.stubEnv('CAIRN_PROVISIONING_TOKEN', TOKEN);
   f.session = null; f.initialized = false; f.writes = 0; f.calls = [];
@@ -35,17 +35,23 @@ describe('onboarding server-action admission', () => {
     await expect(createTenantAction({ ok: true }, form(TOKEN))).rejects.toThrow('REDIRECT_CREATED');
     expect(f.writes).toBe(1); expect(f.calls[0].createdBy).toBe('OWNER_BOOTSTRAP');
   });
-  it('rejects an anonymous later tenant even with owner token', async () => {
+  it('admits a later tenant on the owner token alone: no session, no capability, no second gate', async () => {
     f.initialized = true;
-    expect((await createTenantAction({ ok: true }, form(TOKEN))).ok).toBe(false);
-    expect(f.writes).toBe(0);
+    await expect(createTenantAction({ ok: true }, form(TOKEN))).rejects.toThrow('REDIRECT_CREATED');
+    expect(f.writes).toBe(1);
+    expect(f.calls[0].createdBy).toBe('OWNER_BOOTSTRAP');
   });
-  it('rejects later signed-in users without the exact capability', async () => {
+  it('ignores the signed-in capabilities of a later tenant: the token is the gate, not the session', async () => {
     f.initialized = true; f.session = { user: { username: 'buyer', capabilities: ['PROC.*'] } } as SessionContext;
-    expect((await createTenantAction({ ok: true }, form(TOKEN))).ok).toBe(false);
+    await expect(createTenantAction({ ok: true }, form(TOKEN))).rejects.toThrow('REDIRECT_CREATED');
+    expect(f.writes).toBe(1);
+  });
+  it('refuses a later tenant without the token even for a signed-in owner', async () => {
+    f.initialized = true; f.session = { user: { username: 'owner.admin', capabilities: ['CFG.PLT.CLIENT.ONBOARD'] } } as SessionContext;
+    expect((await createTenantAction({ ok: true }, form(''))).ok).toBe(false);
     expect(f.writes).toBe(0);
   });
-  it('allows a later authorized admin with owner token and session audit actor', async () => {
+  it('allows a later tenant with owner token and records the signed-in actor', async () => {
     f.initialized = true; f.session = { user: { username: 'owner.admin', capabilities: ['CFG.PLT.CLIENT.ONBOARD'] } } as SessionContext;
     await expect(createTenantAction({ ok: true }, form(TOKEN))).rejects.toThrow('REDIRECT_CREATED');
     expect(f.writes).toBe(1); expect(f.calls[0].createdBy).toBe('owner.admin');

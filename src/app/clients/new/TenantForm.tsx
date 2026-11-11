@@ -113,12 +113,13 @@ export default function TenantForm({ requiresOwnerToken = false }: { requiresOwn
           </div>
         </Section>
 
-        <Section title={t('onboard.section.admin')}>
+        <Section title={t('onboard.section.platformAdmin')}>
+          <p className="w-full field-hint">{t('onboard.section.platformAdmin.hint')}</p>
           <Field label={t('onboard.username')} required width="w-56">
-            <input name="username" required defaultValue="admin" className="field-input code" />
+            <input name="username" required defaultValue="owner" className="field-input code" />
           </Field>
           <Field label={t('onboard.fullName')} required width="flex-1">
-            <input name="fullName" required defaultValue="System Administrator" className="field-input" />
+            <input name="fullName" required defaultValue="Deployment Owner" className="field-input" />
           </Field>
           <Field label={t('onboard.email')} width="w-72">
             <input name="email" type="email" className="field-input" />
@@ -130,6 +131,27 @@ export default function TenantForm({ requiresOwnerToken = false }: { requiresOwn
             width="w-72"
           >
             <input name="password" type="password" required className="field-input" />
+          </Field>
+        </Section>
+
+        <Section title={t('onboard.section.tenantAdmin')}>
+          <p className="w-full field-hint">{t('onboard.section.tenantAdmin.hint')}</p>
+          <Field label={t('onboard.username')} required width="w-56">
+            <input name="adminUsername" required defaultValue="admin" className="field-input code" />
+          </Field>
+          <Field label={t('onboard.fullName')} required width="flex-1">
+            <input name="adminFullName" required defaultValue="System Administrator" className="field-input" />
+          </Field>
+          <Field label={t('onboard.email')} width="w-72">
+            <input name="adminEmail" type="email" className="field-input" />
+          </Field>
+          <Field
+            label={t('onboard.password')}
+            hint={t('onboard.password.hint')}
+            required
+            width="w-72"
+          >
+            <input name="adminPassword" type="password" required className="field-input" />
           </Field>
         </Section>
 

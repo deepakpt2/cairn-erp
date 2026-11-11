@@ -1,22 +1,30 @@
 /**
- * One-time deployment-owner bootstrap for the tenant-local PLATFORM_ADMIN role.
+ * One-time deployment-owner nomination of a tenant-local PLATFORM_ADMIN for a tenant
+ * that was created before tenant creation granted the role.
+ *
+ * New tenants do not need this: createTenant creates the platform administrator itself.
+ * This CLI is the repair path for older tenants, and it shares the same in-transaction
+ * helper so the two paths cannot drift apart.
+ *
  * This is an operator CLI, never an HTTP action or test/seed bypass. All routine
  * role administration requires a validated live application session.
  */
-import { createHash, timingSafeEqual, randomUUID } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { basename } from 'node:path';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { validateTarget } from '../src/platform/db/target-guard';
 import { closeDb, withTenant } from '../src/platform/db/client';
-import { recordChange } from '../src/platform/change';
-import { auditAccessLog, appUser, capability, role, roleCapability, userRole, userSession } from '../src/platform/tables/security';
+import { capability, appUser, userSession } from '../src/platform/tables/security';
 import { changeDocument } from '../src/platform/tables/audit-trail';
-import { PLATFORM_ADMIN_ROLE_CODE, ROLE_MAINTAIN_CAPABILITY, USER_ROLE_MAINTAIN_CAPABILITY } from '../src/modules/platform/role-admin';
+import {
+  bootstrapPlatformAdminInTransaction,
+  PLATFORM_ADMIN_CAPABILITIES,
+  PLATFORM_ADMIN_ROLE_CODE,
+} from '../src/modules/platform/platform-admin-bootstrap';
 
 const CLIENT = process.env.CAIRN_PLATFORM_BOOTSTRAP_TENANT ?? '';
 const USER_ID = process.env.CAIRN_PLATFORM_BOOTSTRAP_USER_ID ?? '';
 const ACTOR = process.env.CAIRN_PLATFORM_BOOTSTRAP_ACTOR ?? '';
-const TRANSACTION_CODE = 'CFG.PLT.PLATFORM_ADMIN.BOOTSTRAP';
 
 function fail(message: string): never { throw new Error(message); }
 
@@ -70,14 +78,14 @@ async function bootstrap() {
     const [alreadyBootstrapped] = await tx.select({ id: changeDocument.id }).from(changeDocument)
       .where(and(eq(changeDocument.client, CLIENT), eq(changeDocument.objectClass, 'platform_admin_bootstrap'))).limit(1).for('share');
     if (alreadyBootstrapped) fail(`Tenant ${CLIENT} has already completed its deployment-owner platform-admin bootstrap.`);
-    const [existingRole] = await tx.select({ code: role.code }).from(role)
-      .where(and(eq(role.client, CLIENT), eq(role.code, PLATFORM_ADMIN_ROLE_CODE))).for('update');
-    if (existingRole) fail(`Tenant ${CLIENT} already has the protected ${PLATFORM_ADMIN_ROLE_CODE} role; bootstrap is not repeatable.`);
 
-    const registeredAuthorities = await tx.select({ code: capability.code }).from(capability).where(sql`${capability.code} in (${ROLE_MAINTAIN_CAPABILITY}, ${USER_ROLE_MAINTAIN_CAPABILITY})`);
-    if (registeredAuthorities.length !== 2) fail('Required platform-administration capabilities are not registered; apply the approved migrations first.');
+    const registeredAuthorities = await tx.select({ code: capability.code }).from(capability)
+      .where(inArray(capability.code, [...PLATFORM_ADMIN_CAPABILITIES]));
+    if (registeredAuthorities.length !== PLATFORM_ADMIN_CAPABILITIES.length) {
+      fail('Required platform-administration capabilities are not registered; apply the approved migrations first.');
+    }
 
-    const [target] = await tx.select({ id: appUser.id, username: appUser.username, fullName: appUser.fullName, isActive: appUser.isActive, isLocked: appUser.isLocked })
+    const [target] = await tx.select({ id: appUser.id, username: appUser.username, isActive: appUser.isActive, isLocked: appUser.isLocked })
       .from(appUser).where(and(eq(appUser.client, CLIENT), eq(appUser.id, USER_ID))).for('update');
     if (!target) fail('The nominated user does not exist in the selected tenant.');
     if (target.username.trim().toLowerCase() === ACTOR.trim().toLowerCase()) fail('The deployment-owner operator cannot bootstrap their own account; nominate a separate user.');
@@ -87,45 +95,10 @@ async function bootstrap() {
     )).limit(1).for('share');
     if (!liveSessions.length) fail('The nominated user must have a currently live persisted application session.');
 
-    const now = new Date();
-    await tx.insert(role).values({
-      client: CLIENT,
-      code: PLATFORM_ADMIN_ROLE_CODE,
-      name: 'Platform administrator',
-      description: 'Deployment-owner bootstrapped tenant-local role administration. This is not a global identity and is not the tenant wildcard administrator.',
-      isSystemRole: true,
-      isReadOnly: false,
-      isActive: true,
-      createdBy: ACTOR,
-    });
-    await tx.insert(roleCapability).values([
-      { client: CLIENT, roleCode: PLATFORM_ADMIN_ROLE_CODE, capabilityCode: ROLE_MAINTAIN_CAPABILITY, createdBy: ACTOR },
-      { client: CLIENT, roleCode: PLATFORM_ADMIN_ROLE_CODE, capabilityCode: USER_ROLE_MAINTAIN_CAPABILITY, createdBy: ACTOR },
-    ]);
-    await tx.insert(userRole).values({ client: CLIENT, userId: USER_ID, roleCode: PLATFORM_ADMIN_ROLE_CODE, validFrom: now, createdBy: ACTOR });
-
-    await recordChange(tx, {
-      client: CLIENT,
-      objectClass: 'platform_admin_bootstrap',
-      objectKey: `${CLIENT}/${USER_ID}`,
-      changeType: 'CREATE',
-      transactionCode: TRANSACTION_CODE,
-      changedBy: ACTOR,
-      before: undefined,
-      after: { tenant: CLIENT, targetUserId: USER_ID, targetUsername: target.username, roleCode: PLATFORM_ADMIN_ROLE_CODE, authorities: [ROLE_MAINTAIN_CAPABILITY, USER_ROLE_MAINTAIN_CAPABILITY], bootstrappedBy: ACTOR },
-      securityRelevantFields: ['targetUserId', 'roleCode', 'authorities'],
-    });
-    await tx.insert(auditAccessLog).values({
-      id: randomUUID(),
-      client: CLIENT,
-      userId: null,
-      username: ACTOR,
-      eventType: 'CONFIG_CHANGE',
-      transactionCode: TRANSACTION_CODE,
-      objectType: 'platform_admin_bootstrap',
-      objectKey: `${CLIENT}/${USER_ID}`,
-      detail: `Deployment owner ${ACTOR} bootstrapped tenant-local ${PLATFORM_ADMIN_ROLE_CODE} for ${target.username} (${USER_ID}).`,
-    });
+    // The role may already exist for a tenant whose administrator was created before
+    // tenant creation granted it; the helper tops up its authorities rather than
+    // duplicating them, and still refuses to assign the role twice.
+    await bootstrapPlatformAdminInTransaction(tx, { client: CLIENT, userId: USER_ID, username: target.username, actor: ACTOR });
   });
   await closeDb();
   console.log(`Bootstrapped tenant-local ${PLATFORM_ADMIN_ROLE_CODE} for the nominated account in tenant ${CLIENT}. The account must sign out and back in to refresh session authority.`);
