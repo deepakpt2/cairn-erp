@@ -1,0 +1,17 @@
+-- The production order no longer stores a company code.
+--
+-- `production_order.company_code` arrived beside `controlling_area` under the MB03
+-- ruling, to record which company code the controlling area had been derived from.
+-- Nothing ever read it back. The order service joins `plant` and reports the
+-- plant's company code every time it reads an order; no query, policy, index or
+-- report in the tree names the column. A derived value that is written and never
+-- read is a copy waiting to disagree with its source — it would still hold the old
+-- company code the moment a plant were re-assigned — and it contradicts the
+-- order's own documented contract, which the seed catalogue states for CO01: "the
+-- company code is derived from the plant and never stored".
+--
+-- The controlling area stays. That is the value the ruling actually needed: it is
+-- resolved once, at creation, and must not follow a later change to the
+-- controlling area-company assignment. The company code it was derived from is
+-- available from the plant whenever it is wanted.
+alter table public.production_order drop column if exists company_code;

@@ -606,10 +606,13 @@ export const productionOrder = pgTable('production_order', {
    * Controlling area the order is charged to. Derived from the plant's company
    * code via the controlling area–company assignment at order creation. Null
    * when the company code has no controlling area assignment.
+   *
+   * The company code itself is not stored, and it is not a second key: it is the
+   * plant's, and the order reads it from the plant every time it is read. A copy
+   * taken at creation would drift the moment a plant were re-assigned, and
+   * nothing in the application reads one.
    */
   controllingArea: varchar('controlling_area', { length: 4 }),
-  /** Company code derived from the plant (MB03 ruling). Not stored before this column existed. */
-  companyCode: varchar('company_code', { length: 4 }),
   /** Order currency, inherited from the controlling area of the company code. */
   currency: char('currency', { length: 3 }),
   /**

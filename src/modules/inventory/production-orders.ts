@@ -672,7 +672,6 @@ export async function createProductionOrder(
       productionVersion: derived?.productionVersion ?? null,
       bomUsage: derived?.bomUsage ?? null,
       bomAlternative: derived?.bomAlternative ?? null,
-      companyCode: plantRow.companyCode,
       controllingArea: orderControllingArea,
       currency: orderCurrency,
       createdBy: input.createdBy,

@@ -104,18 +104,18 @@ export async function requireProductionCogiFailureScopeInTx(
 ): Promise<{ companyCode: string; plant: string }> {
   const rows = await tx.execute(sql`
     select o.plant as order_plant,
-           o.company_code as order_company,
            p.plant as plant,
            p.company_code as plant_company
       from production_order o
       join plant p on p.client = o.client and p.plant = o.plant
      where o.client = ${client} and o.order_number = ${failure.orderNumber}
      for share of o, p
-  `) as unknown as Array<{ order_plant: string; order_company: string | null; plant: string; plant_company: string | null }>;
+  `) as unknown as Array<{ order_plant: string; plant: string; plant_company: string | null }>;
   const row = rows[0];
+  // The order's company code is its plant's: no second copy of it is stored on the order,
+  // so the assignment is consistent by construction and only the plant has to name one.
   const companyCode = row?.plant_company?.trim() ?? '';
-  const orderCompany = row?.order_company?.trim() ?? '';
-  if (!row || row.plant !== failure.plant || !companyCode || (orderCompany && orderCompany !== companyCode)) {
+  if (!row || row.plant !== failure.plant || !companyCode) {
     throw new ProductionCogiAuthorizationError(
       'The failed movement does not have a consistent production order, plant, and company assignment.',
       'Ask an administrator to review the order and plant configuration.',

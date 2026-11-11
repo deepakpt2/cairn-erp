@@ -231,7 +231,7 @@ async function requireConfirmationOrderScopeInTx(
   restrictions: Awaited<ReturnType<typeof loadOrgRestrictions>>,
 ) {
   const orders = await rows(tx, sql`
-    select plant, company_code as company_code
+    select plant
       from production_order
      where client = ${client} and order_number = ${orderNumber}
      for share
@@ -246,9 +246,11 @@ async function requireConfirmationOrderScopeInTx(
      for share
   `);
   const plant = plants[0];
+  // The order's company code is its plant's. Nothing carries a second copy of it, so
+  // there is nothing here to reconcile: the plant either names a company code or the
+  // order cannot be placed in one.
   const companyCode = plant?.company_code == null ? '' : String(plant.company_code).trim();
-  const storedCompany = order.company_code == null ? '' : String(order.company_code).trim();
-  if (!plant || !companyCode || (storedCompany && storedCompany !== companyCode)) {
+  if (!plant || !companyCode) {
     fail('The production order has no consistent Company Code and Plant assignment.', 'Ask an administrator to review the order and plant configuration.');
   }
   if (!hasOrgAccess(restrictions, 'COMPANY_CODE', companyCode)

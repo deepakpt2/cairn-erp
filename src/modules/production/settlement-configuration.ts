@@ -20,6 +20,7 @@ import {
   allocationStructureAssignment,
   companyCode,
   costCenter,
+  plant,
   settlementDocument,
   settlementProfile,
 } from '../foundation/schema';
@@ -286,7 +287,12 @@ export async function saveProductionOrderSettlementConfiguration(
       eq(productionOrder.orderNumber, orderNumber),
     ));
     if (!order) throw new SettlementConfigurationError(`Production order ${orderNumber} does not exist.`);
-    const companyCodeValue = order.companyCode?.trim();
+    // The company code is the plant's, read from the plant: the order stores no copy of
+    // it, so a rule is validated against the same figure settlement will post against.
+    const [orderPlant] = await tx.select({ companyCode: plant.companyCode }).from(plant).where(and(
+      eq(plant.client, input.client), eq(plant.plant, order.plant),
+    ));
+    const companyCodeValue = orderPlant?.companyCode?.trim() ?? '';
     const controllingAreaValue = order.controllingArea?.trim();
     if (!companyCodeValue || !controllingAreaValue) {
       throw new SettlementConfigurationError(
@@ -357,7 +363,7 @@ export async function saveProductionOrderSettlementConfiguration(
       eq(companyCode.companyCode, companyCodeValue),
     ));
     if (!company?.chartOfAccounts) {
-      throw new SettlementConfigurationError(`Company code ${order.companyCode} has no chart of accounts.`);
+      throw new SettlementConfigurationError(`Company code ${companyCodeValue} has no chart of accounts.`);
     }
     if (input.receiverCategory === 'COST_CENTER') {
       const centers = await tx.select().from(costCenter).where(and(

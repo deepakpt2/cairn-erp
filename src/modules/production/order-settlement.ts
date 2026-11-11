@@ -15,7 +15,7 @@
  * a percentage, and an account are not assumed. Production orders are selected here;
  * internal orders are not.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { type Tx, withTenant } from '../../platform/db/client';
 import { periodWindows } from '../../platform/periods';
@@ -30,6 +30,7 @@ import {
   costCenter,
   fiscalYearPeriod,
   fiscalYearVariant,
+  plant,
   settlementDocument,
   settlementProfile,
 } from '../foundation/schema';
@@ -313,15 +314,20 @@ async function settleOne(
   run: RunOptions,
   mode: 'INDIVIDUAL' | 'COLLECTIVE',
   row: typeof productionOrder.$inferSelect,
+  /**
+   * The company code the order settles in. It is the company code of the order's plant,
+   * resolved by the caller: the order carries no copy of it, so there is nothing here to
+   * drift away from the plant it came from.
+   */
+  companyCodeValue: string,
 ): Promise<{ order: ProductionOrderSettlementOrderResult; document: ProductionOrderSettlementDocumentRef | null; eligible: boolean }> {
-  const companyCodeValue = row.companyCode?.trim();
   const controllingAreaValue = row.controllingArea?.trim();
   const orderCurrency = row.currency?.trim();
   const base = {
     orderNumber: row.orderNumber,
     orderType: row.orderType,
     controllingArea: row.controllingArea,
-    companyCode: row.companyCode,
+    companyCode: companyCodeValue || null,
     currency: row.currency?.trim() || null,
     amount: null,
     receivers: [] as ProductionOrderSettlementReceiverResult[],
@@ -477,7 +483,7 @@ async function settleOne(
     eq(companyCode.companyCode, companyCodeValue),
   ));
   if (!company?.chartOfAccounts || !company.fiscalYearVariant) {
-    throw new ProductionOrderSettlementError(`Company code ${row.companyCode} is missing its chart or fiscal year variant.`);
+    throw new ProductionOrderSettlementError(`Company code ${companyCodeValue} is missing its chart or fiscal year variant.`);
   }
   if (company.currency.trim() !== orderCurrency) {
     return {
@@ -500,7 +506,7 @@ async function settleOne(
   const position = await derivePosition(tx, input.client, company.fiscalYearVariant, postingDate);
   if (position.fiscalYear !== run.fiscalYear || position.period !== run.settlementPeriod) {
     throw new ProductionOrderSettlementError(
-      `The settlement period ends on ${postingDate}, which is fiscal year ${position.fiscalYear} period ${position.period} for company ${row.companyCode}.`,
+      `The settlement period ends on ${postingDate}, which is fiscal year ${position.fiscalYear} period ${position.period} for company ${companyCodeValue}.`,
       'The entered fiscal year and period were not replaced.',
     );
   }
@@ -813,9 +819,22 @@ async function settleRows(
   const orders: ProductionOrderSettlementOrderResult[] = [];
   const documents: ProductionOrderSettlementDocumentRef[] = [];
   let eligible = 0;
+  // The company code an order settles in is the company code of its plant, read once per
+  // plant here rather than carried on the order row. Nothing stores it, so nothing can
+  // disagree with the plant: the order screen reports the plant's company code for the
+  // same reason, and settlement and display therefore answer the same question once.
+  const plants = [...new Set(rows.map((row) => row.plant))];
+  const rowsByCompany = await withTenant(input.client, (tx) => tx
+    .select({ plant: plant.plant, companyCode: plant.companyCode })
+    .from(plant)
+    .where(and(eq(plant.client, input.client), inArray(plant.plant, plants))));
+  const companyOfPlant = new Map(
+    rowsByCompany.map((row) => [row.plant, row.companyCode?.trim() ?? ''] as const),
+  );
   for (const row of rows) {
+    const companyCodeValue = companyOfPlant.get(row.plant) ?? '';
     try {
-      const settled = await withTenant(input.client, (tx) => settleOne(tx, input, run, mode, row));
+      const settled = await withTenant(input.client, (tx) => settleOne(tx, input, run, mode, row, companyCodeValue));
       orders.push(settled.order);
       if (settled.document) documents.push(settled.document);
       if (settled.eligible) eligible += 1;
@@ -828,7 +847,7 @@ async function settleRows(
         orderNumber: row.orderNumber,
         orderType: row.orderType,
         controllingArea: row.controllingArea,
-        companyCode: row.companyCode,
+        companyCode: companyCodeValue || null,
         currency: row.currency?.trim() || null,
         outcome: 'FAILED',
         reasons: [message],

@@ -184,10 +184,11 @@ export async function getProductionOrderCostReport(
 
   return withTenant(input.client, async (tx) => {
     const [order] = await tx.execute(sql`
-      select order_number, material_number, plant, order_type, status,
-             company_code, controlling_area, currency
-        from production_order
-       where client = ${input.client} and order_number = ${orderNumber}
+      select o.order_number, o.material_number, o.plant, o.order_type, o.status,
+             coalesce(p.company_code, '') as company_code, o.controlling_area, o.currency
+        from production_order o
+        left join plant p on p.client = o.client and p.plant = o.plant
+       where o.client = ${input.client} and o.order_number = ${orderNumber}
        limit 1
     `) as unknown as Array<{
       order_number: string;
@@ -289,13 +290,13 @@ export async function getProductionOrderCostReport(
       'Material-document values are drilldown evidence and are not added again to journal amounts.',
     ];
     if (!order.company_code?.trim() || !order.currency?.trim()) {
-      gaps.push('The order has no stored company code or currency. No company or currency was inferred.');
+      gaps.push("The order's plant names no company code, or the order carries no currency. No company or currency was inferred.");
     }
     if (lines.some((line) => line.lineCurrency !== line.documentCurrency)) {
       gaps.push('A journal line currency differs from its document currency. Both stored values are shown without conversion.');
     }
     if (order.company_code && lines.some((line) => line.companyCode !== order.company_code)) {
-      gaps.push('A journal line company code differs from the order snapshot. No line was silently excluded.');
+      gaps.push('A journal line company code differs from the company code of the order plant. No line was silently excluded.');
     }
     if (lines.length === 0) gaps.push('No posted or reversed journal lines cite this order for the selected period.');
 
