@@ -37,6 +37,9 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db, withTenant, type Tx } from '../db/client';
 import { jobDefinition, jobRun, type BlockedOn } from '../tables/system';
+import { appUser } from '../tables/security';
+import { notifyAll, notifyOn } from '../notification/notify';
+import { resolveRecipients } from '../notification/recipients';
 import { enqueueEntry } from '../tables/lock';
 import { listEnqueue, type EnqueueRow } from '../lock/enqueue';
 import { revokeSessionById } from '../auth/session';
@@ -343,6 +346,8 @@ async function block(
           heartbeatAt: null,
         })
         .where(eq(jobRun.id, claimed.runId));
+
+        await notifyRunOutcome(tx, claimed, 'JOB.BLOCKED');
     });
     return 'BLOCKED';
   }
@@ -399,6 +404,8 @@ async function block(
         heartbeatAt: null,
       })
       .where(eq(jobRun.id, claimed.runId));
+
+    await notifyRunOutcome(tx, claimed, 'JOB.BLOCKED');
   });
   return 'BLOCKED';
 }
@@ -478,6 +485,14 @@ async function fail(
         heartbeatAt: null,
       })
       .where(eq(jobRun.id, claimed.runId));
+
+    // A run that still has retries left has not ended: it is going back on the
+    // queue to be tried again. Calling that a failure would be a lie, and would
+    // contradict the retry the runtime is about to perform. Only once the
+    // allowance is spent is there an ending worth reporting.
+    if (exhausted) {
+      await notifyRunOutcome(tx, claimed, 'JOB.FAILED');
+    }
   });
   return status;
 }
@@ -490,6 +505,68 @@ async function markCancelled(claimed: ClaimedRun): Promise<void> {
       .set({ status: 'CANCELLED', finishedAt: sql`now()`, workerId: null, claimedAt: null, heartbeatAt: null })
       .where(eq(jobRun.id, claimed.runId));
   });
+}
+
+const JOB_MONITOR_CAPABILITY = 'PLT.JOB.DISPLAY';
+
+/**
+ * Tell someone that this run reached a terminal state.
+ *
+ * The person who asked for the run is the natural recipient, and `job_run.triggered_by`
+ * holds them — but it holds 'SCHEDULER' just as happily, which is not a person. The
+ * recipient term of the row policy means only SCHEDULER could ever read a row addressed
+ * to it, so writing one would fill the table with messages nobody can see. The same check
+ * quietly covers a user deleted since the run was queued.
+ *
+ * A run nobody asked for in particular still has to be accounted for when it ends badly.
+ * Failure and blockage both need a person to act, so those fall back to everyone who can
+ * open the jobs screen. Success does not: a scheduled run finishing is the ordinary case,
+ * and the jobs screen is already the record of it. Announcing every one of those to every
+ * monitor would be noise dressed up as diligence.
+ *
+ * Emitted inside the same transaction as the status change, so a run whose ending rolls
+ * back does not leave behind an announcement of that ending.
+ */
+async function notifyRunOutcome(
+  tx: Tx,
+  claimed: ClaimedRun,
+  kind: 'JOB.COMPLETED' | 'JOB.FAILED' | 'JOB.BLOCKED',
+): Promise<void> {
+  const [row] = await tx
+    .select({ triggeredBy: jobRun.triggeredBy })
+    .from(jobRun)
+    .where(eq(jobRun.id, claimed.runId))
+    .limit(1);
+
+  const who = row?.triggeredBy;
+  if (!who) return;
+
+  const [user] = await tx
+    .select({ id: appUser.id })
+    .from(appUser)
+    .where(and(eq(appUser.client, claimed.client), eq(appUser.id, who)))
+    .limit(1);
+
+  const shared = {
+    kind,
+    objectClass: 'job_run',
+    objectKey: claimed.runId,
+    messageKey: `notification.kind.${kind}`,
+    messageParams: { job: claimed.jobCode },
+  } as const;
+
+  // A named submitter hears about their own run whatever the outcome.
+  if (user) {
+    await notifyOn(tx, { ...shared, client: claimed.client, recipient: who });
+    return;
+  }
+
+  // Nobody can be named. Only the endings that need a pair of hands are worth
+  // raising with the people who watch the queue.
+  if (kind === 'JOB.COMPLETED') return;
+
+  const monitors = await resolveRecipients(tx, claimed.client, JOB_MONITOR_CAPABILITY);
+  await notifyAll(tx, claimed.client, monitors, shared);
 }
 
 async function finish(
@@ -512,6 +589,17 @@ async function finish(
         heartbeatAt: null,
       })
       .where(eq(jobRun.id, claimed.runId));
+
+    // Cancelled tells nobody: they asked for it. Everything else names the
+    // ending, because a run that finished while you were on another screen is
+    // the case the whole worker exists for.
+    const kind =
+      status === 'SUCCEEDED'
+        ? 'JOB.COMPLETED'
+        : status === 'FAILED' || status === 'DEAD_LETTER'
+          ? 'JOB.FAILED'
+          : null;
+    if (kind) await notifyRunOutcome(tx, claimed, kind);
   });
 }
 
