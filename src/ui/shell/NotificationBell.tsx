@@ -6,8 +6,13 @@
  * text has to be kept in step, and it does not mark anything seen on hover,
  * because opening is the one act the model recognises.
  *
- * Rendered only when there is something to say. On a quiet day the header is
- * shorter, which is what quiet should look like.
+ * The count is the message. A bare icon with no number makes "three things
+ * need you" and "nothing needs you" look identical from across the room, which
+ * is the one distinction this control exists to draw.
+ *
+ * Drawn as an inline SVG rather than a glyph so it does not change shape or
+ * weight with the reader's font, and so a font that lacks the character
+ * cannot quietly turn the bell into a box.
  */
 import Link from 'next/link';
 
@@ -35,11 +40,33 @@ export async function NotificationBell() {
   return (
     <Link
       href={INBOX}
-      className="relative inline-flex items-center gap-1 text-2xs text-ink-soft hover:text-ink"
+      className="relative inline-flex items-center gap-1 text-2xs text-ink-soft hover:text-accent"
       aria-label={label}
       title={label}
     >
-      <span aria-hidden>{count > 0 ? '\u25CF' : '\u25CB'}</span>
+      <svg
+        viewBox="0 0 16 16"
+        width="13"
+        height="13"
+        aria-hidden
+        focusable="false"
+        className={count > 0 ? 'text-ink' : 'text-ink-faint'}
+      >
+        <path
+          d="M4 6.5a4 4 0 1 1 8 0v2.2l1.2 1.8H2.8L4 8.7V6.5Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M6.4 12.3a1.7 1.7 0 0 0 3.2 0"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
+      </svg>
       {count > 0 ? (
         <span className="code font-medium text-ink">{count}</span>
       ) : null}

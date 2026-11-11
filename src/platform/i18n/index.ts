@@ -5107,7 +5107,7 @@ const en: Catalogue = {
   'notification.markSeen': 'Mark seen',
   'notification.markAllSeen': 'Mark all seen',
   'notification.bell.label': 'Notifications',
-  'notification.bell.unseen': '{count} unseen notifications',
+  'notification.bell.unseen': '{count} unseen notification(s)',
   'notification.bell.none': 'No notifications',
   'notification.age.today': 'Today',
   'notification.age.days': '{days}d ago',
