@@ -73,6 +73,10 @@ export class CreditError extends Error {
 import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
+import { enqueue } from '@/platform/job/queue';
+import { creatorOf } from '@/platform/notification/creator';
+import { notifyOn } from '@/platform/notification/notify';
+import { FANOUT_JOB } from '@/platform/notification/jobs/fanout';
 // The exposure basis is stated by the product document as open orders plus open deliveries plus open
 // receivables. The receivable half is this module's own ledger read; the sales halves can only be counted by
 // the module that owns those documents, so the ladder asks the owner instead of reading its tables (§5.1).
@@ -604,6 +608,68 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
 export const CREDIT_RELEASE_CAPABILITY = 'FIN.CREDIT.RELEASE';
 export const CREDIT_OVERRIDE_CAPABILITY = 'FIN.CREDIT.OVERRIDE';
 
+/**
+ * The change-document class a sales document is recorded under. Spelled here
+ * rather than imported: `sales/order` imports this module for its credit
+ * check, and an import back the other way would be a cycle.
+ */
+const SALES_DOCUMENT_CLASS = 'sales_order';
+
+/**
+ * Who raised the fan-out run, in job_run.triggered_by.
+ *
+ * Not a person, for the same reason as the document release fan-out: the job
+ * runtime reports a run's outcome to whoever triggered it, and the outcome of
+ * a fan-out is not news. On success the people it wrote to already hold the
+ * notification it just wrote.
+ */
+const CREDIT_ACTOR = 'CREDIT';
+
+/**
+ * Hand "who may clear this credit block" to the worker.
+ *
+ * The answer is a capability within a place, not a person: whoever holds
+ * FIN.CREDIT.RELEASE over this credit control area and sales organisation.
+ * Resolving that means loading every candidate's authority, so the transaction
+ * records only what it already knows and the worker does the rest once the
+ * determination is committed.
+ *
+ * Only a *new* block is worth a run. A determination is raised again on every
+ * change to the document and on every manual recheck, and a document that was
+ * blocked and still is has not told anybody anything they do not already have
+ * unread in their inbox — the notification table's own deduplication would
+ * swallow it, at the cost of a run and a resolution per save.
+ */
+async function enqueueCreditBlocked(
+  tx: Tx,
+  input: {
+    client: string;
+    salesDocument: string;
+    determinationId: string;
+    creditControlArea: string;
+    salesOrg: string | null;
+  },
+): Promise<void> {
+  const org: Record<string, string> = { creditControlArea: input.creditControlArea };
+  if (input.salesOrg) org.salesOrg = input.salesOrg;
+
+  await enqueue(tx, {
+    client: input.client,
+    jobCode: FANOUT_JOB,
+    triggeredBy: CREDIT_ACTOR,
+    idempotencyKey: `credit-blocked/${input.salesDocument}/${input.determinationId}`.slice(0, 120),
+    parameters: {
+      capability: CREDIT_RELEASE_CAPABILITY,
+      org,
+      kind: 'CREDIT.BLOCKED',
+      objectClass: SALES_DOCUMENT_CLASS,
+      objectKey: input.salesDocument,
+      messageKey: 'notification.kind.CREDIT.BLOCKED',
+      messageParams: { document: input.salesDocument },
+    },
+  });
+}
+
 export const DETERMINATION_STATUSES = ['BLOCKED', 'PASSED', 'RELEASED'] as const;
 export type DeterminationStatus = (typeof DETERMINATION_STATUSES)[number];
 
@@ -724,6 +790,15 @@ export async function checkSalesDocumentCredit(input: {
     `);
     await recordReleaseEvent(tx, input.client, determinationId, document, 'CHECK', input.changedBy,
       check.reason, undefined, previous?.status, status);
+
+    // A document that was already blocked and still is has not moved. Only the
+    // transition into a block is an episode worth telling people about.
+    if (status === 'BLOCKED' && previous?.status !== 'BLOCKED') {
+      await enqueueCreditBlocked(tx, {
+        client: input.client, salesDocument: document, determinationId,
+        creditControlArea: input.creditControlArea, salesOrg: input.salesOrg ?? null,
+      });
+    }
   });
 
   const rows = await listCreditDeterminations(input.client, { documentFrom: document, documentTo: document, blockedOnly: false, includeReleased: true });
@@ -881,6 +956,24 @@ export async function releaseDocument(input: {
       stillBlocked ? 'OVERRIDE_RELEASE' : 'RELEASE', changedBy,
       stillBlocked ? input.override?.justification.trim() : `Fresh check: ${check.reason}`,
       input.override?.approvalRef, 'BLOCKED', 'RELEASED');
+
+    // The block is off and the document can go out. The person waiting for
+    // that is the one who raised the document — which is the mirror of the
+    // block itself, which went to the people who could clear it rather than
+    // to whoever wanted it. Guessing a recipient is worse than telling
+    // nobody, so with no change trail nothing is sent.
+    const waiting = await creatorOf(tx, client, SALES_DOCUMENT_CLASS, salesDocument);
+    if (waiting) {
+      await notifyOn(tx, {
+        client,
+        recipient: waiting,
+        kind: 'CREDIT.RELEASED',
+        objectClass: SALES_DOCUMENT_CLASS,
+        objectKey: salesDocument,
+        messageKey: 'notification.kind.CREDIT.RELEASED',
+        messageParams: { document: salesDocument },
+      });
+    }
   });
   return {
     salesDocument, ok: true, status: 'RELEASED',
@@ -957,6 +1050,13 @@ export async function reblockDocument(input: {
     `);
     await recordReleaseEvent(tx, input.client, determinationId, input.salesDocument,
       'REBLOCK', input.changedBy, input.reason.trim() || `Fresh check: ${check.reason}`, undefined, 'RELEASED', 'BLOCKED');
+
+    // A reblock is always a new episode: the document was released, and now
+    // it is not, and whoever may clear it has to be told again.
+    await enqueueCreditBlocked(tx, {
+      client: input.client, salesDocument: input.salesDocument, determinationId,
+      creditControlArea: current.credit_control_area, salesOrg: current.sales_org,
+    });
   });
   return { salesDocument: input.salesDocument, ok: true, status: 'BLOCKED', message: `Reblocked after a fresh determination (${reason}).` };
 }
