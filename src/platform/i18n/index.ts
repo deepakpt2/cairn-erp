@@ -5119,7 +5119,7 @@ const en: Catalogue = {
   'notification.kind.CREDIT.BLOCKED': '{document} was credit-blocked',
   'notification.kind.CREDIT.RELEASED': 'The credit block on {document} was released',
   'notification.kind.DOC.INCOMPLETE': '{document} is incomplete',
-  'notification.kind.POSTING.FAILED': 'A posting failed and needs reprocessing',
+  'notification.kind.POSTING.FAILED': 'A posting for order {order} failed and needs reprocessing',
   'notification.kind.OUTPUT.FAILED': 'Output for {document} could not be produced',
   'notification.kind.GRANT.EXPIRING': 'Your {capability} authority ends on {date}',
   'notification.kind.SESSION.CLOSED': 'Your session was closed by {job}',

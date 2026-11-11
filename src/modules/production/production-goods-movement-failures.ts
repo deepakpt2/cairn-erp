@@ -3,6 +3,8 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
+import { enqueue } from '../../platform/job/queue';
+import { FANOUT_JOB } from '../../platform/notification/jobs/fanout';
 import { acquireLock } from '../../platform/lock';
 import { plant as plantTable } from '../foundation/schema';
 import {
@@ -33,6 +35,7 @@ import {
   productionGoodsMovementFailureRevision,
 } from './schema';
 import {
+  PRODUCTION_COGI_CAPABILITY,
   requireProductionCogiAuthorityInTx,
   requireProductionCogiFailureScopeInTx,
   type ProductionCogiAuthorizationContext,
@@ -533,6 +536,67 @@ export interface ProductionGoodsMovementClaim {
   leaseExpiresAt: Date;
 }
 
+/**
+ * POSTING.FAILED — tell whoever can reprocess. Phase 8.
+ *
+ * A confirmation posts its own goods movements, so when one of them fails the
+ * person who entered the confirmation has already moved on: the movement lands
+ * in COGI, and nothing opens COGI on its own until somebody goes looking. So
+ * the queue has to speak.
+ *
+ * It speaks to the holders of PROD.GM.REPROCESS over the two places COGI
+ * itself answers for — the plant and the company code — and the company code is
+ * read from the plant rather than carried on the order, because the plant is
+ * the one place it lives. Passing both is what keeps the resolver the inverse
+ * of `can()`: a holder restricted at either level is correctly left out.
+ *
+ * Only the first failure of a record is news. Every later attempt is made by
+ * somebody sitting in front of the record in COGI, and they are told how it
+ * went on the screen; a second message would tell them what they just did.
+ *
+ * A movement whose plant carries no company code is not announced at all. COGI
+ * refuses to act on it for the same reason, and an unscoped fan-out would reach
+ * every holder of the capability in the tenant, which is worse than silence.
+ */
+const POSTING_ACTOR = 'POSTING';
+const MOVEMENT_FAILURE_NOTIFICATION_CLASS = 'production_goods_movement';
+
+async function enqueuePostingFailed(
+  tx: Tx,
+  row: typeof productionGoodsMovementFailure.$inferSelect,
+): Promise<void> {
+  if (row.attemptCount > 1) return;
+  const movementPlant = row.plant.trim();
+  if (!movementPlant) return;
+
+  const [place] = await tx.execute(sql`
+    select p.company_code as "companyCode"
+      from production_order o
+      join plant p on p.client = o.client and p.plant = o.plant
+     where o.client = ${row.client}
+       and o.order_number = ${row.orderNumber}
+     limit 1
+  `) as unknown as Array<{ companyCode: string | null }>;
+  const companyCode = place?.companyCode?.trim() ?? '';
+  if (!companyCode) return;
+
+  await enqueue(tx, {
+    client: row.client,
+    jobCode: FANOUT_JOB,
+    triggeredBy: POSTING_ACTOR,
+    idempotencyKey: `posting-failed/${row.id}`.slice(0, 120),
+    parameters: {
+      capability: PRODUCTION_COGI_CAPABILITY,
+      org: { plant: movementPlant, companyCode },
+      kind: 'POSTING.FAILED',
+      objectClass: MOVEMENT_FAILURE_NOTIFICATION_CLASS,
+      objectKey: row.id,
+      messageKey: 'notification.kind.POSTING.FAILED',
+      messageParams: { order: row.orderNumber },
+    },
+  });
+}
+
 async function abandonExpiredLeaseInTx(
   tx: Tx,
   row: typeof productionGoodsMovementFailure.$inferSelect,
@@ -583,6 +647,8 @@ async function abandonExpiredLeaseInTx(
       before: { status: 'PROCESSING', processingLeaseExpiresAt: row.processingLeaseExpiresAt },
       after: { status: 'FAILED', failureCode: 'PROCESSING_LEASE_EXPIRED', attemptCount: row.attemptCount },
     });
+    // The attempt never finished, so nobody was told it failed.
+    await enqueuePostingFailed(tx, updated);
   }
 }
 
@@ -827,6 +893,10 @@ async function finishFailureInTx(
     before: { status: 'PROCESSING', attemptCount: row.attemptCount },
     after: { status: state, failureCode: failure.code, errorText: failure.text },
   });
+  // A blocked movement is not a failed posting: its source confirmation was
+  // cancelled, and cancelling is a decision somebody made rather than a posting
+  // waiting to be done again.
+  if (state === 'FAILED') await enqueuePostingFailed(tx, updated);
 }
 
 async function finishSuccessInTx(

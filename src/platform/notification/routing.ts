@@ -81,6 +81,9 @@ export const NOTIFICATION_ROUTES: Readonly<Record<string, RouteEntry>> = {
   // document, so the specific slip cannot be opened from here. Landing on the
   // queue is the honest answer — the same reason `job_run` takes no parameter.
   material_document_output: { path: '/inventory/material-document-output' },
+  // The COGI workbench opens one record by id, so the failure can be opened
+  // rather than merely listed.
+  production_goods_movement: { path: '/production/cogi', param: 'id' },
   user_capability: { path: '/people/authority', param: 'user', value: 'recipient' },
   job_run: { path: '/platform/jobs' },
 };

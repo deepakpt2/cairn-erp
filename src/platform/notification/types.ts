@@ -44,6 +44,11 @@ export type NotificationObjectClass =
    */
   | 'sales_output'
   | 'material_document_output'
+  /**
+   * A goods movement that failed to post and stands in COGI, named by the audit
+   * class the failure already carries so one object has one name in both places.
+   */
+  | 'production_goods_movement'
   | 'job_run'
   | 'user_session'
   | 'user_capability';

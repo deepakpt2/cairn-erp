@@ -34,6 +34,11 @@ import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/product
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 import { createProductionCogiTestActor, type ProductionCogiTestActor } from './helpers/production-cogi-actor';
+import { listInbox } from '../src/platform/notification/notify';
+import { registerJob } from '../src/platform/job/registry';
+import { ensureDefinition } from '../src/platform/job/queue';
+import { runClaimed } from '../src/platform/job/execute';
+import { fanoutJob, FANOUT_JOB } from '../src/platform/notification/jobs/fanout';
 
 /**
  * CO11N and the goods movements a confirmation causes.
@@ -52,6 +57,10 @@ const ACTOR = 'CO11N_MOVEMENT';
 const PLANT = 'QG01';
 const COMPANY = '1000';
 const LOCATION = 'SG01';
+const WORKER = 'test-worker';
+
+// The fan-out is a real job, so it has to be registered for `runClaimed` to find it.
+registerJob(fanoutJob);
 
 describe('CO11N confirmation goods movement', () => {
   let tenant: TestTenant;
@@ -1244,5 +1253,99 @@ describe('CO11N confirmation goods movement', () => {
     await expect(check(orderA, { named: { personnel: '1001' } })).rejects.toThrow(/personnel number is not validated/);
     await expect(check(orderA, { named: { goodsMovement: 'X' } })).rejects.toThrow(/not entered on this screen/);
     await expect(check(orderA, { named: { clearOpenReservations: 'X' } })).rejects.toThrow(/no reservation/i);
+  });
+
+  /** Every fan-out run queued for one movement, in the order it was queued. */
+  async function fanoutRuns(objectKey: string) {
+    return (await withTenant(client, (tx) => tx.execute(sql`
+      select id, triggered_by as "triggeredBy"
+        from job_run
+       where client = ${client}
+         and job_code = ${FANOUT_JOB}
+         and parameters->>'objectKey' = ${objectKey}
+       order by queued_at, id
+    `))) as unknown as { id: string; triggeredBy: string }[];
+  }
+
+  /** Run them, the way the worker would, and report how each ended. */
+  async function drainFanout(objectKey: string): Promise<string[]> {
+    const outcomes: string[] = [];
+    for (const run of await fanoutRuns(objectKey)) {
+      outcomes.push(await runClaimed(WORKER, { runId: run.id, client, jobCode: FANOUT_JOB }));
+    }
+    return outcomes;
+  }
+
+  async function inboxOf(userId: string, kind: string, objectKey: string) {
+    return listInbox(client, userId).then((rows) =>
+      rows.filter((row) => row.kind === kind && row.objectKey === objectKey));
+  }
+
+  it('tells whoever may reprocess that a posting failed, and not a holder of the same capability in another plant', async () => {
+    // Two holders of the authority that puts a failed movement right. Both over
+    // this company code; only the first over the plant the order stands in.
+    // Those are the two levels COGI answers for, and the reason the company
+    // code is read from the plant rather than guessed.
+    const inPlant = await createProductionCogiTestActor(client, { companyScopes: [COMPANY], plantScopes: [PLANT] });
+    const otherPlant = await createProductionCogiTestActor(client, { companyScopes: [COMPANY], plantScopes: ['ZZZZ'] });
+    await withTenant(client, async (tx) => {
+      await ensureDefinition(tx, {
+        code: FANOUT_JOB, name: 'Resolve who to notify', module: 'PEOPLE',
+        chunkSize: 100, maxRetries: 2, timeoutSeconds: 300, isScheduled: false,
+      });
+    });
+
+    const orderNumber = await newOrder(nextKey());
+    // Close the period, so the goods issue this confirmation causes is refused.
+    // The failure is the point of the test, and this is the cheapest honest way
+    // to cause one.
+    await withTenant(client, (tx) => tx.execute(sql`
+      update material_period_control
+         set current_period = 12, previous_period = 11, allow_backposting = false
+       where client = ${client} and company_code = ${COMPANY}
+    `));
+    try {
+      const failed = await save(orderNumber, { yieldQuantity: '2' });
+      expect(failed.movementFailures).toHaveLength(1);
+      expect(failed.movementFailures[0]).toMatchObject({ status: 'FAILED', attemptCount: 1 });
+
+      const failureId = await failureIdOn(failed.confirmationNumber, 'ISSUE');
+      expect(failureId).toBeTruthy();
+
+      // The queue recorded that somebody has to be told, and who that is was
+      // left to the worker. Attributed to the posting, which has no submitter.
+      const runs = await fanoutRuns(failureId);
+      expect(runs).toHaveLength(1);
+      expect(runs[0]!.triggeredBy).toBe('POSTING');
+
+      expect(await drainFanout(failureId)).toEqual(['SUCCEEDED']);
+
+      const told = await inboxOf(inPlant.userId, 'POSTING.FAILED', failureId);
+      expect(told).toHaveLength(1);
+      expect(told[0]!.objectClass).toBe('production_goods_movement');
+      expect(told[0]!.isUnseen).toBe(true);
+      expect(told[0]!.title).toContain(orderNumber);
+
+      // Same authority, another plant. Telling them would put work in an inbox
+      // whose owner COGI then refuses to act as.
+      expect(await inboxOf(otherPlant.userId, 'POSTING.FAILED', failureId)).toHaveLength(0);
+
+      // A retry is made by somebody sitting in front of the record, and they are
+      // told how it went on the screen. The queue does not speak a second time.
+      await withTenant(client, (tx) => tx.execute(sql`
+        update production_goods_movement_failure
+           set next_retry_at = now() - interval '1 second'
+         where client = ${client} and id = ${failureId}
+      `));
+      const retried = await attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR });
+      expect(retried.outcome).toBe('FAILED');
+      expect(await fanoutRuns(failureId)).toHaveLength(1);
+    } finally {
+      await withTenant(client, (tx) => tx.execute(sql`
+        update material_period_control
+           set current_period = 10, previous_period = 9, allow_backposting = true
+         where client = ${client} and company_code = ${COMPANY}
+      `));
+    }
   });
 });
