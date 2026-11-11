@@ -2667,7 +2667,10 @@ export const SCREENS: readonly ScreenLink[] = [
     title: "Output: what the customer receives",
     area: "sales",
     family: "sales-output",
-    accepts: ["order", "delivery", "billing", "customer", "invoice"],
+    // What the screen reads. It filters the shared output queue, so it takes the
+    // queue's own vocabulary and not a document's: there is no `order` here, and
+    // a deep link that sends one is opened as an unfiltered list.
+    accepts: ["dispatchTime", "documentCategory", "documentNumber", "outputType", "status", "transmissionMedium"],
   },
   {
     id: "/sales/returns",
