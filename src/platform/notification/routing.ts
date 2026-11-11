@@ -55,10 +55,10 @@ interface RouteEntry {
  *
  * Absent on purpose:
  *
- * - `output_message` — no screen takes an output record as its key. The sales
- *   and material-document output screens filter by the *document*, not by the
- *   message, so routing there would open the right document by guessing from
- *   the wrong identifier.
+ * - `output_message` — the shared output queue's own name. A failed output is
+ *   never routed under it, because one class covers two applications with two
+ *   different screens; the notification carries `sales_output` or
+ *   `material_document_output` instead, and each of those has one home.
  * - `user_session` — there is no session screen, and a closed session has
  *   nothing to show. The message is the whole content.
  * - `job_run` is present but takes no parameter: the jobs screen lists every
@@ -74,6 +74,13 @@ export const NOTIFICATION_ROUTES: Readonly<Record<string, RouteEntry>> = {
     param: 'agreement',
   },
   sales_order: { path: '/sales/orders', param: 'order' },
+  // A failed output is routed to the document, because that is what the screen
+  // filters by and what the message names.
+  sales_output: { path: '/sales/output', param: 'documentNumber' },
+  // The material-document output queue filters by a document *range*, not by one
+  // document, so the specific slip cannot be opened from here. Landing on the
+  // queue is the honest answer — the same reason `job_run` takes no parameter.
+  material_document_output: { path: '/inventory/material-document-output' },
   user_capability: { path: '/people/authority', param: 'user', value: 'recipient' },
   job_run: { path: '/platform/jobs' },
 };

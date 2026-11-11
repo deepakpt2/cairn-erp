@@ -33,6 +33,10 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import { withTenant } from '../../platform/db/client';
 import type { Tx } from '../../platform/db/client';
 import { plant as plantTable } from '../foundation/schema';
+import {
+  MATERIAL_DOC_OUTPUT_NOTIFICATION_CLASS,
+  enqueueOutputFailed,
+} from '../foundation/output-notify';
 import { outputMessage, outputType } from '../foundation/output-schema';
 import {
   material, materialDocument, materialDocumentLine, movementType,
@@ -618,6 +622,29 @@ export async function dispatchMessage(input: {
 
     const now = new Date();
     if (message.transmissionMedium === 'EMAIL' && !message.recipient) {
+      // Whoever can put this right holds INV.MATERIALDOC.RECEIVEPRINT over the
+      // plant the document's lines stand in. A material document can span
+      // plants, so there is one fan-out per plant: a holder scoped to one of
+      // them is not responsible for the others.
+      const lines = await tx.select({ plant: materialDocumentLine.plant }).from(materialDocumentLine)
+        .where(and(
+          eq(materialDocumentLine.client, input.client),
+          eq(materialDocumentLine.materialDocumentNumber, input.documentNumber),
+        ));
+      const plants = [...new Set(lines.map((line) => line.plant).filter((plant) => plant !== ''))];
+
+      await enqueueOutputFailed(tx, {
+        client: input.client,
+        objectClass: MATERIAL_DOC_OUTPUT_NOTIFICATION_CLASS,
+        documentNumber: input.documentNumber,
+        outputType: message.outputType,
+        transmissionMedium: message.transmissionMedium,
+        issueNumber: message.issueNumber,
+        capability: MATERIAL_DOC_OUTPUT_CAPABILITY,
+        orgs: plants.map((plant) => ({ plant })),
+        previousStatus: message.status,
+      });
+
       const [failed] = await tx.update(outputMessage).set({
         status: 'ERROR',
         errorText: 'An EMAIL output needs a recipient and none stands on the message.',

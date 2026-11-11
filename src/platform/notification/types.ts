@@ -37,6 +37,13 @@ export type NotificationObjectClass =
   | 'scheduling_agreement'
   | 'sales_order'
   | 'output_message'
+  /**
+   * A failed output, named by application rather than by the queue row it
+   * happened to. See `foundation/output-notify.ts`: the queue's own
+   * `output_message` is one class with two screens, and routing is per class.
+   */
+  | 'sales_output'
+  | 'material_document_output'
   | 'job_run'
   | 'user_session'
   | 'user_capability';

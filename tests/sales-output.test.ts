@@ -62,6 +62,11 @@ import {
   seedAccounts,
   type TestTenant,
 } from './helpers';
+import { listInbox } from '../src/platform/notification/notify';
+import { registerJob } from '../src/platform/job/registry';
+import { ensureDefinition } from '../src/platform/job/queue';
+import { runClaimed } from '../src/platform/job/execute';
+import { fanoutJob, FANOUT_JOB } from '../src/platform/notification/jobs/fanout';
 
 const ACTOR = 'SD9252_OUTPUT';
 const AREA = 'CCA1';
@@ -74,6 +79,11 @@ const STORE = '0001';
 const ORDER_DATE = '2026-10-15';
 const BILLING_DATE = '2026-11-01';
 const RECON = '110000';
+/** Whoever runs the fan-out in these tests: the worker, rather than the request path. */
+const WORKER = 'test-worker';
+
+// The fan-out is a real job, so it has to be registered for `runClaimed` to find it.
+registerJob(fanoutJob);
 
 let counter = 0;
 const key = (label: string) => `sd9252-${label}-${++counter}`;
@@ -92,6 +102,8 @@ const base = {
 
 describe('the document the customer receives: output (9252)', () => {
   let tenant: TestTenant;
+  /** The invoice whose output failed. Set by the test that fails it and read by the one after it. */
+  let quietBilling = '';
 
   beforeAll(async () => {
     tenant = await createTenant('sd9252-output');
@@ -556,5 +568,177 @@ describe('the document the customer receives: output (9252)', () => {
     }
     expect(records.some((entry) => entry.access === 1)).toBe(true);
     expect(records.some((entry) => entry.access === 3)).toBe(true);
+  });
+
+  /** A customer that can be sold to, carrying the e-mail address named — or none. */
+  async function sellTo(partnerNumber: string, email: string | null): Promise<void> {
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        insert into business_partner (client, partner_number, category, name, email, created_by)
+        values (${tenant.client}, ${partnerNumber}, 'ORGANIZATION', ${`Test customer ${partnerNumber}`}, ${email}, ${ACTOR})
+        on conflict (client, partner_number) do update set email = excluded.email
+      `);
+      await tx.execute(sql`
+        insert into bp_role (client, partner_number, role_code, created_by)
+        values (${tenant.client}, ${partnerNumber}, 'CUSTOMER', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into customer_sales_area (
+          client, partner_number, role_code, sales_org, distribution_channel, division,
+          pricing_procedure, is_blocked, sales_status, created_by
+        )
+        values (${tenant.client}, ${partnerNumber}, 'CUSTOMER', '1000', '10', '01', 'PR01', false, 'MAINTAINED', ${ACTOR})
+        on conflict (client, partner_number, sales_org, distribution_channel, division)
+        do update set sales_status = excluded.sales_status
+      `);
+      await tx.execute(sql`
+        insert into customer_company_code (
+          client, partner_number, role_code, company_code, chart_of_accounts,
+          reconciliation_account, payment_terms_code, created_by
+        )
+        values (${tenant.client}, ${partnerNumber}, 'CUSTOMER', '1000', 'CA01', ${RECON}, 'NET30', ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+    await saveCustomerCredit({
+      client: tenant.client, changedBy: ACTOR, customer: partnerNumber, creditControlArea: AREA,
+      creditLimit: '1000000.00', riskCategory: 'A', isBlocked: false, changeReason: 'Output test fixture.',
+    });
+  }
+
+  /** Every fan-out run queued for one document, in the order it was queued. */
+  async function fanoutRuns(documentNumber: string) {
+    return (await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select id, triggered_by as "triggeredBy"
+        from job_run
+       where client = ${tenant.client}
+         and job_code = ${FANOUT_JOB}
+         and parameters->>'objectKey' = ${documentNumber}
+       order by queued_at, id
+    `))) as unknown as { id: string; triggeredBy: string }[];
+  }
+
+  /** Run them, the way the worker would, and report how each ended. */
+  async function drainFanout(documentNumber: string): Promise<string[]> {
+    const outcomes: string[] = [];
+    for (const run of await fanoutRuns(documentNumber)) {
+      outcomes.push(await runClaimed(WORKER, { runId: run.id, client: tenant.client, jobCode: FANOUT_JOB }));
+    }
+    return outcomes;
+  }
+
+  function inboxOf(userId: string, kind: string, objectKey: string) {
+    return listInbox(tenant.client, userId).then((rows) =>
+      rows.filter((row) => row.kind === kind && row.objectKey === objectKey));
+  }
+
+  it('tells whoever may dispatch output, and not a holder of the same capability in another sales organisation', async () => {
+    // A customer the company can sell to, whose master carries no e-mail
+    // address. The invoice is e-mailed because a record says so, and it fails
+    // because there is nobody to send it to — which is the only way the queue
+    // comes to hold work nobody has looked at.
+    const quiet = 'SD9252CUST3';
+    await sellTo(quiet, null);
+    await record({
+      outputType: 'RD00', documentCategory: 'BILLING', documentType: 'F2',
+      salesOrg: '1000', distributionChannel: '10', division: '01', customerNumber: quiet,
+      transmissionMedium: 'EMAIL', dispatchTime: 'IMMEDIATE', partnerFunction: 'BP',
+      validityFrom: '2026-01-01', validityTo: '2026-12-31',
+    });
+
+    // Two holders of the capability that puts a failed output right. One holds
+    // it over the sales organisation this document belongs to; the other holds
+    // the very same capability over a sales organisation that has nothing to do
+    // with it, and is told nothing.
+    const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const here = `u-out-${suffix}`;
+    const elsewhere = `u-outelse-${suffix}`;
+    const grantHere = `grant-out-${suffix}`;
+    const grantElsewhere = `grant-outelse-${suffix}`;
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        insert into app_user (id, client, username, full_name, password_hash, is_active)
+        values
+          (${here}, ${tenant.client}, ${'outhere' + suffix}, 'Output clerk here', 'scrypt:x:x', true),
+          (${elsewhere}, ${tenant.client}, ${'outelse' + suffix}, 'Output clerk elsewhere', 'scrypt:x:x', true)
+        on conflict (id) do nothing
+      `);
+      await tx.execute(sql`
+        insert into user_capability (id, client, user_id, capability_code, valid_from, reason, granter)
+        values
+          (${grantHere}, ${tenant.client}, ${here}, 'SALES.OUTPUT.PROCESS', current_date, 'DIRECT', 'TEST'),
+          (${grantElsewhere}, ${tenant.client}, ${elsewhere}, 'SALES.OUTPUT.PROCESS', current_date, 'DIRECT', 'TEST')
+        on conflict (id) do nothing
+      `);
+      await tx.execute(sql`
+        insert into user_capability_scope (client, grant_id, scope_type, scope_value)
+        values
+          (${tenant.client}, ${grantHere}, 'SALES_ORG', '1000'),
+          (${tenant.client}, ${grantElsewhere}, 'SALES_ORG', '2000')
+        on conflict do nothing
+      `);
+      await ensureDefinition(tx, {
+        code: FANOUT_JOB, name: 'Resolve who to notify', module: 'PEOPLE',
+        chunkSize: 100, maxRetries: 2, timeoutSeconds: 300, isScheduled: false,
+      });
+    });
+
+    // The invoice is written and dispatched in one transaction, and it fails
+    // there and then. Before this increment that was the end of it: the message
+    // stood at ERROR until somebody happened to look at the queue.
+    const billingNumber = await bill(await place(quiet));
+    quietBilling = billingNumber;
+    const [failed] = await messages('BILLING', billingNumber);
+    expect(failed).toMatchObject({ transmissionMedium: 'EMAIL', status: 'ERROR', recipient: null });
+
+    // The transaction recorded only that somebody has to be told, not who.
+    // Deciding who means loading every candidate's authority, which is the
+    // worker's job and not the request path's — least of all a request that is
+    // in the middle of writing an invoice.
+    const runs = await fanoutRuns(billingNumber);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.triggeredBy).toBe('OUTPUT');
+
+    expect(await drainFanout(billingNumber)).toEqual(['SUCCEEDED']);
+
+    const told = await inboxOf(here, 'OUTPUT.FAILED', billingNumber);
+    expect(told).toHaveLength(1);
+    expect(told[0]!.objectClass).toBe('sales_output');
+    expect(told[0]!.isUnseen).toBe(true);
+    expect(told[0]!.title).toContain(billingNumber);
+
+    // Same capability, another sales organisation. Telling them would put work
+    // in an inbox whose owner the output screen then refuses to act as.
+    expect(await inboxOf(elsewhere, 'OUTPUT.FAILED', billingNumber)).toHaveLength(0);
+  });
+
+  it('says nothing again while the output stands in error, and nothing at all once it goes out', async () => {
+    // Dispatching it again fails the same way. That is the same episode: the
+    // clerk already holds the message, unread, and a second copy of it would
+    // only be the deduplication throwing it away at the cost of a run.
+    const again = await dispatchSalesOutput({
+      client: tenant.client, changedBy: ACTOR, documentCategory: 'BILLING',
+      documentNumber: quietBilling, outputType: 'RD00', transmissionMedium: 'EMAIL',
+    });
+    expect(again.status).toBe('ERROR');
+    expect(await fanoutRuns(quietBilling)).toHaveLength(1);
+
+    // Give the partner an address and dispatch once more: the output goes out,
+    // and nobody is told about a failure that is over.
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      update business_partner set email = 'quiet@customer.example'
+       where client = ${tenant.client} and partner_number = 'SD9252CUST3'
+    `));
+    await setSalesOutputRecipient({
+      client: tenant.client, changedBy: ACTOR, documentCategory: 'BILLING',
+      documentNumber: quietBilling, outputType: 'RD00', transmissionMedium: 'EMAIL',
+      recipient: 'quiet@customer.example',
+    });
+    const sent = await dispatchSalesOutput({
+      client: tenant.client, changedBy: ACTOR, documentCategory: 'BILLING',
+      documentNumber: quietBilling, outputType: 'RD00', transmissionMedium: 'EMAIL',
+    });
+    expect(sent.status).toBe('PROCESSED');
+    expect(await fanoutRuns(quietBilling)).toHaveLength(1);
   });
 });

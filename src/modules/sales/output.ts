@@ -51,6 +51,10 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { businessPartner } from '../foundation/business-partner-schema';
 import {
+  SALES_OUTPUT_NOTIFICATION_CLASS,
+  enqueueOutputFailed,
+} from '../foundation/output-notify';
+import {
   outputConditionRecord, outputMessage, outputType,
 } from '../foundation/output-schema';
 import { material } from '../inventory/schema';
@@ -494,6 +498,30 @@ async function dispatchInTx(
 ): Promise<DispatchOutcome> {
   const now = new Date();
   if (message.transmissionMedium === 'EMAIL' && !message.recipient) {
+    // Whoever can put this right holds SALES.OUTPUT.PROCESS over the document's
+    // sales area. The document was written in this transaction, so its sales
+    // area is readable here and the fan-out can be queued with the failure
+    // rather than after it.
+    const facts = await documentFacts(
+      tx, client, message.documentCategory as SalesOutputCategory, message.documentNumber,
+    );
+    const area: Record<string, string> = {};
+    if (facts?.salesOrg) area.salesOrg = facts.salesOrg;
+    if (facts?.distributionChannel) area.distributionChannel = facts.distributionChannel;
+    if (facts?.division) area.division = facts.division;
+
+    await enqueueOutputFailed(tx, {
+      client,
+      objectClass: SALES_OUTPUT_NOTIFICATION_CLASS,
+      documentNumber: message.documentNumber,
+      outputType: message.outputType,
+      transmissionMedium: message.transmissionMedium,
+      issueNumber: message.issueNumber,
+      capability: SALES_OUTPUT_CAPABILITY,
+      orgs: [area],
+      previousStatus: message.status,
+    });
+
     await tx.update(outputMessage).set({
       status: 'ERROR',
       errorText: NO_RECIPIENT,

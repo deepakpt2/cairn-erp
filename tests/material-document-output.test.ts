@@ -14,6 +14,11 @@ import {
   setRecipient,
 } from '../src/modules/inventory/material-document-output';
 import { createTenant, destroyTenant } from './helpers';
+import { listInbox } from '../src/platform/notification/notify';
+import { registerJob } from '../src/platform/job/registry';
+import { ensureDefinition } from '../src/platform/job/queue';
+import { runClaimed } from '../src/platform/job/execute';
+import { fanoutJob, FANOUT_JOB } from '../src/platform/notification/jobs/fanout';
 
 /**
  * SCR-135 / MB90 — output determination and dispatch.
@@ -25,6 +30,10 @@ import { createTenant, destroyTenant } from './helpers';
  * message refuses a second dispatch.
  */
 const ACTOR = 'SCR135_MB90_TEST';
+const WORKER = 'test-worker';
+
+// The fan-out is a real job, so it has to be registered for `runClaimed` to find it.
+registerJob(fanoutJob);
 
 describe('SCR-135 material document output (MB90)', () => {
   let client = '';
@@ -211,6 +220,129 @@ describe('SCR-135 material document output (MB90)', () => {
     }
     await expect(listOutputMessages({ client, selection: { status: 'SENT' } }))
       .rejects.toThrow(/is not a processing status/);
+  });
+
+  /** Every fan-out run queued for one document, in the order it was queued. */
+  async function fanoutRuns(documentNumber: string) {
+    return (await withTenant(client, (tx) => tx.execute(sql`
+      select id, triggered_by as "triggeredBy"
+        from job_run
+       where client = ${client}
+         and job_code = ${FANOUT_JOB}
+         and parameters->>'objectKey' = ${documentNumber}
+       order by queued_at, id
+    `))) as unknown as { id: string; triggeredBy: string }[];
+  }
+
+  /** Run them, the way the worker would, and report how each ended. */
+  async function drainFanout(documentNumber: string): Promise<string[]> {
+    const outcomes: string[] = [];
+    for (const run of await fanoutRuns(documentNumber)) {
+      outcomes.push(await runClaimed(WORKER, { runId: run.id, client, jobCode: FANOUT_JOB }));
+    }
+    return outcomes;
+  }
+
+  function inboxOf(userId: string, kind: string, objectKey: string) {
+    return listInbox(client, userId).then((rows) =>
+      rows.filter((row) => row.kind === kind && row.objectKey === objectKey));
+  }
+
+  const notifyDoc = '4900001005';
+
+  it('tells the plants that can put a failed slip right, one fan-out per plant', async () => {
+    // A document whose lines stand in two plants. A holder scoped to one of
+    // them is not responsible for the other, so the failure is queued once per
+    // place somebody has to answer it in rather than once and then shouted to
+    // everybody who holds the capability anywhere.
+    const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const inFirst = `u-md-${suffix}-1`;
+    const inSecond = `u-md-${suffix}-2`;
+    const inThird = `u-md-${suffix}-3`;
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into material_document (client, material_document_number, document_year, document_date,
+                                       posting_date, header_text, status, created_by)
+        values (${client}, ${notifyDoc}, 2026, '2026-05-01', '2026-05-01', 'Two plants', 'POSTED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (client, material_document_number, line_number, movement_type, material_number,
+                                            plant, storage_location, stock_type, line_direction, entry_quantity, entry_unit,
+                                            base_quantity, base_unit, value, currency, created_by) values
+          (${client}, ${notifyDoc}, 1, 'RECEIPT_OTHER', 'OUT-MAT', '1000', '0001', 'UNRESTRICTED', 'RECEIPT', 2, 'PC', 2, 'PC', 20, 'KWD', ${ACTOR}),
+          (${client}, ${notifyDoc}, 2, 'RECEIPT_OTHER', 'OUT-MAT', '2000', '0001', 'UNRESTRICTED', 'RECEIPT', 3, 'PC', 3, 'PC', 30, 'KWD', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into output_message (client, document_category, document_number, document_year, output_type,
+                                    transmission_medium, dispatch_time, issue_number, status, created_by)
+        values (${client}, 'MATERIAL_DOCUMENT', ${notifyDoc}, 2026, 'WE01', 'EMAIL', 'PERIODIC', 1,
+                'PENDING', ${ACTOR})
+        on conflict do nothing
+      `);
+      // Three holders of the same capability. Two of them over a plant this
+      // document stands in; the third over one it does not.
+      await tx.execute(sql`
+        insert into app_user (id, client, username, full_name, password_hash, is_active)
+        values
+          (${inFirst}, ${client}, ${'md1' + suffix}, 'Clerk in plant 1000', 'scrypt:x:x', true),
+          (${inSecond}, ${client}, ${'md2' + suffix}, 'Clerk in plant 2000', 'scrypt:x:x', true),
+          (${inThird}, ${client}, ${'md3' + suffix}, 'Clerk in plant 3000', 'scrypt:x:x', true)
+        on conflict (id) do nothing
+      `);
+      await tx.execute(sql`
+        insert into user_capability (id, client, user_id, capability_code, valid_from, reason, granter)
+        values
+          (${'mdg1-' + suffix}, ${client}, ${inFirst}, ${MATERIAL_DOC_OUTPUT_CAPABILITY}, current_date, 'DIRECT', 'TEST'),
+          (${'mdg2-' + suffix}, ${client}, ${inSecond}, ${MATERIAL_DOC_OUTPUT_CAPABILITY}, current_date, 'DIRECT', 'TEST'),
+          (${'mdg3-' + suffix}, ${client}, ${inThird}, ${MATERIAL_DOC_OUTPUT_CAPABILITY}, current_date, 'DIRECT', 'TEST')
+        on conflict (id) do nothing
+      `);
+      await tx.execute(sql`
+        insert into user_capability_scope (client, grant_id, scope_type, scope_value)
+        values
+          (${client}, ${'mdg1-' + suffix}, 'PLANT', '1000'),
+          (${client}, ${'mdg2-' + suffix}, 'PLANT', '2000'),
+          (${client}, ${'mdg3-' + suffix}, 'PLANT', '3000')
+        on conflict do nothing
+      `);
+      await ensureDefinition(tx, {
+        code: FANOUT_JOB, name: 'Resolve who to notify', module: 'PEOPLE',
+        chunkSize: 100, maxRetries: 2, timeoutSeconds: 300, isScheduled: false,
+      });
+    });
+
+    const failed = await dispatchMessage({
+      client, changedBy: ACTOR, documentNumber: notifyDoc, outputType: 'WE01', transmissionMedium: 'EMAIL',
+    });
+    expect(failed.status).toBe('ERROR');
+
+    // One run per plant, and both attributed to the output rather than to the
+    // person who happened to press dispatch.
+    const runs = await fanoutRuns(notifyDoc);
+    expect(runs).toHaveLength(2);
+    expect(runs.map((run) => run.triggeredBy)).toEqual(['OUTPUT', 'OUTPUT']);
+
+    expect(await drainFanout(notifyDoc)).toEqual(['SUCCEEDED', 'SUCCEEDED']);
+
+    for (const [clerk, expected] of [[inFirst, 1], [inSecond, 1], [inThird, 0]] as const) {
+      const told = await inboxOf(clerk, 'OUTPUT.FAILED', notifyDoc);
+      expect(told).toHaveLength(expected);
+      if (expected === 1) {
+        expect(told[0]!.objectClass).toBe('material_document_output');
+        expect(told[0]!.isUnseen).toBe(true);
+        expect(told[0]!.title).toContain(notifyDoc);
+      }
+    }
+
+    // Dispatching it again fails the same way, and that is the same episode:
+    // both clerks already hold the message, unread.
+    const again = await dispatchMessage({
+      client, changedBy: ACTOR, documentNumber: notifyDoc, outputType: 'WE01', transmissionMedium: 'EMAIL',
+    });
+    expect(again.status).toBe('ERROR');
+    expect(await fanoutRuns(notifyDoc)).toHaveLength(2);
   });
 
   it('refuses a message that does not stand, and another tenant’s queue is invisible', async () => {
