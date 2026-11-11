@@ -80,6 +80,26 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  worker:
+    image: cairn-app:local
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    environment:
+      CAIRN_ENV: production
+      # The app role, not the migrator: the worker must stay inside row-level
+      # security and be refused by assertApplicationRole if it is ever handed
+      # a bypassrls login by mistake.
+      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
+      CAIRN_WORKER_ID: ${CAIRN_WORKER_ID:-worker-1}
+      CAIRN_JOB_QUEUES: ${CAIRN_JOB_QUEUES:-DEFAULT}
+      CAIRN_JOB_POLL_MS: ${CAIRN_JOB_POLL_MS:-2000}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - cairn_internal
 networks:
   cairn_internal:
     internal: true

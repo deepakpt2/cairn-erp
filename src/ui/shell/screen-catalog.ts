@@ -2000,6 +2000,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["batch"],
   },
   {
+    id: "/platform/jobs",
+    path: "/platform/jobs",
+    query: {},
+    code: "PLT.JOB.DISPLAY",
+    title: "Background job status",
+    area: "platform",
+    family: "platform",
+    accepts: [],
+  },
+  {
     id: "/platform/locks",
     path: "/platform/locks",
     query: {},

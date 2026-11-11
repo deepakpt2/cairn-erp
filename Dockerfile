@@ -35,3 +35,20 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]
+
+# ── Background worker ────────────────────────────────────────────────────────
+# Runs the job queue as its own process, so a ten-minute job cannot hold a web
+# request open or make a user wait on a page (CAIRN.md §21).
+#
+# It needs the TypeScript sources rather than the compiled Next output, because
+# the job registry lives in the platform and `tsx` loads it directly. That is
+# deliberate: the worker and the web app share one registry, so a job can never
+# be enqueued by code that does not know how to run it.
+FROM dependencies AS worker
+COPY . .
+ENV NODE_ENV=production \
+    CAIRN_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+RUN groupadd --system --gid 1001 cairn && useradd --system --uid 1001 --gid cairn cairn
+USER cairn
+CMD ["npm", "run", "worker"]

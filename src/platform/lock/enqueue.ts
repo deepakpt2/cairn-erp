@@ -58,6 +58,12 @@ export interface EnqueueRow {
   transactionCode: string | null;
   acquiredAt: string;
   heartbeatAt: string;
+  /**
+   * The session holding this lock. Present so a scheduled job that must clear a
+   * lock can revoke *this* session, rather than resolving a username and hoping
+   * the holder has only one.
+   */
+  ownerSessionId: string | null;
   stale: boolean;
 }
 
@@ -243,6 +249,7 @@ export async function listEnqueue(client: string): Promise<EnqueueRow[]> {
         argument: row.argument,
         mode: row.mode,
         ownerUser: row.ownerUser,
+        ownerSessionId: row.ownerSessionId ?? null,
         transactionCode: row.transactionCode,
         acquiredAt: row.acquiredAt.toISOString(),
         heartbeatAt: row.heartbeatAt.toISOString(),

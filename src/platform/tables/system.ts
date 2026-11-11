@@ -39,6 +39,23 @@ export const messageCatalog = pgTable(
   (t) => [index('message_catalog_class_idx').on(t.messageClass)],
 );
 
+/**
+ * What a run is waiting for. One entry per held document.
+ *
+ * This is the JOB.BLOCKED notification payload, kept queryable on the run rather than
+ * buried in a log line, because the jobs status page is what the user actually reads.
+ */
+export interface BlockedOn {
+  documents: {
+    lockObject: string;
+    argument: string;
+    holderUser: string;
+    holderSessionId: string | null;
+  }[];
+  /** Set when this run has the authority to clear the locks, and has warned the holders. */
+  willTerminateAt?: string;
+}
+
 /** A schedulable unit of work. Everything long-running lives here (§21, D-022). */
 export const jobDefinition = pgTable(
   'job_definition',
@@ -55,6 +72,19 @@ export const jobDefinition = pgTable(
     maxRetries: integer('max_retries').notNull().default(0),
     timeoutSeconds: integer('timeout_seconds').notNull().default(600),
     isEnabled: boolean('is_enabled').notNull().default(true),
+
+    /**
+     * Scheduled critical runs only: permits revoking a holder session to clear an
+     * enqueue lock. Never granted to an ad-hoc user-submitted job — a person's own
+     * job does not get to close someone else's screen, however long it waits.
+     */
+    mayTerminateSessions: boolean('may_terminate_sessions').notNull().default(false),
+    /** How long a scheduled job warns a lock holder before closing their session. */
+    gracePeriodSeconds: integer('grace_period_seconds').notNull().default(300),
+    /** Documents per lock-commit cycle. Locking the whole scope at once would block users. */
+    chunkSize: integer('chunk_size').notNull().default(100),
+    /** How long a finished run is kept before purging. Terminal statuses only. */
+    retentionDays: integer('retention_days').notNull().default(30),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('job_definition_queue_idx').on(t.queue)],
@@ -85,6 +115,34 @@ export const jobRun = pgTable(
     queuedAt: timestamp('queued_at', { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp('started_at', { withTimezone: true }),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
+
+    /** Same key for the same job and tenant yields one run, so a retry cannot double-queue. */
+    idempotencyKey: varchar('idempotency_key', { length: 120 }),
+    /**
+     * When the run becomes claimable. queued_at for a fresh run; moved forward for
+     * backoff, for a lock wait, and for the grace period before a session is closed.
+     */
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    cancelRequestedAt: timestamp('cancel_requested_at', { withTimezone: true }),
+    /**
+     * Where the run stopped, as opaque JSON handed back to the handler on resume.
+     * A resumed run restarts from this chunk, never from zero.
+     */
+    cursor: jsonb('cursor').$type<Record<string, unknown> | null>().default(null),
+    chunksDone: integer('chunks_done').notNull().default(0),
+    chunksTotal: integer('chunks_total'),
+    workerId: varchar('worker_id', { length: 80 }),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    /**
+     * Advanced by the worker while it runs. A RUNNING run whose heartbeat has stopped
+     * was orphaned by a killed worker and is reaped back to QUEUED, keeping its cursor.
+     */
+    heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
+    blockedAt: timestamp('blocked_at', { withTimezone: true }),
+    /** The JOB.BLOCKED payload: which documents are held, and by whom. */
+    blockedOn: jsonb('blocked_on').$type<BlockedOn | null>().default(null),
+    warnedAt: timestamp('warned_at', { withTimezone: true }),
+    deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
   },
   (t) => [
     index('job_run_client_status_idx').on(t.client, t.status),

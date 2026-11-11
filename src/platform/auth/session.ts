@@ -600,6 +600,58 @@ export async function revokeAllSessions(
   return result.length;
 }
 
+/**
+ * Revoke one session, by id.
+ *
+ * The other two revokers key on a token or on a user, because that is who their
+ * callers know. A scheduled job clearing a lock knows neither: it has the
+ * session id from the enqueue row naming the document somebody is holding. This
+ * is the same operation pointed at the one handle a job actually has.
+ *
+ * Revoking the session, rather than just deleting the lock row, is deliberate.
+ * It releases the enqueue entries as a consequence — which is what
+ * `purgeStale` already treats as the signal — and it makes the holder's client
+ * fail with a clear "your session was closed" on their next action instead of a
+ * confusing lock error on their next save.
+ *
+ * Unsaved work in that screen is lost. The caller's grace period and warning
+ * are the mitigation; there is no way to preserve it.
+ *
+ * Returns false when the session was already gone, so callers can tell "I
+ * closed something" from "someone else got there first".
+ */
+export async function revokeSessionById(
+  tx: Tx,
+  input: { client: string; sessionId: string; reason: string },
+): Promise<boolean> {
+  const removed = (await tx.execute(sql`
+    delete from enqueue_entry
+     where client = ${input.client}
+       and owner_session_id = ${input.sessionId}
+    returning argument
+  `)) as unknown as Array<{ argument: string }>;
+
+  const revoked = (await tx.execute(sql`
+    update user_session
+       set revoked_at = now()
+     where client = ${input.client}
+       and id = ${input.sessionId}
+       and revoked_at is null
+    returning id, user_id
+  `)) as unknown as Array<{ id: string; user_id: string }>;
+
+  if (revoked.length === 0) return false;
+
+  await writeAccessLog(tx, {
+    client: input.client,
+    userId: revoked[0]!.user_id,
+    eventType: 'LOGOUT',
+    detail: `Session closed: ${input.reason}. ${removed.length} lock(s) released.`,
+  });
+
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Capabilities
 // ─────────────────────────────────────────────────────────────────────────────
