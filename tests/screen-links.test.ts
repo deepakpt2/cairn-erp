@@ -32,6 +32,9 @@ describe('screen links', () => {
       '/forgot-password',
       '/reset-password',
       '/platform/users/[username]',
+      // Marks the notification seen, then redirects. It is a real page but
+      // not a destination anyone navigates to, so it is not a catalog screen.
+      '/platform/notifications/[id]',
     ];
     for (const route of excludedRoutes) pages.delete(route);
 

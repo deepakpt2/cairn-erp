@@ -36,13 +36,32 @@ let client: string;
 let managerA: string; // holds the release capability, scoped to plant 1000
 let managerB: string; // holds it, scoped to plant 2000
 let clerk: string; // holds nothing
+let grantA: string;
+let grantB: string;
+let grantExp: string;
 
 const CAPABILITY = 'PROC.PR.RELEASE';
 
+// Everything seeded below carries the run's suffix and is removed again here.
+// The grants are why: with a fixed id, `on conflict do nothing` skipped the
+// insert on every run after the first, so the capability was never granted and
+// `canUser` answered false. A fixture that passes once and fails forever after
+// is worse than one that fails on the first run, because it looks like a
+// product regression when it is only stale rows.
 afterAll(async () => {
   if (!client) return;
   await withTenant(client, async (tx) => {
     await tx.execute(sql`delete from notification where client = ${client}`);
+    await tx.execute(
+      sql`delete from user_capability_scope where client = ${client} and grant_id in (${grantA}, ${grantB}, ${grantExp})`,
+    );
+    await tx.execute(
+      sql`delete from user_capability where client = ${client} and id in (${grantA}, ${grantB}, ${grantExp})`,
+    );
+    await tx.execute(
+      sql`delete from app_user where client = ${client} and id in (${managerA}, ${managerB}, ${clerk})`,
+    );
+    await tx.execute(sql`delete from plant where client = ${client} and plant in ('1000', '2000')`);
   }).catch(() => {});
 });
 
@@ -67,6 +86,9 @@ async function seedTenant(): Promise<void> {
   managerA = `u-a-${suffix}`;
   managerB = `u-b-${suffix}`;
   clerk = `u-c-${suffix}`;
+  grantA = `grant-a-${suffix}`;
+  grantB = `grant-b-${suffix}`;
+  grantExp = `grant-exp-${suffix}`;
 
   await withTenant(client, async (tx) => {
     await tx.execute(sql`
@@ -189,12 +211,12 @@ describe('recipient resolution is the inverse of can()', () => {
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into user_capability (id, client, user_id, capability_code, valid_from, reason, granter)
-        values ('grant-a', ${client}, ${managerA}, ${CAPABILITY}, current_date, 'DIRECT', 'TEST')
+        values (${grantA}, ${client}, ${managerA}, ${CAPABILITY}, current_date, 'DIRECT', 'TEST')
         on conflict (id) do nothing
       `);
       await tx.execute(sql`
         insert into user_capability_scope (client, grant_id, scope_type, scope_value)
-        values (${client}, 'grant-a', 'PLANT', '1000')
+        values (${client}, ${grantA}, 'PLANT', '1000')
         on conflict do nothing
       `);
     });
@@ -218,12 +240,12 @@ describe('recipient resolution is the inverse of can()', () => {
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into user_capability (id, client, user_id, capability_code, valid_from, reason, granter)
-        values ('grant-b', ${client}, ${managerB}, ${CAPABILITY}, current_date, 'DIRECT', 'TEST')
+        values (${grantB}, ${client}, ${managerB}, ${CAPABILITY}, current_date, 'DIRECT', 'TEST')
         on conflict (id) do nothing
       `);
       await tx.execute(sql`
         insert into user_capability_scope (client, grant_id, scope_type, scope_value)
-        values (${client}, 'grant-b', 'PLANT', '2000')
+        values (${client}, ${grantB}, 'PLANT', '2000')
         on conflict do nothing
       `);
     });
@@ -298,21 +320,21 @@ describe('the sweep does not repeat itself', () => {
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into user_capability (id, client, user_id, capability_code, valid_from, valid_to, reason, granter)
-        values ('grant-exp', ${client}, ${clerk}, 'PROC.PR.RELEASE',
+        values (${grantExp}, ${client}, ${clerk}, 'PROC.PR.RELEASE',
                 current_date, current_date + 3, 'DIRECT', 'TEST')
         on conflict (id) do nothing
       `);
     });
 
-    const key = { objectClass: 'user_capability', objectKey: 'grant-exp' };
-    const before = (await listInbox(client, clerk)).filter((r) => r.objectKey === 'grant-exp').length;
+    const key = { objectClass: 'user_capability', objectKey: grantExp };
+    const before = (await listInbox(client, clerk)).filter((r) => r.objectKey === grantExp).length;
 
     await withTenant(client, async (tx) => {
       await notifyOn(tx, { client, recipient: clerk, kind: 'GRANT.EXPIRING', messageKey: 'notification.kind.GRANT.EXPIRING', messageParams: { capability: 'PROC.PR.RELEASE', date: '' }, ...key });
       await notifyOn(tx, { client, recipient: clerk, kind: 'GRANT.EXPIRING', messageKey: 'notification.kind.GRANT.EXPIRING', messageParams: { capability: 'PROC.PR.RELEASE', date: '' }, ...key });
     });
 
-    const after = (await listInbox(client, clerk)).filter((r) => r.objectKey === 'grant-exp').length;
+    const after = (await listInbox(client, clerk)).filter((r) => r.objectKey === grantExp).length;
     expect(after).toBe(before + 1);
   });
 });
