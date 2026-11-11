@@ -100,7 +100,50 @@ export async function withTenant<T>(
   });
 }
 
-/** SET LOCAL cannot take a bind parameter; this guards the interpolation instead. */
+
+/**
+ * Run a callback as one named person, inside one tenant.
+ *
+ * `withTenant` names the tenant and nobody, which is right for the tables whose
+ * policies only ask about `client`. A few also ask who you are, and for those
+ * the person has to be named or the policy answers no rows. The notification
+ * inbox is the first of them.
+ *
+ * The user id is validated the same way the client key is, because SET LOCAL
+ * cannot take a bind parameter and therefore cannot be parameterised.
+ */
+export async function withTenantAs<T>(
+  client: string,
+  userId: string,
+  fn: (tx: Tx) => Promise<T>,
+): Promise<T> {
+  await assertApplicationRole();
+  return db().transaction(async (tx) => {
+    await tx.execute(sqlSafeSetting(client));
+    await tx.execute(sqlSafeUser(userId));
+    return fn(tx);
+  });
+}
+
+/**
+ * SET LOCAL cannot take a bind parameter, so this guards the interpolation.
+ *
+ * The setting name is quoted because `user` is a reserved word in SQL: an
+ * unquoted `cairn.user` is a syntax error. Quoting makes it a single
+ * identifier, which is what a custom setting is, and `current_setting` still
+ * reads it by name.
+ */
+function sqlSafeUser(userId: string) {
+  const clean = String(userId);
+  if (!/^[A-Za-z0-9_.:-]{1,60}$/.test(clean)) {
+    throw new Error('Invalid user id: ' + JSON.stringify(userId));
+  }
+  return rawSql('SET LOCAL "cairn.user" = \'' + clean + '\'');
+}
+
+/**
+ * SET LOCAL cannot take a bind parameter, so this guards the interpolation.
+ */
 function sqlSafeSetting(client: string) {
   const clean = String(client);
   if (!/^[A-Za-z0-9]{2,4}$/.test(clean)) {
