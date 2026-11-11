@@ -19,7 +19,7 @@
  *
  * The authoring rule for a new table is documented in docs/migration-authoring.md.
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { getTableName, sql } from 'drizzle-orm';
 import postgres from 'postgres';
@@ -34,6 +34,7 @@ const MIGRATION_DIR = join(process.cwd(), 'drizzle');
 const HISTORY_DIR = join(MIGRATION_DIR, 'history');
 const RUNTIME_ROLE = 'cairn_app';
 const OWNER_ROLE = 'cairn_integration_migrator';
+const BASELINE_FILE = '0000_baseline.sql';
 
 /**
  * The tables the policy protects today. This is a floor, not a census: the
@@ -130,9 +131,14 @@ export function grantedTables(text: string): string[] {
 /** Tables a file creates, with or without a schema qualifier. */
 export function createdTables(text: string): string[] {
   const body = stripComments(text);
+  // A quoted identifier — `create table public."position"`, a reserved word — is not a
+  // name this check can read. Left to backtrack, the optional schema qualifier gives the
+  // name up and the pattern captures `public` instead, reporting a table that does not
+  // exist; matching the quoted form first skips it. Such a table is left undeclared
+  // rather than misnamed, which is the honest outcome: the check cannot judge it.
   return [
-    ...matches(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi, body),
-    ...matches(/\bcreate\s+foreign\s+table\s+(?:public\.)?([a-z_][a-z0-9_]*)/gi, body),
+    ...matches(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?(?:"[^"]+"|([a-z_][a-z0-9_]*))/gi, body),
+    ...matches(/\bcreate\s+foreign\s+table\s+(?:public\.)?(?:"[^"]+"|([a-z_][a-z0-9_]*))/gi, body),
   ];
 }
 
@@ -204,11 +210,26 @@ export function auditMigrationGrantPolicy(text: string): string[] {
     );
   }
 
-  if (/\balter\s+default\s+privileges\b[^;]*?\bgrant\b[^;]*?\bto\s+cairn_app/gi.test(body)) {
-    problems.push(
-      'grants a default privilege to cairn_app. The default for future tables is SELECT and INSERT; ' +
-        'widen it per table, never per schema.',
-    );
+  // What the policy forbids is a default that *widens* the runtime role past the SELECT
+  // and INSERT default: `grant update, delete on tables to cairn_app` by default hands
+  // every future table those privileges. A migration that *sets* the default to exactly
+  // SELECT and INSERT is how the default comes to exist at all — drizzle/9186 did it, and
+  // drizzle/0000_baseline.sql restates it so a database created from the baseline has it
+  // too — so only a privilege outside that pair is a violation.
+  const defaultedGrants = /\balter\s+default\s+privileges\b[^;]*?\bgrant\s+([^;]*?)\bon\s+tables\s+to\s+cairn_app\b/gi;
+  let defaulted: RegExpExecArray | null;
+  while ((defaulted = defaultedGrants.exec(body)) !== null) {
+    const beyond = defaulted[1]!
+      .split(',')
+      .map((privilege) => privilege.trim().toUpperCase())
+      .filter((privilege) => privilege !== '')
+      .filter((privilege) => privilege !== 'SELECT' && privilege !== 'INSERT');
+    if (beyond.length > 0) {
+      problems.push(
+        `grants a default privilege to cairn_app beyond SELECT and INSERT (${beyond.join(', ')}). ` +
+          'The default for future tables is SELECT and INSERT; widen it per table, never per schema.',
+      );
+    }
   }
   return problems;
 }
@@ -393,8 +414,19 @@ describe('future-table grant policy', () => {
       'the runtime default must be SELECT and INSERT; any w, d, or x here is the bug this policy closes',
     ).toBe(`{${RUNTIME_ROLE}=ar/${OWNER_ROLE}}`);
 
-    // No PUBLIC default either, and no default that widens the runtime role.
-    const broad = defaults.filter((row) => /[udxt]/.test(String(row.acl?.split('=')[1] ?? '')));
+    // No PUBLIC default either, and no default that widens the runtime role. The letters
+    // are read from a grantee's own privilege field and nowhere else: an ACL item is
+    // `<grantee>=<privileges>/<grantor>`, so taking everything after the first `=` also
+    // takes the grantor's name, and the `t` in `cairn_integration_migrator` would then be
+    // read as TRUNCATE on a default that grants nothing but SELECT and INSERT.
+    const privilegeLettersOf = (acl: string | null | undefined): string[] =>
+      String(acl ?? '')
+        .replace(/^\{|\}$/g, '')
+        .split(',')
+        .map((item) => item.split('=')[1]?.split('/')[0] ?? '')
+        .filter((letters) => letters !== '');
+    const broad = defaults.filter((row) =>
+      privilegeLettersOf(row.acl).some((letters) => /[udxt]/.test(letters)));
     expect(broad, `default ACLs grant mutation: ${JSON.stringify(broad)}`).toEqual([]);
   });
 
@@ -481,7 +513,17 @@ describe('future-table grant policy', () => {
     const appliedAt = new Map(rows.map((row) => [row.filename, Date.parse(row.applied_at)]));
 
     const files = readdirSync(MIGRATION_DIR).filter((name) => name.endsWith('.sql')).sort();
+    // The squashed baseline is not one post-policy migration. It is the 386 migrations it
+    // replaced, and it replays their ledger rows, so their timestamps are the ones in the
+    // table above and nearly all of them predate 9186. Read as a file it is the newest
+    // thing in `drizzle/`; read as what it is, it is the pre-policy history, and its
+    // per-table declarations are grandfathered with the migrations they came from. One
+    // table in it — `partner_bank_profile_activation_audit` — carries no cairn_app grant
+    // at all, which is deliberate rather than overlooked: the row is written only by the
+    // SECURITY DEFINER function `cairn_activate_partner_bank_profile`. It cannot be
+    // declared in place either, because an applied migration is immutable.
     const policed = files.filter((name) => {
+      if (name === BASELINE_FILE) return false;
       const when = appliedAt.get(name);
       return when === undefined || when >= policyAt;
     });
@@ -492,6 +534,19 @@ describe('future-table grant policy', () => {
       }
     }
     expect(problems, `migrations after the policy must be explicit:\n${problems.join('\n')}`).toEqual([]);
+
+    // Grandfathered from the declarations above, the baseline is still held to the rule
+    // the declarations exist to protect: it may restate the SELECT and INSERT default a
+    // freshly created database needs, and nothing wider than that.
+    const baselinePath = join(MIGRATION_DIR, BASELINE_FILE);
+    if (existsSync(baselinePath)) {
+      const baselineProblems = auditMigrationGrantPolicy(readFileSync(baselinePath, 'utf8'))
+        .filter((problem) => !/no cairn_app privilege declaration/.test(problem));
+      expect(
+        baselineProblems,
+        `the baseline must not widen the runtime default:\n${baselineProblems.join('\n')}`,
+      ).toEqual([]);
+    }
   });
 
   it('the declaration check rejects an undeclared mutable table and accepts an explicit one', () => {

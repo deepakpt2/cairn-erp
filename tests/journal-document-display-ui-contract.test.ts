@@ -29,7 +29,11 @@ describe('SCR-137 accounting document display UI contract', () => {
     expect(display).not.toMatch(/name="company"[^>]*required/);
     expect(display).toMatch(/name="document"[^>]*required/);
     expect(display).toMatch(/name="year"[^>]*required/);
-    expect(display).toContain('must agree');
+    // In the words the screen carries now: the language sweep of 67059cb replaced
+    // "must agree" with a sentence naming the two fields that do identify the document,
+    // which is the same claim read from the other side — the company code is a
+    // cross-check against what was found, not a second half of the key.
+    expect(display).toContain('The number and the fiscal year identify the document.');
     expect(service).toContain('COMPANY_MISMATCH');
   });
 

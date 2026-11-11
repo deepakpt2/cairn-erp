@@ -30,6 +30,11 @@ const fixture = vi.hoisted(() => {
         role: 'cairn_app', database: 'cairn', superuser: state.elevated,
         bypassrls: false, inherit: false, connect: true, schema_usage: true,
         schema_create: false, memberships: 0,
+        // The runtime login is least-privilege but usable: it can log in and it holds
+        // neither CREATEDB nor CREATEROLE. `synchronizeApplicationRole` refuses a role
+        // that cannot log in, so a fixture that omits the attribute fails there rather
+        // than reaching the assertions below.
+        login: true, createdb: false, createrole: false,
       }];
     }
     if (text.includes('from pg_class c')) {
@@ -92,7 +97,14 @@ describe('safe managed application role synchronization', () => {
     await synchronizeApplicationRole(APP, OWNER);
     const call = fixture.tag.mock.calls.find(([, command]) => String(command).includes('ROLE cairn_app'))!;
     expect(call[1]).toMatch(/^ALTER ROLE cairn_app/);
-    expect(call[1]).toContain('NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT');
+    // SUPERUSER and BYPASSRLS are deliberately *not* set here. A CREATEROLE owner cannot
+    // set either attribute — not even to false — on a role it did not create, so
+    // `managedRoleCommand` leaves them at PostgreSQL's defaults and the verification below
+    // refuses the deployment outright if either is not already false. Failing closed is the
+    // guarantee; issuing an attribute it cannot issue would only be a false comfort.
+    expect(call[1]).toContain('LOGIN NOCREATEDB NOCREATEROLE NOINHERIT');
+    expect(call[1]).not.toContain('NOSUPERUSER');
+    expect(call[1]).not.toContain('NOBYPASSRLS');
     expect(call[2]).toBe('SampleAppPassword');
     expect(fixture.unsafe).toHaveBeenCalledWith('SAFE_FORMATTED_ROLE_COMMAND');
     for (const table of ['app_user', 'user_session', 'password_reset_token']) {

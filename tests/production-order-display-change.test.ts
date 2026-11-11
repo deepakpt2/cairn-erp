@@ -291,7 +291,11 @@ describe('CO03 screen contract', () => {
     expect(service).not.toContain('does not read a material BOM');
     expect(page).not.toMatch(/changeProductionOrder|releaseProductionOrder|createProductionOrder/);
     expect(service).not.toMatch(/\.insert\(|\.update\(|\.delete\(|sql`\s*(insert|update|delete)/i);
-    expect(readFileSync('scripts/seed.ts', 'utf8')).toContain("aliases: ['CO03']");
-    expect(readFileSync('scripts/seed.ts', 'utf8')).toContain("aliases: ['CO02']");
+    // A registry term's alias list grows — CO14 was added beside CO03 when the
+    // confirmation display began answering under the same term — so the contract asks
+    // that the transaction code is one of the aliases the seed carries, not that it is
+    // the only one it carries.
+    expect(readFileSync('scripts/seed.ts', 'utf8')).toMatch(/aliases: \[[^\]]*'CO03'/);
+    expect(readFileSync('scripts/seed.ts', 'utf8')).toMatch(/aliases: \[[^\]]*'CO02'/);
   });
 });

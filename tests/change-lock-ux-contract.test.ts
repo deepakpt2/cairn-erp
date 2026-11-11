@@ -512,10 +512,16 @@ describe('what a legacy screen reads when the claim dies', () => {
       if (!/\.(tsx?)$/.test(file)) continue;
       if (readFileSync(file, 'utf8').includes('useChangeLockClaim(')) claimReaders.push(file);
     }
+    // Pinned, so a screen that starts reading the claim is looked at before it ships:
+    // the credit-control-area setup and the purchasing-org company assignment both took
+    // the hook up since the list was written, and neither renders the recovery sentence
+    // above, so both belong here.
     expect(claimReaders.sort()).toEqual([
       'src/app/config/batch-document-management/DocumentForm.tsx',
       'src/app/config/controlling-area/ControllingAreaCompanyAssignmentUI.tsx',
+      'src/app/config/credit-control-areas/CreditControlAreaSetup.tsx',
       'src/app/config/movement-types/MovementTypes.tsx',
+      'src/app/config/purchasing-orgs/assign-company/PurchasingOrgCompanyCodeAssignmentForm.tsx',
       'src/app/config/valuation-classes/ValuationClasses.tsx',
       'src/ui/lock/ChangeLock.tsx',
     ]);

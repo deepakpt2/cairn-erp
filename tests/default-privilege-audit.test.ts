@@ -151,7 +151,7 @@ describe('default privileges and append-only grants', () => {
     const owner = postgres(connectionString!, { max: 1, prepare: false, onnotice: () => {} });
     try {
       const [role] = await owner<{ current_user: string; superuser: boolean }[]>`
-        select current_user, rolsuper from pg_roles where rolname = current_user`;
+        select current_user, rolsuper as superuser from pg_roles where rolname = current_user`;
       expect(role?.current_user).toBe(MIGRATION_ROLE);
       expect(role?.superuser).toBe(false);
       const ownerRights = await owner<{ can_update: boolean; can_delete: boolean; can_truncate: boolean }[]>`
