@@ -18,6 +18,7 @@ import { and, asc, eq, gt, isNotNull, lte } from 'drizzle-orm';
 
 import { withTenant } from '@/platform/db/client';
 import type { JobHandler } from '@/platform/job/types';
+import { registerJob } from '@/platform/job/registry';
 import { userCapability } from '@/platform/tables/security';
 import { notifyOn } from '@/platform/notification/notify';
 
@@ -86,3 +87,7 @@ export const grantExpiringJob: JobHandler = {
     };
   },
 };
+
+// As in fanout.ts: a handler that is imported but not registered is a run that
+// fails the moment a worker claims it.
+registerJob(grantExpiringJob);

@@ -16,6 +16,7 @@
  */
 import { withTenant } from '@/platform/db/client';
 import type { JobHandler } from '@/platform/job/types';
+import { registerJob } from '@/platform/job/registry';
 import { notifyAll } from '../notify';
 import { resolveRecipients } from '../recipients';
 
@@ -77,3 +78,10 @@ export const fanoutJob: JobHandler = {
     };
   },
 };
+
+// Handlers register themselves as a side effect of being imported; see
+// registry.ts for why that is the rule. Without this line the worker imports
+// the module, finds nothing registered under NOTIFY.FANOUT, and the first run
+// it claims fails with "no handler is registered" — a job that exists in
+// job_definition, sits in the worker's import list, and still cannot run.
+registerJob(fanoutJob);

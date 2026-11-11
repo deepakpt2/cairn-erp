@@ -13,9 +13,12 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import { KEY_OF_LEVEL, type OrgLevel, type OrgScope } from '../../platform/auth/authority';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { enqueue } from '../../platform/job/queue';
 import { creatorOf } from '../../platform/notification/creator';
 import { notifyOn } from '../../platform/notification/notify';
+import { FANOUT_JOB } from '../../platform/notification/jobs/fanout';
 import { criterionMatches, type ReleaseAttributes } from '../foundation/release-strategy-definition';
 import {
   characteristic, releaseGroup, releaseStrategy, releaseStrategyCriterion, releaseStrategyStep,
@@ -198,6 +201,89 @@ export async function orderAttributes(tx: Tx, client: string, number: string): P
 }
 
 /**
+ * Who raised the fan-out run, in job_run.triggered_by.
+ *
+ * Deliberately not a person. The job runtime reports a run's outcome back to
+ * whoever triggered it, and the outcome of a fan-out is not news to anybody:
+ * on success the recipients already hold the notification it just wrote, and
+ * "the fan-out finished" would be noise on top of it. Left unnameable, a
+ * successful fan-out says nothing at all and a failed one goes to whoever
+ * watches the queue — which is the split we want, and the same reason the
+ * scheduler writes SCHEDULER rather than a person's name.
+ */
+const RELEASE_ACTOR = 'RELEASE';
+
+/**
+ * The place a release question is asked about.
+ *
+ * Release criteria are named in the SCR-059 vocabulary — PLANT, COMPANY_CODE,
+ * PURCHASING_ORG — and authority is scoped in OrgScope keys — plant,
+ * companyCode, purchasingOrg. KEY_OF_LEVEL is the one translation between the
+ * two. Anything else the document carries (SUPPLIER, say) is a criterion and
+ * not a scope, so it is dropped here rather than silently narrowing the
+ * question to nobody.
+ */
+function orgScopeOf(attributes: ReleaseAttributes): OrgScope {
+  const org: OrgScope = {};
+  for (const [level, value] of Object.entries(attributes)) {
+    const key = KEY_OF_LEVEL[level as OrgLevel];
+    if (!key || value === undefined || value === null || value === '') continue;
+    org[key] = String(value);
+  }
+  return org;
+}
+
+/**
+ * Hand the question "who may release this" to the worker.
+ *
+ * A release code is an authority, not a person (R-108), so there is nobody to
+ * name: the recipients are whoever holds the category's release capability
+ * within this document's place, and answering that means loading every
+ * candidate's authority. That is real work and it does not belong on the
+ * request path, so the transaction only records what it already knows — the
+ * capability, the document, the place — and the fan-out job resolves the rest
+ * once the document is safely committed.
+ *
+ * The idempotency key is what keeps this from becoming a letterbox: a document
+ * is re-synced on every change, and only a *new* pending episode — a different
+ * group, or a different strategy — is worth telling people about again.
+ */
+async function enqueueReleaseWaiting(
+  tx: Tx,
+  input: {
+    client: string;
+    category: string;
+    number: string;
+    attributes: ReleaseAttributes;
+    groupCode: string;
+    strategyCode: string;
+  },
+): Promise<void> {
+  const capability = RELEASE_CAPABILITIES[input.category];
+  const objectClass = OBJECT_CLASS_BY_CATEGORY[input.category];
+  if (!capability || !objectClass) return;
+
+  await enqueue(tx, {
+    client: input.client,
+    jobCode: FANOUT_JOB,
+    triggeredBy: RELEASE_ACTOR,
+    idempotencyKey: [
+      'release-waiting', input.category, input.number,
+      input.groupCode, input.strategyCode, 0,
+    ].join('/').slice(0, 120),
+    parameters: {
+      capability,
+      org: orgScopeOf(input.attributes),
+      kind: 'DOC.RELEASE.WAITING',
+      objectClass,
+      objectKey: input.number,
+      messageKey: 'notification.kind.DOC.RELEASE.WAITING',
+      messageParams: { document: input.number },
+    },
+  });
+}
+
+/**
  * Re-determines a document inside its own transaction. A document
  * whose claiming strategy changed restarts at step zero; RELEASED
  * documents never reach here — the change path refuses them first.
@@ -232,6 +318,10 @@ export async function syncDocumentRelease(
       groupCode: determination.groupCode, strategyCode: determination.strategyCode,
       currentStep: 0, status: 'PENDING', createdBy: changedBy,
     });
+    await enqueueReleaseWaiting(tx, {
+      client, category, number, attributes,
+      groupCode: determination.groupCode, strategyCode: determination.strategyCode,
+    });
     return;
   }
   if (existing.groupCode !== determination.groupCode || existing.strategyCode !== determination.strategyCode) {
@@ -243,6 +333,13 @@ export async function syncDocumentRelease(
       eq(documentRelease.documentCategory, category),
       eq(documentRelease.documentNumber, number),
     ));
+    // Restarting at step zero is a new episode: the people who could release
+    // the old strategy are not necessarily the people who can release this
+    // one, so they have to be resolved again.
+    await enqueueReleaseWaiting(tx, {
+      client, category, number, attributes,
+      groupCode: determination.groupCode, strategyCode: determination.strategyCode,
+    });
   }
 }
 
