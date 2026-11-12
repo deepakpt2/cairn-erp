@@ -430,11 +430,19 @@ async function ensureProductionConfiguration(client: string): Promise<void> {
     releasedForCosting: 'X',
     releasedForOrders: 'X',
   }).catch(ignoreExisting);
+  // Confirmation is the flag that matters here. A routing whose control key does
+  // not allow it produces operations nobody can confirm: CO15 refuses every one
+  // of them with "no operation can be confirmed from the header", and the shop
+  // floor is left with orders that were issued and made but never booked. The
+  // other two flags say what else the operation is used for.
   await saveRoutingControlKey({
     client,
     changedBy: DEMO_ACTOR,
     controlKey: 'PP01',
     description: 'Internal processing',
+    scheduling: 'X',
+    confirmation: 'X',
+    requireWorkCenter: 'X',
   }).catch(ignoreExisting);
 }
 

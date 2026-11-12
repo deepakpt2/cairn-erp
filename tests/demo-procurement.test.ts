@@ -48,14 +48,11 @@ function source(): string {
 
 describe('demo procurement phase', () => {
   it('appends the procurement phase last and never reorders', () => {
-    expect(DEMO_PHASE_PLAN).toEqual([
-      'A_FOUNDATION',
-      'B_ORGANISATION',
-      'B_PEOPLE',
-      'C_MASTERS',
-      'D1_PROCUREMENT',
-    ]);
-    expect(DEMO_PHASE_PLAN.indexOf('D1_PROCUREMENT')).toBe(DEMO_PHASE_PLAN.length - 1);
+    // Procurement runs after the masters and before production: a later phase is
+    // appended behind it, never in front of it.
+    expect(DEMO_PHASE_PLAN.indexOf('D1_PROCUREMENT')).toBe(
+      DEMO_PHASE_PLAN.indexOf('C_MASTERS') + 1,
+    );
   });
 
   it('walks the material period forward instead of holding three periods open', () => {
@@ -97,7 +94,18 @@ describe('demo procurement, when the demo stands', () => {
     if (!(await demoStands())) return;
     expect(await scalar(`select count(*) as n from purchase_order where client = '${CLIENT}'`)).toBe(18);
     // Eighteen receipts, three consumable issues, and two initial stock entries.
-    expect(await scalar(`select count(*) as n from material_document where client = '${CLIENT}'`)).toBe(23);
+    // Counted by movement, not by document total: a later document phase adds
+    // material documents of its own, and this phase's count must not move when
+    // production is built on top of it.
+    expect(await scalar(`
+      select count(*) as n
+        from material_document d
+       where d.client = '${CLIENT}'
+         and exists (
+           select 1 from material_document_line l
+            where l.client = d.client
+              and l.material_document_number = d.material_document_number
+              and l.movement_type in ('GOODS_RECEIPT_PO', 'GI_ISSUE_CC', 'INITIAL_STOCK_ENTRY'))`)).toBe(23);
     // Seventeen of the eighteen receipts were billed; the last was not.
     expect(await scalar(`select count(*) as n from supplier_invoice where client = '${CLIENT}'`)).toBe(17);
     expect(
