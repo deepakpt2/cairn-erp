@@ -605,11 +605,14 @@ reopened by a later phase.
 | Marker tables | `demo_installation` / `demo_installation_phase` are global, not tenant-scoped, and the provisioner is granted no `delete` or `truncate` on them. There is no force or reset flag. |
 | Interrupted installs | A `FAILED` phase is never resumed silently. A phase left `RUNNING` by a dead process is resumed and counted as a retry. |
 | Credentials | One shared password, generated at provisioning time, written to `./credentials/demo-credentials.txt` at mode 0600. The database holds a SHA-256 fingerprint and never the password. Losing the file means provisioning a fresh database, and the report says so. |
-| Credential re-issue | A resumed installation issues a new password and resets every demo account to it, because the first run's password was never stored. A completed installation is never re-issued. |
+| Credential re-issue | A resumed installation issues a new password and resets every demo account to it, because the first run's password was never stored. A completed installation is never re-issued. The reset runs on **any** resumed run that reaches the end, including one that skipped the people phase — otherwise the file would name a password no account answers to. |
 | Demo roles | Custom, namespaced `DEMO_*`. All eleven system roles are protected and unassignable through routine administration; that was left exactly as it was. |
 | Demo role capabilities | Patterns are expanded against the capability catalogue before granting: `grantCapabilityToRole` refuses a wildcard on a custom role. |
 | Two plants | `1000` (manufacturing, built by the standard structure) and `2000` (distribution, added by the demo). Two warehouse clerks hold identical capability patterns and differ only by the plant each is restricted to. |
 | Enterprise structure keys | The standard keys (`1000`, `A000`, `0001`, `01`). Every screen, report and test is written against them. |
 | Docker verification | Not executed — no Docker on the test host. Verified only as a static contract, and every report says so. |
-| Phases | `A_FOUNDATION`, `B_ORGANISATION`, `B_PEOPLE`. Later work appends; it never reorders. |
+| Phases | `A_FOUNDATION`, `B_ORGANISATION`, `B_PEOPLE`, `C_MASTERS`. Later work appends; it never reorders. |
+| Masters scope (`C_MASTERS`) | Materials, partners, purchasing info records, selling prices, tax codes, bills of material, routings and production versions. **No documents.** A biscuit factory with no orders is a company on its first morning, and that is what the document phases start from. |
+| Masters the demo must define itself | BOM usages, BOM statuses, BOM item categories, routing task list types, usages, statuses and control keys are empty in a new tenant, and no seed creates them; a BOM cannot be written without a usage and a routing cannot be written without a task list type. Tax codes are likewise empty and every purchase names one. The demo defines them; the product is left as it was. |
+| Master data is fictional | Partners, prices and tax rates are invented. The tax codes are explicitly **not** any real jurisdiction's rates. |
 | Databases | Only disposable `cairn_dp_*` databases. `cairn_b210`, `cairn_demo`, `cairn_acceptance`, `cairn_integration`, `cairn_hr_accept` are refused by name, in addition to the target guard every connection passes. |

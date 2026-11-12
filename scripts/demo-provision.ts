@@ -34,7 +34,12 @@ import {
   buildDemoOrganisation,
   DEMO_IDENTITY,
 } from '../src/platform/tenancy/demo-organisation';
-import { buildDemoPeople, listDemoAccounts as readDemoAccounts } from '../src/platform/tenancy/demo-people';
+import { buildDemoMasters } from '../src/platform/tenancy/demo-masters';
+import {
+  buildDemoPeople,
+  listDemoAccounts as readDemoAccounts,
+  setEveryPassword,
+} from '../src/platform/tenancy/demo-people';
 import {
   DEFAULT_CREDENTIALS_DIR,
   fingerprintDemoPassword,
@@ -165,10 +170,29 @@ async function runPeoplePhase(ctx: PhaseContext): Promise<Record<string, unknown
   };
 }
 
+async function runMastersPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoMasters({
+    client: DEMO_IDENTITY.clientKey,
+    timeline: ctx.timeline,
+  });
+  return {
+    materials: result.materials,
+    suppliers: result.suppliers,
+    customers: result.customers,
+    infoRecords: result.infoRecords,
+    salesPrices: result.salesPrices,
+    boms: result.boms,
+    routings: result.routings,
+    productionVersions: result.productionVersions,
+    taxCodes: result.taxCodes,
+  };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
   B_PEOPLE: runPeoplePhase,
+  C_MASTERS: runMastersPhase,
 };
 
 async function main(): Promise<number> {
@@ -288,6 +312,20 @@ async function provision(database: string, databaseUrl: string): Promise<number>
   console.log('Dummy-data provisioning complete.');
   console.log(`  Database            ${database}`);
   console.log(`  Timeline            ${timeline.startDate} → ${timeline.endDate} (open periods ${timeline.openPeriods.join(', ')})`);
+
+  // Every account is set to the password this run issued — including on a run that
+  // resumed after the people phase had already finished.
+  //
+  // The people phase resets every account itself, because it is the phase that
+  // creates them and a run that died inside it left accounts holding a password
+  // nobody wrote down. A run that resumes *after* that phase would otherwise write
+  // a credential file naming a password no account answers to, which is a file that
+  // looks like it works and does not. Setting it here as well keeps one password,
+  // one file, and no gap between them.
+  const peopleAlreadyBuilt = claim.disposition === 'RESUME' && claim.completed.includes('B_PEOPLE');
+  if (ctx.password && peopleAlreadyBuilt) {
+    await setEveryPassword(DEMO_IDENTITY.clientKey, ctx.password);
+  }
 
   const accounts = await listDemoAccounts();
   await deliverDemoCredentials({

@@ -48,7 +48,7 @@ export type DemoPhaseStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
  * sessions: if it dies halfway, the run that follows continues with the accounts
  * that are missing rather than rebuilding the company they hang from.
  */
-export const DEMO_PHASE_PLAN: readonly string[] = ['A_FOUNDATION', 'B_ORGANISATION', 'B_PEOPLE'];
+export const DEMO_PHASE_PLAN: readonly string[] = ['A_FOUNDATION', 'B_ORGANISATION', 'B_PEOPLE', 'C_MASTERS'];
 
 export interface DemoTimeline {
   /** The date the installation was claimed. Every generated date is relative to it. */

@@ -510,7 +510,7 @@ async function withAdministration<T>(
 }
 
 /** Set one shared password on every account the demo owns. */
-async function setEveryPassword(client: string, password: string): Promise<void> {
+export async function setEveryPassword(client: string, password: string): Promise<void> {
   const accounts = await withTenant(client, async (tx) => {
     const rows = await tx.select({ id: appUser.id }).from(appUser).where(eq(appUser.client, client));
     return rows.map((row) => row.id);
