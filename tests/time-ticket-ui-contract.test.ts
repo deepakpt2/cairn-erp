@@ -27,8 +27,11 @@ describe('CO11N screen contract', () => {
     expect(service).toContain('persistConfirmationMovementIntents(tx, {');
     expect(service).toContain('processPendingConfirmationMovements({');
     expect(service).toContain('waitForConfirmationMovementSettlement({');
-    expect(movementService).toContain("postGoodsIssue(issueInput(locked, actor, effectivePayload), 'MIGO', { tx })");
-    expect(movementService).toContain('postProductionReceipt(receiptInput(locked, actor, effectivePayload), { tx })');
+    expect(movementService).toContain("postGoodsIssue(issueInput(locked, actor, effectivePayload), 'MIGO', {");
+    expect(movementService).toContain('postProductionReceipt(receiptInput(locked, actor, effectivePayload), {');
+    // A movement is posted by a person: both calls hand the service the user it is acting for.
+    expect(movementService).toMatch(/postGoodsIssue\([\s\S]{0,200}authorization: authority,/);
+    expect(movementService).toMatch(/postProductionReceipt\([\s\S]{0,200}authorization: authority,/);
     // The UI states that a refused posting leaves a durable confirmation available to COGI.
     expect(page).toContain('The confirmation and its movement intents are saved together');
     expect(page).toContain('available in COGI without rolling back the confirmation');

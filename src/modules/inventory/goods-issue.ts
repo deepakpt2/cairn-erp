@@ -55,6 +55,14 @@ import {
 } from './schema';
 
 export const GOODS_ISSUE_CAPABILITY = 'INV.GI.POST';
+/**
+ * SCR-139 — the authority to issue to a production order (MIGO 261 + R08).
+ *
+ * A component issue is a goods movement *and* an act on an order, so it asks for both:
+ * `INV.GI.POST` for the movement, and this one for the order it consumes. A clerk who
+ * may issue to a cost centre cannot empty a shelf into a shop order without it.
+ */
+export const PRODUCTION_ORDER_ISSUE_CAPABILITY = 'PROD.ORDER.GI';
 export const GOODS_ISSUE_ALIAS = 'MB1A';
 export const GOODS_ISSUE_ROUTE = '/inventory/goods-issue';
 
@@ -363,11 +371,20 @@ async function toView(
   };
 }
 
-async function authorizeMb1aPlantsInTx(
+/**
+ * Resolve and authorise the plant and company of every line, for a caller that is a
+ * signed-in user.
+ *
+ * `extraCapabilities` names the authorities a particular movement needs beyond the
+ * goods-issue one: the production-order issue asks for `PROD.ORDER.GI` as well, which
+ * is why this is not two near-identical functions.
+ */
+async function authorizeIssuePlantsInTx(
   tx: Tx,
   client: string,
   lines: readonly GoodsIssueLineInput[],
   authorization: GoodsIssueAuthorizationContext | undefined,
+  extraCapabilities: readonly string[] = [],
 ): Promise<Map<string, { plant: string; companyCode: string }>> {
   if (!authorization?.userId || !authorization.sessionId) {
     throw new GoodsIssueAuthorizationError();
@@ -408,6 +425,9 @@ async function authorizeMb1aPlantsInTx(
   const capabilities = await loadCapabilities(tx, client, authorization.userId);
   if (!hasCapability(capabilities, GOODS_ISSUE_CAPABILITY)) {
     throw new AuthzError(GOODS_ISSUE_CAPABILITY, actor.username);
+  }
+  for (const extra of extraCapabilities) {
+    if (!hasCapability(capabilities, extra)) throw new AuthzError(extra, actor.username);
   }
 
   // Hold existing assignments through commit; absent company or plant grants fail
@@ -485,10 +505,20 @@ export async function postGoodsIssue(
   ]);
 
   const run = async (tx: Tx): Promise<GoodsIssueView> => {
-    // MB1A's direct goods issue is a session-bound business action. Resolve and
-    // authorise trusted plant/company rows before replay lookup as well as writes.
-    const authorisedPlants = screen === 'MB1A'
-      ? await authorizeMb1aPlantsInTx(tx, input.client, input.lines, options?.authorization)
+    // A goods issue out of a plant is a session-bound business action, whether the
+    // screen is MB1A or — for the component issue to a production order — MIGO, and
+    // whether the user is the one typing or the one whose confirmation the worker is
+    // continuing. Resolve and authorise trusted plant/company rows before replay
+    // lookup as well as writes. The order issue asks for PROD.ORDER.GI as well as the
+    // goods-issue authority; every other movement asks for the goods-issue one alone.
+    // A continuation that carries no user posts nothing: the movement stays a failure
+    // for COGI to recover, rather than moving stock under nobody's authority.
+    const orderIssue = scenario.movementType === 'PROD_ISSUE_ORDER';
+    const authorisedPlants = screen === 'MB1A' || orderIssue
+      ? await authorizeIssuePlantsInTx(
+          tx, input.client, input.lines, options?.authorization,
+          orderIssue ? [PRODUCTION_ORDER_ISSUE_CAPABILITY] : [],
+        )
       : null;
     await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);

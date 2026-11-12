@@ -7,6 +7,7 @@ import { createOrder, getOrder } from '../src/modules/purchasing/orders';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
 import { createProductionOrder } from '../src/modules/inventory/production-orders';
@@ -80,7 +81,36 @@ async function standing(seed: string): Promise<string> {
     client, changedBy: ACTOR, companyCode: '1000', fiscalYear: 2026, period: 10, reason: 'Batch assignment',
   });
   await saveBatchLevel({ client, changedBy: ACTOR, batchLevel: '1', version: 0, reason: 'Material level' });
+  Object.assign(PROD_ACTOR, await createProductionActor(client));
+
   return client;
+}
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
 }
 
 describe('batch assigned on the order', () => {
@@ -139,19 +169,19 @@ describe('batch assigned on the order', () => {
       client, createdBy: ACTOR, materialNumber: 'MAT-BATCH', plant: '1000', orderQuantity: 4,
       scheduledStart: '2026-10-18', scheduledFinish: '2026-10-20', batch: '00012',
       components: [{ materialNumber: 'MAT-PLAIN', plant: '1000', requiredQuantity: 1 }],
-    });
+    }, { authorization: await authority(client) });
     expect(order.batch).toBe('00012');
     await expect(createProductionOrder({
       orderType: 'PP01',
       client, createdBy: ACTOR, materialNumber: 'MAT-BATCH', plant: '1000', orderQuantity: 1,
       scheduledStart: '2026-10-18', scheduledFinish: '2026-10-20', batch: 'MISSING',
       components: [{ materialNumber: 'MAT-PLAIN', plant: '1000', requiredQuantity: 1 }],
-    })).rejects.toThrow(/does not stand/i);
+    }, { authorization: await authority(client) })).rejects.toThrow(/does not stand/i);
     await expect(createProductionOrder({
       orderType: 'PP01',
       client, createdBy: ACTOR, materialNumber: 'MAT-PLAIN', plant: '1000', orderQuantity: 1,
       scheduledStart: '2026-10-18', scheduledFinish: '2026-10-20', batch: '00012',
       components: [{ materialNumber: 'MAT-PLAIN', plant: '1000', requiredQuantity: 1 }],
-    })).rejects.toThrow(/not batch-managed/i);
+    }, { authorization: await authority(client) })).rejects.toThrow(/not batch-managed/i);
   });
 });

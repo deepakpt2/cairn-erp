@@ -17,6 +17,7 @@ import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../
 import { movementRequestKey } from '../../src/modules/production/confirmation-movements';
 import { createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
 import type { BrowserTarget } from './targets';
+import { createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
 
 const PASSWORD = 'browser-check-2026';
 
@@ -41,9 +42,19 @@ const REPLAY_KEY = 'co11n-browser-replay';
  * reachable, and the plant carries a default storage location, which is what a receipt with no
  * location of its own is expected to fall back to.
  */
+const PROD_ACTOR: BrowserActor = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/** Sign in once, and widen the actor's reach to whatever the scene has added since. */
+async function browserAuthority(client: string) {
+  if (!PROD_ACTOR.userId) Object.assign(PROD_ACTOR, await createBrowserActor(client));
+  await refreshBrowserActor(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 export async function co11nMovement(ctx: Context) {
   const { page, base, target } = ctx;
   const { client } = target;
+
   console.log('CO11N: confirm an order and watch the withdrawal, the receipt, the replay, and the refusal');
 
   const { code: company, currency } = await withTenant(client, async (tx) => {
@@ -204,7 +215,7 @@ export async function co11nMovement(ctx: Context) {
       materialNumber: 'CO11-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey,
       components: [{ materialNumber: 'CO11-RM', plant: PLANT, storageLocation: LOCATION, requiredQuantity: 20 }],
-    });
+    }, { authorization: (await browserAuthority(client)) });
     await withTenant(client, async (tx) => {
       const copied = await resolveOrderOperationSnapshot(tx, {
         client, plant: PLANT, finishDate: '2026-10-25',
@@ -212,7 +223,7 @@ export async function co11nMovement(ctx: Context) {
       });
       await insertOrderOperationSnapshot(tx, { client, orderNumber: created.orderNumber, createdBy: ACTOR, operations: copied.operations });
     });
-    await releaseProductionOrder({ client, orderNumber: created.orderNumber, releasedBy: ACTOR });
+    await releaseProductionOrder({ client, orderNumber: created.orderNumber, releasedBy: ACTOR }, { authorization: (await browserAuthority(client)) });
     return created.orderNumber;
   }
 
@@ -408,7 +419,7 @@ export async function co11nMovement(ctx: Context) {
     client, changedBy: ACTOR, orderNumber: order2, postingDate: '2026-10-24', documentDate: '2026-10-24',
     headerText: 'Received by hand', requestKey: 'co11n-browser-hand-receipt',
     lines: [{ storageLocation: LOCATION, quantity: 8 }],
-  });
+  }, { authorization: (await browserAuthority(client)) });
   assert.equal(await quantityOf('CO11-FG'), 8, 'eight finished goods stand received against the second order');
   assert.equal(await quantityOf('CO11-RM'), 90, 'the component has moved only by what the first order confirmed');
 

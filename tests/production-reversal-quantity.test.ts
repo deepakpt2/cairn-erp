@@ -12,6 +12,7 @@ import { getProductionOrderDisplay } from '../src/modules/production/production-
 import { planSingleItem } from '../src/modules/production/mrp-run';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 /**
  * Open production quantities after MBST.
@@ -24,6 +25,33 @@ const ACTOR = 'REVQTY_TEST';
 const PLANT = 'RV01';
 const COMPANY = '1000';
 const DAY = '2026-10-16';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('production reversal quantities', () => {
   let client = '';
@@ -38,8 +66,8 @@ describe('production reversal quantities', () => {
       materialNumber: material, plant: PLANT, orderQuantity: quantity,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: components.map((component) => ({ ...component, plant: PLANT, storageLocation: 'RS01' })),
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     await withTenant(client, (tx) => tx.execute(sql`
       update production_order_component
          set requirement_date = '2026-10-18'
@@ -85,6 +113,7 @@ describe('production reversal quantities', () => {
   beforeAll(async () => {
     client = (await createTenant('rev-qty')).client;
     other = (await createTenant('rev-qty-other')).client;
+    Object.assign(PROD_ACTOR, await createProductionActor(client));
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
@@ -191,7 +220,10 @@ describe('production reversal quantities', () => {
         on conflict (client, order_type) do nothing
       `);
     });
-  }, 180_000);
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+}, 180_000);
 
   afterAll(async () => {
     if (client) await destroyTenant(client);
@@ -204,7 +236,7 @@ describe('production reversal quantities', () => {
       client, changedBy: ACTOR, movementTypeCode: '261', postingDate: DAY, documentDate: DAY,
       lines: [{ materialNumber: 'REV-A', plant: PLANT, storageLocation: 'RS01', quantity: 2, productionOrderNumber: orderNumber, productionOrderItem: 10 }],
       requestKey: nextKey(),
-    }, 'MIGO');
+    }, 'MIGO', { authorization: await authority(client) });
     expect(await issued(orderNumber, 10)).toBe(2);
     const before = await componentRow('REV-A', orderNumber);
     expect(before.row).toEqual(expect.objectContaining({ quantity: 3, direction: 'REQUIREMENT' }));
@@ -249,7 +281,7 @@ describe('production reversal quantities', () => {
         { materialNumber: 'REV-C', plant: PLANT, storageLocation: 'RS01', quantity: 3, productionOrderNumber: orderNumber, productionOrderItem: 20 },
       ],
       requestKey: nextKey(),
-    }, 'MIGO');
+    }, 'MIGO', { authorization: await authority(client) });
     expect(posted.journalDocumentNumber).toBeTruthy();
     const lines = await withTenant(client, (tx) => tx.execute(sql`
       select line_number, material_number from material_document_line
@@ -319,7 +351,7 @@ describe('production reversal quantities', () => {
     const received = await postProductionReceipt({
       client, changedBy: ACTOR, orderNumber, postingDate: DAY, documentDate: DAY,
       lines: [{ storageLocation: 'RS01', quantity: 2 }], requestKey: nextKey(),
-    });
+    }, { authorization: await authority(client) });
     expect(await receivedQuantityFor(client, orderNumber)).toBe(2);
     expect(await receiptRow('REV-OUT', orderNumber)).toEqual(expect.objectContaining({ quantity: 2 }));
     expect((await componentRow('REV-F', orderNumber)).row?.quantity).toBe(5);
@@ -340,7 +372,7 @@ describe('production reversal quantities', () => {
       client, changedBy: ACTOR, movementTypeCode: '261', postingDate: DAY, documentDate: DAY,
       lines: [{ materialNumber: 'REV-F', plant: PLANT, storageLocation: 'RS01', quantity: 1, productionOrderNumber: orderNumber, productionOrderItem: 10 }],
       requestKey: nextKey(),
-    }, 'MIGO');
+    }, 'MIGO', { authorization: await authority(client) });
     expect(await receiptRow('REV-OUT', orderNumber)).toEqual(expect.objectContaining({ quantity: 4 }));
     expect((await componentRow('REV-F', orderNumber)).row?.quantity).toBe(4);
     await reverseMaterialDocument({
@@ -364,7 +396,7 @@ describe('production reversal quantities', () => {
         productionOrderNumber: orderNumber, productionOrderItem: 10,
       }],
       requestKey: nextKey(),
-    }, 'MIGO').catch((error: unknown) => error);
+    }, 'MIGO', { authorization: await authority(client) }).catch((error: unknown) => error);
     expect((refused as Error).message).toMatch(/no conversion from GAL/i);
     expect(await issued(orderNumber, 10)).toBe(0);
 
@@ -375,7 +407,7 @@ describe('production reversal quantities', () => {
         productionOrderNumber: orderNumber, productionOrderItem: 10,
       }],
       requestKey: nextKey(),
-    }, 'MIGO');
+    }, 'MIGO', { authorization: await authority(client) });
     expect(await issued(orderNumber, 10)).toBe(2);
     expect((await componentRow('REV-D', orderNumber)).row?.quantity).toBe(4);
     const reversed = await reverseMaterialDocument({
@@ -408,7 +440,7 @@ describe('production reversal quantities', () => {
         productionOrderNumber: orderNumber, productionOrderItem: 10,
       }],
       requestKey: nextKey(),
-    }, 'MIGO');
+    }, 'MIGO', { authorization: await authority(client) });
     const lines = await withTenant(client, (tx) => tx.execute(sql`
       select line_number from material_document_line
        where client = ${client} and material_document_number = ${posted.materialDocumentNumber}
@@ -472,7 +504,7 @@ describe('production reversal quantities', () => {
       client, changedBy: ACTOR, movementTypeCode: '261', postingDate: DAY, documentDate: DAY,
       lines: [{ materialNumber: 'REV-A', plant: PLANT, storageLocation: 'RS01', quantity: 1, productionOrderNumber: orderNumber, productionOrderItem: 10 }],
       requestKey: nextKey(),
-    }, 'MIGO');
+    }, 'MIGO', { authorization: await authority(client) });
     await expect(reverseMaterialDocument({
       client, changedBy: ACTOR, materialDocumentNumber: posted.materialDocumentNumber,
       quantity: 1, postingDate: DAY, documentDate: DAY, requestKey: nextKey(),

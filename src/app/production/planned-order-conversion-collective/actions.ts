@@ -64,6 +64,7 @@ export async function convertPlannedOrdersAction(
         availability: text(form, 'availability'),
         bomExplosionNumber: text(form, 'bomExplosionNumber'),
       },
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(PLANNED_ORDER_CONVERT_COLLECTIVE_ROUTE);
     const failed = result.results.filter((row) => row.status === 'FAILED').length;

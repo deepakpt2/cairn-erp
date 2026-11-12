@@ -40,9 +40,21 @@ export async function createProductionCogiTestActor(
       isSystemRole: false, isReadOnly: false, createdBy: SETUP_ACTOR,
     });
     if (options.canReprocess !== false) {
-      await tx.insert(roleCapability).values({
-        client, roleCode, capabilityCode: 'PROD.GM.REPROCESS', createdBy: SETUP_ACTOR,
-      });
+      // Reprocessing a 261 or a 101 posts that movement: the recovery authority lets the
+      // user reach the failure, the movement authority is what lets them post it. Both,
+      // or COGI can see the failure and still not clear it.
+      for (const [code, module, action] of [
+        ['PROD.GM.REPROCESS', 'PROD', 'POST'],
+        ['PROD.ORDER.GI', 'PROD', 'POST'],
+        ['PROD.ORDER.GR', 'PROD', 'POST'],
+        ['INV.GI.POST', 'INV', 'POST'],
+        ['INV.GR.POST', 'INV', 'POST'],
+      ]) {
+        await tx.insert(capability).values({
+          code, module, action, isPostingRelevant: true, description: 'Test-only COGI reprocessing authority',
+        }).onConflictDoNothing();
+        await tx.insert(roleCapability).values({ client, roleCode, capabilityCode: code, createdBy: SETUP_ACTOR });
+      }
     }
     await tx.insert(appUser).values({
       id: userId,

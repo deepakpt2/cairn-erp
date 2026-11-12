@@ -25,6 +25,7 @@ import {
   previewPlannedOrderConversion,
 } from '../src/modules/production/planned-order-conversion';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 const ACTOR = 'CO40_TEST';
 let tenant: TestTenant;
@@ -74,6 +75,7 @@ async function counts() {
 
 beforeAll(async () => {
   tenant = await createTenant('co40-convert');
+  Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
   await withTenant(tenant.client, async (tx) => {
     await tx.insert(mrpController).values({
       client: tenant.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
@@ -133,12 +135,42 @@ beforeAll(async () => {
     validFrom: '2026-01-01', lotFrom: '0', lotTo: '999999', lotUnit: 'KG',
     bomUsage: 'P', bomAlternative: '01', taskListType: 'N', routingGroup: '50000041', groupCounter: '01',
   });
+
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
 });
 
 afterAll(async () => {
   await destroyTenant(tenant.client);
   await closeDb();
 });
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('planned order conversion', () => {
   it('reviews without writing and refuses a filter that is not stored', async () => {
@@ -162,6 +194,7 @@ describe('planned order conversion', () => {
   it('converts the whole order once and does not post', async () => {
     const created = await planned('convert-1');
     const result = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber, expectedVersion: created.order.version,
     });
@@ -186,6 +219,7 @@ describe('planned order conversion', () => {
     expect(standing?.converted).toBe(true);
     expect(standing?.productionOrderNumber).toBe(result.productionOrderNumber);
     const again = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber,
     });
@@ -230,10 +264,12 @@ describe('planned order conversion', () => {
     const created = await planned('partial-1');
     const before = await counts();
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber, quantity: '4',
     })).rejects.toThrow(/Partial conversion is not supported/);
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, orderNumber: 'PL-BUY40',
     })).rejects.toThrow(/externally procured/);
@@ -243,6 +279,7 @@ describe('planned order conversion', () => {
   it('lets one collective failure stand beside one committed order', async () => {
     const created = await planned('collective-1');
     const result = await convertPlannedOrders({
+      authorization: await authority(tenant.client),
       orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, correlationId: 'batch-1',
       orderNumbers: [created.order.orderNumber, 'MISSING', 'PL-BUY40'],
@@ -256,6 +293,7 @@ describe('planned order conversion', () => {
   it('refuses more than 25 orders before writing', async () => {
     const before = await counts();
     await expect(convertPlannedOrders({
+      authorization: await authority(tenant.client),
       orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, correlationId: 'too-many',
       orderNumbers: Array.from({ length: 26 }, (_, index) => `PL-${index}`),
@@ -266,8 +304,10 @@ describe('planned order conversion', () => {
   it('returns one production order when two conversions race', async () => {
     const created = await planned('race-1');
     const [first, second] = await Promise.all([
-      convertPlannedOrder({ orderType: 'PP01', client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber }),
-      convertPlannedOrder({ orderType: 'PP01', client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber }),
+      convertPlannedOrder({
+      authorization: await authority(tenant.client), orderType: 'PP01', client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber }),
+      convertPlannedOrder({
+    authorization: await authority(tenant.client), orderType: 'PP01', client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber }),
     ]);
     const statuses = [first.status, second.status].sort();
     expect(statuses).toEqual(['ALREADY_CONVERTED', 'CONVERTED']);
@@ -283,14 +323,17 @@ describe('planned order conversion', () => {
     const created = await planned('no-type');
     const before = await counts();
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber,
       orderType: '',
     })).rejects.toThrow(/production order type is required/);
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber,
       orderType: undefined as unknown as string,
     })).rejects.toThrow(/production order type is required/);
     await expect(convertPlannedOrders({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, correlationId: 'no-type-batch',
       orderNumbers: [created.order.orderNumber],
       orderType: '   ',
@@ -311,6 +354,7 @@ describe('planned order conversion', () => {
     });
     const created = await planned('typed-1');
     const result = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber, orderType: 'PP40',
     });
     expect(result.status).toBe('CONVERTED');
@@ -318,11 +362,13 @@ describe('planned order conversion', () => {
     expect(production?.orderType).toBe('PP40');
     const before = await counts();
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: (await planned('bad-type')).order.orderNumber, orderType: 'ZZ99',
     })).rejects.toThrow(/does not stand/);
     expect(await counts()).toEqual(before);
     const collective = await planned('collective-type');
     const batch = await convertPlannedOrders({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, correlationId: 'typed-batch',
       orderNumbers: [collective.order.orderNumber], orderType: 'PP40',
     });
@@ -359,36 +405,44 @@ describe('planned order conversion', () => {
     const collective = await planned('manual-collective');
     const before = await counts();
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: missing.order.orderNumber, orderType: 'PP4M',
     })).rejects.toThrow(/do not stand for plant 1000 and order type PP4M/);
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: blank.order.orderNumber, orderType: 'PP4B',
       productionVersion: '0001',
     })).rejects.toThrow(/not a selection method/);
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: manual.order.orderNumber, orderType: 'PP41',
     })).rejects.toThrow(/require a production version/);
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: manual.order.orderNumber, orderType: 'PP41',
       named: { productionVersion: '0001' },
     })).rejects.toThrow(/not used as a filter/);
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: named.order.orderNumber, orderType: 'PP41',
       productionVersion: '0001',
     });
     expect(converted.status).toBe('CONVERTED');
     const batch = await convertPlannedOrders({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, correlationId: 'manual-batch',
       orderNumbers: [collective.order.orderNumber], orderType: 'PP41',
     });
     expect(batch.results[0]?.status).toBe('FAILED');
     expect(batch.results[0]?.message).toMatch(/require a production version/);
     const namedBatch = await convertPlannedOrders({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, correlationId: 'manual-batch-named',
       orderNumbers: [collective.order.orderNumber], orderType: 'PP41', productionVersion: '0001',
     });
     expect(namedBatch.results[0]?.status).toBe('CONVERTED');
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: (await planned('bad-version')).order.orderNumber,
       orderType: 'PP41', productionVersion: 'ZZZZ',
     })).rejects.toThrow(/not valid on/);
@@ -398,6 +452,7 @@ describe('planned order conversion', () => {
   it('stores the selected version and bill of material on CO40 and CO41', async () => {
     const single = await planned('persist-co40');
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: single.order.orderNumber, orderType: 'PP01',
     });
     expect(converted.status).toBe('CONVERTED');
@@ -412,6 +467,7 @@ describe('planned order conversion', () => {
     ]);
     const collective = await planned('persist-co41');
     const batch = await convertPlannedOrders({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, correlationId: 'persist-batch',
       orderNumbers: [collective.order.orderNumber], orderType: 'PP01',
     });
@@ -439,6 +495,7 @@ describe('planned order conversion', () => {
     });
     const created = await planned('duplicate-lines');
     const result = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber,
       orderType: 'PP41', productionVersion: '0002',
     });
@@ -456,6 +513,7 @@ describe('planned order conversion', () => {
     const created = await planned('supplied-mismatch');
     const before = await counts();
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber, orderType: 'PP01',
       productionVersion: '0001',
       components: [{ materialNumber: 'COMP-40', plant: '1000', requiredQuantity: 1, bomItem: '0090' }],
@@ -470,6 +528,7 @@ describe('planned order conversion', () => {
     `)) as unknown as Array<{ orders: number; components: number }>;
     expect(left).toEqual({ orders: 0, components: 0 });
     const matched = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber, orderType: 'PP01',
       productionVersion: '0001',
       components: [{ materialNumber: 'COMP-40', plant: '1000', requiredQuantity: 20 }],
@@ -496,6 +555,7 @@ describe('planned order conversion', () => {
     const before = await counts();
     try {
       await expect(convertPlannedOrder({
+        authorization: await authority(tenant.client),
         client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber,
         orderType: 'PP01', productionVersion: '0001',
       })).rejects.toThrow(/not extended/);

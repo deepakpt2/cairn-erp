@@ -67,6 +67,7 @@ export async function convertPlannedOrderAction(
         partialQuantity: text(form, 'partialQuantity'),
       },
       transactionCode: PLANNED_ORDER_CONVERT_ALIAS,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(PLANNED_ORDER_CONVERT_ROUTE);
     return {

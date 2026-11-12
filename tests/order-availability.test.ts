@@ -37,6 +37,7 @@ import {
 } from '../src/modules/production/order-availability-commitment';
 import { changeProductionOrder } from '../src/modules/production/production-order-change';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 /**
  * CO09 slice 1 — the read-only availability check over a production order's
@@ -202,10 +203,38 @@ async function fingerprint(): Promise<string> {
   });
 }
 
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 describe('CO09 slice 1 order availability check', () => {
   beforeAll(async () => {
     tenant = await createTenant('co09-avail');
     other = await createTenant('co09-avail-b');
+    Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
 
     await withTenant(tenant.client, async (tx) => {
       await tx.insert(mrpController).values({
@@ -348,34 +377,34 @@ describe('CO09 slice 1 order availability check', () => {
         supplied('C-UOM', 5), supplied('C-NOMRP', 5), supplied('C-NOGROUP', 5), supplied('C-NOSCOPE', 5),
         supplied('C-GNOP', 5), supplied('C-BARE', 1), supplied('C-OK', 4),
       ],
-    });
+    }, { authorization: await authority(tenant.client) });
     orderOne = created.orderNumber;
     const created2 = await createProductionOrder({
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-CO09', plant: PLANT,
       orderQuantity: 1, scheduledStart: '2026-06-02', scheduledFinish: '2026-06-20', orderType: TYPE_NO_CONTROL,
       requestKey: `co09-${++key}`, components: [supplied('C-OK', 2)],
-    });
+    }, { authorization: await authority(tenant.client) });
     orderTwo = created2.orderNumber;
     const created3 = await createProductionOrder({
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-CO09', plant: PLANT,
       orderQuantity: 1, scheduledStart: '2026-06-02', scheduledFinish: '2026-06-20', orderType: TYPE_ORDER,
       requestKey: `co09-${++key}`, components: [supplied('C-OK', 10)],
-    }, { plannedOrderNumber: 'PL-DR-1' });
+    }, { plannedOrderNumber: 'PL-DR-1', authorization: await authority(tenant.client) });
     orderThree = created3.orderNumber;
 
     const supplyA = await createProductionOrder({
       client: tenant.client, createdBy: ACTOR, materialNumber: 'C-OK', plant: PLANT,
       orderQuantity: 5, scheduledStart: '2026-06-01', scheduledFinish: '2026-06-05', orderType: TYPE_ORDER,
       requestKey: `co09-${++key}`, components: [supplied('C-NOP', 1)],
-    });
+    }, { authorization: await authority(tenant.client) });
     supplyReleased = supplyA.orderNumber;
     const supplyB = await createProductionOrder({
       client: tenant.client, createdBy: ACTOR, materialNumber: 'C-OK', plant: PLANT,
       orderQuantity: 5, scheduledStart: '2026-06-01', scheduledFinish: '2026-06-06', orderType: TYPE_ORDER,
       requestKey: `co09-${++key}`, components: [supplied('C-NOP', 1)],
-    });
+    }, { authorization: await authority(tenant.client) });
     supplyCreated = supplyB.orderNumber;
-    await releaseProductionOrder({ client: tenant.client, orderNumber: supplyReleased, releasedBy: ACTOR });
+    await releaseProductionOrder({ client: tenant.client, orderNumber: supplyReleased, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
 
     await withTenant(tenant.client, async (tx) => {
       // Change the current BOM after the order has been made. The check must use the
@@ -442,7 +471,10 @@ describe('CO09 slice 1 order availability check', () => {
       `);
 
     });
-  }, 120_000);
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+}, 120_000);
 
   afterAll(async () => {
     await destroyTenant(tenant.client);
@@ -982,7 +1014,7 @@ describe('CO09 slice 1 order availability check', () => {
        where client = ${tenant.client} and order_number = ${orderTwo} and item_number = 10
     `));
     try {
-      await releaseProductionOrder({ client: tenant.client, orderNumber: orderTwo, releasedBy: ACTOR });
+      await releaseProductionOrder({ client: tenant.client, orderNumber: orderTwo, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
       const result = await run(orderTwo);
       expect(result.businessFunction).toBe('2');
       expect(result.orderStatus).toBe('RELEASED');
@@ -1526,12 +1558,12 @@ describe('CO09 slice 1 order availability check', () => {
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-CO09', plant: PLANT,
       orderQuantity: 1, scheduledStart: '2026-06-02', scheduledFinish: '2026-06-20', orderType: TYPE_ORDER,
       requestKey: `co09-lock-${++key}`, components: [{ materialNumber: 'C-LOCK', plant: PLANT, requiredQuantity: 5 }],
-    });
+    }, { authorization: await authority(tenant.client) });
     const secondOrder = await createProductionOrder({
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-CO09', plant: PLANT,
       orderQuantity: 1, scheduledStart: '2026-06-02', scheduledFinish: '2026-06-20', orderType: TYPE_ORDER,
       requestKey: `co09-lock-${++key}`, components: [{ materialNumber: 'C-LOCK', plant: PLANT, requiredQuantity: 5 }],
-    });
+    }, { authorization: await authority(tenant.client) });
     await withTenant(tenant.client, async (tx) => {
       await tx.execute(sql`
         update production_order_component

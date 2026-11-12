@@ -20,9 +20,37 @@ import {
   saveSchedulingProfile,
 } from '../src/modules/inventory/scheduling-profile';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 const ACTOR = 'OPKP_TEST';
 const PLANT = 'QK01';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('OPKP production scheduling profile', () => {
   let fx: TestTenant;
@@ -31,6 +59,7 @@ describe('OPKP production scheduling profile', () => {
   beforeAll(async () => {
     fx = await createTenant('opkp');
     client = fx.client;
+    Object.assign(PROD_ACTOR, await createProductionActor(client));
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
@@ -61,7 +90,10 @@ describe('OPKP production scheduling profile', () => {
         on conflict (client, order_type) do nothing
       `);
     });
-  }, 180_000);
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+}, 180_000);
 
   afterAll(async () => {
     if (client) await destroyTenant(client);
@@ -81,7 +113,7 @@ describe('OPKP production scheduling profile', () => {
       components: [
         { materialNumber: 'OPKP-RM', plant: PLANT, storageLocation: 'SK01', requiredQuantity: 2 },
       ],
-    });
+    }, { authorization: await authority(client) });
   }
 
   it('keeps the profile key as typed and refuses a padded or cut key', async () => {
@@ -179,7 +211,7 @@ describe('OPKP production scheduling profile', () => {
     expect(created.batch).toBe('');
     const released = await releaseProductionOrder({
       client, orderNumber: created.orderNumber, releasedBy: ACTOR,
-    });
+    }, { authorization: await authority(client) });
     expect(released.status).toBe('RELEASED');
     expect(released.batch).toMatch(/\d/);
 

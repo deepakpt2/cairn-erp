@@ -17,9 +17,37 @@ import { changeRouting, createRouting, getRouting, RoutingError, saveRoutingCont
 import { loadTimeTicket } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 const ACTOR = 'SEQ_AUDIT';
 const PLANT = '1000';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('routing execution-order audit', () => {
   let tenant: TestTenant;
@@ -28,6 +56,7 @@ describe('routing execution-order audit', () => {
   beforeAll(async () => {
     tenant = await createTenant('seq-audit');
     other = await createTenant('seq-audit-other');
+    Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     await withTenant(tenant.client, async (tx) => {
       await tx.insert(mrpController).values({
         client: tenant.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
@@ -73,7 +102,10 @@ describe('routing execution-order audit', () => {
     await saveRoutingTaskListType({ client: tenant.client, changedBy: ACTOR, taskListType: 'N', description: 'Routing' });
     await saveRoutingUsage({ client: tenant.client, changedBy: ACTOR, usage: '1', description: 'Production' });
     await saveRoutingControlKey({ client: tenant.client, changedBy: ACTOR, controlKey: 'PP01', description: 'Confirm', confirmation: 'X' });
-  });
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+});
 
   afterAll(async () => {
     await destroyTenant(tenant.client);
@@ -334,7 +366,7 @@ describe('routing execution-order audit', () => {
     const direct = await createProductionOrder({
       orderType: 'PP01', client: tenant.client, createdBy: ACTOR, materialNumber: 'SEQ-FG', plant: PLANT,
       orderQuantity: 4, scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'seq-co01',
-    });
+    }, { authorization: await authority(tenant.client) });
     const before = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select operation_number, execution_order, sequence, short_text, work_center, control_key
         from production_order_operation
@@ -351,6 +383,7 @@ describe('routing execution-order audit', () => {
       materialNumber: 'SEQ-FG', plant: PLANT, quantity: '3', finishDate: '2026-10-25',
     });
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       orderType: 'PP01', client: tenant.client, changedBy: ACTOR,
       orderNumber: planned.order.orderNumber, expectedVersion: planned.order.version,
     });
@@ -419,9 +452,9 @@ describe('routing execution-order audit', () => {
       ['0010', '2', '000000'],
     ]);
     expect(listed.notes.join(' ')).toMatch(/not proof of an earlier routing order/);
-    const released = await import('../src/modules/inventory/production-orders').then((module) => module.releaseProductionOrder({
+    const released = await import('../src/modules/inventory/production-orders').then(async (module) => module.releaseProductionOrder({
       client: tenant.client, orderNumber: direct.orderNumber, releasedBy: ACTOR,
-    }));
+    }, { authorization: await authority(tenant.client) }));
     const ticket = await loadTimeTicket(tenant.client, { orderNumber: released.orderNumber, operationNumber: '0010' });
     expect(ticket.operations.map((row) => [row.operationNumber, row.executionOrder])).toEqual([['0030', 1], ['0010', 2]]);
     expect(ticket.selected?.operationNumber).toBe('0010');
@@ -431,7 +464,7 @@ describe('routing execution-order audit', () => {
       orderType: 'PP01', client: tenant.client, createdBy: ACTOR, materialNumber: 'SEQ-LEG', plant: PLANT,
       orderQuantity: 1, scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'seq-legacy',
       components: [{ materialNumber: 'SEQ-RM', plant: PLANT, requiredQuantity: 1 }],
-    });
+    }, { authorization: await authority(tenant.client) });
     const legacyShown = await getProductionOrderDisplay(tenant.client, legacy.orderNumber);
     expect(legacyShown?.operations).toEqual([]);
     expect(legacyShown?.gaps.join(' ')).toMatch(/Operations are not stored/);

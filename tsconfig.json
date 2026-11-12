@@ -20,13 +20,19 @@
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   // These five tracked files are documentation snippets, not independently executable modules.
-  // The runnable walkthrough remains the root walkthrough-seed.ts and stays in the project scope.
+  // The walkthrough seed and the two dev modules only it ever imported are retired: tenant
+  // creation and onboarding moved to the owner-token gate and demo provisioning, the seed no
+  // longer matches the service contracts, and it is not made to match them. It is out of the
+  // type-checked project until it is deleted; nothing else in the repository imports it.
   "exclude": [
     "node_modules",
     "notes/walk-a.ts",
     "notes/walk-b.ts",
     "notes/walk-c.ts",
     "notes/walk-d.ts",
-    "notes/walk-e.ts"
+    "notes/walk-e.ts",
+    "walkthrough-seed.ts",
+    "src/dev/walkthrough-volume.ts",
+    "src/dev/walkthrough-asset.ts"
   ]
 }

@@ -44,6 +44,11 @@ import {
   type ProductionOrderDisplay,
 } from './production-order-display';
 import { parseProductionOrderStatus, priorStatusFromRelease } from './production-order-status';
+import {
+  refusePlantOutsideScopeInTx,
+  verifyProductionAuthorityInTx,
+  type ProductionAuthorityContext,
+} from './production-authority';
 import { productionOrderComponentCommitmentEvent } from './schema';
 
 export const PRODUCTION_ORDER_CHANGE_CAPABILITY = 'PROD.ORDER.CHANGE';
@@ -582,6 +587,13 @@ export interface ProductionOrderLifecycleInput {
   expectedVersion: number;
   held: readonly string[];
   confirmed: boolean;
+  /**
+   * The signed-in user the completion is done for. `held` states what the screen
+   * believed the user holds; this is what the service verifies — against the session,
+   * the role grants and the user's Company Code and Plant reach — inside the same
+   * transaction that writes the status.
+   */
+  authorization: ProductionAuthorityContext;
 }
 
 function requireLifecycleActor(input: ProductionOrderLifecycleInput, verb: 'completed' | 'revoked'): string {
@@ -611,7 +623,7 @@ function requireLifecycleActor(input: ProductionOrderLifecycleInput, verb: 'comp
 
 async function lockedOrder(tx: Tx, client: string, orderNumber: string, expectedVersion: number) {
   const found = await rows(tx, sql`
-    select order_number, status, version, released_by, released_at
+    select order_number, status, version, plant, released_by, released_at
       from production_order
      where client = ${client} and order_number = ${orderNumber}
      for update
@@ -637,7 +649,16 @@ export async function technicallyCompleteProductionOrder(
   const actor = requireLifecycleActor(input, 'completed');
   const orderNumber = clean(input.orderNumber);
   await withTenant(input.client, async (tx) => {
+    // Technical completion closes the order to further change, and the order belongs
+    // to a plant: the user completing it must hold PROD.ORDER.CHANGE and reach that
+    // plant. Judged inside the transaction, before the order's status is written.
+    const authority = await verifyProductionAuthorityInTx(
+      tx, input.client, input.authorization, PRODUCTION_ORDER_CHANGE_CAPABILITY,
+    );
+    if (!authority.ok) fail(authority.refusal.message, authority.refusal.remedy);
     const { header, status } = await lockedOrder(tx, input.client, orderNumber, input.expectedVersion);
+    const outOfScope = await refusePlantOutsideScopeInTx(tx, input.client, String(header.plant), authority.restrictions);
+    if (outOfScope) fail(outOfScope.message, outOfScope.remedy);
     if (status === 'TECHNICALLY_COMPLETED') {
       fail(
         `Production order ${orderNumber} is already technically complete. It was not completed again.`,
@@ -694,7 +715,15 @@ export async function revokeTechnicalCompletion(
   const actor = requireLifecycleActor(input, 'revoked');
   const orderNumber = clean(input.orderNumber);
   await withTenant(input.client, async (tx) => {
+    // Revoking technical completion reopens the order, so it is judged by the same
+    // authority and the same reach as setting it.
+    const authority = await verifyProductionAuthorityInTx(
+      tx, input.client, input.authorization, PRODUCTION_ORDER_CHANGE_CAPABILITY,
+    );
+    if (!authority.ok) fail(authority.refusal.message, authority.refusal.remedy);
     const { header, status } = await lockedOrder(tx, input.client, orderNumber, input.expectedVersion);
+    const outOfScope = await refusePlantOutsideScopeInTx(tx, input.client, String(header.plant), authority.restrictions);
+    if (outOfScope) fail(outOfScope.message, outOfScope.remedy);
     if (status !== 'TECHNICALLY_COMPLETED') {
       fail(
         `Production order ${orderNumber} is not technically complete. Nothing was revoked.`,

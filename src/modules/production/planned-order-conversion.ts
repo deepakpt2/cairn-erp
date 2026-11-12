@@ -53,6 +53,7 @@ import {
 } from '../inventory/production-orders';
 import { material, materialPlant } from '../inventory/schema';
 import { parseProductionOrderStatus, type ProductionOrderStatus } from './production-order-status';
+import type { ProductionAuthorityContext } from './production-authority';
 import { readMaterialSchedulingProfile, SchedulingProfileError } from '../inventory/scheduling-profile';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { componentRequirementQuantity } from './mrp-explosion';
@@ -912,6 +913,12 @@ export async function convertPlannedOrder(input: {
    */
   components?: ConversionSuppliedComponent[] | null;
   named?: Record<string, string | null | undefined>;
+  /**
+   * The signed-in user the order is created for. Conversion creates a production
+   * order, so it is created under this user's authority and reach, not under the
+   * conversion's own.
+   */
+  authorization: ProductionAuthorityContext;
 }): Promise<PlannedOrderConversionResult> {
   const named = plannedOrderConversionRefusal(input.named);
   if (named) fail('UNSUPPORTED', named);
@@ -1008,7 +1015,7 @@ export async function convertPlannedOrder(input: {
         scheduledFinish: order.finishDate,
         orderType,
         productionVersion: assessed.productionVersion,
-      }, { tx, plannedOrderNumber: order.orderNumber });
+      }, { tx, plannedOrderNumber: order.orderNumber, authorization: input.authorization });
     } catch (caught) {
       if (caught instanceof ProductionOrderError) fail('ORDER', caught.message, caught.remedy);
       throw caught;
@@ -1096,6 +1103,8 @@ export async function convertPlannedOrders(input: {
   /** One supplied snapshot, checked against each selected order. It is not stored unless it matches. */
   components?: ConversionSuppliedComponent[] | null;
   named?: Record<string, string | null | undefined>;
+  /** The signed-in user every order in the batch is created for. */
+  authorization: ProductionAuthorityContext;
 }): Promise<{ correlationId: string; results: PlannedOrderConversionResult[] }> {
   const named = plannedOrderConversionRefusal(input.named);
   if (named) fail('UNSUPPORTED', named);
@@ -1117,6 +1126,7 @@ export async function convertPlannedOrders(input: {
         components: input.components,
         correlationId: input.correlationId,
         transactionCode: PLANNED_ORDER_CONVERT_COLLECTIVE_ALIAS,
+        authorization: input.authorization,
       }));
     } catch (caught) {
       const error = caught instanceof PlannedOrderConversionError

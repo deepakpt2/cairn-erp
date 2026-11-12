@@ -88,6 +88,9 @@ export async function enterTimeTicketAction(
         ...input,
         requestedBy: session.user.username,
         requestKey: text(form, 'requestKey'),
+        // The automatic movements this confirmation causes are posted under the
+        // confirming user's authority, so they are carried from here.
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       });
     const failed = !check && !ticket.written;
     return {

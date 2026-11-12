@@ -17,10 +17,38 @@ import { changeRouting, createRouting, getRouting, saveRoutingControlKey, saveRo
 import { enterTimeTicket, loadTimeTicket } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 
 const ACTOR = 'CO15_ALLOC';
 const PLANT = '1000';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('operation effect allocation', () => {
   it('scales a stored operation quantity without rounding or inventing a split', () => {
@@ -38,6 +66,7 @@ describe('CO15 allocation and progress', () => {
 
   beforeAll(async () => {
     tenant = await createTenant('co15-alloc');
+    Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     cancellationActor = await createConfirmationCancelTestActor(tenant.client, {
       username: 'CO15_CO13_AUTHORIZED', companyScopes: ['1000'], plantScopes: [PLANT],
     });
@@ -108,7 +137,10 @@ describe('CO15 allocation and progress', () => {
       validFrom: '2020-01-01', lotFrom: '0', lotTo: '999999', lotUnit: 'KG',
       bomUsage: 'P', bomAlternative: '01', taskListType: 'N', routingGroup: '50000091', groupCounter: '01',
     });
-  });
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+});
 
   afterAll(async () => {
     await destroyTenant(tenant.client);
@@ -120,8 +152,8 @@ describe('CO15 allocation and progress', () => {
       orderType: 'PP01', client: tenant.client, createdBy: ACTOR, materialNumber: 'AL-FG', plant: PLANT,
       orderQuantity: 10, scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey,
       ...(components ? { components: [{ materialNumber: 'AL-RM', plant: PLANT, requiredQuantity: 1 }] } : {}),
-    });
-    await releaseProductionOrder({ client: tenant.client, orderNumber: created.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(tenant.client) });
+    await releaseProductionOrder({ client: tenant.client, orderNumber: created.orderNumber, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
     const [row] = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select version from production_order where client = ${tenant.client} and order_number = ${created.orderNumber}
     `)) as unknown as Array<{ version: number }>;
@@ -324,11 +356,11 @@ describe('CO15 allocation and progress', () => {
     const first = await createProductionOrder({
       orderType: 'PP01', client: tenant.client, createdBy: ACTOR, materialNumber: 'AL-FG', plant: PLANT,
       orderQuantity: 10, scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'alloc-replay',
-    });
+    }, { authorization: await authority(tenant.client) });
     const second = await createProductionOrder({
       orderType: 'PP01', client: tenant.client, createdBy: ACTOR, materialNumber: 'AL-FG', plant: PLANT,
       orderQuantity: 10, scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'alloc-replay',
-    });
+    }, { authorization: await authority(tenant.client) });
     expect(second.orderNumber).toBe(first.orderNumber);
     const copied = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select operation_number, sequence, execution_order, short_text

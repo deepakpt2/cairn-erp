@@ -53,6 +53,12 @@ import { material, materialPlant } from './schema';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { productionOrder, productionOrderComponent } from './schema';
 import { parseProductionOrderStatus, type ProductionOrderStatus } from '../production/production-order-status';
+import {
+  productionScopeRefusal,
+  refusePlantOutsideScopeInTx,
+  verifyProductionAuthorityInTx,
+  type ProductionAuthorityContext,
+} from '../production/production-authority';
 import { OrderBomSnapshotError, resolveOrderBomSnapshot, type OrderBomSnapshot } from '../production/order-bom-snapshot';
 import { OrderOperationSnapshotError, insertOrderOperationSnapshot } from '../production/order-operation-snapshot';
 import { productionOrderType } from '../production/schema';
@@ -366,7 +372,7 @@ export async function previewProductionOrderBom(input: {
 
 export async function createProductionOrder(
   input: CreateProductionOrderInput,
-  options?: { tx?: Tx; plannedOrderNumber?: string | null },
+  options: { authorization: ProductionAuthorityContext; tx?: Tx; plannedOrderNumber?: string | null },
 ): Promise<CreateProductionOrderResult> {
   const plant = input.plant.trim();
   const materialNumber = input.materialNumber.trim();
@@ -400,6 +406,28 @@ export async function createProductionOrder(
 
   const run = async (tx: Tx): Promise<CreateProductionOrderResult> => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/production-order`}, 0))`);
+
+    // An order is a plan someone is accountable for, in a plant that person's mandate
+    // reaches. The session, the authority and the reach are judged here — before a
+    // resubmission is answered with the order it already made, and before anything is
+    // written — because a plan nobody is accountable for is not one this service writes.
+    const authority = await verifyProductionAuthorityInTx(
+      tx, input.client, options.authorization, PRODUCTION_ORDER_CAPABILITY,
+    );
+    if (!authority.ok) throw new ProductionOrderError(authority.refusal.message, authority.refusal.remedy);
+    const [plantRow] = await tx.select().from(plantTable).where(and(
+      eq(plantTable.client, input.client), eq(plantTable.plant, plant),
+    ));
+    if (!plantRow) throw new ProductionOrderError(`Plant ${plant} does not exist.`);
+    if (!plantRow.companyCode) {
+      throw new ProductionOrderError(
+        `Plant ${plant} carries no company code, so the order has none.`,
+        'Assign the plant to a company code, then create the order.',
+      );
+    }
+    const outOfScope = productionScopeRefusal(authority.restrictions, plantRow.companyCode, plantRow.plant);
+    if (outOfScope) throw new ProductionOrderError(outOfScope.message, outOfScope.remedy);
+
     if (input.requestKey) {
       const [replay] = await tx.select().from(productionOrder).where(and(
         eq(productionOrder.client, input.client),
@@ -425,16 +453,6 @@ export async function createProductionOrder(
       );
     }
 
-    const [plantRow] = await tx.select().from(plantTable).where(and(
-      eq(plantTable.client, input.client), eq(plantTable.plant, plant),
-    ));
-    if (!plantRow) throw new ProductionOrderError(`Plant ${plant} does not exist.`);
-    if (!plantRow.companyCode) {
-      throw new ProductionOrderError(
-        `Plant ${plant} carries no company code, so the order has none.`,
-        'Assign the plant to a company code, then create the order.',
-      );
-    }
     /** Derive the controlling area and currency from the plant's company code
      *  via the controlling area–company assignment (the MB03 ruling). */
     const [areaInfo] = await tx.select({
@@ -748,11 +766,14 @@ export async function createProductionOrder(
     }
     await tx.execute(sql`SAVEPOINT opkp_release`);
     try {
+      // The profile releases the order in the creator's name, so it is released under
+      // the creator's authority: a user who may create an order but not release one
+      // gets a created order and a note saying why it was not released.
       const released = await releaseProductionOrderInTx(tx, {
         client: input.client,
         orderNumber,
         releasedBy: input.createdBy,
-      });
+      }, options.authorization);
       await tx.execute(sql`RELEASE SAVEPOINT opkp_release`);
       return { ...released, releaseNote: null, snapshotWarnings: derived?.warnings ?? [] };
     } catch (caught) {
@@ -783,7 +804,7 @@ export async function releaseProductionOrder(input: {
   client: string;
   orderNumber: string;
   releasedBy: string;
-}): Promise<ProductionOrderView> {
+}, options: { authorization: ProductionAuthorityContext }): Promise<ProductionOrderView> {
   const number = input.orderNumber.trim();
   if (!number) throw new ProductionOrderError('An order number is required.', 'Enter the order to release.');
 
@@ -791,18 +812,30 @@ export async function releaseProductionOrder(input: {
     client: input.client,
     orderNumber: number,
     releasedBy: input.releasedBy,
-  }));
+  }, options.authorization));
 }
 
 async function releaseProductionOrderInTx(tx: Tx, input: {
   client: string;
   orderNumber: string;
   releasedBy: string;
-}): Promise<ProductionOrderView> {
+}, authorization: ProductionAuthorityContext): Promise<ProductionOrderView> {
+  // Release is the act that lets work be charged to the order, so it is released by a
+  // person holding PROD.ORDER.RELEASE whose reach covers the order's plant. Judged
+  // before the order is locked for update and before any status is answered, so a
+  // caller outside the plant learns nothing about the order at all.
+  const authority = await verifyProductionAuthorityInTx(
+    tx, input.client, authorization, PRODUCTION_ORDER_RELEASE_CAPABILITY,
+  );
+  if (!authority.ok) throw new ProductionOrderError(authority.refusal.message, authority.refusal.remedy);
   const [header] = await tx.select().from(productionOrder).where(and(
     eq(productionOrder.client, input.client),
     eq(productionOrder.orderNumber, input.orderNumber),
   )).for('update');
+  if (header) {
+    const outOfScope = await refusePlantOutsideScopeInTx(tx, input.client, header.plant, authority.restrictions);
+    if (outOfScope) throw new ProductionOrderError(outOfScope.message, outOfScope.remedy);
+  }
   if (!header) {
     throw new ProductionOrderError(
       `Production order ${input.orderNumber} does not exist.`,

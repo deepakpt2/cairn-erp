@@ -16,9 +16,37 @@ import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../
 import { enterTimeTicket, loadTimeTicket, previewTimeTicket, timeTicketRefusal } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 const ACTOR = 'CO11N_CLERK';
 const PLANT = '1000';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('CO11N time ticket', () => {
   let tenant: TestTenant;
@@ -52,6 +80,7 @@ describe('CO11N time ticket', () => {
 
   beforeAll(async () => {
     tenant = await createTenant('co11n-ticket');
+    Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     await withTenant(tenant.client, async (tx) => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
       await tx.execute(sql`
@@ -119,7 +148,7 @@ describe('CO11N time ticket', () => {
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-11', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co11n-order',
       components: [{ materialNumber: 'RM-11', plant: PLANT, requiredQuantity: 1 }],
-    });
+    }, { authorization: await authority(tenant.client) });
     await withTenant(tenant.client, async (tx) => {
       const copied = await resolveOrderOperationSnapshot(tx, {
         client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
@@ -134,8 +163,8 @@ describe('CO11N time ticket', () => {
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-11', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co11n-open',
       components: [{ materialNumber: 'RM-11', plant: PLANT, requiredQuantity: 1 }],
-    });
-    const releasedOrder = await releaseProductionOrder({ client: tenant.client, orderNumber: order.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(tenant.client) });
+    const releasedOrder = await releaseProductionOrder({ client: tenant.client, orderNumber: order.orderNumber, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
     released = releasedOrder.orderNumber;
     created = open.orderNumber;
     const stamped = await withTenant(tenant.client, async (tx) => {
@@ -143,7 +172,10 @@ describe('CO11N time ticket', () => {
       return rows[0]?.version;
     });
     version = Number(stamped);
-  });
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+});
 
   afterAll(async () => {
     await destroyTenant(tenant.client);
@@ -292,7 +324,7 @@ describe('CO11N time ticket', () => {
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-11', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co11n-teco',
       components: [{ materialNumber: 'RM-11', plant: PLANT, requiredQuantity: 1 }],
-    });
+    }, { authorization: await authority(tenant.client) });
     await withTenant(tenant.client, async (tx) => {
       const copied = await resolveOrderOperationSnapshot(tx, {
         client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
@@ -302,11 +334,12 @@ describe('CO11N time ticket', () => {
         client: tenant.client, orderNumber: draft.orderNumber, createdBy: ACTOR, operations: copied.operations,
       });
     });
-    await releaseProductionOrder({ client: tenant.client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    await releaseProductionOrder({ client: tenant.client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
     const [standing] = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select version from production_order where client = ${tenant.client} and order_number = ${draft.orderNumber}
     `)) as unknown as Array<{ version: number }>;
     const completed = await technicallyCompleteProductionOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: draft.orderNumber,
       expectedVersion: Number(standing?.version), held: ['PROD.ORDER.CHANGE'], confirmed: true,
     });

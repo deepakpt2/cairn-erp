@@ -7,6 +7,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { createProductionOrder, releaseProductionOrder } from '../../src/modules/inventory/production-orders';
 import type { BrowserTarget } from './targets';
+import { createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -20,9 +21,19 @@ const MIGO = '/inventory/migo';
  * the order still expects and is refused with the number in the sentence, then receives the
  * rest until the order stands complete.
  */
+const PROD_ACTOR: BrowserActor = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/** Sign in once, and widen the actor's reach to whatever the scene has added since. */
+async function browserAuthority(client: string) {
+  if (!PROD_ACTOR.userId) Object.assign(PROD_ACTOR, await createBrowserActor(client));
+  await refreshBrowserActor(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 export async function migoProductionReceipt(ctx: Context) {
   const { page, base, target } = ctx;
   const { client } = target;
+
   console.log('SCR-140: receive a production order’s finished good from MIGO A01 + R08');
 
   const company = await withTenant(client, async (tx) => {
@@ -133,8 +144,8 @@ export async function migoProductionReceipt(ctx: Context) {
     materialNumber: 'MGR-FG', plant: 'QG02', orderQuantity: 10,
     scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
     components: [{ materialNumber: 'MGR-RM', plant: 'QG02', storageLocation: 'SG02', requiredQuantity: 20 }],
-  });
-  await releaseProductionOrder({ client, orderNumber: order.orderNumber, releasedBy: 'browser.admin' });
+  }, { authorization: (await browserAuthority(client)) });
+  await releaseProductionOrder({ client, orderNumber: order.orderNumber, releasedBy: 'browser.admin' }, { authorization: (await browserAuthority(client)) });
   console.log(`  ✓ order ${order.orderNumber} stands released for ten of MGR-FG`);
 
   const receive = async (quantity: string) => {

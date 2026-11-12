@@ -25,6 +25,7 @@ import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRout
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 /**
  * A production-order component is planning demand only when conversion copied
@@ -82,10 +83,38 @@ async function dependents(client: string, parent?: string) {
   }>>;
 }
 
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 describe('dependent requirements survive conversion', () => {
   beforeAll(async () => {
     tenant = await createTenant('dep-conv');
     other = await createTenant('dep-conv-other');
+    Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     await withTenant(tenant.client, async (tx) => {
       await tx.insert(mrpController).values({
         client: tenant.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
@@ -158,7 +187,10 @@ describe('dependent requirements survive conversion', () => {
     });
     await extend(other.client, 'FG-FOREIGN', 'MAKE');
     await extend(other.client, 'COMP-FOREIGN', 'BUY');
-  }, 180_000);
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+}, 180_000);
 
   afterAll(async () => {
     await destroyTenant(tenant.client);
@@ -255,6 +287,7 @@ describe('dependent requirements survive conversion', () => {
     `));
 
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: selected.order.orderNumber, orderType: 'PP01',
     });
     expect(converted.status).toBe('CONVERTED');
@@ -278,6 +311,7 @@ describe('dependent requirements survive conversion', () => {
     ]);
 
     const again = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: selected.order.orderNumber, orderType: 'PP01',
     });
     expect(again.status).toBe('ALREADY_CONVERTED');
@@ -286,6 +320,7 @@ describe('dependent requirements survive conversion', () => {
     expect(again.warnings.join(' ')).toMatch(/not reconciled again/);
     expect(again.productionOrderNumber).toBe(converted.productionOrderNumber);
     const collective = await convertPlannedOrders({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, correlationId: 'dep-repeat',
       orderNumbers: [selected.order.orderNumber], orderType: 'PP01',
     });
@@ -306,6 +341,7 @@ describe('dependent requirements survive conversion', () => {
       )
     `));
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: failed.order.orderNumber, orderType: 'ZZ99',
     })).rejects.toMatchObject({ reconciliation: 'ROLLED_BACK' });
     expect(await dependents(tenant.client, failed.order.orderNumber)).toEqual([
@@ -378,6 +414,7 @@ describe('dependent requirements survive conversion', () => {
         (${tenant.client}, ${planned.order.orderNumber}, 'FG-DEP', '0020', 'COMP-DEP', ${PLANT}, 9, 'KG', '2026-12-16', 'FG-DEP', 'OPEN', 1, ${ACTOR})
     `));
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     });
     expect(converted.status).toBe('CONVERTED');
@@ -463,6 +500,7 @@ describe('dependent requirements survive conversion', () => {
     expect(preview?.warnings.join(' ')).toMatch(/3 open dependent requirement/);
     expect(preview?.warnings.join(' ')).toMatch(/stays open/);
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     });
     expect(converted.status).toBe('CONVERTED');
@@ -497,6 +535,7 @@ describe('dependent requirements survive conversion', () => {
     expect(list.warnings.join(' ')).toMatch(/not counted again/);
 
     const again = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     });
     expect(again).toMatchObject({ status: 'ALREADY_CONVERTED', reconciliation: 'NOT_RERUN', productionOrderNumber: converted.productionOrderNumber });
@@ -521,6 +560,7 @@ describe('dependent requirements survive conversion', () => {
         (${tenant.client}, ${closedOrder.order.orderNumber}, 'FG-DEP', '0020', 'COMP-DEP', ${PLANT}, 30, 'KG', '2026-12-25', 'FG-DEP', 'CLOSED', 1, ${ACTOR})
     `));
     const closedConversion = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: closedOrder.order.orderNumber, orderType: 'PP01',
     });
     expect(closedConversion.reconciliation).toBe('NONE');
@@ -552,12 +592,14 @@ describe('dependent requirements survive conversion', () => {
       )
     `));
     const collective = await convertPlannedOrders({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, correlationId: 'dep-rollback',
       orderNumbers: [failed.order.orderNumber], orderType: 'ZZ99',
     });
     expect(collective.results[0]).toMatchObject({ status: 'FAILED', reconciliation: 'ROLLED_BACK', productionOrderNumber: null });
     expect(collective.results[0]?.warnings.join(' ')).toMatch(/not an incomplete reconciliation/);
     await expect(convertPlannedOrders({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, correlationId: 'dep-empty', orderNumbers: [], orderType: 'PP01',
     })).rejects.toMatchObject({ code: 'EMPTY', reconciliation: 'NOT_ATTEMPTED' });
     expect(collective.results[0]?.warnings.join(' ')).toMatch(/not closed/);
@@ -582,6 +624,7 @@ describe('dependent requirements survive conversion', () => {
       )
     `));
     await expect(convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: other.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     })).rejects.toThrow(/does not stand/);
     expect(await dependents(other.client, foreign.order.orderNumber)).toEqual([
@@ -599,7 +642,7 @@ describe('dependent requirements survive conversion', () => {
       client: tenant.client, createdBy: ACTOR, requestKey: 'co01-undated',
       materialNumber: 'FG-DEP', plant: PLANT, orderQuantity: 5, orderType: 'PP01',
       scheduledStart: '2026-10-20', scheduledFinish: '2026-10-30',
-    });
+    }, { authorization: await authority(tenant.client) });
     const directDisplay = await getProductionOrderDisplay(tenant.client, direct.orderNumber);
     expect(directDisplay?.components.length).toBeGreaterThan(0);
     expect(directDisplay?.components.every((row) => row.requirementDate == null)).toBe(true);
@@ -624,6 +667,7 @@ describe('dependent requirements survive conversion', () => {
       )
     `));
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     });
     expect(converted.status).toBe('CONVERTED');
@@ -666,6 +710,7 @@ describe('dependent requirements survive conversion', () => {
         (${tenant.client}, ${planned.order.orderNumber}, 'FG-DEP', '0020', 'COMP-DEP', ${PLANT}, 30, 'KG', '2026-12-02', 'FG-DEP', 'OPEN', 1, ${ACTOR})
     `));
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     });
     const orderNumber = converted.productionOrderNumber!;
@@ -697,6 +742,7 @@ describe('dependent requirements survive conversion', () => {
     expect(before.rows.filter((row) => row.documentNumber === orderNumber && row.elementType === 'PRODUCTION_COMPONENT').map((row) => row.quantity).sort((left, right) => left - right)).toEqual([7, 30]);
 
     const completed = await technicallyCompleteProductionOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber, expectedVersion: header.order.version, held: HELD, confirmed: true,
     });
     const hidden = await stockRequirementsList({
@@ -712,6 +758,7 @@ describe('dependent requirements survive conversion', () => {
       expect.objectContaining({ item_number: '0020', status: 'CLOSED' }),
     ]);
     const revoked = await revokeTechnicalCompletion({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber, expectedVersion: completed.order.version, held: HELD, confirmed: true,
     });
     expect(revoked.order.status).toBe('CREATED');
@@ -845,6 +892,7 @@ describe('dependent requirements survive conversion', () => {
         (${tenant.client}, ${planned.order.orderNumber}, 'FG-DEP', '0020', 'COMP-DEP', ${PLANT}, 30, 'KG', '2026-12-02', 'FG-DEP', 'OPEN', 1, ${ACTOR})
     `));
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     });
     const orderNumber = converted.productionOrderNumber!;
@@ -1050,6 +1098,7 @@ describe('dependent requirements survive conversion', () => {
        where client = ${tenant.client} and material_number = 'COMP-DEP' and plant = ${PLANT}
     `));
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     });
     expect(converted.warnings.join(' ')).toMatch(/were closed after the same requirement date/);
@@ -1146,7 +1195,7 @@ describe('dependent requirements survive conversion', () => {
       client: tenant.client, createdBy: ACTOR, requestKey: 'co01-header-undated',
       materialNumber: 'FG-DEP', plant: PLANT, orderQuantity: 1, orderType: 'PP01',
       scheduledStart: '2026-10-20', scheduledFinish: FINISH,
-    });
+    }, { authorization: await authority(tenant.client) });
     const manualOpened = (await getProductionOrderDisplay(tenant.client, manual.orderNumber))!;
     const movedManual = await changeProductionOrder({
       client: tenant.client, changedBy: ACTOR, orderNumber: manual.orderNumber,
@@ -1161,12 +1210,14 @@ describe('dependent requirements survive conversion', () => {
 
     const demandWithOrder = Number((await planComponent()).materials.find((row) => row.materialNumber === 'COMP-DEP')?.demandQuantity);
     const completed = await technicallyCompleteProductionOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber, expectedVersion: afterFailure.version, held: HELD, confirmed: true,
     });
     expect(Number((await planComponent()).materials.find((row) => row.materialNumber === 'COMP-DEP')?.demandQuantity)).toBe(demandWithOrder - 50);
     expect(await componentRows()).toEqual([]);
     expect(await receiptRows()).toEqual([]);
     const revoked = await revokeTechnicalCompletion({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber, expectedVersion: completed.order.version, held: HELD, confirmed: true,
     });
     expect(revoked.order.status).toBe('CREATED');
@@ -1214,7 +1265,7 @@ describe('dependent requirements survive conversion', () => {
       client: tenant.client, createdBy: ACTOR, requestKey: 'co01-co02-undated',
       materialNumber: 'FG-DEP', plant: PLANT, orderQuantity: 5, orderType: 'PP01',
       scheduledStart: '2026-10-20', scheduledFinish: '2026-10-30',
-    });
+    }, { authorization: await authority(tenant.client) });
     const opened = await getProductionOrderDisplay(tenant.client, direct.orderNumber);
     const changed = await changeProductionOrder({
       client: tenant.client, changedBy: ACTOR, orderNumber: direct.orderNumber, expectedVersion: opened!.version,
@@ -1240,6 +1291,7 @@ describe('dependent requirements survive conversion', () => {
         (${tenant.client}, ${planned.order.orderNumber}, 'FG-DEP', '0020', 'COMP-DEP', ${PLANT}, 30, 'KG', '2026-12-04', 'FG-DEP', 'OPEN', 1, ${ACTOR})
     `));
     const converted = await convertPlannedOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber: planned.order.orderNumber, orderType: 'PP01',
     });
     const orderNumber = converted.productionOrderNumber!;
@@ -1262,6 +1314,7 @@ describe('dependent requirements survive conversion', () => {
     const active = await demandOf(nextKey());
     const shown = await getProductionOrderDisplay(tenant.client, orderNumber);
     const completed = await technicallyCompleteProductionOrder({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber, expectedVersion: shown!.version, held: HELD, confirmed: true,
     });
     const hiddenDemand = await demandOf(nextKey());
@@ -1279,6 +1332,7 @@ describe('dependent requirements survive conversion', () => {
       expect.objectContaining({ status: 'CLOSED' }),
     ]);
     const revoked = await revokeTechnicalCompletion({
+      authorization: await authority(tenant.client),
       client: tenant.client, changedBy: ACTOR, orderNumber, expectedVersion: completed.order.version, held: HELD, confirmed: true,
     });
     expect(revoked.order.status).toBe('CREATED');

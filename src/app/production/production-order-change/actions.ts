@@ -122,6 +122,7 @@ async function runStatusAction(form: FormData, kind: 'complete' | 'revoke'): Pro
       expectedVersion: Number(text(form, 'version')),
       held: session.user.capabilities,
       confirmed: true,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     };
     const result = kind === 'complete'
       ? await technicallyCompleteProductionOrder(input)

@@ -13,6 +13,7 @@ import {
   MB1A_SCENARIOS,
   MIGO_ISSUE_SCENARIOS,
   GOODS_ISSUE_CAPABILITY,
+  PRODUCTION_ORDER_ISSUE_CAPABILITY,
   postGoodsIssue,
   type PostGoodsIssueInput,
 } from '../src/modules/inventory/goods-issue';
@@ -25,6 +26,7 @@ import { getProductionOrderDisplay } from '../src/modules/production/production-
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 /**
  * SCR-139 / MIGO 261 — the component issue a production order consumes.
@@ -37,6 +39,33 @@ import { createTenant, destroyTenant, expectRejectedError, type TestTenant } fro
 const ACTOR = 'SCR139_MIGO_TEST';
 const PLANT = 'QM01';
 const COMPANY = '1000';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('SCR-139 MIGO 261 goods issue to a production order', () => {
   let fx: TestTenant;
@@ -61,6 +90,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
   beforeAll(async () => {
     fx = await createTenant('scr139-migo');
     client = fx.client;
+    Object.assign(PROD_ACTOR, await createProductionActor(client));
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
@@ -149,9 +179,9 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       materialNumber: 'MIGO-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', requiredQuantity: 25 }],
-    });
+    }, { authorization: await authority(client) });
     orderNumber = order.orderNumber;
-    await releaseProductionOrder({ client, orderNumber, releasedBy: ACTOR });
+    await releaseProductionOrder({ client, orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     await withTenant(client, async (tx) => {
       await tx.insert(capability).values({
         code: GOODS_ISSUE_CAPABILITY, module: 'INV', description: 'Test goods issue posting', action: 'POST',
@@ -161,9 +191,14 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
         description: 'Authorises MB1A compatibility assertions', isSystemRole: false, isReadOnly: false,
         createdBy: ACTOR,
       }).onConflictDoNothing();
-      await tx.insert(roleCapability).values({
-        client, roleCode: 'TEST_MIGO_MB1A', capabilityCode: GOODS_ISSUE_CAPABILITY, createdBy: ACTOR,
+      await tx.insert(capability).values({
+        code: PRODUCTION_ORDER_ISSUE_CAPABILITY, module: 'PROD',
+        description: 'Test component issue to a production order', action: 'GI',
       }).onConflictDoNothing();
+      await tx.insert(roleCapability).values([
+        { client, roleCode: 'TEST_MIGO_MB1A', capabilityCode: GOODS_ISSUE_CAPABILITY, createdBy: ACTOR },
+        { client, roleCode: 'TEST_MIGO_MB1A', capabilityCode: PRODUCTION_ORDER_ISSUE_CAPABILITY, createdBy: ACTOR },
+      ]).onConflictDoNothing();
       const rows = await tx.execute(sql`
         select company_code as "companyCode" from plant where client = ${client} and plant = ${PLANT}
       `) as unknown as Array<{ companyCode: string }>;
@@ -192,7 +227,10 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       `) as unknown as Array<{ id: string }>;
       authorisedSessionId = sessionRows[0].id;
     });
-  }, 180_000);
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+}, 180_000);
 
   afterAll(async () => {
     if (client) await destroyTenant(client);
@@ -204,7 +242,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
   });
 
   it('issues a component against the released order: stock, value, journal and the order reference', async () => {
-    const view = await postGoodsIssue(input(), 'MIGO');
+    const view = await postGoodsIssue(input(), 'MIGO', { authorization: authorization() });
     expect(view.lines).toHaveLength(1);
     expect(Number(view.totalValue)).toBe(100);
 
@@ -233,7 +271,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
     const view = await postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 5,
       productionOrderNumber: orderNumber, productionOrderItem: 10,
-    }] }), 'MIGO');
+    }] }), 'MIGO', { authorization: authorization() });
     const rows = await withTenant(client, async (tx) => {
       const journal = view.journalDocumentNumber!;
       const result = await tx.execute(sql`
@@ -257,7 +295,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
     const error = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 11,
       productionOrderNumber: orderNumber, productionOrderItem: 10,
-    }] }), 'MIGO'));
+    }] }), 'MIGO', { authorization: authorization() }));
     expect(error.message).toMatch(/still requires 10\.000 PC of MIGO-RM/);
     expect(error.remedy).toMatch(/tolerance master does not stand in canon/);
   });
@@ -269,17 +307,17 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       materialNumber: 'MIGO-FG', plant: PLANT, orderQuantity: 5,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'MIGO-RM', plant: PLANT, requiredQuantity: 5 }],
-    });
+    }, { authorization: await authority(client) });
     const unreleased = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 1,
       productionOrderNumber: order.orderNumber, productionOrderItem: 10,
-    }] }), 'MIGO'));
+    }] }), 'MIGO', { authorization: authorization() }));
     expect(unreleased.message).toMatch(/stands created, and only a released order may be charged/);
 
     const missing = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 1,
       productionOrderNumber: 'PRD9999999', productionOrderItem: 10,
-    }] }), 'MIGO'));
+    }] }), 'MIGO', { authorization: authorization() }));
     expect(missing.message).toMatch(/Production order PRD9999999 does not exist/);
   });
 
@@ -287,20 +325,20 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
     const wrongItem = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 1,
       productionOrderNumber: orderNumber, productionOrderItem: 99,
-    }] }), 'MIGO'));
+    }] }), 'MIGO', { authorization: authorization() }));
     expect(wrongItem.message).toMatch(/carries no component item 99/);
 
     const wrongMaterial = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-FG', plant: PLANT, storageLocation: 'SM01', quantity: 1,
       productionOrderNumber: orderNumber, productionOrderItem: 10,
-    }] }), 'MIGO'));
+    }] }), 'MIGO', { authorization: authorization() }));
     expect(wrongMaterial.message).toMatch(/item 10 requires MIGO-RM in plant/);
   });
 
   it('refuses a 261 line that names no order, and an order on a 201 line', async () => {
     const noOrder = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, quantity: 1,
-    }] }), 'MIGO'));
+    }] }), 'MIGO', { authorization: authorization() }));
     expect(noOrder.message).toMatch(/consumes for a production order, and none was named/);
 
     const orderOn201 = await expectRejectedError(postGoodsIssue(input({ movementTypeCode: '201', lines: [{
@@ -324,12 +362,13 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       materialNumber: 'MIGO-FG', plant: PLANT, orderQuantity: 2,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'MIGO-RM', plant: PLANT, requiredQuantity: 2 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     const [standing] = await withTenant(client, (tx) => tx.execute(sql`
       select version from production_order where client = ${client} and order_number = ${draft.orderNumber}
     `)) as unknown as Array<{ version: number }>;
     await technicallyCompleteProductionOrder({
+      authorization: await authority(client),
       client, changedBy: ACTOR, orderNumber: draft.orderNumber, expectedVersion: Number(standing?.version),
       held: ['PROD.ORDER.CHANGE'], confirmed: true,
     });
@@ -339,7 +378,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
         materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 1,
         productionOrderNumber: draft.orderNumber, productionOrderItem: 10,
       }],
-    }), 'MIGO');
+    }), 'MIGO', { authorization: authorization() });
     expect(posted.materialDocumentNumber).toBeTruthy();
     const [after] = await withTenant(client, (tx) => tx.execute(sql`
       select status from production_order where client = ${client} and order_number = ${draft.orderNumber}
@@ -354,8 +393,8 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       materialNumber: 'MIGO-FG', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', requiredQuantity: 5 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     await withTenant(client, (tx) => tx.execute(sql`
       update production_order_component
          set requirement_date = '2026-10-18'
@@ -367,7 +406,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
         materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 2,
         productionOrderNumber: draft.orderNumber, productionOrderItem: 10,
       }],
-    }), 'MIGO');
+    }), 'MIGO', { authorization: authorization() });
     const list = await stockRequirementsList({
       client, today: '2026-10-01', selection: { material: 'MIGO-RM', plant: PLANT },
     });
@@ -397,7 +436,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
         materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 5,
         productionOrderNumber: draft.orderNumber, productionOrderItem: 10,
       }],
-    }), 'MIGO');
+    }), 'MIGO', { authorization: authorization() });
     expect(again.materialDocumentNumber).not.toBe(issued.materialDocumentNumber);
     const shown = await getProductionOrderDisplay(client, draft.orderNumber);
     expect(shown?.components.find((row) => row.itemNumber === 10)?.issuedQuantity).toBe('5.000');

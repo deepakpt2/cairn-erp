@@ -8,6 +8,7 @@ import { defineRange } from '../../src/platform/numbering';
 import { createProductionOrder, releaseProductionOrder } from '../../src/modules/inventory/production-orders';
 import type { BrowserTarget } from './targets';
 import { chooseClosed } from './closed-fields';
+import { createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -21,9 +22,19 @@ const MIGO = '/inventory/migo';
  * confirms the ledger carries the order, and walks three other cells of the matrix:
  * a delivered one that links away, and a refused one that names its capability.
  */
+const PROD_ACTOR: BrowserActor = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/** Sign in once, and widen the actor's reach to whatever the scene has added since. */
+async function browserAuthority(client: string) {
+  if (!PROD_ACTOR.userId) Object.assign(PROD_ACTOR, await createBrowserActor(client));
+  await refreshBrowserActor(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 export async function migoComponentIssue(ctx: Context) {
   const { page, base, target } = ctx;
   const { client } = target;
+
   console.log('SCR-139: post 261 against a released order from MIGO, then walk the matrix');
 
   const company = await withTenant(client, async (tx) => {
@@ -119,8 +130,8 @@ export async function migoComponentIssue(ctx: Context) {
     materialNumber: 'MIGO-FG', plant: 'QG01', orderQuantity: 10,
     scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
     components: [{ materialNumber: 'MIGO-RM', plant: 'QG01', storageLocation: 'SG01', requiredQuantity: 25 }],
-  });
-  await releaseProductionOrder({ client, orderNumber: order.orderNumber, releasedBy: 'browser.admin' });
+  }, { authorization: (await browserAuthority(client)) });
+  await releaseProductionOrder({ client, orderNumber: order.orderNumber, releasedBy: 'browser.admin' }, { authorization: (await browserAuthority(client)) });
   console.log(`  ✓ order ${order.orderNumber} stands released with 25 of MIGO-RM required`);
 
   await page.goto(`${base}${MIGO}`, { waitUntil: 'domcontentloaded' });

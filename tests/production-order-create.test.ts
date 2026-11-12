@@ -12,6 +12,7 @@ import {
   releaseProductionOrder,
 } from '../src/modules/inventory/production-orders';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 /**
  * SCR-138 / CO01 — the order master the 261 issue will post against.
@@ -23,6 +24,33 @@ import { createTenant, destroyTenant, type TestTenant } from './helpers';
 const ACTOR = 'SCR138_CO01_TEST';
 const PLANT = 'QO01';
 
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 describe('SCR-138 production order create (CO01)', () => {
   let fx: TestTenant;
   let client = '';
@@ -31,6 +59,7 @@ describe('SCR-138 production order create (CO01)', () => {
   beforeAll(async () => {
     fx = await createTenant('scr138-co01');
     client = fx.client;
+    Object.assign(PROD_ACTOR, await createProductionActor(client));
     await withTenant(client, async (tx) => {
       // The produced material and two components, extended to the plant.
       await tx.execute(sql`
@@ -71,7 +100,8 @@ describe('SCR-138 production order create (CO01)', () => {
         on conflict (client, order_type) do nothing
       `);
     });
-  }, 180_000);
+  
+    }, 180_000);
 
   afterAll(async () => {
     if (client) await destroyTenant(client);
@@ -92,7 +122,7 @@ describe('SCR-138 production order create (CO01)', () => {
         { materialNumber: 'CO01-RM1', plant: PLANT, storageLocation: 'SO01', requiredQuantity: 50 },
         { materialNumber: 'CO01-RM2', plant: PLANT, requiredQuantity: 20 },
       ],
-    });
+    }, { authorization: await authority(client) });
     made = view.orderNumber;
     expect(view.orderNumber).toMatch(/^PRD/);
     expect(view.status).toBe('CREATED');
@@ -122,7 +152,7 @@ describe('SCR-138 production order create (CO01)', () => {
       materialNumber: 'CO01-FG', plant: 'QO99', orderQuantity: 10,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       components: [{ materialNumber: 'CO01-RM1', plant: PLANT, requiredQuantity: 5 }],
-    })).rejects.toThrow(/Plant QO99 does not exist/);
+    }, { authorization: await authority(client) })).rejects.toThrow(/Plant QO99 does not exist/);
   });
 
   it('refuses a component that is not extended to its plant, naming the material and plant', async () => {
@@ -132,7 +162,7 @@ describe('SCR-138 production order create (CO01)', () => {
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       components: [{ materialNumber: 'CO01-RM1', plant: 'QO98', requiredQuantity: 5 }],
-    })).rejects.toThrow(/Plant QO98 does not exist/);
+    }, { authorization: await authority(client) })).rejects.toThrow(/Plant QO98 does not exist/);
   });
 
   it('refuses a finish before the start and a non-positive order quantity', async () => {
@@ -142,7 +172,7 @@ describe('SCR-138 production order create (CO01)', () => {
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-11-06', scheduledFinish: '2026-11-02',
       components: [{ materialNumber: 'CO01-RM1', plant: PLANT, requiredQuantity: 5 }],
-    })).rejects.toThrow(/stands before the scheduled start/);
+    }, { authorization: await authority(client) })).rejects.toThrow(/stands before the scheduled start/);
 
     await expect(createProductionOrder({
       orderType: 'PP01',
@@ -150,7 +180,7 @@ describe('SCR-138 production order create (CO01)', () => {
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 0,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       components: [{ materialNumber: 'CO01-RM1', plant: PLANT, requiredQuantity: 5 }],
-    })).rejects.toThrow(/not a positive quantity/);
+    }, { authorization: await authority(client) })).rejects.toThrow(/not a positive quantity/);
   });
 
   it('refuses an order with no components, and a storage location of another plant', async () => {
@@ -160,7 +190,7 @@ describe('SCR-138 production order create (CO01)', () => {
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       components: [],
-    })).rejects.toThrow(/at least one component/);
+    }, { authorization: await authority(client) })).rejects.toThrow(/at least one component/);
 
     await expect(createProductionOrder({
       orderType: 'PP01',
@@ -168,7 +198,7 @@ describe('SCR-138 production order create (CO01)', () => {
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       components: [{ materialNumber: 'CO01-RM1', plant: PLANT, storageLocation: 'ZZZZ', requiredQuantity: 5 }],
-    })).rejects.toThrow(/Storage location ZZZZ does not stand in plant QO01/);
+    }, { authorization: await authority(client) })).rejects.toThrow(/Storage location ZZZZ does not stand in plant QO01/);
   });
 
   it('replays a request key instead of making a second order', async () => {
@@ -180,7 +210,7 @@ describe('SCR-138 production order create (CO01)', () => {
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       components: [{ materialNumber: 'CO01-RM1', plant: PLANT, requiredQuantity: 5 }],
       requestKey: key,
-    });
+    }, { authorization: await authority(client) });
     const second = await createProductionOrder({
       orderType: 'PP01',
       client, createdBy: ACTOR,
@@ -188,23 +218,23 @@ describe('SCR-138 production order create (CO01)', () => {
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       components: [{ materialNumber: 'CO01-RM1', plant: PLANT, requiredQuantity: 5 }],
       requestKey: key,
-    });
+    }, { authorization: await authority(client) });
     expect(second.orderNumber).toBe(first.orderNumber);
   });
 
   it('releases an order once, naming who released it and when, and a second release is a no-op', async () => {
-    const released = await releaseProductionOrder({ client, orderNumber: made, releasedBy: ACTOR });
+    const released = await releaseProductionOrder({ client, orderNumber: made, releasedBy: ACTOR }, { authorization: await authority(client) });
     expect(released.status).toBe('RELEASED');
     expect(released.releasedBy).toBe(ACTOR);
     expect(released.releasedAt).not.toBeNull();
 
-    const again = await releaseProductionOrder({ client, orderNumber: made, releasedBy: 'SOMEONE_ELSE' });
+    const again = await releaseProductionOrder({ client, orderNumber: made, releasedBy: 'SOMEONE_ELSE' }, { authorization: await authority(client) });
     expect(again.status).toBe('RELEASED');
     expect(again.releasedBy).toBe(ACTOR);
   });
 
   it('refuses to release an order that does not stand, in SAP’s wording', async () => {
-    await expect(releaseProductionOrder({ client, orderNumber: 'PRD9999999', releasedBy: ACTOR }))
+    await expect(releaseProductionOrder({ client, orderNumber: 'PRD9999999', releasedBy: ACTOR }, { authorization: await authority(client) }))
       .rejects.toThrow(/Production order PRD9999999 does not exist/);
   });
 

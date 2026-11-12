@@ -22,10 +22,38 @@ import { runOrderInformation } from '../src/modules/production/order-information
 import { parseProductionOrderStatus } from '../src/modules/production/production-order-status';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 const ACTOR = 'CO02_TECO';
 const PLANT = 'QTCO';
 const HELD = [PRODUCTION_ORDER_CHANGE_CAPABILITY];
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('CO02 technical completion', () => {
   let tenant: TestTenant;
@@ -43,7 +71,7 @@ describe('CO02 technical completion', () => {
       scheduledStart: '2026-10-24',
       scheduledFinish: '2026-10-30',
       components: [{ materialNumber: 'TECO-RM', plant: PLANT, requiredQuantity: 2 }],
-    });
+    }, { authorization: await authority(tenant.client) });
     const standing = await header(created.orderNumber);
     return { ...created, version: Number(standing.version) };
   }
@@ -86,7 +114,7 @@ describe('CO02 technical completion', () => {
     }>>;
   }
 
-  function life(orderNumber: string, expectedVersion: number, held: readonly string[] = HELD, confirmed = true) {
+  async function life(orderNumber: string, expectedVersion: number, held: readonly string[] = HELD, confirmed = true) {
     return {
       client: tenant.client,
       changedBy: ACTOR,
@@ -94,12 +122,14 @@ describe('CO02 technical completion', () => {
       expectedVersion,
       held,
       confirmed,
+      authorization: await authority(tenant.client),
     };
   }
 
   beforeAll(async () => {
     tenant = await createTenant('co02-teco');
     other = await createTenant('co02-teco-other');
+    Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     await withTenant(tenant.client, async (tx) => {
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
@@ -126,7 +156,10 @@ describe('CO02 technical completion', () => {
         on conflict (client, order_type) do nothing
       `);
     });
-  });
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+});
 
   afterAll(async () => {
     await destroyTenant(tenant.client);
@@ -156,7 +189,7 @@ describe('CO02 technical completion', () => {
 
   it('completes a created order and a released order, then revokes to the prior status', async () => {
     const created = await order('teco-created');
-    const completed = await technicallyCompleteProductionOrder(life(created.orderNumber, created.version));
+    const completed = await technicallyCompleteProductionOrder(await life(created.orderNumber, created.version));
     expect(completed.order.status).toBe('TECHNICALLY_COMPLETED');
     expect(completed.order.technicallyCompletedBy).toBe(ACTOR);
     expect(completed.order.technicallyCompletedAt).toBeTruthy();
@@ -167,19 +200,19 @@ describe('CO02 technical completion', () => {
     expect(createdHeader.quantity).toBe('8.000');
     expect(createdHeader.released_by).toBeNull();
 
-    const revoked = await revokeTechnicalCompletion(life(created.orderNumber, completed.order.version));
+    const revoked = await revokeTechnicalCompletion(await life(created.orderNumber, completed.order.version));
     expect(revoked.order.status).toBe('CREATED');
     expect(revoked.order.technicallyCompletedBy).toBeNull();
     expect(revoked.order.technicallyCompletedAt).toBeNull();
     expect((await header(created.orderNumber)).released_by).toBeNull();
 
     const released = await order('teco-released');
-    await releaseProductionOrder({ client: tenant.client, orderNumber: released.orderNumber, releasedBy: ACTOR });
+    await releaseProductionOrder({ client: tenant.client, orderNumber: released.orderNumber, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
     const releasedHeader = await header(released.orderNumber);
-    const done = await technicallyCompleteProductionOrder(life(released.orderNumber, Number(releasedHeader.version)));
+    const done = await technicallyCompleteProductionOrder(await life(released.orderNumber, Number(releasedHeader.version)));
     expect(done.order.status).toBe('TECHNICALLY_COMPLETED');
     expect(done.order.releasedBy).toBe(ACTOR);
-    const restored = await revokeTechnicalCompletion(life(released.orderNumber, done.order.version));
+    const restored = await revokeTechnicalCompletion(await life(released.orderNumber, done.order.version));
     expect(restored.order.status).toBe('RELEASED');
     expect(restored.order.releasedBy).toBe(ACTOR);
     expect((await header(released.orderNumber)).technically_completed_by).toBeNull();
@@ -187,14 +220,14 @@ describe('CO02 technical completion', () => {
 
   it('refuses a missing authority, an unconfirmed action, a repeat, and a stale version without a second audit', async () => {
     const created = await order('teco-guards');
-    await expect(technicallyCompleteProductionOrder(life(created.orderNumber, created.version, []))).rejects.toThrow(/do not hold the authority/);
-    await expect(technicallyCompleteProductionOrder(life(created.orderNumber, created.version, HELD, false))).rejects.toThrow(/not confirmed/);
+    await expect(technicallyCompleteProductionOrder(await life(created.orderNumber, created.version, []))).rejects.toThrow(/do not hold the authority/);
+    await expect(technicallyCompleteProductionOrder(await life(created.orderNumber, created.version, HELD, false))).rejects.toThrow(/not confirmed/);
     expect((await header(created.orderNumber)).status).toBe('CREATED');
     expect((await audits(created.orderNumber)).some((row) => row.change_type === 'TECO')).toBe(false);
 
-    const done = await technicallyCompleteProductionOrder(life(created.orderNumber, created.version));
-    await expect(technicallyCompleteProductionOrder(life(created.orderNumber, done.order.version))).rejects.toThrow(/already technically complete/);
-    await expect(technicallyCompleteProductionOrder(life(created.orderNumber, created.version))).rejects.toThrow(/changed by someone else/);
+    const done = await technicallyCompleteProductionOrder(await life(created.orderNumber, created.version));
+    await expect(technicallyCompleteProductionOrder(await life(created.orderNumber, done.order.version))).rejects.toThrow(/already technically complete/);
+    await expect(technicallyCompleteProductionOrder(await life(created.orderNumber, created.version))).rejects.toThrow(/changed by someone else/);
     const standing = await header(created.orderNumber);
     expect(standing.status).toBe('TECHNICALLY_COMPLETED');
     expect(Number(standing.version)).toBe(done.order.version);
@@ -202,37 +235,43 @@ describe('CO02 technical completion', () => {
     expect(rows.filter((row) => row.change_type === 'TECO')).toHaveLength(2);
     expect(rows.filter((row) => row.change_type === 'REVOKE_TECO')).toHaveLength(0);
 
-    await expect(revokeTechnicalCompletion(life(created.orderNumber, created.version))).rejects.toThrow(/changed by someone else/);
-    await expect(revokeTechnicalCompletion({ ...life(created.orderNumber, done.order.version), client: other.client })).rejects.toThrow(/does not stand/);
+    await expect(revokeTechnicalCompletion(await life(created.orderNumber, created.version))).rejects.toThrow(/changed by someone else/);
+    // The same authorities, held in the other tenant: the service answers for the
+    // tenant it is handed, and this order does not stand there. A session from this
+    // tenant is not a session there either, which is why the actor is a second one.
+    const elsewhere = await createProductionActor(other.client);
+    await expect(revokeTechnicalCompletion({
+      ...(await life(created.orderNumber, done.order.version)), client: other.client, authorization: elsewhere.authorization,
+    })).rejects.toThrow(/does not stand/);
     expect((await header(created.orderNumber)).status).toBe('TECHNICALLY_COMPLETED');
   });
 
   it('rolls back when the audit write fails, and does not guess a prior status', async () => {
     const created = await order('teco-audit');
     const spy = vi.spyOn(change, 'recordChange').mockRejectedValueOnce(new Error('audit down'));
-    await expect(technicallyCompleteProductionOrder(life(created.orderNumber, created.version))).rejects.toThrow(/audit down/);
+    await expect(technicallyCompleteProductionOrder(await life(created.orderNumber, created.version))).rejects.toThrow(/audit down/);
     spy.mockRestore();
     const standing = await header(created.orderNumber);
     expect(standing.status).toBe('CREATED');
     expect(Number(standing.version)).toBe(created.version);
     expect((await audits(created.orderNumber)).some((row) => row.change_type === 'TECO')).toBe(false);
 
-    const done = await technicallyCompleteProductionOrder(life(created.orderNumber, created.version));
+    const done = await technicallyCompleteProductionOrder(await life(created.orderNumber, created.version));
     await withTenant(tenant.client, (tx) => tx.execute(sql`
       update production_order
          set released_by = ${ACTOR}, released_at = null
        where client = ${tenant.client} and order_number = ${created.orderNumber}
     `));
-    await expect(revokeTechnicalCompletion(life(created.orderNumber, done.order.version))).rejects.toThrow(/release record is incomplete/);
+    await expect(revokeTechnicalCompletion(await life(created.orderNumber, done.order.version))).rejects.toThrow(/release record is incomplete/);
     expect((await header(created.orderNumber)).status).toBe('TECHNICALLY_COMPLETED');
     expect((await audits(created.orderNumber)).filter((row) => row.change_type === 'REVOKE_TECO')).toHaveLength(0);
   });
 
   it('refuses quantity, component, and release changes, and records the status transition', async () => {
     const created = await order('teco-frozen');
-    await releaseProductionOrder({ client: tenant.client, orderNumber: created.orderNumber, releasedBy: ACTOR });
+    await releaseProductionOrder({ client: tenant.client, orderNumber: created.orderNumber, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
     const before = await header(created.orderNumber);
-    const done = await technicallyCompleteProductionOrder(life(created.orderNumber, Number(before.version)));
+    const done = await technicallyCompleteProductionOrder(await life(created.orderNumber, Number(before.version)));
     await expect(changeProductionOrder({
       client: tenant.client, changedBy: ACTOR, orderNumber: created.orderNumber,
       expectedVersion: done.order.version, quantity: '9',
@@ -244,7 +283,7 @@ describe('CO02 technical completion', () => {
     })).rejects.toThrow(/technically complete/);
     await expect(releaseProductionOrder({
       client: tenant.client, orderNumber: created.orderNumber, releasedBy: ACTOR,
-    })).rejects.toThrow(/technically complete/);
+    }, { authorization: await authority(tenant.client) })).rejects.toThrow(/technically complete/);
     expect(await header(created.orderNumber)).toMatchObject({
       status: 'TECHNICALLY_COMPLETED', quantity: '8.000', components: 1,
     });
@@ -261,7 +300,7 @@ describe('CO02 technical completion', () => {
   it('shows technical completion on CO03 and COOIS and does not coerce it to created', async () => {
     const created = await order('teco-readers');
     const open = await order('teco-open');
-    const done = await technicallyCompleteProductionOrder(life(created.orderNumber, created.version));
+    const done = await technicallyCompleteProductionOrder(await life(created.orderNumber, created.version));
     const shown = await getProductionOrderDisplay(tenant.client, created.orderNumber);
     expect(shown?.status).toBe('TECHNICALLY_COMPLETED');
     expect(shown?.status).not.toBe('CREATED');
@@ -291,7 +330,7 @@ describe('CO02 technical completion', () => {
   it('excludes a technically completed order from the stock requirements receipt', async () => {
     const created = await order('teco-md04');
     const open = await order('teco-md04-open');
-    await technicallyCompleteProductionOrder(life(created.orderNumber, created.version));
+    await technicallyCompleteProductionOrder(await life(created.orderNumber, created.version));
     const list = await stockRequirementsList({
       client: tenant.client,
       today: '2026-10-24',
@@ -305,8 +344,8 @@ describe('CO02 technical completion', () => {
   it('lets one completion win a version conflict and writes one audit', async () => {
     const created = await order('teco-race');
     const raced = await Promise.allSettled([
-      technicallyCompleteProductionOrder(life(created.orderNumber, created.version)),
-      technicallyCompleteProductionOrder(life(created.orderNumber, created.version)),
+      technicallyCompleteProductionOrder(await life(created.orderNumber, created.version)),
+      technicallyCompleteProductionOrder(await life(created.orderNumber, created.version)),
     ]);
     expect(raced.filter((row) => row.status === 'fulfilled')).toHaveLength(1);
     expect(raced.filter((row) => row.status === 'rejected')).toHaveLength(1);

@@ -17,6 +17,7 @@ import { createBatch } from '../src/modules/inventory/batch-master';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 /**
  * SCR-140 / MIGO 101 + R08 — the finished good comes back from the order.
@@ -28,6 +29,33 @@ import { createTenant, destroyTenant, expectRejectedError, type TestTenant } fro
 const ACTOR = 'SCR140_GR_TEST';
 const PLANT = 'QG01';
 const COMPANY = '1000';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('SCR-140 production order goods receipt (MIGO 101)', () => {
   let fx: TestTenant;
@@ -46,6 +74,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
   beforeAll(async () => {
     fx = await createTenant('scr140-gr');
     client = fx.client;
+    Object.assign(PROD_ACTOR, await createProductionActor(client));
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
@@ -143,10 +172,13 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 20 }],
-    });
+    }, { authorization: await authority(client) });
     orderNumber = order.orderNumber;
-    await releaseProductionOrder({ client, orderNumber, releasedBy: ACTOR });
-  }, 180_000);
+    await releaseProductionOrder({ client, orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+}, 180_000);
 
   afterAll(async () => {
     if (client) await destroyTenant(client);
@@ -160,7 +192,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
   });
 
   it('receives the finished good: stock up, valuation up, value at the material’s price', async () => {
-    const view = await postProductionReceipt(input());
+    const view = await postProductionReceipt(input(), { authorization: await authority(client) });
     expect(Number(view.totalValue)).toBe(240);
     expect(view.orderNumber).toBe(orderNumber);
     expect(view.receivedAfter).toBe('6.000');
@@ -187,7 +219,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
   });
 
   it('debits inventory and credits production output — never the consumption account', async () => {
-    const view = await postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 1 }] }));
+    const view = await postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 1 }] }), { authorization: await authority(client) });
     const rows = await withTenant(client, async (tx) => {
       const journal = view.journalDocumentNumber!;
       return await tx.execute(sql`
@@ -208,7 +240,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
 
   it('refuses an over-receipt quoting what the order still expects', async () => {
     // Seven of ten received: three remain.
-    const error = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 4 }] }))
+    const error = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 4 }] }), { authorization: await authority(client) })
       );
     expect(error.message).toMatch(/still expects 3\.000 PC of GR-FG/);
     expect(error.remedy).toMatch(/over-receipt tolerance/);
@@ -221,22 +253,22 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 5,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, requiredQuantity: 5 }],
-    });
-    const unreleased = await expectRejectedError(postProductionReceipt(input({ orderNumber: draft.orderNumber }))
+    }, { authorization: await authority(client) });
+    const unreleased = await expectRejectedError(postProductionReceipt(input({ orderNumber: draft.orderNumber }), { authorization: await authority(client) })
       );
     expect(unreleased.message).toMatch(/stands created, and only a released order receives output/);
 
-    const missing = await expectRejectedError(postProductionReceipt(input({ orderNumber: 'PRD9999999' }))
+    const missing = await expectRejectedError(postProductionReceipt(input({ orderNumber: 'PRD9999999' }), { authorization: await authority(client) })
       );
     expect(missing.message).toMatch(/Production order PRD9999999 does not exist/);
   });
 
   it('refuses a storage location of another plant, and an empty receipt', async () => {
-    const wrongLocation = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'ZZZZ', quantity: 1 }] }))
+    const wrongLocation = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'ZZZZ', quantity: 1 }] }), { authorization: await authority(client) })
       );
     expect(wrongLocation.message).toMatch(/Storage location ZZZZ does not stand in plant QG01/);
 
-    const empty = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 0 }] }))
+    const empty = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 0 }] }), { authorization: await authority(client) })
       );
     expect(empty.message).toMatch(/No receipt quantity was entered/);
   });
@@ -252,8 +284,8 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
 
   it('replays a request key instead of receiving twice', async () => {
     const key = 'gr-replay-1';
-    const first = await postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 3 }], requestKey: key }));
-    const second = await postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 3 }], requestKey: key }));
+    const first = await postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 3 }], requestKey: key }), { authorization: await authority(client) });
+    const second = await postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 3 }], requestKey: key }), { authorization: await authority(client) });
     expect(second.materialDocumentNumber).toBe(first.materialDocumentNumber);
     expect(second.totalValue).toBe(first.totalValue);
     expect(await receivedQuantityFor(client, orderNumber)).toBe(10);
@@ -266,8 +298,8 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 1,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, requiredQuantity: 1 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     await withTenant(client, (tx) => tx.execute(sql`
       update account_determination set gl_account = '121000'
       where client = ${client} and event = 'PRODUCTION_OUTPUT' and valuation_class = 'FINISHED_INVENTORY'
@@ -278,7 +310,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 1 }],
       requestKey: 'gr-same-account',
-    }));
+    }, { authorization: await authority(client) }));
     expect(error.message).toMatch(/would net to nothing/);
     await withTenant(client, (tx) => tx.execute(sql`
       update account_determination set gl_account = '590000'
@@ -297,8 +329,8 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 20 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
 
     // Three boxes are six pieces: the order expects ten, so six is a receipt it can take.
     const receipt = await postProductionReceipt({
@@ -306,7 +338,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 3, entryQuantity: 3, entryUnit: 'BOX' }],
       requestKey: 'gr-alt-unit',
-    });
+    }, { authorization: await authority(client) });
     expect(receipt.lines[0].quantity).toBe('6.000');
     expect(receipt.lines[0].unit).toBe('PC');
   });
@@ -318,14 +350,14 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 20 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     const error = await expectRejectedError(postProductionReceipt({
       client, changedBy: ACTOR, orderNumber: draft.orderNumber,
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 1, entryQuantity: 1, entryUnit: 'GAL' }],
       requestKey: 'gr-no-unit',
-    }));
+    }, { authorization: await authority(client) }));
     expect(error.message).toMatch(/carries no conversion from GAL to its base unit PC/);
     expect(error.remedy).toMatch(/INV\.STOCK\.UOM/);
   });
@@ -342,8 +374,8 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 4 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     const before = await withTenant(client, (tx) => tx.execute(sql`
       select coalesce(sum(quantity), 0)::text as quantity from stock_quantity
       where client = ${client} and material_number = 'GR-FG' and batch_number = ''
@@ -353,13 +385,13 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 1 }],
       requestKey: 'gr-batch-missing',
-    })).rejects.toThrow(/batch is required/i);
+    }, { authorization: await authority(client) })).rejects.toThrow(/batch is required/i);
     await postProductionReceipt({
       client, changedBy: ACTOR, orderNumber: draft.orderNumber,
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 2, batch: '00012' }],
       requestKey: 'gr-batch',
-    });
+    }, { authorization: await authority(client) });
     const stock = await withTenant(client, (tx) => tx.execute(sql`
       select batch_number, quantity::text as quantity from stock_quantity
       where client = ${client} and material_number = 'GR-FG' and storage_location = 'SG01' and quantity <> 0
@@ -388,15 +420,15 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 3, batch: '00013',
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 3 }],
-    });
+    }, { authorization: await authority(client) });
     expect(draft.batch).toBe('00013');
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     const receipt = await postProductionReceipt({
       client, changedBy: ACTOR, orderNumber: draft.orderNumber,
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 1 }],
       requestKey: 'gr-order-batch',
-    });
+    }, { authorization: await authority(client) });
     expect(receipt.lines[0]?.batch).toBe('00013');
   });
 
@@ -407,12 +439,13 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 2,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, requiredQuantity: 2 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     const [standing] = await withTenant(client, (tx) => tx.execute(sql`
       select version from production_order where client = ${client} and order_number = ${draft.orderNumber}
     `)) as unknown as Array<{ version: number }>;
     await technicallyCompleteProductionOrder({
+      authorization: await authority(client),
       client, changedBy: ACTOR, orderNumber: draft.orderNumber, expectedVersion: Number(standing?.version),
       held: ['PROD.ORDER.CHANGE'], confirmed: true,
     });
@@ -422,7 +455,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 1, batch: '00014' }],
       requestKey: 'gr-after-teco',
-    });
+    }, { authorization: await authority(client) });
     expect(receipt.materialDocumentNumber).toBeTruthy();
     const [after] = await withTenant(client, (tx) => tx.execute(sql`
       select status from production_order where client = ${client} and order_number = ${draft.orderNumber}
@@ -437,15 +470,15 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 3,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, requiredQuantity: 1 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     await createBatch({ client, changedBy: ACTOR, materialNumber: 'GR-FG', batchNumber: '00015', reason: 'Reversal batch' });
     const posted = await postProductionReceipt({
       client, changedBy: ACTOR, orderNumber: draft.orderNumber,
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 2, batch: '00015' }],
       requestKey: 'gr-then-reverse',
-    });
+    }, { authorization: await authority(client) });
     expect(await receivedQuantityFor(client, draft.orderNumber)).toBe(2);
     const reversed = await reverseMaterialDocument({
       client, changedBy: ACTOR, materialDocumentNumber: posted.materialDocumentNumber,
@@ -458,7 +491,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 3, batch: '00015' }],
       requestKey: 'gr-after-reverse',
-    });
+    }, { authorization: await authority(client) });
     expect(again.receivedAfter).toBe('3.000');
     const list = await stockRequirementsList({
       client, today: '2026-10-01', selection: { material: 'GR-FG', plant: PLANT },

@@ -105,7 +105,7 @@ export async function createOrderAction(
       productionVersion: header.productionVersion,
       orderType,
       requestKey: text(form, 'requestKey') || undefined,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(PRODUCTION_ORDER_ROUTE);
     const note = order.releaseNote ? ` ${order.releaseNote}` : '';
     const warnings = order.snapshotWarnings?.length ? ` ${order.snapshotWarnings.join(' ')}` : '';
@@ -134,7 +134,7 @@ export async function releaseOrderAction(
       client: session.user.client,
       orderNumber: text(form, 'orderNumber'),
       releasedBy: session.user.username,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(PRODUCTION_ORDER_ROUTE);
     return { ok: true, message: `Order ${order.orderNumber} released.`, order };
   } catch (caught) {

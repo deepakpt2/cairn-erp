@@ -19,6 +19,7 @@ import { convertPlannedOrder } from '../../src/modules/production/planned-order-
 import { saveOrderTypeParameter } from '../../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../../src/modules/production/production-version';
 import type { BrowserTarget } from './targets';
+import { createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -85,7 +86,18 @@ export interface Co09Fixture {
  * nothing below the finished good and the requisitions below are the only supply the check
  * can see.
  */
+const PROD_ACTOR: BrowserActor = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/** Sign in once, and widen the actor's reach to whatever the scene has added since. */
+async function browserAuthority(client: string) {
+  if (!PROD_ACTOR.userId) Object.assign(PROD_ACTOR, await createBrowserActor(client));
+  await refreshBrowserActor(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
+
 export async function co09AvailabilityFixture(client: string): Promise<Co09Fixture> {
+
   await withTenant(client, async (tx) => {
     const [company] = await tx.execute(sql`select company_code from company_code where client = ${client} order by company_code limit 1`) as unknown as Array<{ company_code: string }>;
     if (!company) throw new Error('the browser tenant carries no company code');
@@ -239,6 +251,7 @@ export async function co09AvailabilityFixture(client: string): Promise<Co09Fixtu
   const orders: string[] = [];
   for (const proposal of proposed) {
     const converted = await convertPlannedOrder({
+      authorization: (await browserAuthority(client)),
       client, changedBy: ACTOR, orderNumber: proposal.plannedOrder, orderType: proposal.orderType,
     });
     assert.equal(converted.status, 'CONVERTED', `planned order ${proposal.plannedOrder} did not convert`);
@@ -322,6 +335,7 @@ export async function co09AvailabilityFixture(client: string): Promise<Co09Fixtu
 export async function co09Availability(ctx: Context) {
   const { page, base, target } = ctx;
   const { client } = target;
+
   console.log('CO09: check one order’s components against the configuration, and prove nothing was written');
 
   const fixture = await co09AvailabilityFixture(client);

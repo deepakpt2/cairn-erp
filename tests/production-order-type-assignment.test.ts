@@ -9,9 +9,37 @@ import { createProductionOrder, getProductionOrder, releaseProductionOrder } fro
 import { changeProductionOrder } from '../src/modules/production/production-order-change';
 import { saveProductionOrderType } from '../src/modules/production/production-order-type';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 const ACTOR = 'AUART_TEST';
 const PLANT = 'QO10';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('production order type assignment', () => {
   let tenant: TestTenant;
@@ -20,6 +48,7 @@ describe('production order type assignment', () => {
   beforeAll(async () => {
     tenant = await createTenant('auart');
     other = await createTenant('auart-other');
+    Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     for (const site of [tenant, other]) {
       await withTenant(site.client, async (tx) => {
         await tx.execute(sql`
@@ -51,7 +80,10 @@ describe('production order type assignment', () => {
       client: other.client, changedBy: ACTOR, mode: 'CREATE', orderType: 'PP02',
       description: 'Other type', version: 0, reason: 'Other tenant type',
     });
-  });
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+});
 
   afterAll(async () => {
     await destroyTenant(tenant.client);
@@ -65,7 +97,7 @@ describe('production order type assignment', () => {
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       orderType: orderType ?? '',
       components: [{ materialNumber: 'AUART-RM', plant: PLANT, requiredQuantity: 1 }],
-    });
+    }, { authorization: await authority(tenant.client) });
   }
 
   it('stores a standing category-10 type and rejects a missing type', async () => {
@@ -104,7 +136,7 @@ describe('production order type assignment', () => {
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       orderType: 'ZZ99',
       components: [{ materialNumber: 'AUART-RM', plant: PLANT, requiredQuantity: 1 }],
-    })).rejects.toThrow(/does not stand/);
+    }, { authorization: await authority(tenant.client) })).rejects.toThrow(/does not stand/);
     const before = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select count(*)::int as n from production_order where client = ${tenant.client}
     `)) as unknown as Array<{ n: number }>;
@@ -114,7 +146,7 @@ describe('production order type assignment', () => {
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       orderType: 'PP02',
       components: [{ materialNumber: 'AUART-RM', plant: PLANT, requiredQuantity: 1 }],
-    })).rejects.toThrow(/does not stand in this tenant/);
+    }, { authorization: await authority(tenant.client) })).rejects.toThrow(/does not stand in this tenant/);
     const after = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select count(*)::int as n from production_order where client = ${tenant.client}
     `)) as unknown as Array<{ n: number }>;
@@ -152,7 +184,7 @@ describe('production order type assignment', () => {
     expect(changed.order.orderType).toBeNull();
     const released = await releaseProductionOrder({
       client: tenant.client, orderNumber: 'PRDLEGACY1', releasedBy: ACTOR,
-    });
+    }, { authorization: await authority(tenant.client) });
     expect(released.status).toBe('RELEASED');
     expect(released.orderType).toBeNull();
     const replay = await createProductionOrder({
@@ -161,7 +193,7 @@ describe('production order type assignment', () => {
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
       orderType: 'PP01',
       components: [{ materialNumber: 'AUART-RM', plant: PLANT, requiredQuantity: 1 }],
-    });
+    }, { authorization: await authority(tenant.client) });
     expect(replay.orderNumber).toBe('PRDLEGACY1');
     expect(replay.orderType).toBeNull();
     const again = await getProductionOrder(tenant.client, 'PRDLEGACY1');

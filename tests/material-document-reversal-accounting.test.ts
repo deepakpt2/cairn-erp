@@ -16,6 +16,7 @@ import { MaterialReversalError, reverseMaterialDocument } from '../src/modules/i
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createTenant, destroyTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 /**
  * Accounting consistency of a journaled material document reversed by line.
@@ -28,6 +29,33 @@ const ACTOR = 'REVACC_TEST';
 const PLANT = 'RA01';
 const COMPANY = '1000';
 const DAY = '2026-10-16';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('journaled material-document reversal accounting', () => {
   let client = '';
@@ -42,8 +70,8 @@ describe('journaled material-document reversal accounting', () => {
       materialNumber: 'ACC-FG', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: components.map((component) => ({ ...component, plant: PLANT, storageLocation: 'RA01' })),
-    });
-    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     return draft.orderNumber;
   }
 
@@ -55,7 +83,7 @@ describe('journaled material-document reversal accounting', () => {
         quantity: line.quantity, productionOrderNumber: orderNumber, productionOrderItem: line.item,
       })),
       requestKey: nextKey(),
-    }, 'MIGO');
+    }, 'MIGO', { authorization: await authority(client) });
   }
 
   async function stock(material: string) {
@@ -112,6 +140,7 @@ describe('journaled material-document reversal accounting', () => {
   beforeAll(async () => {
     client = (await createTenant('rev-acc')).client;
     other = (await createTenant('rev-acc-other')).client;
+    Object.assign(PROD_ACTOR, await createProductionActor(client));
     await withTenant(client, async (tx) => {
       const charts = await tx.execute(sql`select chart_of_accounts from chart_of_accounts where client = ${client} limit 1`) as unknown as Array<{ chart_of_accounts: string }>;
       chart = charts[0]?.chart_of_accounts ?? '';
@@ -216,7 +245,10 @@ describe('journaled material-document reversal accounting', () => {
         on conflict (client, order_type) do nothing
       `);
     });
-  }, 180_000);
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+}, 180_000);
 
   afterAll(async () => {
     if (client) await destroyTenant(client);

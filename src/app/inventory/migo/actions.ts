@@ -99,7 +99,7 @@ export async function postMigoAction(
       headerText: text(form, 'headerText') || undefined,
       lines,
       requestKey: text(form, 'requestKey'),
-    }, 'MIGO');
+    }, 'MIGO', { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(MIGO_ROUTE);
     return { ok: true, message: `Posted: material document ${document.materialDocumentNumber}.`, document };
   } catch (caught) {
@@ -142,7 +142,7 @@ export async function postReceiptAction(
         batch: text(form, 'batch') || undefined,
       }],
       requestKey: text(form, 'requestKey'),
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(MIGO_ROUTE);
     return { ok: true, message: `Posted: material document ${document.materialDocumentNumber}.`, document };
   } catch (caught) {

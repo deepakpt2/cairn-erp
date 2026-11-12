@@ -74,6 +74,20 @@ const COMPONENT_ISSUE = '261';
 const SCRAP_MOVEMENT = '551';
 
 /**
+ * Who does what, and why it is them.
+ *
+ * The production loop is deliberately not one person: the planner raises and
+ * releases the order and closes it, the production clerk issues components into it
+ * and receives what it made, and the warehouse clerk moves stock that belongs to no
+ * order. Each of them holds the authority for their own part and no more, and each
+ * is restricted to the plant they work at — so a service that judges authority
+ * sees a real person with a real mandate, not a provisioning script.
+ */
+const PLANNER = 'demo.planner';
+const PRODUCTION_CLERK = 'demo.production';
+const WAREHOUSE_CLERK = 'demo.warehouse1';
+
+/**
  * The account determination production needs.
  *
  * The consumption of a component and the receipt of what it made both read the
@@ -405,7 +419,8 @@ async function ensureOrder(
   const standing = await findStandingOrder(client, `DEMO-PO-${plan.key}`);
   if (standing) return { orderNumber: standing, created: false };
 
-  const created = await createProductionOrder({
+  // The planner raises the order under the planner's own authority and plant reach.
+  const created = await withActingUser(client, PLANNER, (actor) => createProductionOrder({
     client,
     createdBy: DEMO_ACTOR,
     requestKey: `DEMO-PO-${plan.key}`,
@@ -416,7 +431,7 @@ async function ensureOrder(
     scheduledFinish: dateIn(timeline, plan.period, plan.receiptDay),
     productionVersion: PRODUCTION_VERSION,
     orderType: ORDER_TYPE,
-  });
+  }, { authorization: actor }));
   return { orderNumber: created.orderNumber, created: true };
 }
 
@@ -442,13 +457,21 @@ async function ensureRelease(client: string, orderNumber: string): Promise<boole
   if (view && (view.status === 'RELEASED' || view.status === 'TECHNICALLY_COMPLETED')) {
     return false;
   }
-  await releaseProductionOrder({ client, orderNumber, releasedBy: DEMO_ACTOR });
+  await withActingUser(client, PLANNER, (actor) => releaseProductionOrder(
+    { client, orderNumber, releasedBy: DEMO_ACTOR },
+    { authorization: actor },
+  ));
   return true;
 }
 
 /**
- * Issue the components into the order — movement 261, posted by the warehouse
- * clerk who may move stock at this plant.
+ * Issue the components into the order — movement 261, posted by the production
+ * clerk who holds PROD.ORDER.GI.
+ *
+ * Not the warehouse clerk, deliberately: an issue to a production order is an act
+ * on the order as much as a movement of stock, so it asks for the order authority
+ * as well as the goods-issue one. A clerk who may issue to a cost centre cannot
+ * empty a shelf into a shop order.
  *
  * The issue names the order and the component item it satisfies, so the order
  * records what it has been given and refuses a second helping.
@@ -463,7 +486,7 @@ async function issueComponents(
   if (!view || view.components.length === 0) return false;
 
   const postingDate = dateIn(timeline, plan.period, plan.issueDay);
-  await withActingUser(client, 'demo.warehouse1', async (actor) => {
+  await withActingUser(client, PRODUCTION_CLERK, async (actor) => {
     await postGoodsIssue(
       {
         client,
@@ -534,7 +557,9 @@ async function receiveOutput(
   orderNumber: string,
 ): Promise<boolean> {
   const postingDate = dateIn(timeline, plan.period, plan.receiptDay);
-  await postProductionReceipt({
+  // Received by the production clerk, who holds PROD.ORDER.GR and is restricted to
+  // the plant that made the goods.
+  await withActingUser(client, PRODUCTION_CLERK, (actor) => postProductionReceipt({
     client,
     changedBy: DEMO_ACTOR,
     orderNumber,
@@ -543,7 +568,7 @@ async function receiveOutput(
     headerText: 'Receipt from order',
     requestKey: `DEMO-GR-${plan.key}`,
     lines: [{ quantity: plan.quantity, storageLocation: RECEIVING_STORAGE_LOCATION }],
-  });
+  }, { authorization: actor }));
   return true;
 }
 
@@ -558,14 +583,15 @@ async function completeOrder(client: string, orderNumber: string): Promise<boole
   const view = await getProductionOrder(client, orderNumber);
   if (!view || view.status === 'TECHNICALLY_COMPLETED') return false;
 
-  await technicallyCompleteProductionOrder({
+  await withActingUser(client, PLANNER, (actor) => technicallyCompleteProductionOrder({
     client,
     changedBy: DEMO_ACTOR,
     orderNumber,
     expectedVersion: view.version,
     held: ['PROD.*'],
     confirmed: true,
-  });
+    authorization: actor,
+  }));
   return true;
 }
 
@@ -581,7 +607,7 @@ async function scrapMaterial(
   timeline: DemoTimeline,
 ): Promise<boolean> {
   const postingDate = dateIn(timeline, plan.period, plan.day);
-  await withActingUser(client, 'demo.warehouse1', async (actor) => {
+  await withActingUser(client, WAREHOUSE_CLERK, async (actor) => {
     await postGoodsIssue(
       {
         client,

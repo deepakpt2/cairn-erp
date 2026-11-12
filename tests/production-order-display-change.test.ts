@@ -18,6 +18,7 @@ import {
   productionOrderChangeRefusal,
 } from '../src/modules/production/production-order-change';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 const ACTOR = 'CO02_TEST';
 const PLANT = 'QO02';
@@ -36,7 +37,7 @@ async function order(key: string, quantity = 10) {
     scheduledStart: '2026-10-24',
     scheduledFinish: '2026-10-30',
     components: [{ materialNumber: 'CO02-RM', plant: PLANT, requiredQuantity: 2 }],
-  });
+  }, { authorization: await authority(tenant.client) });
 }
 
 async function stamp(orderNumber: string) {
@@ -51,6 +52,7 @@ async function stamp(orderNumber: string) {
 beforeAll(async () => {
   tenant = await createTenant('co02-change');
   other = await createTenant('co02-other');
+  Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
   await withTenant(tenant.client, async (tx) => {
     await tx.execute(sql`
       insert into material (client, material_number, description, material_type, base_unit, created_by)
@@ -77,6 +79,9 @@ beforeAll(async () => {
       on conflict (client, order_type) do nothing
     `);
   });
+
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
 });
 
 afterAll(async () => {
@@ -84,6 +89,33 @@ afterAll(async () => {
   await destroyTenant(other.client);
   await closeDb();
 });
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('CO03 display production order', () => {
   it('shows the stored order and writes nothing', async () => {
@@ -217,7 +249,7 @@ describe('CO02 change production order', () => {
 
   it('allows a released order with no movement, then freezes it after a goods movement', async () => {
     const created = await order('released-1', 8);
-    await releaseProductionOrder({ client: tenant.client, orderNumber: created.orderNumber, releasedBy: ACTOR });
+    await releaseProductionOrder({ client: tenant.client, orderNumber: created.orderNumber, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
     const released = await getProductionOrderDisplay(tenant.client, created.orderNumber);
     expect(released?.status).toBe('RELEASED');
     expect(released?.version).toBe(2);

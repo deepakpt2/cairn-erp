@@ -8,6 +8,7 @@ import { MrpRunError, getMrpRun, planMaterials } from '../src/modules/production
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 /**
  * SCR-166 / MD01 — a run calculates a shortage and posts nothing.
@@ -16,6 +17,33 @@ import { createTenant, destroyTenant } from './helpers';
  * requisition. A make shortage becomes a planned order. A future receipt does
  * not cover an earlier shortage. A check writes nothing.
  */
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 describe('SCR-166 total planning (MD01)', () => {
   const ACTOR = 'SCR166_PLANNER';
   const PLANT = '1000';
@@ -82,13 +110,17 @@ describe('SCR-166 total planning (MD01)', () => {
     const tenant = await createTenant('scr166-md01');
     client = tenant.client;
     const second = await createTenant('scr166-md01-other');
+    Object.assign(PROD_ACTOR, await createProductionActor(client));
     other = second.client;
     await withTenant(client, async (tx) => {
       await defineRange(tx, { client, objectCode: 'MRPRUN', subObject: '*', prefix: 'MR', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client, objectCode: 'PURCHREQ', subObject: 'NB', prefix: 'PR', numberLength: 7, createdBy: ACTOR });
     });
-  });
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+});
 
   afterAll(async () => {
     await destroyTenant(client);
@@ -432,7 +464,7 @@ describe('SCR-166 total planning (MD01)', () => {
       client, createdBy: ACTOR, requestKey: 'md01-teco', materialNumber: 'MD01-TECO', plant: PLANT, orderQuantity: 5,
       scheduledStart: DAY, scheduledFinish: DAY,
       components: [{ materialNumber: 'MD01-TECO-RM', plant: PLANT, requiredQuantity: 1 }],
-    });
+    }, { authorization: await authority(client) });
     const [beforeComplete] = await withTenant(client, (tx) => tx.execute(sql`
       select (select count(*) from purchase_requisition_item where client = ${client})::int as requisitions,
              (select count(*) from reservation_header where client = ${client})::int as reservations,
@@ -440,6 +472,7 @@ describe('SCR-166 total planning (MD01)', () => {
              (select count(*) from journal_entry where client = ${client})::int as journals
     `)) as unknown as Array<{ requisitions: number; reservations: number; documents: number; journals: number }>;
     await technicallyCompleteProductionOrder({
+      authorization: await authority(client),
       client, changedBy: ACTOR, orderNumber: completedOrder.orderNumber, expectedVersion: 1,
       held: ['PROD.ORDER.CHANGE'], confirmed: true,
     });
@@ -455,8 +488,8 @@ describe('SCR-166 total planning (MD01)', () => {
       client, createdBy: ACTOR, requestKey: 'md01-open', materialNumber: 'MD01-OPEN', plant: PLANT, orderQuantity: 5,
       scheduledStart: DAY, scheduledFinish: DAY,
       components: [{ materialNumber: 'MD01-TECO-RM', plant: PLANT, requiredQuantity: 1 }],
-    });
-    await releaseProductionOrder({ client, orderNumber: open.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(client) });
+    await releaseProductionOrder({ client, orderNumber: open.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     const excluded = await planMaterials({
       client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
       materialFrom: 'MD01-TECO', materialTo: 'MD01-TECO',

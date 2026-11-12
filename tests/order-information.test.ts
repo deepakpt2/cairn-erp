@@ -21,9 +21,37 @@ import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRout
 import { enterTimeTicket } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
 const ACTOR = 'COOIS_CLERK';
 const PLANT = '1000';
+
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
 
 describe('COOIS order information', () => {
   let tenant: TestTenant;
@@ -60,6 +88,7 @@ describe('COOIS order information', () => {
   beforeAll(async () => {
     tenant = await createTenant('coois-info');
     other = await createTenant('coois-other');
+    Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     await withTenant(tenant.client, async (tx) => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
       await tx.execute(sql`
@@ -123,7 +152,7 @@ describe('COOIS order information', () => {
         { materialNumber: 'RM-16', plant: PLANT, requiredQuantity: 2 },
         { materialNumber: 'RM-16B', plant: PLANT, requiredQuantity: 1 },
       ],
-    });
+    }, { authorization: await authority(tenant.client) });
     await withTenant(tenant.client, async (tx) => {
       const copied = await resolveOrderOperationSnapshot(tx, {
         client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
@@ -138,8 +167,8 @@ describe('COOIS order information', () => {
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-16', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-26', requestKey: 'coois-second',
       components: [{ materialNumber: 'RM-16', plant: PLANT, requiredQuantity: 1 }],
-    });
-    const releasedOrder = await releaseProductionOrder({ client: tenant.client, orderNumber: order.orderNumber, releasedBy: ACTOR });
+    }, { authorization: await authority(tenant.client) });
+    const releasedOrder = await releaseProductionOrder({ client: tenant.client, orderNumber: order.orderNumber, releasedBy: ACTOR }, { authorization: await authority(tenant.client) });
     released = releasedOrder.orderNumber;
     second = extra.orderNumber;
     const stamped = await withTenant(tenant.client, async (tx) => {
@@ -184,7 +213,10 @@ describe('COOIS order information', () => {
           (${tenant.client}, 'MDCOIS2', 1, 'COOIS', 'FG-16', ${PLANT}, 9, 'PC', 9, 'PC', ${released}, null, 'RECEIPT', ${ACTOR})
       `);
     });
-  });
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+});
 
   afterAll(async () => {
     await destroyTenant(tenant.client);

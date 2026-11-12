@@ -32,6 +32,7 @@ import {
 } from '../src/modules/production/production-cogi';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 import { createProductionCogiTestActor, type ProductionCogiTestActor } from './helpers/production-cogi-actor';
 import { listInbox } from '../src/platform/notification/notify';
@@ -62,10 +63,38 @@ const WORKER = 'test-worker';
 // The fan-out is a real job, so it has to be registered for `runClaimed` to find it.
 registerJob(fanoutJob);
 
+/** The signed-in user the production services act for. Filled in by the suite's own setup. */
+const PROD_ACTOR = { userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/**
+ * The authority a production service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ */
+let ACTOR_READY: Promise<void> | null = null;
+let ACTOR_TENANT = '';
+
+async function authority(client: string) {
+  // Keyed on the tenant as well as the user: a suite that stands two tenants up
+  // needs a session in each, and a session from one is not a session in the other.
+  if (!PROD_ACTOR.userId || ACTOR_TENANT !== client) {
+    ACTOR_TENANT = client;
+    ACTOR_READY = createProductionActor(client).then((actor) => { Object.assign(PROD_ACTOR, actor); });
+    await ACTOR_READY;
+  }
+  await refreshActorPlants(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 describe('CO11N confirmation goods movement', () => {
   let tenant: TestTenant;
   let cancellationActor!: ConfirmationCancelTestActor;
   let cogiActor!: ProductionCogiTestActor;
+  const cogiActorAuthorization = () => cogiActor.authorization;
   let client = '';
   let orderA = '';
   let orderB = '';
@@ -248,7 +277,7 @@ describe('CO11N confirmation goods movement', () => {
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey,
       components: (shape.components ?? [{ materialNumber: 'MV-RM', requiredQuantity: 20 }])
         .map((component) => ({ ...component, plant: PLANT, storageLocation: LOCATION })),
-    });
+    }, { authorization: await authority(client) });
     await withTenant(client, async (tx) => {
       const copied = await resolveOrderOperationSnapshot(tx, {
         client, plant: PLANT, finishDate: '2026-10-25',
@@ -256,12 +285,15 @@ describe('CO11N confirmation goods movement', () => {
       });
       await insertOrderOperationSnapshot(tx, { client, orderNumber: order.orderNumber, createdBy: ACTOR, operations: copied.operations });
     });
-    await releaseProductionOrder({ client, orderNumber: order.orderNumber, releasedBy: ACTOR });
+    await releaseProductionOrder({ client, orderNumber: order.orderNumber, releasedBy: ACTOR }, { authorization: await authority(client) });
     return order.orderNumber;
   }
 
-  const ticket = (orderNumber: string, expectedVersion: number, extra: Record<string, unknown> = {}) => ({
+  const ticket = async (orderNumber: string, expectedVersion: number, extra: Record<string, unknown> = {}) => ({
     requestedBy: ACTOR, requestKey: nextKey(), orderNumber, operationNumber: '0010',
+    // The confirmation's automatic movements are posted by the confirming user: this is
+    // who, and a ticket that names nobody posts nothing.
+    authorization: await authority(client),
     confirmationType: 'PARTIAL', yieldQuantity: '4', postingDate: '2026-10-24',
     // The operation carries a required activity: a ticket states its own hours, because the
     // standard value is not substituted into a confirmation.
@@ -271,17 +303,17 @@ describe('CO11N confirmation goods movement', () => {
 
   /** A confirmation at the version the order carries now, which is what the screen sends. */
   async function save(orderNumber: string, extra: Record<string, unknown> = {}) {
-    return enterTimeTicket(client, ticket(orderNumber, await orderVersion(orderNumber), extra));
+    return enterTimeTicket(client, await ticket(orderNumber, await orderVersion(orderNumber), extra));
   }
   async function check(orderNumber: string, extra: Record<string, unknown> = {}) {
-    return previewTimeTicket(client, ticket(orderNumber, await orderVersion(orderNumber), extra));
+    return previewTimeTicket(client, await ticket(orderNumber, await orderVersion(orderNumber), extra));
   }
   async function issueManually(orderNumber: string, quantity: number) {
     return postGoodsIssue({
       client, changedBy: ACTOR, movementTypeCode: '261', postingDate: '2026-10-24', documentDate: '2026-10-24',
       headerText: 'Manual component issue', requestKey: nextKey(),
       lines: [{ materialNumber: 'MV-RM', plant: PLANT, storageLocation: LOCATION, quantity, productionOrderNumber: orderNumber, productionOrderItem: componentItem }],
-    }, 'MIGO');
+    }, 'MIGO', { authorization: await authority(client) });
   }
 
   beforeAll(async () => {
@@ -422,7 +454,10 @@ describe('CO11N confirmation goods movement', () => {
     `));
     componentItem = Number(component?.item_number ?? 0);
     expect(componentItem).toBeGreaterThan(0);
-  }, 300_000);
+  
+
+    // Signed in once the masters stand: the services this suite calls post as this user.
+}, 300_000);
 
   afterAll(async () => {
     if (client) await destroyTenant(client);
@@ -570,7 +605,7 @@ describe('CO11N confirmation goods movement', () => {
   it('refuses a stale record version before any movement is posted', async () => {
     const before = await componentStock();
     const current = await orderVersion(orderB);
-    await expect(enterTimeTicket(client, ticket(orderB, current - 1, { yieldQuantity: '1' })))
+    await expect(enterTimeTicket(client, await ticket(orderB, current - 1, { yieldQuantity: '1' })))
       .rejects.toThrow(/changed|version/i);
     expect(await componentStock()).toBe(before);
     expect(await documentsOn(orderB)).toHaveLength(1);
@@ -630,7 +665,7 @@ describe('CO11N confirmation goods movement', () => {
       client, changedBy: ACTOR, orderNumber: orderD, postingDate: '2026-10-24', documentDate: '2026-10-24',
       headerText: 'Manual receipt', requestKey: nextKey(),
       lines: [{ storageLocation: LOCATION, quantity: 8 }],
-    });
+    }, { authorization: await authority(client) });
     const documentsBefore = await documentsOn(orderD);
     expect(documentsBefore).toHaveLength(1);
     const componentBefore = await componentStock();
@@ -685,7 +720,7 @@ describe('CO11N confirmation goods movement', () => {
     const valuationBefore = await valuationOf('MV-RM');
     const reservationBefore = await reservationWithdrawnTotal();
     const requestKey = nextKey();
-    const input = ticket(orderB, await orderVersion(orderB), { requestKey, yieldQuantity: '2' });
+    const input = await ticket(orderB, await orderVersion(orderB), { requestKey, yieldQuantity: '2' });
     const failed = await enterTimeTicket(client, input);
 
     expect(failed.written).toBe(true);
@@ -720,8 +755,8 @@ describe('CO11N confirmation goods movement', () => {
       `);
     });
     const results = await Promise.all([
-      attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR }),
-      attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR }),
+      attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR, authorization: cogiActorAuthorization() }),
+      attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR, authorization: cogiActorAuthorization() }),
     ]);
     expect(results.filter((result) => result.outcome === 'POSTED')).toHaveLength(1);
     expect(results.some((result) => result.outcome === 'BUSY' || result.outcome === 'ALREADY_POSTED')).toBe(true);
@@ -751,7 +786,7 @@ describe('CO11N confirmation goods movement', () => {
          where client = ${client} and company_code = ${COMPANY}
       `);
     });
-    const failed = await enterTimeTicket(client, ticket(orderG, await orderVersion(orderG), { yieldQuantity: '4' }));
+    const failed = await enterTimeTicket(client, await ticket(orderG, await orderVersion(orderG), { yieldQuantity: '4' }));
     const failureId = await failureIdOn(failed.confirmationNumber, 'ISSUE');
     await withTenant(client, (tx) => tx.execute(sql`
       update production_goods_movement_failure set next_retry_at = now() - interval '1 second'
@@ -807,7 +842,7 @@ describe('CO11N confirmation goods movement', () => {
          where client = ${client} and order_number = ${order}
       `);
     });
-    const saved = await enterTimeTicket(client, ticket(order, await orderVersion(order), { yieldQuantity: '4' }));
+    const saved = await enterTimeTicket(client, await ticket(order, await orderVersion(order), { yieldQuantity: '4' }));
     expect(saved.movementFailures[0]).toMatchObject({ status: 'FAILED', failureCode: 'GOODS_ISSUE_REFUSED' });
     const failureId = await failureIdOn(saved.confirmationNumber, 'ISSUE');
     const before = await getProductionGoodsMovementFailure(client, failureId);
@@ -864,7 +899,7 @@ describe('CO11N confirmation goods movement', () => {
          where client = ${client} and company_code = ${COMPANY}
       `);
     });
-    const saved = await enterTimeTicket(client, ticket(order, await orderVersion(order), { yieldQuantity: '4' }));
+    const saved = await enterTimeTicket(client, await ticket(order, await orderVersion(order), { yieldQuantity: '4' }));
     const failureId = await failureIdOn(saved.confirmationNumber, 'ISSUE');
     expect((await getProductionGoodsMovementFailure(client, failureId))?.failure.status).toBe('FAILED');
     await withTenant(client, async (tx) => {
@@ -893,7 +928,7 @@ describe('CO11N confirmation goods movement', () => {
       `);
     });
     const requestKey = nextKey();
-    const failed = await enterTimeTicket(client, ticket(orderF, await orderVersion(orderF), { requestKey, yieldQuantity: '4' }));
+    const failed = await enterTimeTicket(client, await ticket(orderF, await orderVersion(orderF), { requestKey, yieldQuantity: '4' }));
     expect(failed.movementFailures[0]).toMatchObject({ status: 'FAILED', failureCode: 'GOODS_ISSUE_REFUSED' });
     const failureId = await failureIdOn(failed.confirmationNumber, 'ISSUE');
     expect(await documentsOn(orderF)).toHaveLength(0);
@@ -913,7 +948,10 @@ describe('CO11N confirmation goods movement', () => {
        where client = ${client} and id = ${failureId}
     `));
 
-    const result = await attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR });
+    // A user drives the attempt: the block is what stops it, not an absent authority.
+    const result = await attemptProductionGoodsMovementFailure({
+      client, failureId, attemptedBy: ACTOR, authorization: cogiActorAuthorization(),
+    });
     expect(result).toMatchObject({ outcome: 'BLOCKED', failureCode: 'SOURCE_CONFIRMATION_CANCELLED' });
     const detail = await getProductionGoodsMovementFailure(client, failureId);
     expect(detail?.failure).toMatchObject({ status: 'BLOCKED', failureCode: 'SOURCE_CONFIRMATION_CANCELLED' });
@@ -985,6 +1023,7 @@ describe('CO11N confirmation goods movement', () => {
 
   it('sees no movement and no mark of another tenant', async () => {
     const other = await createTenant('co11n-other');
+    Object.assign(PROD_ACTOR, await createProductionActor(client));
     try {
       const inside = await withTenant(client, async (tx) => ({
         documents: await postedMovements(tx, other.client, 'CO11N-MV-1-BF'),
@@ -1008,7 +1047,7 @@ describe('CO11N confirmation goods movement', () => {
          where client = ${client} and failure_id = ${localFailures[0]!.id}
       `))).rejects.toThrow();
       // The other tenant cannot confirm this tenant's order at all.
-      await expect(enterTimeTicket(other.client, ticket(orderA, 1))
+      await expect(enterTimeTicket(other.client, await ticket(orderA, 1))
         ).rejects.toThrow(/does not stand|not stand|does not exist|order/i);
     } finally {
       await destroyTenant(other.client);
@@ -1081,8 +1120,8 @@ describe('CO11N confirmation goods movement', () => {
     const before = await componentStock();
 
     const both = await Promise.all([
-      enterTimeTicket(client, ticket(orderF, version, { requestKey: shared })),
-      enterTimeTicket(client, ticket(orderF, version, { requestKey: shared })),
+      enterTimeTicket(client, await ticket(orderF, version, { requestKey: shared })),
+      enterTimeTicket(client, await ticket(orderF, version, { requestKey: shared })),
     ]);
     expect(both.filter((result) => result.replayed)).toHaveLength(1);
     // Both views show the one withdrawal that stands: the replay reports the document the
@@ -1110,8 +1149,8 @@ describe('CO11N confirmation goods movement', () => {
     expect(await documentsOn(orderG)).toHaveLength(1);
 
     const both = await Promise.all([
-      enterTimeTicket(client, ticket(orderG, version, { yieldQuantity: '6' })),
-      enterTimeTicket(client, ticket(orderG, version, { yieldQuantity: '4' })),
+      enterTimeTicket(client, await ticket(orderG, version, { yieldQuantity: '6' })),
+      enterTimeTicket(client, await ticket(orderG, version, { yieldQuantity: '4' })),
     ]);
     expect(both.map((result) => ({
       movementsPosted: result.movementsPosted,
@@ -1161,11 +1200,11 @@ describe('CO11N confirmation goods movement', () => {
         materialNumber: 'MV-RM', plant: PLANT, storageLocation: LOCATION, quantity: 3,
         productionOrderNumber: orderH, productionOrderItem: componentItem,
       }],
-    }, 'MIGO')).rejects.toThrow(/already posted .*different posting/i);
+    }, 'MIGO', { authorization: await authority(client) })).rejects.toThrow(/already posted .*different posting/i);
 
     expect(await documentsOn(orderH)).toHaveLength(1);
     // The same key and the same content is a replay, not a second withdrawal.
-    const again = await enterTimeTicket(client, ticket(orderH, await orderVersion(orderH), { requestKey: saved.requestKey }));
+    const again = await enterTimeTicket(client, await ticket(orderH, await orderVersion(orderH), { requestKey: saved.requestKey }));
     expect(again.replayed).toBe(true);
     // The standing document is shown again, and no second one is caused by the replay.
     expect(again.movementsPosted).toBe(1);

@@ -38,6 +38,7 @@ import {
   type ConfirmationMovement,
   type MovementPlan,
 } from './confirmation-movements';
+import type { ProductionAuthorityContext } from './production-authority';
 import {
   confirmationMovementOutcomes,
   MovementFailurePersistenceError,
@@ -909,6 +910,15 @@ export async function enterTimeTicket(client: string, input: {
   expectedVersion: number;
   confirmFinal?: boolean;
   named?: Record<string, string | null | undefined>;
+  /**
+   * The signed-in user whose confirmation causes the automatic movements. CO11N posts
+   * no movement itself, but the intents it writes are posted straight afterwards, and
+   * a movement is posted by a person: this is who. It is carried into the posting so
+   * the backflush is issued by the confirming user's authority and reach, and a
+   * continuation that names nobody posts nothing — the movement stays a failure for
+   * COGI to recover rather than moving stock under no authority at all.
+   */
+  authorization?: ProductionAuthorityContext;
 }): Promise<TimeTicketView> {
   const refused = timeTicketRefusal(input.named);
   if (refused) fail(refused, 'Confirm one operation. Nothing was saved.');
@@ -1017,6 +1027,7 @@ export async function enterTimeTicket(client: string, input: {
       client,
       confirmationNumber,
       attemptedBy: input.requestedBy,
+      authorization: input.authorization,
     });
     await waitForConfirmationMovementSettlement({ client, confirmationNumber });
     const stored = await withTenant(client, (tx) => storedView(tx, client, confirmationNumber, replayed));

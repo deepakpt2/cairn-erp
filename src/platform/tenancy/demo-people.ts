@@ -173,7 +173,14 @@ const ROLES = [
     code: 'DEMO_PROD_CLERK',
     name: 'Production clerk',
     description: 'Shop-floor confirmations and goods movements',
-    capabilities: ['PROD.CONFIRM.*', 'PROD.ORDER.GI', 'PROD.ORDER.GR', 'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW'],
+    // The component issue to an order asks for the goods-issue authority as well as the
+    // production one: it moves stock, and a movement is posted by somebody who may move
+    // stock. The clerk holds it for the manufacturing plant alone; the warehouse clerk
+    // next door holds the same authority for every other movement and not this one.
+    capabilities: [
+      'PROD.CONFIRM.*', 'PROD.ORDER.GI', 'PROD.ORDER.GR', 'INV.GI.POST',
+      'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW',
+    ],
   },
   {
     code: 'DEMO_WH_CLERK_MFG',
@@ -218,11 +225,15 @@ const ROLES = [
  *
  * `plant` is the whole point of the second plant: two warehouse clerks hold the same
  * capability pattern and are told apart only by the plant each is restricted to.
- * Everyone else works across the company and gets no plant restriction at all.
+ * Everyone else works across the company and gets no plant restriction at all —
+ * except the planner, who raises, releases and closes production orders, and an
+ * order is raised in a plant: a service that judges authority asks for a Company
+ * Code *and* a Plant grant, and an absent plant grant is a mandate nobody gave
+ * rather than a mandate to act everywhere.
  */
 const USERS = [
   { username: 'demo.buyer', fullName: 'Mariam Fadel', role: 'DEMO_BUYER', plant: null },
-  { username: 'demo.planner', fullName: 'Ziad Homsi', role: 'DEMO_PLANNER', plant: null },
+  { username: 'demo.planner', fullName: 'Ziad Homsi', role: 'DEMO_PLANNER', plant: DEMO_STRUCTURE.manufacturingPlant },
   { username: 'demo.production', fullName: 'Omar Nasser', role: 'DEMO_PROD_CLERK', plant: DEMO_STRUCTURE.manufacturingPlant },
   { username: 'demo.warehouse1', fullName: 'Faisal Jaber', role: 'DEMO_WH_CLERK_MFG', plant: DEMO_STRUCTURE.manufacturingPlant },
   { username: 'demo.warehouse2', fullName: 'Hana Qasem', role: 'DEMO_WH_CLERK_DIST', plant: DEMO_STRUCTURE.distributionPlant },

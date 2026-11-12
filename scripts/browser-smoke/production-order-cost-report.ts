@@ -8,13 +8,24 @@ import { defineRange } from '../../src/platform/numbering';
 import { postJournalEntry } from '../../src/platform/posting';
 import { createProductionOrder } from '../../src/modules/inventory/production-orders';
 import type { BrowserTarget } from './targets';
+import { createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 const ACTOR = 'browser.admin';
 
+const PROD_ACTOR: BrowserActor = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/** Sign in once, and widen the actor's reach to whatever the scene has added since. */
+async function browserAuthority(client: string) {
+  if (!PROD_ACTOR.userId) Object.assign(PROD_ACTOR, await createBrowserActor(client));
+  await refreshBrowserActor(client, PROD_ACTOR);
+  return PROD_ACTOR.authorization;
+}
+
 export async function productionOrderCostReport(ctx: Context) {
   const { page, base, target } = ctx;
   const { client } = target;
+
   console.log('DI-012: read posted order-assigned actuals, filter periods, prove the report writes nothing');
 
   const fixture = await withTenant(client, async (tx) => {
@@ -81,7 +92,7 @@ export async function productionOrderCostReport(ctx: Context) {
     orderQuantity: 10, scheduledStart: '2026-01-01', scheduledFinish: '2026-01-05',
     components: [{ materialNumber: 'CR-RM', plant: 'QR01', storageLocation: 'SR01', requiredQuantity: 5 }],
     orderType: 'PP01',
-  });
+  }, { authorization: (await browserAuthority(client)) });
 
   async function post(reference: string, postingDate: string, postingPeriod: number, value: string, secondValue?: string) {
     await withTenant(client, (tx) => postJournalEntry(tx, {

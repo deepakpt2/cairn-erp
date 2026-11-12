@@ -159,6 +159,16 @@ class LostMovementLeaseError extends Error {
   }
 }
 
+/** A movement nobody owns: the continuation carries no user, so nothing is posted. */
+export class AutomaticMovementAuthorityError extends Error {
+  constructor() {
+    super(
+      'This automatic movement has no user behind it, and a goods movement is posted by a person. Nothing was posted.',
+    );
+    this.name = 'AutomaticMovementAuthorityError';
+  }
+}
+
 export class MovementFailurePersistenceError extends Error {
   constructor(readonly confirmationNumber: string, cause: unknown) {
     super(
@@ -1042,6 +1052,12 @@ async function executeClaimedMovement(
       if (liveAuthority) {
         await requireProductionCogiFailureScopeInTx(tx, record.client, locked, liveAuthority.restrictions);
       }
+      // A goods movement is posted by a person. This continuation carries the user the
+      // movement belongs to — the confirming user, or the COGI recovery operator — and
+      // a claim with nobody behind it posts nothing: the intent stays a failure for
+      // COGI to recover rather than moving stock under no authority at all.
+      const authority = claim.authorization;
+      if (!authority) throw new AutomaticMovementAuthorityError();
       const [cancelled] = await tx.select({ cancellationNumber: productionConfirmationCancellation.cancellationNumber })
         .from(productionConfirmationCancellation).where(and(
           eq(productionConfirmationCancellation.client, record.client),
@@ -1062,11 +1078,17 @@ async function executeClaimedMovement(
       let documentNumber: string;
       let documentYear: number;
       if (record.movementKind === 'ISSUE') {
-        const document: GoodsIssueView = await postGoodsIssue(issueInput(locked, actor, effectivePayload), 'MIGO', { tx });
+        const document: GoodsIssueView = await postGoodsIssue(issueInput(locked, actor, effectivePayload), 'MIGO', {
+          tx,
+          authorization: authority,
+        });
         documentNumber = document.materialDocumentNumber;
         documentYear = document.documentYear;
       } else {
-        const document: ProductionReceiptView = await postProductionReceipt(receiptInput(locked, actor, effectivePayload), { tx });
+        const document: ProductionReceiptView = await postProductionReceipt(receiptInput(locked, actor, effectivePayload), {
+          tx,
+          authorization: authority,
+        });
         documentNumber = document.materialDocumentNumber;
         documentYear = document.documentYear;
       }
@@ -1141,6 +1163,13 @@ export async function processPendingConfirmationMovements(input: {
   client: string;
   confirmationNumber: string;
   attemptedBy: string;
+  /**
+   * Who the movement is posted for. Carried from the confirmation that caused it: the
+   * intents are posted in their own transactions after the confirmation commits, so the
+   * only way a movement has an owner is for the confirmation to name one. Without it
+   * the posting services refuse, and the intent stays a failure for COGI to recover.
+   */
+  authorization?: ProductionCogiAuthorizationContext;
 }): Promise<ProductionGoodsMovementAttemptResult[]> {
   const pending = await withTenant(input.client, (tx) => tx.select({ id: productionGoodsMovementFailure.id })
     .from(productionGoodsMovementFailure)
@@ -1156,6 +1185,7 @@ export async function processPendingConfirmationMovements(input: {
       client: input.client,
       failureId: row.id,
       attemptedBy: input.attemptedBy,
+      authorization: input.authorization,
     }));
   }
   return results;

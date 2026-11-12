@@ -38,6 +38,11 @@ import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import { lineNotReversed, OPEN_PRODUCTION_DOCUMENT } from './production-document-quantity';
+import {
+  productionScopeRefusal,
+  verifyProductionAuthorityInTx,
+  type ProductionAuthorityContext,
+} from '../production/production-authority';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
 /** WE — the document type a goods receipt posts under (as MB01 does). */
 const JOURNAL_DOCUMENT_TYPE = 'WE';
@@ -251,7 +256,7 @@ async function toView(
  */
 export async function postProductionReceipt(
   input: PostProductionReceiptInput,
-  options?: { tx?: Tx },
+  options: { tx?: Tx; authorization: ProductionAuthorityContext },
 ): Promise<ProductionReceiptView> {
   const orderNumber = input.orderNumber.trim();
   if (!orderNumber) {
@@ -282,6 +287,14 @@ export async function postProductionReceipt(
   ]);
 
   const run = async (tx: Tx): Promise<ProductionReceiptView> => {
+    // Receiving an order's output puts valued stock in a plant, so it is done by a
+    // person holding PROD.ORDER.GR whose reach covers that plant. Judged before a
+    // resubmission is answered with the document it already posted, and before the
+    // order is read: the receipt is a posting with an owner, not an anonymous update.
+    const authority = await verifyProductionAuthorityInTx(
+      tx, input.client, options.authorization, PRODUCTION_RECEIPT_CAPABILITY,
+    );
+    if (!authority.ok) throw new ProductionReceiptError(authority.refusal.message, authority.refusal.remedy);
     await lockRequestKey(tx, input.client, input.requestKey);
     const [replay] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, input.client),
@@ -375,6 +388,8 @@ export async function postProductionReceipt(
       );
     }
     const companyCode = plantRow.companyCode;
+    const outOfScope = productionScopeRefusal(authority.restrictions, companyCode, plantRow.plant);
+    if (outOfScope) throw new ProductionReceiptError(outOfScope.message, outOfScope.remedy);
 
     // The order states how much it will make; a receipt beyond that is a receipt with no plan.
     const orderQuantity = Number(order.orderQuantity);
