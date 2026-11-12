@@ -17,6 +17,7 @@ checkpoints
 .venv
 __pycache__
 storage
+credentials
 .git-credentials
 .netrc
 *.dump

@@ -12,7 +12,10 @@ FROM dependencies AS operations
 COPY . .
 COPY walkthrough-seed.ts /app/walkthrough-seed.ts
 ENV CAIRN_ENV=production
-CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run db:sync-role && npm run db:init-reference && npm run seed"]
+# demo:provision is last and exits 0 immediately unless ENABLE_DUMMY_DATA asks for it,
+# so a normal deployment's command is unchanged and the application still cannot start
+# until this command has completed successfully.
+CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run db:sync-role && npm run db:init-reference && npm run seed && npm run demo:provision"]
 
 FROM dependencies AS builder
 COPY . .

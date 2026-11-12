@@ -25,6 +25,7 @@ db.txt
 !.env.example
 !.env.docker.example
 !.env.development.example
+credentials/
 .git-credentials
 .netrc
 

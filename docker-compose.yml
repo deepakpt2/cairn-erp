@@ -38,8 +38,17 @@ services:
     # so the seed can be refreshed without rebuilding the image.
     volumes:
       - ./walkthrough-seed.ts:/app/walkthrough-seed.ts:ro
+      # Where the generated demo credentials are written. Bind-mounted rather than
+      # kept in a volume so the deployment owner can read the file on the host; the
+      # provisioner sets the mode and, where it can, the ownership.
+      - ./credentials:/app/credentials
     environment:
       CAIRN_ENV: production
+      ENABLE_DUMMY_DATA: ${ENABLE_DUMMY_DATA:-false}
+      # Optional: the host uid/gid to own the credential file. Left unset, the file
+      # is owned by the container user and readable only by them.
+      CAIRN_DEMO_CREDENTIALS_UID: ${CAIRN_DEMO_CREDENTIALS_UID:-}
+      CAIRN_DEMO_CREDENTIALS_GID: ${CAIRN_DEMO_CREDENTIALS_GID:-}
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
       MIGRATION_DATABASE_URL: postgresql://cairn:${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
     depends_on:
