@@ -85,7 +85,7 @@ export async function createDeliveryAction(
       headerText: optional(form, 'headerText'),
       items,
       requestKey: text(form, 'requestKey') || `DL-${session.user.username}-${Date.now()}`,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     const blocked = result.credit?.status === 'BLOCKED';
     return {
@@ -186,7 +186,7 @@ export async function postGoodsIssueAction(
       deliveryNumber,
       expectedVersion: Number(text(form, 'expectedVersion') || '0'),
       postingDate: text(form, 'postingDate'),
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,

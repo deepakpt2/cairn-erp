@@ -6,6 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
 import { getReceivables, postIncomingPayment } from '../src/modules/finance/incoming-payment';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { createSalesActor, refreshSalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SCR068_F28_TEST';
 
@@ -14,6 +15,22 @@ const ACTOR = 'SCR068_F28_TEST';
  * customer's open receivables, clears them in place under the
  * clearing date, and refuses any difference by name.
  */
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/** The authority a payment is banked under: signed in once, reach refreshed on every call. */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 describe('SCR-068 incoming payment (F-28)', () => {
   let client = '';
 
@@ -76,13 +93,14 @@ describe('SCR-068 incoming payment (F-28)', () => {
     return c;
   }
 
-  const payment = (patch: Partial<Parameters<typeof postIncomingPayment>[0]> = {}) => ({
+  const payment = async (patch: Partial<Parameters<typeof postIncomingPayment>[0]> = {}) => ({
     client, changedBy: ACTOR,
     customerNumber: 'C10000', companyCode: '1000',
     documentDate: '2026-11-20', postingDate: '2026-11-20', clearingDate: '2026-11-21',
     bankGlAccount: '101000', amount: 850, currency: 'USD',
     reference: 'BANK-REF-001', requestKey: 'pay-1',
     items: [] as Array<{ documentNumber: string; fiscalYear: number; lineNumber: number }>,
+    authorization: await salesAuthority(client),
     ...patch,
   });
 
@@ -93,7 +111,7 @@ describe('SCR-068 incoming payment (F-28)', () => {
     expect(view.openBalance).toBe(850);
     expect(view.openItems[0].dueDate).toBe('2026-11-15');
     const first = view.openItems[0];
-    await expect(postIncomingPayment(payment({
+    await expect(postIncomingPayment(await payment({
       items: [{ documentNumber: first.documentNumber, fiscalYear: first.fiscalYear, lineNumber: first.lineNumber }],
     }))).rejects.toThrow('leaves an unassigned difference of 300.00 USD beyond the tolerance');
   });
@@ -104,7 +122,7 @@ describe('SCR-068 incoming payment (F-28)', () => {
     const refs = view.openItems.map((i) => ({
       documentNumber: i.documentNumber, fiscalYear: i.fiscalYear, lineNumber: i.lineNumber,
     }));
-    const posted = await postIncomingPayment(payment({ items: refs }));
+    const posted = await postIncomingPayment(await payment({ items: refs }));
     expect(posted.itemsCleared).toBe(2);
     expect(posted.clearingDate).toBe('2026-11-21');
 
@@ -125,9 +143,9 @@ describe('SCR-068 incoming payment (F-28)', () => {
     expect(clearedRows.every((r) => r.cd === '2026-11-21')).toBe(true);
     expect((await getReceivables(c, 'C10000', '1000')).openItems).toHaveLength(0);
 
-    const replay = await postIncomingPayment(payment({ items: refs }));
+    const replay = await postIncomingPayment(await payment({ items: refs }));
     expect(replay.journalDocumentNumber).toBe(posted.journalDocumentNumber);
-    await expect(postIncomingPayment(payment({ requestKey: 'pay-2', items: refs })))
+    await expect(postIncomingPayment(await payment({ requestKey: 'pay-2', items: refs })))
       .rejects.toThrow('already stands cleared');
   });
 });

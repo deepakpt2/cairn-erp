@@ -46,6 +46,7 @@ import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { listBillablePlanDates, saveBillingPlan } from '../src/modules/sales/billing-plan';
 import { assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 /**
  * DI-020 — the order-to-invoice chain on the services that own it.
@@ -80,6 +81,32 @@ const base = {
 
 let counter = 0;
 const key = (what: string) => `sd9191-${what}-${++counter}`;
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 async function stateOf(client: string, materialDocumentNumber: string | null, journal: string | null) {
   return withTenant(client, async (tx) => {
@@ -319,7 +346,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const created = await createSalesOrder({
       ...base, requestKey: key('order'),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 6, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     order = created.orderNumber;
     // The column is numeric(23,4): the figure is asserted as money, not as a string of one shape.
     expect(Number(created.lines[0].netAmount)).toBe(150);
@@ -340,7 +367,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
       goodsMovementDate: DATE, headerText: 'Partial shipment of the test order',
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '4' }],
       requestKey: submission,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     delivery = built.deliveryNumber;
     deliveryVersion = built.version;
     expect(built.replayed).toBe(false);
@@ -364,7 +391,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const replay = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '4' }], requestKey: submission,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(replay.replayed).toBe(true);
     expect(replay.deliveryNumber).toBe(delivery);
   });
@@ -374,12 +401,12 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createBillingFromDelivery({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, billingDate: DATE,
       requestKey: key('early-bill'),
-    })).rejects.toThrow(/only a goods-issued delivery earns an invoice/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/only a goods-issued delivery earns an invoice/);
     // 4 of the 6 are already on the standing delivery, so only 2 remain.
     const over = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '3' }], requestKey: key('over'),
-    }).then(() => null, (error: unknown) => error);
+    }, { authorization: await salesAuthority(tenant.client) }).then(() => null, (error: unknown) => error);
     expect(over).toBeInstanceOf(DeliveryError);
     expect((over as DeliveryError).message).toMatch(/carries 2\.000 UNT open of 6\.000 ordered, and 3 was entered/);
     // The screen shows this sentence next to the refusal, so it has to be a remedy and not a stack trace.
@@ -388,18 +415,18 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '1' }, { orderLineNumber: 10, quantity: '1' }], requestKey: key('twice'),
-    })).rejects.toThrow(/was named twice/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/was named twice/);
 
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
       items: [{ orderLineNumber: 90, quantity: '1' }], requestKey: key('missing'),
-    })).rejects.toThrow(/carries no item 90/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/carries no item 90/);
 
     // A quantity the unit cannot carry is refused at the delivery, exactly as at the order.
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '0.5' }], requestKey: key('scale'),
-    })).rejects.toThrow(/unit UNT is maintained to 0 decimals/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/unit UNT is maintained to 0 decimals/);
   });
 
   it('picks against the delivery and never beyond it', async () => {
@@ -452,12 +479,12 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const partial = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '1' }], requestKey: key('partial'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const partialNumber = partial.deliveryNumber;
     await expect(postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: partialNumber,
       expectedVersion: partial.version, postingDate: DATE,
-    })).rejects.toThrow(/only a fully picked delivery can be goods-issued/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/only a fully picked delivery can be goods-issued/);
 
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: partialNumber,
@@ -466,7 +493,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: partialNumber,
       expectedVersion: 99, postingDate: DATE,
-    })).rejects.toThrow(/changed since it was read/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/changed since it was read/);
 
     // The stock the movement needs is the shelf's own answer — nothing is invented to make it fit.
     const before = await stateOf(tenant.client, null, null);
@@ -479,7 +506,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const posted = await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     materialDocument = posted.materialDocumentNumber;
     expect(materialDocument).toMatch(/^MD-/);
     expect(posted.totalValue).toBe('40.00');
@@ -505,7 +532,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery,
       expectedVersion: issued!.version, postingDate: DATE,
-    })).rejects.toThrow(/was already goods-issued with material document/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/was already goods-issued with material document/);
     const again = await stateOf(tenant.client, materialDocument, null);
     expect(again.stock).toBe(96);
 
@@ -545,7 +572,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const result = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, billingDate: DATE,
       requestKey: key('bill'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     billing = result.billing.billingNumber;
     expect(billing).toMatch(/^INV-\d+$/);
     expect(result.posted).toBe(true);
@@ -586,11 +613,11 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createBillingFromDelivery({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, billingDate: DATE,
       requestKey: key('bill-again'),
-    })).rejects.toThrow(new RegExp(`is already billed as ${billing}`));
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(new RegExp(`is already billed as ${billing}`));
     const repeat = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, billingDate: DATE,
       requestKey: key('bill-repeat'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(repeat.replayed).toBe(true);
     expect(repeat.posted).toBe(true);
     expect(repeat.billing.billingNumber).toBe(billing);
@@ -608,7 +635,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const partial = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '2' }], requestKey: key('to-reverse'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const number = partial.deliveryNumber;
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: number,
@@ -618,7 +645,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
       client: tenant.client, changedBy: ACTOR, deliveryNumber: number,
       // The confirmation moved the document on; the movement is posted against the version it now carries.
       expectedVersion: (await getDelivery(tenant.client, number))!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(await stateOf(tenant.client, null, null)).toMatchObject({ stock: 94 });
 
     const reversal = await reverseMaterialDocument({
@@ -643,14 +670,14 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createBillingFromDelivery({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: number, billingDate: DATE,
       requestKey: key('bill-reversed'),
-    })).rejects.toThrow(/has been reversed/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/has been reversed/);
   });
 
   it('refuses a delivery, a pick and a goods issue on a blocked document, and holds the invoice', async () => {
     const blocked = await createSalesOrder({
       ...base, customerNumber: EXPOSED_CUSTOMER, requestKey: key('exposed'),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 6, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(blocked.credit?.status).toBe('BLOCKED');
     expect(blocked.credit?.reason).toMatch(/limit|manual hold|block/i);
 
@@ -658,7 +685,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: blocked.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '4' }], requestKey: key('blocked-delivery'),
-    })).rejects.toThrow(/is credit-blocked.*: nothing was delivered/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/is credit-blocked.*: nothing was delivered/);
 
     const refused = await releaseSalesOrderCredit({
       client: tenant.client, changedBy: ACTOR, orderNumber: blocked.orderNumber, canOverride: false,
@@ -674,7 +701,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const built = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: blocked.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '4' }], requestKey: key('released-delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const number = built.deliveryNumber;
     expect(built.status).toBe('OPEN');
     expect(built.credit?.status).toBe('BLOCKED');
@@ -705,7 +732,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: number,
       expectedVersion: (await getDelivery(tenant.client, number))!.version, postingDate: DATE,
-    })).rejects.toThrow(/is credit-blocked.*: nothing was issued/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/is credit-blocked.*: nothing was issued/);
     expect((await stateOf(tenant.client, null, null)).stock).toBe(96);
 
     // Once released, the movement posts; the breach it causes then holds the receivable, never the stock.
@@ -716,7 +743,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const issue = await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: number,
       expectedVersion: (await getDelivery(tenant.client, number))!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(issue.delivery.status).toBe('GOODS_ISSUED');
     expect(issue.creditBlockedForBilling).toBe(true);
     expect((await stateOf(tenant.client, issue.materialDocumentNumber, null)).stock).toBe(92);
@@ -724,7 +751,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const held = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: number, billingDate: DATE,
       requestKey: key('hold-bill'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(held.heldForCredit).toBe(true);
     expect(held.posted).toBe(false);
     expect(held.billing.status).toBe('OPEN');
@@ -737,7 +764,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const again = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: number, billingDate: DATE,
       requestKey: key('hold-bill-2'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     // Re-submitting under a block repeats the refusal; it is not a replay of a finished act.
     expect(again.heldForCredit).toBe(true);
     expect(again.replayed).toBe(false);
@@ -753,7 +780,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const posted = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: number, billingDate: DATE,
       requestKey: key('post-after-release'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(posted.billing.billingNumber).toBe(held.billing.billingNumber);
     expect(posted.posted).toBe(true);
     expect(posted.billing.status).toBe('POSTED');
@@ -847,7 +874,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const corrected = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, billingDate: DATE,
       requestKey: key('rebilled'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(corrected.replayed).toBe(false);
     expect(corrected.posted).toBe(true);
     expect(corrected.billing.billingNumber).not.toBe(billing);
@@ -860,7 +887,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createBillingFromDelivery({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery, billingDate: DATE,
       requestKey: key('rebilled-strict'),
-    })).rejects.toThrow(new RegExp(`is already billed as ${corrected.billing.billingNumber}`));
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(new RegExp(`is already billed as ${corrected.billing.billingNumber}`));
 
     // Cancelling the same document a second time is not a second reversal: the call is idempotent and answers
     // with the cancellation that already stands, and the unique index would refuse a second row anyway.
@@ -976,7 +1003,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const fresh = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '0.001' }], requestKey: key('return-unissued'),
-    }).catch(() => null);
+    }, { authorization: await salesAuthority(tenant.client) }).catch(() => null);
     if (fresh) {
       await expect(postReturnsReceipt({
         client: tenant.client, changedBy: ACTOR, deliveryNumber: fresh.deliveryNumber,
@@ -1192,12 +1219,12 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const placed = await createSalesOrder({
       ...base, requestKey: key(`${label}-order`),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: quantity, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: String(quantity) }], requestKey: key(`${label}-delivery`),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: String(quantity), storageLocation: STORE }], requestKey: key(`${label}-pick`),
@@ -1206,11 +1233,11 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const invoiced = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key(`${label}-invoice`),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return {
       orderNumber: placed.orderNumber, deliveryNumber: shipped.deliveryNumber,
       billingNumber: invoiced.billing.billingNumber,
@@ -1223,7 +1250,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const placed = await createSalesOrder({
       ...base, requestKey: key('returns-order'),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const source = placed.orderNumber;
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: source });
     expect(open).toHaveLength(1);
@@ -1232,7 +1259,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: source, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '2' }], requestKey: key('returns-second-delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const shippedNumber = shipped.deliveryNumber;
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber,
@@ -1242,7 +1269,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
 
     // What the chain says before any return exists on this delivery.
     const deliveredBefore = (await listDeliverableOrderLines(tenant.client, { orderNumber: source }))
@@ -1343,12 +1370,12 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const placed = await createSalesOrder({
       ...base, requestKey: key('returns-order-source'),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('returns-order-delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('returns-order-pick'),
@@ -1357,11 +1384,11 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const invoiced = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('returns-order-invoice'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const invoiceNumber = invoiced.billing.billingNumber;
 
     // What the customer is committed to before the return is asked for.
@@ -1434,19 +1461,19 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: raised.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '1' }], requestKey: key('returns-order-outbound'),
-    })).rejects.toThrow(/goods on a returns order come back/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/goods on a returns order come back/);
   });
 
   it('refuses a returns order that is not against an invoice, or for more than it billed', async () => {
     const placed = await createSalesOrder({
       ...base, requestKey: key('returns-order-refusals'),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('returns-order-refusals-delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('returns-order-refusals-pick'),
@@ -1455,11 +1482,11 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const invoiced = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('returns-order-refusals-invoice'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const invoiceNumber = invoiced.billing.billingNumber;
     const first = { client: tenant.client, changedBy: ACTOR, billingNumber: invoiceNumber, orderDate: DATE };
 
@@ -1493,12 +1520,12 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const placed = await createSalesOrder({
       ...base, requestKey: key('lr-from-order-source'),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('lr-from-order-delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const shippedNumber = shipped.deliveryNumber;
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber,
@@ -1508,11 +1535,11 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const invoiced = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shippedNumber, billingDate: DATE,
       requestKey: key('lr-from-order-invoice'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const raised = await createReturnsOrder({
       client: tenant.client, changedBy: ACTOR, billingNumber: invoiced.billing.billingNumber, orderDate: DATE,
       requestKey: key('lr-from-order-return'),
@@ -1568,7 +1595,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const placed = await createSalesOrder({
       ...base, requestKey: key('lr-not-a-return'),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await expect(createReturnsDelivery({
       client: tenant.client, changedBy: ACTOR, returnsOrderNumber: placed.orderNumber, deliveryDate: DATE,
       requestKey: key('lr-not-a-return-first'),
@@ -1845,12 +1872,12 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const placed = await createSalesOrder({
       ...base, requestKey: key(`${label}-order`),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: quantity, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: String(quantity) }], requestKey: key(`${label}-delivery`),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: String(quantity), storageLocation: STORE }], requestKey: key(`${label}-pick`),
@@ -1859,7 +1886,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const issued = await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return {
       orderNumber: placed.orderNumber, deliveryNumber: shipped.deliveryNumber,
       materialDocumentNumber: issued.materialDocumentNumber!,
@@ -1903,7 +1930,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: chain.deliveryNumber,
       expectedVersion: undone!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const reissued = await getDelivery(tenant.client, chain.deliveryNumber);
     expect(reissued!.status).toBe('GOODS_ISSUED');
     expect(reissued!.goodsIssueStands).toBe(true);
@@ -1917,7 +1944,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const invoiced = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: billed.deliveryNumber, billingDate: DATE,
       requestKey: key('reversal-billed-invoice'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const refusal = await reverseMaterialDocument({
       client: tenant.client, changedBy: ACTOR, materialDocumentNumber: billed.materialDocumentNumber,
       fiscalYear: billed.materialDocumentYear, postingDate: DATE, documentDate: DATE,
@@ -1956,7 +1983,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const invoiced = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('returns-screen-invoice'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
 
     // The complaint: raised against the invoice, priced from the line the goods were billed on.
     const asked = await createReturnsOrder({
@@ -2026,7 +2053,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const invoiced = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('credit-screen-invoice'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
 
     // The complaint: raised against the invoice, and held from the moment it exists.
     const request = await createCreditMemoRequest({
@@ -2096,7 +2123,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const first = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('rebill-first'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
 
     const live = async (): Promise<number> => withTenant(tenant.client, async (tx) => {
       const [row] = await tx.execute(sql`
@@ -2129,7 +2156,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const second = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('rebill-second'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(second.billing.billingNumber).not.toBe(first.billing.billingNumber);
     expect(second.posted).toBe(true);
     // One live document at every moment: the cancelled row is history, not a competitor.
@@ -2140,7 +2167,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const again = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('rebill-third'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(again.billing.billingNumber).toBe(second.billing.billingNumber);
     expect(again.replayed).toBe(true);
     expect(await live()).toBe(1);
@@ -2150,7 +2177,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createBillingFromDelivery({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('rebill-duplicate'),
-    })).rejects.toThrow(/already billed as/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/already billed as/);
 
     // The chain reads the way the screen now draws it: what was sent, the cancellation that undid it,
     // and the corrected document that stands.
@@ -2211,7 +2238,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const placed = await createSalesOrder({
       ...base, requestKey: key('plan-order'),
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     // The item is billed by a plan: one date, the whole of it, on the day the order was raised.
     await saveBillingPlan({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, orderLineNumber: 10,
@@ -2223,7 +2250,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('plan-delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('plan-pick'),
@@ -2232,7 +2259,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: issued!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
 
     // The goods went out, and the delivery is still not offered: the plan is the answer to when this
     // item is billed, and a delivery that answered as well would bill the same value twice.
@@ -2243,7 +2270,7 @@ describe('sales fulfillment and billing (DI-020)', () => {
     await expect(createBillingFromDelivery({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('plan-billing'),
-    })).rejects.toThrow(/billing plan/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/billing plan/);
 
     // What is offered in its place: the date, from the due list the billing screen reads.
     const due = await listBillablePlanDates(tenant.client, { orderNumber: placed.orderNumber, onDate: DATE });

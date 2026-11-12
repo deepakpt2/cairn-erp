@@ -40,6 +40,7 @@ import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9247_TERMS';
 const AREA = 'CA47';
@@ -67,6 +68,32 @@ const base = {
 
 let counter = 0;
 const key = (what: string) => `sd9247-${what}-${++counter}`;
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 describe('what the master promised', () => {
   let tenant: TestTenant;
@@ -115,20 +142,20 @@ describe('what the master promised', () => {
     });
   };
 
-  const order = (materialNumber: string, quantity = 10, plant?: string) => createSalesOrder({
+  const order = async (materialNumber: string, quantity = 10, plant?: string) => createSalesOrder({
     ...base,
     requestKey: key(`order-${materialNumber}`),
     lines: [{
       lineNumber: undefined, materialNumber, plant: plant as string,
       orderQuantity: quantity, quantityUnit: 'UNT', taxCode: 'T10',
     }],
-  });
+  }, { authorization: await salesAuthority(base.client) });
 
   /** Raise a delivery for one item of an order, and return the delivery number. */
-  const ship = (orderNumber: string, quantity: string, what: string, extra: object = {}) => createDelivery({
+  const ship = async (orderNumber: string, quantity: string, what: string, extra: object = {}) => createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity, ...extra }], requestKey: key(what),
-    });
+    }, { authorization: await salesAuthority(base.client) });
 
   beforeAll(async () => {
     tenant = await createTenant('sd9247-delivery-terms');
@@ -315,13 +342,13 @@ describe('what the master promised', () => {
         { lineNumber: undefined, materialNumber: 'SD9247M007', plant: PLANT, orderQuantity: 3, quantityUnit: 'UNT', taxCode: 'T10' },
         { lineNumber: undefined, materialNumber: 'SD9247M007', plant: PLANT, orderQuantity: 3, quantityUnit: 'UNT', taxCode: 'T10' },
       ],
-    });
+    }, { authorization: await salesAuthority(base.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     await setSalesArea(SHIP_TO, { completeDelivery: true });
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '3' }], requestKey: key('leaves-one'),
-    })).rejects.toThrow(/requires a complete delivery of order .*, and item 20 is being left behind/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/requires a complete delivery of order .*, and item 20 is being left behind/);
     await setSalesArea(SHIP_TO, { completeDelivery: false });
   });
 
@@ -362,7 +389,7 @@ describe('what the master promised', () => {
         { orderNumber: second.orderNumber, orderLineNumber: 10, quantity: '5' },
       ],
       requestKey: key('combined'),
-    });
+    }, { authorization: await salesAuthority(base.client) });
     expect(combined.deliveryNumber).toBeTruthy();
     await setSalesArea(SHIP_TO, { orderCombination: false });
   });
@@ -377,7 +404,7 @@ describe('what the master promised', () => {
         { orderNumber: second.orderNumber, orderLineNumber: 10, quantity: '5' },
       ],
       requestKey: key('no-combination'),
-    })).rejects.toThrow(/Customer SD9247CUST2 does not allow their orders to be combined, so order .* travels alone/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/Customer SD9247CUST2 does not allow their orders to be combined, so order .* travels alone/);
   });
 
   it('refuses to gather orders that are going to two different addresses', async () => {
@@ -398,7 +425,7 @@ describe('what the master promised', () => {
         { orderNumber: second.orderNumber, orderLineNumber: 10, quantity: '5' },
       ],
       requestKey: key('two-addresses'),
-    })).rejects.toThrow(/ships to SD9247CUST3, and this delivery ships to SD9247CUST2/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/ships to SD9247CUST3, and this delivery ships to SD9247CUST2/);
     await saveCustomerPartner({
       client: tenant.client, changedBy: ACTOR, partnerNumber: CUSTOMER,
       salesOrg: '1000', distributionChannel: '10', division: '01',

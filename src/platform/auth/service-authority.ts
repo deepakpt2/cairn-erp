@@ -62,19 +62,26 @@ function refusal(message: string, remedy: string): ServiceAuthorityVerdict {
 }
 
 /**
- * Verify the acting session, one named authority, and the presence of both
- * organisational grants — all inside the caller's transaction.
+ * Verify the acting session, one named authority, and the presence of the
+ * organisational grants the action needs — all inside the caller's transaction.
  *
  * The locks are not decoration: `user_role`, `role` and `role_capability` are held
  * `for share` so an administrator removing the role in a second transaction cannot
  * commit between this read and the service's write, and the restriction rows are held
  * the same way so a narrowed scope cannot land in between.
+ *
+ * `requirePlantScope` is the difference between a plant and a company: a goods
+ * movement, a production order and a delivery happen in a plant, so an actor with no
+ * plant grant holds a mandate nobody gave. A payment is a company's, not a plant's —
+ * it settles a receivable the company code owns — so a service that names a company
+ * code and no plant passes `false` and is judged on the company code alone.
  */
 export async function verifyServiceAuthorityInTx(
   tx: Tx,
   client: string,
   authorization: ServiceAuthorityContext | undefined,
   capability: string,
+  options: { requirePlantScope?: boolean } = {},
 ): Promise<ServiceAuthorityVerdict> {
   if (!authorization?.userId || !authorization.sessionId) {
     return refusal(
@@ -132,7 +139,13 @@ export async function verifyServiceAuthorityInTx(
   const restrictions = await loadOrgRestrictions(tx, client, authorization.userId);
   const hasCompanyScope = restrictions.some((scope) => scope.scopeType === 'COMPANY_CODE' && scope.scopeValue.trim());
   const hasPlantScope = restrictions.some((scope) => scope.scopeType === 'PLANT' && scope.scopeValue.trim());
-  if (!hasCompanyScope || !hasPlantScope) {
+  if (!hasCompanyScope) {
+    return refusal(
+      'This action needs an explicit Company Code scope.',
+      'Ask an administrator to grant the Company Code scope your role needs.',
+    );
+  }
+  if (options.requirePlantScope !== false && !hasPlantScope) {
     return refusal(
       'This action needs an explicit Company Code and Plant scope.',
       'Ask an administrator to grant the Company Code and Plant scope your role needs.',

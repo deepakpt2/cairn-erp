@@ -6,6 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
 import { getReceivables, postIncomingPayment } from '../src/modules/finance/incoming-payment';
 import { createTenant, dateFromToday, defineTestRanges, destroyTenant } from './helpers';
+import { createSalesActor, refreshSalesActor } from './helpers/sales-actor';
 
 // The terms give 2 percent within ten days of the document date, and `getReceivables` judges that
 // window against today (`incoming-payment.ts:100`, `outgoing-payment.ts:154`), so the fixture dates
@@ -24,6 +25,22 @@ const ACTOR = 'SCR079_F28_TEST';
  * outcomes standing on the journal lines, on-account amounts and
  * tolerated differences posted by name.
  */
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/** The authority a payment is banked under: signed in once, reach refreshed on every call. */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 describe('SCR-079 incoming payment completion (F-28)', () => {
   let client = '';
 
@@ -108,13 +125,14 @@ describe('SCR-079 incoming payment completion (F-28)', () => {
     return { documentNumber: item.documentNumber, fiscalYear: item.fiscalYear, lineNumber: item.lineNumber };
   };
 
-  const payment = (patch: Partial<Parameters<typeof postIncomingPayment>[0]> = {}) => ({
+  const payment = async (patch: Partial<Parameters<typeof postIncomingPayment>[0]> = {}) => ({
     client, changedBy: ACTOR,
     customerNumber: 'C10000', companyCode: '1000',
     documentDate: PAYMENT_DATE, postingDate: PAYMENT_DATE, clearingDate: CLEARING_DATE,
     bankGlAccount: '101000', amount: 0, currency: 'USD',
     requestKey: `comp-${Math.random()}`,
     items: [] as Parameters<typeof postIncomingPayment>[0]['items'],
+    authorization: await salesAuthority(client),
     ...patch,
   });
 
@@ -123,14 +141,14 @@ describe('SCR-079 incoming payment completion (F-28)', () => {
     const view = await getReceivables(client, 'C10000', '1000');
     const taxed = view.openItems.find((i) => i.signed === 550);
     expect(taxed?.discountPercent).toBe(2);
-    await expect(postIncomingPayment(payment({
+    await expect(postIncomingPayment(await payment({
       amount: 530, items: [{ ...(await refOf(550)), discount: 20 }],
     }))).rejects.toThrow('exceeds the eligible 11.00');
   });
 
   it('posts the discount, clearing the item at its full open amount', async () => {
     const c = await standingClient();
-    const posted = await postIncomingPayment(payment({
+    const posted = await postIncomingPayment(await payment({
       amount: 539, requestKey: 'comp-pay-discount',
       items: [{ ...(await refOf(550)), discount: 11 }],
     }));
@@ -156,7 +174,7 @@ describe('SCR-079 incoming payment completion (F-28)', () => {
   it('leaves a residual open item and, for a partial payment, both items standing', async () => {
     const c = await standingClient();
     // Residual: 300 open, 200 applied → original clears, 100 stands open.
-    const posted = await postIncomingPayment(payment({
+    const posted = await postIncomingPayment(await payment({
       amount: 200, items: [{ ...(await refOf(300)), applied: 200, outcome: 'RESIDUAL' }],
     }));
     expect(posted.itemsCleared).toBe(1);
@@ -165,7 +183,7 @@ describe('SCR-079 incoming payment completion (F-28)', () => {
 
     // Partial: 40 against the residual 100 → both stand; nothing clears.
     const residualRef = await refOf(100);
-    const partial = await postIncomingPayment(payment({
+    const partial = await postIncomingPayment(await payment({
       amount: 40, items: [{ ...residualRef, applied: 40, outcome: 'PARTIAL' }],
     }));
     expect(partial.itemsCleared).toBe(0);
@@ -187,7 +205,7 @@ describe('SCR-079 incoming payment completion (F-28)', () => {
     const last = view.openItems[0];
     const ref = { documentNumber: last.documentNumber, fiscalYear: last.fiscalYear, lineNumber: last.lineNumber };
     // Settle the last 100 in full, 45 on account, 5 unassigned within tolerance.
-    const posted = await postIncomingPayment(payment({
+    const posted = await postIncomingPayment(await payment({
       amount: 150, onAccountAmount: 45, items: [ref],
     }));
     const lines = await withTenant(c, (tx) => tx.execute(sql`
@@ -205,7 +223,7 @@ describe('SCR-079 incoming payment completion (F-28)', () => {
     `));
     expect((record as unknown as Array<{ oa: string }>)[0].oa).toBe('45.0000');
 
-    await expect(postIncomingPayment(payment({
+    await expect(postIncomingPayment(await payment({
       amount: 999, items: [],
     }))).rejects.toThrow('Select at least one open item');
   });

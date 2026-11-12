@@ -19,6 +19,7 @@ import {
   assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 /**
  * §5.3 — sales analysis: sales, backlog, returns, margin.
@@ -71,6 +72,32 @@ const base = {
 /** The material is priced at 25 a unit and valued at 10, so a unit earns 15. */
 const PRICE = 25;
 const COST = 10;
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 describe('sales analysis: sales, backlog, returns and margin (§5.3)', () => {
   let tenant: TestTenant;
@@ -338,7 +365,7 @@ describe('sales analysis: sales, backlog, returns and margin (§5.3)', () => {
         lineNumber: undefined, materialNumber, plant: PLANT,
         orderQuantity: units, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
   }
 
   /** An order, delivered and goods issued. */
@@ -350,7 +377,7 @@ describe('sales analysis: sales, backlog, returns and margin (§5.3)', () => {
       goodsMovementDate: DATE, headerText: 'Analysis fixture',
       items: [{ orderLineNumber: open[0].lineNumber, quantity: String(units) }],
       requestKey: key('delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       items: [{ lineNumber: 10, quantity: String(units), storageLocation: STORE }],
@@ -359,7 +386,7 @@ describe('sales analysis: sales, backlog, returns and margin (§5.3)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       expectedVersion: picked!.version, postingDate: DATE, documentDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return { orderNumber: created.orderNumber, deliveryNumber: built.deliveryNumber };
   }
 
@@ -371,7 +398,7 @@ describe('sales analysis: sales, backlog, returns and margin (§5.3)', () => {
     const [document] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate,
       selection: { deliveryNumber: chain.deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(tenant.client) })).documents;
     return { ...chain, billingNumber: document.billing.billingNumber };
   }
 
@@ -468,7 +495,7 @@ describe('sales analysis: sales, backlog, returns and margin (§5.3)', () => {
       goodsMovementDate: DATE, headerText: 'Analysis fixture',
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '4' }],
       requestKey: key('delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       items: [{ lineNumber: 10, quantity: '4', storageLocation: STORE }],
@@ -477,7 +504,7 @@ describe('sales analysis: sales, backlog, returns and margin (§5.3)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       expectedVersion: picked!.version, postingDate: DATE, documentDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
 
     const backlog = await listAnalysis(tenant.client, {
       kind: 'BACKLOG', groupBy: 'CUSTOMER', filter: { orderNumber: created.orderNumber },
@@ -504,7 +531,7 @@ describe('sales analysis: sales, backlog, returns and margin (§5.3)', () => {
           orderQuantity: 3, quantityUnit: 'UNT', taxCode: 'T10',
         },
       ],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const standing = await getSalesOrder(tenant.client, withRejected.orderNumber);
     const rejectedLine = standing!.lines[0].lineNumber;
     const keptLine = standing!.lines[1].lineNumber;

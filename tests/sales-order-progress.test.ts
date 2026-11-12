@@ -17,6 +17,7 @@ import {
   assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 /**
  * §5.4 — what the chain has taken off an item, on the order that asked for it.
@@ -60,6 +61,32 @@ const base = {
   orderDate: DATE,
   documentType: 'OR',
 };
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 describe('what the chain has taken off each item of an order (§5.4)', () => {
   let tenant: TestTenant;
@@ -277,7 +304,7 @@ describe('what the chain has taken off each item of an order (§5.4)', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: units, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
   }
 
   /** Deliver `units` of an order and issue them, on a delivery of its own. */
@@ -288,7 +315,7 @@ describe('what the chain has taken off each item of an order (§5.4)', () => {
       goodsMovementDate: DATE, headerText: 'Progress fixture',
       items: [{ orderLineNumber: open[0].lineNumber, quantity: String(units) }],
       requestKey: key('delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       items: [{ lineNumber: 10, quantity: String(units), storageLocation: STORE }],
@@ -297,7 +324,7 @@ describe('what the chain has taken off each item of an order (§5.4)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       expectedVersion: picked!.version, postingDate: DATE, documentDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return built.deliveryNumber;
   }
 
@@ -319,7 +346,7 @@ describe('what the chain has taken off each item of an order (§5.4)', () => {
     await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: delivered },
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect((await line()).deliveredQuantity).toBe('4');
     expect((await line()).billedQuantity).toBe('4');
     expect((await line()).openQuantity).toBe('6');
@@ -391,7 +418,7 @@ describe('what the chain has taken off each item of an order (§5.4)', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
       })),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const read = await getSalesOrder(tenant.client, created.orderNumber);
     expect(read!.lines).toHaveLength(30);
     // Numbered in tens, as items have always been numbered, and every one of them unfulfilled.

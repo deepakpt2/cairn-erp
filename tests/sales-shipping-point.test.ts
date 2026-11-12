@@ -53,6 +53,7 @@ import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9245_DOCK';
 const AREA = 'CA45';
@@ -101,6 +102,32 @@ const base = {
 let counter = 0;
 const key = (what: string) => `sd9245-${what}-${++counter}`;
 
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 describe('where the goods leave from', () => {
   let tenant: TestTenant;
 
@@ -134,13 +161,13 @@ describe('where the goods leave from', () => {
     });
   };
 
-  const order = (materialNumbers: string[]) => createSalesOrder({
+  const order = async (materialNumbers: string[]) => createSalesOrder({
     ...base,
     requestKey: key('order'),
     lines: materialNumbers.map((materialNumber) => ({
       lineNumber: undefined, materialNumber, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
     })),
-  });
+  }, { authorization: await salesAuthority(base.client) });
 
   /** Raise a delivery for every line of the order, and read back the dock it was given. */
   const ship = async (orderNumber: string) => {
@@ -149,7 +176,7 @@ describe('where the goods leave from', () => {
       client: tenant.client, changedBy: ACTOR, orderNumber, deliveryDate: DATE,
       items: open.map((line) => ({ orderLineNumber: line.lineNumber, quantity: '2' })),
       requestKey: key('delivery'),
-    });
+    }, { authorization: await salesAuthority(base.client) });
     return getDelivery(tenant.client, shipped.deliveryNumber);
   };
 
@@ -382,7 +409,7 @@ describe('where the goods leave from', () => {
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: open.map((line) => ({ orderLineNumber: line.lineNumber, quantity: '2' })),
       requestKey: key('two-docks'),
-    })).rejects.toThrow(/Item \d+ loads through shipping point (PALT|CRAN), and this delivery loads through (CRAN|PALT)\./);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/Item \d+ loads through shipping point (PALT|CRAN), and this delivery loads through (CRAN|PALT)\./);
   });
 
   it('refuses a dock that stopped loading, and names it', async () => {
@@ -393,7 +420,7 @@ describe('where the goods leave from', () => {
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('gone-dock'),
-    })).rejects.toThrow(/Shipping point GONE stands withdrawn/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/Shipping point GONE stands withdrawn/);
   });
 
   it('refuses a condition nobody may ask for, and names it', async () => {
@@ -405,7 +432,7 @@ describe('where the goods leave from', () => {
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('gone-condition'),
-    })).rejects.toThrow(/Shipping condition ZZ stands withdrawn/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/Shipping condition ZZ stands withdrawn/);
     await setCondition(SHIP_TO, null);
   });
 
@@ -428,7 +455,7 @@ describe('where the goods leave from', () => {
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('no-row'),
-    })).rejects.toThrow(/No shipping point is determined for plant 1000 with shipping condition 01 and loading group none/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/No shipping point is determined for plant 1000 with shipping condition 01 and loading group none/);
 
     // Restored, because the tests after this one are read as the tenant stands.
     await setCondition(SHIP_TO, null);

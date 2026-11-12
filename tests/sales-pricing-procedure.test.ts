@@ -12,6 +12,7 @@ import {
   STANDARD_PRICING_PROCEDURE, pricingProcedureDeterminationRows, salesDocumentConditionsOf,
 } from '../src/modules/sales/pricing-procedure';
 import { assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales, sql, type TestTenant } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9238_PRICING_TEST';
 const AREA = 'CCA1';
@@ -43,6 +44,32 @@ const base = {
  * a reader would expect: 5 at 25.00 less 10%, plus 5.00 a unit of freight, plus its share of 15.00 of
  * freight on the document, taxed at 10% on what survived all three.
  */
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 describe('the pricing procedure and the conditions it writes', () => {
   let tenant: TestTenant;
   let orderNumber = '';
@@ -185,7 +212,7 @@ describe('the pricing procedure and the conditions it writes', () => {
         { lineNumber: undefined, materialNumber: MATERIAL_A, plant: PLANT, orderQuantity: 5, quantityUnit: 'UNT', taxCode: 'T10' },
         { lineNumber: undefined, materialNumber: MATERIAL_B, plant: PLANT, orderQuantity: 3, quantityUnit: 'UNT', taxCode: 'T10' },
       ],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     orderNumber = created.orderNumber;
     const view = await getSalesOrder(tenant.client, orderNumber);
     const [first, second] = view!.lines;
@@ -271,7 +298,7 @@ describe('the pricing procedure and the conditions it writes', () => {
     const created = await createSalesOrder({
       ...base, requestKey: 'SD9238-CREATE-0002',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL_UNVALUED, plant: PLANT, orderQuantity: 2, quantityUnit: 'UNT' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const conditions = await salesDocumentConditionsOf(tenant.client, 'ORDER', created.orderNumber);
     const cost = conditions.find((row) => row.conditionType === 'VPRS');
     // The step ran and found nothing. That is written down as a fact, not left as an absence.
@@ -310,7 +337,7 @@ describe('the pricing procedure and the conditions it writes', () => {
       await createSalesOrder({
         ...base, requestKey: 'SD9238-CREATE-0003',
         lines: [{ lineNumber: undefined, materialNumber: MATERIAL_A, plant: PLANT, orderQuantity: 1, quantityUnit: 'UNT' }],
-      });
+      }, { authorization: await salesAuthority(tenant.client) });
     } catch (error) {
       refusal = error as { message: string; remedy?: string };
     } finally {

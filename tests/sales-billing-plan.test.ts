@@ -45,6 +45,7 @@ import {
   maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9248_BILLING_PLAN';
 const AREA = 'CCA1';
@@ -83,6 +84,32 @@ const QUARTERS = [
   { billingDate: FOURTH, percentage: 25 },
 ];
 
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 async function placeOrder(client: string, requestKey: string): Promise<string> {
   const placed = await createSalesOrder({
     ...base,
@@ -96,7 +123,7 @@ async function placeOrder(client: string, requestKey: string): Promise<string> {
       quantityUnit: 'UNT',
       taxCode: 'T10',
     }],
-  });
+  }, { authorization: await salesAuthority(base.client) });
   return placed.orderNumber;
 }
 
@@ -289,7 +316,7 @@ describe('a billing plan says when an order item is billed (9248)', () => {
     const result = await createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, orderLineNumber: 10,
       dateNumber: 10, billingDate: FIRST, requestKey: key('bill-first'),
-    });
+    }, { authorization: await salesAuthority(base.client) });
     firstBilling = result.billing.billingNumber;
     expect(result.posted).toBe(true);
     expect(result.replayed).toBe(false);
@@ -319,12 +346,12 @@ describe('a billing plan says when an order item is billed (9248)', () => {
     await expect(createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, orderLineNumber: 10,
       dateNumber: 20, billingDate: '2026-10-14', requestKey: key('bill-early'),
-    })).rejects.toThrow(new RegExp(SECOND));
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(new RegExp(SECOND));
 
     await expect(createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, orderLineNumber: 10,
       dateNumber: 10, billingDate: FIRST, requestKey: key('bill-twice'),
-    })).rejects.toThrow(new RegExp(firstBilling));
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(new RegExp(firstBilling));
   });
 
   it('will not rewrite a plan one of whose dates has been billed', async () => {
@@ -350,7 +377,7 @@ describe('a billing plan says when an order item is billed (9248)', () => {
     const again = await createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, orderLineNumber: 10,
       dateNumber: 10, billingDate: FIRST, requestKey: key('bill-released'),
-    });
+    }, { authorization: await salesAuthority(base.client) });
     secondBilling = again.billing.billingNumber;
     expect(again.billing.billingNumber).not.toBe(firstBilling);
     expect(Number(again.billing.grossValue)).toBe(13.75);
@@ -389,6 +416,6 @@ describe('a billing plan says when an order item is billed (9248)', () => {
     await expect(createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber: order, orderLineNumber: 10,
       dateNumber: 30, billingDate: THIRD, requestKey: key('bill-withdrawn'),
-    })).rejects.toThrow(/withdrawn/i);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/withdrawn/i);
   });
 });

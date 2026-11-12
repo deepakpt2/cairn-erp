@@ -20,7 +20,11 @@ import { paymentTerms } from '../foundation/payment-terms-schema';
 import { customerInvoice } from '../purchasing/schema';
 import { incomingPayment, journalEntry, journalEntryLine } from './schema';
 
-export const INCOMING_PAYMENT_CAPABILITY = 'FIN.AR.PAYMENT.ENTER';
+import { hasOrgAccess } from '../../platform/auth/session';
+import {
+  type ServiceAuthorityContext, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
+
 const JOURNAL_DOCUMENT_TYPE = 'DZ';
 const PAYMENT_CLASS = 'incoming_payment';
 
@@ -219,6 +223,9 @@ async function byRequestKey(tx: Tx, client: string, requestKey: string): Promise
   } : null;
 }
 
+/** The authority a customer payment is banked under. */
+export const INCOMING_PAYMENT_CAPABILITY = 'FIN.AR.PAYMENT.ENTER';
+
 export async function postIncomingPayment(input: {
   client: string; changedBy: string;
   customerNumber: string; companyCode: string;
@@ -228,6 +235,12 @@ export async function postIncomingPayment(input: {
   /** Remainder of the receipt left standing as an open customer credit. */
   onAccountAmount?: number;
   items: PaymentItemRef[];
+  /**
+   * Who is banking the money. A payment settles a receivable the company code owns,
+   * so the actor is judged on the company code alone — a plant grant is not asked
+   * for, because a payment is not made in a plant.
+   */
+  authorization?: ServiceAuthorityContext;
 }): Promise<PostedPayment> {
   if (input.items.length === 0) {
     throw new IncomingPaymentError('Select at least one open item to settle.', 'Tick the items this receipt settles.');
@@ -237,6 +250,17 @@ export async function postIncomingPayment(input: {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new IncomingPaymentError(`${label} ${value} is not a calendar date.`);
   }
   return withTenant(input.client, async (tx) => {
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, input.authorization, INCOMING_PAYMENT_CAPABILITY,
+      { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new IncomingPaymentError(authority.refusal.message, authority.refusal.remedy);
+    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', input.companyCode)) {
+      throw new IncomingPaymentError(
+        `Your Company Code scope does not cover company code ${input.companyCode}.`,
+        'Ask an administrator to extend your Company Code scope, then repeat the action.',
+      );
+    }
     const replay = await byRequestKey(tx, input.client, input.requestKey);
     if (replay) return replay;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/incpay/${input.companyCode}/${input.customerNumber}`}, 0))`);

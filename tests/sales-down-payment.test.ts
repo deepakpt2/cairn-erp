@@ -51,6 +51,7 @@ import {
   maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9250_DOWN_PAYMENT';
 const AREA = 'CCA1';
@@ -82,6 +83,32 @@ const base = {
   currency: 'USD',
   orderDate: DATE,
 };
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 describe('money before the goods: the down payment (9250)', () => {
   let tenant: TestTenant;
@@ -221,7 +248,7 @@ describe('money before the goods: the down payment (9250)', () => {
         quantityUnit: 'UNT',
         taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return placed.orderNumber;
   }
 
@@ -296,7 +323,7 @@ describe('money before the goods: the down payment (9250)', () => {
     await expect(createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber, orderLineNumber: 10,
       dateNumber: 10, billingDate: FIRST, requestKey: key('bill-advance-date'),
-    })).rejects.toThrow(/raises a request and not an invoice/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/raises a request and not an invoice/);
 
     // A plan is a promise about a day, and the day is the point of it.
     await expect(requestDownPaymentFromPlanDate({
@@ -336,7 +363,7 @@ describe('money before the goods: the down payment (9250)', () => {
     const first = await createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber, orderLineNumber: 10,
       dateNumber: 20, billingDate: SECOND, requestKey: key('bill-first-half'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(first.posted).toBe(true);
     expect(Number(first.billing.grossValue)).toBeCloseTo(27.5, 2);
     expect(first.downPayment?.cleared).toBe('13.75');
@@ -360,7 +387,7 @@ describe('money before the goods: the down payment (9250)', () => {
     const second = await createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber, orderLineNumber: 10,
       dateNumber: 30, billingDate: THIRD, requestKey: key('bill-second-half'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(Number(second.billing.grossValue)).toBeCloseTo(27.5, 2);
     expect(second.downPayment).toBeUndefined();
     const afterSecond = await getCustomerDownPaymentClearing(tenant.client, CUSTOMER, '1000', 'A');

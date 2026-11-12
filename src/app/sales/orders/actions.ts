@@ -111,7 +111,7 @@ export async function createOrderAction(
       lines: linesFrom(form),
       // The submission key makes a double press or a retried request the same order, not a second one.
       requestKey: text(form, 'requestKey') || `SO-${session.user.username}-${Date.now()}`,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,

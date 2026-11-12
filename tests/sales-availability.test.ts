@@ -47,6 +47,7 @@ import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9243_ATP';
 const AREA = 'CA43';
@@ -102,6 +103,32 @@ const BLANK_FLAGS = {
 let counter = 0;
 const key = (what: string) => `sd9243-${what}-${++counter}`;
 
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 describe('what the plant can promise', () => {
   let tenant: TestTenant;
 
@@ -151,10 +178,10 @@ describe('what the plant can promise', () => {
     });
   };
 
-  const order = (materialNumber: string, quantity: number) => createSalesOrder({
+  const order = async (materialNumber: string, quantity: number) => createSalesOrder({
     ...base, requestKey: key(`${materialNumber}-order`),
     lines: [{ lineNumber: undefined, materialNumber, plant: PLANT, orderQuantity: quantity, quantityUnit: 'UNT', taxCode: 'T10' }],
-  });
+  }, { authorization: await salesAuthority(base.client) });
 
   beforeAll(async () => {
     tenant = await createTenant('sd9243-atp');
@@ -363,11 +390,11 @@ describe('what the plant can promise', () => {
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '8' }], requestKey: key('over-confirmed'),
-    })).rejects.toThrow(/of 10\.000 ordered and 6\.000 confirmed/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/of 10\.000 ordered and 6\.000 confirmed/);
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '6' }], requestKey: key('as-confirmed'),
-    });
+    }, { authorization: await salesAuthority(base.client) });
     // The delivery carries what the plant had promised when it was made, so a line of six against an
     // order of ten can be read as a promise kept rather than a customer shorted.
     const read = await getDelivery(tenant.client, shipped.deliveryNumber);
@@ -389,7 +416,7 @@ describe('what the plant can promise', () => {
     await expect(createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: 10, quantity: '6' }], requestKey: key('door-shut'),
-    })).rejects.toThrow(/can promise 3\.000 UNT/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/can promise 3\.000 UNT/);
   });
 
   it('leaves what has gone out confirmed, and asks only for the rest', async () => {
@@ -399,7 +426,7 @@ describe('what the plant can promise', () => {
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '6' }], requestKey: key('change-delivery'),
-    });
+    }, { authorization: await salesAuthority(base.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: '6', storageLocation: STORE }], requestKey: key('change-pick'),
@@ -408,7 +435,7 @@ describe('what the plant can promise', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(base.client) });
 
     // The customer asks for four more. The plant has nothing left beyond what it has already shipped,
     // so the four are confirmed at zero — and the six that went out stay confirmed at six, because a

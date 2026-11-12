@@ -30,6 +30,7 @@ import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9239_CHAIN_TEST';
 const AREA = 'CCA1';
@@ -53,6 +54,32 @@ const base = {
 
 let counter = 0;
 const key = (what: string) => `sd9239-${what}-${++counter}`;
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 describe('the conditions a document is priced by, through the chain that follows it', () => {
   let tenant: TestTenant;
@@ -262,13 +289,13 @@ describe('the conditions a document is priced by, through the chain that follows
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: ordered, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: String(delivered) }],
       requestKey: key(`${label}-delivery`),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: String(delivered), storageLocation: STORE }],
@@ -278,11 +305,11 @@ describe('the conditions a document is priced by, through the chain that follows
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const invoiced = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key(`${label}-invoice`),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return {
       orderNumber: placed.orderNumber,
       deliveryNumber: shipped.deliveryNumber,
@@ -300,7 +327,7 @@ describe('the conditions a document is priced by, through the chain that follows
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 10, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const view = await getSalesOrder(tenant.client, placed.orderNumber);
     expect(Number(view!.netValue)).toBe(290);
     expect(Number(view!.taxValue)).toBe(29);
@@ -566,7 +593,7 @@ describe('the conditions a document is priced by, through the chain that follows
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 10, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     historicOrder = placed.orderNumber;
     // Rename them onto a document that does not exist, which is the cheapest way to reach the state the
     // books are actually in: the application role is granted no DELETE on a condition, because what priced
@@ -583,7 +610,7 @@ describe('the conditions a document is priced by, through the chain that follows
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '4' }], requestKey: key('historic-delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: '4', storageLocation: STORE }], requestKey: key('historic-pick'),
@@ -592,11 +619,11 @@ describe('the conditions a document is priced by, through the chain that follows
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const invoicedHistoric = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key('historic-invoice'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const line = invoicedHistoric.billing.lines[0];
     // Four units at the price the line has always carried, and the tax the master stands at today.
     expect(line.netPrice).toBe('29.0000');
@@ -644,7 +671,7 @@ describe('the conditions a document is priced by, through the chain that follows
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     // Stripped of its conditions, which is the state a document carries no pricing for: the tax is then
     // priced at the moment of billing, from the master as it stands at that moment.
     await withTenant(tenant.client, async (tx) => {
@@ -657,7 +684,7 @@ describe('the conditions a document is priced by, through the chain that follows
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '2' }], requestKey: key('lapsed-delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: '2', storageLocation: STORE }], requestKey: key('lapsed-pick'),
@@ -666,7 +693,7 @@ describe('the conditions a document is priced by, through the chain that follows
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await withTenant(tenant.client, async (tx) => {
       await tx.execute(sql`
         delete from tax_code where client = ${tenant.client} and country = 'KW' and tax_code = 'T10'
@@ -676,7 +703,7 @@ describe('the conditions a document is priced by, through the chain that follows
       await expect(postBillingDocument({
         client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
         requestKey: key('lapsed-invoice'),
-      })).rejects.toThrow(/T10 no longer stands for country KW/);
+      }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/T10 no longer stands for country KW/);
     } finally {
       await withTenant(tenant.client, async (tx) => {
         await tx.execute(sql`
@@ -712,7 +739,7 @@ describe('the conditions a document is priced by, through the chain that follows
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const conditions = await salesDocumentConditionsOf(tenant.client, 'ORDER', placed.orderNumber);
     expect(Number(conditions.find((row) => row.conditionType === 'PR00')!.amount)).toBe(30);
     // And it names the record the increase created — which is what makes the assertions below, that no

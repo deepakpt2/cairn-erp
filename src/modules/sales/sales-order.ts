@@ -23,6 +23,10 @@
 import { z } from 'zod';
 import { and, asc, eq, sql } from 'drizzle-orm';
 
+import { hasOrgAccess } from '../../platform/auth/session';
+import {
+  type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
@@ -649,9 +653,30 @@ async function recordSchedule(
  * engine, in its own transaction, after the document stands: the engine is the only writer of that
  * table, and a block is a judgement about the document rather than a column of it.
  */
-export async function createSalesOrder(input: OrderCreateInput): Promise<CreateSalesOrderResult> {
+/** The authority a sales order is raised under. */
+export const SALES_ORDER_CREATE_CAPABILITY = 'SALES.ORDER.CREATE';
+
+export async function createSalesOrder(
+  input: OrderCreateInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
+): Promise<CreateSalesOrderResult> {
   const parsed = orderCreateInput.parse(input);
   const created = await withTenant(parsed.client, async (tx) => {
+    // An order is raised by somebody: a session that stands, the authority to order, and
+    // a Company Code and Plant reach that covers wherever the items will ship from. The
+    // screen asks the same question before it calls — the service asks again, because a
+    // service that can be reached another way has to answer for itself.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, parsed.client, options.authorization, SALES_ORDER_CREATE_CAPABILITY,
+    );
+    if (!authority.ok) throw new SalesOrderError(authority.refusal.message, authority.refusal.remedy);
+    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', parsed.companyCode)) {
+      throw new SalesOrderError(
+        `Your Company Code scope does not cover company code ${parsed.companyCode}.`,
+        'Ask an administrator to extend your Company Code scope, then repeat the action.',
+      );
+    }
+
     const area = await requireOne(await (async () => {
       const [row] = await tx.select().from(salesArea).where(and(
         eq(salesArea.client, parsed.client),
@@ -728,6 +753,14 @@ export async function createSalesOrder(input: OrderCreateInput): Promise<CreateS
     const netValue = round2(lines.reduce((sum, l) => sum + Number(l.netAmount), 0));
     const taxValue = round2(lines.reduce((sum, l) => sum + Number(l.taxAmount), 0));
     const grossValue = round2(Number(netValue) + Number(taxValue));
+
+    // Where the goods will come from is decided by pricing — a customer's sales area, or
+    // the material's own sales view — so it is the priced line, not the typed one, that
+    // says which plant this order draws on. Judged before the order is written.
+    for (const shipFrom of [...new Set(lines.map((line) => line.plant).filter(Boolean))].sort()) {
+      const outOfScope = await refusePlantOutsideScopeInTx(tx, parsed.client, shipFrom, authority.restrictions);
+      if (outOfScope) throw new SalesOrderError(outOfScope.message, outOfScope.remedy);
+    }
 
     if (parsed.requestKey) {
       const [existing] = await tx.select({ orderNumber: salesOrder.orderNumber }).from(salesOrder)

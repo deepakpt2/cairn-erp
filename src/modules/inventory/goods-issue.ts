@@ -63,6 +63,8 @@ export const GOODS_ISSUE_CAPABILITY = 'INV.GI.POST';
  * may issue to a cost centre cannot empty a shelf into a shop order without it.
  */
 export const PRODUCTION_ORDER_ISSUE_CAPABILITY = 'PROD.ORDER.GI';
+/** The authority the goods issue to a customer (601) asks for, beyond the goods-issue one. */
+export const SALES_GOODS_ISSUE_CAPABILITY = 'SALES.GI.POST';
 export const GOODS_ISSUE_ALIAS = 'MB1A';
 export const GOODS_ISSUE_ROUTE = '/inventory/goods-issue';
 
@@ -505,19 +507,21 @@ export async function postGoodsIssue(
   ]);
 
   const run = async (tx: Tx): Promise<GoodsIssueView> => {
-    // A goods issue out of a plant is a session-bound business action, whether the
-    // screen is MB1A or — for the component issue to a production order — MIGO, and
-    // whether the user is the one typing or the one whose confirmation the worker is
-    // continuing. Resolve and authorise trusted plant/company rows before replay
-    // lookup as well as writes. The order issue asks for PROD.ORDER.GI as well as the
-    // goods-issue authority; every other movement asks for the goods-issue one alone.
-    // A continuation that carries no user posts nothing: the movement stays a failure
-    // for COGI to recover, rather than moving stock under nobody's authority.
+    // A goods issue out of a plant is a session-bound business action, on every screen
+    // that can raise one — MB1A, MIGO for the component issue to a production order,
+    // and the delivery that ships to a customer — and whether the user is the one typing
+    // or the one whose confirmation the worker is continuing. Resolve and authorise
+    // trusted plant/company rows before replay lookup as well as writes. The order issue
+    // asks for PROD.ORDER.GI as well as the goods-issue authority, and the issue to a
+    // customer asks for SALES.GI.POST; every other movement asks for the goods-issue one
+    // alone. A continuation that carries no user posts nothing: the movement stays a
+    // failure for COGI to recover, rather than moving stock under nobody's authority.
     const orderIssue = scenario.movementType === 'PROD_ISSUE_ORDER';
-    const authorisedPlants = screen === 'MB1A' || orderIssue
+    const customerIssue = scenario.movementType === 'GI_CUSTOMER';
+    const authorisedPlants = screen === 'MB1A' || orderIssue || customerIssue
       ? await authorizeIssuePlantsInTx(
           tx, input.client, input.lines, options?.authorization,
-          orderIssue ? [PRODUCTION_ORDER_ISSUE_CAPABILITY] : [],
+          orderIssue ? [PRODUCTION_ORDER_ISSUE_CAPABILITY] : customerIssue ? [SALES_GOODS_ISSUE_CAPABILITY] : [],
         )
       : null;
     await lockRequestKey(tx, input.client, input.requestKey);

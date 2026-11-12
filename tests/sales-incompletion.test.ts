@@ -19,6 +19,7 @@ import {
 import { billingDueList, postBillingDocument } from '../src/modules/sales/billing';
 import { listInbox } from '../src/platform/notification/notify';
 import { assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales, sql, type TestTenant } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9255_INCOMPLETION_TEST';
 const AREA = 'CCA1';
@@ -49,6 +50,32 @@ const base = {
  * a tenant named. Everything here is either that, or the consequence a tenant chose — the named
  * function that stops, and the one that does not.
  */
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 describe('the incompletion procedure and the log it writes', () => {
   let tenant: TestTenant;
   let counter = 0;
@@ -255,13 +282,13 @@ describe('the incompletion procedure and the log it writes', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: ordered, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     const delivery = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: String(shipped) }],
       requestKey: key(`${label}-delivery`),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery.deliveryNumber,
       items: [{ lineNumber: 10, quantity: String(shipped), storageLocation: STORE }],
@@ -271,7 +298,7 @@ describe('the incompletion procedure and the log it writes', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: delivery.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return { orderNumber: placed.orderNumber, deliveryNumber: delivery.deliveryNumber };
   }
 
@@ -311,7 +338,7 @@ describe('the incompletion procedure and the log it writes', () => {
           lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
           orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
         }],
-      });
+      }, { authorization: await salesAuthority(tenant.client) });
       // It stands — that is the whole point — and the log says what it is missing.
       const missing = await readIncompletion(tenant.client, 'ORDER', placed.orderNumber);
       expect(missing).toHaveLength(1);
@@ -367,7 +394,7 @@ describe('the incompletion procedure and the log it writes', () => {
           lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
           orderQuantity: 4, quantityUnit: 'UNT', taxCode: 'T10',
         }],
-      });
+      }, { authorization: await salesAuthority(tenant.client) });
       expect(await blockedFor(tenant.client, {
         documentCategory: 'ORDER', documentNumber: placed.orderNumber, fn: 'DELIVERY',
       })).toHaveLength(1);
@@ -380,7 +407,7 @@ describe('the incompletion procedure and the log it writes', () => {
         client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
         items: [{ orderLineNumber: 10, quantity: '4' }],
         requestKey: key('blocked-delivery'),
-      })).rejects.toThrow(/is incomplete: it is missing the date the goods were asked for/);
+      }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/is incomplete: it is missing the date the goods were asked for/);
 
       // And the same document is still billable, because that is not what this group stops.
       expect(await blockedFor(tenant.client, {
@@ -429,7 +456,7 @@ describe('the incompletion procedure and the log it writes', () => {
       await expect(postBillingDocument({
         client: tenant.client, changedBy: ACTOR, deliveryNumber, billingDate: DATE,
         requestKey: key('billblock-invoice'),
-      })).rejects.toThrow(/cannot be billed: it is missing where the delivery is going/);
+      }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/cannot be billed: it is missing where the delivery is going/);
     } finally {
       await withdrawIncompletionAssignment({
         client: tenant.client, changedBy: ACTOR, documentCategory: 'DELIVERY',
@@ -512,7 +539,7 @@ describe('the incompletion procedure and the log it writes', () => {
             requestedDeliveryDate: '2026-04-30',
           },
         ],
-      });
+      }, { authorization: await salesAuthority(tenant.client) });
       const entries = await readIncompletion(tenant.client, 'ORDER', placed.orderNumber);
       expect(entries.map((row) => row.lineNumber)).toEqual([10]);
       expect(await blockedFor(tenant.client, {
@@ -556,7 +583,7 @@ describe('the incompletion procedure and the log it writes', () => {
           lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
           orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
         }],
-      });
+      }, { authorization: await salesAuthority(tenant.client) });
       const listed = await listIncompleteDocuments(tenant.client, { customerNumber: CUSTOMER });
       const view = listed.find((row) => row.documentNumber === placed.orderNumber);
       expect(view).toBeDefined();
@@ -633,7 +660,7 @@ describe('the incompletion procedure and the log it writes', () => {
             requestedDeliveryDate: '2026-11-30',
           },
         ],
-      });
+      }, { authorization: await salesAuthority(tenant.client) });
       // The line with no date is the one the log names.
       expect((await readIncompletion(tenant.client, 'ORDER', placed.orderNumber))
         .map((row) => row.lineNumber)).toEqual([10]);
@@ -725,7 +752,7 @@ describe('the incompletion procedure and the log it writes', () => {
           lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
           orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
         }],
-      });
+      }, { authorization: await salesAuthority(tenant.client) });
       expect(await readIncompletion(tenant.client, 'ORDER', placed.orderNumber)).toHaveLength(1);
 
       const told = await inboxOf(clerk, 'DOC.INCOMPLETE', placed.orderNumber);

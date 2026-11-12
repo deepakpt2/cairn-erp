@@ -59,6 +59,10 @@ export const DELIVERY_OBJECT_CLASS = 'delivery';
 /** The movement that ships to a customer, named as the inventory engine's own scenario table names it. */
 export const DELIVERY_GOODS_ISSUE_MOVEMENT = '601';
 
+import {
+  type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
+
 export class DeliveryError extends Error {
   remedy?: string;
   constructor(message: string, remedy?: string) {
@@ -591,9 +595,22 @@ async function partialDeliveriesOf(
  * before anything is written, a delivery draws from one plant, and a repeated submission under the same
  * request key returns the document the first attempt created instead of creating a second one.
  */
-export async function createDelivery(input: DeliveryCreateInput): Promise<DeliveryView & { replayed: boolean }> {
+/** The authority a delivery is raised under. */
+export const SALES_DELIVERY_CREATE_CAPABILITY = 'SALES.DELIVERY.CREATE';
+
+export async function createDelivery(
+  input: DeliveryCreateInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
+): Promise<DeliveryView & { replayed: boolean }> {
   const parsed = deliveryCreateInput.parse(input);
   const created = await withTenant(parsed.client, async (tx) => {
+    // Goods leave a plant on somebody's authority: a session that stands, the authority
+    // to deliver, and a Plant reach that covers the plant the goods come from.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, parsed.client, options.authorization, SALES_DELIVERY_CREATE_CAPABILITY,
+    );
+    if (!authority.ok) throw new DeliveryError(authority.refusal.message, authority.refusal.remedy);
+
     const [order] = await tx.select().from(salesOrder).where(and(
       eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, parsed.orderNumber),
     )).limit(1);
@@ -675,6 +692,14 @@ export async function createDelivery(input: DeliveryCreateInput): Promise<Delive
       linesByOrder.set(orderNumber, await tx.select().from(salesOrderLine).where(and(
         eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, orderNumber),
       )).orderBy(asc(salesOrderLine.lineNumber)));
+    }
+
+    // The plant the goods come from is the order line's own, which is the first point
+    // the delivery can be judged against the actor's reach: a delivery draws from one
+    // plant, and a plant outside that reach is not a plant this delivery may empty.
+    for (const shipFrom of [...new Set([...linesByOrder.values()].flat().map((line) => line.plant).filter(Boolean))].sort()) {
+      const outOfScope = await refusePlantOutsideScopeInTx(tx, parsed.client, shipFrom, authority.restrictions);
+      if (outOfScope) throw new DeliveryError(outOfScope.message, outOfScope.remedy);
     }
 
     // What the order is missing. The due list leaves a blocked line out, and naming one by hand is
@@ -1379,7 +1404,10 @@ export interface DeliveryGoodsIssueResult {
  * or its order, or when the stock the movement needs is not there: the last refusal is the inventory engine's
  * own words, quoted rather than paraphrased, so a short shelf does not read as a broken screen.
  */
-export async function postDeliveryGoodsIssue(input: DeliveryIssueInput): Promise<DeliveryGoodsIssueResult> {
+export async function postDeliveryGoodsIssue(
+  input: DeliveryIssueInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
+): Promise<DeliveryGoodsIssueResult> {
   const parsed = deliveryIssueInput.parse(input);
   await refuseStandingBlock(parsed.client, parsed.deliveryNumber, `Delivery ${parsed.deliveryNumber}`, 'issued');
   const posted = await withTenant(parsed.client, async (tx) => {
@@ -1466,6 +1494,24 @@ export async function postDeliveryGoodsIssue(input: DeliveryIssueInput): Promise
       );
     }
 
+    // Goods leave the plant on somebody's authority: a session that stands, the
+    // authority to ship, and a Plant reach that covers the plant the goods come
+    // from. Stated here as well as inside the movement, because the movement runs
+    // in this transaction with this transaction's view, and a posting that is
+    // refused after the lines are read has already read them under no authority.
+    const issueAuthority = await verifyServiceAuthorityInTx(
+      tx, parsed.client, options.authorization, DELIVERY_GOODS_ISSUE_CAPABILITY,
+    );
+    if (!issueAuthority.ok) {
+      throw new DeliveryError(issueAuthority.refusal.message, issueAuthority.refusal.remedy);
+    }
+    for (const plantCode of [...new Set(lines.map((line) => line.plant.trim())).values()].sort()) {
+      const outOfScope = await refusePlantOutsideScopeInTx(
+        tx, parsed.client, plantCode, issueAuthority.restrictions,
+      );
+      if (outOfScope) throw new DeliveryError(outOfScope.message, outOfScope.remedy);
+    }
+
     let issue: Awaited<ReturnType<typeof postGoodsIssue>>;
     try {
       issue = await postGoodsIssue({
@@ -1482,7 +1528,7 @@ export async function postDeliveryGoodsIssue(input: DeliveryIssueInput): Promise
         // be answered with the reversed document.
         requestKey: `sd-gi-${parsed.client}-${header.deliveryNumber}-${header.version}`.slice(0, 64),
         lines: issueLines,
-      }, 'SALES', { tx });
+      }, 'SALES', { tx, authorization: options.authorization });
     } catch (caught) {
       if (caught instanceof GoodsIssueError || caught instanceof UnitConversionError) {
         throw new DeliveryError(caught.message, (caught as { remedy?: string }).remedy);

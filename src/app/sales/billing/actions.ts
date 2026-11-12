@@ -67,7 +67,7 @@ export async function createBillingAction(
       deliveryNumber: text(form, 'deliveryNumber'),
       billingDate: text(form, 'billingDate'),
       requestKey: text(form, 'requestKey') || `BL-${session.user.username}-${Date.now()}`,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     if (result.heldForCredit) {
       return {
@@ -122,7 +122,7 @@ export async function billDueListAction(
         salesOrg: optional(form, 'salesOrg'),
         plant: optional(form, 'plant'),
       },
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     const documents = result.documents;
     if (documents.length === 0) {
@@ -182,7 +182,7 @@ export async function billPlanDateAction(
       dateNumber,
       billingDate: text(form, 'billingDate'),
       requestKey: text(form, 'requestKey') || `BL-PD-${session.user.username}-${Date.now()}`,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     if (result.heldForCredit) {
       return {
@@ -359,7 +359,7 @@ export async function rebillDeliveryAction(
       deliveryNumber,
       billingDate: text(form, 'billingDate'),
       requestKey: text(form, 'requestKey') || `BL-RE-${session.user.username}-${Date.now()}`,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     if (result.heldForCredit) {
       return {

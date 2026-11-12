@@ -30,6 +30,7 @@ import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 /**
  * §4.5 — billing the month: the collective run over the billing due list (audit gap G2).
@@ -67,6 +68,32 @@ const base = {
 
 let counter = 0;
 const key = (what: string) => `sd9253-${what}-${++counter}`;
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 async function seedPartners(client: string, partners: string[]) {
   await withTenant(client, async (tx) => {
@@ -118,14 +145,14 @@ async function issuedDelivery(
       lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
       orderQuantity: input.quantity, quantityUnit: 'UNT', taxCode: 'T10',
     }],
-  });
+  }, { authorization: await salesAuthority(base.client) });
   const open = await listDeliverableOrderLines(client, { orderNumber: created.orderNumber });
   const built = await createDelivery({
     client, changedBy: ACTOR, orderNumber: created.orderNumber, deliveryDate: DATE,
     goodsMovementDate: DATE, headerText: 'Collective run fixture',
     items: [{ orderLineNumber: open[0].lineNumber, quantity: String(input.quantity) }],
     requestKey: key('delivery'),
-  });
+  }, { authorization: await salesAuthority(base.client) });
   await confirmDeliveryPicks({
     client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
     items: [{ lineNumber: 10, quantity: String(input.quantity), storageLocation: STORE }],
@@ -136,7 +163,7 @@ async function issuedDelivery(
   const issued = await postDeliveryGoodsIssue({
     client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
     expectedVersion: picked!.version, postingDate: DATE, documentDate: DATE,
-  });
+  }, { authorization: await salesAuthority(base.client) });
   if (input.shipTo) {
     const shipTo = input.shipTo;
     await withTenant(client, (tx) => writeDocumentPartners(tx, {
@@ -381,7 +408,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
 
     const run = await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(base.client) });
     // Two deliveries, one payer, one currency, one company code, no criterion maintained: one document.
     expect(run.documents).toHaveLength(1);
     const created = run.documents[0];
@@ -414,7 +441,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
     // repeat: the due list, and not a flag, is what says a delivery has been billed.
     const again = await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(base.client) });
     expect(again.documents).toHaveLength(0);
 
     // The flow still names the invoice, read through the lines: a header that names no delivery would
@@ -429,7 +456,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
     await issuedDelivery(tenant.client, { customerNumber: CUSTOMER, quantity: 3 });
     const first = await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(base.client) });
     expect(first.documents).toHaveLength(1);
     const number = first.documents[0].billing.billingNumber;
     const invoices = () => withTenant(tenant.client, (tx) => tx.execute(sql`
@@ -441,7 +468,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
     // is raised. What makes the retry safe is the due list and not a submission key — a delivery that
     // has been billed is no longer due, and a run takes no key because a key names one document and a
     // run draws several.
-    const retry = await billDueList({ client: tenant.client, changedBy: ACTOR, billingDate: DATE });
+    const retry = await billDueList({ client: tenant.client, changedBy: ACTOR, billingDate: DATE }, { authorization: await salesAuthority(base.client) });
     expect(retry.documents).toHaveLength(0);
     expect((await invoices())[0].n).toBe(invoicesBefore);
 
@@ -455,7 +482,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
     expect(await billingDueList(tenant.client, {})).toHaveLength(1);
 
     // The run raises a real document for it, and not the one that was undone.
-    const corrected = await billDueList({ client: tenant.client, changedBy: ACTOR, billingDate: DATE });
+    const corrected = await billDueList({ client: tenant.client, changedBy: ACTOR, billingDate: DATE }, { authorization: await salesAuthority(base.client) });
     expect(corrected.documents).toHaveLength(1);
     expect(corrected.documents[0].billing.billingNumber).not.toBe(number);
     expect(corrected.documents[0].posted).toBe(true);
@@ -471,7 +498,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
 
     const run = await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(base.client) });
     // One document for each payer: a receivable is owed by one customer, and a document that named two
     // would be owed by neither.
     expect(run.documents).toHaveLength(2);
@@ -505,7 +532,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
 
     const run = await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(base.client) });
     expect(run.documents).toHaveLength(2);
     const byValue = run.documents
       .map((row) => Number(row.billing.grossValue))
@@ -542,7 +569,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
 
     await expect(billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
-    })).rejects.toThrow(/no billing number can be drawn/);
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/no billing number can be drawn/);
 
     // Nothing was written for any group: billing the first and stopping at the second is not a
     // month-end run, it is two runs and a reconciliation.
@@ -560,7 +587,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
     // The month is still there to be billed, and the run that could not draw a number took none of it.
     const after = await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(base.client) });
     expect(after.documents).toHaveLength(1);
     expect(after.documents[0].posted).toBe(true);
   });
@@ -585,7 +612,7 @@ describe('collective billing — the month-end run (§4.5, gap G2)', () => {
 
     const run = await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(base.client) });
     expect(run.documents).toHaveLength(1);
     expect(run.documents[0].posted).toBe(true);
   });

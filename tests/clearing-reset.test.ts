@@ -7,6 +7,7 @@ import { getClearingDocument, resetClearing } from '../src/modules/finance/clear
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
 import { getReceivables, postIncomingPayment } from '../src/modules/finance/incoming-payment';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SCR071_FBRA_TEST';
 
@@ -17,6 +18,32 @@ const ACTOR = 'SCR071_FBRA_TEST';
  * standing on its own retained record. Nothing posts, nothing is
  * edited, and a repeated request returns the standing reset.
  */
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 describe('SCR-071 reset cleared items (FBRA)', () => {
   let client = '';
   let clearingDocument = '';
@@ -82,7 +109,9 @@ describe('SCR-071 reset cleared items (FBRA)', () => {
         items: view.openItems.map((i) => ({
           documentNumber: i.documentNumber, fiscalYear: i.fiscalYear, lineNumber: i.lineNumber,
         })),
-      });
+      
+  authorization: await salesAuthority(tenant.client),
+});
       clearingDocument = posted.journalDocumentNumber;
     }
     return client;

@@ -223,24 +223,26 @@ const ROLES = [
 /**
  * The accounts.
  *
- * `plant` is the whole point of the second plant: two warehouse clerks hold the same
- * capability pattern and are told apart only by the plant each is restricted to.
- * Everyone else works across the company and gets no plant restriction at all —
- * except the planner, who raises, releases and closes production orders, and an
- * order is raised in a plant: a service that judges authority asks for a Company
- * Code *and* a Plant grant, and an absent plant grant is a mandate nobody gave
- * rather than a mandate to act everywhere.
+ * `plants` is the whole point of the second plant: two warehouse clerks hold the
+ * same capability pattern and are told apart only by the plant each is restricted
+ * to. The sales clerk is granted both plants on purpose — an order is raised and a
+ * delivery ships from the plant the goods stand in, and the demo sells from both.
+ * The accountant is granted none, also on purpose: a payment settles a receivable
+ * the company code owns, and the service that banks one asks for a Company Code
+ * grant and no Plant grant. Every account therefore carries an explicit reach, and
+ * a service that judges authority finds a mandate that was deliberately given
+ * rather than an absence it has to interpret.
  */
 const USERS = [
-  { username: 'demo.buyer', fullName: 'Mariam Fadel', role: 'DEMO_BUYER', plant: null },
-  { username: 'demo.planner', fullName: 'Ziad Homsi', role: 'DEMO_PLANNER', plant: DEMO_STRUCTURE.manufacturingPlant },
-  { username: 'demo.production', fullName: 'Omar Nasser', role: 'DEMO_PROD_CLERK', plant: DEMO_STRUCTURE.manufacturingPlant },
-  { username: 'demo.warehouse1', fullName: 'Faisal Jaber', role: 'DEMO_WH_CLERK_MFG', plant: DEMO_STRUCTURE.manufacturingPlant },
-  { username: 'demo.warehouse2', fullName: 'Hana Qasem', role: 'DEMO_WH_CLERK_DIST', plant: DEMO_STRUCTURE.distributionPlant },
-  { username: 'demo.sales', fullName: 'Dina Rahal', role: 'DEMO_SALES_CLERK', plant: null },
-  { username: 'demo.accountant', fullName: 'Amina Barakat', role: 'DEMO_ACCOUNTANT', plant: null },
-  { username: 'demo.controller', fullName: 'Walid Farouk', role: 'DEMO_CONTROLLER', plant: null },
-  { username: 'demo.quality', fullName: 'Noor Adeeb', role: 'DEMO_QUALITY', plant: null },
+  { username: 'demo.buyer', fullName: 'Mariam Fadel', role: 'DEMO_BUYER', plants: [] },
+  { username: 'demo.planner', fullName: 'Ziad Homsi', role: 'DEMO_PLANNER', plants: [DEMO_STRUCTURE.manufacturingPlant] },
+  { username: 'demo.production', fullName: 'Omar Nasser', role: 'DEMO_PROD_CLERK', plants: [DEMO_STRUCTURE.manufacturingPlant] },
+  { username: 'demo.warehouse1', fullName: 'Faisal Jaber', role: 'DEMO_WH_CLERK_MFG', plants: [DEMO_STRUCTURE.manufacturingPlant] },
+  { username: 'demo.warehouse2', fullName: 'Hana Qasem', role: 'DEMO_WH_CLERK_DIST', plants: [DEMO_STRUCTURE.distributionPlant] },
+  { username: 'demo.sales', fullName: 'Dina Rahal', role: 'DEMO_SALES_CLERK', plants: [DEMO_STRUCTURE.manufacturingPlant, DEMO_STRUCTURE.distributionPlant] },
+  { username: 'demo.accountant', fullName: 'Amina Barakat', role: 'DEMO_ACCOUNTANT', plants: [] },
+  { username: 'demo.controller', fullName: 'Walid Farouk', role: 'DEMO_CONTROLLER', plants: [] },
+  { username: 'demo.quality', fullName: 'Noor Adeeb', role: 'DEMO_QUALITY', plants: [] },
 ] as const;
 
 export interface DemoPeopleResult {
@@ -377,13 +379,13 @@ export async function buildDemoPeople(input: BuildDemoPeopleInput): Promise<Demo
         companyCode: DEMO_STRUCTURE.companyCode,
       }).catch(ignoreExisting);
 
-      if (user.plant) {
+      for (const plantCode of user.plants) {
         await grantPlantScope({
           client,
           actor,
           targetUserId: created.id,
           companyCode: DEMO_STRUCTURE.companyCode,
-          plantCode: user.plant,
+          plantCode,
         }).catch(ignoreExisting);
       }
     }

@@ -46,6 +46,7 @@ import {
   maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9251_REBATE';
 const AREA = 'CCA1';
@@ -93,6 +94,32 @@ const promise = {
   validTo: '2026-12-31',
   conditionType: 'BO01',
 };
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 describe('money given back: the rebate (9251)', () => {
   let tenant: TestTenant;
@@ -246,7 +273,7 @@ describe('money given back: the rebate (9251)', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 2, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await saveBillingPlan({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, orderLineNumber: 10,
       planType: 'MS', reason: 'Invoiced in full on delivery.',
@@ -259,7 +286,7 @@ describe('money given back: the rebate (9251)', () => {
     return createBillingFromPlanDate({
       client: tenant.client, changedBy: ACTOR, orderNumber, orderLineNumber: 10,
       dateNumber, billingDate, requestKey: key('bill'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
   }
 
   /**

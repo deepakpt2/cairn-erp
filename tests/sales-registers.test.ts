@@ -18,6 +18,7 @@ import {
   assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 /**
  * §5.2 — the registers, and the due lists read through them.
@@ -62,6 +63,32 @@ const base = {
 
 /** The material is priced at 25 a unit, and tax is ten per cent, so four units net 100. */
 const net = (units: number) => (units * 25).toFixed(2);
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 describe('the document registers and the due lists (§5.2)', () => {
   let tenant: TestTenant;
@@ -279,7 +306,7 @@ describe('the document registers and the due lists (§5.2)', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: units, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
   }
 
   /** An order, delivered and goods issued. The smallest thing that can earn an invoice. */
@@ -291,7 +318,7 @@ describe('the document registers and the due lists (§5.2)', () => {
       goodsMovementDate: DATE, headerText: 'Register fixture',
       items: [{ orderLineNumber: open[0].lineNumber, quantity: String(units) }],
       requestKey: key('delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       items: [{ lineNumber: 10, quantity: String(units), storageLocation: STORE }],
@@ -300,7 +327,7 @@ describe('the document registers and the due lists (§5.2)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       expectedVersion: picked!.version, postingDate: DATE, documentDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return { orderNumber: created.orderNumber, deliveryNumber: built.deliveryNumber };
   }
 
@@ -310,7 +337,7 @@ describe('the document registers and the due lists (§5.2)', () => {
     const [document] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: chain.deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(tenant.client) })).documents;
     return { ...chain, billingNumber: document.billing.billingNumber };
   }
 
@@ -441,7 +468,7 @@ describe('the document registers and the due lists (§5.2)', () => {
       goodsMovementDate: DATE, headerText: 'Register fixture',
       items: [{ orderLineNumber: open[0].lineNumber, quantity: '7' }],
       requestKey: key('delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       items: [{ lineNumber: 10, quantity: '7', storageLocation: STORE }],
@@ -460,7 +487,7 @@ describe('the document registers and the due lists (§5.2)', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
       expectedVersion: picked!.version, postingDate: DATE, documentDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
 
     // Gone out, and now it is the billing due list that names it.
     const due = await listDueRegister(tenant.client, {
@@ -472,7 +499,7 @@ describe('the document registers and the due lists (§5.2)', () => {
     const [billable] = await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: built.deliveryNumber },
-    }).then((result) => result.documents);
+    }, { authorization: await salesAuthority(tenant.client) }).then((result) => result.documents);
     expect(billable.billing.deliveryNumber).toBe(built.deliveryNumber);
 
     // Billed, and the queue is empty again — the register is reading the same queue the billing
@@ -504,7 +531,7 @@ describe('the document registers and the due lists (§5.2)', () => {
       goodsMovementDate: DATE, headerText: 'Register fixture',
       items: [{ orderLineNumber: openLines[0].lineNumber, quantity: '3' }],
       requestKey: key('delivery'),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const issued = await getDelivery(tenant.client, built.deliveryNumber);
     await cancelDelivery({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,

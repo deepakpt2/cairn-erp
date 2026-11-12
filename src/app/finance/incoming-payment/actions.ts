@@ -62,6 +62,7 @@ export async function postPaymentAction(
       onAccountAmount: Number(text(form, 'onAccount')) || 0,
       requestKey: text(form, 'requestKey') || crypto.randomUUID(),
       items,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {

@@ -126,8 +126,8 @@ describe('demo two-plant isolation', () => {
       join(process.cwd(), 'src/platform/tenancy/demo-people.ts'),
       'utf8',
     );
-    const mfg = /DEMO_WH_CLERK_MFG[\s\S]{0,400}?plant:\s*DEMO_STRUCTURE\.(\w+)/.exec(source);
-    const dist = /DEMO_WH_CLERK_DIST[\s\S]{0,400}?plant:\s*DEMO_STRUCTURE\.(\w+)/.exec(source);
+    const mfg = /DEMO_WH_CLERK_MFG[\s\S]{0,400}?plants:\s*\[\s*DEMO_STRUCTURE\.(\w+)/.exec(source);
+    const dist = /DEMO_WH_CLERK_DIST[\s\S]{0,400}?plants:\s*\[\s*DEMO_STRUCTURE\.(\w+)/.exec(source);
     expect(mfg?.[1]).toBeTruthy();
     expect(dist?.[1]).toBeTruthy();
     expect(mfg?.[1]).not.toBe(dist?.[1]);

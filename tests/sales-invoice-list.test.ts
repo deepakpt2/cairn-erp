@@ -28,6 +28,7 @@ import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 /**
  * §4.6 — the customer's invoice: invoice lists (audit gap G2, second half).
@@ -72,6 +73,32 @@ const base = {
 
 let counter = 0;
 const key = (what: string) => `sd9254-${what}-${++counter}`;
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 async function seedPartners(client: string, partners: string[]) {
   await withTenant(client, async (tx) => {
@@ -138,14 +165,14 @@ async function issuedDelivery(client: string, input: { customerNumber: string; q
       lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
       orderQuantity: input.quantity, quantityUnit: 'UNT', taxCode: 'T10',
     }],
-  });
+  }, { authorization: await salesAuthority(base.client) });
   const open = await listDeliverableOrderLines(client, { orderNumber: created.orderNumber });
   const built = await createDelivery({
     client, changedBy: ACTOR, orderNumber: created.orderNumber, deliveryDate: DATE,
     goodsMovementDate: DATE, headerText: 'Invoice list fixture',
     items: [{ orderLineNumber: open[0].lineNumber, quantity: String(input.quantity) }],
     requestKey: key('delivery'),
-  });
+  }, { authorization: await salesAuthority(base.client) });
   await confirmDeliveryPicks({
     client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
     items: [{ lineNumber: 10, quantity: String(input.quantity), storageLocation: STORE }],
@@ -154,7 +181,7 @@ async function issuedDelivery(client: string, input: { customerNumber: string; q
   await postDeliveryGoodsIssue({
     client, changedBy: ACTOR, deliveryNumber: built.deliveryNumber,
     expectedVersion: picked!.version, postingDate: DATE, documentDate: DATE,
-  });
+  }, { authorization: await salesAuthority(base.client) });
   return { orderNumber: created.orderNumber, deliveryNumber: built.deliveryNumber };
 }
 
@@ -318,7 +345,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [created] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
 
     expect(created.billing.invoiceListStatus).toBe('NOT_RELEVANT');
     expect(created.awaitingInvoiceList).toBe(false);
@@ -336,7 +363,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [withType] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: onlyType.deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     expect(withType.billing.invoiceListStatus).toBe('NOT_RELEVANT');
     expect(withType.posted).toBe(true);
 
@@ -347,7 +374,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [withSchedule] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: onlySchedule.deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     expect(withSchedule.billing.invoiceListStatus).toBe('NOT_RELEVANT');
     expect(withSchedule.posted).toBe(true);
 
@@ -364,7 +391,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [created] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
 
     // 5 units at 25 is 125, plus ten per cent — billed, complete, and worth exactly what it was
     // always worth. What it is not is released to accounting.
@@ -393,7 +420,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
       const [document] = (await billDueList({
         client: tenant.client, changedBy: ACTOR, billingDate: DATE,
         selection: { deliveryNumber },
-      })).documents;
+      }, { authorization: await salesAuthority(base.client) })).documents;
       billed.push(document);
     }
 
@@ -448,7 +475,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [own] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: plain.deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     expect(own.billing.invoiceListStatus).toBe('NOT_RELEVANT');
     await expect(createInvoiceList({
       client: tenant.client, changedBy: ACTOR, billingNumbers: [own.billing.billingNumber],
@@ -459,7 +486,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [document] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: again.deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     const { list } = await createInvoiceList({
       client: tenant.client, changedBy: ACTOR, billingNumbers: [document.billing.billingNumber],
     });
@@ -473,13 +500,13 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [otherDocument] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: other.deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     await setSchedule(tenant.client, OTHER_CUSTOMER, 'MONTHLY');
     const thirdPayer = await issuedDelivery(tenant.client, { customerNumber: OTHER_CUSTOMER, quantity: 1 });
     const [thirdDocument] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber: thirdPayer.deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     await expect(createInvoiceList({
       client: tenant.client, changedBy: ACTOR,
       billingNumbers: [otherDocument.billing.billingNumber, thirdDocument.billing.billingNumber],
@@ -503,7 +530,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
       const [document] = (await billDueList({
         client: tenant.client, changedBy: ACTOR, billingDate: DATE,
         selection: { deliveryNumber },
-      })).documents;
+      }, { authorization: await salesAuthority(base.client) })).documents;
       billed.push(document);
     }
     const { list } = await createInvoiceList({
@@ -579,7 +606,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [document] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     const { list } = await createInvoiceList({
       client: tenant.client, changedBy: ACTOR, billingNumbers: [document.billing.billingNumber],
     });
@@ -614,7 +641,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [document] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     const { list } = await createInvoiceList({
       client: tenant.client, changedBy: ACTOR, billingNumbers: [document.billing.billingNumber],
     });
@@ -634,7 +661,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [document] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     expect(document.billing.invoiceListStatus).toBe('DUE');
 
     // The payer asks to be billed on their own again. The document that is already waiting does not
@@ -660,12 +687,12 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [document] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     expect(document.billing.invoiceListStatus).toBe('DUE');
 
     const asked = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber, billingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(asked.posted).toBe(false);
     expect(asked.awaitingInvoiceList).toBe(true);
     // Still no receivable of its own. That is the whole property.
@@ -682,7 +709,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     const [document] = (await billDueList({
       client: tenant.client, changedBy: ACTOR, billingDate: DATE,
       selection: { deliveryNumber },
-    })).documents;
+    }, { authorization: await salesAuthority(base.client) })).documents;
     const { list } = await createInvoiceList({
       client: tenant.client, changedBy: ACTOR, billingNumbers: [document.billing.billingNumber],
     });
@@ -694,7 +721,7 @@ describe('invoice lists — the customer\'s invoice (§4.6, gap G2)', () => {
     // the list asks for money its own rows no longer add up to.
     await expect(postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber, billingDate: DATE,
-    })).rejects.toThrow(/stands on invoice list/i);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/stands on invoice list/i);
     await expect(cancelBillingDocument({
       client: tenant.client, changedBy: ACTOR, billingNumber: number, postingDate: DATE,
     })).rejects.toThrow(/stands on invoice list/i);

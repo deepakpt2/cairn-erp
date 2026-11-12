@@ -15,6 +15,7 @@ import {
   releaseSalesOrderCredit,
 } from '../src/modules/sales/sales-order';
 import { assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9190_SALES_TEST';
 const AREA = 'CCA1';
@@ -41,6 +42,32 @@ const base = {
  * determination the save raises, and the transitions the order offers. Every refusal below is judged by
  * the service, not by a form — a screen that hides a button is not a control.
  */
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
+
 describe('sales order and its pricing', () => {
   let tenant: TestTenant;
   let createdOrder = '';
@@ -163,7 +190,7 @@ describe('sales order and its pricing', () => {
     const created = await createSalesOrder({
       ...base, requestKey: 'SD9190-CREATE-0001',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 5, quantityUnit: 'UNT' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     createdOrder = created.orderNumber;
     expect(created.replayed).toBe(false);
     expect(created.orderNumber).toMatch(/^SO-\d+$/);
@@ -191,7 +218,7 @@ describe('sales order and its pricing', () => {
     const created = await createSalesOrder({
       ...base, requestKey: 'SD9190-CREATE-0002',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 4, quantityUnit: 'UNT', taxCode: 'T10' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const view = await getSalesOrder(tenant.client, created.orderNumber);
     expect(Number(view!.lines[0].netAmount)).toBe(100);
     expect(Number(view!.lines[0].taxAmount)).toBe(10);
@@ -206,49 +233,49 @@ describe('sales order and its pricing', () => {
     await expect(createSalesOrder({
       ...base, requestKey: 'SD9190-CREATE-0003',
       lines: [{ lineNumber: undefined, materialNumber: UNPRICED_MATERIAL, plant: '1000', orderQuantity: 1, quantityUnit: 'UNT' }],
-    })).rejects.toThrow(/No PR00 condition record stands/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/No PR00 condition record stands/);
   });
 
   it('refuses a tax code that does not stand in the company country', async () => {
     await expect(createSalesOrder({
       ...base, requestKey: 'SD9190-CREATE-0004',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'ZZZ' }],
-    })).rejects.toThrow(/does not stand for country KW/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/does not stand for country KW/);
   });
 
   it('refuses a quantity the unit cannot carry, and accepts the same figure padded out', async () => {
     await expect(createSalesOrder({
       ...base, requestKey: 'SD9190-CREATE-0005',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 5.5, quantityUnit: 'UNT' }],
-    })).rejects.toThrow(/more decimals than unit UNT allows \(0\)/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/more decimals than unit UNT allows \(0\)/);
   });
 
   it('refuses a unit that does not stand instead of reading it as the base unit', async () => {
     await expect(createSalesOrder({
       ...base, requestKey: 'SD9190-CREATE-0006',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 1, quantityUnit: 'ZZZ' }],
-    })).rejects.toThrow(/Unit of measure ZZZ does not stand/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/Unit of measure ZZZ does not stand/);
   });
 
   it('refuses a material that is not extended to the plant named on the item', async () => {
     await expect(createSalesOrder({
       ...base, requestKey: 'SD9190-CREATE-0007',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: OTHER_PLANT, orderQuantity: 1, quantityUnit: 'UNT' }],
-    })).rejects.toThrow(/is not extended to plant 2000/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/is not extended to plant 2000/);
   });
 
   it('refuses a customer whose sales area carries an order block', async () => {
     await expect(createSalesOrder({
       ...base, customerNumber: BLOCKED_CUSTOMER, requestKey: 'SD9190-CREATE-0008',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 1, quantityUnit: 'UNT' }],
-    })).rejects.toThrow(/is blocked for the sales area/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/is blocked for the sales area/);
   });
 
   it('refuses a sales area that does not stand', async () => {
     await expect(createSalesOrder({
       ...base, salesOrg: '9999', requestKey: 'SD9190-CREATE-0009',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 1, quantityUnit: 'UNT' }],
-    })).rejects.toThrow(/does not stand/);
+    }, { authorization: await salesAuthority(tenant.client) })).rejects.toThrow(/does not stand/);
   });
 
   it('replays a repeated submission onto the order the first attempt created', async () => {
@@ -256,8 +283,8 @@ describe('sales order and its pricing', () => {
       ...base, requestKey: 'SD9190-REPLAY-0001',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 2, quantityUnit: 'UNT' }],
     };
-    const first = await createSalesOrder(submission);
-    const second = await createSalesOrder(submission);
+    const first = await createSalesOrder(submission, { authorization: await salesAuthority(tenant.client) });
+    const second = await createSalesOrder(submission, { authorization: await salesAuthority(tenant.client) });
     expect(second.orderNumber).toBe(first.orderNumber);
     expect(second.replayed).toBe(true);
     const documents = await listSalesOrderDocuments(tenant.client, { customerNumber: CUSTOMER });
@@ -320,7 +347,7 @@ describe('sales order and its pricing', () => {
         { lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 4, quantityUnit: 'UNT' },
         { lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 6, quantityUnit: 'UNT' },
       ],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(Number(created.netValue)).toBe(250);
     const view = await getSalesOrder(tenant.client, created.orderNumber);
     await changeSalesOrder({
@@ -348,7 +375,7 @@ describe('sales order and its pricing', () => {
     const created = await createSalesOrder({
       ...base, customerNumber: BLOCKED_CUSTOMER, requestKey: 'SD9190-CREDIT-0001',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 5, quantityUnit: 'UNT' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(created.credit.status).toBe('BLOCKED');
     // The order stands, blocked: a block is a state the follow-on documents read, not a deletion.
     expect(created.status).toBe('OPEN');
@@ -396,7 +423,7 @@ describe('sales order and its pricing', () => {
     const created = await createSalesOrder({
       ...base, customerNumber: BLOCKED_CUSTOMER, requestKey: 'SD9190-CREDIT-0002',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 5, quantityUnit: 'UNT' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(created.credit.status).toBe('PASSED'); // 125.00 on top of the other order against a 400.00 limit
     const view = await getSalesOrder(tenant.client, created.orderNumber);
     const changed = await changeSalesOrder({
@@ -415,7 +442,7 @@ describe('sales order and its pricing', () => {
     const created = await createSalesOrder({
       ...base, requestKey: 'SD9190-CANCEL-0001',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 1, quantityUnit: 'UNT' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const view = await getSalesOrder(tenant.client, created.orderNumber);
     const cancelled = await cancelSalesOrder({
       client: tenant.client, changedBy: ACTOR, orderNumber: created.orderNumber, expectedVersion: view!.version,
@@ -460,12 +487,12 @@ describe('sales order and its pricing', () => {
     const early = await createSalesOrder({
       ...base, orderDate: '2026-03-01', requestKey: 'SD9190-PRICING-0001',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 1, quantityUnit: 'UNT' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(early.lines[0].netPrice).toBe('25.0000');
     const late = await createSalesOrder({
       ...base, orderDate: '2026-07-01', requestKey: 'SD9190-PRICING-0002',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 1, quantityUnit: 'UNT' }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect(late.lines[0].netPrice).toBe('30.0000');
     // And the old order keeps the record and the price it read.
     const kept = await getSalesOrder(tenant.client, createdOrder);

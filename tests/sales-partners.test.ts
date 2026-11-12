@@ -37,6 +37,7 @@ import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
+import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 
 const ACTOR = 'SD9242_PARTNERS';
 const AREA = 'CCA1';
@@ -65,6 +66,32 @@ const base = {
 
 let counter = 0;
 const key = (what: string) => `sd9242-${what}-${++counter}`;
+
+
+const SALES_ACTOR = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+let SALES_ACTOR_READY: Promise<void> | null = null;
+let SALES_ACTOR_TENANT = '';
+
+/**
+ * The authority a sales service is handed.
+ *
+ * The actor is signed in the first time a service is called, and its Company Code
+ * and Plant reach is refreshed on every call: a suite builds its masters in
+ * `beforeAll` and often adds a plant after the tenant exists, and a service asked
+ * before that plant was granted would answer that the actor's reach does not cover
+ * it — which is the rule working, not a test failing for the wrong reason.
+ * Keyed on the tenant as well, because a suite that stands two tenants needs a
+ * session in each and a session from one is not a session in the other.
+ */
+async function salesAuthority(client: string) {
+  if (!SALES_ACTOR.userId || SALES_ACTOR_TENANT !== client) {
+    SALES_ACTOR_TENANT = client;
+    SALES_ACTOR_READY = createSalesActor(client).then((actor) => { Object.assign(SALES_ACTOR, actor); });
+    await SALES_ACTOR_READY;
+  }
+  await refreshSalesActor(client, SALES_ACTOR);
+  return SALES_ACTOR.authorization;
+}
 
 describe('who a sale is made with', () => {
   let tenant: TestTenant;
@@ -275,13 +302,13 @@ describe('who a sale is made with', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: quantity, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
     const shipped = await createDelivery({
       client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
       items: [{ orderLineNumber: open[0].lineNumber, quantity: String(quantity) }],
       requestKey: key(`${what}-delivery`),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     await confirmDeliveryPicks({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       items: [{ lineNumber: 10, quantity: String(quantity), storageLocation: STORE }],
@@ -291,11 +318,11 @@ describe('who a sale is made with', () => {
     await postDeliveryGoodsIssue({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber,
       expectedVersion: standing!.version, postingDate: DATE,
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const billed = await postBillingDocument({
       client: tenant.client, changedBy: ACTOR, deliveryNumber: shipped.deliveryNumber, billingDate: DATE,
       requestKey: key(`${what}-invoice`),
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     return { placed, shipped, billed };
   }
 
@@ -308,7 +335,7 @@ describe('who a sale is made with', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const order = await getSalesOrder(tenant.client, placed.orderNumber);
     expect(order!.partners).toEqual({
       soldTo: CUSTOMER, shipTo: CUSTOMER, billTo: CUSTOMER, payer: CUSTOMER,
@@ -333,7 +360,7 @@ describe('who a sale is made with', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const order = await getSalesOrder(tenant.client, placed.orderNumber);
     expect(order!.partners.shipTo).toBe(SHIP_AREA);
     expect(order!.partners.soldTo).toBe(CUSTOMER);
@@ -353,7 +380,7 @@ describe('who a sale is made with', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const before = await getSalesOrder(tenant.client, placed.orderNumber);
     // No payer is maintained, so the invoice is settled by the customer it is addressed to — which is
     // the first place to look for the customer who pays.
@@ -370,7 +397,7 @@ describe('who a sale is made with', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     const order = await getSalesOrder(tenant.client, after.orderNumber);
     expect(order!.partners.billTo).toBe(BILL_TO);
     expect(order!.partners.payer).toBe(PAYER);
@@ -441,7 +468,7 @@ describe('who a sale is made with', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect((await getSalesOrder(tenant.client, before.orderNumber))!.partners.shipTo).toBe(SHIP_AREA);
 
     await changeCustomerPartnerStatus({
@@ -456,7 +483,7 @@ describe('who a sale is made with', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect((await getSalesOrder(tenant.client, during.orderNumber))!.partners.shipTo).toBe(SHIP_ANY);
     // The withdrawn row still stands: it says who used to ship for this customer, which is what an
     // auditor reads when the answer was changed.
@@ -474,7 +501,7 @@ describe('who a sale is made with', () => {
         lineNumber: undefined, materialNumber: MATERIAL, plant: PLANT,
         orderQuantity: 1, quantityUnit: 'UNT', taxCode: 'T10',
       }],
-    });
+    }, { authorization: await salesAuthority(tenant.client) });
     expect((await getSalesOrder(tenant.client, after.orderNumber))!.partners.shipTo).toBe(SHIP_AREA);
   });
 

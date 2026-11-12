@@ -29,6 +29,10 @@
 import { z } from 'zod';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
+import {
+  type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
+
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
@@ -327,8 +331,21 @@ const collectiveBillingInput = z.object({
  * A run that failed partway is safe for the same reason. The groups it did bill are billed, and the
  * retry bills what the due list still offers — which is the rest of the month, and no more.
  */
-export async function billDueList(input: z.input<typeof collectiveBillingInput>): Promise<CollectiveBillingResult> {
+export async function billDueList(
+  input: z.input<typeof collectiveBillingInput>,
+  options: { authorization?: ServiceAuthorityContext } = {},
+): Promise<CollectiveBillingResult> {
   const parsed = collectiveBillingInput.parse(input);
+  // A collective run raises one invoice per group, every one of them on the same
+  // authority, so the actor is judged once here rather than inside each group's
+  // transaction. The plant each delivery ships from is still judged per group below.
+  const actor = await withTenant(parsed.client, async (tx) => {
+    const authority = await verifyServiceAuthorityInTx(
+      tx, parsed.client, options.authorization, SALES_BILLING_CREATE_CAPABILITY,
+    );
+    if (!authority.ok) throw new BillingError(authority.refusal.message, authority.refusal.remedy);
+    return authority.restrictions;
+  });
   const criteria = await activeSplitCriteria(parsed.client);
   const due = await billingDueList(parsed.client, parsed.selection ?? {});
   const groups = groupDueList(due, criteria);
@@ -355,6 +372,10 @@ export async function billDueList(input: z.input<typeof collectiveBillingInput>)
             'Nothing was billed. Read the due list again and run it once more.',
           );
         }
+        const outOfScope = await refusePlantOutsideScopeInTx(
+          tx, parsed.client, deliveryHeader.plant, actor,
+        );
+        if (outOfScope) throw new BillingError(outOfScope.message, outOfScope.remedy);
         const gate = await assertDeliveryBillable(tx, parsed.client, deliveryHeader);
         held = held || gate.held;
         const build = await buildLinesForDelivery(
@@ -1680,9 +1701,22 @@ async function writeBillingDocument(
   };
 }
 
-export async function createBillingFromDelivery(input: BillingCreateInput): Promise<BillingCreateResult> {
+/** The authority a billing document is raised under. */
+export const SALES_BILLING_CREATE_CAPABILITY = 'SALES.BILLING.CREATE';
+
+export async function createBillingFromDelivery(
+  input: BillingCreateInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
+): Promise<BillingCreateResult> {
   const parsed = billingCreateInput.parse(input);
   const built: BuiltBilling = await withTenant(parsed.client, async (tx) => {
+    // An invoice asks a customer for money on somebody's authority: a session that
+    // stands, the authority to bill, and a reach that covers the plant the goods left.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, parsed.client, options.authorization, SALES_BILLING_CREATE_CAPABILITY,
+    );
+    if (!authority.ok) throw new BillingError(authority.refusal.message, authority.refusal.remedy);
+
     const [deliveryHeader] = await tx.select().from(delivery).where(and(
       eq(delivery.client, parsed.client), eq(delivery.deliveryNumber, parsed.deliveryNumber),
     )).limit(1);
@@ -1692,6 +1726,10 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
         'Create the delivery at /sales/delivery and post its goods issue first.',
       );
     }
+    const outOfScope = await refusePlantOutsideScopeInTx(
+      tx, parsed.client, deliveryHeader.plant, authority.restrictions,
+    );
+    if (outOfScope) throw new BillingError(outOfScope.message, outOfScope.remedy);
     if (parsed.requestKey) {
       const [existing] = await tx.select({ number: billingDocument.billingNumber }).from(billingDocument).where(and(
         eq(billingDocument.client, parsed.client), eq(billingDocument.requestKey, parsed.requestKey),
@@ -1782,9 +1820,17 @@ export async function createBillingFromDelivery(input: BillingCreateInput): Prom
  */
 export async function createBillingFromPlanDate(
   input: BillingPlanDateBillingInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
 ): Promise<BillingCreateResult> {
   const parsed = billingPlanDateBillingInput.parse(input);
   const built: BuiltBilling = await withTenant(parsed.client, async (tx) => {
+    // The same authority, asked of a date the plan says is due: an invoice raised from a
+    // billing plan is no less an invoice than one raised from a delivery.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, parsed.client, options.authorization, SALES_BILLING_CREATE_CAPABILITY,
+    );
+    if (!authority.ok) throw new BillingError(authority.refusal.message, authority.refusal.remedy);
+
     // One date, one document. Two clerks billing the same date at the same moment is the whole reason
     // the lock is taken before the date is read rather than after it.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${parsed.client}/plan/${parsed.orderNumber}/${parsed.orderLineNumber}/${parsed.dateNumber}`}, 0))`);
@@ -1806,6 +1852,10 @@ export async function createBillingFromPlanDate(
       billingDate: parsed.billingDate,
       action: 'billed',
     });
+    const planOutOfScope = await refusePlantOutsideScopeInTx(
+      tx, parsed.client, orderLine.plant, authority.restrictions,
+    );
+    if (planOutOfScope) throw new BillingError(planOutOfScope.message, planOutOfScope.remedy);
     // A date maintained to ask for an advance is not billed: the advance is settled against the
     // invoice, and an invoice raised from the same date would ask the customer for the money twice.
     if (date.billingRule === 'DOWN_PAYMENT') {
@@ -2286,6 +2336,7 @@ async function postStandingBilling(input: {
  */
 export async function postBillingDocument(
   input: BillingCreateInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
 ): Promise<BillingCreateResult> {
   const parsed = billingCreateInput.parse(input);
   const existing = await withTenant(parsed.client, async (tx) => {
@@ -2298,7 +2349,7 @@ export async function postBillingDocument(
   });
   // No live document stands, so a cancelled one is history rather than a door: the corrected document is
   // drawn here, which is what the billing due list offers once a cancellation has released the delivery.
-  if (!existing) return createBillingFromDelivery(parsed);
+  if (!existing) return createBillingFromDelivery(parsed, options);
 
   const view = await getBilling(parsed.client, existing);
   if (!view) throw new BillingError(`Billing document ${existing} could not be read.`);
