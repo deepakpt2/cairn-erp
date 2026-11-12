@@ -31,6 +31,11 @@ import {
   type DemoTimeline,
 } from '../src/platform/tenancy/demo-provisioning';
 import {
+  buildDemoOrganisation,
+  DEMO_IDENTITY,
+} from '../src/platform/tenancy/demo-organisation';
+import { buildDemoPeople, listDemoAccounts as readDemoAccounts } from '../src/platform/tenancy/demo-people';
+import {
   DEFAULT_CREDENTIALS_DIR,
   fingerprintDemoPassword,
   generateDemoPassword,
@@ -135,8 +140,35 @@ async function runFoundationPhase(ctx: PhaseContext): Promise<Record<string, unk
   };
 }
 
+async function runOrganisationPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoOrganisation({ password: ctx.password, timeline: ctx.timeline });
+  return {
+    client: result.client,
+    companyCode: result.companyCode,
+    plants: result.plants,
+    tenantCreated: result.tenantCreated,
+  };
+}
+
+async function runPeoplePhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoPeople({
+    client: DEMO_IDENTITY.clientKey,
+    password: ctx.password,
+    timeline: ctx.timeline,
+  });
+  return {
+    orgUnits: result.orgUnits,
+    positions: result.positions,
+    employees: result.employees,
+    roles: result.roles,
+    users: result.users,
+  };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
+  B_ORGANISATION: runOrganisationPhase,
+  B_PEOPLE: runPeoplePhase,
 };
 
 async function main(): Promise<number> {
@@ -200,12 +232,15 @@ async function provision(database: string, databaseUrl: string): Promise<number>
     return 0;
   }
 
-  // One password for the whole run, so every phase stamps the same one. A resumed run
-  // inherits the password already recorded against this installation only if one was
-  // recorded; otherwise it issues a fresh one, because a password that was generated
-  // but never delivered is worse than a new one that is.
+  // One password for the whole run, so every phase stamps the same one.
+  //
+  // A resumed run gets a new one even though a fingerprint already stands, and that
+  // deserves the explanation: the recorded password was never stored, only hashed, so
+  // the run that finishes the work cannot know what the run that started it chose.
+  // The accounts already created are therefore reset to the new one, and the
+  // credential file is rewritten — one file, one password, every account in it.
   const existing = await readDemoPasswordState(claim.installationId);
-  const password = existing.fingerprint ? null : generateDemoPassword();
+  const password = generateDemoPassword();
   const ctx: PhaseContext = {
     installationId: claim.installationId,
     timeline,
@@ -273,8 +308,15 @@ async function provision(database: string, databaseUrl: string): Promise<number>
  * installation — where the accounts were created by a run that is no longer alive —
  * still produces a complete list. Empty until the phase that creates users has run.
  */
+/**
+ * The accounts the credential file should list.
+ *
+ * Read back from the database rather than remembered from the run, so a resumed
+ * installation — where the accounts were created by a run that is no longer alive —
+ * still produces a complete list.
+ */
 async function listDemoAccounts(): Promise<DemoAccount[]> {
-  return [];
+  return readDemoAccounts(DEMO_IDENTITY.clientKey);
 }
 
 if (basename(process.argv[1] ?? '') === 'demo-provision.ts') {

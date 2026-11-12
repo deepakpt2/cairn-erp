@@ -585,3 +585,31 @@ npm run platform-admin:bootstrap
 ```
 
 The command refuses if the nominated account lacks a live session, the tenant already has a bootstrap record or `PLATFORM_ADMIN` role, or any authorization/target check fails. It does not provision a tenant or user, alter company/plant scopes, execute the walkthrough seed, or modify `CAIRN_SEED_*`. Never use tenant `0100` or an owner/personal database for this procedure.
+
+
+## 10. Demo dataset (`ENABLE_DUMMY_DATA`) — standing decisions
+
+These are static decisions about the demo dataset, recorded here because this file is
+read at the start of every session. They were settled with the owner and are not
+reopened by a later phase.
+
+| Decision | Ruling |
+|---|---|
+| Default | `false`. Off unless the deployment names it. A misspelled flag produces an empty deployment, never a populated one. |
+| Delivery | One step, `demo:provision`, appended **last** to the one-shot operations command. `app` and `worker` are already gated on `migrate` succeeding, so a refused or failed install keeps the application from starting. |
+| Existing business data | Fails the deployment. Eligibility is decided by counting rows in every `client`-column table, never by a marker. |
+| Eligibility count | Must run through the `security definer` functions `demo_tenant_table_count()` / `demo_eligibility_conflicts()`. A direct count under row-level security reported 7 conflicting tables of 424 and missed the tenant entirely. |
+| History shape | Opening balances posted in period 1. Prior months are summarised, not reconstructed document by document. |
+| Timeline | Three open periods ending with the month of deployment; frozen at claim time and stored, so a resumed run uses the periods the first run chose. |
+| Locks | Two advisory keys: `cairn/demo-provisioning/run` (session) and `cairn/demo-provisioning/claim` (transaction). One key for both deadlocks a run against itself. |
+| Marker tables | `demo_installation` / `demo_installation_phase` are global, not tenant-scoped, and the provisioner is granted no `delete` or `truncate` on them. There is no force or reset flag. |
+| Interrupted installs | A `FAILED` phase is never resumed silently. A phase left `RUNNING` by a dead process is resumed and counted as a retry. |
+| Credentials | One shared password, generated at provisioning time, written to `./credentials/demo-credentials.txt` at mode 0600. The database holds a SHA-256 fingerprint and never the password. Losing the file means provisioning a fresh database, and the report says so. |
+| Credential re-issue | A resumed installation issues a new password and resets every demo account to it, because the first run's password was never stored. A completed installation is never re-issued. |
+| Demo roles | Custom, namespaced `DEMO_*`. All eleven system roles are protected and unassignable through routine administration; that was left exactly as it was. |
+| Demo role capabilities | Patterns are expanded against the capability catalogue before granting: `grantCapabilityToRole` refuses a wildcard on a custom role. |
+| Two plants | `1000` (manufacturing, built by the standard structure) and `2000` (distribution, added by the demo). Two warehouse clerks hold identical capability patterns and differ only by the plant each is restricted to. |
+| Enterprise structure keys | The standard keys (`1000`, `A000`, `0001`, `01`). Every screen, report and test is written against them. |
+| Docker verification | Not executed — no Docker on the test host. Verified only as a static contract, and every report says so. |
+| Phases | `A_FOUNDATION`, `B_ORGANISATION`, `B_PEOPLE`. Later work appends; it never reorders. |
+| Databases | Only disposable `cairn_dp_*` databases. `cairn_b210`, `cairn_demo`, `cairn_acceptance`, `cairn_integration`, `cairn_hr_accept` are refused by name, in addition to the target guard every connection passes. |

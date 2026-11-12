@@ -40,8 +40,15 @@ export const DEMO_CLAIM_LOCK_KEY = 'cairn/demo-provisioning/claim';
 export type DemoInstallationStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type DemoPhaseStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
-/** Phases this build implements. Later work appends; it never reorders. */
-export const DEMO_PHASE_PLAN: readonly string[] = ['A_FOUNDATION'];
+/**
+ * Phases this build implements. Later work appends; it never reorders.
+ *
+ * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
+ * people are split because the second takes minutes and opens administrator
+ * sessions: if it dies halfway, the run that follows continues with the accounts
+ * that are missing rather than rebuilding the company they hang from.
+ */
+export const DEMO_PHASE_PLAN: readonly string[] = ['A_FOUNDATION', 'B_ORGANISATION', 'B_PEOPLE'];
 
 export interface DemoTimeline {
   /** The date the installation was claimed. Every generated date is relative to it. */
@@ -500,13 +507,16 @@ export async function recordDemoPasswordIssued(
   fingerprint: string,
 ): Promise<void> {
   await assertApplicationRole();
+  // Not guarded on `password_fingerprint is null`: a resumed installation issues a
+  // fresh password, because the one the first run chose was never stored, and the
+  // recorded date has to answer for the password now in the file rather than for one
+  // nobody can produce.
   await db().execute(sql`
     update demo_installation
        set password_fingerprint = ${fingerprint},
            password_issued_at = now(),
            updated_at = now()
      where installation_id = ${installationId}
-       and password_fingerprint is null
   `);
 }
 
