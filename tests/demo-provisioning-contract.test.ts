@@ -17,10 +17,10 @@ describe('dummy-data provisioning', () => {
     // Surrounding space is trimmed, so ' true ' is an affirmative. A value that only
     // looks like one — 'TRUE ' with the space inside the quotes, or 'enabled' — is not.
     for (const off of [undefined, '', ' ', 'false', 'False', '0', 'no', 'off', 'yes please', 'enabled']) {
-      expect(isDemoProvisioningEnabled({ ENABLE_DUMMY_DATA: off } as NodeJS.ProcessEnv)).toBe(false);
+      expect(isDemoProvisioningEnabled({ ENABLE_DUMMY_DATA: off } as unknown as NodeJS.ProcessEnv)).toBe(false);
     }
     for (const on of ['true', 'TRUE', 'True', ' true ', '1', 'yes', 'YES', 'on']) {
-      expect(isDemoProvisioningEnabled({ ENABLE_DUMMY_DATA: on } as NodeJS.ProcessEnv)).toBe(true);
+      expect(isDemoProvisioningEnabled({ ENABLE_DUMMY_DATA: on } as unknown as NodeJS.ProcessEnv)).toBe(true);
     }
   });
 

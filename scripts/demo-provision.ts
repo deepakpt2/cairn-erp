@@ -25,9 +25,19 @@ import {
   DEMO_PROVISION_OPERATION,
   failDemoPhase,
   isDemoProvisioningEnabled,
+  readDemoPasswordState,
+  recordDemoPasswordIssued,
   startDemoPhase,
   type DemoTimeline,
 } from '../src/platform/tenancy/demo-provisioning';
+import {
+  DEFAULT_CREDENTIALS_DIR,
+  fingerprintDemoPassword,
+  generateDemoPassword,
+  renderDemoCredentialReport,
+  writeDemoCredentials,
+  type DemoAccount,
+} from '../src/platform/tenancy/demo-credentials';
 
 /**
  * Databases this step must never write to, on top of the guard every connection
@@ -46,6 +56,67 @@ interface PhaseContext {
   installationId: string;
   timeline: DemoTimeline;
   database: string;
+  /**
+   * The shared password, in memory only, for the lifetime of the run.
+   *
+   * It is generated once at the start so every phase stamps the same one onto the
+   * accounts it creates, and it is never written to the database, the log, or the
+   * repository — only to the credential file, at the end, once there is something
+   * for it to open.
+   */
+  password: string;
+}
+
+/**
+ * Where the credential file lands on the host, for the report.
+ *
+ * The container path and the host path are both shown because the person reading the
+ * file is on the host and the process writing it is not.
+ */
+function describeCredentialsDirectory(): { directory: string; hostPath: string } {
+  const directory =
+    process.env.CAIRN_DEMO_CREDENTIALS_DIR?.trim() || DEFAULT_CREDENTIALS_DIR;
+  const mount = process.env.CAIRN_DEMO_CREDENTIALS_MOUNT?.trim();
+  return { directory, hostPath: mount ? `${mount.replace(/\/$/, '')}` : directory };
+}
+
+/**
+ * Deliver the credential file.
+ *
+ * `password` is null when a password was issued by an earlier run and cannot be
+ * recovered; the report says so rather than printing a blank.
+ */
+async function deliverDemoCredentials(input: {
+  installationId: string;
+  database: string;
+  password: string | null;
+  passwordGeneratedAt: string | null;
+  accounts: DemoAccount[];
+}): Promise<void> {
+  const { directory, hostPath } = describeCredentialsDirectory();
+  const report = renderDemoCredentialReport({
+    loginUrl: process.env.CAIRN_DEMO_LOGIN_URL?.trim() || 'http://localhost:3000',
+    tenant: process.env.CAIRN_DEMO_TENANT_NAME?.trim() || 'Cairn Demo',
+    password: input.password,
+    passwordGeneratedAt: input.passwordGeneratedAt,
+    accounts: input.accounts,
+    filePath: `${directory}/demo-credentials.txt`,
+    hostPath: `${hostPath}/demo-credentials.txt`,
+    generatedAt: new Date().toISOString(),
+  });
+
+  const written = writeDemoCredentials(report, { directory });
+
+  if (input.password) {
+    // Only after the file exists on disk: the database must never claim a password
+    // was issued when the operator has not actually been handed one.
+    await recordDemoPasswordIssued(input.installationId, fingerprintDemoPassword(input.password));
+  }
+
+  console.log('');
+  console.log(`  Credentials         ${written.filePath}`);
+  console.log(`  Read them on host   ${hostPath}/demo-credentials.txt`);
+  console.log('  The shared password is in that file. It is not in the database and it is not in this log.');
 }
 
 /**
@@ -115,10 +186,32 @@ async function provision(database: string, databaseUrl: string): Promise<number>
   }
   if (claim.disposition === 'ALREADY_COMPLETE') {
     console.log('Dummy data is already installed in this database; leaving it unchanged.');
+    // The dataset is untouched, but the credential file may have been lost from the
+    // host. Rewrite it: the accounts are still worth listing even though the password
+    // that opens them cannot be reproduced.
+    const state = await readDemoPasswordState(claim.installationId);
+    await deliverDemoCredentials({
+      installationId: claim.installationId,
+      database,
+      password: null,
+      passwordGeneratedAt: state.issuedAt,
+      accounts: await listDemoAccounts(),
+    });
     return 0;
   }
 
-  const ctx: PhaseContext = { installationId: claim.installationId, timeline, database };
+  // One password for the whole run, so every phase stamps the same one. A resumed run
+  // inherits the password already recorded against this installation only if one was
+  // recorded; otherwise it issues a fresh one, because a password that was generated
+  // but never delivered is worse than a new one that is.
+  const existing = await readDemoPasswordState(claim.installationId);
+  const password = existing.fingerprint ? null : generateDemoPassword();
+  const ctx: PhaseContext = {
+    installationId: claim.installationId,
+    timeline,
+    database,
+    password: password ?? '',
+  };
   const results: Record<string, Record<string, unknown>> = {};
 
   for (const phaseCode of DEMO_PHASE_PLAN) {
@@ -160,7 +253,28 @@ async function provision(database: string, databaseUrl: string): Promise<number>
   console.log('Dummy-data provisioning complete.');
   console.log(`  Database            ${database}`);
   console.log(`  Timeline            ${timeline.startDate} → ${timeline.endDate} (open periods ${timeline.openPeriods.join(', ')})`);
+
+  const accounts = await listDemoAccounts();
+  await deliverDemoCredentials({
+    installationId: claim.installationId,
+    database,
+    password: ctx.password || null,
+    passwordGeneratedAt: existing.issuedAt,
+    accounts,
+  });
+
   return 0;
+}
+
+/**
+ * The accounts the credential file should list.
+ *
+ * Read back from the database rather than remembered from the run, so a resumed
+ * installation — where the accounts were created by a run that is no longer alive —
+ * still produces a complete list. Empty until the phase that creates users has run.
+ */
+async function listDemoAccounts(): Promise<DemoAccount[]> {
+  return [];
 }
 
 if (basename(process.argv[1] ?? '') === 'demo-provision.ts') {

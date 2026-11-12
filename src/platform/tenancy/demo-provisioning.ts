@@ -465,6 +465,51 @@ export async function acquireDemoProvisioningLock(
   };
 }
 
+/**
+ * Whether a password has already been issued for this installation.
+ *
+ * Reading the fingerprint is safe; reading the password would not be, which is why
+ * there is no function here that returns one.
+ */
+export async function readDemoPasswordState(installationId: string): Promise<{
+  fingerprint: string | null;
+  issuedAt: string | null;
+}> {
+  await assertApplicationRole();
+  const rows = (await db().execute(sql`
+    select password_fingerprint, password_issued_at
+      from demo_installation
+     where installation_id = ${installationId}
+  `)) as unknown as Array<{ password_fingerprint: string | null; password_issued_at: Date | string | null }>;
+  const row = rows[0];
+  return {
+    fingerprint: row?.password_fingerprint ?? null,
+    issuedAt: row?.password_issued_at ? new Date(row.password_issued_at as string).toISOString() : null,
+  };
+}
+
+/**
+ * Record that a password was issued, without recording the password.
+ *
+ * Called only after the credential file has been written, so a crash between issuing
+ * and delivering leaves the fingerprint null and the next run knows to issue a fresh
+ * one rather than to promise a password it never handed over.
+ */
+export async function recordDemoPasswordIssued(
+  installationId: string,
+  fingerprint: string,
+): Promise<void> {
+  await assertApplicationRole();
+  await db().execute(sql`
+    update demo_installation
+       set password_fingerprint = ${fingerprint},
+           password_issued_at = now(),
+           updated_at = now()
+     where installation_id = ${installationId}
+       and password_fingerprint is null
+  `);
+}
+
 export async function readDemoInstallation(): Promise<{
   installation: InstallationRow | undefined;
   phases: PhaseRow[];

@@ -49,6 +49,11 @@ services:
       # is owned by the container user and readable only by them.
       CAIRN_DEMO_CREDENTIALS_UID: ${CAIRN_DEMO_CREDENTIALS_UID:-}
       CAIRN_DEMO_CREDENTIALS_GID: ${CAIRN_DEMO_CREDENTIALS_GID:-}
+      # Printed in the credential file so the operator is told where to look on the
+      # host, not only where the file sits inside the container.
+      CAIRN_DEMO_CREDENTIALS_MOUNT: ./credentials
+      # Printed as the sign-in address in the credential file.
+      CAIRN_DEMO_LOGIN_URL: http://${CAIRN_HOST:-localhost}:3000
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
       MIGRATION_DATABASE_URL: postgresql://cairn:${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
     depends_on:
