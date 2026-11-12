@@ -441,9 +441,13 @@ async function ensurePostingConfiguration(client: string): Promise<number> {
       if (!isAlready(error)) throw error;
     }
   }
-  // What stands, not what was written: see the note above.
+  // What stands, not what was written — see the note above. Scoped to the events
+  // this phase configures: a later phase adds rows of its own, and this phase's
+  // report must not grow when production is built on top of it.
+  const mine = new Set(ACCOUNT_DETERMINATION.map((row) => row.event));
   const standing = await listAccountDeterminations(client).catch(() => null);
-  return standing?.length ?? created;
+  if (!standing) return created;
+  return standing.filter((row) => mine.has(row.event)).length;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
