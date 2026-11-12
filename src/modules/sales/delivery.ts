@@ -1258,11 +1258,16 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
           storageLocation: entry.storageLocation,
           batchNumber: entry.batchNumber,
           reason: (item.reason ?? '').trim() || null,
-          // The key is unique per row, so where one submission writes several rows the pick number
-          // goes after it. A single row keeps the key exactly as it was submitted, so nothing that
-          // reads these rows today sees a key it did not write.
+          // The key is unique per row, so where one submission writes several rows this row's
+          // place in it goes after it: the line it picked, then the pick within that line. A
+          // submission that writes one row keeps the key exactly as it was submitted, so
+          // nothing that reads these rows today sees a key it did not write. The line has to
+          // be part of it, because a submission confirming two order lines writes a row for
+          // each, and two rows carrying one key is a key that is not unique.
           requestKey: parsed.requestKey
-            ? (picks.length === 1 ? parsed.requestKey : `${parsed.requestKey}#${index + 1}`)
+            ? (parsed.items.length > 1 || picks.length > 1
+              ? `${parsed.requestKey}#${line.lineNumber}.${index + 1}`
+              : parsed.requestKey)
             : null,
           createdBy: parsed.changedBy,
         });

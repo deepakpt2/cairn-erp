@@ -23,12 +23,15 @@
  * its own work.
  */
 
+import { sql } from 'drizzle-orm';
+
 import { applyMaterialDefaults } from '../../modules/inventory/standard-config';
 import { getMaterialDetail, saveMaterialView } from '../../modules/inventory/materials';
 import { getBusinessPartner, saveBusinessPartner } from '../../modules/foundation/business-partners';
 import { getSupplierCompany, saveSupplierCompany } from '../../modules/foundation/supplier-companies';
 import { getSupplierPurchasing, saveSupplierPurchasing } from '../../modules/foundation/supplier-purchasing';
 import { getCustomerCompany, saveCustomerCompany } from '../../modules/foundation/customer-companies';
+import { saveCustomerCredit } from '../../modules/finance/credit';
 import { getCustomerSalesArea, saveCustomerSalesArea } from '../../modules/foundation/customer-sales-areas';
 import { saveTaxCode } from '../../modules/foundation/tax-code-definition';
 import { createPurchasingInfoRecord } from '../../modules/purchasing/info-record';
@@ -52,6 +55,24 @@ import { createProductionVersion, getProductionVersion } from '../../modules/pro
 import { withTenant } from '../db/client';
 import { DEMO_ACTOR, DEMO_IDENTITY, DEMO_STRUCTURE } from './demo-organisation';
 import type { DemoTimeline } from './demo-provisioning';
+
+/**
+ * The customer's half of pricing-procedure determination.
+ *
+ * The determination rows the standard package delivers name '*' for the customer,
+ * so any group the master carries is answered by them; this is the group a normal
+ * domestic customer carries, and it is named rather than left blank because a
+ * blank pricing procedure is the difference between a customer the demo can sell
+ * to and one no order may be entered against.
+ */
+const DEMO_CUSTOMER_PRICING_PROCEDURE = '1';
+
+/** Saving a view that already reads exactly this way is the work, not a collision. */
+function ignoreUnchanged(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/changed after it was opened/i.test(message)) return;
+  throw error;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tax codes
@@ -143,6 +164,16 @@ interface CustomerSpec {
   terms: string;
   /** Where the goods ship from. Export customers take theirs from the distribution centre. */
   deliveringPlant: string;
+  /**
+   * What the customer may owe at once, in the credit control area's currency.
+   *
+   * Not decoration: a customer with no credit record is credit-blocked the moment
+   * an order is raised against them, and a blocked order delivers nothing. It is
+   * also not a free choice — the opening balances already brought these three
+   * customers' receivables forward, so the limit has to cover what they already
+   * owe on the company's first morning as well as what the demo sells them.
+   */
+  creditLimit: string;
 }
 
 const SUPPLIERS: readonly SupplierSpec[] = [
@@ -153,9 +184,9 @@ const SUPPLIERS: readonly SupplierSpec[] = [
 ];
 
 const CUSTOMERS: readonly CustomerSpec[] = [
-  { number: 'CUS-1000', name: 'Kuwait Co-operative Union', city: 'Kuwait City', country: 'KW', terms: 'NET30', deliveringPlant: '2000' },
-  { number: 'CUS-2000', name: 'Gulf Hypermarkets WLL', city: 'Salmiya', country: 'KW', terms: 'NET15', deliveringPlant: '2000' },
-  { number: 'CUS-3000', name: 'Doha Food Distributors', city: 'Doha', country: 'QA', terms: 'NET30', deliveringPlant: '2000' },
+  { number: 'CUS-1000', name: 'Kuwait Co-operative Union', city: 'Kuwait City', country: 'KW', terms: 'NET30', deliveringPlant: '2000', creditLimit: '75000.0000' },
+  { number: 'CUS-2000', name: 'Gulf Hypermarkets WLL', city: 'Salmiya', country: 'KW', terms: 'NET15', deliveringPlant: '2000', creditLimit: '60000.0000' },
+  { number: 'CUS-3000', name: 'Doha Food Distributors', city: 'Doha', country: 'QA', terms: 'NET30', deliveringPlant: '2000', creditLimit: '40000.0000' },
 ];
 
 /**
@@ -328,8 +359,11 @@ export async function buildDemoMasters(input: BuildDemoMastersInput): Promise<De
     await ensureSupplier(client, supplier, from, to);
   }
 
+  await ensureCreditRiskCategories(client);
+
   for (const customer of CUSTOMERS) {
     await ensureCustomer(client, customer);
+    await ensureCustomerCredit(client, customer);
   }
 
   let salesPrices = 0;
@@ -724,25 +758,81 @@ async function ensureCustomer(client: string, spec: CustomerSpec): Promise<void>
     DEMO_STRUCTURE.distributionChannel,
     DEMO_STRUCTURE.division,
   );
-  if (!area) {
+  // A customer sales-area view is complete only when it carries both the plant the
+  // goods ship from and the pricing procedure the customer is priced under. Without
+  // the second one the view stands INCOMPLETE, and an incomplete master is not a
+  // warning the order screen prints and waves through: no order may be entered
+  // against it at all. It is repaired here as well as written, because a run that
+  // resumes has to adopt the masters it finds rather than only create the ones it
+  // is missing.
+  if (!area || area.salesStatus === 'INCOMPLETE') {
     await saveCustomerSalesArea({
       client,
       partnerNumber: spec.number,
       salesOrg: DEMO_STRUCTURE.salesOrg,
       distributionChannel: DEMO_STRUCTURE.distributionChannel,
       division: DEMO_STRUCTURE.division,
-      expectedVersion: 0,
+      expectedVersion: area?.version ?? 0,
       changedBy: DEMO_ACTOR,
       reason: 'Demo company masters',
       salesDistrict: '',
       deliveringPlant: spec.deliveringPlant,
-      pricingProcedure: '',
+      pricingProcedure: DEMO_CUSTOMER_PRICING_PROCEDURE,
       accountAssignmentGroup: '',
       completeDelivery: false,
       orderCombination: false,
       isBlocked: false,
+    }).catch(ignoreUnchanged);
+  }
+}
+
+/**
+ * The risk categories a credit record may name.
+ *
+ * The product ships none: they are the tenant's own configuration, read by the
+ * credit master and never written by it. One is enough for a company that has
+ * decided, once, how it grades the customers it sells to on credit.
+ */
+const CREDIT_RISK_CATEGORIES = [
+  { riskCategory: '001', name: 'Standard risk' },
+  { riskCategory: '002', name: 'Higher risk — monitored' },
+] as const;
+
+/** The category every demo customer is graded in to begin with. */
+const STANDARD_RISK_CATEGORY = '001';
+
+async function ensureCreditRiskCategories(client: string): Promise<void> {
+  for (const row of CREDIT_RISK_CATEGORIES) {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into credit_risk_category (client, risk_category, name, is_active, created_by)
+        values (${client}, ${row.riskCategory}, ${row.name}, true, ${DEMO_ACTOR})
+        on conflict (client, risk_category) do nothing
+      `);
     });
   }
+}
+
+/**
+ * Open the customer's credit account.
+ *
+ * A customer with no credit record is not a customer with unlimited credit: the
+ * determination an order raises comes back NO_CREDIT_RECORD and the order is
+ * blocked, which is the system refusing to promise goods to somebody it has never
+ * assessed. The demo sells on credit, so the account is opened here, in the
+ * masters, before anything is sold.
+ */
+async function ensureCustomerCredit(client: string, spec: CustomerSpec): Promise<void> {
+  await saveCustomerCredit({
+    client,
+    changedBy: DEMO_ACTOR,
+    customer: spec.number,
+    creditControlArea: DEMO_STRUCTURE.creditControlArea,
+    creditLimit: spec.creditLimit,
+    riskCategory: STANDARD_RISK_CATEGORY,
+    isBlocked: false,
+    changeReason: 'Demo company masters',
+  });
 }
 
 /** One price per customer and material. Returns true when a price was written. */

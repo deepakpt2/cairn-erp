@@ -50,6 +50,7 @@ export type DemoPhaseStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
  */
 export const DEMO_PHASE_PLAN: readonly string[] = [
   'A_FOUNDATION', 'B_ORGANISATION', 'B_PEOPLE', 'C_MASTERS', 'D1_PROCUREMENT', 'D2_PRODUCTION',
+  'D3_SALES',
 ];
 
 export interface DemoTimeline {

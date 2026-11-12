@@ -266,8 +266,13 @@ describe('demo procurement, when the demo stands', () => {
 
   it('records the provisioner as the actor on what it posted', async () => {
     if (!(await demoStands())) return;
+    // The provisioning phases are the provisioner's own work, and every movement
+    // they post carries their name. What a demo person posts afterwards — the
+    // goods issues the warehouse clerks confirm in phase D3 — carries theirs, by
+    // design: a document is written by the person whose job it is.
     const others = await scalar(
-      `select count(*) as n from material_document where client = '${CLIENT}' and created_by <> 'DEMO_PROVISION'`,
+      `select count(*) as n from material_document
+        where client = '${CLIENT}' and request_key like 'DEMO-%' and created_by <> 'DEMO_PROVISION'`,
     );
     expect(others).toBe(0);
   });

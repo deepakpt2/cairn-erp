@@ -581,6 +581,12 @@ const DUPLICATE_REFUSALS: ReadonlyArray<RegExp> = [
   /already (has|have) an assignment covering that day/i,
   // role-admin.
   /already exists\.|already holds /i,
+  // An organisational scope the account already holds. The accounts are built
+  // by adoption — a resumed run adopts the user it finds rather than recreating
+  // them — so the grants have to be adopted the same way: a scope that already
+  // stands is the work this phase came back to finish, not a collision with
+  // somebody else's data.
+  /(Company|Plant) scope .+ is already assigned to /i,
 ];
 
 function ignoreExisting(error: unknown): void {
