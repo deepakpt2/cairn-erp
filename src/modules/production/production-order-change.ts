@@ -46,9 +46,9 @@ import {
 import { parseProductionOrderStatus, priorStatusFromRelease } from './production-order-status';
 import {
   refusePlantOutsideScopeInTx,
-  verifyProductionAuthorityInTx,
-  type ProductionAuthorityContext,
-} from './production-authority';
+  verifyServiceAuthorityInTx,
+  type ServiceAuthorityContext,
+} from '@/platform/auth/service-authority';
 import { productionOrderComponentCommitmentEvent } from './schema';
 
 export const PRODUCTION_ORDER_CHANGE_CAPABILITY = 'PROD.ORDER.CHANGE';
@@ -593,7 +593,7 @@ export interface ProductionOrderLifecycleInput {
    * the role grants and the user's Company Code and Plant reach — inside the same
    * transaction that writes the status.
    */
-  authorization: ProductionAuthorityContext;
+  authorization: ServiceAuthorityContext;
 }
 
 function requireLifecycleActor(input: ProductionOrderLifecycleInput, verb: 'completed' | 'revoked'): string {
@@ -652,7 +652,7 @@ export async function technicallyCompleteProductionOrder(
     // Technical completion closes the order to further change, and the order belongs
     // to a plant: the user completing it must hold PROD.ORDER.CHANGE and reach that
     // plant. Judged inside the transaction, before the order's status is written.
-    const authority = await verifyProductionAuthorityInTx(
+    const authority = await verifyServiceAuthorityInTx(
       tx, input.client, input.authorization, PRODUCTION_ORDER_CHANGE_CAPABILITY,
     );
     if (!authority.ok) fail(authority.refusal.message, authority.refusal.remedy);
@@ -717,7 +717,7 @@ export async function revokeTechnicalCompletion(
   await withTenant(input.client, async (tx) => {
     // Revoking technical completion reopens the order, so it is judged by the same
     // authority and the same reach as setting it.
-    const authority = await verifyProductionAuthorityInTx(
+    const authority = await verifyServiceAuthorityInTx(
       tx, input.client, input.authorization, PRODUCTION_ORDER_CHANGE_CAPABILITY,
     );
     if (!authority.ok) fail(authority.refusal.message, authority.refusal.remedy);

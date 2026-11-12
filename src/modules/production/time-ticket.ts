@@ -38,7 +38,7 @@ import {
   type ConfirmationMovement,
   type MovementPlan,
 } from './confirmation-movements';
-import type { ProductionAuthorityContext } from './production-authority';
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
 import {
   confirmationMovementOutcomes,
   MovementFailurePersistenceError,
@@ -918,7 +918,7 @@ export async function enterTimeTicket(client: string, input: {
    * continuation that names nobody posts nothing — the movement stays a failure for
    * COGI to recover rather than moving stock under no authority at all.
    */
-  authorization?: ProductionAuthorityContext;
+  authorization?: ServiceAuthorityContext;
 }): Promise<TimeTicketView> {
   const refused = timeTicketRefusal(input.named);
   if (refused) fail(refused, 'Confirm one operation. Nothing was saved.');

@@ -53,7 +53,7 @@ import {
 } from '../inventory/production-orders';
 import { material, materialPlant } from '../inventory/schema';
 import { parseProductionOrderStatus, type ProductionOrderStatus } from './production-order-status';
-import type { ProductionAuthorityContext } from './production-authority';
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
 import { readMaterialSchedulingProfile, SchedulingProfileError } from '../inventory/scheduling-profile';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { componentRequirementQuantity } from './mrp-explosion';
@@ -918,7 +918,7 @@ export async function convertPlannedOrder(input: {
    * order, so it is created under this user's authority and reach, not under the
    * conversion's own.
    */
-  authorization: ProductionAuthorityContext;
+  authorization: ServiceAuthorityContext;
 }): Promise<PlannedOrderConversionResult> {
   const named = plannedOrderConversionRefusal(input.named);
   if (named) fail('UNSUPPORTED', named);
@@ -1104,7 +1104,7 @@ export async function convertPlannedOrders(input: {
   components?: ConversionSuppliedComponent[] | null;
   named?: Record<string, string | null | undefined>;
   /** The signed-in user every order in the batch is created for. */
-  authorization: ProductionAuthorityContext;
+  authorization: ServiceAuthorityContext;
 }): Promise<{ correlationId: string; results: PlannedOrderConversionResult[] }> {
   const named = plannedOrderConversionRefusal(input.named);
   if (named) fail('UNSUPPORTED', named);

@@ -1,15 +1,15 @@
 /**
- * The authority a production service acts under — CAIRN.md §23.
+ * The authority a business service acts under — CAIRN.md §23.
  *
- * Production orders, their goods movements and their technical completion were the
- * last business services in the production loop to check nothing at all: any caller
- * that could reach them could create, release, complete and receive an order in a
- * plant the caller had no mandate for, because the screens checked a capability and
- * the services checked nothing. The inventory posting paths (`goods-issue`,
- * `goods-receipt`, `initial-stock`) and the two production recovery paths
- * (`production-cogi-auth`, `confirmation-cancel`) already answer the same question
- * inside their own transaction; this module states that answer once so the four
- * services ask it the same way.
+ * A service that writes a document is answerable for who wrote it. The inventory
+ * posting paths (`goods-issue`, `goods-receipt`, `initial-stock`) and the two
+ * production recovery paths (`production-cogi-auth`, `confirmation-cancel`) always
+ * asked inside their own transaction; the production services and the sales services
+ * did not, which left an order, a delivery, a billing document or a payment writable
+ * by a caller with no session at all, for a plant the caller had no mandate for.
+ *
+ * This module states the answer once, so every service asks the same three questions
+ * in the same order and refuses in the same words.
  *
  * **Three questions, in this order.**
  *
@@ -27,8 +27,8 @@
  *
  * The module returns a verdict rather than throwing, so each service refuses in the
  * words its own callers already catch: a production order answers with
- * `ProductionOrderError`, a change with `ProductionOrderChangeError`, and a receipt
- * with `ProductionReceiptError`. One authority rule, three honest sentences.
+ * `ProductionOrderError`, a sales order with `SalesOrderError`, a payment with the
+ * payment's own error. One authority rule, spoken in each service's voice.
  */
 import { sql } from 'drizzle-orm';
 
@@ -38,26 +38,26 @@ import {
   loadCapabilities,
   loadOrgRestrictions,
   type OrgRestriction,
-} from '../../platform/auth/session';
-import type { Tx } from '../../platform/db/client';
+} from './session';
+import type { Tx } from '../db/client';
 
 /** Who the service acts for. Supplied from the authenticated session, never from a form. */
-export interface ProductionAuthorityContext {
+export interface ServiceAuthorityContext {
   userId: string;
   sessionId: string;
 }
 
 /** A refusal, in the caller's voice: what is wrong, and what the actor does next. */
-export interface ProductionAuthorityRefusal {
+export interface ServiceAuthorityRefusal {
   message: string;
   remedy: string;
 }
 
-export type ProductionAuthorityVerdict =
+export type ServiceAuthorityVerdict =
   | { ok: true; username: string; restrictions: OrgRestriction[] }
-  | { ok: false; refusal: ProductionAuthorityRefusal };
+  | { ok: false; refusal: ServiceAuthorityRefusal };
 
-function refusal(message: string, remedy: string): ProductionAuthorityVerdict {
+function refusal(message: string, remedy: string): ServiceAuthorityVerdict {
   return { ok: false, refusal: { message, remedy } };
 }
 
@@ -70,12 +70,12 @@ function refusal(message: string, remedy: string): ProductionAuthorityVerdict {
  * commit between this read and the service's write, and the restriction rows are held
  * the same way so a narrowed scope cannot land in between.
  */
-export async function verifyProductionAuthorityInTx(
+export async function verifyServiceAuthorityInTx(
   tx: Tx,
   client: string,
-  authorization: ProductionAuthorityContext | undefined,
+  authorization: ServiceAuthorityContext | undefined,
   capability: string,
-): Promise<ProductionAuthorityVerdict> {
+): Promise<ServiceAuthorityVerdict> {
   if (!authorization?.userId || !authorization.sessionId) {
     return refusal(
       'This action needs a signed-in user. Nothing was saved.',
@@ -151,11 +151,11 @@ export async function verifyProductionAuthorityInTx(
  * that read the plant already refuses a plant with no company code, and it says so in
  * its own words. Call this only once a company code stands.
  */
-export function productionScopeRefusal(
+export function scopeRefusal(
   restrictions: readonly OrgRestriction[],
   companyCode: string,
   plant: string,
-): ProductionAuthorityRefusal | null {
+): ServiceAuthorityRefusal | null {
   if (!hasOrgAccess(restrictions, 'COMPANY_CODE', companyCode) || !hasOrgAccess(restrictions, 'PLANT', plant)) {
     return {
       message: `Your Company Code or Plant scope does not cover plant ${plant}.`,
@@ -175,7 +175,7 @@ export async function refusePlantOutsideScopeInTx(
   client: string,
   plant: string,
   restrictions: readonly OrgRestriction[],
-): Promise<ProductionAuthorityRefusal | null> {
+): Promise<ServiceAuthorityRefusal | null> {
   const rows = await tx.execute(sql`
     select p.plant, p.company_code as "companyCode"
       from plant p
@@ -193,5 +193,5 @@ export async function refusePlantOutsideScopeInTx(
       remedy: 'Assign the plant to a company code, then repeat the action.',
     };
   }
-  return productionScopeRefusal(restrictions, companyCode, row.plant);
+  return scopeRefusal(restrictions, companyCode, row.plant);
 }

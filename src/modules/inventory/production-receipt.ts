@@ -39,10 +39,10 @@ import { batchClassificationRefusal } from './batch-classification';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import { lineNotReversed, OPEN_PRODUCTION_DOCUMENT } from './production-document-quantity';
 import {
-  productionScopeRefusal,
-  verifyProductionAuthorityInTx,
-  type ProductionAuthorityContext,
-} from '../production/production-authority';
+  scopeRefusal,
+  verifyServiceAuthorityInTx,
+  type ServiceAuthorityContext,
+} from '@/platform/auth/service-authority';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
 /** WE — the document type a goods receipt posts under (as MB01 does). */
 const JOURNAL_DOCUMENT_TYPE = 'WE';
@@ -256,7 +256,7 @@ async function toView(
  */
 export async function postProductionReceipt(
   input: PostProductionReceiptInput,
-  options: { tx?: Tx; authorization: ProductionAuthorityContext },
+  options: { tx?: Tx; authorization: ServiceAuthorityContext },
 ): Promise<ProductionReceiptView> {
   const orderNumber = input.orderNumber.trim();
   if (!orderNumber) {
@@ -291,7 +291,7 @@ export async function postProductionReceipt(
     // person holding PROD.ORDER.GR whose reach covers that plant. Judged before a
     // resubmission is answered with the document it already posted, and before the
     // order is read: the receipt is a posting with an owner, not an anonymous update.
-    const authority = await verifyProductionAuthorityInTx(
+    const authority = await verifyServiceAuthorityInTx(
       tx, input.client, options.authorization, PRODUCTION_RECEIPT_CAPABILITY,
     );
     if (!authority.ok) throw new ProductionReceiptError(authority.refusal.message, authority.refusal.remedy);
@@ -388,7 +388,7 @@ export async function postProductionReceipt(
       );
     }
     const companyCode = plantRow.companyCode;
-    const outOfScope = productionScopeRefusal(authority.restrictions, companyCode, plantRow.plant);
+    const outOfScope = scopeRefusal(authority.restrictions, companyCode, plantRow.plant);
     if (outOfScope) throw new ProductionReceiptError(outOfScope.message, outOfScope.remedy);
 
     // The order states how much it will make; a receipt beyond that is a receipt with no plan.

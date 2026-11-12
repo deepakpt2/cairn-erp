@@ -54,11 +54,11 @@ import { resolveStorageLocation, StorageLocationError } from './storage-location
 import { productionOrder, productionOrderComponent } from './schema';
 import { parseProductionOrderStatus, type ProductionOrderStatus } from '../production/production-order-status';
 import {
-  productionScopeRefusal,
+  scopeRefusal,
   refusePlantOutsideScopeInTx,
-  verifyProductionAuthorityInTx,
-  type ProductionAuthorityContext,
-} from '../production/production-authority';
+  verifyServiceAuthorityInTx,
+  type ServiceAuthorityContext,
+} from '@/platform/auth/service-authority';
 import { OrderBomSnapshotError, resolveOrderBomSnapshot, type OrderBomSnapshot } from '../production/order-bom-snapshot';
 import { OrderOperationSnapshotError, insertOrderOperationSnapshot } from '../production/order-operation-snapshot';
 import { productionOrderType } from '../production/schema';
@@ -372,7 +372,7 @@ export async function previewProductionOrderBom(input: {
 
 export async function createProductionOrder(
   input: CreateProductionOrderInput,
-  options: { authorization: ProductionAuthorityContext; tx?: Tx; plannedOrderNumber?: string | null },
+  options: { authorization: ServiceAuthorityContext; tx?: Tx; plannedOrderNumber?: string | null },
 ): Promise<CreateProductionOrderResult> {
   const plant = input.plant.trim();
   const materialNumber = input.materialNumber.trim();
@@ -411,7 +411,7 @@ export async function createProductionOrder(
     // reaches. The session, the authority and the reach are judged here — before a
     // resubmission is answered with the order it already made, and before anything is
     // written — because a plan nobody is accountable for is not one this service writes.
-    const authority = await verifyProductionAuthorityInTx(
+    const authority = await verifyServiceAuthorityInTx(
       tx, input.client, options.authorization, PRODUCTION_ORDER_CAPABILITY,
     );
     if (!authority.ok) throw new ProductionOrderError(authority.refusal.message, authority.refusal.remedy);
@@ -425,7 +425,7 @@ export async function createProductionOrder(
         'Assign the plant to a company code, then create the order.',
       );
     }
-    const outOfScope = productionScopeRefusal(authority.restrictions, plantRow.companyCode, plantRow.plant);
+    const outOfScope = scopeRefusal(authority.restrictions, plantRow.companyCode, plantRow.plant);
     if (outOfScope) throw new ProductionOrderError(outOfScope.message, outOfScope.remedy);
 
     if (input.requestKey) {
@@ -804,7 +804,7 @@ export async function releaseProductionOrder(input: {
   client: string;
   orderNumber: string;
   releasedBy: string;
-}, options: { authorization: ProductionAuthorityContext }): Promise<ProductionOrderView> {
+}, options: { authorization: ServiceAuthorityContext }): Promise<ProductionOrderView> {
   const number = input.orderNumber.trim();
   if (!number) throw new ProductionOrderError('An order number is required.', 'Enter the order to release.');
 
@@ -819,12 +819,12 @@ async function releaseProductionOrderInTx(tx: Tx, input: {
   client: string;
   orderNumber: string;
   releasedBy: string;
-}, authorization: ProductionAuthorityContext): Promise<ProductionOrderView> {
+}, authorization: ServiceAuthorityContext): Promise<ProductionOrderView> {
   // Release is the act that lets work be charged to the order, so it is released by a
   // person holding PROD.ORDER.RELEASE whose reach covers the order's plant. Judged
   // before the order is locked for update and before any status is answered, so a
   // caller outside the plant learns nothing about the order at all.
-  const authority = await verifyProductionAuthorityInTx(
+  const authority = await verifyServiceAuthorityInTx(
     tx, input.client, authorization, PRODUCTION_ORDER_RELEASE_CAPABILITY,
   );
   if (!authority.ok) throw new ProductionOrderError(authority.refusal.message, authority.refusal.remedy);
