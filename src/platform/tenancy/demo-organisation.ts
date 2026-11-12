@@ -61,6 +61,8 @@ export const DEMO_IDENTITY = {
 export const DEMO_STRUCTURE = {
   companyCode: '1000',
   companyName: 'Vantage Foods',
+  /** The chart the standard package gives the company. Posting configuration is per chart. */
+  chartOfAccounts: 'CA01',
   /** The plant the standard structure builds: where the goods are made. */
   manufacturingPlant: '1000',
   /** The plant this module adds: where the finished goods are held and shipped. */

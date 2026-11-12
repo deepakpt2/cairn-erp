@@ -57,7 +57,7 @@ describe('demo company structure', () => {
   });
 
   it('plans the organisation and the people as separate resumable phases', () => {
-    expect(DEMO_PHASE_PLAN).toEqual(['A_FOUNDATION', 'B_ORGANISATION', 'B_PEOPLE', 'C_MASTERS']);
+    expect(DEMO_PHASE_PLAN).toEqual(['A_FOUNDATION', 'B_ORGANISATION', 'B_PEOPLE', 'C_MASTERS', 'D1_PROCUREMENT']);
     // Appended, never reordered: a database provisioned by an earlier build must read
     // the same plan it was written with.
     expect(DEMO_PHASE_PLAN[0]).toBe('A_FOUNDATION');

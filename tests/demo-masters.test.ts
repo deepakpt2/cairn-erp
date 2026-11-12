@@ -46,8 +46,12 @@ function mastersSource(): string {
 
 describe('demo masters phase', () => {
   it('appends the masters as a phase after the people, and never reorders', () => {
-    expect(DEMO_PHASE_PLAN).toEqual(['A_FOUNDATION', 'B_ORGANISATION', 'B_PEOPLE', 'C_MASTERS']);
-    expect(DEMO_PHASE_PLAN.indexOf('C_MASTERS')).toBe(DEMO_PHASE_PLAN.length - 1);
+    expect(DEMO_PHASE_PLAN).toContain('C_MASTERS');
+    // Immediately after the people: the phases run in the order they can, and
+    // later phases may be appended behind this one.
+    expect(DEMO_PHASE_PLAN.indexOf('C_MASTERS')).toBe(
+      DEMO_PHASE_PLAN.indexOf('B_PEOPLE') + 1,
+    );
   });
 
   it('writes no documents: the masters are a company on its first morning', () => {

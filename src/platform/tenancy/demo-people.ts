@@ -260,7 +260,7 @@ export interface BuildDemoPeopleInput {
 export async function buildDemoPeople(input: BuildDemoPeopleInput): Promise<DemoPeopleResult> {
   const client = input.client;
 
-  await withAdministration(client, DEMO_FOUNDER_ACCOUNTS.administrator.username, async (actor) => {
+  await withActingUser(client, DEMO_FOUNDER_ACCOUNTS.administrator.username, async (actor) => {
     for (const unit of ORG_UNITS) {
       await defineOrgUnit(
         {
@@ -327,7 +327,7 @@ export async function buildDemoPeople(input: BuildDemoPeopleInput): Promise<Demo
     void actor;
   });
 
-  await withAdministration(client, DEMO_FOUNDER_ACCOUNTS.platformAdmin.username, async (actor) => {
+  await withActingUser(client, DEMO_FOUNDER_ACCOUNTS.platformAdmin.username, async (actor) => {
     for (const definition of ROLES) {
       await createRole({
         client,
@@ -468,7 +468,7 @@ export async function listDemoAccounts(client: string = DEMO_IDENTITY.clientKey)
  * token, and revoked by id at the end, in a `finally` so a failure mid-phase does
  * not leave a live administrator session behind in a demo anyone can open.
  */
-async function withAdministration<T>(
+export async function withActingUser<T>(
   client: string,
   username: string,
   work: (actor: { userId: string; sessionId: string }) => Promise<T>,
@@ -516,7 +516,7 @@ export async function setEveryPassword(client: string, password: string): Promis
     return rows.map((row) => row.id);
   });
 
-  await withAdministration(client, DEMO_FOUNDER_ACCOUNTS.administrator.username, async () => {
+  await withActingUser(client, DEMO_FOUNDER_ACCOUNTS.administrator.username, async () => {
     for (const userId of accounts) {
       const { token } = await initiatePasswordReset(
         { client, userId, changedBy: DEMO_ACTOR, ipAddress: '127.0.0.1' },

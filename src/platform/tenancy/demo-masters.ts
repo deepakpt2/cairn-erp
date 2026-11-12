@@ -108,18 +108,18 @@ interface MaterialSpec {
  * finished stock is held somewhere other than where it is made.
  */
 const MATERIALS: readonly MaterialSpec[] = [
-  { number: 'RAW-FLOUR', description: 'Wheat flour, milled', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.4500', safetyStock: '2000' },
-  { number: 'RAW-SUGAR', description: 'Caster sugar', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.3200', safetyStock: '800' },
-  { number: 'RAW-FAT', description: 'Vegetable shortening', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.9100', safetyStock: '600' },
-  { number: 'RAW-COCOA', description: 'Cocoa powder', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '4.4500', safetyStock: '250' },
-  { number: 'PACK-CARTON', description: 'Shipping carton, 24 units', type: 'RAW', group: 'PACKAGING', unit: 'PC', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.6200', safetyStock: '1200' },
-  { number: 'PACK-WRAP', description: 'Printed wrapper, 200 g', type: 'RAW', group: 'PACKAGING', unit: 'PC', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.0850', safetyStock: '9000' },
+  { number: 'RAW-FLOUR', description: 'Wheat flour, milled', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.4100', safetyStock: '2000' },
+  { number: 'RAW-SUGAR', description: 'Caster sugar', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.3000', safetyStock: '800' },
+  { number: 'RAW-FAT', description: 'Vegetable shortening', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.8700', safetyStock: '600' },
+  { number: 'RAW-COCOA', description: 'Cocoa powder', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '4.1800', safetyStock: '250' },
+  { number: 'PACK-CARTON', description: 'Shipping carton, 24 units', type: 'RAW', group: 'PACKAGING', unit: 'PC', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.5800', safetyStock: '1200' },
+  { number: 'PACK-WRAP', description: 'Printed wrapper, 200 g', type: 'RAW', group: 'PACKAGING', unit: 'PC', procurement: 'BUY', plants: ['1000'], valuationClass: 'RAW_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '0.0800', safetyStock: '9000' },
   { number: 'SEMI-DOUGH', description: 'Biscuit dough, mixed', type: 'SEMI', group: 'PRODUCTS', unit: 'KG', procurement: 'MAKE', plants: ['1000'], valuationClass: 'SEMI_INVENTORY', priceControl: 'STANDARD', price: '1.7200', safetyStock: '500' },
   { number: 'FG-CREAM', description: 'Cream biscuit 200 g', type: 'FIN', group: 'PRODUCTS', unit: 'PC', procurement: 'MAKE', plants: ['1000', '2000'], valuationClass: 'FINISHED_INVENTORY', priceControl: 'STANDARD', price: '0.4120', safetyStock: '4000', sellable: true },
   { number: 'FG-CHOC', description: 'Chocolate biscuit 200 g', type: 'FIN', group: 'PRODUCTS', unit: 'PC', procurement: 'MAKE', plants: ['1000', '2000'], valuationClass: 'FINISHED_INVENTORY', priceControl: 'STANDARD', price: '0.4680', safetyStock: '4000', sellable: true },
   { number: 'FG-WAFER', description: 'Wafer roll 150 g', type: 'FIN', group: 'PRODUCTS', unit: 'PC', procurement: 'MAKE', plants: ['1000', '2000'], valuationClass: 'FINISHED_INVENTORY', priceControl: 'STANDARD', price: '0.3510', safetyStock: '2500', sellable: true },
-  { number: 'TRAD-JUICE', description: 'Imported fruit juice 1 L', type: 'TRAD', group: 'PRODUCTS', unit: 'BOX', procurement: 'BUY', plants: ['1000', '2000'], valuationClass: 'TRADE_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '6.7500', safetyStock: '300', sellable: true },
-  { number: 'TRAD-CRATE', description: 'Returnable plastic crate', type: 'TRAD', group: 'PACKAGING', unit: 'PC', procurement: 'BUY', plants: ['2000'], valuationClass: 'TRADE_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '3.2000', safetyStock: '150' },
+  { number: 'TRAD-JUICE', description: 'Imported fruit juice 1 L', type: 'TRAD', group: 'PRODUCTS', unit: 'BOX', procurement: 'BUY', plants: ['1000', '2000'], valuationClass: 'TRADE_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '6.4000', safetyStock: '300', sellable: true },
+  { number: 'TRAD-CRATE', description: 'Returnable plastic crate', type: 'TRAD', group: 'PACKAGING', unit: 'PC', procurement: 'BUY', plants: ['2000'], valuationClass: 'TRADE_INVENTORY', priceControl: 'MOVING_AVERAGE', price: '3.0500', safetyStock: '150' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,16 +171,37 @@ const SELLING_PRICES: Readonly<Record<string, string>> = {
   'TRAD-JUICE': '9.950',
 };
 
+/**
+ * The unit each material is kept in, exported so a document phase quotes quantities
+ * in the unit the master actually holds rather than one it guessed.
+ */
+export function materialUnit(materialNumber: string): string {
+  return MATERIALS.find((row) => row.number === materialNumber)?.unit ?? 'PC';
+}
+
 /** Purchase prices, in KWD, per material — what the info record says the supplier charges. */
-const PURCHASE_PRICES: Readonly<Record<string, string>> = {
-  'RAW-FLOUR': '0.4120',
-  'RAW-SUGAR': '0.2950',
-  'RAW-FAT': '0.8700',
-  'RAW-COCOA': '4.1800',
-  'PACK-CARTON': '0.5800',
-  'PACK-WRAP': '0.0790',
-  'TRAD-JUICE': '6.4000',
-  'TRAD-CRATE': '3.0500',
+/**
+ * Purchase prices, in KWD, per material — what the info record says the supplier
+ * charges.
+ *
+ * Two decimals, and that is not a stylistic choice. A purchase order stores its
+ * net price at the precision the service judges, which for this currency is two
+ * decimals: a price of 0.412 would be recorded as 0.41, and the goods receipt
+ * would then be valued at 0.41 while an invoice raised at 0.412 cleared a
+ * different amount. The difference would land in the price-difference account —
+ * small, silent, and a nuisance to reconcile. The price is therefore stated here
+ * at the precision the order will actually keep, so the order, the receipt and
+ * the invoice all say the same number.
+ */
+export const PURCHASE_PRICES: Readonly<Record<string, string>> = {
+  'RAW-FLOUR': '0.41',
+  'RAW-SUGAR': '0.30',
+  'RAW-FAT': '0.87',
+  'RAW-COCOA': '4.18',
+  'PACK-CARTON': '0.58',
+  'PACK-WRAP': '0.08',
+  'TRAD-JUICE': '6.40',
+  'TRAD-CRATE': '3.05',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -35,6 +35,7 @@ import {
   DEMO_IDENTITY,
 } from '../src/platform/tenancy/demo-organisation';
 import { buildDemoMasters } from '../src/platform/tenancy/demo-masters';
+import { buildDemoProcurement } from '../src/platform/tenancy/demo-procurement';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -188,11 +189,29 @@ async function runMastersPhase(ctx: PhaseContext): Promise<Record<string, unknow
   };
 }
 
+async function runProcurementPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoProcurement({
+    client: DEMO_IDENTITY.clientKey,
+    timeline: ctx.timeline,
+  });
+  return {
+    openingJournal: result.openingJournal,
+    determinationRows: result.determinationRows,
+    purchaseOrders: result.purchaseOrders,
+    goodsReceipts: result.goodsReceipts,
+    supplierInvoices: result.supplierInvoices,
+    payments: result.payments,
+    goodsIssues: result.goodsIssues,
+    documents: result.documents,
+  };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
   B_PEOPLE: runPeoplePhase,
   C_MASTERS: runMastersPhase,
+  D1_PROCUREMENT: runProcurementPhase,
 };
 
 async function main(): Promise<number> {
