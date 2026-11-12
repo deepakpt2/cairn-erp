@@ -38,6 +38,7 @@ import { listPurchaseOrders } from '../../modules/purchasing/purchase-order-list
 import { postSupplierInvoice } from '../../modules/purchasing/invoice-verification';
 import { postGoodsReceipt } from '../../modules/inventory/goods-receipt';
 import { postGoodsIssue } from '../../modules/inventory/goods-issue';
+import { postInitialStock } from '../../modules/inventory/initial-stock';
 import {
   getMaterialPeriodControl,
   initializeMaterialPeriodControl,
@@ -316,6 +317,8 @@ export interface DemoProcurementResult {
   /** The account-determination rows that stand, whether written now or found. */
   determinationRows: number;
   openingJournal: string | null;
+  /** The initial stock documents: one per plant, dated the first day. */
+  openingStock: number;
   /** The purchase orders of this phase that stand, raised now or found. */
   purchaseOrders: number;
   goodsReceipts: number;
@@ -348,6 +351,7 @@ export async function buildDemoProcurement(
 
   const determinationRows = await ensurePostingConfiguration(client);
   const openingJournal = await postOpeningBalances(client, input.timeline);
+  let openingStock = 0;
 
   let purchaseOrders = 0;
   let goodsReceipts = 0;
@@ -358,6 +362,11 @@ export async function buildDemoProcurement(
   for (let index = 0; index < input.timeline.openPeriods.length; index += 1) {
     const openPeriod = input.timeline.openPeriods[index] ?? '';
     await ensureMaterialPeriod(client, Number(openPeriod.slice(0, 4)), Number(openPeriod.slice(4)), input.timeline);
+
+    // The shelves are filled on the first day of the first open period, before
+    // anything is bought. A company arrives with stock already on hand; the
+    // buying that follows adds to it rather than starting it.
+    if (index === 0) openingStock = await postOpeningStock(client, input.timeline);
 
     const orders = await runPurchaseOrders(client, input.timeline, index);
     const receipts = await postReceipts(client, input.timeline, index, orders);
@@ -376,6 +385,7 @@ export async function buildDemoProcurement(
     client,
     determinationRows,
     openingJournal,
+    openingStock,
     purchaseOrders,
     goodsReceipts,
     supplierInvoices,
@@ -383,6 +393,7 @@ export async function buildDemoProcurement(
     goodsIssues,
     documents:
       (openingJournal ? 1 : 0) +
+      openingStock +
       purchaseOrders +
       goodsReceipts +
       supplierInvoices +
@@ -531,6 +542,91 @@ async function postOpeningBalances(client: string, timeline: DemoTimeline): Prom
     lines: openingLines(),
   });
   return posted.displayNumber;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Opening stock
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface OpeningStockLine {
+  material: string;
+  plant: string;
+  storageLocation: string;
+  quantity: number;
+}
+
+/**
+ * What was already on the shelves on the first day of the first open period.
+ *
+ * A journal can state a value but it cannot put a quantity on a shelf, and the
+ * two have to agree or the inventory accounts stop tying to the stock they are
+ * supposed to represent. So the stock arrives as a goods movement — movement 561,
+ * the initial stock entry — valued at the price each material carries, with
+ * retained earnings on the other side because stock the company already held on
+ * the day the books opened is part of the equity it opened with.
+ *
+ * Raw materials and packaging at the factory, trading goods at both sites, and
+ * finished goods waiting to be sold: a company does not begin empty-handed, and
+ * a demo that showed one would be showing a company that does not exist.
+ */
+const OPENING_STOCK: readonly OpeningStockLine[] = [
+  { material: 'RAW-FLOUR', plant: '1000', storageLocation: '0001', quantity: 8000 },
+  { material: 'RAW-SUGAR', plant: '1000', storageLocation: '0001', quantity: 2400 },
+  { material: 'RAW-FAT', plant: '1000', storageLocation: '0001', quantity: 1800 },
+  { material: 'RAW-COCOA', plant: '1000', storageLocation: '0001', quantity: 900 },
+  { material: 'PACK-CARTON', plant: '1000', storageLocation: '0001', quantity: 6000 },
+  { material: 'PACK-WRAP', plant: '1000', storageLocation: '0001', quantity: 40000 },
+  { material: 'SEMI-DOUGH', plant: '1000', storageLocation: '0001', quantity: 1200 },
+  { material: 'FG-CREAM', plant: '1000', storageLocation: '0001', quantity: 5000 },
+  { material: 'FG-CHOC', plant: '1000', storageLocation: '0001', quantity: 4000 },
+  { material: 'FG-WAFER', plant: '1000', storageLocation: '0001', quantity: 3000 },
+  { material: 'TRAD-JUICE', plant: '1000', storageLocation: '0001', quantity: 300 },
+  { material: 'FG-CHOC', plant: '2000', storageLocation: '0001', quantity: 2000 },
+  { material: 'FG-CREAM', plant: '2000', storageLocation: '0001', quantity: 2500 },
+  { material: 'TRAD-JUICE', plant: '2000', storageLocation: '0001', quantity: 500 },
+  { material: 'TRAD-CRATE', plant: '2000', storageLocation: '0001', quantity: 120 },
+];
+
+/**
+ * Put the opening stock on the shelves.
+ *
+ * One document per plant, and not because the movement could not carry both: it
+ * is because the clerk who posts it is restricted to one plant, and a document
+ * spanning two plants would need a poster whose reach covered both. The
+ * restriction is therefore on the path the movement takes, the same way it is
+ * for every receipt and issue that follows.
+ */
+async function postOpeningStock(client: string, timeline: DemoTimeline): Promise<number> {
+  let posted = 0;
+  const postingDate = dateIn(timeline, 0, 1);
+
+  for (const plant of [DEMO_STRUCTURE.manufacturingPlant, DEMO_STRUCTURE.distributionPlant]) {
+    const lines = OPENING_STOCK.filter((line) => line.plant === plant);
+    if (lines.length === 0) continue;
+
+    await withActingUser(client, clerkFor(plant), async (actor) => {
+      await postInitialStock(
+        {
+          client,
+          changedBy: DEMO_ACTOR,
+          postingDate,
+          documentDate: postingDate,
+          headerText: 'Opening stock',
+          requestKey: `DEMO-OPENING-STOCK-${plant}`,
+          lines: lines.map((line) => ({
+            materialNumber: line.material,
+            plant: line.plant,
+            storageLocation: line.storageLocation,
+            quantity: line.quantity,
+            entryUnit: materialUnit(line.material),
+          })),
+        },
+        { authorization: actor },
+      );
+    });
+    posted += 1;
+  }
+  return posted;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

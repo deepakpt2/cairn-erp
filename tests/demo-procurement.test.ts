@@ -96,8 +96,8 @@ describe('demo procurement, when the demo stands', () => {
   it('wrote the documents the plan says it wrote', async () => {
     if (!(await demoStands())) return;
     expect(await scalar(`select count(*) as n from purchase_order where client = '${CLIENT}'`)).toBe(18);
-    // Eighteen receipts and three consumable issues.
-    expect(await scalar(`select count(*) as n from material_document where client = '${CLIENT}'`)).toBe(21);
+    // Eighteen receipts, three consumable issues, and two initial stock entries.
+    expect(await scalar(`select count(*) as n from material_document where client = '${CLIENT}'`)).toBe(23);
     // Seventeen of the eighteen receipts were billed; the last was not.
     expect(await scalar(`select count(*) as n from supplier_invoice where client = '${CLIENT}'`)).toBe(17);
     expect(
@@ -111,6 +111,49 @@ describe('demo procurement, when the demo stands', () => {
         `select count(*) as n from journal_entry where client = '${CLIENT}' and origin_class is null`,
       ),
     ).toBe(1);
+  });
+
+  it('fills the shelves on the first day, before anything is bought', async () => {
+    if (!(await demoStands())) return;
+    // Movement 561: one document per plant, posted the day the books open. A
+    // company arrives with stock already on hand; the buying that follows adds
+    // to it rather than starting it.
+    const opening = await rows(`
+      select l.plant, count(*) as lines, sum(l.value::numeric) as value
+        from material_document d
+        join material_document_line l
+          on l.client = d.client and l.material_document_number = d.material_document_number
+       where d.client = '${CLIENT}' and l.movement_type = 'INITIAL_STOCK_ENTRY'
+       group by l.plant order by l.plant
+    `);
+    // Both plants, because a clerk's reach stops at one.
+    expect(opening.map((row) => String(row.plant))).toEqual(['1000', '2000']);
+    expect(opening.every((row) => Number(row.value) > 0)).toBe(true);
+
+    // Nothing moved before the books opened.
+    const earliest = await rows(`
+      select min(posting_date)::text as first from material_document where client = '${CLIENT}'
+    `);
+    expect(String(earliest[0]?.first)).toBe(buildDemoTimeline().startDate);
+  });
+
+  it('credits the initial stock to retained earnings, with no clearing account', async () => {
+    if (!(await demoStands())) return;
+    // The other side of an opening balance is equity, not GR/IR: there is
+    // nothing to clear, because no order was ever invoiced for this stock.
+    const openingJournals = await rows(`
+      select jl.gl_account, jl.debit_credit, sum(jl.amount_local::numeric) as amount
+        from material_document d
+        join material_document_line l
+          on l.client = d.client and l.material_document_number = d.material_document_number
+        join journal_entry_line jl
+          on jl.client = d.client and jl.document_number = d.journal_document_number
+       where d.client = '${CLIENT}' and l.movement_type = 'INITIAL_STOCK_ENTRY'
+       group by jl.gl_account, jl.debit_credit order by jl.gl_account
+    `);
+    const credited = openingJournals.filter((row) => String(row.debit_credit) === 'H');
+    expect(credited.map((row) => String(row.gl_account))).toEqual(['290000']);
+    expect(openingJournals.map((row) => String(row.gl_account))).not.toContain('210000');
   });
 
   it('balances: total debits equal total credits', async () => {
@@ -129,7 +172,8 @@ describe('demo procurement, when the demo stands', () => {
     if (!(await demoStands())) return;
     const ledger = await scalar(
       `select coalesce(sum(case when debit_credit = 'S' then amount_local::numeric else -amount_local::numeric end), 0) as n
-         from journal_entry_line where client = '${CLIENT}' and gl_account in ('120000', '120300')`,
+         from journal_entry_line where client = '${CLIENT}'
+           and gl_account in ('120000', '120100', '120200', '120300')`,
     );
     const stock = await scalar(
       `select coalesce(sum(stock_value::numeric), 0) as n from material_valuation where client = '${CLIENT}'`,
