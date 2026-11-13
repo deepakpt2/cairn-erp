@@ -619,3 +619,19 @@ reopened by a later phase.
 | Masters the demo must define itself | BOM usages, BOM statuses, BOM item categories, routing task list types, usages, statuses and control keys are empty in a new tenant, and no seed creates them; a BOM cannot be written without a usage and a routing cannot be written without a task list type. Tax codes are likewise empty and every purchase names one. The demo defines them; the product is left as it was. |
 | Master data is fictional | Partners, prices and tax rates are invented. The tax codes are explicitly **not** any real jurisdiction's rates. |
 | Databases | Only disposable `cairn_dp_*` databases. `cairn_b210`, `cairn_demo`, `cairn_acceptance`, `cairn_integration`, `cairn_hr_accept` are refused by name, in addition to the target guard every connection passes. |
+| Reconciliation | Twelve checks in `tests/demo-reconciliation.test.ts`, run against a database all nine phases completed in, skipped with a comment anywhere else. Where a figure can be derived from the documents it is derived from them and the two sides are asserted equal — a dataset that drifts fails even though no single phase did anything wrong. |
+| Document volume | 152 connected documents: 141 a person can open (20 purchase orders, 19 supplier invoices, 11 outgoing payments, 52 goods movements, 9 production orders, 6 sales orders, 5 deliveries, 4 billing documents, 3 incoming payments, 2 inspection lots, 2 usage decisions, 8 inspection results) plus 11 journals posted by hand. The 88 accounting documents those transactions generated are not counted twice; counting them too gives 240, still inside the task's 150–250 band, so the assertion does not depend on where the line is drawn. |
+| Restart matrix | `docs/demo-restart-and-safety.md`, asserted by `tests/demo-safety-matrix.test.ts`. Each of the nine phases states what it writes and how a resumed run recognises it, and each statement names the source that guarantees it, so a row cannot outlive a refactor that removed the mechanism. |
+| Installation guide | `docs/fresh-server-installation.md`. Fresh host to running deployment: prerequisites, the external `proxy` network, `.env` keys, the demo decision, verification, first sign-in, routine operations, teardown, and a troubleshooting table. |
+| Verified state | A full nine-phase run reconciles: trial balance nets to zero across 32 accounts, stock derived from posted movements equals `stock_quantity` with zero mismatches, GR/IR is nil, AR/AP subledgers equal the general ledger, and no document or journal sits outside the three open periods. |
+
+## 11. Operator documents
+
+| Document | Audience | What it is |
+|---|---|---|
+| `docs/fresh-server-installation.md` | Whoever installs the product | Fresh host to running deployment, with and without the demo dataset. |
+| `docs/demo-restart-and-safety.md` | Whoever is staring at a failed provisioning run | The ledger, the four dispositions, the nine phases, the five refusals, and a decision tree for what to do next. |
+
+A static decision belongs in §10 of this file, because this file is read at the start
+of every session. A procedure belongs in one of the two documents above, because
+someone will follow it at a terminal rather than in a code review.
