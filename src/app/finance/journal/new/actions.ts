@@ -56,7 +56,7 @@ export async function postJournalAction(_previous: PostState, formData: FormData
       reference: read('reference') || undefined,
       headerText: read('headerText') || undefined,
       lines,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath('/finance/journal');
     revalidatePath('/config/number-ranges');
     return {

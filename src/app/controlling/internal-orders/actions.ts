@@ -59,7 +59,7 @@ export async function saveInternalOrderAction(
           statistical: Boolean(input.statistical),
           isPostingLocked: Boolean(input.isPostingLocked),
           markedForDeletion: Boolean(input.markedForDeletion),
-        })
+        }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } })
       : await createInternalOrder({
           client: session.user.client,
           changedBy: session.user.username,
@@ -76,7 +76,7 @@ export async function saveInternalOrderAction(
           statistical: input.statistical === undefined ? undefined : Boolean(input.statistical),
           sourceOrderNumber: String(input.sourceOrderNumber ?? ''),
           requestKey: String(input.requestKey ?? '') || undefined,
-        });
+        }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(INTERNAL_ORDER_ROUTE);
     return { ok: true, orderNumber: saved.orderNumber, message: `Internal order ${saved.orderNumber} saved. Nothing was posted.` };
   } catch (error) {

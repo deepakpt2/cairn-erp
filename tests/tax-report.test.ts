@@ -3,8 +3,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { postJournalEntry, reverseJournalEntry } from '../src/platform/posting';
-import { executeTaxReport } from '../src/modules/finance/tax-report';
+import { executeTaxReport as executeTaxReportService } from '../src/modules/finance/tax-report';
 import { createTenant, defineTestRanges, destroyTenant, seedAccounts } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const executeTaxReport = financePoster(executeTaxReportService);
 
 const ACTOR = 'TAXRPT-TEST';
 let client = '';

@@ -74,6 +74,8 @@ export interface GrIrResult {
 
 import { and, eq, sql } from 'drizzle-orm';
 
+import { hasOrgAccess } from '../../platform/auth/session';
+import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
@@ -103,7 +105,7 @@ function classify(openQty: number, openValue: number): GrIrClassification {
  */
 export async function executeGrIrAnalysis(input: {
   client: string; changedBy: string; selection: GrIrSelection;
-}): Promise<GrIrResult> {
+}, options: { authorization?: ServiceAuthorityContext } = {}): Promise<GrIrResult> {
   const s = input.selection;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s.keyDate)) {
     throw new GrIrReclassError(`Key date ${s.keyDate} is not a calendar date.`);
@@ -120,6 +122,20 @@ export async function executeGrIrAnalysis(input: {
   }
 
   return withTenant(input.client, async (tx) => {
+    // A reclassification moves a balance the company owes or is owed, and in a
+    // productive run it posts accruals. It is therefore made by somebody: a session
+    // that stands, the authority to reclassify, and a Company Code reach that covers
+    // the company whose open goods and invoices are being read.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, options.authorization, GRIR_RECLASS_CAPABILITY, { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new GrIrReclassError(authority.refusal.message + ' ' + authority.refusal.remedy);
+    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', s.companyCode)) {
+      throw new GrIrReclassError(
+        `Your Company Code scope does not cover company code ${s.companyCode}. Ask an administrator to extend your Company Code scope, then repeat the action.`
+      );
+    }
+
     const [existing] = await tx.select().from(grirReclassRun).where(and(
       eq(grirReclassRun.client, input.client), eq(grirReclassRun.requestKey, s.requestKey),
     ));

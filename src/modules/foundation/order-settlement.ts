@@ -11,6 +11,8 @@
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 
+import { hasOrgAccess } from '../../platform/auth/session';
+import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { periodWindows } from '../../platform/periods';
 import { derivePosition } from '../../platform/periods';
@@ -306,7 +308,22 @@ async function settleOne(
   run: RunOptions,
   mode: 'INDIVIDUAL' | 'COLLECTIVE',
   row: typeof internalOrder.$inferSelect,
+  authorization?: ServiceAuthorityContext,
 ): Promise<{ order: SettlementOrderResult; document: SettlementDocumentRef | null; eligible: boolean }> {
+  // Settlement moves what an order collected onto the receivers its rules name.
+  // Whether or not the run posts, it is answered for by somebody: a session that
+  // stands, the authority to settle, and a Company Code reach that covers the
+  // company the order belongs to.
+  const authority = await verifyServiceAuthorityInTx(
+    tx, input.client, authorization, ORDER_SETTLEMENT_CAPABILITY, { requirePlantScope: false },
+  );
+  if (!authority.ok) throw new OrderSettlementError(authority.refusal.message, authority.refusal.remedy);
+  if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', row.companyCode)) {
+    throw new OrderSettlementError(
+      `Your Company Code scope does not cover company code ${row.companyCode}.`,
+      'Ask an administrator to extend your Company Code scope, then repeat the action.',
+    );
+  }
   // The profile assignment, the allocation assignment and the distribution rule are one condition, so
   // they are read under the key the rule screen holds while it writes them: an update cannot post
   // against a profile from one save and a rule from the next. A test run reports rather than decides,
@@ -793,13 +810,14 @@ async function settleRows(
   run: RunOptions,
   mode: 'INDIVIDUAL' | 'COLLECTIVE',
   rows: Array<typeof internalOrder.$inferSelect>,
+  authorization?: ServiceAuthorityContext,
 ): Promise<SettlementRunResult> {
   const orders: SettlementOrderResult[] = [];
   const documents: SettlementDocumentRef[] = [];
   let eligible = 0;
   for (const row of rows) {
     try {
-      const settled = await withTenant(input.client, (tx) => settleOne(tx, input, run, mode, row));
+      const settled = await withTenant(input.client, (tx) => settleOne(tx, input, run, mode, row, authorization));
       orders.push(settled.order);
       if (settled.document) documents.push(settled.document);
       if (settled.eligible) eligible += 1;
@@ -831,7 +849,10 @@ async function settleRows(
   return finish(mode, run, outcome, orders, documents, runMessage(run, outcome, orders), eligible);
 }
 
-export async function settleOrder(input: OrderSettlementInput): Promise<SettlementRunResult> {
+export async function settleOrder(
+  input: OrderSettlementInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
+): Promise<SettlementRunResult> {
   const run = requireRun(input);
   const orderNumber = text(input.orderNumber);
   if (!orderNumber) throw new OrderSettlementError('KO88 requires one order number.');
@@ -857,11 +878,14 @@ export async function settleOrder(input: OrderSettlementInput): Promise<Settleme
     return { row };
   }).then(async (found) => {
     if ('outcome' in found) return found;
-    return settleRows(input, run, 'INDIVIDUAL', [found.row]);
+    return settleRows(input, run, 'INDIVIDUAL', [found.row], options.authorization);
   });
 }
 
-export async function settleOrdersCollective(input: OrderSettlementInput): Promise<SettlementRunResult> {
+export async function settleOrdersCollective(
+  input: OrderSettlementInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
+): Promise<SettlementRunResult> {
   const run = requireRun(input);
   const orderNumber = text(input.orderNumber);
   const orderFrom = text(input.orderFrom);
@@ -906,5 +930,5 @@ export async function settleOrdersCollective(input: OrderSettlementInput): Promi
   if (rows.length === 0) {
     return finish('COLLECTIVE', run, 'NO_ELIGIBLE_ORDERS', [], [], 'No internal order matches the selection. This is not an invalid order number. Nothing was posted.', 0);
   }
-  return settleRows(input, run, 'COLLECTIVE', rows);
+  return settleRows(input, run, 'COLLECTIVE', rows, options.authorization);
 }

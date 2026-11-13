@@ -58,6 +58,8 @@ export interface TaxReportResult {
 
 import { and, eq, sql } from 'drizzle-orm';
 
+import { hasOrgAccess } from '../../platform/auth/session';
+import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import { getCompanyCode, derivePosition } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
@@ -88,7 +90,7 @@ interface TaxLineRow {
  */
 export async function executeTaxReport(input: {
   client: string; changedBy: string; selection: TaxReportSelection;
-}): Promise<TaxReportResult> {
+}, options: { authorization?: ServiceAuthorityContext } = {}): Promise<TaxReportResult> {
   const { selection } = input;
   const from = selection.postingDateFrom;
   const to = selection.postingDateTo;
@@ -100,6 +102,20 @@ export async function executeTaxReport(input: {
 
   return withTenant(input.client, async (tx) => {
     const company = await getCompanyCode(tx, input.client, selection.companyCode);
+    // A return states what the company owes the tax authority, and a productive
+    // run marks the lines it reports on. It is run by somebody: a session that
+    // stands, the authority to report tax, and a Company Code reach that covers
+    // the company whose tax is being reported.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, options.authorization, TAX_REPORT_CAPABILITY, { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new TaxReportError(authority.refusal.message + ' ' + authority.refusal.remedy);
+    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', selection.companyCode)) {
+      throw new TaxReportError(
+        `Your Company Code scope does not cover company code ${selection.companyCode}. Ask an administrator to extend your Company Code scope, then repeat the action.`
+      );
+    }
+
     if (!company?.isActive) {
       throw new TaxReportError(`Company code ${selection.companyCode} is not active or does not exist.`);
     }

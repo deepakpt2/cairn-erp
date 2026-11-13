@@ -10,6 +10,8 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 
+import { hasOrgAccess } from '../../platform/auth/session';
+import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { getCompanyCode } from '../../platform/periods';
@@ -215,7 +217,7 @@ export async function proposeDunningRun(input: {
   client: string; changedBy: string;
   runDate: string; runId: string; dunningDate: string; postedThrough: string;
   companyCodes: string[]; customerFrom?: string; customerTo?: string;
-}): Promise<DunningRunView> {
+}, options: { authorization?: ServiceAuthorityContext } = {}): Promise<DunningRunView> {
   judgeDate('Run date', input.runDate);
   judgeDate('Dunning date', input.dunningDate);
   judgeDate('Documents posted up to', input.postedThrough);
@@ -232,6 +234,24 @@ export async function proposeDunningRun(input: {
     throw new DunningError('Name at least one company code.', 'Restrict the run to the companies it may process.');
   }
   return withTenant(input.client, async (tx) => {
+    // A dunning run reads what the company's customers owe and, when it is
+    // finalized, writes a notice against every one of them. That is a company's
+    // business, so the run is proposed by somebody: a session that stands, the
+    // authority to dun, and a Company Code reach covering every company the run
+    // will look at.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, options.authorization, DUNNING_CAPABILITY, { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new DunningError(authority.refusal.message, authority.refusal.remedy);
+    for (const companyCode of input.companyCodes) {
+      if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', companyCode)) {
+        throw new DunningError(
+          `Your Company Code scope does not cover company code ${companyCode}.`,
+          'Ask an administrator to extend your Company Code scope, then repeat the action.',
+        );
+      }
+    }
+
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/dunning`}, 0))`);
     const [existing] = await tx.select().from(dunningRun).where(and(
       eq(dunningRun.client, input.client), eq(dunningRun.runDate, input.runDate), eq(dunningRun.runId, input.runId),
@@ -395,7 +415,7 @@ export async function excludeDunningAccount(input: {
 export async function finalizeDunningRun(input: {
   client: string; changedBy: string;
   runDate: string; runId: string; confirmed: boolean;
-}): Promise<DunningRunView> {
+}, options: { authorization?: ServiceAuthorityContext } = {}): Promise<DunningRunView> {
   if (!input.confirmed) {
     throw new DunningError('The dunning run stands unconfirmed.', 'Tick the confirmation, then finalize the run.');
   }
@@ -412,6 +432,27 @@ export async function finalizeDunningRun(input: {
     }
     if (run.status !== 'PROPOSED') {
       throw new DunningError(`Run ${input.runId} of ${input.runDate} stands ${run.status}; only a proposed run finalizes.`);
+    }
+
+    // Finalizing writes the notice, and levels advance only here. The run carries
+    // the company codes it was proposed for, and the actor's reach has to cover
+    // every one of them - not merely the company the first account happens to be in.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, options.authorization, DUNNING_CAPABILITY, { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new DunningError(authority.refusal.message, authority.refusal.remedy);
+    const runCompanies = await tx.select().from(dunningRunCompany).where(and(
+      eq(dunningRunCompany.client, input.client),
+      eq(dunningRunCompany.runDate, input.runDate),
+      eq(dunningRunCompany.runId, input.runId),
+    ));
+    for (const row of runCompanies) {
+      if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', row.companyCode)) {
+        throw new DunningError(
+          `Your Company Code scope does not cover company code ${row.companyCode}.`,
+          'Ask an administrator to extend your Company Code scope, then repeat the action.',
+        );
+      }
     }
 
     const view = await loadRunView(tx, input.client, input.runDate, input.runId);

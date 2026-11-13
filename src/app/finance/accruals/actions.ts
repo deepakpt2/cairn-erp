@@ -51,6 +51,7 @@ export async function postAccrualAction(_previous: AccrualState, formData: FormD
       headerText: read('headerText') || undefined,
       reversalDate: read('reversalDate'), reversalReason: read('reversalReason'),
       lines,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath('/finance/accruals');
     return {

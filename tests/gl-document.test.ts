@@ -3,8 +3,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { reverseJournalEntry } from '../src/platform/posting';
-import { postGlDocument } from '../src/modules/finance/gl-document';
+import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const postGlDocument = financePoster(postGlDocumentService);
 
 const ACTOR = 'FB50-TEST';
 let client = '';

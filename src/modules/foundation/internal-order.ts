@@ -9,6 +9,8 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { hasOrgAccess } from '../../platform/auth/session';
+import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
@@ -231,6 +233,7 @@ function snapshot(row: {
 
 export async function createInternalOrder(
   raw: CreateInternalOrderInput,
+  options: { authorization?: ServiceAuthorityContext } = {},
 ): Promise<{ orderNumber: string }> {
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
@@ -245,6 +248,21 @@ export async function createInternalOrder(
     );
   }
   const orderNumber = await withTenant(input.client, async (tx) => {
+    // An internal order collects the company's costs and settles them somewhere,
+    // so it is created by somebody: a session that stands, the authority to
+    // maintain orders, and a Company Code reach that covers the company the order
+    // will be charged to.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, options.authorization, INTERNAL_ORDER_MAINTAIN_CAPABILITY, { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new InternalOrderError(authority.refusal.message, authority.refusal.remedy);
+    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', input.companyCode)) {
+      throw new InternalOrderError(
+        `Your Company Code scope does not cover company code ${input.companyCode}.`,
+        'Ask an administrator to extend your Company Code scope, then repeat the action.',
+      );
+    }
+
     if (input.requestKey) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/internal_order/request/${input.requestKey}`}, 0))`);
       const [existing] = await tx.select().from(internalOrder).where(and(
@@ -324,6 +342,7 @@ export async function createInternalOrder(
 
 export async function changeInternalOrder(
   raw: CreateInternalOrderInput & { orderNumber: string },
+  options: { authorization?: ServiceAuthorityContext } = {},
 ): Promise<{ orderNumber: string }> {
   const { orderNumber: supplied, ...document } = raw;
   const parsed = documentInput.safeParse({ ...document, orderNumber: '' });
@@ -335,6 +354,21 @@ export async function changeInternalOrder(
   const number = supplied.trim();
   if (!number) throw new InternalOrderError('An order number is required.');
   await withTenant(input.client, async (tx) => {
+    // A changed order is still an order somebody is answerable for: the same
+    // session, the same authority, and the same Company Code reach the create
+    // asks for.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, options.authorization, INTERNAL_ORDER_MAINTAIN_CAPABILITY,
+      { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new InternalOrderError(authority.refusal.message, authority.refusal.remedy);
+    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', input.companyCode)) {
+      throw new InternalOrderError(
+        `Your Company Code scope does not cover company code ${input.companyCode}.`,
+        'Ask an administrator to extend your Company Code scope, then repeat the action.',
+      );
+    }
+
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/internal_order/${number}`}, 0))`);
     const [before] = await tx.select().from(internalOrder).where(and(
       eq(internalOrder.client, input.client), eq(internalOrder.orderNumber, number),

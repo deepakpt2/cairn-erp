@@ -214,8 +214,13 @@ const ROLES = [
   {
     code: 'DEMO_CONTROLLER',
     name: 'Controller',
-    description: 'Costing, profitability and reporting',
-    capabilities: ['COST.*', 'FIN.RPT.*', 'AUDIT.TRAIL.VIEW'],
+    description: 'Costing, profitability, internal orders and their settlement',
+    // `CO.*` is what an internal order and its settlement ask for: the controller
+    // maintains the order, keeps its budget, and runs the settlement that moves
+    // what the order collected onto the receivers its rules name. `COST.*` is the
+    // cost-centre and activity side of the same job, and the two are not the same
+    // pattern even though they read as though they might be.
+    capabilities: ['CO.*', 'COST.*', 'FIN.RPT.*', 'AUDIT.TRAIL.VIEW'],
   },
   {
     code: 'DEMO_QUALITY',

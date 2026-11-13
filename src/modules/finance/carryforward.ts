@@ -76,6 +76,7 @@ export class CarryforwardError extends Error {
 
 import { sql } from 'drizzle-orm';
 import { and, eq } from 'drizzle-orm';
+import { type ServiceAuthorityContext } from '@/platform/auth/service-authority';
 import { withTenant } from '@/platform/db/client';
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
 import { getCompanyCode } from '@/platform/periods';
@@ -145,6 +146,8 @@ async function retainedEarningsDeterminations(client: string, chart: string): Pr
 
 export async function executeCarryforward(input: {
   client: string; changedBy: string; selection: CarryforwardSelection;
+  /** Who is closing the year. Passed down to the G/L posting the run makes. */
+  authorization?: ServiceAuthorityContext;
 }): Promise<CarryforwardRunView> {
   const { client, changedBy } = input;
   const s = { ...input.selection, companyCodes: [...new Set(input.selection.companyCodes.map((c) => c.trim()).filter(Boolean))] };
@@ -255,7 +258,7 @@ export async function executeCarryforward(input: {
             glAccount: l.glAccount, debitCredit: l.debitCredit, amount: l.amount,
             profitCenter: l.profitCenter, lineText: l.lineText,
           })),
-        });
+        }, { authorization: input.authorization });
         transferDocument = posted.displayNumber || posted.documentNumber;
         transferDocuments.push(transferDocument);
       }

@@ -5,8 +5,14 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { postVendorInvoice } from '../src/modules/finance/vendor-invoice';
 import { postVendorCreditMemo } from '../src/modules/finance/vendor-credit-memo';
-import { getPayables, postOutgoingPayment } from '../src/modules/finance/outgoing-payment';
+import { getPayables, postOutgoingPayment as postOutgoingPaymentService } from '../src/modules/finance/outgoing-payment';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const postOutgoingPayment = financePoster(postOutgoingPaymentService);
 
 const ACTOR = 'SCR078_F53_TEST';
 

@@ -19,6 +19,8 @@
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import { hasOrgAccess } from '../../platform/auth/session';
+import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
@@ -242,7 +244,8 @@ export async function postOutgoingPayment(input: {
   /** Remainder of the payment left standing as an open vendor debit. */
   onAccountAmount?: number;
   items: PaymentItemRef[];
-}): Promise<PostedOutgoingPayment> {
+}, options: { authorization?: ServiceAuthorityContext } = {}
+): Promise<PostedOutgoingPayment> {
   if (input.items.length === 0 && !(Number(input.onAccountAmount ?? 0) > 0)) {
     throw new OutgoingPaymentError('Select at least one open item to settle.', 'Tick the items this payment settles, or enter an on-account amount.');
   }
@@ -258,6 +261,21 @@ export async function postOutgoingPayment(input: {
   }
   return withTenant(input.client, async (tx) => {
     const replay = await byRequestKey(tx, input.client, input.requestKey);
+    // The company's money leaves on this document, so it is paid by somebody: a
+    // session that stands, the authority to pay, and a Company Code reach that covers
+    // the company the vendor was bought from. A payment is a company's, not a
+    // plant's — no plant grant is asked for.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, options.authorization, OUTGOING_PAYMENT_CAPABILITY, { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new OutgoingPaymentError(authority.refusal.message, authority.refusal.remedy);
+    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', input.companyCode)) {
+      throw new OutgoingPaymentError(
+        `Your Company Code scope does not cover company code ${input.companyCode}.`,
+        'Ask an administrator to extend your Company Code scope, then repeat the action.',
+      );
+    }
+
     if (replay) return replay;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/outpay/${input.companyCode}/${input.vendorNumber}`}, 0))`);
     const replayLocked = await byRequestKey(tx, input.client, input.requestKey);

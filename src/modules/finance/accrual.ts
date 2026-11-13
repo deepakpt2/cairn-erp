@@ -50,6 +50,7 @@ export interface AccrualDocumentView {
 
 import { and, eq, sql } from 'drizzle-orm';
 
+import { type ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import { postGlDocument, GlDocumentError, type GlDocumentInput } from './gl-document';
 import { reverseDocument, DocumentReversalError } from './document-reversal';
@@ -58,6 +59,8 @@ import { accrualDocument, journalEntry, journalEntryLine, reversalReason } from 
 export interface AccrualPostInput {
   client: string;
   changedBy: string;
+  /** Who is posting. Passed to the G/L posting, which is the service that judges. */
+  authorization?: ServiceAuthorityContext;
   requestKey: string;
   companyCode: string;
   documentDate: string;
@@ -115,7 +118,9 @@ export async function postAccrualDocument(input: AccrualPostInput) {
     },
   };
   try {
-    const posted = await postGlDocument(glInput);
+    // The accrual rides the G/L posting's transaction, so it is the G/L posting
+    // that asks who is acting — with the authority this caller was given.
+    const posted = await postGlDocument(glInput, { authorization: input.authorization });
     const view = await getAccrualDocument(input.client, input.companyCode, posted.documentNumber, posted.fiscalYear);
     if (!view) throw new AccrualError('The posted accrual document could not be read back.');
     return view;

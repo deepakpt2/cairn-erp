@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { postGlDocument } from '../src/modules/finance/gl-document';
+import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import { postJournalEntry } from '../src/platform/posting';
 import { resetClearing } from '../src/modules/finance/clearing-reset';
 import {
@@ -19,6 +19,12 @@ import {
   type GlClearingItemRef,
 } from '../src/modules/finance/gl-clearing';
 import { closeDb, createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const postGlDocument = financePoster(postGlDocumentService);
 
 const ACTOR = 'SCR114-TEST';
 const TODAY = '2026-05-20';

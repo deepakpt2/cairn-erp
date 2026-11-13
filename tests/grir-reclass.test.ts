@@ -2,8 +2,14 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { executeGrIrAnalysis } from '../src/modules/finance/grir-reclass';
+import { executeGrIrAnalysis as executeGrIrAnalysisService } from '../src/modules/finance/grir-reclass';
 import { createTenant, defineTestRanges, destroyTenant, seedAccounts } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const executeGrIrAnalysis = financePoster(executeGrIrAnalysisService);
 
 const ACTOR = 'GRIR-TEST';
 let client = '';

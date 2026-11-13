@@ -9,11 +9,17 @@ import {
 } from '../src/modules/purchasing/invoice-verification';
 import { createAsset, deactivateAsset, getAsset } from '../src/modules/finance/asset-master';
 import { getAssetTransactions } from '../src/modules/finance/asset-acquisition';
-import { createInternalOrder } from '../src/modules/foundation/internal-order';
+import { createInternalOrder as createInternalOrderService } from '../src/modules/foundation/internal-order';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { costCenter } from '../src/modules/foundation/schema';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const createInternalOrder = financePoster(createInternalOrderService);
 
 /**
  * Account-assigned invoice verification. An item that is charged to a cost

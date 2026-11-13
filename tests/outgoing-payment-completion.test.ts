@@ -4,8 +4,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { postVendorInvoice } from '../src/modules/finance/vendor-invoice';
-import { getPayables, postOutgoingPayment } from '../src/modules/finance/outgoing-payment';
+import { getPayables, postOutgoingPayment as postOutgoingPaymentService } from '../src/modules/finance/outgoing-payment';
 import { createTenant, dateFromToday, defineTestRanges, destroyTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const postOutgoingPayment = financePoster(postOutgoingPaymentService);
 
 // The terms give 2 percent within ten days of the document date, and `getReceivables` judges that
 // window against today (`incoming-payment.ts:100`, `outgoing-payment.ts:154`), so the fixture dates

@@ -13,8 +13,8 @@ import { closeDb, createTenant, defineTestRanges, destroyTenant, sql, withTenant
 import { ensureSettlementMasters } from './settlement-masters';
 import { defineRange } from '../src/platform/numbering';
 import { postJournalEntry } from '../src/platform/posting';
-import { createInternalOrder } from '../src/modules/foundation/internal-order';
-import { settleOrder } from '../src/modules/foundation/order-settlement';
+import { createInternalOrder as createInternalOrderService } from '../src/modules/foundation/internal-order';
+import { settleOrder as settleOrderService } from '../src/modules/foundation/order-settlement';
 import { saveOrderSettlementConfiguration } from '../src/modules/foundation/settlement-configuration';
 import {
   assignOrderTypeSettlementProfile,
@@ -29,6 +29,13 @@ import {
   saveSettlementProfile,
   structureDependents,
 } from '../src/modules/foundation/settlement-configuration-masters';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const createInternalOrder = financePoster(createInternalOrderService);
+const settleOrder = financePoster(settleOrderService);
 
 const ACTOR = 'SETCFG_TEST';
 const clients: string[] = [];

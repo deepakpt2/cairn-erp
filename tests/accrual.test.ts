@@ -2,10 +2,14 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import {
-  executeAccrualReversal, listDueAccruals, postAccrualDocument,
-} from '../src/modules/finance/accrual';
+import { executeAccrualReversal, listDueAccruals, postAccrualDocument as postAccrualDocumentService } from '../src/modules/finance/accrual';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const postAccrualDocument = financeInputPoster(postAccrualDocumentService);
 
 const ACTOR = 'ACCRUAL-TEST';
 let client = '';

@@ -63,7 +63,7 @@ export async function postPaymentAction(
       valueDate: text(form, 'valueDate') || undefined,
       requestKey: text(form, 'requestKey') || crypto.randomUUID(),
       items,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,

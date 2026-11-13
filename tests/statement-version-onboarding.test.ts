@@ -5,7 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import { calculateBalanceSheet } from '../src/modules/finance/balance-sheet';
 import { ledgerJournalStatus } from '../src/modules/finance/ledger-journal';
 import { calculateProfitLoss } from '../src/modules/finance/profit-loss';
-import { postGlDocument } from '../src/modules/finance/gl-document';
+import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import {
   TRIAL_BALANCE_CAPABILITY, calculateTrialBalance, listStatementVersions,
   type TrialBalanceSelection,
@@ -13,6 +13,12 @@ import {
 import { STANDARD_PACKAGE_VERSION, STANDARD_STATEMENT_VERSION, applyStandardPackage } from '../src/modules/foundation/standard-config';
 
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const postGlDocument = financePoster(postGlDocumentService);
 
 /**
  * SCR-106 stage 3 — the standard financial statement version is stood by the

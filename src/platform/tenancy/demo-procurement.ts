@@ -47,6 +47,9 @@ import {
 } from '../../modules/inventory/material-period-control';
 import { materialUnit, PURCHASE_PRICES, STANDARD_TAX_CODE } from './demo-masters';
 import { withActingUser } from './demo-people';
+
+/** The accountant: posts the opening balances and banks the suppliers' money. */
+const ACCOUNTANT = 'demo.accountant';
 import { DEMO_ACTOR, DEMO_IDENTITY, DEMO_STRUCTURE } from './demo-organisation';
 import type { DemoTimeline } from './demo-provisioning';
 
@@ -532,9 +535,12 @@ async function ensureMaterialPeriod(
  * document back rather than a second opening balance.
  */
 async function postOpeningBalances(client: string, timeline: DemoTimeline): Promise<string | null> {
-  const posted = await postGlDocument({
+  // What the company owned and owed before the books opened is a journal, and a
+  // journal is posted by the accountant — the same person who banks the money in
+  // every phase after this one.
+  const posted = await withActingUser(client, ACCOUNTANT, (actor) => postGlDocument({
     client,
-    changedBy: DEMO_ACTOR,
+    changedBy: ACCOUNTANT,
     requestKey: 'DEMO-OPENING-BALANCES',
     companyCode: DEMO_STRUCTURE.companyCode,
     documentDate: timeline.startDate,
@@ -544,7 +550,7 @@ async function postOpeningBalances(client: string, timeline: DemoTimeline): Prom
     reference: 'OPENING',
     headerText: 'Opening balances',
     lines: openingLines(),
-  });
+  }, { authorization: actor }));
   return posted.displayNumber;
 }
 
@@ -894,9 +900,10 @@ async function runPayments(client: string, timeline: DemoTimeline, period: numbe
     if (!(amount > 0)) continue;
 
     const postingDate = dateIn(timeline, plan.period, plan.day);
-    await postOutgoingPayment({
+    // Banked by the accountant, in the company code they were granted.
+    await withActingUser(client, ACCOUNTANT, (actor) => postOutgoingPayment({
       client,
-      changedBy: DEMO_ACTOR,
+      changedBy: ACCOUNTANT,
       vendorNumber: plan.supplier,
       companyCode: DEMO_STRUCTURE.companyCode,
       documentDate: postingDate,
@@ -908,7 +915,7 @@ async function runPayments(client: string, timeline: DemoTimeline, period: numbe
       reference: plan.key,
       requestKey: `DEMO-PAY-${plan.key}`,
       items,
-    });
+    }, { authorization: actor }));
     posted += 1;
   }
   return posted;

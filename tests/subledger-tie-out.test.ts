@@ -11,11 +11,17 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { postGlDocument } from '../src/modules/finance/gl-document';
+import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import {
   calculateSubledgerTie, SubledgerTieError, type SubledgerTieSelection,
 } from '../src/modules/finance/subledger-tie-out';
 import { closeDb, createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const postGlDocument = financePoster(postGlDocumentService);
 
 const ACTOR = 'SCR115-TEST';
 let tenant: TestTenant | undefined;

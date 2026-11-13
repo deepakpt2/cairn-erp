@@ -13,6 +13,10 @@
  */
 import { and, eq } from 'drizzle-orm';
 
+import { hasOrgAccess } from '../../platform/auth/session';
+import {
+  type ServiceAuthorityContext, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode, PeriodError } from '../../platform/periods';
 import {
@@ -103,7 +107,10 @@ async function replayResult(tx: Tx, client: string, requestKey: string): Promise
  * Post one directly entered G/L document, or return the document a
  * previous submission with the same request key produced.
  */
-export async function postGlDocument(input: GlDocumentInput): Promise<PostedJournal> {
+export async function postGlDocument(
+  input: GlDocumentInput,
+  options: { tx?: Tx; authorization?: ServiceAuthorityContext } = {},
+): Promise<PostedJournal> {
   if (!input.requestKey?.trim()) {
     throw new GlDocumentError('A request key is required.', 'Reload the entry screen, then post again.');
   }
@@ -136,7 +143,24 @@ export async function postGlDocument(input: GlDocumentInput): Promise<PostedJour
     }
   }
 
-  return withTenant(input.client, async (tx) => {
+  const post = async (tx: Tx): Promise<PostedJournal> => {
+    // A journal moves the company's money, so it is written by somebody: a session
+    // that stands, the authority to post, and a Company Code reach that covers the
+    // company the document is posted into. The screen asks before it calls — the
+    // service asks again, because it can also be reached from a closing run, a
+    // reclassification, or a provisioning step, and those have to answer too.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, input.client, options.authorization, GL_DOCUMENT_CAPABILITY,
+      { requirePlantScope: false },
+    );
+    if (!authority.ok) throw new GlDocumentError(authority.refusal.message, authority.refusal.remedy);
+    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', input.companyCode)) {
+      throw new GlDocumentError(
+        `Your Company Code scope does not cover company code ${input.companyCode}.`,
+        'Ask an administrator to extend your Company Code scope, then repeat the action.',
+      );
+    }
+
     const replay = await replayResult(tx, input.client, input.requestKey);
     if (replay) return replay;
 
@@ -301,5 +325,10 @@ export async function postGlDocument(input: GlDocumentInput): Promise<PostedJour
       documentNumber: posted.documentNumber, fiscalYear: posted.fiscalYear,
     });
     return posted;
-  });
+  };
+
+  // A caller that already holds a transaction — a carryforward, a reclassification —
+  // posts inside it, so the document and the run that produced it stand or fall
+  // together. A caller with no transaction gets one of its own.
+  return options.tx ? post(options.tx) : withTenant(input.client, post);
 }

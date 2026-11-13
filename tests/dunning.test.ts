@@ -4,10 +4,15 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
-import {
-  cancelDunningRun, excludeDunningAccount, finalizeDunningRun, proposeDunningRun,
-} from '../src/modules/finance/dunning';
+import { cancelDunningRun, excludeDunningAccount, finalizeDunningRun as finalizeDunningRunService, proposeDunningRun as proposeDunningRunService } from '../src/modules/finance/dunning';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const finalizeDunningRun = financePoster(finalizeDunningRunService);
+const proposeDunningRun = financePoster(proposeDunningRunService);
 
 const ACTOR = 'SCR074_F150_TEST';
 

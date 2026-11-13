@@ -6,8 +6,14 @@ import {
   transferGlAccounts, type GlAccountTransferSelection,
 } from '../src/modules/finance/gl-account-transfer';
 import { getJournalItems } from '../src/modules/finance/journal-items';
-import { postGlDocument } from '../src/modules/finance/gl-document';
+import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const postGlDocument = financePoster(postGlDocumentService);
 
 const ACTOR = 'FS15-TEST';
 const TARGET = '2000';

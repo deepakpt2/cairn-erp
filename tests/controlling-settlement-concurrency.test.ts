@@ -15,12 +15,21 @@ import { and, closeDb, createTenant, db, defineTestRanges, destroyTenant, eq, sq
 import { type Tx } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { postJournalEntry } from '../src/platform/posting';
-import { changeInternalOrder, createInternalOrder } from '../src/modules/foundation/internal-order';
-import { settleOrder, settleOrdersCollective } from '../src/modules/foundation/order-settlement';
+import { changeInternalOrder as changeInternalOrderService, createInternalOrder as createInternalOrderService } from '../src/modules/foundation/internal-order';
+import { settleOrder as settleOrderService, settleOrdersCollective as settleOrdersCollectiveService } from '../src/modules/foundation/order-settlement';
 import { createPlanRevaluationOrder } from '../src/modules/foundation/plan-revaluation';
 import { saveOrderSettlementConfiguration } from '../src/modules/foundation/settlement-configuration';
 import { ensureSettlementMasters } from './settlement-masters';
 import { internalOrder } from '../src/modules/foundation/schema';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const changeInternalOrder = financePoster(changeInternalOrderService);
+const createInternalOrder = financePoster(createInternalOrderService);
+const settleOrder = financePoster(settleOrderService);
+const settleOrdersCollective = financePoster(settleOrdersCollectiveService);
 
 const ACTOR = 'CONCUR_TEST';
 const clients: string[] = [];

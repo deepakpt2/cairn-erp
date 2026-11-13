@@ -12,6 +12,7 @@
  *
  * The real pages are rendered, the real actions are called, and `enqueue_entry` is read back.
  */
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { and, eq, sql } from 'drizzle-orm';
 import * as React from 'react';
@@ -47,15 +48,12 @@ vi.mock('@/platform/auth/current', async (original) => {
 });
 
 import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
+import { authOrgRestriction, role, roleCapability, userRole } from '@/platform/tables/security';
 import { defineRange } from '@/platform/numbering';
 import { derivePosition } from '@/platform/periods';
 import { releaseChangeLock } from '@/platform/lock/enqueue';
 import { controllingArea, controllingAreaCompany } from '@/modules/foundation/schema';
-import {
-  INTERNAL_ORDER_DISPLAY_CAPABILITY,
-  INTERNAL_ORDER_MAINTAIN_CAPABILITY,
-  createInternalOrder,
-} from '@/modules/foundation/internal-order';
+import { INTERNAL_ORDER_DISPLAY_CAPABILITY, INTERNAL_ORDER_MAINTAIN_CAPABILITY, createInternalOrder as createInternalOrderService } from '@/modules/foundation/internal-order';
 import {
   ORIGINAL_BUDGET_CHANGE_CAPABILITY,
   ORIGINAL_BUDGET_DISPLAY_CAPABILITY,
@@ -71,6 +69,12 @@ import InternalOrderDisplayPage from '@/app/controlling/internal-order-display/p
 import OriginalBudgetPage from '@/app/controlling/original-budget/page';
 import BudgetForm from '@/app/controlling/original-budget/BudgetForm';
 import OriginalBudgetDisplayPage from '@/app/controlling/original-budget-display/page';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const createInternalOrder = financePoster(createInternalOrderService);
 
 const ACTOR = 'CONTROLLING_LOCK_TEST';
 const LOCK_OBJECT = 'INTERNAL_ORDER';
@@ -252,6 +256,29 @@ beforeAll(async () => {
     tenant.currency = area.currency.trim();
     tenant.variant = area.fiscalYearVariant;
   });
+  // The internal-order service asks who is acting: the live session the rows above
+  // give these three, the authority, and a Company Code reach. So each of them
+  // carries a role holding exactly the capabilities the case is about, and the
+  // restriction that puts the company inside their reach.
+  for (const person of Object.keys(PEOPLE) as Person[]) {
+    const details = PEOPLE[person];
+    const userId = `user-${details.username}`;
+    const roleCode = `KO_LOCK_${person.toUpperCase()}`;
+    await withTenant(tenant.client, async (tx) => {
+      await tx.insert(role).values({
+        client: tenant.client, code: roleCode, name: `Lock test ${person}`,
+        description: 'Test-only role', isSystemRole: false, isReadOnly: false, createdBy: ACTOR,
+      });
+      for (const capabilityCode of CAPABILITIES[person]) {
+        await tx.insert(roleCapability).values({ client: tenant.client, roleCode, capabilityCode, createdBy: ACTOR });
+      }
+      await tx.insert(userRole).values({ client: tenant.client, userId, roleCode, createdBy: ACTOR });
+      await tx.insert(authOrgRestriction).values({
+        id: randomUUID(), client: tenant.client, userId,
+        scopeType: 'COMPANY_CODE', scopeValue: tenant.company, createdBy: ACTOR,
+      });
+    });
+  }
   await saveBudgetProfile({
     client: tenant.client, changedBy: ACTOR, profileCode: 'BP01', description: 'Original budget',
     overallBudget: true, annualBudget: true, annualNotExceedOverall: true,

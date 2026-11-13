@@ -22,6 +22,7 @@ export async function executeCarryforwardAction(_previous: CarryState, formData:
         targetFiscalYear: Number(read('targetFiscalYear')),
         testRun: read('testRun') !== 'false',
       },
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath('/finance/carryforward');
     return {

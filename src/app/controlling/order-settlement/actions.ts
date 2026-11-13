@@ -35,7 +35,7 @@ export async function settleOrderAction(
       settlementPeriod: Number(input.settlementPeriod),
       testRun: input.testRun === true,
       checkTransactionData: input.checkTransactionData === true,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     return {
       ok: result.posted || result.outcome === 'SIMULATED' || result.outcome === 'NOTHING_TO_SETTLE',
       result,

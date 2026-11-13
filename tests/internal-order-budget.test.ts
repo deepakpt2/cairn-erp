@@ -6,7 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { derivePosition } from '../src/platform/periods';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 import { controllingArea, controllingAreaCompany } from '../src/modules/foundation/schema';
-import { changeInternalOrder, createInternalOrder } from '../src/modules/foundation/internal-order';
+import { changeInternalOrder as changeInternalOrderService, createInternalOrder as createInternalOrderService } from '../src/modules/foundation/internal-order';
 import {
   assignOrderTypeBudgetProfile,
   changeOriginalBudget,
@@ -15,6 +15,13 @@ import {
   saveBudgetProfile,
 } from '../src/modules/foundation/internal-order-budget';
 import { displayOriginalBudget } from '../src/modules/foundation/internal-order-budget-display';
+
+import { financePoster, financeInputPoster } from './helpers/finance-actor';
+
+// The finance services ask who is acting. These wrappers hand them the finance
+// test actor, created the first time one of them is called.
+const changeInternalOrder = financePoster(changeInternalOrderService);
+const createInternalOrder = financePoster(createInternalOrderService);
 
 const ACTOR = 'BUDGET_TEST';
 const clients: string[] = [];
