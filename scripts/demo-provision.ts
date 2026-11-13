@@ -38,6 +38,7 @@ import { buildDemoMasters } from '../src/platform/tenancy/demo-masters';
 import { buildDemoProcurement } from '../src/platform/tenancy/demo-procurement';
 import { buildDemoProduction } from '../src/platform/tenancy/demo-production';
 import { buildDemoSales } from '../src/platform/tenancy/demo-sales';
+import { buildDemoFinance } from '../src/platform/tenancy/demo-finance';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -244,6 +245,25 @@ async function runSalesPhase(ctx: PhaseContext): Promise<Record<string, unknown>
   };
 }
 
+async function runFinancePhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoFinance({
+    client: DEMO_IDENTITY.clientKey,
+    timeline: ctx.timeline,
+  });
+  return {
+    costJournals: result.costJournals,
+    payrollPayments: result.payrollPayments,
+    accruals: result.accruals,
+    supplierPayments: result.supplierPayments,
+    internalOrders: result.internalOrders,
+    orderCostJournals: result.orderCostJournals,
+    settlements: result.settlements,
+    grirRuns: result.grirRuns,
+    taxReturns: result.taxReturns,
+    dunningNotices: result.dunningNotices,
+    documents: result.documents,
+  };
+}
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -252,6 +272,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D1_PROCUREMENT: runProcurementPhase,
   D2_PRODUCTION: runProductionPhase,
   D3_SALES: runSalesPhase,
+  D4_FINANCE: runFinancePhase,
 };
 
 async function main(): Promise<number> {

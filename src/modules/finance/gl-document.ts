@@ -26,7 +26,7 @@ import { toScaled } from '../../platform/posting/decimal';
 import {
   hasCompanyCodeAssignments, missingCompanyCodeAssignments, describeMissingCompanyCodeAssignments,
 } from '../foundation/company-code-assignments';
-import { costCenter, documentType, profitCenter } from '../foundation/schema';
+import { costCenter, documentType, internalOrder, profitCenter } from '../foundation/schema';
 import { glAccount, glAccountCompany, journalEntry, journalEntryLine, journalPostingRequest } from './schema';
 
 export const GL_DOCUMENT_CAPABILITY = 'FIN.JOURNAL.POST';
@@ -47,6 +47,7 @@ export interface GlDocumentLineInput {
   amount: string;
   costCenter?: string;
   profitCenter?: string;
+  internalOrder?: string;
   businessPartner?: string;
   assignment?: string;
   lineText?: string;
@@ -247,7 +248,7 @@ export async function postGlDocument(
       if (segment?.isBlockedPosting) {
         throw new GlDocumentError(`Line ${i + 1}: G/L account ${line.glAccount} is blocked for posting in company ${input.companyCode}.`);
       }
-      if (account.requiresCostObject && !line.costCenter && !line.profitCenter) {
+      if (account.requiresCostObject && !line.costCenter && !line.profitCenter && !line.internalOrder) {
         throw new GlDocumentError(
           `Line ${i + 1}: account ${line.glAccount} requires a cost object.`,
           'Enter a cost centre or profit centre on the line.',
@@ -265,6 +266,36 @@ export async function postGlDocument(
         }
         if (cc.isPostingLocked) {
           throw new GlDocumentError(`Line ${i + 1}: cost centre ${line.costCenter} is locked for posting.`);
+        }
+      }
+      if (line.internalOrder) {
+        // An internal order is a cost object in its own right: what it collects is
+        // settled to a receiver at the period end, so a line may name one instead
+        // of a cost centre. It is still judged against the standing master data —
+        // it has to belong to this company, to stand unmarked and unlocked, and to
+        // be valid on the day the document posts.
+        const [order] = await tx.select().from(internalOrder).where(and(
+          eq(internalOrder.client, input.client),
+          eq(internalOrder.orderNumber, line.internalOrder),
+        ));
+        if (!order) {
+          throw new GlDocumentError(`Line ${i + 1}: internal order ${line.internalOrder} does not exist.`);
+        }
+        if (order.companyCode !== input.companyCode) {
+          throw new GlDocumentError(
+            `Line ${i + 1}: internal order ${line.internalOrder} belongs to company ${order.companyCode}, not ${input.companyCode}.`,
+          );
+        }
+        if (order.markedForDeletion) {
+          throw new GlDocumentError(`Line ${i + 1}: internal order ${line.internalOrder} is marked for deletion.`);
+        }
+        if (order.startDate > input.postingDate || order.endDate < input.postingDate) {
+          throw new GlDocumentError(
+            `Line ${i + 1}: internal order ${line.internalOrder} is not valid on ${input.postingDate}.`,
+          );
+        }
+        if (order.isPostingLocked) {
+          throw new GlDocumentError(`Line ${i + 1}: internal order ${line.internalOrder} is locked for posting.`);
         }
       }
       if (line.profitCenter) {

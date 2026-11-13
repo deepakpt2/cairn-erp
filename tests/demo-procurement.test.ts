@@ -36,6 +36,14 @@ async function scalar(statement: string): Promise<number> {
   });
 }
 
+
+/** The first column of a one-row, one-column query, as text. */
+async function one(statement: string): Promise<string> {
+  return withTenant(CLIENT, async (tx) => {
+    const found = (await tx.execute(sql.raw(statement))) as unknown as Array<{ v: string | null }>;
+    return found[0]?.v ?? '';
+  });
+}
 async function rows(statement: string): Promise<Array<Record<string, unknown>>> {
   return withTenant(CLIENT, (tx) => tx.execute(sql.raw(statement))) as unknown as Promise<
     Array<Record<string, unknown>>
@@ -108,15 +116,24 @@ describe('demo procurement, when the demo stands', () => {
               and l.movement_type in ('GOODS_RECEIPT_PO', 'GI_ISSUE_CC', 'INITIAL_STOCK_ENTRY'))`)).toBe(23);
     // Seventeen of the eighteen receipts were billed; the last was not.
     expect(await scalar(`select count(*) as n from supplier_invoice where client = '${CLIENT}'`)).toBe(17);
+    // Seven payments, counted by the key this phase gave them: the close pays
+    // suppliers of its own, and this count must not move when it does.
     expect(
       await scalar(
-        `select count(*) as n from journal_entry where client = '${CLIENT}' and origin_class = 'outgoing_payment'`,
+        `select count(*) as n from outgoing_payment where client = '${CLIENT}' and request_key like 'DEMO-PAY-%'`,
       ),
     ).toBe(7);
-    // One opening journal, carrying no origin class of its own.
+    // One opening journal, carrying no origin class of its own — counted by its
+    // request key, because every phase after this one posts journals that carry
+    // no origin class either.
     expect(
       await scalar(
-        `select count(*) as n from journal_entry where client = '${CLIENT}' and origin_class is null`,
+        `select count(*) as n from journal_entry h
+           join journal_posting_request r
+             on r.client = h.client and r.document_number = h.document_number
+            and r.fiscal_year = h.fiscal_year
+          where h.client = '${CLIENT}' and r.request_key = 'DEMO-OPENING-BALANCES'
+            and h.origin_class is null`,
       ),
     ).toBe(1);
   });
@@ -207,6 +224,25 @@ describe('demo procurement, when the demo stands', () => {
     );
     const outstanding = received - invoiced;
     expect(outstanding).toBeGreaterThan(0);
+    // The month-end close reclassifies this balance onto an accrual: goods the
+    // company has and has not been billed for are a liability either way, and
+    // the close is where the ledger admits to it. So what GR/IR holds depends on
+    // whether that close has run — and once it has, the document that moved the
+    // balance is the one that has to account for every fils of it.
+    const reclassified = await one(
+      `select coalesce(max(accrual_document_number), '') as v from grir_reclass_run where client = '${CLIENT}'`,
+    );
+    if (reclassified) {
+      expect(grIr).toBe(0);
+      expect(
+        await scalar(
+          `select coalesce(sum(case when debit_credit = 'S' then amount_local::numeric else 0 end), 0) as n
+             from journal_entry_line where client = '${CLIENT}' and gl_account = '210000'
+               and document_number = '${reclassified}'`,
+        ),
+      ).toBe(outstanding);
+      return;
+    }
     expect(grIr).toBe(-outstanding);
   });
 
