@@ -192,7 +192,7 @@ export async function postTransferAction(
       documentDate: text(form, 'documentDate'),
       headerText: text(form, 'headerText') || undefined,
       requestKey: text(form, 'requestKey'),
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(MIGO_ROUTE);
     return { ok: true, message: `Posted: material document ${document.materialDocumentNumber}.`, document };
   } catch (caught) {

@@ -100,22 +100,32 @@ describe('demo procurement phase', () => {
 describe('demo procurement, when the demo stands', () => {
   it('wrote the documents the plan says it wrote', async () => {
     if (!(await demoStands())) return;
-    expect(await scalar(`select count(*) as n from purchase_order where client = '${CLIENT}'`)).toBe(18);
-    // Eighteen receipts, three consumable issues, and two initial stock entries.
-    // Counted by movement, not by document total: a later document phase adds
-    // material documents of its own, and this phase's count must not move when
-    // production is built on top of it.
+    // Counted from the receipts this phase posted, not from the table: the
+    // quality phase buys goods of its own and receives them against orders of
+    // its own, and a count of every order in the tenant would move when a later
+    // phase did its job.
+    expect(await scalar(`
+      select count(distinct l.purchase_order_number) as n
+        from material_document d
+        join material_document_line l
+          on l.client = d.client and l.material_document_number = d.material_document_number
+       where d.client = '${CLIENT}' and d.request_key like 'DEMO-GR-%'
+         and d.request_key not like 'DEMO-GR-PRD-%'
+         and l.purchase_order_number is not null`)).toBe(18);
+    // Eighteen receipts, three consumable issues, and two initial stock entries —
+    // counted by the key this phase gave them, because a later document phase
+    // posts material documents under keys of its own.
     expect(await scalar(`
       select count(*) as n
-        from material_document d
-       where d.client = '${CLIENT}'
-         and exists (
-           select 1 from material_document_line l
-            where l.client = d.client
-              and l.material_document_number = d.material_document_number
-              and l.movement_type in ('GOODS_RECEIPT_PO', 'GI_ISSUE_CC', 'INITIAL_STOCK_ENTRY'))`)).toBe(23);
+        from material_document
+       where client = '${CLIENT}'
+         and (request_key like 'DEMO-ISS-%'
+           or request_key like 'DEMO-OPENING-STOCK-%'
+           or (request_key like 'DEMO-GR-%' and request_key not like 'DEMO-GR-PRD-%'))`)).toBe(23);
     // Seventeen of the eighteen receipts were billed; the last was not.
-    expect(await scalar(`select count(*) as n from supplier_invoice where client = '${CLIENT}'`)).toBe(17);
+    expect(await scalar(`
+      select count(*) as n from supplier_invoice
+       where client = '${CLIENT}' and request_key like 'DEMO-IR-%'`)).toBe(17);
     // Seven payments, counted by the key this phase gave them: the close pays
     // suppliers of its own, and this count must not move when it does.
     expect(
@@ -306,9 +316,17 @@ describe('demo procurement, when the demo stands', () => {
     // they post carries their name. What a demo person posts afterwards — the
     // goods issues the warehouse clerks confirm in phase D3 — carries theirs, by
     // design: a document is written by the person whose job it is.
+    // This phase's own movements, held to the provisioner's name. Later phases
+    // post movements under keys of their own and in the name of the person whose
+    // job the movement is — a quality decision's stock posting carries the
+    // inspector's name, and that is the design rather than an exception — so the
+    // claim made here is about the documents this phase keyed.
     const others = await scalar(
       `select count(*) as n from material_document
-        where client = '${CLIENT}' and request_key like 'DEMO-%' and created_by <> 'DEMO_PROVISION'`,
+        where client = '${CLIENT}' and created_by <> 'DEMO_PROVISION'
+          and (request_key like 'DEMO-ISS-%'
+            or request_key like 'DEMO-OPENING-STOCK-%'
+            or (request_key like 'DEMO-GR-%' and request_key not like 'DEMO-GR-PRD-%'))`,
     );
     expect(others).toBe(0);
   });

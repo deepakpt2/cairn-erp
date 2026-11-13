@@ -9,7 +9,7 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
-import { postTransfer } from '../src/modules/inventory/transfer-posting';
+import { postTransfer } from './helpers/transfer-authorized';
 import {
   MaterialReversalError,
   getReversalDocument,

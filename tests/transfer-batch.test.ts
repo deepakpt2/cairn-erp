@@ -6,7 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
-import { postTransfer } from '../src/modules/inventory/transfer-posting';
+import { postTransfer } from './helpers/transfer-authorized';
 import { closeDb, createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 const ACTOR = 'TRANSFER_BATCH_TEST';

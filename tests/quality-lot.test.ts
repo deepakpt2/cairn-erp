@@ -15,8 +15,8 @@ import {
   getLot,
   listInspectableLines,
   listLots,
-  openLot,
 } from '../src/modules/quality/lot';
+import { openLot } from './helpers/quality-authorized';
 import { createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
 
 /**

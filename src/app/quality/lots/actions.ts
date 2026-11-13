@@ -82,7 +82,7 @@ export async function openLotAction(
       lineNumber: Number(lineNumber),
       inspectionNote: optional(form, 'inspectionNote'),
       requestKey: text(form, 'requestKey') || `QL-${session.user.username}-${Date.now()}`,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,

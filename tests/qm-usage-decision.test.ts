@@ -11,19 +11,14 @@ import {
 } from '../src/modules/purchasing/orders';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
-import {
-  openLot,
-} from '../src/modules/quality/lot';
-import {
-  saveCharacteristic,
-  recordInspectionResult,
-} from '../src/modules/quality/inspection-results';
+import { openLot } from './helpers/quality-authorized';
+import { saveCharacteristic } from '../src/modules/quality/inspection-results';
+import { recordInspectionResult } from './helpers/quality-authorized';
 import {
   UsageDecisionError,
-  recordUsageDecision,
-  postUsageDecisionWithStock,
   getDecisionWithLot,
 } from '../src/modules/quality/usage-decision';
+import { recordUsageDecision, postUsageDecisionWithStock } from './helpers/quality-authorized';
 import { materialDocument, stockQuantity } from '../src/modules/inventory/schema';
 import { changeDocument } from '../src/platform/tables/audit-trail';
 import { usageDecision } from '../src/modules/quality/schema';

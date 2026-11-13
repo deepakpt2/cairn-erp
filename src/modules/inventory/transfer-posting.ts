@@ -20,6 +20,9 @@ import { createHash } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import {
+  type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
@@ -935,13 +938,50 @@ function validatePostTransferInput(input: PostTransferInput): string {
   return materialNumber;
 }
 
-export async function postTransfer(input: PostTransferInput): Promise<TransferDocumentView> {
+export async function postTransfer(
+  input: PostTransferInput,
+  options?: { authorization?: ServiceAuthorityContext },
+): Promise<TransferDocumentView> {
   validatePostTransferInput(input);
-  return withTenant(input.client, (tx) => postTransferInTx(tx, input));
+  return withTenant(input.client, (tx) => postTransferInTx(tx, input, options?.authorization));
 }
 
-/** Post a transfer inside an existing tenant transaction so callers can compose atomic workflows. */
-export async function postTransferInTx(tx: Tx, input: PostTransferInput): Promise<TransferDocumentView> {
+/**
+ * Ask who is moving the stock, and whether their reach covers both plants.
+ *
+ * A transfer is posted by somebody: a session that stands, the transfer authority, and a
+ * Company Code and Plant scope that cover the plant the goods leave and the plant they arrive
+ * in. It is judged here rather than on the screen because the screen is not the only caller —
+ * a usage decision posts a 321 or a 323 through this same door — and an engine that only some
+ * of its callers ask is an engine with a way in.
+ */
+async function requireTransferAuthorityInTx(
+  tx: Tx,
+  client: string,
+  authorization: ServiceAuthorityContext | undefined,
+  plants: readonly string[],
+): Promise<void> {
+  const authority = await verifyServiceAuthorityInTx(tx, client, authorization, TRANSFER_POST_CAPABILITY);
+  if (!authority.ok) {
+    throw new TransferPostingError(authority.refusal.message, authority.refusal.remedy);
+  }
+  for (const plantCode of new Set(plants)) {
+    const refusal = await refusePlantOutsideScopeInTx(tx, client, plantCode, authority.restrictions);
+    if (refusal) throw new TransferPostingError(refusal.message, refusal.remedy);
+  }
+}
+
+/**
+ * Post a transfer inside an existing tenant transaction so callers can compose atomic
+ * workflows. The acting user is named by the caller, because the caller is the only one
+ * that knows whose action this is: the screen passes the person at the keyboard, and a
+ * usage decision passes the inspector who decided.
+ */
+export async function postTransferInTx(
+  tx: Tx,
+  input: PostTransferInput,
+  authorization?: ServiceAuthorityContext,
+): Promise<TransferDocumentView> {
   const materialNumber = validatePostTransferInput(input);
   const [scope] = await tx.execute(sql<{ client: string | null }>`
     select current_setting('cairn.client', true) as client
@@ -949,6 +989,9 @@ export async function postTransferInTx(tx: Tx, input: PostTransferInput): Promis
   if (scope?.client !== input.client) {
     throw new TransferPostingError('The transfer transaction is not scoped to the requested tenant.');
   }
+  await requireTransferAuthorityInTx(tx, input.client, authorization, [
+    input.issuingPlant, input.receivingPlant,
+  ]);
   await lockRequestKey(tx, input.client, input.requestKey);
   const replay = await replayOrRefuse(tx, input.client, input.requestKey, fingerprintOf(input));
   if (replay) return replay;
@@ -1134,7 +1177,10 @@ export interface ReverseTransferInput {
   requestKey: string;
 }
 
-export async function reverseTransfer(input: ReverseTransferInput): Promise<TransferDocumentView> {
+export async function reverseTransfer(
+  input: ReverseTransferInput,
+  options?: { authorization?: ServiceAuthorityContext },
+): Promise<TransferDocumentView> {
   requireDate(input.postingDate, 'The posting date');
   requireDate(input.documentDate, 'The document date');
   const fingerprint = postingFingerprint([
@@ -1183,6 +1229,12 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
         'Only a transfer document carries an issuing and a receiving line; reverse a goods receipt from its own screen.',
       );
     }
+    // The counter posting is a movement like any other: it is written by somebody whose
+    // reach covers the plants the undone transfer moved between, judged on the document's
+    // own lines rather than on anything the caller says about where the goods were.
+    await requireTransferAuthorityInTx(tx, input.client, options?.authorization, [
+      issue.plant, receipt.plant,
+    ]);
     await lockStockScope(tx, input.client, [issue.materialNumber], 'EXCLUSIVE');
     const [movement] = await tx.select().from(movementType).where(and(
       eq(movementType.client, input.client), eq(movementType.movementType, issue.movementType),

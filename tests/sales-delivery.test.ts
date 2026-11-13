@@ -42,7 +42,7 @@ import {
   postCreditMemo, releaseBillingBlock,
 } from '../src/modules/sales/credit-memo';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
-import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
+import { postTransfer, reverseTransfer } from './helpers/transfer-authorized';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { listBillablePlanDates, saveBillingPlan } from '../src/modules/sales/billing-plan';
 import { assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';

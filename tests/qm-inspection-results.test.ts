@@ -12,17 +12,17 @@ import {
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import {
   InspectionLotError,
-  openLot,
   getLot,
 } from '../src/modules/quality/lot';
+import { openLot } from './helpers/quality-authorized';
 import {
   saveCharacteristic,
   InspectionResultError,
-  recordInspectionResult,
   getInspectionResult,
   listInspectionResults,
   lotResultSummary,
 } from '../src/modules/quality/inspection-results';
+import { recordInspectionResult } from './helpers/quality-authorized';
 
 const ACTOR = 'QM_INSPECTION_TEST';
 const MATERIAL = 'MAT-QMI01';

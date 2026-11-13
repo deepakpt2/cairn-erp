@@ -16,6 +16,9 @@ import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import {
+  type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import {
@@ -24,6 +27,13 @@ import {
 import { lotResultSummary } from './inspection-results';
 
 export const USAGE_DECISION_CAPABILITY = 'QM.USAGE.DECIDE';
+/**
+ * The authority a decision that moves stock asks for as well. Deciding is one act and moving the
+ * goods is another: the first says what the goods are, the second puts them somewhere, and the
+ * second is the one that leaves inspection stock. A decision that leaves the goods where they
+ * are — a rework — asks for nothing more.
+ */
+export const USAGE_DECISION_STOCK_CAPABILITY = 'QM.STOCK.POST';
 export const USAGE_DECISION_OBJECT_CLASS = 'usage_decision';
 
 export class UsageDecisionError extends Error {
@@ -43,6 +53,13 @@ export const decisionInput = z.object({
   lotNumber: key(20),
   decisionCode: z.enum(['ACCEPT', 'REJECT', 'BLOCK', 'REWORK']),
   decisionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a date is required').optional(),
+  /**
+   * The date the stock movement posts under, when the decision moves stock. It defaults to the
+   * decision's own date and then to today — which is why it exists: a caller writing a period
+   * other than the one the clock is in has to be able to say so, or the movement lands in the
+   * wrong books and the period refuses it for a reason that has nothing to do with the goods.
+   */
+  postingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a date is required').optional(),
   postStock: z.boolean().optional().default(true),
   requestKey: z.string().trim().max(64).optional(),
 });
@@ -155,8 +172,42 @@ async function getExistingDecision(tx: Tx, client: string, lotNumber: string): P
   };
 }
 
+/**
+ * Whose decision this is, and whether their reach covers the plant the goods stand in.
+ *
+ * `stockAlso` is set when the decision is going to move stock: the movement is a second act and
+ * asks for its own authority, in the same way an issue to a production order asks for the
+ * production authority as well as the goods-issue one. Judged inside the decision's own
+ * transaction, on the plant the receipt line carries, so a decision cannot be recorded against
+ * goods in a plant the inspector was never given.
+ */
+async function requireUsageDecisionAuthorityInTx(
+  tx: Tx,
+  client: string,
+  plant: string,
+  authorization: ServiceAuthorityContext | undefined,
+  stockAlso: boolean,
+): Promise<void> {
+  const authority = await verifyServiceAuthorityInTx(
+    tx, client, authorization, USAGE_DECISION_CAPABILITY,
+  );
+  if (!authority.ok) {
+    throw new UsageDecisionError(authority.refusal.message, authority.refusal.remedy);
+  }
+  const refusal = await refusePlantOutsideScopeInTx(tx, client, plant, authority.restrictions);
+  if (refusal) throw new UsageDecisionError(refusal.message, refusal.remedy);
+  if (!stockAlso) return;
+  const movement = await verifyServiceAuthorityInTx(
+    tx, client, authorization, USAGE_DECISION_STOCK_CAPABILITY,
+  );
+  if (!movement.ok) {
+    throw new UsageDecisionError(movement.refusal.message, movement.refusal.remedy);
+  }
+}
+
 export async function recordUsageDecision(
   raw: DecisionInput & { changedBy: string; client: string },
+  options?: { authorization?: ServiceAuthorityContext },
 ): Promise<DecisionRow> {
   const parsed = decisionInput.safeParse(raw);
   if (!parsed.success) {
@@ -184,6 +235,9 @@ export async function recordUsageDecision(
         'Decide on a lot whose receipt still stands.',
       );
     }
+    await requireUsageDecisionAuthorityInTx(
+      tx, client, lot.plant, options?.authorization, false,
+    );
 
     const existing = await getExistingDecision(tx, client, input.lotNumber);
     if (existing) {
@@ -245,6 +299,7 @@ export async function recordUsageDecision(
 
 export async function postUsageDecisionWithStock(
   raw: DecisionInput & { changedBy: string; client: string },
+  options?: { authorization?: ServiceAuthorityContext },
 ): Promise<DecisionRow & { stockDocumentNumber: string | null; stockDocumentLine: number | null }> {
   const parsed = decisionInput.safeParse(raw);
   if (!parsed.success) {
@@ -272,6 +327,14 @@ export async function postUsageDecisionWithStock(
         'Decide on a lot whose receipt still stands.',
       );
     }
+
+    // What this decision will do to the goods is known before the goods move, so the
+    // authority is judged for that and not for a guess: a rework decides and leaves the
+    // stock alone, an accept or a reject moves it out of inspection.
+    const movesStock = input.decisionCode !== 'REWORK' && input.postStock !== false;
+    await requireUsageDecisionAuthorityInTx(
+      tx, client, lot.plant, options?.authorization, movesStock,
+    );
 
     const existing = await getExistingDecision(tx, client, input.lotNumber);
     if (existing) {
@@ -333,6 +396,9 @@ export async function postUsageDecisionWithStock(
     }
 
     const decisionDate = input.decisionDate || new Date().toISOString().slice(0, 10);
+    // The movement is dated by the caller, defaulting to the decision's own date: a decision
+    // taken about goods received last month posts last month, not the day somebody ran it.
+    const stockPostingDate = input.postingDate ?? decisionDate;
 
     let stockDocNumber: string | null = null;
     let stockDocLine: number | null = null;
@@ -350,7 +416,9 @@ export async function postUsageDecisionWithStock(
         unit: lot.baseUnit,
         sourceStockType: lot.stockType,
         destinationStockType,
+        postingDate: stockPostingDate,
         requestKey: input.requestKey,
+        authorization: options?.authorization,
       });
       stockDocNumber = stockResult.documentNumber;
       stockDocLine = stockResult.lineNumber;
@@ -397,7 +465,11 @@ async function postQualityStockMovementInTx(
     materialNumber: string; plant: string; storageLocation: string;
     batchNumber: string; quantity: number; unit: string;
     sourceStockType: string; destinationStockType: string;
+    /** The date the movement posts under — the caller's, never the clock's. */
+    postingDate: string;
     requestKey?: string | null;
+    /** Who is moving the stock: the inspector whose decision this movement answers. */
+    authorization?: ServiceAuthorityContext;
   },
 ): Promise<{ documentNumber: string; lineNumber: number }> {
   const { postTransferInTx } = await import('../../modules/inventory/transfer-posting');
@@ -413,11 +485,11 @@ async function postQualityStockMovementInTx(
       issuingStorageLocation: input.storageLocation,
       receivingPlant: input.plant,
       receivingStorageLocation: input.storageLocation,
-      postingDate: new Date().toISOString().slice(0, 10),
-      documentDate: new Date().toISOString().slice(0, 10),
+      postingDate: input.postingDate,
+      documentDate: input.postingDate,
       requestKey,
       batch: input.batchNumber || undefined,
-    });
+    }, input.authorization);
     return {
       documentNumber: result.materialDocumentNumber,
       lineNumber: 1,
@@ -437,11 +509,11 @@ async function postQualityStockMovementInTx(
     receivingPlant: input.plant,
     receivingStorageLocation: input.storageLocation,
     stockType: input.sourceStockType,
-    postingDate: new Date().toISOString().slice(0, 10),
-    documentDate: new Date().toISOString().slice(0, 10),
+    postingDate: input.postingDate,
+    documentDate: input.postingDate,
     requestKey,
     batch: input.batchNumber || undefined,
-  });
+  }, input.authorization);
   return {
     documentNumber: result.materialDocumentNumber,
     lineNumber: 2,

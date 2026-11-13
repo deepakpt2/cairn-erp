@@ -39,6 +39,7 @@ import { buildDemoProcurement } from '../src/platform/tenancy/demo-procurement';
 import { buildDemoProduction } from '../src/platform/tenancy/demo-production';
 import { buildDemoSales } from '../src/platform/tenancy/demo-sales';
 import { buildDemoFinance } from '../src/platform/tenancy/demo-finance';
+import { buildDemoQuality } from '../src/platform/tenancy/demo-quality';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -264,6 +265,29 @@ async function runFinancePhase(ctx: PhaseContext): Promise<Record<string, unknow
     documents: result.documents,
   };
 }
+/**
+ * The quality phase: two deliveries bought, received into inspection stock,
+ * inspected, decided on, invoiced and paid.
+ */
+async function runQualityPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoQuality({
+    client: DEMO_IDENTITY.clientKey,
+    timeline: ctx.timeline,
+  });
+  return {
+    characteristics: result.characteristics,
+    purchaseOrders: result.purchaseOrders,
+    goodsReceipts: result.goodsReceipts,
+    lots: result.lots,
+    results: result.results,
+    decisions: result.decisions,
+    stockMovements: result.stockMovements,
+    invoices: result.invoices,
+    payments: result.payments,
+    documents: result.documents,
+  };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -273,6 +297,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D2_PRODUCTION: runProductionPhase,
   D3_SALES: runSalesPhase,
   D4_FINANCE: runFinancePhase,
+  D5_QUALITY: runQualityPhase,
 };
 
 async function main(): Promise<number> {

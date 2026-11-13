@@ -17,6 +17,9 @@ import { z } from 'zod';
 import { and, desc, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import {
+  type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import {
   inspectionCharacteristic, inspectionResult, qualityLot,
@@ -99,7 +102,7 @@ export interface LotResultSummary {
 }
 
 async function loadLot(tx: Tx, client: string, lotNumber: string): Promise<{
-  lotNumber: string; state: 'OPEN' | 'SOURCE_REVERSED';
+  lotNumber: string; state: 'OPEN' | 'SOURCE_REVERSED'; plant: string;
 } | null> {
   const [row] = await tx.select({
     lotNumber: qualityLot.lotNumber,
@@ -109,15 +112,23 @@ async function loadLot(tx: Tx, client: string, lotNumber: string): Promise<{
     eq(qualityLot.client, client), eq(qualityLot.lotNumber, lotNumber),
   )).limit(1);
   if (!row) return null;
-  // Derive lot standing from the source document.
-  const [doc] = await tx.select({
-    documentStatus: sql`md.status`,
-  }).from(sql`material_document md`).where(and(
-    eq(sql`md.client`, client),
-    eq(sql`md.material_document_number`, row.materialDocumentNumber),
-  )).limit(1);
+  // Derive lot standing from the source document, and the plant from the line: both are
+  // read rather than stored, so a lot cannot claim to be open about goods in a plant the
+  // receipt never put them in.
+  const rows = await tx.execute(sql`
+    select md.status as "documentStatus", mdl.plant as plant
+      from material_document md
+      join material_document_line mdl
+        on mdl.client = md.client
+       and mdl.material_document_number = md.material_document_number
+     where md.client = ${client}
+       and md.material_document_number = ${row.materialDocumentNumber}
+       and mdl.line_number = ${row.materialDocumentLine}
+     limit 1
+  `) as unknown as Array<{ documentStatus: string; plant: string }>;
+  const doc = rows[0];
   const state = doc?.documentStatus === 'REVERSED' ? 'SOURCE_REVERSED' : 'OPEN';
-  return { lotNumber: row.lotNumber, state };
+  return { lotNumber: row.lotNumber, state, plant: String(doc?.plant ?? '') };
 }
 
 /** Save or update a characteristic definition. */
@@ -237,6 +248,7 @@ export async function listCharacteristics(client: string): Promise<Characteristi
 /** Record or supersede an inspection result for one characteristic on one lot. */
 export async function recordInspectionResult(
   raw: ResultInput & { changedBy: string; client: string },
+  options?: { authorization?: ServiceAuthorityContext },
 ): Promise<ResultRow> {
   const parsed = resultInput.safeParse(raw);
   if (!parsed.success) {
@@ -268,6 +280,17 @@ export async function recordInspectionResult(
         'Record the result against a lot whose receipt still stands.',
       );
     }
+
+    // A result is a finding about goods standing in a plant, written by an inspector whose
+    // reach covers it. The plant is the lot's, taken from the receipt line the lot names.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, client, options?.authorization, INSPECTION_RESULT_CAPABILITY,
+    );
+    if (!authority.ok) {
+      throw new InspectionResultError(authority.refusal.message, authority.refusal.remedy);
+    }
+    const refusal = await refusePlantOutsideScopeInTx(tx, client, lot.plant, authority.restrictions);
+    if (refusal) throw new InspectionResultError(refusal.message, refusal.remedy);
 
     // The characteristic must exist and be valid.
     const [char] = await tx.select().from(inspectionCharacteristic).where(and(

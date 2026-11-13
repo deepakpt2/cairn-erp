@@ -54,7 +54,7 @@ export async function postTransferAction(
       headerText: text(form, 'headerText') || undefined,
       externalReference: text(form, 'externalReference') || undefined,
       requestKey: text(form, 'requestKey'),
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,
@@ -130,7 +130,7 @@ export async function reverseTransferAction(
       documentDate: text(form, 'documentDate'),
       postingDate: text(form, 'postingDate'),
       requestKey: text(form, 'requestKey'),
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,

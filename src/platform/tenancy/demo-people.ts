@@ -226,7 +226,15 @@ const ROLES = [
     code: 'DEMO_QUALITY',
     name: 'Quality inspector',
     description: 'Inspection lots, results and usage decisions',
-    capabilities: ['QM.*', 'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW'],
+    // The decision that moves goods out of inspection stock posts a transfer, so the
+    // inspector holds the transfer authority as well as the quality ones: the same rule
+    // the production clerk's component issue lives under, where the actor holds the
+    // movement authority as well as the one belonging to their own module. What they do
+    // *not* hold is a goods receipt or a goods issue: an inspector decides what the
+    // goods are, and a clerk is the one who books them in and out.
+    capabilities: [
+      'QM.*', 'INV.TRANSFER.POST', 'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW',
+    ],
   },
 ] as const;
 
@@ -252,7 +260,11 @@ const USERS = [
   { username: 'demo.sales', fullName: 'Dina Rahal', role: 'DEMO_SALES_CLERK', plants: [DEMO_STRUCTURE.manufacturingPlant, DEMO_STRUCTURE.distributionPlant] },
   { username: 'demo.accountant', fullName: 'Amina Barakat', role: 'DEMO_ACCOUNTANT', plants: [] },
   { username: 'demo.controller', fullName: 'Walid Farouk', role: 'DEMO_CONTROLLER', plants: [] },
-  { username: 'demo.quality', fullName: 'Noor Adeeb', role: 'DEMO_QUALITY', plants: [] },
+  // The inspector stands at the factory, because that is where goods are received and
+  // inspected. The distribution centre's goods are not inspected here, and a decision
+  // asked for at plant 2000 is refused for the want of a reach — which is the point of
+  // giving a scope rather than none.
+  { username: 'demo.quality', fullName: 'Noor Adeeb', role: 'DEMO_QUALITY', plants: [DEMO_STRUCTURE.manufacturingPlant] },
 ] as const;
 
 export interface DemoPeopleResult {

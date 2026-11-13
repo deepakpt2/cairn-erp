@@ -10,7 +10,7 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
-import { postTransfer } from '../src/modules/inventory/transfer-posting';
+import { postTransfer } from './helpers/transfer-authorized';
 import { stockOverview } from '../src/modules/inventory/stock-overview';
 import { listWarehouseStocks } from '../src/modules/inventory/warehouse-stocks';
 import { stockOnPostingDate } from '../src/modules/inventory/stock-posting-date';

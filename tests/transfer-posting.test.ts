@@ -4,12 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
-import {
-  TransferPostingError,
-  postTransfer,
-  reverseTransfer,
-  type PostTransferInput,
-} from '../src/modules/inventory/transfer-posting';
+import { TransferPostingError, type PostTransferInput } from '../src/modules/inventory/transfer-posting';
+import { postTransfer, reverseTransfer } from './helpers/transfer-authorized';
 import { createTenant, defineTestRanges, destroyTenant, expectRejectedError } from './helpers';
 
 /**

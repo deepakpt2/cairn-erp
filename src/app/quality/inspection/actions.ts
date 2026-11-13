@@ -74,7 +74,7 @@ export async function recordResultAction(
       measuredUnit: typeof measuredUnit === 'string' ? measuredUnit.trim().toUpperCase() || undefined : undefined,
       resultStatus,
       requestKey: typeof requestKey === 'string' ? requestKey.trim() || undefined : undefined,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,
@@ -153,7 +153,7 @@ export async function decideAction(
       decisionCode,
       postStock: postStock !== 'false',
       requestKey: typeof requestKey === 'string' ? requestKey.trim() || undefined : undefined,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,

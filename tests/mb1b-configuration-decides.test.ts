@@ -5,11 +5,10 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import {
   TransferPostingError,
-  postTransfer,
-  reverseTransfer,
   validateTransfer,
   type PostTransferInput,
 } from '../src/modules/inventory/transfer-posting';
+import { postTransfer, reverseTransfer } from './helpers/transfer-authorized';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 /**

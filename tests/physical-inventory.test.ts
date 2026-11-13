@@ -14,7 +14,8 @@ import {
   tryLockStockScope,
 } from '../src/modules/inventory/physical-inventory';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
-import { postTransfer, TransferPostingError } from '../src/modules/inventory/transfer-posting';
+import { TransferPostingError } from '../src/modules/inventory/transfer-posting';
+import { postTransfer } from './helpers/transfer-authorized';
 import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
 

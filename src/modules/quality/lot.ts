@@ -18,11 +18,19 @@
  * **One line is inspected once.** A second lot against the same receipt line is refused and the standing lot
  * is named, and a submission that repeats its request key gets back the lot the first attempt created
  * instead of a second one. The decision path, when it arrives (slice 2), is an act on the existing lot.
+ *
+ * Opening a lot posts nothing, but it is still an act by somebody: it is judged on the lot authority and on
+ * a reach that covers the plant the goods stand in, inside the lot's own transaction. The plant is the
+ * receipt line's, read from the document rather than supplied by the caller, so an inspector cannot open a
+ * lot in a plant they were never given by naming one.
  */
 import { z } from 'zod';
 import { and, desc, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import {
+  type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
+} from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { materialDocument, materialDocumentLine } from '../inventory/schema';
@@ -270,9 +278,20 @@ async function reversalOf(
  * standing against the line is named in the refusal rather than answered with a second one, and a submission
  * that repeats its request key returns the lot the first attempt created.
  */
-export async function openLot(input: LotOpenInput): Promise<LotView & { replayed: boolean }> {
+export async function openLot(
+  input: LotOpenInput,
+  options?: { authorization?: ServiceAuthorityContext },
+): Promise<LotView & { replayed: boolean }> {
   const parsed = lotOpenInput.parse(input);
   const opened = await withTenant(parsed.client, async (tx) => {
+    // Whose request this is, judged before anything is read or written: a lot names goods
+    // standing in a plant, and the lot is opened by somebody whose reach covers it.
+    const authority = await verifyServiceAuthorityInTx(
+      tx, parsed.client, options?.authorization, LOT_CAPABILITY,
+    );
+    if (!authority.ok) {
+      throw new InspectionLotError(authority.refusal.message, authority.refusal.remedy);
+    }
     if (parsed.requestKey) {
       const [previous] = await tx.select({ lotNumber: qualityLot.lotNumber }).from(qualityLot).where(and(
         eq(qualityLot.client, parsed.client), eq(qualityLot.requestKey, parsed.requestKey),
@@ -292,6 +311,11 @@ export async function openLot(input: LotOpenInput): Promise<LotView & { replayed
         'Open a lot against the line a posted receipt actually wrote. The number is on the receipt confirmation.',
       );
     }
+    const refusal = await refusePlantOutsideScopeInTx(
+      tx, parsed.client, source.plant, authority.restrictions,
+    );
+    if (refusal) throw new InspectionLotError(refusal.message, refusal.remedy);
+
     if (source.lineDirection !== 'RECEIPT') {
       throw new InspectionLotError(
         `Document ${source.materialDocumentNumber} line ${source.lineNumber} is an ${source.lineDirection.toLowerCase()} of `
