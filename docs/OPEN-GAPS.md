@@ -1,6 +1,6 @@
-# Open gaps — payroll (items 4, phases 1–5b) and cost centre planning (item 5)
+# Open gaps — payroll (item 4, phases 1–5b), cost centre planning (item 5), activity prices (item 6)
 
-Recorded 2026-11-15, at commit `a52ec282` on `development`. These are deferred, not forgotten: each was
+Recorded 2026-11-15, at commit `a52ec282` on `development`; item 6 (KSPI) added after it. These are deferred, not forgotten: each was
 either out of scope by its own spec or found while building and left for a later decision. Older
 deferrals made before this work stay in `DEFERRED_ISSUES.md`.
 
@@ -46,6 +46,19 @@ Status key: **Spec** = the item's own spec put it out of scope · **Found** = fo
 | C4 | Assessment, distribution, activity price calculation (KSU5, KSV5, KSPI) | Spec | Downstream of planning; items #5, #6, #9 of the ranked list. |
 | C5 | Annual-total spread uses equal shares only | Found | No seasonal or weighted distribution keys. |
 | C6 | A cost centre with no company code is scoped against every company of its area | Found | The service needs reach over all of them to plan such a centre. |
+
+## 3b. Activity price calculation (KSPI) — item 6
+
+| # | Gap | Kind | Notes |
+|---|---|---|---|
+| K1 | Price indicator 2 (automatic on capacity) | Spec · Decision | `work_center` carries no cost centre, so there is no path to the capacity that would be the denominator. Needs a new field on the work centre master. Refused by name. |
+| K2 | No iteration | Spec | One pass (`iterations: 1`). Becomes incomplete when assessment (KSU5) or distribution (KSV5) lands. |
+| K3 | Two-decimal prices | Spec · Decision | `activity_rate.fixed_price`/`variable_price` are `numeric(11,2)`; the residual is reported. Widening is a migration. |
+| K4 | No fixed/variable split | Spec | No fixed/variable indicator on a cost element; all cost is fixed, variable price 0. |
+| K5 | A cost centre planning more than one activity type is refused | Decision (chosen) | No equivalence numbers to split the centre's cost; owner chose refusal over a guessed rule. |
+| K6 | No role holds `CO.PLAN.ACTIVITYPRICE.EXECUTE` | Spec · Decision | Only `demo.admin` in the demo. |
+| K7 | A calculated price goes stale when quantities change | Found | KP26 accepts the standing calculated price back unchanged; after changing a planned quantity the calculation must be run again. |
+| K8 | Prices are written into existing rows only | Found | Periods a pair never planned get no row and no price (the spec allowed upserting them). |
 
 ## 4. Demo data and environment
 

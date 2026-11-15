@@ -55,7 +55,7 @@ interface RestartRow {
 }
 
 /**
- * The sixteen phases, and how each one behaves when the run is stopped inside it.
+ * The seventeen phases, and how each one behaves when the run is stopped inside it.
  *
  * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
  * people are split because the second takes minutes and opens administrator
@@ -158,6 +158,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     writes: 'A primary-cost plan (version 000) for the installation’s fiscal year: every cost centre and cost element carrying cost, each period the centre is valid in planned at the element’s average actual month.',
     resumesBy: 'A save replaces its selection (area, version, year, cost centre), so a repeat writes the same plan and changes nothing; each save is request-keyed (`DEMO-COPLAN-<year>-<centre>`).',
     guaranteedBy: ['buildDemoCoPlan'],
+  },
+  {
+    phase: 'D13_ACTIVITY_PRICE',
+    writes: 'Three activity types (MIXH and PACKH on automatic price indicator 1, QCH manual at 25.00) with planned hours where D12 planned cost, and the activity prices calculated from the plan; the manual type is skipped.',
+    resumesBy: 'Activity types adopted when standing; a rate save replaces its matrix; the calculation recomputes the same prices and is request-keyed (`DEMO-KSPI-<year>`).',
+    guaranteedBy: ['buildDemoActivityPrice'],
   },
 ];
 

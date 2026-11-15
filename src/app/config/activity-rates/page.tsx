@@ -12,7 +12,10 @@ import {
   listCostCenters,
   planningContext,
 } from '@/modules/foundation/activity-rate-definition';
+import { ACTIVITY_PRICE_CAPABILITY, ActivityPriceError, listCalculableActivities } from '@/modules/foundation/activity-price';
 import ActivityRates from './ActivityRates';
+import { PricePanel } from './PricePanel';
+import { randomUUID } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +61,22 @@ export default async function ActivityRatesPage({
     listActivityTypes(client, area),
     planningContext(client, area, fiscalYear),
   ]);
+  // KSPI: the price calculation panel, for holders of its own capability. What a run over the year
+  // would do is shown before anything is pressed; a refusal of the listing is shown as text.
+  const canCalculate = can(session, ACTIVITY_PRICE_CAPABILITY);
+  let planned: Awaited<ReturnType<typeof listCalculableActivities>> = null;
+  let plannedProblem: string | null = null;
+  if (canCalculate && area && context) {
+    try {
+      planned = await listCalculableActivities(
+        { client, controllingArea: area, fiscalYear, planVersion: version },
+        { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } },
+      );
+    } catch (error) {
+      if (!(error instanceof ActivityPriceError)) throw error;
+      plannedProblem = `${error.message}${error.remedy ? ` ${error.remedy}` : ''}`;
+    }
+  }
   const rates =
     center !== '' && type !== ''
       ? await listActivityRates(client, {
@@ -99,6 +118,19 @@ export default async function ActivityRatesPage({
         rates={rates}
         canMaintain={canMaintain}
       />
+
+      {canCalculate && area && context && (plannedProblem ? (
+        <p role="status" className="panel p-4 text-sm text-signal-error">{plannedProblem}</p>
+      ) : (
+        <PricePanel
+          selection={{ controllingArea: area, fiscalYear, planVersion: version }}
+          periods={context.periods.filter((p) => p.periodType === 'REGULAR').map((p) => p.period)}
+          currency={context.currency}
+          planned={planned?.pairs ?? []}
+          defaultRange={planned ? { periodFrom: planned.periodFrom, periodTo: planned.periodTo } : null}
+          requestKey={randomUUID()}
+        />
+      ))}
     </div>
   );
 }

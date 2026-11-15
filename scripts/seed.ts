@@ -415,6 +415,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'PEOPLE.PAYROLLRUN.EXECUTE', module: 'PEOPLE', action: 'EXECUTE', posting: false, description: 'Create and release a payroll run for one company and period' },
   { code: 'PEOPLE.PAYROLL.RESULT', module: 'PEOPLE', action: 'DISPLAY', posting: false, description: 'Read the payroll result (the slip) for one employee and period' },
   { code: 'PEOPLE.PAYROLL.IMPORT', module: 'PEOPLE', action: 'CREATE', posting: false, description: 'Import a payroll result from an external provider' },
+  { code: 'CO.PLAN.ACTIVITYPRICE.EXECUTE', module: 'CO', action: 'EXECUTE', posting: false, description: 'Calculate activity prices from the plan (KSPI)' },
   { code: 'CO.PLAN.COSTCENTER.MAINTAIN', module: 'CO', action: 'MAINTAIN', posting: false, description: 'Plan primary costs per cost centre, cost element and period (KP06)' },
   { code: 'PEOPLE.PAYROLL.PAYMENT', module: 'PEOPLE', action: 'POST', posting: false, description: 'Pay the net pay of a posted payroll run from a house bank account' },
   { code: 'PEOPLE.PAYROLL.STRUCTURE.DEFINE', module: 'PEOPLE', action: 'DEFINE', posting: false, description: 'Define salary structures and their components, and assign employees to them' },

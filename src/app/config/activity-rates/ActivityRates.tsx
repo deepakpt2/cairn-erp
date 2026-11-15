@@ -379,8 +379,9 @@ export default function ActivityRates({
             <p className="text-xs text-ink-soft">
               Prices are in the controlling area&apos;s currency, per the price unit shown. Whether
               price components may be entered follows the activity type&apos;s price indicator:
-              manual indicators keep them, automatic indicators refuse them until a calculation
-              exists to own the price. Every period cell in view is saved with the act.
+              manual indicators keep them; automatic indicators refuse entered prices — their price
+              comes from the activity price calculation below (KSPI) and passes back unchanged. Every
+              period cell in view is saved with the act.
             </p>
           </div>
         )}

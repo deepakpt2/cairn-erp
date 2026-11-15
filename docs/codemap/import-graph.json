@@ -102,6 +102,10 @@
     "modules/foundation/cost-center-definition.ts",
     "ui/lock/ChangeLock.tsx"
   ],
+  "app/config/activity-rates/PricePanel.tsx": [
+    "app/config/activity-rates/price-actions.ts",
+    "modules/foundation/activity-price.ts"
+  ],
   "app/config/activity-rates/actions.ts": [
     "modules/foundation/activity-rate-definition.ts",
     "platform/auth/current.ts",
@@ -109,9 +113,15 @@
   ],
   "app/config/activity-rates/page.tsx": [
     "app/config/activity-rates/ActivityRates.tsx",
+    "app/config/activity-rates/PricePanel.tsx",
+    "modules/foundation/activity-price.ts",
     "modules/foundation/activity-rate-definition.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
+  ],
+  "app/config/activity-rates/price-actions.ts": [
+    "modules/foundation/activity-price.ts",
+    "platform/auth/current.ts"
   ],
   "app/config/activity-types/ActivityTypes.tsx": [
     "app/config/activity-types/actions.ts",
@@ -5098,6 +5108,15 @@
     "platform/tables/registry.ts",
     "platform/tenancy/index.ts"
   ],
+  "modules/foundation/activity-price.ts": [
+    "modules/foundation/activity-rate-definition.ts",
+    "modules/foundation/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
+  ],
   "modules/foundation/activity-rate-definition.ts": [
     "modules/foundation/activity-type-definition.ts",
     "modules/foundation/cost-center-definition.ts",
@@ -7719,6 +7738,17 @@
   "platform/tenancy/config-activity-status.ts": [
     "platform/db/client.ts",
     "platform/tables/registry.ts"
+  ],
+  "platform/tenancy/demo-activity-price.ts": [
+    "modules/foundation/activity-price.ts",
+    "modules/foundation/activity-rate-definition.ts",
+    "modules/foundation/activity-type-definition.ts",
+    "modules/foundation/cost-center-planning.ts",
+    "modules/foundation/schema.ts",
+    "platform/db/client.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-audit.ts": [
     "modules/audit/workspace.ts",

@@ -102,7 +102,8 @@
 - `src/modules/foundation/profit-center-hierarchy.ts` — hierarchy/group tree maintenance.
 - `src/modules/foundation/profit-center-report.ts` — actual/plan report query.
 - `src/modules/foundation/activity-type-definition.ts` — activity type (KL01) master CRUD.
-- `src/modules/foundation/activity-rate-definition.ts` — activity price/rate planning (KP26) by cost center/activity type/period.
+- `src/modules/foundation/activity-rate-definition.ts` — activity price/rate planning (KP26) by cost center/activity type/period. Automatic price indicators refuse an entered price, except the standing (calculated) price coming back unchanged.
+- `src/modules/foundation/activity-price.ts` — KSPI (item 6, 9283 data-only): activity prices from the plan for price indicator 1 — Σ `cost_center_plan` of the centre (revenue elements subtracted) ÷ Σ `activity_rate.planned_quantity` × price unit, half-up to 2 decimals, written as `fixed_price` (variable 0) into existing rows only (no row created). Basis `ANNUAL` (one price for the range) or `PERIOD`. Pure `computePrices` = one pass (`iterations: 1`; the loop for assessment/distribution has its place). Residual (cost − Σ price/unit × qty) reported per pair and in total. Indicator 3 skipped; indicator 2 refused (work centre has no cost centre); refused also: no output, negative cost, no cost plan, type invalid/locked in a period, indicator changing in the range, a centre planning >1 type (no equivalence numbers). `calculateActivityPrices` refuses when any pair is refused; `previewActivityPrices` writes nothing; `listCalculableActivities`. Session judged (`CO.PLAN.ACTIVITYPRICE.EXECUTE` + Company Code reach); one change document per run (`activity_price_run`, `correlationId` = request key).
 - `src/modules/foundation/internal-order.ts` — internal order (KO01/KO02) create/change; create/change take `options.authorization` (`ServiceAuthorityContext`) and verify live authority + Company Code scope in-tx. Exports: `INTERNAL_ORDER_MAINTAIN_CAPABILITY`, `createInternalOrder`, `changeInternalOrder`, `getInternalOrder`, `listInternalOrders`, `internalOrderChoices`.
 - `src/modules/foundation/internal-order-display.ts` — display-only (KO03) read path.
 - `src/modules/foundation/internal-order-budget.ts` — original budget entry (KO22); uses platform locking.
@@ -119,7 +120,7 @@
 - `src/app/config/profit-centers/page.tsx`, `ProfitCenters.tsx`, `actions.ts` — profit center master screen.
 - `src/app/config/profit-center-hierarchy/page.tsx`, `ProfitCenterHierarchy.tsx`, `actions.ts` — profit center hierarchy screen.
 - `src/app/config/activity-types/page.tsx`, `ActivityTypes.tsx`, `actions.ts` — activity type screen.
-- `src/app/config/activity-rates/page.tsx`, `ActivityRates.tsx`, `actions.ts` — activity rate screen.
+- `src/app/config/activity-rates/page.tsx`, `ActivityRates.tsx`, `actions.ts` — activity rate screen; `PricePanel.tsx` + `price-actions.ts` — the KSPI panel (listing, Preview/Calculate via `action`, run table with residual), shown to holders of `CO.PLAN.ACTIVITYPRICE.EXECUTE`.
 - `src/app/config/settlement-configuration/page.tsx`, `SettlementMasters.tsx`, `actions.ts` — settlement master screen.
 - `src/app/controlling/cost-center-report/page.tsx`, `CostCenterReportShell.tsx` — cost center report screen.
 - `src/app/controlling/profit-center-report/page.tsx`, `ProfitCenterReportShell.tsx`, `export/route.ts` — profit center report screen + export API route.

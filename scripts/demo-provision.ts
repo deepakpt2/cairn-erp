@@ -47,6 +47,7 @@ import { buildDemoPayrollPost } from '../src/platform/tenancy/demo-payroll-post'
 import { buildDemoPayrollPay } from '../src/platform/tenancy/demo-payroll-pay';
 import { buildDemoPayrollOffCycle } from '../src/platform/tenancy/demo-payroll-offcycle';
 import { buildDemoCoPlan } from '../src/platform/tenancy/demo-co-plan';
+import { buildDemoActivityPrice } from '../src/platform/tenancy/demo-activity-price';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -375,6 +376,15 @@ async function runCoPlanPhase(ctx: PhaseContext): Promise<Record<string, unknown
   return { ...result };
 }
 
+/**
+ * Phase D13_ACTIVITY_PRICE: KSPI. Defines three activity types with planned output where D12 planned
+ * cost, and calculates the automatic ones' prices; the manual one is skipped.
+ */
+async function runActivityPricePhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoActivityPrice({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -392,6 +402,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D10_PAYROLL_PAY: runPayrollPayPhase,
   D11_PAYROLL_OFFCYCLE: runPayrollOffCyclePhase,
   D12_CO_PLAN: runCoPlanPhase,
+  D13_ACTIVITY_PRICE: runActivityPricePhase,
 };
 
 async function main(): Promise<number> {

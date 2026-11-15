@@ -24,8 +24,9 @@ export type { ActivityTypeRow, CostCenterArea, CostCenterRow };
  * sharing the last regular period's window as everywhere else here;
  * master validity judged per period against the period's window, never
  * per year; and prices governed by the activity type's price indicator
- * (manual entry stands, automatic leaves the price to a calculation
- * that does not exist yet and refuses entered components).
+ * (manual entry stands; automatic leaves the price to the calculation
+ * in activity-price.ts (KSPI) and refuses entered components — a standing
+ * calculated price may come back through the form unchanged).
  *
  * This activity discharges two standing promises: rates give SCR-043's
  * deletion judge its count (an activity type period refuses deletion
@@ -471,10 +472,19 @@ export async function saveActivityRates(raw: ActivityRatesInput): Promise<{ chan
         .orderBy(asc(activityTypeTable.validFrom));
       void typePeriod;
 
-      // Automatic indicators (1, 2) leave the price to a calculation run
-      // this product does not have yet; entered components are refused.
+      // Automatic indicators (1, 2) leave the price to the calculation run
+      // (KSPI, activity-price.ts); entered components are refused. A price
+      // equal to the one standing is the calculated price coming back
+      // through the form unchanged — refusing it would make the planned
+      // quantity of an already-priced period impossible to correct.
+      const standingPrice = before.get(entry.period);
+      const unchangedCalculatedPrice =
+        standingPrice !== undefined &&
+        Number(standingPrice.fixedPrice) === Number(entry.fixedPrice) &&
+        Number(standingPrice.variablePrice) === Number(entry.variablePrice);
       if (
         facts.priceIndicator !== '3' &&
+        !unchangedCalculatedPrice &&
         (Number(entry.fixedPrice) !== 0 || Number(entry.variablePrice) !== 0)
       ) {
         throw new ActivityRateError(
