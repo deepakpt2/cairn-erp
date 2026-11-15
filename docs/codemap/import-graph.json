@@ -3394,12 +3394,15 @@
   "app/people/payroll-runs/actions.ts": [
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
+    "modules/people/salary-payment.ts",
     "platform/auth/current.ts"
   ],
   "app/people/payroll-runs/page.tsx": [
     "app/people/payroll-runs/RunForms.tsx",
+    "modules/finance/payment-run.ts",
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
+    "modules/people/salary-payment.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
   ],
@@ -6397,6 +6400,20 @@
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
+  "modules/people/salary-payment.ts": [
+    "modules/finance/gl-document.ts",
+    "modules/finance/schema.ts",
+    "modules/foundation/schema.ts",
+    "modules/people/payroll-posting.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts",
+    "platform/numbering/index.ts",
+    "platform/periods/index.ts",
+    "platform/posting/index.ts"
+  ],
   "modules/people/schema.ts": [
     "platform/tables/tenancy.ts"
   ],
@@ -7735,6 +7752,16 @@
     "platform/tenancy/demo-provisioning.ts",
     "platform/tenancy/index.ts",
     "platform/tenancy/standard-structure.ts"
+  ],
+  "platform/tenancy/demo-payroll-pay.ts": [
+    "modules/foundation/bank-master.ts",
+    "modules/foundation/house-bank-definition.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/salary-payment.ts",
+    "platform/db/client.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-payroll-post.ts": [
     "modules/people/payroll-posting.ts",

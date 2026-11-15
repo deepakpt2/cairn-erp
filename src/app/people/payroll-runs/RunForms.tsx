@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 
 import {
   cancelRunAction,
+  paySalaryRunAction,
   postPayrollRunAction,
   proposeRunAction,
   recalculateRunAction,
@@ -125,5 +126,68 @@ export function RunActions({ runId, status, exceptionCount, mayPost }: { runId: 
       {status === 'RELEASED' && <p className="text-sm text-ink-soft">Released runs are frozen: they are never recalculated.</p>}
       {status === 'POSTED' && <p className="text-sm text-ink-soft">A posted run is never cancelled or re-run. A correction is a reversal of its document and a new run in a later period.</p>}
     </section>
+  );
+}
+
+/**
+ * Pay a posted run from one house-bank account. One option per house-bank/account pair; the choice is
+ * submitted as two named inputs, `houseBankKey` and `bankAccountId`, as the payment run screen does.
+ */
+export function PaySalaryForm({
+  runId,
+  defaultDate,
+  banks,
+}: {
+  runId: string;
+  defaultDate: string;
+  banks: Array<{ houseBankKey: string; accountId: string; currency: string; glAccount: string }>;
+}) {
+  const [state, action, pending] = useActionState(paySalaryRunAction, { ok: false });
+  const [first] = banks;
+  const [houseBankKey, setHouseBankKey] = useState(first?.houseBankKey ?? '');
+  const [accountId, setAccountId] = useState(first?.accountId ?? '');
+  return (
+    <form action={action} className="panel space-y-3 p-4" aria-label="Pay salaries">
+      <h2 className="panel-title">Pay salaries</h2>
+      <input type="hidden" name="runId" value={runId} />
+      <input type="hidden" name="houseBankKey" value={houseBankKey} />
+      <input type="hidden" name="bankAccountId" value={accountId} />
+      {banks.length === 0 ? (
+        <p className="text-sm text-ink-soft">
+          The company has no house-bank account to pay from. Define one at <Link href="/config/house-banks" className="underline">/config/house-banks</Link>.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label>
+            <span className="field-label">Payment date</span>
+            <input type="date" name="paymentDate" className="field-input w-full" required defaultValue={defaultDate} />
+          </label>
+          <label>
+            <span className="field-label">Pay from</span>
+            <select
+              className="field-input w-full"
+              value={`${houseBankKey}/${accountId}`}
+              onChange={(event) => {
+                const [bank = '', account = ''] = event.target.value.split('/');
+                setHouseBankKey(bank);
+                setAccountId(account);
+              }}
+            >
+              {banks.map((b) => (
+                <option key={`${b.houseBankKey}/${b.accountId}`} value={`${b.houseBankKey}/${b.accountId}`}>
+                  {b.houseBankKey} / {b.accountId} — {b.currency} (G/L {b.glAccount})
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      <p className="text-xs text-ink-soft">
+        One PY document: a debit per employee on the net pay payable, one credit to the bank. The payroll document&apos;s
+        payable is cleared. A run is paid once.
+      </p>
+      <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending || banks.length === 0}>Pay</button>
+      <Status state={state} />
+    </form>
   );
 }

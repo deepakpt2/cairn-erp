@@ -16,6 +16,7 @@ import {
   type PayrollRunView,
 } from '@/modules/people/payroll-run';
 import { PAYROLL_POST_CAPABILITY, PayrollPostingError, postPayrollRun } from '@/modules/people/payroll-posting';
+import { SALARY_PAYMENT_CAPABILITY, SalaryPaymentError, paySalaryRun } from '@/modules/people/salary-payment';
 
 const ROUTE = PAYROLL_RUN_ROUTE;
 
@@ -156,5 +157,43 @@ export async function postPayrollRunAction(_prev: PayrollRunActionState, form: F
     if (error instanceof PayrollPostingError) return { ok: false, message: error.message, remedy: error.remedy };
     console.error('Payroll posting failed', error);
     return { ok: false, message: 'Posting failed. Nothing was saved.', remedy: 'Check the configuration and contact an administrator if the problem persists.' };
+  }
+}
+
+/**
+ * Pay a posted run: `runId` (hidden), `paymentDate`, `houseBankKey`, `bankAccountId`. The request key
+ * is derived from the run by the service (`SALARY-PAY-<runId>`); nothing client-supplied is used.
+ */
+export async function paySalaryRunAction(_prev: PayrollRunActionState, form: FormData): Promise<PayrollRunActionState> {
+  const session = await requireSession(ROUTE);
+  const runId = text(form, 'runId');
+  try {
+    if (!can(session, SALARY_PAYMENT_CAPABILITY)) {
+      throw new SalaryPaymentError(
+        'You do not hold the authority to pay salaries.',
+        `Ask an administrator for the Pay salaries authority (${SALARY_PAYMENT_CAPABILITY}).`,
+      );
+    }
+    const result = await paySalaryRun({
+      client: session.user.client,
+      changedBy: session.user.username,
+      runId,
+      paymentDate: text(form, 'paymentDate'),
+      houseBankKey: text(form, 'houseBankKey').toUpperCase(),
+      bankAccountId: text(form, 'bankAccountId').toUpperCase(),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+    });
+    refresh();
+    revalidatePath('/finance/journal');
+    return {
+      ok: true,
+      runId,
+      documentNumber: result.documentNumber,
+      message: `Paid ${result.employeeCount} employees, ${result.totalAmount}, as document ${result.displayNumber} on ${result.paymentDate}.`,
+    };
+  } catch (error) {
+    if (error instanceof SalaryPaymentError) return { ok: false, message: error.message, remedy: error.remedy };
+    console.error('Salary payment failed', error);
+    return { ok: false, message: 'The payment failed. Nothing was saved.', remedy: 'Check the house bank configuration and contact an administrator if the problem persists.' };
   }
 }

@@ -137,3 +137,6 @@ export async function createPayrollPoster(
   const { createFinanceActor } = await import('./finance-actor');
   return createFinanceActor(client, { capabilities: options.capabilities ?? PAYROLL_POSTER_CAPABILITIES, companyScopes: options.companyScopes });
 }
+
+/** Payroll phase 4: may post payroll and pay it — PEOPLE.PAYROLL.POST, PEOPLE.PAYROLL.PAYMENT, FIN.JOURNAL.POST. */
+export const PAYROLL_PAYER_CAPABILITIES: readonly string[] = ['PEOPLE.PAYROLL.POST', 'PEOPLE.PAYROLL.PAYMENT', 'FIN.JOURNAL.POST'];

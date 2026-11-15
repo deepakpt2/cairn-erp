@@ -415,6 +415,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'PEOPLE.PAYROLLRUN.EXECUTE', module: 'PEOPLE', action: 'EXECUTE', posting: false, description: 'Create and release a payroll run for one company and period' },
   { code: 'PEOPLE.PAYROLL.RESULT', module: 'PEOPLE', action: 'DISPLAY', posting: false, description: 'Read the payroll result (the slip) for one employee and period' },
   { code: 'PEOPLE.PAYROLL.IMPORT', module: 'PEOPLE', action: 'CREATE', posting: false, description: 'Import a payroll result from an external provider' },
+  { code: 'PEOPLE.PAYROLL.PAYMENT', module: 'PEOPLE', action: 'POST', posting: false, description: 'Pay the net pay of a posted payroll run from a house bank account' },
   { code: 'PEOPLE.PAYROLL.STRUCTURE.DEFINE', module: 'PEOPLE', action: 'DEFINE', posting: false, description: 'Define salary structures and their components, and assign employees to them' },
   // The People module's first codes, and they are deliberately master-data codes. `PEOPLE.PAYROLL.POST` has
   // been in this list since the design without anything behind it; the two below are the ones the screens at

@@ -21,8 +21,10 @@ import {
   listPayrollRuns,
 } from '@/modules/people/payroll-run';
 import { PAYROLL_POST_CAPABILITY, getPayrollPosting } from '@/modules/people/payroll-posting';
+import { SALARY_PAYMENT_CAPABILITY, getSalaryPayment } from '@/modules/people/salary-payment';
+import { listBankChoices } from '@/modules/finance/payment-run';
 
-import { ProposeRunForm, RunActions } from './RunForms';
+import { PaySalaryForm, ProposeRunForm, RunActions } from './RunForms';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +53,14 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
   const posting = selected && selected.status === 'POSTED' ? await getPayrollPosting(client, selected.runId) : null;
   const mayPost = can(session, PAYROLL_POST_CAPABILITY);
   const mayDisplayJournal = can(session, 'FIN.JOURNAL.DISPLAY');
+  const mayPay = can(session, SALARY_PAYMENT_CAPABILITY);
+  const payment = selected && selected.status === 'POSTED' ? await getSalaryPayment(client, selected.runId) : null;
+  const banks = selected && selected.status === 'POSTED' && !payment && mayPay
+    ? (await listBankChoices(client)).filter((b) => b.companyCode === selected.companyCode)
+    : [];
+  const nextPeriodStart = selected
+    ? new Date(Date.UTC(Number(selected.periodTo.slice(0, 4)), Number(selected.periodTo.slice(5, 7)) - 1, Number(selected.periodTo.slice(8, 10)) + 1)).toISOString().slice(0, 10)
+    : today;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -113,6 +123,18 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
                   </p>
                 )}
                 {selected.status === 'PROPOSED' && <p className="text-xs text-ink-soft">Not postable yet: the run has not been released.</p>}
+                {selected.status === 'RELEASED' && <p className="text-xs text-ink-soft">Not payable yet: post the run first.</p>}
+                {payment && (
+                  <p className="text-sm">
+                    Paid {payment.employeeCount} employees, {payment.totalAmount} {payment.currency}, on {payment.paymentDate} from house bank{' '}
+                    {payment.houseBankKey} / {payment.bankAccountId} (G/L {payment.bankGlAccount}) as document{' '}
+                    {mayDisplayJournal
+                      ? <Link href={`/finance/journal/document?document=${payment.documentNumber}`} className="code underline">{payment.displayNumber}</Link>
+                      : <span className="code">{payment.displayNumber}</span>}
+                    {' '}by {payment.paidBy}.
+                    {payment.reversalDocumentNumber ? ` Reversed by document ${payment.reversalDocumentNumber}; the run stays paid — a correction is a new document.` : ''}
+                  </p>
+                )}
                 {mayReadResults && (
                   <Link href={`${PAYROLL_RESULT_ROUTE}?runId=${selected.runId}`} className="text-sm underline">Open the results of this run</Link>
                 )}
@@ -141,6 +163,12 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
               </section>
 
               <RunActions runId={selected.runId} status={selected.status} exceptionCount={selected.exceptionCount} mayPost={mayPost} />
+              {selected.status === 'POSTED' && !payment && mayPay && (
+                <PaySalaryForm runId={selected.runId} defaultDate={nextPeriodStart} banks={banks} />
+              )}
+              {selected.status === 'POSTED' && !payment && !mayPay && (
+                <p className="text-sm text-ink-soft">Paying this run needs {SALARY_PAYMENT_CAPABILITY} and FIN.JOURNAL.POST.</p>
+              )}
             </>
           )}
 

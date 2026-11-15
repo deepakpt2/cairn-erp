@@ -44,6 +44,7 @@ import { buildDemoAudit, demoAuditPrerequisitesMissing } from '../src/platform/t
 import { buildDemoPayroll } from '../src/platform/tenancy/demo-payroll';
 import { buildDemoPayrollRun } from '../src/platform/tenancy/demo-payroll-run';
 import { buildDemoPayrollPost } from '../src/platform/tenancy/demo-payroll-post';
+import { buildDemoPayrollPay } from '../src/platform/tenancy/demo-payroll-pay';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -345,6 +346,15 @@ async function runPayrollPostPhase(ctx: PhaseContext): Promise<Record<string, un
   return { ...result };
 }
 
+/**
+ * Phase D10_PAYROLL_PAY: payroll phase 4. Defines the demo company's house bank and pays the posted
+ * run from it as one PY document, clearing the payroll document's net pay payable.
+ */
+async function runPayrollPayPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoPayrollPay({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -359,6 +369,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D7_PAYROLL: runPayrollPhase,
   D8_PAYROLL_RUN: runPayrollRunPhase,
   D9_PAYROLL_POST: runPayrollPostPhase,
+  D10_PAYROLL_PAY: runPayrollPayPhase,
 };
 
 async function main(): Promise<number> {

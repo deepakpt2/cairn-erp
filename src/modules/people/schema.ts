@@ -953,6 +953,61 @@ export const payrollResultLine = pgTable(
   ],
 );
 
+// ── 9280: payroll phase 4 — salary payment ─────────────────────────────────
+// SAP: the payment step of PCP0 / F111. Pays the net pay a posted run's PR document credited, from one
+// house-bank account, as a PY document; the PR document's net pay credit is cleared by it.
+
+export const SALARY_PAYMENT_CAPABILITY = 'PEOPLE.PAYROLL.PAYMENT';
+export const SALARY_PAYMENT_DOCUMENT_TYPE = 'PY';
+export const SALARY_PAYMENT_OBJECT_CLASS = 'salary_payment';
+
+/** One payment of one payroll run. A row existing is what "paid" means: the payment posts or it does not. */
+export const salaryPayment = pgTable(
+  'salary_payment',
+  {
+    client: tenant(),
+    paymentId: varchar('payment_id', { length: 36 }).notNull(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    companyCode: varchar('company_code', { length: 4 }).notNull(),
+    fiscalYear: integer('fiscal_year').notNull(),
+    period: integer('period').notNull(),
+    /** The day the money leaves. Chosen by the user, never derived. */
+    paymentDate: date('payment_date', { mode: 'string' }).notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    houseBankKey: varchar('house_bank_key', { length: 5 }).notNull(),
+    bankAccountId: varchar('bank_account_id', { length: 5 }).notNull(),
+    /** The G/L account credited, snapshotted from `bank_account` at payment time. */
+    bankGlAccount: varchar('bank_gl_account', { length: 10 }).notNull(),
+    /** The G/L account debited, snapshotted from the determination at payment time. */
+    netPayAccount: varchar('net_pay_account', { length: 10 }).notNull(),
+    employeeCount: integer('employee_count').notNull(),
+    totalAmount: numeric('total_amount', { precision: 23, scale: 4 }).notNull(),
+    documentNumber: varchar('document_number', { length: 40 }).notNull(),
+    documentFiscalYear: integer('document_fiscal_year').notNull(),
+    requestKey: varchar('request_key', { length: 64 }).notNull(),
+    paidBy: varchar('paid_by', { length: 60 }).notNull(),
+    paidAt: timestamp('paid_at', { withTimezone: true }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.paymentId] }),
+    // One payment per run. A run is calculated once, posted once, and paid once.
+    uniqueIndex('salary_payment_run_uq').on(t.client, t.runId),
+    index('salary_payment_document_idx').on(t.client, t.documentNumber, t.documentFiscalYear),
+    foreignKey({
+      name: 'salary_payment_run_fk',
+      columns: [t.client, t.runId],
+      foreignColumns: [payrollRun.client, payrollRun.runId],
+    }).onDelete('restrict'),
+    check('salary_payment_period_ck', sql`${t.period} between 1 and 16`),
+    check('salary_payment_currency_format_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check('salary_payment_amount_ck', sql`${t.totalAmount} > 0`),
+    check('salary_payment_count_ck', sql`${t.employeeCount} > 0`),
+    check('salary_payment_bank_key_format_ck', sql`${t.houseBankKey} ~ '^[A-Z0-9]{1,5}$'`),
+    check('salary_payment_bank_id_format_ck', sql`${t.bankAccountId} ~ '^[A-Z0-9]{1,5}$'`),
+  ],
+);
+
 // ── 9197: time and leave ────────────────────────────────────────────────────
 // §8.10: time_recording, absence, attendance, leave_quota — Time data.
 // §10.8: PEOPLE.TIME.ENTER (absence and attendance entry), PEOPLE.LEAVE.VIEW
