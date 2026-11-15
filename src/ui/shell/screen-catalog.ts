@@ -982,6 +982,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["order"],
   },
   {
+    id: "/controlling/internal-order-line-items",
+    path: "/controlling/internal-order-line-items",
+    query: {},
+    code: "CO.ORDER.COST.DISPLAY",
+    title: "Internal order line items",
+    area: "controlling",
+    family: "internal-orders",
+    accepts: ["order"],
+  },
+  {
     id: "/controlling/internal-orders",
     path: "/controlling/internal-orders",
     query: {},

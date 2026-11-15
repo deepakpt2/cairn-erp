@@ -419,6 +419,8 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'CO.ASSESSMENT.EXECUTE', module: 'CO', action: 'EXECUTE', posting: false, description: 'Execute an assessment cycle, relieving senders and charging receivers (KSU5)' },
   { code: 'CO.PLAN.ACTIVITYPRICE.EXECUTE', module: 'CO', action: 'EXECUTE', posting: false, description: 'Calculate activity prices from the plan (KSPI)' },
   { code: 'CO.PLAN.COSTCENTER.MAINTAIN', module: 'CO', action: 'MAINTAIN', posting: false, description: 'Plan primary costs per cost centre, cost element and period (KP06)' },
+  // Migration 9286. Exact-grant-only and granted to no role, as PROD.ORDER.COST.DISPLAY is.
+  { code: 'CO.ORDER.COST.DISPLAY', module: 'CO', action: 'DISPLAY', posting: false, description: 'Read the actual journal line items posted to one internal order (KOB1). Writes nothing' },
   { code: 'PEOPLE.PAYROLL.PAYMENT', module: 'PEOPLE', action: 'POST', posting: false, description: 'Pay the net pay of a posted payroll run from a house bank account' },
   { code: 'PEOPLE.PAYROLL.STRUCTURE.DEFINE', module: 'PEOPLE', action: 'DEFINE', posting: false, description: 'Define salary structures and their components, and assign employees to them' },
   // The People module's first codes, and they are deliberately master-data codes. `PEOPLE.PAYROLL.POST` has

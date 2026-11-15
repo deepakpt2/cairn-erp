@@ -1,6 +1,6 @@
-# Open gaps — payroll (item 4, phases 1–5b), cost centre planning (item 5), activity prices (item 6), assessment (item 7), BOM explosion (item 8)
+# Open gaps — payroll (item 4, phases 1–5b), cost centre planning (item 5), activity prices (item 6), assessment (item 7), BOM explosion (item 8), internal order line items (item 11)
 
-Recorded 2026-11-15, at commit `a52ec282` on `development`; items 6 (KSPI), 7 (KSU5) and 8 (CS11/CS12/CS15) added after it. These are deferred, not forgotten: each was
+Recorded 2026-11-15, at commit `a52ec282` on `development`; items 6 (KSPI), 7 (KSU5), 8 (CS11/CS12/CS15) and 11 (KOB1) added after it. These are deferred, not forgotten: each was
 either out of scope by its own spec or found while building and left for a later decision. Older
 deferrals made before this work stay in `DEFERRED_ISSUES.md`.
 
@@ -86,6 +86,18 @@ Status key: **Spec** = the item's own spec put it out of scope · **Found** = fo
 | B5 | Where-used shows BOM quantities only | Spec | By design: walking upward there is no parent quantity. |
 | B6 | The explosion reads one plant | Spec | An issuing plant other than the BOM's is shown, never switched to. |
 | B7 | A unit that loses its conversion after BOM maintenance stops the branch | Found | BOM maintenance refuses such a unit; the report reports it (`UNIT`) if a conversion is later removed. |
+
+## 3e. Internal order line items (KOB1) — item 11
+
+| # | Gap | Kind | Notes |
+|---|---|---|---|
+| L1 | One order at a time | Spec | KOB1 accepts a list or range of orders; the report takes one. Also stated in the report's own `gaps`. |
+| L2 | No role holds `CO.ORDER.COST.DISPLAY` | Spec · Decision | Granted exactly as `PROD.ORDER.COST.DISPLAY`: exact-grant-only (`capability-policy.ts`) and in no role, so `*` and `CO.*` do not reach it and no demo account can open the screen until someone is granted it by name. |
+| L3 | No commitments (KOB2), plan, budget or budget-vs-actual | Spec | Budget tables exist; a comparison is a possible later item. |
+| L4 | No net in order currency when local currencies differ | Decision (chosen) | Totals per (company, document currency, local currency) stay complete; the net is null and the gap names the currencies. Same rule as the cost-centre report and assessment. |
+| L5 | No index on `journal_entry_line.internal_order` | Found | The production-order sibling has a partial index; adding one is a schema change, which this item excluded. The read uses the client/document join; add `(client, internal_order) where internal_order is not null` if the report gets slow. |
+| L6 | Orders as allocation receivers | Spec | Gap S2 above; when it closes, allocation lines appear here with no change. |
+| L7 | Settlement covered by a fixture, not a real run | Found | Test 16 writes a document with origin `order_settlement`, as `order-settlement.ts` posts it; the demo order IO-00000001 shows real settlement lines (document 1000/2026/90). |
 
 ## 4. Demo data and environment
 

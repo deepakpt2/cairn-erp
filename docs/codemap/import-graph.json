@@ -1883,6 +1883,10 @@
     "modules/foundation/internal-order.ts",
     "platform/auth/current.ts"
   ],
+  "app/controlling/internal-order-line-items/page.tsx": [
+    "modules/foundation/internal-order-cost-report.ts",
+    "platform/auth/current.ts"
+  ],
   "app/controlling/internal-orders/OrderForm.tsx": [
     "app/controlling/internal-orders/actions.ts",
     "modules/foundation/internal-order.ts"
@@ -5397,6 +5401,12 @@
     "platform/periods/index.ts",
     "platform/posting/decimal.ts",
     "platform/tables/numbering.ts"
+  ],
+  "modules/foundation/internal-order-cost-report.ts": [
+    "platform/auth/capability-policy.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
   ],
   "modules/foundation/internal-order-display.ts": [
     "modules/foundation/internal-order.ts"

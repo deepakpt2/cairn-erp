@@ -86,7 +86,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | types.ts |  |  |
 | **platform/auth/** | | |
 | authority.ts | LEVEL_OF_KEY, ORG_LEVELS, SCOPE_KEYS, KEY_OF_LEVEL, patternsOf, withinScope, withinRestrictions, grantMatches, canWith, effectiveGrants, loadRestrictions, canUser, canTx, patternMatches | auth_org_restriction, delegation, delegation_approval, delegation_scope, employee, position_assignment, position_capability, role, role_capability, user_capability, user_capability_scope, user_role |
-| capability-policy.ts | CREDIT_CONTROL_AREA_CAPABILITY, PRODUCTION_GOODS_MOVEMENT_REPROCESS_CAPABILITY, PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY, PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY, PRODUCTION_ORDER_COST_DISPLAY_CAPABILITY, EXPLICIT_GRANT_ONLY_CAPABILITIES |  |
+| capability-policy.ts | CREDIT_CONTROL_AREA_CAPABILITY, PRODUCTION_GOODS_MOVEMENT_REPROCESS_CAPABILITY, PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY, PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY, PRODUCTION_ORDER_COST_DISPLAY_CAPABILITY, INTERNAL_ORDER_COST_DISPLAY_CAPABILITY, EXPLICIT_GRANT_ONLY_CAPABILITIES |  |
 | current.ts | getSession, requireSession, requireCapability, AuthzError, can |  |
 | password.ts | hashPassword, verifyPassword, checkPasswordPolicy |  |
 | pattern.ts | patternGrants, hasCapability, patternMatches |  |
