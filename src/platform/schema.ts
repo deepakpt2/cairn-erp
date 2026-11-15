@@ -11,6 +11,7 @@ export * from './tables';
  * Each business module contributes its own tables. Platform tables above are
  * shared by all of them.
  */
+export * from '../modules/audit/schema';
 export * from '../modules/finance/schema';
 export * from '../modules/foundation/schema';
 /**

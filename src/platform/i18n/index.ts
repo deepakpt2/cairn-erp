@@ -96,6 +96,7 @@ const en: Catalogue = {
   'nav.area.production': 'Production',
   'nav.area.controlling': 'Controlling',
   'nav.area.configuration': 'Configuration',
+  'nav.area.audit': 'Audit',
 
   // ── Command bar — the behaviour we keep (§19.1) ───────────────────────────
   'command.label': 'Command',

@@ -429,6 +429,10 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'AUDIT.WORKSPACE', module: 'AUDIT', action: 'DISPLAY', posting: false, description: 'Open the auditor workspace' },
   { code: 'AUDIT.EVIDENCE.EXPORT', module: 'AUDIT', action: 'EXPORT', posting: false, description: 'Export an evidence pack' },
   { code: 'AUDIT.TRAIL.VIEW', module: 'AUDIT', action: 'DISPLAY', posting: false, description: 'View change history and document trail' },
+  // Migration 9276. Management's acts, never the auditor's: neither is read-kind, so a live
+  // audit grant strips both even from a holder whose role carries them.
+  { code: 'AUDIT.ACCESS.GRANT', module: 'AUDIT', action: 'MAINTAIN', posting: false, description: 'Grant and revoke time-boxed, scoped, read-only auditor access' },
+  { code: 'AUDIT.REQUEST.RESPOND', module: 'AUDIT', action: 'CHANGE', posting: false, description: "Answer an auditor's finding or request to management" },
   { code: 'CFG.PLT.USER.MAINTAIN', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Maintain application users: change details, activate and deactivate accounts. Does not touch HR-owned employee data.' },
   { code: 'CFG.PLT.USER.PASSWORD_RESET', module: 'PLT', action: 'EXECUTE', posting: false, description: 'Administrator-initiated password reset for application users, including users without an employee link. Revokes all sessions and requires a new password at next sign-in.' },
   { code: 'CFG.PLT.ROLE.MAINTAIN', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Create and maintain tenant roles and assign registered capabilities; protected roles and central authorities remain immutable.' },

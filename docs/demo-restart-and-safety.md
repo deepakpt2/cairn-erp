@@ -45,14 +45,14 @@ one transaction with the eligibility survey. It is handed one of four answers.
 
 | Disposition | When | What the run does |
 |---|---|---|
-| `FRESH` | No installation record, and every tenant-owned table is empty. | Writes the record and all nine pending phases, then runs all nine. |
-| `RESUME` | A record stands for this database and this build, not failed, with phases outstanding. | Skips the phases already `COMPLETED`, and resumes at the first one that is not — a phase left `RUNNING` by a dead process is resumed and counted as a retry. |
-| `ALREADY_COMPLETE` | The record is `COMPLETED` and all nine phases are. | Changes nothing. Rewrites the credential file, because a deployment that lost the file cannot be given the password back — with the password shown as *not recoverable* rather than blank. Returns 0. |
+| `FRESH` | No installation record, and every tenant-owned table is empty. | Writes the record and all ten pending phases, then runs all ten. |
+| `RESUME` | A record stands for this database and this build, not failed, with phases outstanding. | Skips the phases already `COMPLETED`, and resumes at the first one that is not — a phase left `RUNNING` by a dead process is resumed and counted as a retry. Also: a record that is `COMPLETED` but does not name a phase a later build added (e.g. `D6_AUDIT`) has that phase appended and run; a phase it names but never finished is still refused. A resumed run resets every account to a new password and rewrites the credential file. |
+| `ALREADY_COMPLETE` | The record is `COMPLETED` and all ten phases are. | Changes nothing. Rewrites the credential file, because a deployment that lost the file cannot be given the password back — with the password shown as *not recoverable* rather than blank. Returns 0. |
 | `REFUSE` | Any of the five refusals in §4. | Writes nothing. Returns 1, so the application never starts. |
 
 ---
 
-## 3. The nine phases
+## 3. The ten phases
 
 A phase is a unit of resumption, not a unit of tidiness. The organisation and the
 people are split because the second takes minutes and opens administrator sessions: a
@@ -63,13 +63,14 @@ rebuilding the company they hang from.
 |---|---|---|
 | `A_FOUNDATION` | The installation record, the frozen timeline, the client and its foundation. | Claimed once. Once the record stands, eligibility is never consulted again. |
 | `B_ORGANISATION` | Company code, both plants, storage locations, the organisation and its positions, cost centres, profit centres, the internal order, the demo roles. | Adoption: an element that already stands is adopted rather than created again. |
-| `B_PEOPLE` | The nine accounts, their capability grants and organisational restrictions. | Adoption, and one password: a resumed run issues a new password and resets every account to it, because the first run's password was never stored. |
+| `B_PEOPLE` | The ten accounts, their capability grants and organisational restrictions. | Adoption, and one password: a resumed run issues a new password and resets every account to it, because the first run's password was never stored. |
 | `C_MASTERS` | Materials, partners, info records, prices, tax codes, BOMs, routings, production versions. **No documents.** | Idempotent by adoption. |
 | `D1_PROCUREMENT` | Opening balances, opening stock, purchase orders, goods receipts, supplier invoices, first payments. | Request-keyed: `DEMO-OPENING-*`, `DEMO-GR-*`, `DEMO-IR-*`, `DEMO-PAY-*`, `DEMO-ISS-*`. |
 | `D2_PRODUCTION` | Production orders, component issues, confirmations, receipts of finished material. | Request-keyed: `DEMO-PO-*`, `DEMO-GI-*`, `DEMO-CF-*`, `DEMO-GR-*`, `DEMO-SC-*`. |
 | `D3_SALES` | Sales orders, deliveries with goods issues, billing documents, incoming payments. | Request-keyed, through the phase's own `findByRequestKey` before each post. |
 | `D4_FINANCE` | Outgoing payments, operating costs, the internal order and its settlement, GR/IR reclassification, tax returns, a dunning run. | Request-keyed, through the phase's own `findByRequestKey` before each post. |
 | `D5_QUALITY` | A purchase of inspection stock, two lots, their results, the usage decisions, and the 321 and 323 transfers behind them. | Request-keyed: `DEMO-QM-*`, through the phase's own `findByRequestKey`. |
+| `D6_AUDIT` | One time-boxed, scoped, read-only audit grant to `demo.auditor`, the auditor's findings, note, bookmark and two requests, and the controller's answer to one of them. | Request-keyed grant (fixed request key → grant id); findings found by subject; a request is answered only while open. |
 
 The ledger says which phases finished. It cannot say what a phase had committed
 before it died, which is why each phase asks its own question — does a document
@@ -177,7 +178,7 @@ database; the report says so.
 
 | Claim | Evidence |
 |---|---|
-| All nine phases complete, first attempt, one record naming the right database | `tests/demo-safety-matrix.test.ts`, against a provisioned database |
+| All ten phases complete, first attempt, one record naming the right database | `tests/demo-safety-matrix.test.ts`, against a provisioned database |
 | The disposition, refusal, lock and ordering guarantees | `tests/demo-safety-matrix.test.ts`, against the source |
 | Every phase request-keyed, or idempotent by adoption | `tests/demo-safety-matrix.test.ts`, against the phase modules |
 | Credential file permissions, ownership and atomic write | `tests/demo-credentials.test.ts` |

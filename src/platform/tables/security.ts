@@ -323,6 +323,12 @@ export const auditAccessLog = pgTable(
      * asked after something goes wrong, and the answer has to exist.
      */
     delegationId: varchar('delegation_id', { length: 36 }),
+    /**
+     * The audit grant a read or export was made under (migration 9276). Null for
+     * everything else. The auditor's own access is logged against the grant that
+     * allowed it, so "what did the auditor look at under this engagement" has an answer.
+     */
+    grantId: varchar('grant_id', { length: 36 }),
     ipAddress: varchar('ip_address', { length: 64 }),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -70,7 +70,8 @@ describe('demo quality phase, as it is written', () => {
     // selling and the close left behind: it inspects goods that arrived, so it
     // can only stand after the phases that put them there.
     expect(DEMO_PHASE_PLAN.indexOf('D5_QUALITY')).toBe(DEMO_PHASE_PLAN.indexOf('D4_FINANCE') + 1);
-    expect(DEMO_PHASE_PLAN[DEMO_PHASE_PLAN.length - 1]).toBe('D5_QUALITY');
+    // Later work appends after it: the audit phase (D6_AUDIT) follows quality.
+    expect(DEMO_PHASE_PLAN[DEMO_PHASE_PLAN.indexOf('D5_QUALITY') + 1]).toBe('D6_AUDIT');
   });
 
   it('derives every date from the frozen timeline, never from a literal', () => {

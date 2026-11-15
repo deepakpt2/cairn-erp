@@ -55,7 +55,7 @@ interface RestartRow {
 }
 
 /**
- * The nine phases, and how each one behaves when the run is stopped inside it.
+ * The ten phases, and how each one behaves when the run is stopped inside it.
  *
  * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
  * people are split because the second takes minutes and opens administrator
@@ -77,7 +77,7 @@ const RESTART_MATRIX: readonly RestartRow[] = [
   },
   {
     phase: 'B_PEOPLE',
-    writes: 'The nine accounts, their capability grants and their organisational restrictions.',
+    writes: 'The ten accounts, their capability grants and their organisational restrictions.',
     resumesBy: 'Adoption, and one password: a resumed run issues a new password and resets every account to it, because the first run’s password was never stored.',
     guaranteedBy: ['buildDemoPeople', 'setEveryPassword'],
   },
@@ -116,6 +116,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     writes: 'A purchase of inspection stock, two inspection lots, their results, the usage decisions, and the 321 and 323 transfers that follow them.',
     resumesBy: 'Request-keyed: `DEMO-QM-*`, looked up through the phase’s own `findByRequestKey` before each post.',
     guaranteedBy: ['buildDemoQuality'],
+  },
+  {
+    phase: 'D6_AUDIT',
+    writes: 'One time-boxed, scoped, read-only audit grant to the auditor, the auditor’s findings, note, bookmark and requests, and the controller’s answer to one request.',
+    resumesBy: 'Request-keyed grant (`DEMO_AUDIT_GRANT_REQUEST_KEY` becomes the grant id); findings are found by subject before they are raised, and a request is answered only while still open.',
+    guaranteedBy: ['buildDemoAudit'],
   },
 ];
 

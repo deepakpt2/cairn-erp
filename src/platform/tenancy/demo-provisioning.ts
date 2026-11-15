@@ -50,7 +50,7 @@ export type DemoPhaseStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
  */
 export const DEMO_PHASE_PLAN: readonly string[] = [
   'A_FOUNDATION', 'B_ORGANISATION', 'B_PEOPLE', 'C_MASTERS', 'D1_PROCUREMENT', 'D2_PRODUCTION',
-  'D3_SALES', 'D4_FINANCE', 'D5_QUALITY',
+  'D3_SALES', 'D4_FINANCE', 'D5_QUALITY', 'D6_AUDIT',
 ];
 
 export interface DemoTimeline {
@@ -237,12 +237,38 @@ export async function claimDemoInstallation(input: {
     `) as unknown as PhaseRow[];
 
     if (row.status === 'COMPLETED') {
-      const missing = phasePlan.filter((code) => !phases.some((p) => p.phase_code === code && p.status === 'COMPLETED'));
-      if (missing.length > 0) {
+      // A phase the record names but never finished is a marker that disagrees with
+      // the data: refused, never trusted.
+      const unfinished = phasePlan.filter((code) => phases.some((p) => p.phase_code === code && p.status !== 'COMPLETED'));
+      if (unfinished.length > 0) {
         return {
           disposition: 'REFUSE',
           reason: 'The installation is marked complete but phases of the declared plan never finished.',
-          detail: [`Recorded as complete, yet never completed: ${missing.join(', ')}.`, 'A marker that disagrees with the data is refused, not trusted.'],
+          detail: [`Recorded as complete, yet never completed: ${unfinished.join(', ')}.`, 'A marker that disagrees with the data is refused, not trusted.'],
+        } satisfies DemoClaim;
+      }
+      // A phase the record does not name at all was added by a later build (D6_AUDIT
+      // after D5_QUALITY, for example). It is appended and run — the same answer the
+      // running-install path below gives — so a deployment provisioned by an earlier
+      // build gains the new demo data instead of refusing to start. Every phase is
+      // idempotent by adoption or request key, so this writes only what is missing.
+      const appended = phasePlan.filter((code) => !phases.some((p) => p.phase_code === code));
+      if (appended.length > 0) {
+        for (const phaseCode of appended) {
+          await tx.execute(sql`
+            insert into demo_installation_phase (installation_id, phase_code, status)
+            values (${row.installation_id}, ${phaseCode}, 'PENDING')
+          `);
+        }
+        await tx.execute(sql`
+          update demo_installation set status = 'RUNNING', completed_at = null, updated_at = now()
+           where installation_id = ${row.installation_id}
+        `);
+        return {
+          disposition: 'RESUME',
+          installationId: row.installation_id,
+          resumeFrom: appended[0] ?? null,
+          completed: phases.filter((p) => p.status === 'COMPLETED').map((p) => p.phase_code),
         } satisfies DemoClaim;
       }
       return { disposition: 'ALREADY_COMPLETE', installationId: row.installation_id } satisfies DemoClaim;

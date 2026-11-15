@@ -40,6 +40,7 @@ import { buildDemoProduction } from '../src/platform/tenancy/demo-production';
 import { buildDemoSales } from '../src/platform/tenancy/demo-sales';
 import { buildDemoFinance } from '../src/platform/tenancy/demo-finance';
 import { buildDemoQuality } from '../src/platform/tenancy/demo-quality';
+import { buildDemoAudit, demoAuditPrerequisitesMissing } from '../src/platform/tenancy/demo-audit';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -288,6 +289,30 @@ async function runQualityPhase(ctx: PhaseContext): Promise<Record<string, unknow
   };
 }
 
+/**
+ * The audit phase: the controller grants the auditor time-boxed, scoped, read-only
+ * access; the auditor raises findings and requests; the controller answers one.
+ */
+async function runAuditPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  // An installation provisioned by an earlier build finished its people phase before
+  // the auditor account and the controller's audit authorities existed. The people
+  // phase is idempotent by adoption, so running it again adds only what is missing.
+  // It resets every account to this run's password, which a resumed run does anyway.
+  if (await demoAuditPrerequisitesMissing(DEMO_IDENTITY.clientKey)) {
+    await buildDemoPeople({ client: DEMO_IDENTITY.clientKey, password: ctx.password, timeline: ctx.timeline });
+  }
+  const result = await buildDemoAudit({
+    client: DEMO_IDENTITY.clientKey,
+    timeline: ctx.timeline,
+  });
+  return {
+    grantId: result.grantId,
+    grantStatus: result.grantStatus,
+    findings: result.findings,
+    answered: result.answered,
+  };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -298,6 +323,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D3_SALES: runSalesPhase,
   D4_FINANCE: runFinancePhase,
   D5_QUALITY: runQualityPhase,
+  D6_AUDIT: runAuditPhase,
 };
 
 async function main(): Promise<number> {

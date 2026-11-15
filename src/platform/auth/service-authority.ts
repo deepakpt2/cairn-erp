@@ -40,6 +40,7 @@ import {
   type OrgRestriction,
 } from './session';
 import type { Tx } from '../db/client';
+import { isAuditorReadableCapability, liveAuditGrantId } from '../../modules/audit/read-only';
 
 /** Who the service acts for. Supplied from the authenticated session, never from a form. */
 export interface ServiceAuthorityContext {
@@ -108,6 +109,17 @@ export async function verifyServiceAuthorityInTx(
     return refusal(
       'Your session or account is no longer active. Nothing was saved.',
       'Sign in again with an active account.',
+    );
+  }
+
+  // A person working under a live audit grant reads and never writes. Their authority
+  // is already cut to the read side in `effectiveGrants()`; this says why, by name,
+  // instead of letting the refusal read as a missing role.
+  const auditGrantId = await liveAuditGrantId(tx, client, authorization.userId);
+  if (auditGrantId && !(await isAuditorReadableCapability(tx, capability))) {
+    return refusal(
+      `You are working under audit grant ${auditGrantId}, which is read-only. ${capability} changes data, and an auditor cannot post, change or delete anything. Nothing was saved.`,
+      'Ask somebody who is not under an audit grant to do this, or ask the grantor to revoke the grant first.',
     );
   }
 

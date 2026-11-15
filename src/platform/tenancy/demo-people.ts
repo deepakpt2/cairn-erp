@@ -220,7 +220,26 @@ const ROLES = [
     // what the order collected onto the receivers its rules name. `COST.*` is the
     // cost-centre and activity side of the same job, and the two are not the same
     // pattern even though they read as though they might be.
-    capabilities: ['CO.*', 'COST.*', 'FIN.RPT.*', 'AUDIT.TRAIL.VIEW'],
+    // The controller is also who grants an auditor access and answers the auditor's
+    // requests (`/audit/grants`, `/audit/findings`): management's side of the audit.
+    capabilities: ['CO.*', 'COST.*', 'FIN.RPT.*', 'AUDIT.TRAIL.VIEW', 'AUDIT.ACCESS.GRANT', 'AUDIT.REQUEST.RESPOND'],
+  },
+  {
+    code: 'DEMO_AUDITOR',
+    name: 'Auditor',
+    description: 'External auditor: read-only, under a time-boxed audit grant',
+    // Display only, by name — no wildcard that could reach a posting capability. The
+    // grant the audit phase gives this account cuts anything else away regardless
+    // (src/modules/audit/read-only.ts); the role is display-only so that the demo
+    // shows an auditor who never held a write in the first place.
+    capabilities: [
+      'AUDIT.WORKSPACE', 'AUDIT.TRAIL.VIEW', 'AUDIT.EVIDENCE.EXPORT',
+      'FIN.RPT.BALANCESHEET', 'FIN.RPT.PROFITLOSS', 'FIN.RPT.TRIALBALANCE', 'FIN.RPT.CASHFLOW',
+      'FIN.RPT.SUBLEDGER.TIE', 'FIN.RPT.CONSOLIDATE.STMT',
+      'FIN.GL.BALANCE', 'FIN.JOURNAL.LIST', 'FIN.JOURNAL.DISPLAY', 'FIN.DOC.FLOW', 'FIN.AP.AGEING', 'FIN.AR.AGEING',
+      'PROC.PO.LIST', 'PROC.PO.DISPLAY', 'SALES.DOCUMENTS.LIST', 'INV.MATERIALDOC.LIST', 'INV.STOCK.VIEW',
+      'PLT.LOCK.DISPLAY', 'PLT.JOB.DISPLAY', 'PLT.NOTIFY.DISPLAY',
+    ],
   },
   {
     code: 'DEMO_QUALITY',
@@ -265,6 +284,9 @@ const USERS = [
   // asked for at plant 2000 is refused for the want of a reach — which is the point of
   // giving a scope rather than none.
   { username: 'demo.quality', fullName: 'Noor Adeeb', role: 'DEMO_QUALITY', plants: [DEMO_STRUCTURE.manufacturingPlant] },
+  // The external auditor. Reads only, under the time-boxed grant the audit phase gives
+  // (scripts/demo-provision.ts D6_AUDIT); no plant, because an auditor moves nothing.
+  { username: 'demo.auditor', fullName: 'Leila Haddad', role: 'DEMO_AUDITOR', plants: [] },
 ] as const;
 
 export interface DemoPeopleResult {

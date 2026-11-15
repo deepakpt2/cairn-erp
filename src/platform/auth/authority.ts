@@ -70,6 +70,12 @@ import {
 // The pure predicates live in their own leaf so the resolver can use them
 // without importing the delegation service, which imports this file.
 import { isLive } from '../../modules/people/delegation-status';
+// A leaf: it imports the pattern matcher and the db type, never this file.
+import {
+  capabilityCatalogue,
+  liveAuditGrantId,
+  restrictToReadOnly,
+} from '../../modules/audit/read-only';
 import { employee, positionAssignment } from '../../modules/people/schema';
 import {
   authOrgRestriction,
@@ -457,6 +463,14 @@ export async function effectiveGrants(
   // copied. See delegatedGrants below for why that is the whole design.
   if (depth < MAX_DELEGATION_DEPTH) {
     grants.push(...(await delegatedGrants(tx, client, userId, day, depth)));
+  }
+
+  // ── Under a live audit grant, nothing that writes survives. This is the one
+  // place every request, sign-in, `can()` and service check resolves authority, so
+  // cutting here is what makes posting structurally impossible for an auditor rather
+  // than a matter of each screen remembering to ask (src/modules/audit/read-only.ts).
+  if (grants.length > 0 && (await liveAuditGrantId(tx, client, userId, day))) {
+    return restrictToReadOnly(grants, await capabilityCatalogue(tx));
   }
 
   return grants;

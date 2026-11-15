@@ -15,7 +15,8 @@ export type ScreenArea =
   | 'inventory'
   | 'production'
   | 'controlling'
-  | 'configuration';
+  | 'configuration'
+  | 'audit';
 
 export interface ScreenLink {
   id: string;
@@ -2911,6 +2912,37 @@ export const SCREENS: readonly ScreenLink[] = [
     family: "people-time-leave",
     accepts: ["employee", "type", "status", "q"],
   },
+  {
+    id: "/audit/workspace",
+    path: "/audit/workspace",
+    query: {},
+    code: "AUDIT.WORKSPACE",
+    title: "Auditor workspace",
+    area: "audit",
+    family: "audit",
+    accepts: [],
+  },
+  {
+    id: "/audit/grants",
+    path: "/audit/grants",
+    query: {},
+    // Gated by AUDIT.ACCESS.GRANT (a controller's capability), not by the workspace one.
+    code: "AUDIT.ACCESS.GRANT",
+    title: "Auditor access grants",
+    area: "audit",
+    family: "audit",
+    accepts: [],
+  },
+  {
+    id: "/audit/findings",
+    path: "/audit/findings",
+    query: {},
+    code: "AUDIT.WORKSPACE",
+    title: "Audit findings and requests",
+    area: "audit",
+    family: "audit",
+    accepts: [],
+  },
 ];
 
 export const SCREEN_AREAS: readonly ScreenArea[] = [
@@ -2923,4 +2955,5 @@ export const SCREEN_AREAS: readonly ScreenArea[] = [
   'production',
   'controlling',
   'configuration',
+  'audit',
 ];
