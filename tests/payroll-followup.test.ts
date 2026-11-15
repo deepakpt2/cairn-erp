@@ -311,3 +311,55 @@ describe('E · posting event labels', () => {
     expect(missing).toEqual([]);
   });
 });
+
+// ── 5b · The scope check fails closed ───────────────────────────────────────
+
+describe('5b · an employee whose company cannot be resolved is refused, not waved through', () => {
+  let insider: Awaited<ReturnType<typeof createPayrollPoster>>;
+  let outsider: Awaited<ReturnType<typeof createPayrollPoster>>;
+  const asInsider = () => ({ authorization: insider.authorization });
+  const assign = (personnelNumber: string, validFrom: string, access: { authorization: { userId: string; sessionId: string } }) =>
+    assignStructure({ client: tenant.client, personnelNumber, structureCode: STRUCTURE, baseAmount: '500', currency: fx.currency, validFrom, changedBy: 'SCOPE_TEST' }, access);
+
+  beforeAll(async () => {
+    insider = await createPayrollPoster(tenant.client, { capabilities: ['PEOPLE.PAYROLL.STRUCTURE.DEFINE'] });
+    outsider = await createPayrollPoster(tenant.client, { capabilities: ['PEOPLE.PAYROLL.STRUCTURE.DEFINE'], companyScopes: ['ZZZZ'] });
+  }, 120_000);
+
+  it('1, 3. assigning a structure to an employee with no position is refused, naming them, with a remedy naming the position screen', async () => {
+    const homeless = await payrollEmployee(fx, { positionFrom: null });
+    const refusal = await expectError(assign(homeless, '2025-10-01', asInsider()), PayrollStructureError, 'NO_COMPANY');
+    expect(refusal.message).toContain(homeless);
+    expect(refusal.remedy).toContain('/people/assignments');
+  });
+
+  it('2. ending an assignment of such an employee is refused, naming them', async () => {
+    const homeless = await payrollEmployee(fx, { positionFrom: null });
+    // Made in-process (a trusted caller carries no Company Code limit), then ended through a session.
+    const made = await assignStructure({ client: tenant.client, personnelNumber: homeless, structureCode: STRUCTURE, baseAmount: '500', currency: fx.currency, validFrom: '2025-10-01', changedBy: PAYROLL_ACTOR }, PAYROLL_AUTH);
+    const refusal = await expectError(
+      endAssignment({ client: tenant.client, assignmentId: made.assignmentId, validTo: '2025-10-31', changedBy: insider.username }, asInsider()),
+      PayrollStructureError, 'NO_COMPANY');
+    expect(refusal.message).toContain(homeless);
+    expect(refusal.remedy).toBeTruthy();
+  });
+
+  it('4. assigning a structure to an employee whose position is in scope succeeds', async () => {
+    const pn = await payrollEmployee(fx, { positionFrom: '2025-10-01' });
+    const made = await assign(pn, '2025-10-01', asInsider());
+    expect(made).toMatchObject({ personnelNumber: pn, structureCode: STRUCTURE });
+  });
+
+  it('5. assigning a structure to an employee whose position is outside the scope is refused, naming the company', async () => {
+    const pn = await payrollEmployee(fx, { positionFrom: '2025-10-01' });
+    const refusal = await expectError(assign(pn, '2025-10-01', { authorization: outsider.authorization }), PayrollStructureError, 'COMPANY_SCOPE');
+    expect(refusal.message).toContain(fx.companyCode);
+  });
+
+  it('6. ending the pay structure of a leaver (position ended in the past) still succeeds', async () => {
+    const leaver = await payrollEmployee(fx, { positionFrom: '2024-01-01', positionTo: '2024-06-30' });
+    const made = await assignStructure({ client: tenant.client, personnelNumber: leaver, structureCode: STRUCTURE, baseAmount: '500', currency: fx.currency, validFrom: '2024-01-01', changedBy: PAYROLL_ACTOR }, PAYROLL_AUTH);
+    const ended = await endAssignment({ client: tenant.client, assignmentId: made.assignmentId, validTo: '2024-06-30', changedBy: insider.username }, asInsider());
+    expect(ended.validTo).toBe('2024-06-30');
+  });
+});

@@ -100,10 +100,24 @@ async function companyOfEmployee(tx: Tx, client: string, personnelNumber: string
   return rows[0]?.company_code ?? null;
 }
 
-/** Refuse when the employee's company lies outside the grant. */
+/**
+ * Refuse when the employee's company lies outside the grant — and, fail closed, when it cannot be
+ * resolved at all: a session's scope can only be proven against a company. (A trusted in-process
+ * caller carries no Company Code limit, so it has nothing to prove.) A leaver resolves through their
+ * latest position, so ending a leaver's pay structure is not refused here.
+ */
 async function assertEmployeeScope(tx: Tx, client: string, grant: PayrollGrant, personnelNumber: string, onDate: string): Promise<void> {
+  if (grant.restrictions === null) return;
   const company = await companyOfEmployee(tx, client, personnelNumber, onDate);
-  if (company) assertCompanyScope(grant, company, refuse);
+  if (!company) {
+    refuse(
+      'NO_COMPANY',
+      `Employee ${personnelNumber} has no position, so their company code cannot be resolved.`,
+      'Give the employee a position assignment at /people/assignments before maintaining their pay structure, '
+        + 'or ask an administrator to extend your Company Code scope to every company you need to reach.',
+    );
+  }
+  assertCompanyScope(grant, company, refuse);
 }
 
 // ── Input ───────────────────────────────────────────────────────────────────
