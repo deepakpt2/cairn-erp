@@ -56,7 +56,7 @@ export interface DemoPayrollRunResult {
   eosRemovedFrom: string[];
 }
 
-async function ensureEmployee(
+export async function ensureEmployee(
   client: string,
   person: { personnelNumber: string; fullName: string; positionCode: string; costCenter: string },
   from: string,
@@ -103,7 +103,7 @@ export async function buildDemoPayrollRun(input: { client?: string; timeline: De
   // EOS provisions are not calculated in v1: no demo structure may name one.
   const eosRemovedFrom: string[] = [];
   for (const structureCode of ['STAFF', 'MGMT']) {
-    const structure = await getStructure(client, structureCode).catch(() => null);
+    const structure = await getStructure(client, structureCode, AUTHORITY).catch(() => null);
     if (structure?.components.some((c) => c.componentKind === 'EOS_PROVISION')) {
       for (const c of structure.components.filter((x) => x.componentKind === 'EOS_PROVISION')) {
         await removeStructureComponent({ client, structureCode, componentCode: c.componentCode, changedBy: DEMO_ACTOR }, AUTHORITY);
@@ -141,7 +141,7 @@ export async function buildDemoPayrollRun(input: { client?: string; timeline: De
   await ensureAbsence(client, '10000007', 'UNPAID', addDays(periodTo, -1), addDays(periodTo, 2), true, 'Unpaid leave across the month end (demo)');
   await ensureAbsence(client, '10000008', 'UNPAID', addDays(periodFrom, 11), addDays(periodFrom, 12), false, 'Requested, not yet decided (demo)');
 
-  const standing = (await listPayrollRuns(client)).find(
+  const standing = (await listPayrollRuns(client, AUTHORITY)).find(
     (r) => r.companyCode === companyCode && r.fiscalYear === fiscalYear && r.period === period && r.status !== 'CANCELLED',
   );
   const run = standing ?? await proposePayrollRun({

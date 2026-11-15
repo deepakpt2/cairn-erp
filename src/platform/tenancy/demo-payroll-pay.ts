@@ -26,6 +26,8 @@ import { DEMO_ACTOR, DEMO_FOUNDER_ACCOUNTS, DEMO_IDENTITY, DEMO_STRUCTURE } from
 import { withActingUser } from './demo-people';
 import type { DemoTimeline } from './demo-provisioning';
 
+/** The demo provisioner acts as the administrator, whose pattern is the wildcard. */
+const AUTHORITY = ['*'] as const;
 const BANK = { country: 'KW', key: 'VFDEMO01', name: 'Gulf Demonstration Bank', city: 'Kuwait City' } as const;
 const HOUSE_BANK = 'VFB';
 const ACCOUNT = { id: 'MAIN', number: '0012345678', glAccount: '101000' } as const;
@@ -67,12 +69,12 @@ export async function buildDemoPayrollPay(input: { client?: string; timeline: De
   const companyCode = DEMO_STRUCTURE.companyCode;
   await ensureHouseBank(client, companyCode);
 
-  const posted = (await listPayrollRuns(client))
+  const posted = (await listPayrollRuns(client, AUTHORITY))
     .filter((r) => r.companyCode === companyCode && r.status === 'POSTED')
     .sort((a, b) => b.fiscalYear - a.fiscalYear || b.period - a.period)[0];
   if (!posted) throw new Error('D10_PAYROLL_PAY: no posted payroll run stands; D9_PAYROLL_POST posts it.');
 
-  const existing = await getSalaryPayment(client, posted.runId);
+  const existing = await getSalaryPayment(client, posted.runId, AUTHORITY);
   if (!existing) {
     const payer = DEMO_FOUNDER_ACCOUNTS.administrator.username;
     await withActingUser(client, payer, (actor) => paySalaryRun({
@@ -80,7 +82,7 @@ export async function buildDemoPayrollPay(input: { client?: string; timeline: De
       paymentDate: posted.periodTo, houseBankKey: HOUSE_BANK, bankAccountId: ACCOUNT.id,
     }));
   }
-  const payment = (await getSalaryPayment(client, posted.runId))!;
+  const payment = (await getSalaryPayment(client, posted.runId, AUTHORITY))!;
   return {
     runId: posted.runId,
     paymentDate: payment.paymentDate,

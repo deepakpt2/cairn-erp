@@ -816,13 +816,23 @@ export const payrollRun = pgTable(
     postedAt: timestamp('posted_at', { withTimezone: true }),
     /** The idempotency key handed to the G/L posting service. */
     postingRequestKey: varchar('posting_request_key', { length: 64 }),
+    /**
+     * The run this one follows, when this run exists because a period already had one (9281).
+     * Set at propose time when at least one employee was excluded as already covered.
+     * Null for an ordinary run, and for the first run of a period.
+     */
+    predecessorRunId: varchar('predecessor_run_id', { length: 36 }),
     ...auditColumns,
   },
   (t) => [
     primaryKey({ columns: [t.client, t.runId] }),
-    uniqueIndex('payroll_run_period_uq')
-      .on(t.client, t.companyCode, t.fiscalYear, t.period)
-      .where(sql`${t.status} <> 'CANCELLED'`),
+    // 9281: a period may hold more than one run (off-cycle). What it may not hold is one employee
+    // twice — the coverage trigger on payroll_result enforces that instead of a unique index.
+    foreignKey({
+      name: 'payroll_run_predecessor_fk',
+      columns: [t.client, t.predecessorRunId],
+      foreignColumns: [t.client, t.runId],
+    }).onDelete('set null'),
     uniqueIndex('payroll_run_request_key_uq').on(t.client, t.requestKey).where(sql`${t.requestKey} is not null`),
     check('payroll_run_period_ck', sql`${t.period} between 1 and 16`),
     check('payroll_run_dates_ck', sql`${t.periodTo} >= ${t.periodFrom}`),

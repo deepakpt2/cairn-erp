@@ -30,6 +30,7 @@ import { accountingReversalLink, journalEntry, journalEntryLine } from '../finan
 import { accountDetermination, bankAccount, houseBank } from '../foundation/schema';
 import { PAYROLL_NET_PAY_EVENT } from './payroll-posting';
 import { PAYROLL_RUN_ROUTE } from './payroll-run';
+import { type PayrollAccess, assertCompanyScope, judgePayrollAccess } from './payroll-access';
 import {
   SALARY_PAYMENT_CAPABILITY,
   SALARY_PAYMENT_DOCUMENT_TYPE,
@@ -375,12 +376,14 @@ export async function paySalaryRun(input: PaySalaryRunInput): Promise<SalaryPaym
 // ── Reading ─────────────────────────────────────────────────────────────────
 
 /** What a run was paid with, or null. */
-export async function getSalaryPayment(client: string, runIdInput: string): Promise<SalaryPaymentView | null> {
+export async function getSalaryPayment(client: string, runIdInput: string, access?: PayrollAccess): Promise<SalaryPaymentView | null> {
   const runId = String(runIdInput ?? '').trim();
   if (!runId) return null;
   return withTenant(client, async (tx) => {
+    const grant = await judgePayrollAccess(tx, client, access, ['PEOPLE.PAYROLLRUN.EXECUTE', 'PEOPLE.PAYROLL.RESULT', SALARY_PAYMENT_CAPABILITY], refuse);
     const [row] = await tx.select().from(salaryPayment).where(and(eq(salaryPayment.client, client), eq(salaryPayment.runId, runId))).limit(1);
     if (!row) return null;
+    assertCompanyScope(grant, row.companyCode, refuse);
     const [entry] = await tx.select({ displayNumber: journalEntry.displayNumber }).from(journalEntry).where(and(
       eq(journalEntry.client, client), eq(journalEntry.companyCode, row.companyCode),
       eq(journalEntry.documentNumber, row.documentNumber), eq(journalEntry.fiscalYear, row.documentFiscalYear),

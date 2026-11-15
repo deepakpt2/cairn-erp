@@ -30,14 +30,15 @@ const CAPABILITY = SALARY_STRUCTURE_CAPABILITY;
 export default async function SalaryStructurePage({ searchParams }: { searchParams: Promise<{ structure?: string }> }) {
   const params = await searchParams;
   const session = await requireSession(ROUTE);
+  const access = { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } };
   const allowed = can(session, CAPABILITY);
   const client = session.user.client;
   const [structures, components, currency] = allowed
-    ? await Promise.all([listStructures(client), listAssignableComponents(client), defaultPayrollCurrency(client)])
+    ? await Promise.all([listStructures(client, access), listAssignableComponents(client), defaultPayrollCurrency(client)])
     : [[], [], null];
   const selectedCode = params.structure?.toUpperCase();
   const selected = allowed && selectedCode && structures.some((s) => s.code === selectedCode)
-    ? await getStructure(client, selectedCode)
+    ? await getStructure(client, selectedCode, access)
     : null;
   const today = new Date().toISOString().slice(0, 10);
 

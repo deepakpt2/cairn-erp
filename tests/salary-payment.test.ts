@@ -215,7 +215,7 @@ describe('paying the March 2025 run', () => {
   it('18. an actor with it but without FIN.JOURNAL.POST is refused by the posting service', async () => {
     const actor = await createPayrollPoster(tenant.client, { capabilities: ['PEOPLE.PAYROLL.PAYMENT'] });
     await expectRefusal(pay(run.runId, {}, actor), 'GL_REFUSED');
-    expect(await getSalaryPayment(tenant.client, run.runId)).toBeNull();
+    expect(await getSalaryPayment(tenant.client, run.runId, RUN_AUTH)).toBeNull();
   });
 
   it('1, 3–7. a posted run is paid: one PY document, a debit per paid employee on the net pay account, one bank credit', async () => {
@@ -254,7 +254,7 @@ describe('paying the March 2025 run', () => {
   });
 
   it('10. a salary_payment row records the bank, both accounts, the count and the amount', async () => {
-    const view = (await getSalaryPayment(tenant.client, run.runId))!;
+    const view = (await getSalaryPayment(tenant.client, run.runId, RUN_AUTH))!;
     expect(view).toMatchObject({
       paymentDate: '2025-04-05', houseBankKey: 'HB01', bankAccountId: 'MAIN', bankGlAccount: '101000', netPayAccount: '251000',
       employeeCount: 2, totalAmount: '2850.0000', documentNumber: payment.documentNumber, documentFiscalYear: payment.fiscalYear,
@@ -281,7 +281,7 @@ describe('paying the March 2025 run', () => {
     const count = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
       select count(*)::int as n from journal_entry where client = ${tenant.client} and document_type = 'PY'`)) as unknown as Array<{ n: number }>);
     expect(count[0]!.n).toBe(1);
-    expect((await getSalaryPayment(tenant.client, run.runId))!.documentNumber).toBe(payment.documentNumber);
+    expect((await getSalaryPayment(tenant.client, run.runId, RUN_AUTH))!.documentNumber).toBe(payment.documentNumber);
   });
 });
 
@@ -291,7 +291,7 @@ describe('the bank and the payable come from configuration', () => {
     const result = await pay(run.runId, { paymentDate: '2025-06-05', bankAccountId: 'ALT' });
     const posted = await lines(result.documentNumber, result.fiscalYear);
     expect(posted.find((l) => l.debit_credit === 'H')!.gl_account).toBe('101100');
-    expect((await getSalaryPayment(tenant.client, run.runId))!.bankGlAccount).toBe('101100');
+    expect((await getSalaryPayment(tenant.client, run.runId, RUN_AUTH))!.bankGlAccount).toBe('101100');
   });
 
   it('19. the reconciliation guard: a determination changed after posting refuses the payment, naming both amounts', async () => {
@@ -305,19 +305,22 @@ describe('the bank and the payable come from configuration', () => {
     } finally {
       await setNetPayAccount('251000');
     }
-    expect(await getSalaryPayment(tenant.client, run.runId)).toBeNull();
+    expect(await getSalaryPayment(tenant.client, run.runId, RUN_AUTH)).toBeNull();
   });
 
   it('the reconciliation guard: an open amount that differs from the results refuses, naming both', async () => {
     const run = await runFor(7);
     const pr = await runDocument(run.runId);
-    // Simulate results that no longer agree with what was posted (one result gone): pay what was posted,
-    // never what is stored now. Results cannot be updated by the application; delete stands for recalculation.
+    // Simulate a payroll document whose open net pay no longer agrees with the results (a hand-edited
+    // ledger line): pay what the run's results say only when the ledger agrees. A posted result itself
+    // can be neither updated (no grant) nor deleted (9281 trigger).
     await withTenant(tenant.client, (tx) => tx.execute(sql`
-      delete from payroll_result where client = ${tenant.client} and run_id = ${run.runId} and personnel_number = ${people[1]!}`));
+      update journal_entry_line set amount_document = amount_document - 1900
+       where client = ${tenant.client} and document_number = ${pr.document_number} and fiscal_year = ${pr.document_fiscal_year}
+         and gl_account = '251000' and debit_credit = 'H'`));
     const refusal = await expectRefusal(pay(run.runId, { paymentDate: '2025-08-05' }), 'NET_PAY_MISMATCH');
     expect(refusal.message).toContain(pr.document_number);
     expect(refusal.message).toContain('2850.0000');
-    expect(refusal.message).toContain('950.0000');
+    expect(refusal.message).toContain('950.0000'); // what the ledger leaves open
   });
 });

@@ -41,20 +41,21 @@ const STATUS_CHIP: Record<string, string> = {
 export default async function PayrollRunPage({ searchParams }: { searchParams: Promise<{ run?: string }> }) {
   const params = await searchParams;
   const session = await requireSession(ROUTE);
+  const access = { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } };
   const allowed = can(session, CAPABILITY);
   const mayReadResults = can(session, PAYROLL_RESULT_CAPABILITY);
   const client = session.user.client;
   const today = new Date().toISOString().slice(0, 10);
 
-  const [runs, companies] = allowed ? await Promise.all([listPayrollRuns(client), listPayrollCompanies(client)]) : [[], []];
+  const [runs, companies] = allowed ? await Promise.all([listPayrollRuns(client, access), listPayrollCompanies(client)]) : [[], []];
   const defaultCompany = companies[0]?.companyCode ?? '';
   const position = allowed && defaultCompany ? await currentPayrollPeriod(client, defaultCompany, today) : null;
-  const selected = allowed && params.run && runs.some((r) => r.runId === params.run) ? await getPayrollRun(client, params.run) : null;
-  const posting = selected && selected.status === 'POSTED' ? await getPayrollPosting(client, selected.runId) : null;
+  const selected = allowed && params.run && runs.some((r) => r.runId === params.run) ? await getPayrollRun(client, params.run, access) : null;
+  const posting = selected && selected.status === 'POSTED' ? await getPayrollPosting(client, selected.runId, access) : null;
   const mayPost = can(session, PAYROLL_POST_CAPABILITY);
   const mayDisplayJournal = can(session, 'FIN.JOURNAL.DISPLAY');
   const mayPay = can(session, SALARY_PAYMENT_CAPABILITY);
-  const payment = selected && selected.status === 'POSTED' ? await getSalaryPayment(client, selected.runId) : null;
+  const payment = selected && selected.status === 'POSTED' ? await getSalaryPayment(client, selected.runId, access) : null;
   const banks = selected && selected.status === 'POSTED' && !payment && mayPay
     ? (await listBankChoices(client)).filter((b) => b.companyCode === selected.companyCode)
     : [];
@@ -122,6 +123,13 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
                     {posting.reversalDocumentNumber ? ` Reversed by document ${posting.reversalDocumentNumber}; the run stays posted — a correction is a new run in a later period.` : ''}
                   </p>
                 )}
+                {selected.predecessorRunId && (
+                  <p className="text-sm">
+                    Off-cycle run: it follows run{' '}
+                    <Link href={`${ROUTE}?run=${selected.predecessorRunId}`} className="code underline">{selected.predecessorRunId}</Link>
+                    {' '}and pays only employees no live run of this period covers.
+                  </p>
+                )}
                 {selected.status === 'PROPOSED' && <p className="text-xs text-ink-soft">Not postable yet: the run has not been released.</p>}
                 {selected.status === 'RELEASED' && <p className="text-xs text-ink-soft">Not payable yet: post the run first.</p>}
                 {payment && (
@@ -152,7 +160,10 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
                         <tr key={`${e.personnelNumber}-${i}`}>
                           <td className="code"><Link href={`/people/employees?employee=${e.personnelNumber}`} className="underline">{e.personnelNumber}</Link></td>
                           <td>{e.employeeName ?? ''}</td>
-                          <td className="code text-xs">{e.reasonCode}</td>
+                          <td className="code text-xs">
+                            {e.reasonCode}
+                            {e.informational && <span className="chip ml-1">information</span>}
+                          </td>
                           <td className="text-sm">{e.message}</td>
                           <td className="text-xs text-ink-soft">{e.remedy ?? ''}</td>
                         </tr>

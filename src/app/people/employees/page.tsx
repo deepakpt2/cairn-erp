@@ -5,6 +5,7 @@ import { EMPLOYEE_CAPABILITY, EMPLOYEE_ROUTE, RECORD_CAPABILITY, getEmployee, li
 import { listRecordTypes } from '@/modules/people/record-types';
 import {
   PAYROLL_RESULT_CAPABILITY,
+  PayrollStructureError,
   SALARY_STRUCTURE_CAPABILITY,
   SALARY_STRUCTURE_ROUTE,
   defaultPayrollCurrency,
@@ -40,6 +41,7 @@ export default async function PeopleEmployeesPage({ searchParams }: {
   searchParams: Promise<{ employee?: string; q?: string }>;
 }) {
   const session = await requireSession(EMPLOYEE_ROUTE);
+  const access = { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } };
   const params = await searchParams;
   const client = session.user.client;
   const personnelNumber = (params.employee ?? '').trim().toUpperCase();
@@ -83,6 +85,7 @@ export default async function PeopleEmployeesPage({ searchParams }: {
           personnelNumber={personnelNumber}
           canRead={can(session, SALARY_STRUCTURE_CAPABILITY) || can(session, PAYROLL_RESULT_CAPABILITY)}
           canAssign={can(session, SALARY_STRUCTURE_CAPABILITY)}
+          access={access}
         />
       )}
     </div>
@@ -99,11 +102,14 @@ async function PayStructureSection({
   personnelNumber,
   canRead,
   canAssign,
+  access,
 }: {
   client: string;
   personnelNumber: string;
   canRead: boolean;
   canAssign: boolean;
+  /** The signed-in session; the payroll services judge it themselves (capability, Company Code scope). */
+  access: { authorization: { userId: string; sessionId: string } };
 }) {
   if (!canRead) {
     return (
@@ -118,12 +124,24 @@ async function PayStructureSection({
   const today = new Date().toISOString().slice(0, 10);
   const monthFrom = `${today.slice(0, 8)}01`;
   const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
-  const [assignments, structures, currency, readiness] = await Promise.all([
-    listAssignments(client, personnelNumber),
-    listStructures(client),
-    defaultPayrollCurrency(client),
-    employeeRunReadiness(client, personnelNumber, monthFrom, monthEnd),
-  ]);
+  let loaded;
+  try {
+    loaded = await Promise.all([
+      listAssignments(client, personnelNumber, access),
+      listStructures(client, access),
+      defaultPayrollCurrency(client),
+      employeeRunReadiness(client, personnelNumber, monthFrom, monthEnd, access),
+    ]);
+  } catch (error) {
+    if (!(error instanceof PayrollStructureError)) throw error;
+    return (
+      <section className="panel p-4" aria-label="Pay structure">
+        <h2 className="panel-title">Pay structure</h2>
+        <p role="status" className="text-sm text-ink-soft">{error.message}{error.remedy ? ` ${error.remedy}` : ''}</p>
+      </section>
+    );
+  }
+  const [assignments, structures, currency, readiness] = loaded;
   const current = assignments.find((a) => a.validFrom <= today && (a.validTo === null || a.validTo >= today)) ?? null;
 
   return (

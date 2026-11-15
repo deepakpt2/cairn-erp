@@ -55,7 +55,7 @@ interface RestartRow {
 }
 
 /**
- * The fourteen phases, and how each one behaves when the run is stopped inside it.
+ * The fifteen phases, and how each one behaves when the run is stopped inside it.
  *
  * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
  * people are split because the second takes minutes and opens administrator
@@ -146,6 +146,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     writes: 'A bank in the bank master, house bank VFB with account MAIN (KWD, G/L 101000) for company 1000, and the posted run paid from it as one PY document, clearing the payroll document’s net pay payable.',
     resumesBy: 'The bank, house bank and account are created only when missing; a run already paid is left as it is, and the payment is request-keyed (`SALARY-PAY-<run>`).',
     guaranteedBy: ['buildDemoPayrollPay'],
+  },
+  {
+    phase: 'D11_PAYROLL_OFFCYCLE',
+    writes: 'A late joiner (10000019) with a position and STAFF assignment from the 20th of the run’s period, and a proposed off-cycle run for that period paying only her, naming the paid run as its predecessor. Nothing released, posted or paid.',
+    resumesBy: 'Employee and position looked up before they are written; request-keyed assignment (`DEMO-SAL-10000019`) and run (`DEMO-PAYRUN-OFFCYCLE-*`); an off-cycle run already standing for the period is left as it is.',
+    guaranteedBy: ['buildDemoPayrollOffCycle'],
   },
 ];
 

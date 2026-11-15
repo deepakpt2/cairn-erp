@@ -6366,10 +6366,16 @@
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
+  "modules/people/payroll-access.ts": [
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts"
+  ],
   "modules/people/payroll-posting.ts": [
     "modules/finance/gl-document.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "modules/people/payroll-access.ts",
     "modules/people/payroll-run.ts",
     "modules/people/schema.ts",
     "platform/auth/service-authority.ts",
@@ -6380,16 +6386,16 @@
     "platform/posting/index.ts"
   ],
   "modules/people/payroll-run.ts": [
+    "modules/people/payroll-access.ts",
     "modules/people/payroll-structure.ts",
     "modules/people/schema.ts",
-    "platform/auth/session.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts"
   ],
   "modules/people/payroll-structure.ts": [
+    "modules/people/payroll-access.ts",
     "modules/people/schema.ts",
-    "platform/auth/session.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
@@ -6404,6 +6410,7 @@
     "modules/finance/gl-document.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "modules/people/payroll-access.ts",
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "modules/people/schema.ts",
@@ -7752,6 +7759,15 @@
     "platform/tenancy/demo-provisioning.ts",
     "platform/tenancy/index.ts",
     "platform/tenancy/standard-structure.ts"
+  ],
+  "platform/tenancy/demo-payroll-offcycle.ts": [
+    "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
+    "platform/db/client.ts",
+    "platform/periods/index.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-payroll-run.ts",
+    "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-payroll-pay.ts": [
     "modules/foundation/bank-master.ts",

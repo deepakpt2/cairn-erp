@@ -47,12 +47,12 @@ one transaction with the eligibility survey. It is handed one of four answers.
 |---|---|---|
 | `FRESH` | No installation record, and every tenant-owned table is empty. | Writes the record and all eleven pending phases, then runs all eleven. |
 | `RESUME` | A record stands for this database and this build, not failed, with phases outstanding. | Skips the phases already `COMPLETED`, and resumes at the first one that is not — a phase left `RUNNING` by a dead process is resumed and counted as a retry. Also: a record that is `COMPLETED` but does not name a phase a later build added (e.g. `D6_AUDIT`) has that phase appended and run; a phase it names but never finished is still refused. A resumed run resets every account to a new password and rewrites the credential file. |
-| `ALREADY_COMPLETE` | The record is `COMPLETED` and all fourteen phases are. | Changes nothing. Rewrites the credential file, because a deployment that lost the file cannot be given the password back — with the password shown as *not recoverable* rather than blank. Returns 0. |
+| `ALREADY_COMPLETE` | The record is `COMPLETED` and all fifteen phases are. | Changes nothing. Rewrites the credential file, because a deployment that lost the file cannot be given the password back — with the password shown as *not recoverable* rather than blank. Returns 0. |
 | `REFUSE` | Any of the five refusals in §4. | Writes nothing. Returns 1, so the application never starts. |
 
 ---
 
-## 3. The fourteen phases
+## 3. The fifteen phases
 
 A phase is a unit of resumption, not a unit of tidiness. The organisation and the
 people are split because the second takes minutes and opens administrator sessions: a
@@ -75,6 +75,7 @@ rebuilding the company they hang from.
 | `D8_PAYROLL_RUN` | A joiner (10000017) and a leaver (10000018) with positions and STAFF assignments, unpaid leave (approved for 10000004, approved across the month end for 10000007, still requested for 10000008), EOSPROV taken out of STAFF and MGMT, and a **proposed** payroll run for the period the installation was claimed in — 10000016 stands as its named exception. Nothing released or posted. | Employees, positions and absences looked up before they are written; request-keyed assignments `DEMO-SAL-*` and run `DEMO-PAYRUN-*`; a run already standing for the period is left alone. |
 | `D9_PAYROLL_POST` | A MGMT structure for 10000016 from the first day of the run's period (clearing D8's exception), then the run recalculated, released and **posted** as one PR document by `demo.admin` — who is given explicit Company Code 1000 and Plant 1000/2000 scope, its whole reach, because the judged posting services refuse an unscoped actor. Only that period: the earlier months' salaries are already booked by D4's journals. Nothing paid. | Request-keyed assignment `DEMO-SAL-10000016-*`; scopes granted only when missing; each step runs only from the status before it; posting request-keyed `PAYROLL-POST-<run>`. |
 | `D10_PAYROLL_PAY` | Bank `VFDEMO01` in the bank master, house bank `VFB` account `MAIN` (KWD, G/L 101000) for company 1000, and the posted run paid from it on the last day of its period as one PY document — a debit per employee on the net pay payable, one bank credit — clearing the payroll document's payable. | Bank, house bank and account created only when missing; a paid run is left alone; payment request-keyed `SALARY-PAY-<run>`. |
+| `D11_PAYROLL_OFFCYCLE` | A late joiner (10000019, Yara Khalil) from the 20th of the run's period, STAFF from that day, and a **proposed off-cycle run** for the same period that pays only her; the 18 employees the paid run covers are listed as information naming it, and it is the off-cycle run's predecessor. | Employee and position looked up; request-keyed assignment `DEMO-SAL-10000019` and run `DEMO-PAYRUN-OFFCYCLE-*`; an off-cycle run already standing is left alone. |
 
 The ledger says which phases finished. It cannot say what a phase had committed
 before it died, which is why each phase asks its own question — does a document
@@ -182,7 +183,7 @@ database; the report says so.
 
 | Claim | Evidence |
 |---|---|
-| All fourteen phases complete, first attempt, one record naming the right database | `tests/demo-safety-matrix.test.ts`, against a provisioned database |
+| All fifteen phases complete, first attempt, one record naming the right database | `tests/demo-safety-matrix.test.ts`, against a provisioned database |
 | The disposition, refusal, lock and ordering guarantees | `tests/demo-safety-matrix.test.ts`, against the source |
 | Every phase request-keyed, or idempotent by adoption | `tests/demo-safety-matrix.test.ts`, against the phase modules |
 | Credential file permissions, ownership and atomic write | `tests/demo-credentials.test.ts` |

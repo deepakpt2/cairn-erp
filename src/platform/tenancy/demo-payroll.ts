@@ -142,12 +142,12 @@ export async function buildDemoPayroll(input: { client?: string; timeline: DemoT
     }, AUTHORITY);
   }
 
-  const structures = new Set((await listStructures(client)).map((s) => s.code));
+  const structures = new Set((await listStructures(client, AUTHORITY)).map((s) => s.code));
   for (const s of STRUCTURES) {
     if (!structures.has(s.code)) {
       await defineSalaryStructure({ client, code: s.code, name: s.name, currency: DEMO_IDENTITY.currency, validFrom: from, changedBy: DEMO_ACTOR }, AUTHORITY);
     }
-    const rules = new Set((await getStructure(client, s.code)).components.map((c) => c.componentCode));
+    const rules = new Set((await getStructure(client, s.code, AUTHORITY)).components.map((c) => c.componentCode));
     for (const r of s.rules) {
       if (rules.has(r.component)) continue;
       await setStructureComponent({

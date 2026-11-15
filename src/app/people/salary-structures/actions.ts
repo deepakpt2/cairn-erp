@@ -31,12 +31,17 @@ function text(form: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-async function guard(route: string): Promise<{ client: string; actor: string; capabilities: string[] } | PayrollActionState> {
+async function guard(route: string): Promise<{ client: string; actor: string; access: { authorization: { userId: string; sessionId: string } } } | PayrollActionState> {
   const session = await requireSession(route);
   if (!can(session, SALARY_STRUCTURE_CAPABILITY)) {
     return { ok: false, message: `You do not hold ${SALARY_STRUCTURE_CAPABILITY}.`, remedy: `Ask for ${SALARY_STRUCTURE_CAPABILITY}.` };
   }
-  return { client: session.user.client, actor: session.user.username, capabilities: session.user.capabilities };
+  return {
+    client: session.user.client,
+    actor: session.user.username,
+    // The service judges the session itself: capability and Company Code scope.
+    access: { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } },
+  };
 }
 
 function refusal(error: unknown): PayrollActionState {
@@ -57,7 +62,7 @@ export async function defineStructureAction(_prev: PayrollActionState, form: For
       validFrom: text(form, 'validFrom'),
       validTo: text(form, 'validTo') || null,
       changedBy: access.actor,
-    }, access.capabilities);
+    }, access.access);
     revalidatePath(ROUTE);
     return { ok: true, message: `Structure ${view.code} — ${view.name} — defined in ${view.currency}, valid from ${view.validFrom}.` };
   } catch (error) {
@@ -78,7 +83,7 @@ export async function changeStructureAction(_prev: PayrollActionState, form: For
       validTo: form.has('validTo') ? text(form, 'validTo') || null : undefined,
       isValid: isValid === '' ? undefined : isValid === 'yes',
       changedBy: access.actor,
-    }, access.capabilities);
+    }, access.access);
     revalidatePath(ROUTE);
     return { ok: true, message: `Structure ${view.code} changed: ${view.isValid ? 'valid' : 'retired'}, ${view.validFrom} to ${view.validTo ?? 'open'}.` };
   } catch (error) {
@@ -98,7 +103,7 @@ export async function setComponentAction(_prev: PayrollActionState, form: FormDa
       amountKind: text(form, 'amountKind'),
       amountValue: text(form, 'amountValue'),
       changedBy: access.actor,
-    }, access.capabilities);
+    }, access.access);
     revalidatePath(ROUTE);
     const rule = view.amountKind === 'FIXED' ? `fixed ${view.amountValue}` : `${view.amountValue} % of base`;
     return { ok: true, message: `${view.componentCode} in ${view.structureCode}: ${rule}.` };
@@ -117,7 +122,7 @@ export async function removeComponentAction(_prev: PayrollActionState, form: For
       structureCode: text(form, 'structureCode'),
       componentCode: text(form, 'componentCode'),
       changedBy: access.actor,
-    }, access.capabilities);
+    }, access.access);
     revalidatePath(ROUTE);
     return { ok: true, message: `${text(form, 'componentCode').toUpperCase()} removed from ${view.code}. Results already calculated keep their lines.` };
   } catch (error) {
@@ -143,7 +148,7 @@ export async function assignStructureAction(_prev: PayrollActionState, form: For
       validTo: text(form, 'validTo') || null,
       requestKey: text(form, 'requestKey') || undefined,
       changedBy: access.actor,
-    }, access.capabilities);
+    }, access.access);
     revalidatePath(EMPLOYEE_ROUTE);
     return {
       ok: true,
@@ -165,7 +170,7 @@ export async function endAssignmentAction(_prev: PayrollActionState, form: FormD
       assignmentId: text(form, 'assignmentId'),
       validTo: text(form, 'validTo'),
       changedBy: access.actor,
-    }, access.capabilities);
+    }, access.access);
     revalidatePath(EMPLOYEE_ROUTE);
     return { ok: true, message: `Assignment ${view.structureCode} now ends ${view.validTo}.` };
   } catch (error) {

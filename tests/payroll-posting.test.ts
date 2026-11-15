@@ -199,7 +199,7 @@ describe('posting the March 2025 run', () => {
     const payrollOnly = await createPayrollPoster(tenant.client, { capabilities: ['PEOPLE.PAYROLL.POST'] });
     const refusal = await expectPostingRefusal(post(run.runId, payrollOnly), 'GL_REFUSED');
     expect(refusal.message).toMatch(/FIN\.JOURNAL\.POST|post/i);
-    expect((await getPayrollRun(tenant.client, run.runId))!.status).toBe('RELEASED');
+    expect((await getPayrollRun(tenant.client, run.runId, RUN_AUTH))!.status).toBe('RELEASED');
   });
 
   it('an actor whose Company Code scope misses the company is refused, naming it', async () => {
@@ -216,7 +216,7 @@ describe('posting the March 2025 run', () => {
       select document_type, posting_date::text as posting_date, reference from journal_entry
        where client = ${tenant.client} and document_number = ${result.documentNumber} and fiscal_year = ${result.fiscalYear}`)) as unknown as Array<{ document_type: string; posting_date: string; reference: string }>);
     expect(entries).toEqual([{ document_type: 'PR', posting_date: '2025-03-31', reference: 'PAYROLL-2025-3' }]);
-    const standing = (await getPayrollRun(tenant.client, run.runId))!;
+    const standing = (await getPayrollRun(tenant.client, run.runId, RUN_AUTH))!;
     expect(standing.status).toBe('POSTED');
     const row = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
       select document_number, document_fiscal_year, posted_by, posting_request_key from payroll_run where client = ${tenant.client} and run_id = ${run.runId}`)) as unknown as Array<Record<string, unknown>>);
@@ -226,12 +226,12 @@ describe('posting the March 2025 run', () => {
   it('3, 4. debits equal gross plus employer cost; credits equal net plus deductions plus employer contributions, and balance', async () => {
     const lines = await journalLines(document.documentNumber, document.fiscalYear);
     const sum = (side: string) => lines.filter((l) => l.debit_credit === side).reduce((s, l) => s + Number(l.amount), 0);
-    const view = (await getPayrollRun(tenant.client, run.runId))!;
+    const view = (await getPayrollRun(tenant.client, run.runId, RUN_AUTH))!;
     expect(sum('S')).toBeCloseTo(Number(view.grossPay) + Number(view.employerCost), 4);
     expect(sum('H')).toBeCloseTo(Number(view.netPay) + Number(view.totalDeductions) + Number(view.employerCost), 4);
     expect(sum('S')).toBeCloseTo(sum('H'), 4);
     expect(sum('S')).toBeCloseTo(2620, 4);
-    const posting = (await getPayrollPosting(tenant.client, run.runId))!;
+    const posting = (await getPayrollPosting(tenant.client, run.runId, RUN_AUTH))!;
     expect(posting).toMatchObject({ documentNumber: document.documentNumber, documentFiscalYear: YEAR, postingDate: '2025-03-31', lineCount: 6, reversalDocumentNumber: null });
     expect(Number(posting.debitTotal)).toBeCloseTo(2620, 4);
   });
@@ -268,7 +268,7 @@ describe('posting the March 2025 run', () => {
     const count = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
       select count(*)::int as n from journal_entry where client = ${tenant.client} and document_type = 'PR'`)) as unknown as Array<{ n: number }>);
     expect(count[0]!.n).toBe(1);
-    const standing = (await getPayrollRun(tenant.client, run.runId))!;
+    const standing = (await getPayrollRun(tenant.client, run.runId, RUN_AUTH))!;
     expect(standing.status).toBe('POSTED');
   });
 
@@ -303,7 +303,7 @@ describe('determination, period and snapshot refusals', () => {
     } finally {
       await setNetPayAccount('251000');
     }
-    expect((await getPayrollRun(tenant.client, run.runId))!.status).toBe('RELEASED');
+    expect((await getPayrollRun(tenant.client, run.runId, RUN_AUTH))!.status).toBe('RELEASED');
   });
 
   it('16. a result with negative net pay is refused, naming the personnel number', async () => {

@@ -30,7 +30,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { hasCapability } from '../../platform/auth/session';
+import { type PayrollAccess, assertCompanyScope, judgePayrollAccess, reachesCompany } from './payroll-access';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { PeriodError, checkPostingAllowed, derivePosition, getCompanyCode, periodDates } from '../../platform/periods';
@@ -56,7 +56,7 @@ import {
 } from './schema';
 
 export { PAYROLL_RESULT_CAPABILITY, PAYROLL_RESULT_ROUTE, PAYROLL_RUN_CAPABILITY, PAYROLL_RUN_ROUTE };
-export type { PayrollRunStatus };
+export type { PayrollRunStatus, PayrollAccess };
 
 // ── Errors ──────────────────────────────────────────────────────────────────
 
@@ -76,14 +76,26 @@ function refuse(code: string, message: string, remedy?: string): never {
   throw new PayrollRunError(message, remedy, code);
 }
 
-function assertCapability(capabilities: readonly string[] | undefined, actor: string): void {
-  if (!capabilities || !hasCapability([...capabilities], PAYROLL_RUN_CAPABILITY)) {
-    refuse(
-      'PAYROLL_AUTHORITY',
-      `${actor} does not hold ${PAYROLL_RUN_CAPABILITY}.`,
-      `Ask an administrator for ${PAYROLL_RUN_CAPABILITY}. Payroll authority is granted to no role by default.`,
-    );
+/** Proposing, recalculating, releasing and cancelling a run. */
+const EXECUTE = [PAYROLL_RUN_CAPABILITY] as const;
+/** Reading runs and results: whoever runs payroll, or whoever may read a payroll result. */
+const READ = [PAYROLL_RUN_CAPABILITY, PAYROLL_RESULT_CAPABILITY] as const;
+const judge = (tx: Tx, client: string, access: PayrollAccess | undefined, capabilities: readonly string[]) =>
+  judgePayrollAccess(tx, client, access, capabilities, refuse);
+
+/** Exception codes that inform rather than block: the employee is already paid by another run. */
+export const INFORMATIONAL_EXCEPTIONS: ReadonlySet<string> = new Set(['ALREADY_COVERED']);
+
+/** A database refusal from the coverage or immutability trigger (9281), in payroll's words. */
+function translateTrigger(error: unknown): never {
+  const code = (error as { code?: string } | null)?.code;
+  if (code === '23505' && /already covered by payroll run/.test(String((error as Error).message))) {
+    refuse('RUN_RACE', 'Another run has just covered one or more of these employees. Propose the run again.', 'Reload the runs; the employees are paid by the run that covered them.');
   }
+  if (code === '23514' && /a released result is never deleted/.test(String((error as Error).message))) {
+    refuse('RESULT_FROZEN', 'That payroll result belongs to a released run and cannot be deleted.', 'A released result is frozen; a correction is a new run in a later period.');
+  }
+  throw error;
 }
 
 // ── Input ───────────────────────────────────────────────────────────────────
@@ -297,6 +309,8 @@ export interface PayrollRunRow extends RunRow {
   cancelledBy: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  /** The run this off-cycle run follows (it excluded employees that run covers); null otherwise. */
+  predecessorRunId: string | null;
 }
 
 export interface RunException {
@@ -305,6 +319,8 @@ export interface RunException {
   reasonCode: string;
   message: string;
   remedy: string | null;
+  /** True when the exception only informs (ALREADY_COVERED) and does not block release. */
+  informational: boolean;
 }
 
 export interface PayrollRunView extends PayrollRunRow {
@@ -363,7 +379,7 @@ const RUN_SELECT = sql`
   select r.run_id, r.company_code, r.fiscal_year, r.period, r.period_from::text as period_from,
          r.period_to::text as period_to, r.total_days, r.currency, r.status, r.employee_count,
          r.exception_count, r.calculated_by, r.calculated_at, r.released_by, r.released_at,
-         r.cancelled_by, r.cancelled_at, r.cancel_reason,
+         r.cancelled_by, r.cancelled_at, r.cancel_reason, r.predecessor_run_id,
          coalesce(t.gross, 0)::text as gross_pay, coalesce(t.deductions, 0)::text as total_deductions,
          coalesce(t.net, 0)::text as net_pay, coalesce(t.employer, 0)::text as employer_cost
     from payroll_run r
@@ -398,6 +414,7 @@ function runRowOf(r: RunSqlRow): PayrollRunRow {
     cancelledBy: (r.cancelled_by as string | null) ?? null,
     cancelledAt: stamp(r.cancelled_at),
     cancelReason: (r.cancel_reason as string | null) ?? null,
+    predecessorRunId: (r.predecessor_run_id as string | null) ?? null,
   };
 }
 
@@ -416,23 +433,38 @@ async function runView(tx: Tx, client: string, runId: string): Promise<PayrollRu
     .leftJoin(employee, and(eq(employee.client, payrollRunException.client), eq(employee.personnelNumber, payrollRunException.personnelNumber)))
     .where(and(eq(payrollRunException.client, client), eq(payrollRunException.runId, runId)))
     .orderBy(asc(payrollRunException.personnelNumber), asc(payrollRunException.seq));
-  return { ...runRowOf(rows[0]), exceptions: exceptions.map((e) => ({ ...e, employeeName: e.employeeName ?? null, remedy: e.remedy ?? null })) };
+  return { ...runRowOf(rows[0]), exceptions: exceptions.map((e) => ({ ...e, employeeName: e.employeeName ?? null, remedy: e.remedy ?? null, informational: INFORMATIONAL_EXCEPTIONS.has(e.reasonCode) })) };
 }
 
-export async function getPayrollRun(clientInput: string, runIdInput: string): Promise<PayrollRunView | null> {
+/** One run with its exceptions. Refused when the run's company lies outside the caller's scope. */
+export async function getPayrollRun(clientInput: string, runIdInput: string, access?: PayrollAccess): Promise<PayrollRunView | null> {
   const client = parse(clientField, clientInput);
   const runId = parse(runIdField, runIdInput);
-  return withTenant(client, (tx) => runView(tx, client, runId));
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, READ);
+    const view = await runView(tx, client, runId);
+    if (view) assertCompanyScope(grant, view.companyCode, refuse);
+    return view;
+  });
 }
 
 /** Every run of the tenant, newest period first. */
-export async function listPayrollRuns(clientInput: string): Promise<PayrollRunRow[]> {
+/** The runs in the caller's Company Code scope, newest period first. A list filters; it never refuses a run. */
+export async function listPayrollRuns(clientInput: string, access?: PayrollAccess): Promise<PayrollRunRow[]> {
   const client = parse(clientField, clientInput);
   return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, READ);
     const rows = (await tx.execute(sql`${RUN_SELECT} where r.client = ${client}
       order by r.fiscal_year desc, r.period desc, r.company_code, r.calculated_at desc`)) as unknown as RunSqlRow[];
-    return rows.map(runRowOf);
+    return rows.map(runRowOf).filter((r) => reachesCompany(grant, r.companyCode));
   });
+}
+
+/** The company a run pays, for the read services' scope check. */
+async function companyOfRun(tx: Tx, client: string, runId: string): Promise<string | null> {
+  const [row] = await tx.select({ companyCode: payrollRun.companyCode }).from(payrollRun)
+    .where(and(eq(payrollRun.client, client), eq(payrollRun.runId, runId))).limit(1);
+  return row?.companyCode ?? null;
 }
 
 async function resultRows(tx: Tx, client: string, where: ReturnType<typeof and>): Promise<ResultRow[]> {
@@ -463,15 +495,20 @@ async function resultRows(tx: Tx, client: string, where: ReturnType<typeof and>)
 }
 
 /** The results of one run, optionally for one employee. */
-export async function listResults(clientInput: string, runIdInput: string, personnelNumber?: string): Promise<ResultRow[]> {
+export async function listResults(clientInput: string, runIdInput: string, personnelNumber?: string, access?: PayrollAccess): Promise<ResultRow[]> {
   const client = parse(clientField, clientInput);
   const runId = parse(runIdField, runIdInput);
   const person = personnelNumber?.trim().toUpperCase();
-  return withTenant(client, (tx) => resultRows(tx, client, and(
-    eq(payrollResult.client, client),
-    eq(payrollResult.runId, runId),
-    person ? eq(payrollResult.personnelNumber, person) : undefined,
-  )));
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, READ);
+    const company = await companyOfRun(tx, client, runId);
+    if (company) assertCompanyScope(grant, company, refuse);
+    return resultRows(tx, client, and(
+      eq(payrollResult.client, client),
+      eq(payrollResult.runId, runId),
+      person ? eq(payrollResult.personnelNumber, person) : undefined,
+    ));
+  });
 }
 
 async function linesOf(tx: Tx, client: string, resultId: string): Promise<ResultLineRow[]> {
@@ -504,12 +541,16 @@ async function linesOf(tx: Tx, client: string, resultId: string): Promise<Result
 export async function getResultWithLines(
   clientInput: string,
   resultIdInput: string,
+  access?: PayrollAccess,
 ): Promise<{ result: ResultRow; lines: ResultLineRow[] } | null> {
   const client = parse(clientField, clientInput);
   const resultId = parse(runIdField, resultIdInput);
   return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, READ);
     const [result] = await resultRows(tx, client, and(eq(payrollResult.client, client), eq(payrollResult.resultId, resultId)));
     if (!result) return null;
+    const company = await companyOfRun(tx, client, result.runId);
+    if (company) assertCompanyScope(grant, company, refuse);
     return { result, lines: await linesOf(tx, client, resultId) };
   });
 }
@@ -753,12 +794,32 @@ export async function calculateResult(tx: Tx, client: string, run: RunRow, perso
  * Select, check and calculate every employee of a run, replacing whatever a previous calculation of
  * the same (proposed) run wrote. Unready employees become exceptions with phase 1's named reasons.
  */
-async function calculateRun(tx: Tx, client: string, run: RunRow, changedBy: string): Promise<void> {
-  await tx.delete(payrollResult).where(and(eq(payrollResult.client, client), eq(payrollResult.runId, run.runId)));
+async function calculateRun(tx: Tx, client: string, run: RunRow, changedBy: string): Promise<{ selected: number; covered: Map<string, string> }> {
+  try {
+    await tx.delete(payrollResult).where(and(eq(payrollResult.client, client), eq(payrollResult.runId, run.runId)));
+  } catch (error) {
+    translateTrigger(error);
+  }
   await tx.delete(payrollRunException).where(and(eq(payrollRunException.client, client), eq(payrollRunException.runId, run.runId)));
   let included = 0;
   let excepted = 0;
-  for (const pn of await selectEmployees(tx, client, run)) {
+  const selected = await selectEmployees(tx, client, run);
+  // Off-cycle: an employee another live run of this period already covers is not paid again. They are
+  // listed on this run as information, naming the covering run, and the run that covered the most
+  // becomes this run's predecessor.
+  const covered = await coverageOf(tx, client, run, run.runId);
+  const byRun = new Map<string, number>();
+  for (const pn of selected.filter((p) => covered.has(p))) {
+    const other = covered.get(pn)!;
+    byRun.set(other, (byRun.get(other) ?? 0) + 1);
+    await tx.insert(payrollRunException).values({
+      client, runId: run.runId, personnelNumber: pn, seq: 1, reasonCode: 'ALREADY_COVERED',
+      message: `Already covered by run ${other} — an off-cycle run pays only employees no live run covers.`,
+      remedy: `Nothing to do: run ${other} pays this employee for the period.`, createdBy: changedBy,
+    });
+  }
+  const predecessor = [...byRun.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+  for (const pn of selected.filter((p) => !covered.has(p))) {
     const readiness = await validateEmployeeForRun(tx, client, pn, run.periodFrom, run.periodTo);
     let reasons: Array<{ code: string; message: string; remedy?: string }> = readiness.reasons;
     if (readiness.ready) {
@@ -780,8 +841,23 @@ async function calculateRun(tx: Tx, client: string, run: RunRow, changedBy: stri
     })));
   }
   await tx.update(payrollRun)
-    .set({ employeeCount: included, exceptionCount: excepted, calculatedBy: changedBy, calculatedAt: new Date() })
+    .set({ employeeCount: included, exceptionCount: excepted, predecessorRunId: predecessor, calculatedBy: changedBy, calculatedAt: new Date() })
     .where(and(eq(payrollRun.client, client), eq(payrollRun.runId, run.runId)));
+  return { selected: selected.length, covered: new Map(selected.filter((p) => covered.has(p)).map((p) => [p, covered.get(p)!])) };
+}
+
+/** Personnel number → the other live run of this company and period whose result covers them. */
+async function coverageOf(tx: Tx, client: string, run: RunRow, exceptRunId: string): Promise<Map<string, string>> {
+  const rows = (await tx.execute(sql`
+    select r.personnel_number, r.run_id
+      from payroll_result r
+      join payroll_run run on run.client = r.client and run.run_id = r.run_id
+     where r.client = ${client}
+       and run.status <> 'CANCELLED'
+       and run.company_code = ${run.companyCode} and run.fiscal_year = ${run.fiscalYear} and run.period = ${run.period}
+       and r.run_id <> ${exceptRunId}
+  `)) as unknown as Array<{ personnel_number: string; run_id: string }>;
+  return new Map(rows.map((r) => [r.personnel_number, r.run_id]));
 }
 
 async function lockPeriod(tx: Tx, client: string, companyCode: string, fiscalYear: number, period: number): Promise<void> {
@@ -813,15 +889,6 @@ async function assertPeriodOpen(tx: Tx, client: string, companyCode: string, fis
   return { company, dates };
 }
 
-async function liveRunFor(tx: Tx, client: string, companyCode: string, fiscalYear: number, period: number, except?: string) {
-  const rows = await tx.select().from(payrollRun).where(and(
-    eq(payrollRun.client, client), eq(payrollRun.companyCode, companyCode),
-    eq(payrollRun.fiscalYear, fiscalYear), eq(payrollRun.period, period),
-    sql`${payrollRun.status} <> 'CANCELLED'`,
-  ));
-  return rows.find((r) => r.runId !== except) ?? null;
-}
-
 // ── The run ─────────────────────────────────────────────────────────────────
 
 /**
@@ -829,10 +896,11 @@ async function liveRunFor(tx: Tx, client: string, companyCode: string, fiscalYea
  * fiscal year variant, refuse a closed period or a second live run, then select, check and calculate
  * every employee. A resubmitted form (same request key) is handed the run it already made.
  */
-export async function proposePayrollRun(input: ProposeRunInput, capabilities?: readonly string[]): Promise<PayrollRunView> {
+export async function proposePayrollRun(input: ProposeRunInput, access?: PayrollAccess): Promise<PayrollRunView> {
   const parsed = parse(proposeInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   return withTenant(parsed.client, async (tx) => {
+    const grant = await judge(tx, parsed.client, access, EXECUTE);
+    assertCompanyScope(grant, parsed.companyCode, refuse);
     if (parsed.requestKey) {
       const [replay] = await tx.select({ runId: payrollRun.runId }).from(payrollRun)
         .where(and(eq(payrollRun.client, parsed.client), eq(payrollRun.requestKey, parsed.requestKey))).limit(1);
@@ -840,16 +908,6 @@ export async function proposePayrollRun(input: ProposeRunInput, capabilities?: r
     }
     await lockPeriod(tx, parsed.client, parsed.companyCode, parsed.fiscalYear, parsed.period);
     const { company, dates } = await assertPeriodOpen(tx, parsed.client, parsed.companyCode, parsed.fiscalYear, parsed.period);
-    const standing = await liveRunFor(tx, parsed.client, parsed.companyCode, parsed.fiscalYear, parsed.period);
-    if (standing) {
-      refuse(
-        'RUN_EXISTS',
-        `Payroll run ${standing.runId} (${standing.status}) already stands for company ${parsed.companyCode}, period ${parsed.period}/${parsed.fiscalYear}.`,
-        standing.status === 'PROPOSED'
-          ? `Recalculate or release it at ${PAYROLL_RUN_ROUTE}?run=${standing.runId}, or cancel it first.`
-          : 'A released run is frozen; a correction is a new run in a later period.',
-      );
-    }
     const runId = randomUUID();
     const run: RunRow = {
       runId, companyCode: parsed.companyCode, fiscalYear: parsed.fiscalYear, period: parsed.period,
@@ -860,7 +918,23 @@ export async function proposePayrollRun(input: ProposeRunInput, capabilities?: r
       client: parsed.client, ...run, calculatedBy: parsed.changedBy,
       requestKey: parsed.requestKey || null, createdBy: parsed.changedBy,
     });
-    await calculateRun(tx, parsed.client, run, parsed.changedBy);
+    let outcome: Awaited<ReturnType<typeof calculateRun>>;
+    try {
+      outcome = await calculateRun(tx, parsed.client, run, parsed.changedBy);
+    } catch (error) {
+      if (error instanceof PayrollRunError) throw error;
+      translateTrigger(error);
+    }
+    // Every employee this run would have paid is already paid by another run: nothing for it to do.
+    // (A run whose candidates are merely unready still stands — it records the named reasons.)
+    if (outcome.covered.size > 0 && outcome.covered.size === outcome.selected) {
+      const covering = [...new Set(outcome.covered.values())].sort();
+      refuse(
+        'ALL_COVERED',
+        `Run ${covering.join(', ')} already covers every employee for period ${parsed.period}/${parsed.fiscalYear} of company ${parsed.companyCode}; there is nothing for another run to pay.`,
+        `Open run ${covering[0]} at ${PAYROLL_RUN_ROUTE}?run=${covering[0]}.`,
+      );
+    }
     const view = (await runView(tx, parsed.client, runId))!;
     await recordChange(tx, {
       client: parsed.client,
@@ -872,6 +946,7 @@ export async function proposePayrollRun(input: ProposeRunInput, capabilities?: r
       after: {
         companyCode: run.companyCode, fiscalYear: run.fiscalYear, period: run.period, periodFrom: run.periodFrom,
         periodTo: run.periodTo, employees: view.employeeCount, exceptions: view.exceptionCount, netPay: view.netPay,
+        predecessorRunId: view.predecessorRunId,
       },
     });
     return view;
@@ -883,17 +958,23 @@ export async function proposePayrollRun(input: ProposeRunInput, capabilities?: r
  * an assignment, absence or rule changed. A released, posted or cancelled run is refused: a released
  * result is frozen, and a correction is a new run in a later period.
  */
-export async function recalculatePayrollRun(input: RecalculateRunInput, capabilities?: readonly string[]): Promise<PayrollRunView> {
+export async function recalculatePayrollRun(input: RecalculateRunInput, access?: PayrollAccess): Promise<PayrollRunView> {
   const parsed = parse(runActionInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   return withTenant(parsed.client, async (tx) => {
+    const grant = await judge(tx, parsed.client, access, EXECUTE);
     const standing = await loadRun(tx, parsed.client, parsed.runId);
+    assertCompanyScope(grant, standing.companyCode, refuse);
     await lockPeriod(tx, parsed.client, standing.companyCode, standing.fiscalYear, standing.period);
     const row = await loadRun(tx, parsed.client, parsed.runId);
     assertProposed(row, 'recalculated');
     await assertPeriodOpen(tx, parsed.client, row.companyCode, row.fiscalYear, row.period);
     const before = (await runView(tx, parsed.client, row.runId))!;
-    await calculateRun(tx, parsed.client, runRowFrom(row), parsed.changedBy);
+    try {
+      await calculateRun(tx, parsed.client, runRowFrom(row), parsed.changedBy);
+    } catch (error) {
+      if (error instanceof PayrollRunError) throw error;
+      translateTrigger(error);
+    }
     await tx.update(payrollRun).set({ changedBy: parsed.changedBy, changedAt: new Date() })
       .where(and(eq(payrollRun.client, parsed.client), eq(payrollRun.runId, row.runId)));
     const view = (await runView(tx, parsed.client, row.runId))!;
@@ -928,27 +1009,35 @@ function assertProposed(row: typeof payrollRun.$inferSelect, verb: string): void
  * employee is no longer ready, or while the selection has changed since the calculation (recalculate
  * first). A released run is frozen.
  */
-export async function releasePayrollRun(input: ReleaseRunInput, capabilities?: readonly string[]): Promise<PayrollRunView> {
+export async function releasePayrollRun(input: ReleaseRunInput, access?: PayrollAccess): Promise<PayrollRunView> {
   const parsed = parse(runActionInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   return withTenant(parsed.client, async (tx) => {
+    const grant = await judge(tx, parsed.client, access, EXECUTE);
     const standing = await loadRun(tx, parsed.client, parsed.runId);
+    assertCompanyScope(grant, standing.companyCode, refuse);
     await lockPeriod(tx, parsed.client, standing.companyCode, standing.fiscalYear, standing.period);
     const row = await loadRun(tx, parsed.client, parsed.runId);
     assertProposed(row, 'released');
-    const other = await liveRunFor(tx, parsed.client, row.companyCode, row.fiscalYear, row.period, row.runId);
-    if (other) {
-      refuse('RUN_EXISTS', `Payroll run ${other.runId} (${other.status}) already stands for company ${row.companyCode}, period ${row.period}/${row.fiscalYear}.`, 'Only one run per company and period may be released.');
-    }
     await assertPeriodOpen(tx, parsed.client, row.companyCode, row.fiscalYear, row.period);
 
     const view = (await runView(tx, parsed.client, row.runId))!;
-    if (view.exceptions.length > 0) {
-      const named = [...new Map(view.exceptions.map((e) => [e.personnelNumber, e])).values()]
+    const blocking = view.exceptions.filter((e) => !e.informational);
+    if (blocking.length > 0) {
+      const named = [...new Map(blocking.map((e) => [e.personnelNumber, e])).values()]
         .map((e) => `${e.personnelNumber} (${e.reasonCode}: ${e.message})`).join('; ');
       refuse('RELEASE_EXCEPTIONS', `Payroll run ${row.runId} cannot be released while employees stand as exceptions: ${named}`, `Fix each, then recalculate the run at ${PAYROLL_RUN_ROUTE}?run=${row.runId}.`);
     }
     const results = await resultRows(tx, parsed.client, and(eq(payrollResult.client, parsed.client), eq(payrollResult.runId, row.runId)));
+    // An off-cycle run never pays an employee another live run of the period covers.
+    const coveredElsewhere = await coverageOf(tx, parsed.client, runRowFrom(row), row.runId);
+    const twice = results.filter((r) => coveredElsewhere.has(r.personnelNumber));
+    if (twice.length > 0) {
+      refuse(
+        'COVERED_ELSEWHERE',
+        `Payroll run ${row.runId} cannot be released: ${twice.map((r) => `${r.personnelNumber} is already covered by run ${coveredElsewhere.get(r.personnelNumber)}`).join('; ')}.`,
+        `Recalculate the run at ${PAYROLL_RUN_ROUTE}?run=${row.runId}; it then leaves those employees to the run that covers them.`,
+      );
+    }
     if (results.length === 0) {
       refuse('RUN_EMPTY', `Payroll run ${row.runId} includes no employee; there is nothing to release.`, 'Cancel it, or recalculate it once employees are assigned.');
     }
@@ -961,7 +1050,8 @@ export async function releasePayrollRun(input: ReleaseRunInput, capabilities?: r
       refuse('RELEASE_UNREADY', `Payroll run ${row.runId} cannot be released; included employees are no longer ready: ${unready.join('; ')}`, `Fix each, then recalculate the run at ${PAYROLL_RUN_ROUTE}?run=${row.runId}.`);
     }
     const calculated = new Set(results.map((r) => r.personnelNumber));
-    const missing = (await selectEmployees(tx, parsed.client, runRowFrom(row))).filter((pn) => !calculated.has(pn));
+    const missing = (await selectEmployees(tx, parsed.client, runRowFrom(row)))
+      .filter((pn) => !calculated.has(pn) && !coveredElsewhere.has(pn));
     if (missing.length > 0) {
       refuse('RUN_STALE', `Payroll run ${row.runId} was calculated before employee${missing.length > 1 ? 's' : ''} ${missing.join(', ')} joined the period's selection.`, `Recalculate the run at ${PAYROLL_RUN_ROUTE}?run=${row.runId}, then release it.`);
     }
@@ -988,11 +1078,12 @@ export async function releasePayrollRun(input: ReleaseRunInput, capabilities?: r
  * Cancel a PROPOSED or RELEASED run, with a reason. Its results stay as history; the period is free
  * for a new run. A POSTED run is refused: reverse the posting first.
  */
-export async function cancelPayrollRun(input: CancelRunInput, capabilities?: readonly string[]): Promise<PayrollRunView> {
+export async function cancelPayrollRun(input: CancelRunInput, access?: PayrollAccess): Promise<PayrollRunView> {
   const parsed = parse(cancelInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   return withTenant(parsed.client, async (tx) => {
+    const grant = await judge(tx, parsed.client, access, EXECUTE);
     const standing = await loadRun(tx, parsed.client, parsed.runId);
+    assertCompanyScope(grant, standing.companyCode, refuse);
     await lockPeriod(tx, parsed.client, standing.companyCode, standing.fiscalYear, standing.period);
     const row = await loadRun(tx, parsed.client, parsed.runId);
     if (row.status === 'POSTED') {

@@ -37,12 +37,17 @@ function text(form: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-async function guard(): Promise<{ client: string; actor: string; capabilities: string[] } | PayrollRunActionState> {
+async function guard(): Promise<{ client: string; actor: string; access: { authorization: { userId: string; sessionId: string } } } | PayrollRunActionState> {
   const session = await requireSession(ROUTE);
   if (!can(session, PAYROLL_RUN_CAPABILITY)) {
     return { ok: false, message: `You do not hold ${PAYROLL_RUN_CAPABILITY}.`, remedy: `Ask for ${PAYROLL_RUN_CAPABILITY}.` };
   }
-  return { client: session.user.client, actor: session.user.username, capabilities: session.user.capabilities };
+  return {
+    client: session.user.client,
+    actor: session.user.username,
+    // The service judges the session itself: capability and Company Code scope.
+    access: { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } },
+  };
 }
 
 function refusal(error: unknown, extra: Partial<PayrollRunActionState> = {}): PayrollRunActionState {
@@ -72,7 +77,7 @@ export async function proposeRunAction(_prev: PayrollRunActionState, form: FormD
       period: text(form, 'period'),
       requestKey: text(form, 'requestKey') || undefined,
       changedBy: access.actor,
-    }, access.capabilities);
+    }, access.access);
     refresh();
     return {
       ok: true,
@@ -90,7 +95,7 @@ export async function recalculateRunAction(_prev: PayrollRunActionState, form: F
   const access = await guard();
   if (!('actor' in access)) return access;
   try {
-    const view = await recalculatePayrollRun({ client: access.client, runId: text(form, 'runId'), changedBy: access.actor }, access.capabilities);
+    const view = await recalculatePayrollRun({ client: access.client, runId: text(form, 'runId'), changedBy: access.actor }, access.access);
     refresh();
     return { ok: true, runId: view.runId, message: `Run recalculated: ${summary(view)}` };
   } catch (error) {
@@ -103,7 +108,7 @@ export async function releaseRunAction(_prev: PayrollRunActionState, form: FormD
   const access = await guard();
   if (!('actor' in access)) return access;
   try {
-    const view = await releasePayrollRun({ client: access.client, runId: text(form, 'runId'), changedBy: access.actor }, access.capabilities);
+    const view = await releasePayrollRun({ client: access.client, runId: text(form, 'runId'), changedBy: access.actor }, access.access);
     refresh();
     return { ok: true, runId: view.runId, message: `Run released by ${view.releasedBy}: ${view.employeeCount} employees, net pay ${view.netPay} ${view.currency}. It is now frozen.` };
   } catch (error) {
@@ -116,7 +121,7 @@ export async function cancelRunAction(_prev: PayrollRunActionState, form: FormDa
   const access = await guard();
   if (!('actor' in access)) return access;
   try {
-    const view = await cancelPayrollRun({ client: access.client, runId: text(form, 'runId'), reason: text(form, 'reason'), changedBy: access.actor }, access.capabilities);
+    const view = await cancelPayrollRun({ client: access.client, runId: text(form, 'runId'), reason: text(form, 'reason'), changedBy: access.actor }, access.access);
     refresh();
     return { ok: true, runId: view.runId, message: `Run cancelled: ${view.cancelReason}. The period is free for a new run.` };
   } catch (error) {

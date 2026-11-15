@@ -45,6 +45,7 @@ import { buildDemoPayroll } from '../src/platform/tenancy/demo-payroll';
 import { buildDemoPayrollRun } from '../src/platform/tenancy/demo-payroll-run';
 import { buildDemoPayrollPost } from '../src/platform/tenancy/demo-payroll-post';
 import { buildDemoPayrollPay } from '../src/platform/tenancy/demo-payroll-pay';
+import { buildDemoPayrollOffCycle } from '../src/platform/tenancy/demo-payroll-offcycle';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -355,6 +356,15 @@ async function runPayrollPayPhase(ctx: PhaseContext): Promise<Record<string, unk
   return { ...result };
 }
 
+/**
+ * Phase D11_PAYROLL_OFFCYCLE: payroll phase 5. Hires a late joiner after the paid November run and
+ * proposes an off-cycle run that pays only her, naming the November run as its predecessor.
+ */
+async function runPayrollOffCyclePhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoPayrollOffCycle({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -370,6 +380,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D8_PAYROLL_RUN: runPayrollRunPhase,
   D9_PAYROLL_POST: runPayrollPostPhase,
   D10_PAYROLL_PAY: runPayrollPayPhase,
+  D11_PAYROLL_OFFCYCLE: runPayrollOffCyclePhase,
 };
 
 async function main(): Promise<number> {

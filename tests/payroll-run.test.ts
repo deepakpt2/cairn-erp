@@ -90,7 +90,7 @@ const resultOf = (results: ResultRow[], pn: string) => {
   expect(r, `result for ${pn}`).toBeTruthy();
   return r!;
 };
-const linesOf = async (r: ResultRow) => (await getResultWithLines(tenant.client, r.resultId))!.lines;
+const linesOf = async (r: ResultRow) => (await getResultWithLines(tenant.client, r.resultId, RUN_AUTH))!.lines;
 const amountOf = async (r: ResultRow, component: string) =>
   (await linesOf(r)).filter((l) => l.componentCode === component).map((l) => l.amount);
 
@@ -256,7 +256,7 @@ describe('a run for March 2025', () => {
     // A resubmitted form is handed the same run.
     const replay = await propose(3, { requestKey: 'payroll-run-test-march' });
     expect(replay.runId).toBe(run.runId);
-    expect((await listPayrollRuns(tenant.client)).map((r) => r.runId)).toContain(run.runId);
+    expect((await listPayrollRuns(tenant.client, RUN_AUTH)).map((r) => r.runId)).toContain(run.runId);
   });
 
   it('5. an employee with no structure for the period is a named exception, not dropped', async () => {
@@ -266,18 +266,18 @@ describe('a run for March 2025', () => {
     expect(e[0]!.message).toContain(people.unready);
     expect(run.exceptionCount).toBe(1);
     expect(run.employeeCount).toBe(7);
-    expect((await listResults(tenant.client, run.runId)).some((r) => r.personnelNumber === people.unready)).toBe(false);
+    expect((await listResults(tenant.client, run.runId, undefined, RUN_AUTH)).some((r) => r.personnelNumber === people.unready)).toBe(false);
   });
 
   it('2, 3, 4. full, joiner and leaver are paid for the days they are covered', async () => {
-    const results = await listResults(tenant.client, run.runId);
+    const results = await listResults(tenant.client, run.runId, undefined, RUN_AUTH);
     expect(resultOf(results, people.full!)).toMatchObject({ payableDays: '31.00', totalDays: '31.00', grossPay: '1310.0000', totalDeductions: '50.0000', netPay: '1260.0000', employerCost: '110.0000' });
     expect(resultOf(results, people.joiner!)).toMatchObject({ payableDays: '21.00', coveredDays: '21.00', grossPay: '887.4200', totalDeductions: '33.8700', netPay: '853.5500', employerCost: '74.5200' });
     expect(resultOf(results, people.leaver!)).toMatchObject({ payableDays: '20.00', grossPay: '845.1600', totalDeductions: '32.2600', netPay: '812.9000', employerCost: '70.9700' });
   });
 
   it('6, 7, 8, 9. unpaid approved leave is clipped, de-duplicated, and only approved unpaid counts', async () => {
-    const results = await listResults(tenant.client, run.runId);
+    const results = await listResults(tenant.client, run.runId, undefined, RUN_AUTH);
     expect(resultOf(results, people.unpaid!)).toMatchObject({ payableDays: '28.00', unpaidLeaveDays: '3.00' });
     expect(resultOf(results, people.straddle!)).toMatchObject({ payableDays: '29.00', unpaidLeaveDays: '2.00' });
     expect(resultOf(results, people.overlap!)).toMatchObject({ payableDays: '24.00', unpaidLeaveDays: '7.00' });
@@ -285,7 +285,7 @@ describe('a run for March 2025', () => {
   });
 
   it('10. a mid-period raise splits the period into segments, each with its own base', async () => {
-    const results = await listResults(tenant.client, run.runId);
+    const results = await listResults(tenant.client, run.runId, undefined, RUN_AUTH);
     const raise = resultOf(results, people.raise!);
     const basic = (await linesOf(raise)).filter((l) => l.componentCode === 'BASIC');
     expect(basic.map((l) => [l.segmentFrom, l.segmentTo, l.payableDays, l.baseAmount, l.amount])).toEqual([
@@ -296,7 +296,7 @@ describe('a run for March 2025', () => {
   });
 
   it('11. gross − deductions = net on every result, and totals are sums of the rounded lines', async () => {
-    const results = await listResults(tenant.client, run.runId);
+    const results = await listResults(tenant.client, run.runId, undefined, RUN_AUTH);
     for (const r of results) {
       expect(Number(r.grossPay) - Number(r.totalDeductions)).toBeCloseTo(Number(r.netPay), 4);
       const lines = await linesOf(r);
@@ -305,13 +305,13 @@ describe('a run for March 2025', () => {
       expect(sum('DEDUCTION')).toBeCloseTo(Number(r.totalDeductions), 4);
       expect(sum('EMPLOYER_CONTRIBUTION')).toBeCloseTo(Number(r.employerCost), 4);
     }
-    const view = (await getPayrollRun(tenant.client, run.runId))!;
+    const view = (await getPayrollRun(tenant.client, run.runId, RUN_AUTH))!;
     const net = results.reduce((s, r) => s + Number(r.netPay), 0);
     expect(Number(view.netPay)).toBeCloseTo(net, 4);
   });
 
   it('12. each line snapshots accounts and cost receiver, and keeps them when configuration changes', async () => {
-    const full = resultOf(await listResults(tenant.client, run.runId), people.full!);
+    const full = resultOf(await listResults(tenant.client, run.runId, undefined, RUN_AUTH), people.full!);
     const byCode = Object.fromEntries((await linesOf(full)).map((l) => [l.componentCode, l]));
     expect(byCode.BASIC).toMatchObject({ debitAccount: '500000', creditAccount: null, costReceiverCategory: 'NONE', costCenter: null, controllingArea: null });
     expect(byCode.HOUSING).toMatchObject({ debitAccount: '500000', costReceiverCategory: 'ASSIGNMENT', costCenter: CENTRE, controllingArea: AREA, amount: '310.0000' });
@@ -374,8 +374,8 @@ describe('a run for March 2025', () => {
     await expectRunRefusal(releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: PAYROLL_ACTOR }, RUN_AUTH), 'RUN_FROZEN');
   });
 
-  it('15. a second live run for the same company, year and period is refused, naming the run that stands', async () => {
-    const second = await expectRunRefusal(propose(3), 'RUN_EXISTS');
+  it('15. a second run for a period every employee of which is already covered is refused, naming the covering run (9281: off-cycle)', async () => {
+    const second = await expectRunRefusal(propose(3), 'ALL_COVERED');
     expect(second.message).toContain(run.runId);
   });
 
@@ -384,7 +384,7 @@ describe('a run for March 2025', () => {
     const cancelled = await cancelPayrollRun({ client: tenant.client, runId: run.runId, reason: 'Wrong base for one employee', changedBy: PAYROLL_ACTOR }, RUN_AUTH);
     expect(cancelled).toMatchObject({ status: 'CANCELLED', cancelReason: 'Wrong base for one employee', cancelledBy: PAYROLL_ACTOR });
     // History stays.
-    expect((await listResults(tenant.client, run.runId)).length).toBe(9);
+    expect((await listResults(tenant.client, run.runId, undefined, RUN_AUTH)).length).toBe(9);
     await expectRunRefusal(recalculatePayrollRun({ client: tenant.client, runId: run.runId, changedBy: PAYROLL_ACTOR }, RUN_AUTH), 'RUN_CANCELLED');
     const again = await propose(3);
     expect(again.status).toBe('PROPOSED');
@@ -392,7 +392,7 @@ describe('a run for March 2025', () => {
   });
 
   it('a posted run cannot be cancelled', async () => {
-    const standing = (await listPayrollRuns(tenant.client)).find((r) => r.period === 3 && r.status === 'PROPOSED')!;
+    const standing = (await listPayrollRuns(tenant.client, RUN_AUTH)).find((r) => r.period === 3 && r.status === 'PROPOSED')!;
     await withTenant(tenant.client, (tx) => tx.execute(sql`
       update payroll_run set status = 'POSTED', released_by = ${PAYROLL_ACTOR}, released_at = now(),
              document_number = 'TEST-POSTED', document_fiscal_year = ${YEAR} where client = ${tenant.client} and run_id = ${standing.runId}`));
@@ -446,7 +446,7 @@ describe('a run for June 2025: configuration refusals', () => {
       .rejects.toBeInstanceOf(PayrollStructureError);
     const after = await removeStructureComponent({ client: tenant.client, structureCode: eosStructure, componentCode: 'EOS', changedBy: PAYROLL_ACTOR }, PAYROLL_AUTH);
     expect(after.components.map((c) => c.componentCode)).toEqual(['BASIC']);
-    expect((await getStructure(tenant.client, eosStructure)).components).toHaveLength(1);
+    expect((await getStructure(tenant.client, eosStructure, PAYROLL_AUTH)).components).toHaveLength(1);
     const ready = await withTenant(tenant.client, (tx) => validateEmployeeForRun(tx, tenant.client, eosEmployee, '2025-06-01', '2025-06-30'));
     expect(ready.ready).toBe(true);
   });
@@ -461,7 +461,7 @@ describe('a run for June 2025: configuration refusals', () => {
     await expectRunRefusal(releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: PAYROLL_ACTOR }, RUN_AUTH), 'RELEASE_EXCEPTIONS');
     run = await recalculatePayrollRun({ client: tenant.client, runId: run.runId, changedBy: PAYROLL_ACTOR }, RUN_AUTH);
     expect(run.exceptions.map((e) => e.personnelNumber)).toEqual([unmappedEmployee]);
-    const eos = resultOf(await listResults(tenant.client, run.runId), eosEmployee);
+    const eos = resultOf(await listResults(tenant.client, run.runId, undefined, RUN_AUTH), eosEmployee);
     expect(eos).toMatchObject({ payableDays: '30.00', grossPay: '1000.0000' });
   });
 });

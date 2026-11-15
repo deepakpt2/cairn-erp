@@ -88,7 +88,7 @@ export async function buildDemoPayrollPost(input: { client?: string; timeline: D
 
   // The exception's remedy: a structure for the controller from the first day of the period, ending
   // the day before any assignment that already stands later in it.
-  const standing = await listAssignments(client, CONTROLLER.personnelNumber);
+  const standing = await listAssignments(client, CONTROLLER.personnelNumber, AUTHORITY);
   const covering = standing.find((a) => a.validFrom <= periodFrom && (a.validTo === null || a.validTo >= periodFrom));
   if (!covering) {
     const next = standing.filter((a) => a.validFrom > periodFrom).map((a) => a.validFrom).sort()[0];
@@ -99,7 +99,7 @@ export async function buildDemoPayrollPost(input: { client?: string; timeline: D
     }, AUTHORITY);
   }
 
-  const run = (await listPayrollRuns(client)).find(
+  const run = (await listPayrollRuns(client, AUTHORITY)).find(
     (r) => r.companyCode === companyCode && r.fiscalYear === fiscalYear && r.period === period && r.status !== 'CANCELLED',
   );
   if (!run) throw new Error(`D9_PAYROLL_POST: no payroll run stands for ${companyCode} ${period}/${fiscalYear}; D8_PAYROLL_RUN proposes it.`);
@@ -117,7 +117,7 @@ export async function buildDemoPayrollPost(input: { client?: string; timeline: D
     await scopeAdministrator(client);
     await withActingUser(client, poster, (actor) => postPayrollRun({ client, changedBy: poster, runId: run.runId, authorization: actor }));
   }
-  const posting = await getPayrollPosting(client, run.runId);
+  const posting = await getPayrollPosting(client, run.runId, AUTHORITY);
   return {
     fiscalYear,
     period,

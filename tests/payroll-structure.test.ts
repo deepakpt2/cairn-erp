@@ -101,7 +101,7 @@ afterAll(async () => {
 describe('structures and their components', () => {
   it('1. defines a structure and lists it', async () => {
     const s = await structure([]);
-    const listed = (await listStructures(tenant.client)).find((r) => r.code === s);
+    const listed = (await listStructures(tenant.client, PAYROLL_AUTH)).find((r) => r.code === s);
     expect(listed).toMatchObject({ code: s, currency: fx.currency, validFrom: '2024-01-01', validTo: null, isValid: true, components: 0 });
     await expectRefusal(
       defineSalaryStructure({ client: tenant.client, code: s, name: 'again', currency: fx.currency, validFrom: '2024-01-01', changedBy: PAYROLL_ACTOR }, PAYROLL_AUTH),
@@ -112,13 +112,13 @@ describe('structures and their components', () => {
   it('2. adds a component with its amount rule, and changes the rule in place', async () => {
     const s = await structure([{ component: fx.basic, kind: 'FIXED', value: '2500' }]);
     await setStructureComponent({ client: tenant.client, structureCode: s, componentCode: fx.housing, amountKind: 'PERCENT_OF_BASE', amountValue: '7.5', changedBy: PAYROLL_ACTOR }, PAYROLL_AUTH);
-    let view = await getStructure(tenant.client, s);
+    let view = await getStructure(tenant.client, s, PAYROLL_AUTH);
     expect(view.components.map((c) => [c.componentCode, c.amountKind, Number(c.amountValue)])).toEqual([
       ['BASIC', 'FIXED', 2500],
       ['HOUSING', 'PERCENT_OF_BASE', 7.5],
     ]);
     await setStructureComponent({ client: tenant.client, structureCode: s, componentCode: fx.basic, amountKind: 'FIXED', amountValue: '2600', changedBy: PAYROLL_ACTOR }, PAYROLL_AUTH);
-    view = await getStructure(tenant.client, s);
+    view = await getStructure(tenant.client, s, PAYROLL_AUTH);
     expect(Number(view.components.find((c) => c.componentCode === 'BASIC')!.amountValue)).toBe(2600);
     // The rule never reaches pay_component: it has no amount column at all.
     const columns = (await withTenant(tenant.client, (tx) => tx.execute(sql`
@@ -208,7 +208,7 @@ describe('assignments', () => {
     const a = await assignStructure(input, PAYROLL_AUTH);
     const b = await assignStructure(input, PAYROLL_AUTH);
     expect(b.assignmentId).toBe(a.assignmentId);
-    expect(await listAssignments(tenant.client, person)).toHaveLength(1);
+    expect(await listAssignments(tenant.client, person, PAYROLL_AUTH)).toHaveLength(1);
   });
 
   it('10. ending an assignment sets validTo and keeps the history readable', async () => {
@@ -217,7 +217,7 @@ describe('assignments', () => {
     const a = await assign(person, s, '2025-01-01');
     const ended = await endAssignment({ client: tenant.client, assignmentId: a.assignmentId, validTo: '2025-03-15', changedBy: PAYROLL_ACTOR }, PAYROLL_AUTH);
     expect(ended.validTo).toBe('2025-03-15');
-    const history = await listAssignments(tenant.client, person);
+    const history = await listAssignments(tenant.client, person, PAYROLL_AUTH);
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({ assignmentId: a.assignmentId, validFrom: '2025-01-01', validTo: '2025-03-15' });
     await expectRefusal(

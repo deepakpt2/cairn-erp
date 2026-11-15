@@ -14,6 +14,7 @@ import {
   PAYROLL_RESULT_CAPABILITY,
   PAYROLL_RESULT_ROUTE,
   PAYROLL_RUN_ROUTE,
+  PayrollRunError,
   getResultWithLines,
   listPayrollRuns,
   listResults,
@@ -32,16 +33,23 @@ export default async function PayrollResultPage({
 }) {
   const params = await searchParams;
   const session = await requireSession(ROUTE);
+  const access = { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } };
   const allowed = can(session, CAPABILITY);
   const client = session.user.client;
 
-  const runs = allowed ? await listPayrollRuns(client) : [];
+  const runs = allowed ? await listPayrollRuns(client, access) : [];
   const run = runs.find((r) => r.runId === params.runId) ?? runs.find((r) => r.status !== 'CANCELLED') ?? runs[0] ?? null;
   const personnelNumber = params.personnelNumber?.trim().toUpperCase() || '';
-  const results = allowed && run ? await listResults(client, run.runId, personnelNumber || undefined) : [];
-  const slip = allowed && params.result ? await getResultWithLines(client, params.result) : null;
+  const results = allowed && run ? await listResults(client, run.runId, personnelNumber || undefined, access) : [];
+  // A result outside the caller's Company Code scope is refused by the service; the page shows none.
+  const slip = allowed && params.result
+    ? await getResultWithLines(client, params.result, access).catch((error: unknown) => {
+      if (error instanceof PayrollRunError) return null;
+      throw error;
+    })
+    : null;
   const slipRun = slip ? runs.find((r) => r.runId === slip.result.runId) : null;
-  const posting = run && run.status === 'POSTED' ? await getPayrollPosting(client, run.runId) : null;
+  const posting = run && run.status === 'POSTED' ? await getPayrollPosting(client, run.runId, access) : null;
   const posted = Boolean(posting);
   const query = (extra: Record<string, string>) => {
     const q = new URLSearchParams({ ...(run ? { runId: run.runId } : {}), ...(personnelNumber ? { personnelNumber } : {}), ...extra });

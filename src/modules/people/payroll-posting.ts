@@ -34,6 +34,7 @@ import { GlDocumentError, postGlDocument, type GlDocumentLineInput } from '../fi
 import { accountingReversalLink, glAccount, journalEntry } from '../finance/schema';
 import { accountDetermination } from '../foundation/schema';
 import { PAYROLL_RUN_ROUTE } from './payroll-run';
+import { type PayrollAccess, assertCompanyScope, judgePayrollAccess } from './payroll-access';
 import { payComponent, payrollResult, payrollResultLine, payrollRun } from './schema';
 
 export const PAYROLL_POST_CAPABILITY = 'PEOPLE.PAYROLL.POST';
@@ -360,11 +361,13 @@ function toUnitsSigned(text: string): bigint {
 // ── Reading ─────────────────────────────────────────────────────────────────
 
 /** What a run posted, or null when it carries no document. */
-export async function getPayrollPosting(client: string, runIdInput: string): Promise<PayrollPostingView | null> {
+export async function getPayrollPosting(client: string, runIdInput: string, access?: PayrollAccess): Promise<PayrollPostingView | null> {
   const runId = String(runIdInput ?? '').trim();
   if (!runId) return null;
   return withTenant(client, async (tx) => {
+    const grant = await judgePayrollAccess(tx, client, access, ['PEOPLE.PAYROLLRUN.EXECUTE', 'PEOPLE.PAYROLL.RESULT', PAYROLL_POST_CAPABILITY], refuse);
     const run = await loadRun(tx, client, runId);
+    if (run) assertCompanyScope(grant, run.companyCode, refuse);
     if (!run?.documentNumber || run.documentFiscalYear === null) return null;
     const [entry] = await tx.select({
       displayNumber: journalEntry.displayNumber,

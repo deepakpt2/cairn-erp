@@ -19,7 +19,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { hasCapability } from '../../platform/auth/session';
+import { type PayrollAccess, assertCompanyScope, judgePayrollAccess, type PayrollGrant } from './payroll-access';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import {
@@ -36,6 +36,7 @@ import {
   type AmountKind,
 } from './schema';
 
+export type { PayrollAccess };
 export {
   AMOUNT_KINDS,
   SALARY_ASSIGNMENT_OBJECT_CLASS,
@@ -72,14 +73,37 @@ function refuse(code: string, message: string, remedy?: string): never {
   throw new PayrollStructureError(message, remedy, code);
 }
 
-function assertCapability(capabilities: readonly string[] | undefined, actor: string): void {
-  if (!capabilities || !hasCapability([...capabilities], SALARY_STRUCTURE_CAPABILITY)) {
-    refuse(
-      'PAYROLL_AUTHORITY',
-      `${actor} does not hold ${SALARY_STRUCTURE_CAPABILITY}.`,
-      `Ask an administrator for ${SALARY_STRUCTURE_CAPABILITY}. Payroll authority is granted to no role by default.`,
-    );
-  }
+/** Maintaining structures and assignments. */
+const MAINTAIN = [SALARY_STRUCTURE_CAPABILITY] as const;
+/** Reading them: the definer, or whoever may read a payroll result (the employee screen shows pay to both). */
+const READ = [SALARY_STRUCTURE_CAPABILITY, PAYROLL_RESULT_CAPABILITY] as const;
+const judge = (tx: Tx, client: string, access: PayrollAccess | undefined, capabilities: readonly string[]) =>
+  judgePayrollAccess(tx, client, access, capabilities, refuse);
+
+/**
+ * The company an employee is paid by on a date: the position assignment standing that day (else the
+ * latest one), its own company code, else its cost centre's. Null when the employee holds no position
+ * — nothing then ties the employee to a company, and Company Code scope has nothing to judge.
+ */
+async function companyOfEmployee(tx: Tx, client: string, personnelNumber: string, onDate: string): Promise<string | null> {
+  const rows = (await tx.execute(sql`
+    select coalesce(pa.company_code, (
+             select cc.company_code from cost_center cc
+              where cc.client = pa.client and cc.controlling_area = pa.controlling_area and cc.cost_center = pa.cost_center
+                and cc.valid_from <= greatest(pa.valid_from, ${onDate}::date) and cc.valid_to >= greatest(pa.valid_from, ${onDate}::date)
+              order by cc.valid_from desc limit 1)) as company_code
+      from position_assignment pa
+     where pa.client = ${client} and pa.personnel_number = ${personnelNumber}
+     order by (pa.valid_from <= ${onDate}::date and (pa.valid_to is null or pa.valid_to >= ${onDate}::date)) desc, pa.valid_from desc
+     limit 1
+  `)) as unknown as Array<{ company_code: string | null }>;
+  return rows[0]?.company_code ?? null;
+}
+
+/** Refuse when the employee's company lies outside the grant. */
+async function assertEmployeeScope(tx: Tx, client: string, grant: PayrollGrant, personnelNumber: string, onDate: string): Promise<void> {
+  const company = await companyOfEmployee(tx, client, personnelNumber, onDate);
+  if (company) assertCompanyScope(grant, company, refuse);
 }
 
 // ── Input ───────────────────────────────────────────────────────────────────
@@ -279,13 +303,13 @@ async function structureView(tx: Tx, client: string, code: string): Promise<Stru
 }
 
 /** Define a salary structure. It names what is paid; it never names a person. */
-export async function defineSalaryStructure(input: StructureInput, capabilities?: readonly string[]): Promise<StructureView> {
+export async function defineSalaryStructure(input: StructureInput, access?: PayrollAccess): Promise<StructureView> {
   const parsed = parse(structureInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   if (parsed.validTo && parsed.validTo < parsed.validFrom) {
     refuse('STRUCTURE_PERIOD', `A structure cannot end (${parsed.validTo}) before it starts (${parsed.validFrom}).`, 'Choose an end date on or after the start.');
   }
   return withTenant(parsed.client, async (tx) => {
+    await judge(tx, parsed.client, access, MAINTAIN);
     await assertCurrency(tx, parsed.currency);
     if (await loadStructure(tx, parsed.client, parsed.code)) {
       refuse('STRUCTURE_EXISTS', `Salary structure ${parsed.code} already exists.`, 'Change it instead, or choose another code.');
@@ -317,10 +341,10 @@ export async function defineSalaryStructure(input: StructureInput, capabilities?
  * Rename a structure, move its end, or retire it. Retirement is by validity, never by delete. The
  * currency and start are not changed here: assignments were made against them.
  */
-export async function changeSalaryStructure(input: ChangeStructureInput, capabilities?: readonly string[]): Promise<StructureView> {
+export async function changeSalaryStructure(input: ChangeStructureInput, access?: PayrollAccess): Promise<StructureView> {
   const parsed = parse(changeStructureInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   return withTenant(parsed.client, async (tx) => {
+    await judge(tx, parsed.client, access, MAINTAIN);
     const standing = await loadStructure(tx, parsed.client, parsed.code);
     if (!standing) refuse('STRUCTURE_UNKNOWN', `Salary structure ${parsed.code} does not exist.`, `Define it at ${SALARY_STRUCTURE_ROUTE}.`);
     const patch: { name?: string; validTo?: string | null; isValid?: boolean } = {};
@@ -355,9 +379,8 @@ export async function changeSalaryStructure(input: ChangeStructureInput, capabil
  * Add a component to a structure, or change its amount rule. The rule lives here and only here;
  * nothing is written to `pay_component`.
  */
-export async function setStructureComponent(input: ComponentInput, capabilities?: readonly string[]): Promise<ComponentView> {
+export async function setStructureComponent(input: ComponentInput, access?: PayrollAccess): Promise<ComponentView> {
   const parsed = parse(componentInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   if (!(AMOUNT_KINDS as readonly string[]).includes(parsed.amountKind)) {
     refuse('AMOUNT_KIND', `Amount kind "${parsed.amountKind}" is not one of ${AMOUNT_KINDS.join(', ')}.`, 'A formula is not built; use a fixed amount or a percentage of base.');
   }
@@ -365,6 +388,7 @@ export async function setStructureComponent(input: ComponentInput, capabilities?
     refuse('PERCENT_OVER_100', `A percentage of base cannot exceed 100; ${parsed.amountValue} was given for ${parsed.componentCode}.`, 'Enter a rate from 0 to 100 (7.5 means 7.5 %).');
   }
   return withTenant(parsed.client, async (tx) => {
+    await judge(tx, parsed.client, access, MAINTAIN);
     const structure = await loadStructure(tx, parsed.client, parsed.structureCode);
     if (!structure) refuse('STRUCTURE_UNKNOWN', `Salary structure ${parsed.structureCode} does not exist.`, `Define it at ${SALARY_STRUCTURE_ROUTE}.`);
     const [component] = await tx
@@ -425,9 +449,10 @@ export async function setStructureComponent(input: ComponentInput, capabilities?
 }
 
 /** Every structure in the tenant, with how many components it names. */
-export async function listStructures(clientInput: string): Promise<StructureRow[]> {
+export async function listStructures(clientInput: string, access?: PayrollAccess): Promise<StructureRow[]> {
   const client = parse(clientField, clientInput);
   return withTenant(client, async (tx) => {
+    await judge(tx, client, access, READ);
     const rows = (await tx.execute(sql`
       select s.code, s.name, s.currency, s.valid_from, s.valid_to, s.is_valid,
              (select count(*)::int from salary_structure_component c
@@ -445,10 +470,13 @@ export async function listStructures(clientInput: string): Promise<StructureRow[
 }
 
 /** One structure and its components with their amount rules. */
-export async function getStructure(clientInput: string, codeInput: string): Promise<StructureView> {
+export async function getStructure(clientInput: string, codeInput: string, access?: PayrollAccess): Promise<StructureView> {
   const client = parse(clientField, clientInput);
   const code = parse(codeField, codeInput);
-  return withTenant(client, (tx) => structureView(tx, client, code));
+  return withTenant(client, async (tx) => {
+    await judge(tx, client, access, READ);
+    return structureView(tx, client, code);
+  });
 }
 
 /** The valid pay components a structure can name. */
@@ -473,10 +501,10 @@ export type RemoveComponentInput = z.input<typeof removeComponentInput>;
  * Take a component out of a structure. A calculated payroll result snapshots its own lines, so no
  * result changes; the next run simply no longer pays the component to anyone on the structure.
  */
-export async function removeStructureComponent(input: RemoveComponentInput, capabilities?: readonly string[]): Promise<StructureView> {
+export async function removeStructureComponent(input: RemoveComponentInput, access?: PayrollAccess): Promise<StructureView> {
   const parsed = parse(removeComponentInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   return withTenant(parsed.client, async (tx) => {
+    await judge(tx, parsed.client, access, MAINTAIN);
     const structure = await loadStructure(tx, parsed.client, parsed.structureCode);
     if (!structure) refuse('STRUCTURE_UNKNOWN', `Salary structure ${parsed.structureCode} does not exist.`, `Define it at ${SALARY_STRUCTURE_ROUTE}.`);
     const where = and(
@@ -546,13 +574,13 @@ async function oneAssignment(tx: Tx, client: string, assignmentId: string): Prom
  * silently resolved: end the standing assignment first. A resubmitted form (same request key) is
  * handed the assignment it already made.
  */
-export async function assignStructure(input: AssignmentInput, capabilities?: readonly string[]): Promise<AssignmentView> {
+export async function assignStructure(input: AssignmentInput, access?: PayrollAccess): Promise<AssignmentView> {
   const parsed = parse(assignmentInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   if (parsed.validTo && parsed.validTo < parsed.validFrom) {
     refuse('ASSIGNMENT_PERIOD', `An assignment cannot end (${parsed.validTo}) before it starts (${parsed.validFrom}).`, 'Choose an end date on or after the start.');
   }
   return withTenant(parsed.client, async (tx) => {
+    const grant = await judge(tx, parsed.client, access, MAINTAIN);
     if (parsed.requestKey) {
       const [again] = await tx
         .select({ assignmentId: salaryStructureAssignment.assignmentId })
@@ -571,6 +599,7 @@ export async function assignStructure(input: AssignmentInput, capabilities?: rea
       .limit(1);
     if (!person) refuse('EMPLOYEE_UNKNOWN', `Employee ${parsed.personnelNumber} does not exist.`, `Create the employee at ${EMPLOYEE_ROUTE}.`);
     if (!person.isActive) refuse('EMPLOYEE_INACTIVE', `Employee ${parsed.personnelNumber} is not active.`, 'Reactivate the employee first.');
+    await assertEmployeeScope(tx, parsed.client, grant, parsed.personnelNumber, parsed.validFrom);
 
     const structure = await loadStructure(tx, parsed.client, parsed.structureCode);
     if (!structure) refuse('STRUCTURE_UNKNOWN', `Salary structure ${parsed.structureCode} does not exist.`, `Define it at ${SALARY_STRUCTURE_ROUTE}.`);
@@ -625,10 +654,10 @@ export async function assignStructure(input: AssignmentInput, capabilities?: rea
 }
 
 /** End an assignment on a date (inclusive). The row stays, so history reads back. */
-export async function endAssignment(input: EndAssignmentInput, capabilities?: readonly string[]): Promise<AssignmentView> {
+export async function endAssignment(input: EndAssignmentInput, access?: PayrollAccess): Promise<AssignmentView> {
   const parsed = parse(endAssignmentInput, input);
-  assertCapability(capabilities, parsed.changedBy);
   return withTenant(parsed.client, async (tx) => {
+    const grant = await judge(tx, parsed.client, access, MAINTAIN);
     const [row] = await tx
       .select()
       .from(salaryStructureAssignment)
@@ -636,6 +665,7 @@ export async function endAssignment(input: EndAssignmentInput, capabilities?: re
       .for('update')
       .limit(1);
     if (!row) refuse('ASSIGNMENT_UNKNOWN', `Assignment ${parsed.assignmentId} does not exist.`, 'Choose an assignment of this employee.');
+    await assertEmployeeScope(tx, parsed.client, grant, row.personnelNumber, parsed.validTo);
     if (parsed.validTo < row.validFrom) {
       refuse('ASSIGNMENT_PERIOD', `The assignment starts ${row.validFrom}; it cannot end on ${parsed.validTo}.`, 'Choose an end date on or after the start.');
     }
@@ -667,10 +697,14 @@ export async function assignmentFor(tx: Tx, client: string, personnelNumber: str
 }
 
 /** Every assignment of one employee, newest first: the history the employee screen shows. */
-export async function listAssignments(clientInput: string, personnelInput: string): Promise<AssignmentView[]> {
+export async function listAssignments(clientInput: string, personnelInput: string, access?: PayrollAccess): Promise<AssignmentView[]> {
   const client = parse(clientField, clientInput);
   const personnelNumber = parse(personnelField, personnelInput);
-  return withTenant(client, (tx) => assignmentViews(tx, client, personnelNumber));
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, READ);
+    await assertEmployeeScope(tx, client, grant, personnelNumber, new Date().toISOString().slice(0, 10));
+    return assignmentViews(tx, client, personnelNumber);
+  });
 }
 
 // ── Validation: what must stand before a run ────────────────────────────────
@@ -831,10 +865,15 @@ export async function employeeRunReadiness(
   personnelInput: string,
   periodFrom: string,
   periodTo: string,
+  access?: PayrollAccess,
 ): Promise<EmployeeRunReadiness> {
   const client = parse(clientField, clientInput);
   const personnelNumber = parse(personnelField, personnelInput);
-  return withTenant(client, (tx) => validateEmployeeForRun(tx, client, personnelNumber, periodFrom, periodTo));
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, READ);
+    await assertEmployeeScope(tx, client, grant, personnelNumber, periodFrom);
+    return validateEmployeeForRun(tx, client, personnelNumber, periodFrom, periodTo);
+  });
 }
 
 /** The currency of the tenant's first company code — the default a new structure is offered. */
