@@ -27,17 +27,9 @@ import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 export const WAREHOUSE_STOCK_CAPABILITY = 'INV.STOCK.WAREHOUSE';
 export const WAREHOUSE_STOCK_ALIAS = 'MB52';
 
-export const UNRESTRICTED = 'UNRESTRICTED';
-// The stock type column is varchar(16): the canonical value is QUALITY, displayed as quality inspection.
-export const QUALITY_INSPECTION = 'QUALITY';
-export const BLOCKED = 'BLOCKED';
-/**
- * Returns stock — SAP's "blocked stock returns", what movement 651 receives a customer return into.
- * The goods stand in the plant but are not the company's stock again until they are inspected and
- * transferred out of here: the bucket is deliberately NOT VALUATED, so it is counted and it is not
- * valued, and a movement into it posts no accounting document.
- */
-export const RETURNS = 'RETURNS';
+// Stock type identities live in a client-safe file; re-exported here for existing importers.
+import { UNRESTRICTED, QUALITY_INSPECTION, BLOCKED, RETURNS } from './stock-types';
+export { UNRESTRICTED, QUALITY_INSPECTION, BLOCKED, RETURNS };
 
 export const SCOPE_OF_LIST_OPTIONS = ['ALV', 'STANDARD'] as const;
 export type ScopeOfList = (typeof SCOPE_OF_LIST_OPTIONS)[number];

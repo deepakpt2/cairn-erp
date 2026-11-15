@@ -1,4 +1,6 @@
-import { RETURNS } from './warehouse-stocks';
+// Client-safe: this catalogue is imported by the TransferPosting client component, so it must
+// not import any service module (warehouse-stocks pulls in the DB client and next/headers).
+import { RETURNS } from './stock-types';
 
 /**
  * The transfer movement catalogue — SCR-131 / MB1B.
