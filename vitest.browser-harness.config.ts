@@ -1,3 +1,5 @@
+// Loads .env.test and refuses any database other than erp_test — tests never touch erp_dev.
+import './tests/test-env';
 /** Pure CLI/fixture/credential tests: intentionally no database setup or cleanup. */
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';

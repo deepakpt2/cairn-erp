@@ -26,6 +26,7 @@ db.txt
 !.env.docker.example
 !.env.development.example
 credentials/
+!.env.test
 .git-credentials
 .netrc
 
@@ -44,3 +45,10 @@ __pycache__/
 .pytest_cache/
 .playwright/
 tmp/
+
+# Workbench build output (separate from the dev server's .next) and dev-server logs
+.next-build/
+.logs/
+
+# Crash dumps from the workbench (multi-GB); never commit.
+/core.[0-9]*
