@@ -46,6 +46,7 @@ import { buildDemoPayrollRun } from '../src/platform/tenancy/demo-payroll-run';
 import { buildDemoPayrollPost } from '../src/platform/tenancy/demo-payroll-post';
 import { buildDemoPayrollPay } from '../src/platform/tenancy/demo-payroll-pay';
 import { buildDemoPayrollOffCycle } from '../src/platform/tenancy/demo-payroll-offcycle';
+import { buildDemoCoPlan } from '../src/platform/tenancy/demo-co-plan';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -365,6 +366,15 @@ async function runPayrollOffCyclePhase(ctx: PhaseContext): Promise<Record<string
   return { ...result };
 }
 
+/**
+ * Phase D12_CO_PLAN: cost centre planning (KP06). Plans the installation's fiscal year for every cost
+ * centre and element carrying cost, from the average actual month, so the actual/plan report shows variance.
+ */
+async function runCoPlanPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoCoPlan({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -381,6 +391,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D9_PAYROLL_POST: runPayrollPostPhase,
   D10_PAYROLL_PAY: runPayrollPayPhase,
   D11_PAYROLL_OFFCYCLE: runPayrollOffCyclePhase,
+  D12_CO_PLAN: runCoPlanPhase,
 };
 
 async function main(): Promise<number> {

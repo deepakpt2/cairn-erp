@@ -3,7 +3,7 @@
 Persistent map of the Cairn ERP codebase (branch `development`, refreshed 2026-11-14) (Next.js App Router + Drizzle/Postgres, multi-tenant, SAP-style modules). Built from the actual code (imports, schemas, routes), not an assumed layout. Use this to find files/dependencies without rescanning the repo; update the relevant file here whenever code moves.
 
 ## Files in this folder
-- `import-graph.json` — raw `madge --json` import graph of `src/` (1,308 nodes, full coverage)
+- `import-graph.json` — raw `madge --json` import graph of `src/` (1,313 nodes, full coverage)
 - `modules/<name>.md` — one file per business module (below; 10 incl. `audit`)
 - `shared.md` — cross-cutting infra (`src/platform/*`, `src/ui/*`, `src/worker/*`, auth/authority/db/tenancy & demo install/locking/posting/jobs/notifications/attention/i18n/etc.) and which modules use each piece
 - `database.md` — all 443 Drizzle tables (+2 SQL-only) → owning module, cross-module reads/writes, relations
@@ -14,7 +14,7 @@ Persistent map of the Cairn ERP codebase (branch `development`, refreshed 2026-1
 | Module | Purpose | Entry points | Doc |
 |---|---|---|---|
 | **finance** | GL, AP/AR, period close, fixed assets, consolidation, tax | `/finance/*`, `/config/{chart-of-accounts,consolidation,credit-control-areas,fiscal-year-variants,gl-accounts,intercompany-clearing}` | [modules/finance.md](modules/finance.md) |
-| **foundation** | Enterprise structure & master data (partners, company codes, plants, orgs) + controlling masters/reporting (cost/profit centers, internal orders, settlement) | `/foundation/*`, `/controlling/*`, `/constrained-values`, most of `/config/*` | [modules/foundation.md](modules/foundation.md) |
+| **foundation** | Enterprise structure & master data (partners, company codes, plants, orgs) + controlling masters/reporting/planning (cost/profit centers, internal orders, settlement, cost centre planning KP06) | `/foundation/*`, `/controlling/*`, `/constrained-values`, most of `/config/*` | [modules/foundation.md](modules/foundation.md) |
 | **inventory** | Stock/warehouse: goods movements, batches, physical inventory, material master | `/inventory/*` (incl. `serial-numbers`), `/config/{batch-*,material-*,movement-types,valuation-classes,industry-sectors}` | [modules/inventory.md](modules/inventory.md) |
 | **production** | MRP, production/planned orders, BOMs, routings, confirmations, work centers | `/production/*`, `/config/{availability-check,checking-control,order-type-parameters,production-order-types,scheduling-profiles,wip-batch}` | [modules/production.md](modules/production.md) |
 | **purchasing** | Requisitions, POs, RFQ/quotations, scheduling agreements, invoice verification, GR/IR | `/purchasing/*`, `/config/{delivery-completion,purchasing-orgs}` | [modules/purchasing.md](modules/purchasing.md) |

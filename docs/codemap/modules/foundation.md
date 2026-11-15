@@ -96,7 +96,8 @@
 - `src/modules/foundation/controlling-area-company-compatibility.ts` — validates company code fiscal year variant/currency vs controlling area pre-assignment; locks OXX assignments during check. Exports: `lockCompanyCodeOxxAssignments`, `assertCompanyCodeFinancialSettingsCompatible`.
 - `src/modules/foundation/cost-center-definition.ts` — cost center master (KS01) CRUD.
 - `src/modules/foundation/cost-center-hierarchy.ts` — hierarchy/group tree maintenance. Re-exports `listCostCenterAreas` from cost-center-definition.
-- `src/modules/foundation/cost-center-report.ts` — actual/plan report query (S_ALR_87013611).
+- `src/modules/foundation/cost-center-report.ts` — actual/plan report query (S_ALR_87013611); reads `cost_center_plan`.
+- `src/modules/foundation/cost-center-planning.ts` — KP06/KP07 (item 5, 9282 data-only): the write side of `cost_center_plan`. `saveCostCenterPlan(input, { authorization })` replaces one selection (area, version, year, cost centre): filled cells upserted (`updatedBy`/`updatedAt` on update), blank/absent cells deleted; judges the session (`CO.PLAN.COSTCENTER.MAINTAIN` via `verifyServiceAuthorityInTx`) and Company Code reach (centre's company, else every company of the area); periods from `planningContext`; centre valid and unlocked per period; cost element = any `gl_account` of a chart of a company in the area, not blocked there or in `gl_account_company`; precision from the `currency` table (`decimal_places`), judged on the value; change document per save with `correlationId` = request key (a key reused for another selection is refused). Pure `spreadAnnualTotal(total, periods, decimals)` (exact, remainder to earliest periods, negatives allowed). Readers `planningGrid` (context, cells, prior-year posted elements as suggestions), `listCostCentersFor`, `listPlanningAreas`, `planningCurrencyDecimals`. Never touches the journal or `activity_rate`.
 - `src/modules/foundation/profit-center-definition.ts` — profit center master (KE51) CRUD.
 - `src/modules/foundation/profit-center-hierarchy.ts` — hierarchy/group tree maintenance.
 - `src/modules/foundation/profit-center-report.ts` — actual/plan report query.
@@ -130,6 +131,7 @@
 - `src/app/controlling/order-settlement-collective/page.tsx`, `CollectiveForm.tsx`, `actions.ts` — collective settlement (KO8G) screen; action passes session `authorization`.
 - `src/app/controlling/settlement-rules/page.tsx`, `RuleForm.tsx`, `actions.ts` — settlement rule screen.
 - `src/app/controlling/plan-revaluation/page.tsx`, `RevaluationForm.tsx`, `actions.ts` — plan revaluation (KOP1) screen.
+- `src/app/controlling/cost-center-planning/{page.tsx,PlanGrid.tsx,actions.ts}` — KP06 screen: GET selection (`controllingArea`, `fiscalYear`, `planVersion`, `costCenter`); grid form `element_<i>`, `amount_<i>_<period>`, `total_<i>` (spread over regular periods), `reason`, `requestKey`; shows the area currency; says plainly when no plan stands.
 
 ### Other config (payment terms/methods, tax/document types, number ranges, banks, exchange rates, characteristics/classes, release strategies, tolerance groups, retained earnings, special G/L, account determination, industries, constrained values)
 - `src/modules/foundation/account-determination.ts` — automatic account determination (OBYC) by posting event + valuation class (new event `RETURNS_TRANSFER`/GBB, no seeded row; `PAYROLL_NET_PAY` (9279, balance sheet, seeded 251000 by `applyStandardPackage` and by migration 9279 for existing charts) — read by `people/payroll-posting.ts` and `people/salary-payment.ts`); document type `PY` Payroll payment added to `DOCUMENT_TYPES` (9280 inserts it for tenants that have `PR`); imports `valuationClass` from inventory. Exports: `ACTIVITY`, `POSTING_EVENTS`, `postingEvent`.
@@ -183,6 +185,7 @@
 - `/controlling/original-budget`, `/controlling/original-budget-display` — original budget entry + display-only.
 - `/controlling/order-settlement`, `/controlling/order-settlement-collective`, `/controlling/settlement-rules` — individual/collective settlement execution + rule maintenance.
 - `/controlling/plan-revaluation` — plan revaluation definition (KOP1).
+- `/controlling/cost-center-planning` — cost centre primary-cost planning (KP06/KP07), `CO.PLAN.COSTCENTER.MAINTAIN` (granted to no role).
 - `/foundation/partners` (+`/bank-profiles`) — BP Master (customer/supplier extensions, bank data) + bank-country-profile activation admin.
 - `/constrained-values` — action endpoint backing shared `ConstrainedField` (not a visible page).
 

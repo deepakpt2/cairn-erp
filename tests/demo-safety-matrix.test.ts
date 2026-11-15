@@ -55,7 +55,7 @@ interface RestartRow {
 }
 
 /**
- * The fifteen phases, and how each one behaves when the run is stopped inside it.
+ * The sixteen phases, and how each one behaves when the run is stopped inside it.
  *
  * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
  * people are split because the second takes minutes and opens administrator
@@ -152,6 +152,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     writes: 'A late joiner (10000019) with a position and STAFF assignment from the 20th of the run’s period, and a proposed off-cycle run for that period paying only her, naming the paid run as its predecessor. Nothing released, posted or paid.',
     resumesBy: 'Employee and position looked up before they are written; request-keyed assignment (`DEMO-SAL-10000019`) and run (`DEMO-PAYRUN-OFFCYCLE-*`); an off-cycle run already standing for the period is left as it is.',
     guaranteedBy: ['buildDemoPayrollOffCycle'],
+  },
+  {
+    phase: 'D12_CO_PLAN',
+    writes: 'A primary-cost plan (version 000) for the installation’s fiscal year: every cost centre and cost element carrying cost, each period the centre is valid in planned at the element’s average actual month.',
+    resumesBy: 'A save replaces its selection (area, version, year, cost centre), so a repeat writes the same plan and changes nothing; each save is request-keyed (`DEMO-COPLAN-<year>-<centre>`).',
+    guaranteedBy: ['buildDemoCoPlan'],
   },
 ];
 

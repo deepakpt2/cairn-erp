@@ -1042,6 +1042,17 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    // Item 5 (9282): primary-cost planning per cost centre, element and period (KP06/KP07).
+    id: "/controlling/cost-center-planning",
+    path: "/controlling/cost-center-planning",
+    query: {},
+    code: "CO.PLAN.COSTCENTER.MAINTAIN",
+    title: "Cost centre planning",
+    area: "controlling",
+    family: "controlling-plan",
+    accepts: [],
+  },
+  {
     id: "/controlling/profit-center-report",
     path: "/controlling/profit-center-report",
     query: {},

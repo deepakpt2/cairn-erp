@@ -1831,6 +1831,19 @@
     "modules/foundation/constrained-values.ts",
     "platform/auth/current.ts"
   ],
+  "app/controlling/cost-center-planning/PlanGrid.tsx": [
+    "app/controlling/cost-center-planning/actions.ts"
+  ],
+  "app/controlling/cost-center-planning/actions.ts": [
+    "modules/foundation/activity-rate-definition.ts",
+    "modules/foundation/cost-center-planning.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/controlling/cost-center-planning/page.tsx": [
+    "app/controlling/cost-center-planning/PlanGrid.tsx",
+    "modules/foundation/cost-center-planning.ts",
+    "platform/auth/current.ts"
+  ],
   "app/controlling/cost-center-report/CostCenterReportShell.tsx": [
     "modules/foundation/cost-center-report.ts"
   ],
@@ -5211,6 +5224,15 @@
     "platform/tables/registry.ts",
     "platform/tenancy/index.ts"
   ],
+  "modules/foundation/cost-center-planning.ts": [
+    "modules/foundation/activity-rate-definition.ts",
+    "modules/foundation/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
+  ],
   "modules/foundation/cost-center-report.ts": [
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
@@ -7702,6 +7724,15 @@
     "modules/audit/workspace.ts",
     "platform/db/client.ts",
     "platform/tables/security.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
+  ],
+  "platform/tenancy/demo-co-plan.ts": [
+    "modules/foundation/activity-rate-definition.ts",
+    "modules/foundation/cost-center-planning.ts",
+    "platform/db/client.ts",
+    "platform/periods/index.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
     "platform/tenancy/demo-provisioning.ts"
