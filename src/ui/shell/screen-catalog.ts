@@ -2918,6 +2918,28 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["structure"],
   },
   {
+    // Payroll phase 2 (9278): propose, recalculate, release and cancel a run.
+    id: "/people/payroll-runs",
+    path: "/people/payroll-runs",
+    query: {},
+    code: "PEOPLE.PAYROLLRUN.EXECUTE",
+    title: "Payroll runs",
+    area: "people",
+    family: "people",
+    accepts: ["run"],
+  },
+  {
+    // Payroll phase 2 (9278): the results of a run, one slip per employee.
+    id: "/people/payroll-results",
+    path: "/people/payroll-results",
+    query: {},
+    code: "PEOPLE.PAYROLL.RESULT",
+    title: "Payroll results",
+    area: "people",
+    family: "people",
+    accepts: ["runId", "personnelNumber", "result"],
+  },
+  {
     id: "/audit/workspace",
     path: "/audit/workspace",
     query: {},

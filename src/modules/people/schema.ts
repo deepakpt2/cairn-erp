@@ -765,6 +765,181 @@ export const salaryStructureAssignment = pgTable(
   ],
 );
 
+// ── 9278: payroll phase 2 — the run and its result ─────────────────────────
+// SAP: the payroll driver run (PC00_M99_CALC) and the payroll result cluster (RX). A run is one
+// company code, one fiscal period. A released result is frozen; a correction is a new run in a later
+// period (DV-001: no retroactive accounting). Nothing here posts — phase 3 does.
+
+export const PAYROLL_RUN_ROUTE = '/people/payroll-runs';
+export const PAYROLL_RESULT_ROUTE = '/people/payroll-results';
+export const PAYROLL_RUN_CAPABILITY = 'PEOPLE.PAYROLLRUN.EXECUTE';
+export const PAYROLL_RUN_OBJECT_CLASS = 'payroll_run';
+export const PAYROLL_RESULT_OBJECT_CLASS = 'payroll_result';
+
+export const PAYROLL_RUN_STATUSES = ['PROPOSED', 'RELEASED', 'POSTED', 'CANCELLED'] as const;
+export type PayrollRunStatus = (typeof PAYROLL_RUN_STATUSES)[number];
+
+/** Where a result came from. Stored from day one: it is cheap now and a migration later. */
+export const PAYROLL_RESULT_ORIGINS = ['CALCULATED', 'IMPORTED'] as const;
+export type PayrollResultOrigin = (typeof PAYROLL_RESULT_ORIGINS)[number];
+
+/** One payroll period for one company code. */
+export const payrollRun = pgTable(
+  'payroll_run',
+  {
+    client: tenant(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    companyCode: varchar('company_code', { length: 4 }).notNull(),
+    fiscalYear: integer('fiscal_year').notNull(),
+    /** The posting period being paid (1–16; the service refuses special periods). */
+    period: integer('period').notNull(),
+    periodFrom: date('period_from', { mode: 'string' }).notNull(),
+    periodTo: date('period_to', { mode: 'string' }).notNull(),
+    /** Calendar days in the period, inclusive — the denominator for proration. */
+    totalDays: integer('total_days').notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('PROPOSED'),
+    employeeCount: integer('employee_count').notNull().default(0),
+    exceptionCount: integer('exception_count').notNull().default(0),
+    calculatedBy: varchar('calculated_by', { length: 60 }).notNull(),
+    calculatedAt: timestamp('calculated_at', { withTimezone: true }).notNull().defaultNow(),
+    releasedBy: varchar('released_by', { length: 60 }),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+    cancelledBy: varchar('cancelled_by', { length: 60 }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: varchar('cancel_reason', { length: 200 }),
+    requestKey: varchar('request_key', { length: 64 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.runId] }),
+    uniqueIndex('payroll_run_period_uq')
+      .on(t.client, t.companyCode, t.fiscalYear, t.period)
+      .where(sql`${t.status} <> 'CANCELLED'`),
+    uniqueIndex('payroll_run_request_key_uq').on(t.client, t.requestKey).where(sql`${t.requestKey} is not null`),
+    check('payroll_run_period_ck', sql`${t.period} between 1 and 16`),
+    check('payroll_run_dates_ck', sql`${t.periodTo} >= ${t.periodFrom}`),
+    check('payroll_run_days_ck', sql`${t.totalDays} > 0`),
+    check('payroll_run_currency_format_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check('payroll_run_status_ck', sql`${t.status} in ('PROPOSED','RELEASED','POSTED','CANCELLED')`),
+  ],
+);
+
+/** An employee the run selected but could not include, with the readiness reason. Never dropped silently. */
+export const payrollRunException = pgTable(
+  'payroll_run_exception',
+  {
+    client: tenant(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    seq: integer('seq').notNull(),
+    reasonCode: varchar('reason_code', { length: 32 }).notNull(),
+    message: varchar('message', { length: 400 }).notNull(),
+    remedy: varchar('remedy', { length: 400 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.runId, t.personnelNumber, t.seq] }),
+    foreignKey({
+      name: 'payroll_run_exception_run_fk',
+      columns: [t.client, t.runId],
+      foreignColumns: [payrollRun.client, payrollRun.runId],
+    }).onDelete('cascade'),
+  ],
+);
+
+/** One employee's result in one run. SAP's payroll result cluster. */
+export const payrollResult = pgTable(
+  'payroll_result',
+  {
+    client: tenant(),
+    resultId: varchar('result_id', { length: 36 }).notNull(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    origin: varchar('origin', { length: 12 }).notNull().default('CALCULATED'),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    /** Days paid, after proration and unpaid leave. */
+    payableDays: numeric('payable_days', { precision: 6, scale: 2 }).notNull(),
+    /** Days in the period. payableDays / totalDays is the proration factor. */
+    totalDays: numeric('total_days', { precision: 6, scale: 2 }).notNull(),
+    /** Days the employee held a position in this company during the period. */
+    coveredDays: numeric('covered_days', { precision: 6, scale: 2 }).notNull(),
+    /** Unpaid approved absence days inside the covered days. */
+    unpaidLeaveDays: numeric('unpaid_leave_days', { precision: 6, scale: 2 }).notNull().default('0'),
+    grossPay: numeric('gross_pay', { precision: 23, scale: 4 }).notNull().default('0'),
+    totalDeductions: numeric('total_deductions', { precision: 23, scale: 4 }).notNull().default('0'),
+    netPay: numeric('net_pay', { precision: 23, scale: 4 }).notNull().default('0'),
+    employerCost: numeric('employer_cost', { precision: 23, scale: 4 }).notNull().default('0'),
+    /** The employee's cost centre at the end of the period (the last segment's). */
+    costCenter: varchar('cost_center', { length: 10 }),
+    controllingArea: varchar('controlling_area', { length: 4 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.resultId] }),
+    uniqueIndex('payroll_result_employee_uq').on(t.client, t.runId, t.personnelNumber),
+    index('payroll_result_run_idx').on(t.client, t.runId),
+    foreignKey({
+      name: 'payroll_result_run_fk',
+      columns: [t.client, t.runId],
+      foreignColumns: [payrollRun.client, payrollRun.runId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'payroll_result_employee_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+    check('payroll_result_origin_ck', sql`${t.origin} in ('CALCULATED','IMPORTED')`),
+    check('payroll_result_net_ck', sql`${t.netPay} = ${t.grossPay} - ${t.totalDeductions}`),
+  ],
+);
+
+/**
+ * One component of one result, for one segment of the period.
+ *
+ * Everything needed to post this line is **snapshotted here** — the component kind, both accounts,
+ * the cost receiver category and the cost centre. Configuration changes afterwards; a calculated
+ * result must not. A segment is a contiguous span with one position and one salary assignment, so a
+ * mid-period transfer or raise yields one line per component per segment.
+ */
+export const payrollResultLine = pgTable(
+  'payroll_result_line',
+  {
+    client: tenant(),
+    resultId: varchar('result_id', { length: 36 }).notNull(),
+    lineId: varchar('line_id', { length: 36 }).notNull(),
+    lineNo: integer('line_no').notNull(),
+    segmentFrom: date('segment_from', { mode: 'string' }).notNull(),
+    segmentTo: date('segment_to', { mode: 'string' }).notNull(),
+    payableDays: numeric('payable_days', { precision: 6, scale: 2 }).notNull(),
+    structureCode: varchar('structure_code', { length: 10 }).notNull(),
+    baseAmount: numeric('base_amount', { precision: 23, scale: 4 }).notNull(),
+    componentCode: varchar('component_code', { length: 10 }).notNull(),
+    componentKind: varchar('component_kind', { length: 24 }).notNull(),
+    amountKind: varchar('amount_kind', { length: 20 }),
+    amountValue: numeric('amount_value', { precision: 23, scale: 4 }),
+    /** What this line is worth for this segment, after proration, rounded once. */
+    amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+    debitAccount: varchar('debit_account', { length: 10 }),
+    creditAccount: varchar('credit_account', { length: 10 }),
+    costReceiverCategory: varchar('cost_receiver_category', { length: 10 }).notNull().default('NONE'),
+    costCenter: varchar('cost_center', { length: 10 }),
+    controllingArea: varchar('controlling_area', { length: 4 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.resultId, t.lineId] }),
+    index('payroll_result_line_result_idx').on(t.client, t.resultId),
+    foreignKey({
+      name: 'payroll_result_line_result_fk',
+      columns: [t.client, t.resultId],
+      foreignColumns: [payrollResult.client, payrollResult.resultId],
+    }).onDelete('cascade'),
+    check('payroll_result_line_amount_ck', sql`${t.amount} >= 0`),
+    check('payroll_result_line_receiver_ck', sql`${t.costReceiverCategory} in ('ASSIGNMENT','FIXED','NONE')`),
+  ],
+);
+
 // ── 9197: time and leave ────────────────────────────────────────────────────
 // §8.10: time_recording, absence, attendance, leave_quota — Time data.
 // §10.8: PEOPLE.TIME.ENTER (absence and attendance entry), PEOPLE.LEAVE.VIEW

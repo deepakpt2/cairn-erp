@@ -16,7 +16,7 @@
  * Dates follow every dated people table: `valid_to` is the last day that applies (inclusive).
  */
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { hasCapability } from '../../platform/auth/session';
@@ -49,6 +49,8 @@ export type { AmountKind };
 export const EMPLOYEE_ROUTE = '/people/employees';
 /** Where a pay component is mapped to accounts. */
 export const PAY_COMPONENT_ROUTE = '/config/pay-components';
+/** The component kind a run does not calculate (out of scope for v1): no structure may name one. */
+export const EOS_PROVISION_KIND = 'EOS_PROVISION';
 /** Reading an employee's pay structure: the definer, or whoever may read a payroll result. */
 export const PAYROLL_RESULT_CAPABILITY = 'PEOPLE.PAYROLL.RESULT';
 
@@ -202,6 +204,7 @@ export interface ReadinessReason {
     | 'NO_POSITION'
     | 'NO_COST_CENTRE'
     | 'NO_COMPANY'
+    | 'EOS_NOT_SUPPORTED'
     | 'CURRENCY_DIFFERS';
   message: string;
   remedy?: string;
@@ -372,6 +375,9 @@ export async function setStructureComponent(input: ComponentInput, capabilities?
     if (!component) {
       refuse('COMPONENT_UNKNOWN', `Pay component ${parsed.componentCode} does not exist.`, `Define it at ${PAY_COMPONENT_ROUTE}.`);
     }
+    if (component.componentKind === EOS_PROVISION_KIND) {
+      refuse('EOS_NOT_SUPPORTED', `Pay component ${parsed.componentCode} is an end-of-service provision; a payroll run does not calculate those yet, so a structure may not name one.`, 'Leave end-of-service provisions out of salary structures for now.');
+    }
     if (!component.isValid) {
       refuse('COMPONENT_RETIRED', `Pay component ${parsed.componentCode} is retired.`, `Choose a valid component, or restore it at ${PAY_COMPONENT_ROUTE}.`);
     }
@@ -451,8 +457,49 @@ export async function listAssignableComponents(clientInput: string): Promise<Arr
   return withTenant(client, (tx) => tx
     .select({ code: payComponent.code, name: payComponent.name, componentKind: payComponent.componentKind })
     .from(payComponent)
-    .where(and(eq(payComponent.client, client), eq(payComponent.isValid, true)))
+    .where(and(eq(payComponent.client, client), eq(payComponent.isValid, true), ne(payComponent.componentKind, EOS_PROVISION_KIND)))
     .orderBy(asc(payComponent.code)));
+}
+
+const removeComponentInput = z.object({
+  client: clientField,
+  structureCode: codeField,
+  componentCode: codeField,
+  changedBy: actor,
+});
+export type RemoveComponentInput = z.input<typeof removeComponentInput>;
+
+/**
+ * Take a component out of a structure. A calculated payroll result snapshots its own lines, so no
+ * result changes; the next run simply no longer pays the component to anyone on the structure.
+ */
+export async function removeStructureComponent(input: RemoveComponentInput, capabilities?: readonly string[]): Promise<StructureView> {
+  const parsed = parse(removeComponentInput, input);
+  assertCapability(capabilities, parsed.changedBy);
+  return withTenant(parsed.client, async (tx) => {
+    const structure = await loadStructure(tx, parsed.client, parsed.structureCode);
+    if (!structure) refuse('STRUCTURE_UNKNOWN', `Salary structure ${parsed.structureCode} does not exist.`, `Define it at ${SALARY_STRUCTURE_ROUTE}.`);
+    const where = and(
+      eq(salaryStructureComponent.client, parsed.client),
+      eq(salaryStructureComponent.structureCode, parsed.structureCode),
+      eq(salaryStructureComponent.componentCode, parsed.componentCode),
+    );
+    const [standing] = await tx.select().from(salaryStructureComponent).where(where).limit(1);
+    if (!standing) {
+      refuse('COMPONENT_NOT_IN_STRUCTURE', `Structure ${parsed.structureCode} does not name component ${parsed.componentCode}.`, 'Choose a component the structure names.');
+    }
+    await tx.delete(salaryStructureComponent).where(where);
+    await recordChange(tx, {
+      client: parsed.client,
+      objectClass: SALARY_STRUCTURE_OBJECT_CLASS,
+      objectKey: `${parsed.structureCode}/${parsed.componentCode}`,
+      changeType: 'DELETE',
+      changedBy: parsed.changedBy,
+      transactionCode: SALARY_STRUCTURE_CAPABILITY,
+      before: { amountKind: standing.amountKind, amountValue: numberText(standing.amountValue) },
+    });
+    return structureView(tx, parsed.client, parsed.structureCode);
+  });
 }
 
 // ── Assignments ─────────────────────────────────────────────────────────────
@@ -732,13 +779,17 @@ export async function validateEmployeeForRun(
       reason('STRUCTURE_NOT_VALID', `Structure ${code} is not valid for the whole period (${structure.isValid ? `valid ${structure.validFrom} to ${structure.validTo ?? 'open'}` : 'retired'}; used ${usedFrom} to ${usedTo}).`, `Extend or restore it at ${SALARY_STRUCTURE_ROUTE}.`);
     }
     const components = (await tx.execute(sql`
-      select c.component_code from salary_structure_component c
+      select c.component_code, p.component_kind from salary_structure_component c
+        join pay_component p on p.client = c.client and p.code = c.component_code
        where c.client = ${client} and c.structure_code = ${code}
        order by c.component_code
-    `)) as unknown as Array<{ component_code: string }>;
+    `)) as unknown as Array<{ component_code: string; component_kind: string }>;
     if (components.length === 0) {
       reason('STRUCTURE_EMPTY', `Structure ${code} names no components.`, `Add components at ${SALARY_STRUCTURE_ROUTE}.`);
       continue;
+    }
+    for (const eos of components.filter((c) => c.component_kind === EOS_PROVISION_KIND)) {
+      reason('EOS_NOT_SUPPORTED', `Structure ${code} names end-of-service provision component ${eos.component_code}; a payroll run does not calculate end-of-service provisions yet.`, `Remove ${eos.component_code} from ${code} at ${SALARY_STRUCTURE_ROUTE}?structure=${code}.`);
     }
     const charts = [...new Set([...companyOf.values()].filter((c): c is NonNullable<typeof c> => c !== null).map((c) => c.chart))];
     for (const { component_code: component } of components) {

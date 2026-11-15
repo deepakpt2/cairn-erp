@@ -26,7 +26,7 @@ Infra not owned by any business module; every module depends on some of this.
 
 **Posting — `src/platform/posting/`**: `index.ts` (`postJournalEntry`,`reverseJournalEntry`,`computeTotals`,`PostingError`) · `decimal.ts` (scaled-bigint money math, `MONEY_SCALE=4`: `toScaled`,`fromScaled`,`sumScaled`,`equalsScaled`,`multiplyScaled`)
 
-**Periods — `src/platform/periods/`**: `index.ts` (`derivePosition`,`checkPostingAllowed`,`periodStatus`,`PeriodError`) · `windows.ts` (`periodWindows`)
+**Periods — `src/platform/periods/`**: `index.ts` (`derivePosition`,`periodDates` (period → inclusive dates; refuses special periods),`checkPostingAllowed`,`periodStatus`,`PeriodError`) · `windows.ts` (`periodWindows`)
 
 **Change/audit — `src/platform/change/`**: `index.ts` (`recordChange`,`changeHistory`) · `partner-data-history.ts` (masks sensitive fields; `isPartnerSensitiveHistoryClass`,`isPartnerHistoryMaskedField`,`projectPartnerHistorySnapshot`)
 
@@ -63,7 +63,7 @@ Infra not owned by any business module; every module depends on some of this.
 | `platform/lock`+`ui/lock` | config,controlling,finance,foundation,inventory,platform,production,purchasing,quality |
 | `platform/numbering` | config,finance,foundation,inventory,production,purchasing,quality,sales |
 | `platform/posting` | finance,foundation,inventory,people,production,purchasing |
-| `platform/periods` | config,finance,foundation,inventory,production,purchasing |
+| `platform/periods` | config,finance,foundation,inventory,people,production,purchasing |
 | `platform/change` | config,finance,foundation,inventory,people,platform,production,purchasing,quality,sales |
 | `platform/document` | inventory, purchasing only |
 | `platform/i18n` | all 9 modules |
@@ -89,7 +89,7 @@ Infra not owned by any business module; every module depends on some of this.
 # NEW TESTS (development branch)
 **Job/worker/notifications:** `job-runtime`, `job-monitor`, `job-notification`, `worker`, `notification`, `attention`
 **Audit:** `audit-workspace` (helper `helpers/audit-actor.ts`)
-**Payroll:** `payroll-structure` (helper `helpers/payroll-actor.ts`)
+**Payroll:** `payroll-structure`, `payroll-run` (helper `helpers/payroll-actor.ts`)
 **Demo installation/tenancy:** `demo-credentials`, `demo-organisation`, `demo-masters`, `demo-procurement`, `demo-production`, `demo-sales`, `demo-quality`, `demo-finance`, `demo-reconciliation`, `demo-safety-matrix`, `demo-provisioning-contract`, `config-activity-status`
 **Python:** `backup_manifest_test.py`, `deployment_diagnostic_test.py`, `deployment_routing_test.py`
 (all filenames above take `.test.ts` suffix unless otherwise shown)

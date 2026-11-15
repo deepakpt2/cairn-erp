@@ -8,6 +8,9 @@
  * there on purpose: his employee screen shows the readiness check naming why a run could not include
  * him.
  *
+ * EOSPROV is defined and mapped but named by no structure: a payroll run does not calculate
+ * end-of-service provisions in v1 and refuses a structure that names one.
+ *
  * The amounts and rates are demonstration values chosen for a fictional company. They are not a
  * statute, a tax table or a social-insurance rate (DV-001): nothing statutory ships.
  *
@@ -64,7 +67,6 @@ const STRUCTURES: ReadonlyArray<{ code: string; name: string; rules: Rule[] }> =
       { component: 'TRANSPORT', kind: 'FIXED', value: '40' },
       { component: 'PENSION', kind: 'PERCENT_OF_BASE', value: '5' },
       { component: 'ERCONTRIB', kind: 'PERCENT_OF_BASE', value: '11' },
-      { component: 'EOSPROV', kind: 'PERCENT_OF_BASE', value: '8.33' },
     ],
   },
   {
@@ -76,7 +78,6 @@ const STRUCTURES: ReadonlyArray<{ code: string; name: string; rules: Rule[] }> =
       { component: 'TRANSPORT', kind: 'FIXED', value: '120' },
       { component: 'PENSION', kind: 'PERCENT_OF_BASE', value: '5' },
       { component: 'ERCONTRIB', kind: 'PERCENT_OF_BASE', value: '11' },
-      { component: 'EOSPROV', kind: 'PERCENT_OF_BASE', value: '8.33' },
     ],
   },
 ];

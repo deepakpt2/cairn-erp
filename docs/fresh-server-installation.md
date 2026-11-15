@@ -126,7 +126,7 @@ does in production.
 
 `ENABLE_DUMMY_DATA=true` provisions a complete fictional company — one company code,
 two plants, three open posting periods, and roughly 150 connected documents across
-purchasing, inventory, production, sales, finance and quality, an audit in progress, salary structures and pay components ready for payroll, plus ten accounts to
+purchasing, inventory, production, sales, finance and quality, an audit in progress, salary structures and pay components, and a proposed payroll run with a joiner, a leaver, unpaid leave and one named exception, plus ten accounts to
 work it with.
 
 Three things you should know before choosing it:

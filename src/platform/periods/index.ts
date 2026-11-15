@@ -109,6 +109,40 @@ export async function derivePosition(
 }
 
 /**
+ * The calendar window of one ordinary period of a fiscal year — the inverse of `derivePosition`.
+ *
+ * Special periods are refused: they share the last period's window and exist for year-end
+ * adjustment, so a date range read from one would describe a different period. Dates are inclusive
+ * `YYYY-MM-DD` strings.
+ */
+export async function periodDates(
+  tx: Tx,
+  client: string,
+  variantCode: string,
+  fiscalYear: number,
+  period: number,
+): Promise<{ from: string; to: string }> {
+  const variant = await getVariant(tx, client, variantCode);
+  if (period > variant.regularPeriods) {
+    throw new PeriodError(
+      `Period ${period} is a special period of fiscal year variant ${variantCode}, which has ` +
+        `${variant.regularPeriods} ordinary periods; a special period has no calendar window of its own.`,
+      `Choose an ordinary period from 1 to ${variant.regularPeriods}.`,
+    );
+  }
+  const regular = await regularPeriods(tx, client, variantCode, variant.isYearDependent, fiscalYear);
+  const window = periodWindows(regular, fiscalYear).find((w) => w.period === period);
+  if (!window) {
+    throw new PeriodError(
+      `Fiscal year variant ${variantCode} defines no period ${period} for fiscal year ${fiscalYear}.`,
+      'Check the variant\'s period definition (CFG.FIN.FYV.DEFINE).',
+    );
+  }
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  return { from: iso(window.start), to: iso(window.end) };
+}
+
+/**
  * The ordinary periods that apply to one fiscal year, in period order.
  *
  * A year-dependent variant keeps a row set per calendar year; every other variant's rows

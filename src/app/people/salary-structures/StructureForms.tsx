@@ -5,6 +5,7 @@ import { useActionState } from 'react';
 import {
   changeStructureAction,
   defineStructureAction,
+  removeComponentAction,
   setComponentAction,
   type PayrollActionState,
 } from './actions';
@@ -115,6 +116,18 @@ export function ComponentForm({
       </div>
       <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending || components.length === 0}>Save component</button>
       <Status state={state} />
+    </form>
+  );
+}
+
+export function RemoveComponentForm({ structureCode, componentCode }: { structureCode: string; componentCode: string }) {
+  const [state, action, pending] = useActionState(removeComponentAction, { ok: false });
+  return (
+    <form action={action} className="flex items-center gap-2">
+      <input type="hidden" name="structureCode" value={structureCode} />
+      <input type="hidden" name="componentCode" value={componentCode} />
+      <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={pending} aria-label={`Remove ${componentCode} from ${structureCode}`}>Remove</button>
+      {state.message && !state.ok ? <span role="status" className="text-xs text-signal-error">{state.message}</span> : null}
     </form>
   );
 }

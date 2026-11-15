@@ -12,6 +12,7 @@ import {
   changeSalaryStructure,
   defineSalaryStructure,
   endAssignment,
+  removeStructureComponent,
   setStructureComponent,
 } from '@/modules/people/payroll-structure';
 
@@ -101,6 +102,24 @@ export async function setComponentAction(_prev: PayrollActionState, form: FormDa
     revalidatePath(ROUTE);
     const rule = view.amountKind === 'FIXED' ? `fixed ${view.amountValue}` : `${view.amountValue} % of base`;
     return { ok: true, message: `${view.componentCode} in ${view.structureCode}: ${rule}.` };
+  } catch (error) {
+    return refusal(error);
+  }
+}
+
+/** Take a component out of a structure: `structureCode`, `componentCode`. */
+export async function removeComponentAction(_prev: PayrollActionState, form: FormData): Promise<PayrollActionState> {
+  const access = await guard(ROUTE);
+  if (!('actor' in access)) return access;
+  try {
+    const view = await removeStructureComponent({
+      client: access.client,
+      structureCode: text(form, 'structureCode'),
+      componentCode: text(form, 'componentCode'),
+      changedBy: access.actor,
+    }, access.capabilities);
+    revalidatePath(ROUTE);
+    return { ok: true, message: `${text(form, 'componentCode').toUpperCase()} removed from ${view.code}. Results already calculated keep their lines.` };
   } catch (error) {
     return refusal(error);
   }

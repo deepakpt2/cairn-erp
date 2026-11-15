@@ -3,7 +3,8 @@
  *
  * Payroll phase 1: define a structure, its components and each component's amount rule (fixed or a
  * percentage of base). Employees are assigned a structure on /people/employees. Nothing here
- * calculates or posts. `?structure=` opens one structure.
+ * calculates or posts. A component can be removed from a structure; calculated results keep
+ * their lines. `?structure=` opens one structure.
  */
 import Link from 'next/link';
 
@@ -19,7 +20,7 @@ import {
   listStructures,
 } from '@/modules/people/payroll-structure';
 
-import { ChangeStructureForm, ComponentForm, DefineStructureForm } from './StructureForms';
+import { ChangeStructureForm, ComponentForm, DefineStructureForm, RemoveComponentForm } from './StructureForms';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,7 +101,7 @@ export default async function SalaryStructurePage({ searchParams }: { searchPara
                   <p className="p-4 text-sm text-ink-soft">Structure {selected.code} names no components yet; a payroll run cannot include anyone on it.</p>
                 ) : (
                   <table className="grid-table">
-                    <thead><tr><th>Component</th><th>Name</th><th>Kind</th><th>Rule</th></tr></thead>
+                    <thead><tr><th>Component</th><th>Name</th><th>Kind</th><th>Rule</th><th></th></tr></thead>
                     <tbody>
                       {selected.components.map((c) => (
                         <tr key={c.componentCode}>
@@ -108,6 +109,7 @@ export default async function SalaryStructurePage({ searchParams }: { searchPara
                           <td>{c.componentName}</td>
                           <td className="text-xs">{c.componentKind}</td>
                           <td className="code">{c.amountKind === 'FIXED' ? `fixed ${c.amountValue} ${selected.currency}` : `${c.amountValue} % of base`}</td>
+                          <td><RemoveComponentForm structureCode={selected.code} componentCode={c.componentCode} /></td>
                         </tr>
                       ))}
                     </tbody>

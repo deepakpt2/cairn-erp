@@ -42,6 +42,7 @@ import { buildDemoFinance } from '../src/platform/tenancy/demo-finance';
 import { buildDemoQuality } from '../src/platform/tenancy/demo-quality';
 import { buildDemoAudit, demoAuditPrerequisitesMissing } from '../src/platform/tenancy/demo-audit';
 import { buildDemoPayroll } from '../src/platform/tenancy/demo-payroll';
+import { buildDemoPayrollRun } from '../src/platform/tenancy/demo-payroll-run';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -324,6 +325,16 @@ async function runPayrollPhase(ctx: PhaseContext): Promise<Record<string, unknow
   return { ...result };
 }
 
+/**
+ * Phase D8_PAYROLL_RUN: payroll phase 2. A joiner, a leaver and unpaid leave around a proposed run for
+ * the period the installation was claimed in; 10000016 stands as the run's named exception. Takes
+ * EOSPROV out of the demo structures (a run refuses it). Proposes; never releases or posts.
+ */
+async function runPayrollRunPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoPayrollRun({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -336,6 +347,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D5_QUALITY: runQualityPhase,
   D6_AUDIT: runAuditPhase,
   D7_PAYROLL: runPayrollPhase,
+  D8_PAYROLL_RUN: runPayrollRunPhase,
 };
 
 async function main(): Promise<number> {
