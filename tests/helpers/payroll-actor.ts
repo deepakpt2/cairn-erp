@@ -122,3 +122,18 @@ export async function payrollEmployee(
   }
   return personnelNumber;
 }
+
+/**
+ * Payroll phase 3: a signed-in actor that may post payroll. Posting asks for `PEOPLE.PAYROLL.POST`
+ * (the payroll service) and `FIN.JOURNAL.POST` (the G/L posting it rides on), and Company Code reach —
+ * the shape `finance-actor.ts` builds. Pass `capabilities` to prove a refusal.
+ */
+export const PAYROLL_POSTER_CAPABILITIES: readonly string[] = ['PEOPLE.PAYROLL.POST', 'FIN.JOURNAL.POST'];
+
+export async function createPayrollPoster(
+  client: string,
+  options: { capabilities?: readonly string[]; companyScopes?: readonly string[] } = {},
+) {
+  const { createFinanceActor } = await import('./finance-actor');
+  return createFinanceActor(client, { capabilities: options.capabilities ?? PAYROLL_POSTER_CAPABILITIES, companyScopes: options.companyScopes });
+}

@@ -809,6 +809,13 @@ export const payrollRun = pgTable(
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancelReason: varchar('cancel_reason', { length: 200 }),
     requestKey: varchar('request_key', { length: 64 }),
+    /** The accounting document this run produced (9279). Present exactly when status is POSTED. */
+    documentNumber: varchar('document_number', { length: 40 }),
+    documentFiscalYear: integer('document_fiscal_year'),
+    postedBy: varchar('posted_by', { length: 60 }),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    /** The idempotency key handed to the G/L posting service. */
+    postingRequestKey: varchar('posting_request_key', { length: 64 }),
     ...auditColumns,
   },
   (t) => [
@@ -822,6 +829,12 @@ export const payrollRun = pgTable(
     check('payroll_run_days_ck', sql`${t.totalDays} > 0`),
     check('payroll_run_currency_format_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check('payroll_run_status_ck', sql`${t.status} in ('PROPOSED','RELEASED','POSTED','CANCELLED')`),
+    check(
+      'payroll_run_document_pair_ck',
+      sql`(${t.documentNumber} is null and ${t.documentFiscalYear} is null)
+       or (${t.documentNumber} is not null and ${t.documentFiscalYear} is not null)`,
+    ),
+    check('payroll_run_posted_document_ck', sql`(${t.status} = 'POSTED') = (${t.documentNumber} is not null)`),
   ],
 );
 

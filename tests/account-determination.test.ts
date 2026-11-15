@@ -201,9 +201,17 @@ async function rowHistory(input = creation()) {
 
 describe('OBYC define account determination', () => {
   it('lists the furniture the judge reads: charts, active classes, accounts', async () => {
-    // The standard package seeds exactly one determination (SCR-121): retained
-    // earnings indicator X, which this screen and OB53 read from one source.
+    // The standard package seeds exactly two determinations: retained earnings
+    // indicator X (SCR-121), which this screen and OB53 read from one source, and
+    // payroll net pay (9279), the payable a payroll posting credits.
     expect(await listAccountDeterminations(fixture().client)).toEqual([
+      expect.objectContaining({
+        chartOfAccounts: 'CA01',
+        event: 'PAYROLL_NET_PAY',
+        valuationClass: '',
+        generalModifier: '',
+        glAccount: '251000',
+      }),
       expect.objectContaining({
         chartOfAccounts: 'CA01',
         event: 'RETAINED_EARNINGS',
@@ -304,6 +312,7 @@ describe('OBYC define account determination', () => {
       'GR_IR_CLEARING||',
       'INVENTORY|RAW_INVENTORY|',
       'OFFSETTING_INVENTORY|RAW_INVENTORY|VBR',
+      'PAYROLL_NET_PAY||',
       'RETAINED_EARNINGS||X',
     ]);
   });

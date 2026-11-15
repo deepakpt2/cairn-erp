@@ -18,6 +18,7 @@ import {
   listPayrollRuns,
   listResults,
 } from '@/modules/people/payroll-run';
+import { getPayrollPosting } from '@/modules/people/payroll-posting';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,8 @@ export default async function PayrollResultPage({
   const results = allowed && run ? await listResults(client, run.runId, personnelNumber || undefined) : [];
   const slip = allowed && params.result ? await getResultWithLines(client, params.result) : null;
   const slipRun = slip ? runs.find((r) => r.runId === slip.result.runId) : null;
+  const posting = run && run.status === 'POSTED' ? await getPayrollPosting(client, run.runId) : null;
+  const posted = Boolean(posting);
   const query = (extra: Record<string, string>) => {
     const q = new URLSearchParams({ ...(run ? { runId: run.runId } : {}), ...(personnelNumber ? { personnelNumber } : {}), ...extra });
     return `${ROUTE}?${q.toString()}`;
@@ -57,7 +60,7 @@ export default async function PayrollResultPage({
           </div>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          One slip per employee and run. Each line shows the account it will post to and the cost receiver, fixed when
+          One slip per employee and run. Each line shows the account it posts to and the cost receiver, fixed when
           the run was calculated. Read-only.
         </p>
       </header>
@@ -104,7 +107,7 @@ export default async function PayrollResultPage({
               </p>
               <table className="grid-table mt-2">
                 <thead>
-                  <tr><th>#</th><th>Segment</th><th>Days</th><th>Component</th><th>Kind</th><th>Rule</th><th>Amount</th><th>Debit</th><th>Credit</th><th>Cost receiver</th></tr>
+                  <tr><th>#</th><th>Segment</th><th>Days</th><th>Component</th><th>Kind</th><th>Rule</th><th>Amount</th><th>{slipRun?.status === 'POSTED' ? 'Debited' : 'Debit'}</th><th>{slipRun?.status === 'POSTED' ? 'Credited' : 'Credit'}</th><th>Cost receiver</th></tr>
                 </thead>
                 <tbody>
                   {slip.lines.map((l) => (
@@ -130,6 +133,15 @@ export default async function PayrollResultPage({
             <h2 className="panel-title px-4 pt-4">
               Company {run.companyCode} · period {run.period}/{run.fiscalYear} · {run.periodFrom} to {run.periodTo} · {run.status.toLowerCase()}
             </h2>
+            {posting && (
+              <p className="px-4 text-sm">
+                Posted as document <span className="code">{posting.displayNumber}</span> on {posting.postingDate}: debits {posting.debitTotal}, credits {posting.creditTotal}.
+                Each slip shows the accounts its lines posted to.
+              </p>
+            )}
+            {!posted && run.status !== 'CANCELLED' && (
+              <p className="px-4 text-xs text-ink-soft">Not posted yet: each slip shows the accounts its lines will post to.</p>
+            )}
             {results.length === 0 ? (
               <p className="p-4 text-sm text-ink-soft">
                 {personnelNumber ? `No result for ${personnelNumber} in this run.` : 'This run has no results.'}

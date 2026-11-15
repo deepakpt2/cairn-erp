@@ -20,6 +20,7 @@ import {
   listPayrollCompanies,
   listPayrollRuns,
 } from '@/modules/people/payroll-run';
+import { PAYROLL_POST_CAPABILITY, getPayrollPosting } from '@/modules/people/payroll-posting';
 
 import { ProposeRunForm, RunActions } from './RunForms';
 
@@ -47,6 +48,9 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
   const defaultCompany = companies[0]?.companyCode ?? '';
   const position = allowed && defaultCompany ? await currentPayrollPeriod(client, defaultCompany, today) : null;
   const selected = allowed && params.run && runs.some((r) => r.runId === params.run) ? await getPayrollRun(client, params.run) : null;
+  const posting = selected && selected.status === 'POSTED' ? await getPayrollPosting(client, selected.runId) : null;
+  const mayPost = can(session, PAYROLL_POST_CAPABILITY);
+  const mayDisplayJournal = can(session, 'FIN.JOURNAL.DISPLAY');
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -63,7 +67,7 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
           A run pays one company for one fiscal period. Joiners and leavers are paid for the days they hold a position;
           approved unpaid leave is deducted. A released run is frozen — a correction is a new run in a later period.
-          Nothing here posts.
+          Posting a released run books one PR document: personnel cost by cost centre, the payables flat.
         </p>
       </header>
 
@@ -98,6 +102,17 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
                   {selected.cancelledBy ? ` · cancelled by ${selected.cancelledBy}: ${selected.cancelReason}` : ''}
                   {' · '}run {selected.runId}
                 </p>
+                {posting && (
+                  <p className="text-sm">
+                    Posted as document{' '}
+                    {mayDisplayJournal
+                      ? <Link href={`/finance/journal/document?document=${posting.documentNumber}`} className="code underline">{posting.displayNumber}</Link>
+                      : <span className="code">{posting.displayNumber}</span>}
+                    {' '}(fiscal year {posting.documentFiscalYear}, dated {posting.postingDate}) by {posting.postedBy}: debits {posting.debitTotal}, credits {posting.creditTotal}, {posting.lineCount} lines.
+                    {posting.reversalDocumentNumber ? ` Reversed by document ${posting.reversalDocumentNumber}; the run stays posted — a correction is a new run in a later period.` : ''}
+                  </p>
+                )}
+                {selected.status === 'PROPOSED' && <p className="text-xs text-ink-soft">Not postable yet: the run has not been released.</p>}
                 {mayReadResults && (
                   <Link href={`${PAYROLL_RESULT_ROUTE}?runId=${selected.runId}`} className="text-sm underline">Open the results of this run</Link>
                 )}
@@ -125,7 +140,7 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
                 )}
               </section>
 
-              <RunActions runId={selected.runId} status={selected.status} exceptionCount={selected.exceptionCount} />
+              <RunActions runId={selected.runId} status={selected.status} exceptionCount={selected.exceptionCount} mayPost={mayPost} />
             </>
           )}
 

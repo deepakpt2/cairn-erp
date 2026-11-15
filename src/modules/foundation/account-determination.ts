@@ -73,6 +73,11 @@ export const POSTING_EVENTS: PostingEvent[] = [
   { event: 'FXLOSS', referenceAlias: 'FXLOSS', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'CASH_DISCOUNT', referenceAlias: 'SKTO', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: true },
   { event: 'PAYMENT_DIFFERENCE', referenceAlias: 'DIF', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: true },
+  // The credit side of a payroll posting: what the period owes its people. Net pay is
+  // not a pay component — it is the remainder after deductions — so no component can
+  // carry the account, and the determination is where a tenant names it. Registered
+  // with a seeded row, because the standard chart delivers the account it points at.
+  { event: 'PAYROLL_NET_PAY', referenceAlias: 'PAYROLL_NET_PAY', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
 ];
 
 export function postingEvent(event: string): PostingEvent | undefined {

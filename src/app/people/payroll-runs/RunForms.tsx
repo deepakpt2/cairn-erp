@@ -5,6 +5,7 @@ import { useActionState } from 'react';
 
 import {
   cancelRunAction,
+  postPayrollRunAction,
   proposeRunAction,
   recalculateRunAction,
   releaseRunAction,
@@ -71,8 +72,9 @@ export function ProposeRunForm({
   );
 }
 
-export function RunActions({ runId, status, exceptionCount }: { runId: string; status: string; exceptionCount: number }) {
+export function RunActions({ runId, status, exceptionCount, mayPost }: { runId: string; status: string; exceptionCount: number; mayPost: boolean }) {
   const [recalc, recalcAction, recalcPending] = useActionState(recalculateRunAction, { ok: false });
+  const [post, postAction, postPending] = useActionState(postPayrollRunAction, { ok: false });
   const [release, releaseAction, releasePending] = useActionState(releaseRunAction, { ok: false });
   const [cancel, cancelAction, cancelPending] = useActionState(cancelRunAction, { ok: false });
   const proposed = status === 'PROPOSED';
@@ -97,6 +99,17 @@ export function RunActions({ runId, status, exceptionCount }: { runId: string; s
       )}
       <Status state={recalc} />
       <Status state={release} />
+      {status === 'RELEASED' && mayPost && (
+        <form action={postAction} className="flex flex-wrap items-center gap-3">
+          <input type="hidden" name="runId" value={runId} />
+          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={postPending}>Post to G/L</button>
+          <span className="text-xs text-ink-soft">One PR document, dated the last day of the period. A posted run cannot be cancelled or posted again.</span>
+        </form>
+      )}
+      {status === 'RELEASED' && !mayPost && (
+        <p className="text-sm text-ink-soft">Posting this run needs PEOPLE.PAYROLL.POST and FIN.JOURNAL.POST.</p>
+      )}
+      <Status state={post} />
       {cancellable && (
         <form action={cancelAction} className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="runId" value={runId} />
@@ -109,7 +122,8 @@ export function RunActions({ runId, status, exceptionCount }: { runId: string; s
       )}
       <Status state={cancel} />
       {!proposed && !cancellable && <p className="text-sm text-ink-soft">This run is {status.toLowerCase()}; nothing more can be done to it here.</p>}
-      {status === 'RELEASED' && <p className="text-sm text-ink-soft">Released runs are frozen: they are never recalculated. Posting is payroll phase 3.</p>}
+      {status === 'RELEASED' && <p className="text-sm text-ink-soft">Released runs are frozen: they are never recalculated.</p>}
+      {status === 'POSTED' && <p className="text-sm text-ink-soft">A posted run is never cancelled or re-run. A correction is a reversal of its document and a new run in a later period.</p>}
     </section>
   );
 }

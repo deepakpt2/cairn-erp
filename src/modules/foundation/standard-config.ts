@@ -445,6 +445,24 @@ export async function applyStandardPackage(
     })
     .onConflictDoNothing();
 
+  /* ── Payroll net pay determination ──────────────────────────────────────── */
+  // Salary expense is mapped per pay component; the payable it creates is not,
+  // because net pay is what remains after deductions and no component carries it.
+  // The standard chart delivers 251000, so the determination stands with it and a
+  // fresh tenant can post a payroll run without a second configuration step.
+  await tx
+    .insert(accountDetermination)
+    .values({
+      client,
+      chartOfAccounts: coaKey,
+      event: 'PAYROLL_NET_PAY',
+      valuationClass: '',
+      generalModifier: '',
+      glAccount: '251000',
+      createdBy: activatedBy,
+    })
+    .onConflictDoNothing();
+
   /* ── Financial statement version (F.01, FIN.RPT.TRIALBALANCE / .BALANCESHEET / .PROFITLOSS) ─
      The three closing reports resolve their layout from a version bound to the company's
      chart, and they refuse without one — "Financial statement version X does not stand.",

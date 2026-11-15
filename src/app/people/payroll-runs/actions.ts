@@ -15,6 +15,7 @@ import {
   releasePayrollRun,
   type PayrollRunView,
 } from '@/modules/people/payroll-run';
+import { PAYROLL_POST_CAPABILITY, PayrollPostingError, postPayrollRun } from '@/modules/people/payroll-posting';
 
 const ROUTE = PAYROLL_RUN_ROUTE;
 
@@ -26,6 +27,8 @@ export interface PayrollRunActionState {
   runId?: string;
   /** A fresh idempotency key for the next submission of the propose form. */
   requestKey?: string;
+  /** The accounting document a posting produced. */
+  documentNumber?: string;
 }
 
 function text(form: FormData, name: string): string {
@@ -117,5 +120,41 @@ export async function cancelRunAction(_prev: PayrollRunActionState, form: FormDa
     return { ok: true, runId: view.runId, message: `Run cancelled: ${view.cancelReason}. The period is free for a new run.` };
   } catch (error) {
     return refusal(error);
+  }
+}
+
+/**
+ * Post a released run to the G/L: `runId` (hidden) and nothing else. The request key is derived from
+ * the run (`PAYROLL-POST-<runId>`) by the service; a client-supplied key could replay another run.
+ */
+export async function postPayrollRunAction(_prev: PayrollRunActionState, form: FormData): Promise<PayrollRunActionState> {
+  const session = await requireSession(ROUTE);
+  const runId = text(form, 'runId');
+  try {
+    if (!can(session, PAYROLL_POST_CAPABILITY)) {
+      throw new PayrollPostingError(
+        'You do not hold the authority to post payroll.',
+        `Ask an administrator for the Post payroll authority (${PAYROLL_POST_CAPABILITY}).`,
+      );
+    }
+    const result = await postPayrollRun({
+      client: session.user.client,
+      changedBy: session.user.username,
+      runId,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+    });
+    refresh();
+    revalidatePath('/finance/journal');
+    return {
+      ok: true,
+      runId,
+      documentNumber: result.documentNumber,
+      message: `Payroll posted as document ${result.displayNumber} in fiscal year ${result.fiscalYear}, dated ${result.postingDate}. `
+        + `Debits ${result.debitTotal}, credits ${result.creditTotal}, ${result.lineCount} lines.`,
+    };
+  } catch (error) {
+    if (error instanceof PayrollPostingError) return { ok: false, message: error.message, remedy: error.remedy };
+    console.error('Payroll posting failed', error);
+    return { ok: false, message: 'Posting failed. Nothing was saved.', remedy: 'Check the configuration and contact an administrator if the problem persists.' };
   }
 }

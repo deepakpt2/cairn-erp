@@ -55,7 +55,7 @@ interface RestartRow {
 }
 
 /**
- * The twelve phases, and how each one behaves when the run is stopped inside it.
+ * The thirteen phases, and how each one behaves when the run is stopped inside it.
  *
  * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
  * people are split because the second takes minutes and opens administrator
@@ -134,6 +134,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     writes: 'A joiner and a leaver with their positions and pay structures, unpaid leave (approved, straddling the month end, and one still requested), EOSPROV taken out of the demo structures, and a proposed payroll run for the period the installation was claimed in. Nothing is released or posted.',
     resumesBy: 'Employees and absences are looked up before they are written; request-keyed structure assignments (`DEMO-SAL-*`) and run (`DEMO-PAYRUN-*`); a run already standing for the period is left as it is.',
     guaranteedBy: ['buildDemoPayrollRun'],
+  },
+  {
+    phase: 'D9_PAYROLL_POST',
+    writes: 'A pay structure for 10000016 from the first day of the run’s period, then the run recalculated, released and posted as one PR document. Nothing is paid.',
+    resumesBy: 'Request-keyed assignment (`DEMO-SAL-10000016-*`); each step runs only while the run stands in the status before it, and the posting is request-keyed (`PAYROLL-POST-<run>`).',
+    guaranteedBy: ['buildDemoPayrollPost'],
   },
 ];
 

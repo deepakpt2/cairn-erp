@@ -394,7 +394,8 @@ describe('a run for March 2025', () => {
   it('a posted run cannot be cancelled', async () => {
     const standing = (await listPayrollRuns(tenant.client)).find((r) => r.period === 3 && r.status === 'PROPOSED')!;
     await withTenant(tenant.client, (tx) => tx.execute(sql`
-      update payroll_run set status = 'POSTED', released_by = ${PAYROLL_ACTOR}, released_at = now() where client = ${tenant.client} and run_id = ${standing.runId}`));
+      update payroll_run set status = 'POSTED', released_by = ${PAYROLL_ACTOR}, released_at = now(),
+             document_number = 'TEST-POSTED', document_fiscal_year = ${YEAR} where client = ${tenant.client} and run_id = ${standing.runId}`));
     await expectRunRefusal(cancelPayrollRun({ client: tenant.client, runId: standing.runId, reason: 'try', changedBy: PAYROLL_ACTOR }, RUN_AUTH), 'RUN_POSTED');
   });
 });

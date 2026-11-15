@@ -3383,6 +3383,7 @@
     "platform/auth/current.ts"
   ],
   "app/people/payroll-results/page.tsx": [
+    "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
@@ -3391,11 +3392,13 @@
     "app/people/payroll-runs/actions.ts"
   ],
   "app/people/payroll-runs/actions.ts": [
+    "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "platform/auth/current.ts"
   ],
   "app/people/payroll-runs/page.tsx": [
     "app/people/payroll-runs/RunForms.tsx",
+    "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
@@ -6360,6 +6363,19 @@
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
+  "modules/people/payroll-posting.ts": [
+    "modules/finance/gl-document.ts",
+    "modules/finance/schema.ts",
+    "modules/foundation/schema.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts",
+    "platform/numbering/index.ts",
+    "platform/periods/index.ts",
+    "platform/posting/index.ts"
+  ],
   "modules/people/payroll-run.ts": [
     "modules/people/payroll-structure.ts",
     "modules/people/schema.ts",
@@ -7719,6 +7735,17 @@
     "platform/tenancy/demo-provisioning.ts",
     "platform/tenancy/index.ts",
     "platform/tenancy/standard-structure.ts"
+  ],
+  "platform/tenancy/demo-payroll-post.ts": [
+    "modules/people/payroll-posting.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
+    "modules/platform/organisation-scope-admin.ts",
+    "platform/db/client.ts",
+    "platform/periods/index.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-payroll-run.ts": [
     "modules/people/assignment.ts",

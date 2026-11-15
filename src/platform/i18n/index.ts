@@ -4100,6 +4100,7 @@ const en: Catalogue = {
   'acctDet.event.GR_IR_CLEARING': 'GR/IR clearing',
   'acctDet.event.OFFSETTING_INVENTORY': 'Offsetting entry for inventory',
   'acctDet.event.PRICE_DIFFERENCE': 'Price differences',
+  'acctDet.event.PAYROLL_NET_PAY': 'Payroll net pay payable',
   'acctDet.valuationClass': 'Valuation Class',
   'acctDet.anyValuationClass': 'Any valuation class',
   'acctDet.chooseValuationClass': 'Choose valuation class',

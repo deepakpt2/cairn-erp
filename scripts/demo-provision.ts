@@ -43,6 +43,7 @@ import { buildDemoQuality } from '../src/platform/tenancy/demo-quality';
 import { buildDemoAudit, demoAuditPrerequisitesMissing } from '../src/platform/tenancy/demo-audit';
 import { buildDemoPayroll } from '../src/platform/tenancy/demo-payroll';
 import { buildDemoPayrollRun } from '../src/platform/tenancy/demo-payroll-run';
+import { buildDemoPayrollPost } from '../src/platform/tenancy/demo-payroll-post';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -335,6 +336,15 @@ async function runPayrollRunPhase(ctx: PhaseContext): Promise<Record<string, unk
   return { ...result };
 }
 
+/**
+ * Phase D9_PAYROLL_POST: payroll phase 3. Gives 10000016 a structure for the run's period, recalculates,
+ * releases and posts the run as one PR document (by demo.admin). Pays nobody.
+ */
+async function runPayrollPostPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoPayrollPost({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -348,6 +358,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D6_AUDIT: runAuditPhase,
   D7_PAYROLL: runPayrollPhase,
   D8_PAYROLL_RUN: runPayrollRunPhase,
+  D9_PAYROLL_POST: runPayrollPostPhase,
 };
 
 async function main(): Promise<number> {

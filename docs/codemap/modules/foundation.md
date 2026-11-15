@@ -132,7 +132,7 @@
 - `src/app/controlling/plan-revaluation/page.tsx`, `RevaluationForm.tsx`, `actions.ts` — plan revaluation (KOP1) screen.
 
 ### Other config (payment terms/methods, tax/document types, number ranges, banks, exchange rates, characteristics/classes, release strategies, tolerance groups, retained earnings, special G/L, account determination, industries, constrained values)
-- `src/modules/foundation/account-determination.ts` — automatic account determination (OBYC) by posting event + valuation class (new event `RETURNS_TRANSFER`/GBB, no seeded row); imports `valuationClass` from inventory. Exports: `ACTIVITY`, `POSTING_EVENTS`, `postingEvent`.
+- `src/modules/foundation/account-determination.ts` — automatic account determination (OBYC) by posting event + valuation class (new event `RETURNS_TRANSFER`/GBB, no seeded row; `PAYROLL_NET_PAY` (9279, balance sheet, seeded 251000 by `applyStandardPackage` and by migration 9279 for existing charts) — read by `people/payroll-posting.ts`); imports `valuationClass` from inventory. Exports: `ACTIVITY`, `POSTING_EVENTS`, `postingEvent`.
 - `src/modules/foundation/characteristic-schema.ts` — classification schema. Tables: `characteristic`, `characteristicValue`, `classType`, `classificationClass`, `classAssignment`, `releaseGroup`, `releaseCode`, `releaseStrategy`, `releaseStrategyCriterion`, `releaseStrategyStep`.
 - `src/modules/foundation/characteristic-definition.ts` — characteristic (CT04) master CRUD.
 - `src/modules/foundation/class-definition.ts` — classification class (CL02) master CRUD.
