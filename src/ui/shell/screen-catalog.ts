@@ -2064,6 +2064,18 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["alternative", "material", "plant", "usage", "validOn"],
   },
   {
+    // Item 8 (9285 registry only): CS11/CS12 explosion and CS15 where-used, a read of BOM master data,
+    // guarded by the standing PROD.BOM.DISPLAY.
+    id: "/production/bom-explosion",
+    path: "/production/bom-explosion",
+    query: {},
+    code: "PROD.BOM.DISPLAY",
+    title: "BOM explosion and where-used",
+    area: "production",
+    family: "production-master",
+    accepts: [],
+  },
+  {
     id: "/production/boms",
     path: "/production/boms",
     query: {},

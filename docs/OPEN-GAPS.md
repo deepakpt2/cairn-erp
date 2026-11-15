@@ -1,6 +1,6 @@
-# Open gaps — payroll (item 4, phases 1–5b), cost centre planning (item 5), activity prices (item 6), assessment (item 7)
+# Open gaps — payroll (item 4, phases 1–5b), cost centre planning (item 5), activity prices (item 6), assessment (item 7), BOM explosion (item 8)
 
-Recorded 2026-11-15, at commit `a52ec282` on `development`; items 6 (KSPI) and 7 (KSU5) added after it. These are deferred, not forgotten: each was
+Recorded 2026-11-15, at commit `a52ec282` on `development`; items 6 (KSPI), 7 (KSU5) and 8 (CS11/CS12/CS15) added after it. These are deferred, not forgotten: each was
 either out of scope by its own spec or found while building and left for a later decision. Older
 deferrals made before this work stay in `DEFERRED_ISSUES.md`.
 
@@ -74,6 +74,18 @@ Status key: **Spec** = the item's own spec put it out of scope · **Found** = fo
 | S8 | Currency asymmetry, deliberate | Decision (chosen) | The cost-centre report warns and excludes foreign-currency lines; a run refuses a company whose currency is not the area's. The report can show less; a run must not silently send less. |
 | S9 | Cross-company and currency-mismatch refusals are not covered by a test | Found | The test tenant's area has one company; both paths are straightforward but untested. |
 | S10 | Cancelling a run trusts the document's REVERSED status | Found | The test sets the status directly; the end-to-end path through `/finance/document-reversal` was not exercised. |
+
+## 3d. BOM explosion and where-used (CS11 / CS12 / CS15) — item 8
+
+| # | Gap | Kind | Notes |
+|---|---|---|---|
+| B1 | Explosion by order (CS13) and BOM comparison (CS14) | Spec | An order's BOM is snapshotted separately (`order-bom-snapshot.ts`). |
+| B2 | Only MAKE materials are exploded below the top | Decision (chosen) | Matches MRP; BUY and other procurement types stop with a named note. SAP's CS12 would explode any material with a BOM. |
+| B3 | Bulk, co-product, issuing-plant and special-procurement items are shown but not recursed | Found | Mirrors MRP, which does not plan them; each carries a note. |
+| B4 | No costing of the structure | Spec | Item #11 (CK11N). Quantities only. |
+| B5 | Where-used shows BOM quantities only | Spec | By design: walking upward there is no parent quantity. |
+| B6 | The explosion reads one plant | Spec | An issuing plant other than the BOM's is shown, never switched to. |
+| B7 | A unit that loses its conversion after BOM maintenance stops the branch | Found | BOM maintenance refuses such a unit; the report reports it (`UNIT`) if a conversion is later removed. |
 
 ## 4. Demo data and environment
 

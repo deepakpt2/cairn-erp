@@ -3577,6 +3577,11 @@
     "modules/production/material-bom.ts",
     "platform/auth/current.ts"
   ],
+  "app/production/bom-explosion/page.tsx": [
+    "modules/production/bom-explosion.ts",
+    "platform/auth/current.ts",
+    "platform/db/client.ts"
+  ],
   "app/production/boms/BomForm.tsx": [
     "app/production/boms/actions.ts",
     "modules/production/material-bom.ts",
@@ -6539,6 +6544,16 @@
     "platform/db/client.ts",
     "platform/tenancy/index.ts"
   ],
+  "modules/production/bom-explosion.ts": [
+    "modules/inventory/unit-conversion.ts",
+    "modules/production/material-bom.ts",
+    "modules/production/mrp-explosion.ts",
+    "modules/production/production-version.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
+  ],
   "modules/production/checking-control.ts": [
     "modules/foundation/schema.ts",
     "modules/production/schema.ts",
@@ -7795,6 +7810,14 @@
     "platform/tables/security.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
+  ],
+  "platform/tenancy/demo-bom-structure.ts": [
+    "modules/inventory/materials.ts",
+    "modules/production/material-bom.ts",
+    "modules/production/production-version.ts",
+    "modules/production/routing.ts",
+    "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-co-plan.ts": [

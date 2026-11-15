@@ -55,7 +55,7 @@ interface RestartRow {
 }
 
 /**
- * The eighteen phases, and how each one behaves when the run is stopped inside it.
+ * The nineteen phases, and how each one behaves when the run is stopped inside it.
  *
  * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
  * people are split because the second takes minutes and opens administrator
@@ -170,6 +170,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     writes: 'A dedicated allocation account 690000 in the demo chart, the CO_ASSESSMENT determination naming it, cycle SVC01 (Warehousing and Administration to Mixing 60 % and Packing 40 %), and its assessment run for the installation’s period as one AL document.',
     resumesBy: 'Account and determination created only when missing; the cycle adopted when it stands; a period with a live run left as it is; the posting request-keyed (`ALLOC-SVC01-<year>-<period>`).',
     guaranteedBy: ['buildDemoAssessment'],
+  },
+  {
+    phase: 'D15_BOM_STRUCTURE',
+    writes: 'A text item category, the phantom glaze PH-GLAZE (MRP type NONE) with its BOM, routing and production version, and alternative 02 of FG-CHOC (phantom, scrap, fixed quantity, text item) selected by no production version.',
+    resumesBy: 'Adoption: the item category, material, BOMs, routing and version are created only when missing; each BOM, routing and version is request-keyed.',
+    guaranteedBy: ['buildDemoBomStructure'],
   },
 ];
 

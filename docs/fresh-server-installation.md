@@ -126,7 +126,7 @@ does in production.
 
 `ENABLE_DUMMY_DATA=true` provisions a complete fictional company — one company code,
 two plants, three open posting periods, and roughly 150 connected documents across
-purchasing, inventory, production, sales, finance and quality, an audit in progress, salary structures and pay components, and a payroll run with a joiner, a leaver and unpaid leave, released, posted to the ledger and paid from a house bank, plus a proposed off-cycle run for a late joiner, a cost centre plan to report actuals against, activity prices calculated from that plan, a service-centre assessment cycle run for the period, plus ten accounts to
+purchasing, inventory, production, sales, finance and quality, an audit in progress, salary structures and pay components, and a payroll run with a joiner, a leaver and unpaid leave, released, posted to the ledger and paid from a house bank, plus a proposed off-cycle run for a late joiner, a cost centre plan to report actuals against, activity prices calculated from that plan, a service-centre assessment cycle run for the period, a phantom and an alternative BOM to explode, plus ten accounts to
 work it with.
 
 Three things you should know before choosing it:

@@ -49,6 +49,7 @@ import { buildDemoPayrollOffCycle } from '../src/platform/tenancy/demo-payroll-o
 import { buildDemoCoPlan } from '../src/platform/tenancy/demo-co-plan';
 import { buildDemoActivityPrice } from '../src/platform/tenancy/demo-activity-price';
 import { buildDemoAssessment } from '../src/platform/tenancy/demo-assessment';
+import { buildDemoBomStructure } from '../src/platform/tenancy/demo-bom-structure';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -395,6 +396,16 @@ async function runAssessmentPhase(ctx: PhaseContext): Promise<Record<string, unk
   return { ...result };
 }
 
+/**
+ * Phase D15_BOM_STRUCTURE: something for CS11/CS12/CS15 to show — a phantom glaze with its own BOM and
+ * version, and alternative 02 of FG-CHOC (phantom, scrap, fixed quantity, text item) that no production
+ * version selects, so MRP plans exactly what it planned before.
+ */
+async function runBomStructurePhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoBomStructure({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -414,6 +425,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D12_CO_PLAN: runCoPlanPhase,
   D13_ACTIVITY_PRICE: runActivityPricePhase,
   D14_ASSESSMENT: runAssessmentPhase,
+  D15_BOM_STRUCTURE: runBomStructurePhase,
 };
 
 async function main(): Promise<number> {

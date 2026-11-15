@@ -5,7 +5,8 @@
 ## Files
 ### MRP & planning
 - `src/modules/production/mrp-run.ts` — MD01/MD02/MD03 engine. Exports: `planMaterials`, `planSingleItem`, `planSingleLevel`, `getMrpRun`, `listMrpRuns`, `cancelMrpRun`
-- `src/modules/production/mrp-explosion.ts` — BOM explosion into dependent requirements, one planned order. Exports: `explodePlannedSupply`, `componentRequirementQuantity`
+- `src/modules/production/mrp-explosion.ts` — BOM explosion into dependent requirements, one planned order. Exports: `explodePlannedSupply`, `componentRequirementQuantity`, `ExplosionDiagnostic`, `SCALE`, `DEPTH_LIMIT` (the last two shared with the BOM explosion report)
+- `src/modules/production/bom-explosion.ts` — CS11/CS12 `explodeBom` and CS15 `whereUsedBom` (item 8), read-only. Reproduces MRP's walk exactly: `componentRequirementQuantity`, `SCALE`, `DEPTH_LIMIT`, cycle rule, `selectProductionVersion` (`PLANNING`, base unit) for the top and every lower BOM, conversion to the component base unit before recursing; explodes MAKE only (BUY → `BUY_NOT_EXPLODED`, other types → `NOT_MAKE`), phantoms passed through with their components one level below; bulk/co-product/issuing-plant/special-procurement items shown but not recursed (MRP does not plan them). A named usage+alternative overrides the version; with no quantity the BOM base quantity is exploded. Where-used lists any parent BOM whatever its procurement type, BOM quantities per base only, with cycle and depth rules; `allScopedPlants` reads every plant in the user's Plant scope. Authority `PROD.BOM.DISPLAY` + Plant scope (no new capability; registry `PROD.BOM.EXPLOSION` with aliases CS11/CS12/CS15, migration 9285).
 - `src/modules/production/mrp-structure.ts` — multi-level structural BOM walk, diagnostics. Exports: `structuralBomLevels`
 - `src/modules/production/stock-requirements.ts` — MD04 list. Exports: `stockRequirementsList`
 - `src/modules/production/conversion-outcome.ts` — shared vocab, planned-order conversion results. Exports: `ConversionStatus`, `DemandReconciliation`, `summarizeConversionResults`
@@ -57,6 +58,7 @@
 - `src/modules/production/material-bom-display.ts` — thin display re-export. Exports: `displayMaterialBom`, `listMaterialBomsForDisplay`
 - `src/app/production/boms/{actions.ts,BomForm.tsx,ConfigForms.tsx,page.tsx}`
 - `src/app/production/bom-display/page.tsx`
+- `src/app/production/bom-explosion/page.tsx` — CS11/CS12/CS15 report (GET: `mode`, `materialNumber`, `plant`, `keyDate`, `depth`, `quantity`, `usage`, `alternative`, `productionVersion`, `allPlants`); diagnostics on their rows.
 
 ### Routings & work centers
 - `src/modules/production/routing.ts` — routing config (task-list type/usage/status/control key/std value key) + standard routing CRUD. Exports: `createRouting`, `changeRouting`, `selectEffectiveRouting`, `saveRoutingControlKey`, etc.
@@ -115,6 +117,7 @@
 - `/production/confirmation-cancel` — CO13
 - `/production/confirmation-display` — search/detail
 - `/production/cogi` — COGI workbench
+- `/production/bom-explosion` — BOM explosion (CS11/CS12) and where-used (CS15), `PROD.BOM.DISPLAY`
 - `/production/boms`, `/production/bom-display` — CS01/CS02/CS03-style
 - `/production/routings`, `/production/routing-display` — standard routing
 - `/production/work-centers`, `/production/work-center-display` — CR01-style

@@ -19,8 +19,10 @@ import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { ProductionVersionError, selectProductionVersion } from './production-version';
 
-const SCALE = 3;
-const DEPTH_LIMIT = 20;
+/** Quantity scale of the explosion — shared with the BOM explosion report (CS11/CS12/CS15). */
+export const SCALE = 3;
+/** Levels below which a branch stops — shared with the BOM explosion report. */
+export const DEPTH_LIMIT = 20;
 
 export interface ExplosionDiagnostic {
   severity: 'INFO' | 'WARNING' | 'ERROR';

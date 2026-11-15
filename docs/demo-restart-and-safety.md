@@ -47,12 +47,12 @@ one transaction with the eligibility survey. It is handed one of four answers.
 |---|---|---|
 | `FRESH` | No installation record, and every tenant-owned table is empty. | Writes the record and all eleven pending phases, then runs all eleven. |
 | `RESUME` | A record stands for this database and this build, not failed, with phases outstanding. | Skips the phases already `COMPLETED`, and resumes at the first one that is not — a phase left `RUNNING` by a dead process is resumed and counted as a retry. Also: a record that is `COMPLETED` but does not name a phase a later build added (e.g. `D6_AUDIT`) has that phase appended and run; a phase it names but never finished is still refused. A resumed run resets every account to a new password and rewrites the credential file. |
-| `ALREADY_COMPLETE` | The record is `COMPLETED` and all eighteen phases are. | Changes nothing. Rewrites the credential file, because a deployment that lost the file cannot be given the password back — with the password shown as *not recoverable* rather than blank. Returns 0. |
+| `ALREADY_COMPLETE` | The record is `COMPLETED` and all nineteen phases are. | Changes nothing. Rewrites the credential file, because a deployment that lost the file cannot be given the password back — with the password shown as *not recoverable* rather than blank. Returns 0. |
 | `REFUSE` | Any of the five refusals in §4. | Writes nothing. Returns 1, so the application never starts. |
 
 ---
 
-## 3. The eighteen phases
+## 3. The nineteen phases
 
 A phase is a unit of resumption, not a unit of tidiness. The organisation and the
 people are split because the second takes minutes and opens administrator sessions: a
@@ -79,6 +79,7 @@ rebuilding the company they hang from.
 | `D12_CO_PLAN` | A primary-cost plan (version 000) for the installation's fiscal year: every cost centre and cost element carrying cost, each period the centre is valid in planned at the element's average actual month, saved through KP06 as `demo.admin`. | A save replaces its selection, so a repeat changes nothing; request-keyed `DEMO-COPLAN-<year>-<centre>`. |
 | `D13_ACTIVITY_PRICE` | Activity types MIXH (Mixing, CC1000) and PACKH (Packing, CC1010) on automatic price indicator 1, QCH (Quality, CC6000) manual at 25.00, with planned hours for the periods the centres stand in, and the activity prices calculated from D12's plan (annual basis); QCH is skipped. | Types adopted when standing; a rate save replaces its matrix; the calculation is request-keyed `DEMO-KSPI-<year>` and recomputes the same prices. |
 | `D14_ASSESSMENT` | A dedicated allocation account 690000 "Internal cost allocation" in the demo chart, the CO_ASSESSMENT determination naming it, cycle SVC01 (Warehousing CC2000 and Administration CC5000 to Mixing CC1000 60 % and Packing CC1010 40 %), and its assessment run for the installation's period — one AL document. | Account and determination created only when missing; cycle adopted when it stands; a period with a live run left alone; posting request-keyed. |
+| `D15_BOM_STRUCTURE` | Text item category T; phantom glaze PH-GLAZE (MRP type NONE) with its BOM (cocoa, sugar), routing and production version; alternative 02 of FG-CHOC with the phantom, 2 % scrap on the dough, a fixed carton quantity and a text item — selected by **no** production version, so MRP plans exactly what it did before (verified on a scratch install: identical proposals and dependent requirements; the only new MRP row is PH-GLAZE skipped as not planned). | Adoption; each BOM, routing and version request-keyed. |
 
 The ledger says which phases finished. It cannot say what a phase had committed
 before it died, which is why each phase asks its own question — does a document
@@ -186,7 +187,7 @@ database; the report says so.
 
 | Claim | Evidence |
 |---|---|
-| All eighteen phases complete, first attempt, one record naming the right database | `tests/demo-safety-matrix.test.ts`, against a provisioned database |
+| All nineteen phases complete, first attempt, one record naming the right database | `tests/demo-safety-matrix.test.ts`, against a provisioned database |
 | The disposition, refusal, lock and ordering guarantees | `tests/demo-safety-matrix.test.ts`, against the source |
 | Every phase request-keyed, or idempotent by adoption | `tests/demo-safety-matrix.test.ts`, against the phase modules |
 | Credential file permissions, ownership and atomic write | `tests/demo-credentials.test.ts` |
