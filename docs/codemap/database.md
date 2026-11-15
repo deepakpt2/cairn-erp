@@ -1,62 +1,268 @@
 # Database
+448 Drizzle tables (+2 SQL-only: `demo_installation`, `demo_installation_phase`, from `drizzle/9273_*`, raw SQL in `platform/tenancy/`). Aggregate: `src/platform/schema.ts` (drizzle-kit and the `Db`/`Tx` type). Migrations: `drizzle/0000_baseline.sql` + `drizzle/9267_*`…; `drizzle/history/` is never applied (see `unassigned.md`).
 
-432 Drizzle tables across each module's `schema.ts` (+ a few per-area schema files) and `src/platform/tables/*.ts`, plus 2 SQL-only tables (`demo_installation`, `demo_installation_phase` — created by `drizzle/9273_demo_installation.sql`, no Drizzle definition, read/written by raw SQL in `src/platform/tenancy/`). Aggregated in `src/platform/schema.ts` (what `drizzle.config.ts` points at — new tables must be re-exported there). Migrations: `drizzle/0000_baseline.sql` (schema-only `pg_dump` replacing the 386-file chain; records those 386 as applied) + new files from `9267_*` on. The old chain lives in `drizzle/history/` — not applied by the migrator, still read by tests. A database built from the old chain can't be upgraded in place to the baseline (it must be rebuilt). See `unassigned.md`.
+## Gotchas
+- Tenant tables are FORCE RLS on `cairn.client`; read/write only inside `withTenant`/`withTenantAs`. The runtime role is `cairn_app` (NOBYPASSRLS); a superuser connection is refused.
+- Every object must be owned by `cairn_integration_migrator` (SECURITY DEFINER functions and triggers run as it). Migrate only as that role.
+- Cross-module writes exist: foundation `services.ts` → finance `gl_account`; inventory hosts `production_order*`; purchasing hosts `customer_invoice*`.
+- Invariants often live in triggers or advisory locks, not indexes (payroll 9281, confirmation cancellation 9172, company-code refs). Grep `drizzle/*.sql` (not `history/`) before assuming none.
 
-## Tables by owning module
+## Tables by owning module (schema file: tables)
+### audit (3)
+- `modules/audit/schema.ts`: audit_finding, audit_grant, audit_grant_scope
 
-**finance (95)** — `schema.ts` + `gl-account-group-schema.ts`: journal `journal_entry(_line)`,`journal_posting_request`,`parked_journal_header(_line)` · GL master `gl_account`,`gl_account_group(_field_status)`,`gl_account_company`,`group_chart_accounts`,`gl_account_transfer_run(_result)` · AP `vendor_invoice(_line)`,`outgoing_payment`,`vendor_down_payment(_clearing/_request)`,`vendor_dp_request_fulfillment` · AR `incoming_payment`,`customer_down_payment(_clearing/_clearing_item/_request)`,`down_payment_request_fulfillment`,`dunning_run(_company/_account/_item)`,`dunning_notice`,`customer_credit(_group)`,`credit_risk_category`,`credit_representative_group`,`credit_block_reason`,`credit_change_audit`,`credit_determination`,`credit_release_event` · payments `payment_run(_company/_method)`,`payment_proposal_item`,`payment_document` · GR/IR/clearing `grir_reclass_run(_item)`,`gl_clearing_allocation`,`gl_clearing_residual`,`residual_reason`,`clearing_reset`,`reversal_reason`,`accounting_reversal_link` · close `closing_task_template(_dependency)`,`closing_task_list`,`closing_task_instance`,`closing_task_dependency`,`closing_execution_log`,`closing_task_event`,`carryforward_run(_result)` · tax/FX `tax_return_run`,`fx_valuation_run(_item)` · assets `asset_class`,`depreciation_area`,`depreciation_key`,`fixed_asset`,`asset_assignment`,`asset_depreciation`,`asset_transaction_type`,`asset_transaction`,`asset_retirement`,`asset_depreciation_run(_item)`,`asset_depreciation_posting` · consolidation `consolidation_data_basis`,`consolidation_dimension`,`consolidation_area`,`consolidation_unit(_assignment)`,`consolidation_group(_account)`,`consolidation_account_mapping`,`consolidation_method`,`consolidation_version`,`consolidation_task(_status)`,`consolidation_execution(_log)` · reporting `financial_statement_version(_node/_assignment)` · intercompany `intercompany_clearing_config`,`intercompany_document_header` · `accrual_document`.
+### finance (95)
+- `modules/finance/gl-account-group-schema.ts`: gl_account_group, gl_account_group_field_status, group_chart_accounts
+- `modules/finance/schema.ts`: accounting_reversal_link, accrual_document, asset_assignment, asset_class, asset_depreciation, asset_depreciation_posting, asset_depreciation_run, asset_depreciation_run_item, asset_retirement, asset_transaction, asset_transaction_type, carryforward_result, carryforward_run, clearing_reset, closing_execution_log, closing_task_dependency, closing_task_event, closing_task_instance, closing_task_list, closing_task_template, closing_task_template_dependency, consolidation_account_mapping, consolidation_area, consolidation_data_basis, consolidation_dimension, consolidation_execution, consolidation_execution_log, consolidation_group, consolidation_group_account, consolidation_method, consolidation_task, consolidation_task_status, consolidation_unit, consolidation_unit_assignment, consolidation_version, credit_block_reason, credit_change_audit, credit_determination, credit_release_event, credit_representative_group, credit_risk_category, customer_credit, customer_credit_group, customer_down_payment, customer_down_payment_clearing, customer_down_payment_clearing_item, customer_down_payment_request, depreciation_area, depreciation_key, down_payment_request_fulfillment, dunning_notice, dunning_run, dunning_run_account, dunning_run_company, dunning_run_item, financial_statement_assignment, financial_statement_node, financial_statement_version, fixed_asset, fx_valuation_item, fx_valuation_run, gl_account, gl_account_company, gl_account_transfer_result, gl_account_transfer_run, gl_clearing_allocation, gl_clearing_residual, grir_reclass_item, grir_reclass_run, incoming_payment, intercompany_clearing_config, intercompany_document_header, journal_entry, journal_entry_line, journal_posting_request, outgoing_payment, parked_journal_header, parked_journal_line, payment_document, payment_proposal_item, payment_run, payment_run_company, payment_run_method, residual_reason, reversal_reason, tax_return_run, vendor_down_payment, vendor_down_payment_clearing, vendor_down_payment_request, vendor_dp_request_fulfillment, vendor_invoice, vendor_invoice_line
 
-**foundation (94)** — `schema.ts` + ~16 area files: partners `business_partner`,`bp_role`,`central_address`,`partner_bank(_country_profile/_profile_activation_audit)`,`supplier_partner_function`,`supplier_purchasing_partner`,`customer_company_code`,`customer_sales_area`,`supplier_company_code`,`supplier_purchasing_org` · structure `company_code`,`plant`,`storage_location`,`purchasing_org(_plant)`,`purchasing_group`,`sales_org`,`sales_area`,`sales_org_distribution_channel`,`sales_org_division`,`sales_org_text`,`distribution_channel`,`division`,`credit_control_area`,`controlling_area(_company)`,`industry(_text)`,`factory_calendar` · finance config `chart_of_accounts`,`group_chart_of_accounts`,`fiscal_year_variant(_period)`,`posting_period_variant`,`posting_period_rule`,`special_gl_config`,`exchange_rate`,`tax_code`,`document_type`,`house_bank`,`bank_account`,`payment_terms`,`payment_method` · controlling master `cost_center`,`cost_center_group(_leaf)`,`cost_center_hierarchy`,`cost_center_node(_assignment)`,`cost_center_plan`,`profit_center`,`profit_center_group(_leaf)`,`profit_center_hierarchy`,`profit_center_node(_assignment)`,`internal_order`,`internal_order_type`,`internal_order_budget_profile`,`internal_order_type_budget_profile`,`internal_order_original_budget(_year)`,`plan_revaluation_order(_item)`, allocation (9284) `cost_allocation_cycle`,`cost_allocation_segment`,`cost_allocation_sender`,`cost_allocation_receiver`,`cost_allocation_run` · settlement `settlement_profile`,`internal_order_type_settlement_profile`,`allocation_structure(_assignment)`,`settlement_distribution_rule`,`settlement_document` · classification `characteristic(_value)`,`class_type`,`classification_class`,`class_assignment`,`release_group`,`release_code`,`release_strategy(_criterion/_step)` · output (`output-schema.ts`, moved from inventory) `output_type`,`output_message`,`output_condition_record` · `employee_tolerance_group`.
+### foundation (94)
+- `modules/foundation/business-partner-schema.ts`: bp_role, business_partner, industry, industry_text
+- `modules/foundation/central-address-schema.ts`: central_address
+- `modules/foundation/characteristic-schema.ts`: characteristic, characteristic_value, class_assignment, class_type, classification_class, release_code, release_group, release_strategy, release_strategy_criterion, release_strategy_step
+- `modules/foundation/customer-company-schema.ts`: customer_company_code
+- `modules/foundation/customer-sales-area-schema.ts`: customer_sales_area
+- `modules/foundation/output-schema.ts`: output_condition_record, output_message, output_type
+- `modules/foundation/partner-bank-country-profile-schema.ts`: partner_bank_country_profile
+- `modules/foundation/partner-bank-profile-activation-audit-schema.ts`: partner_bank_profile_activation_audit
+- `modules/foundation/partner-bank-schema.ts`: partner_bank
+- `modules/foundation/payment-method-schema.ts`: payment_method
+- `modules/foundation/payment-terms-schema.ts`: payment_terms
+- `modules/foundation/schema.ts`: account_determination, activity_rate, activity_type, allocation_structure, allocation_structure_assignment, bank_account, chart_of_accounts, company_code, controlling_area, controlling_area_company, cost_allocation_cycle, cost_allocation_receiver, cost_allocation_run, cost_allocation_segment, cost_allocation_sender, cost_center, cost_center_group, cost_center_group_leaf, cost_center_hierarchy, cost_center_node, cost_center_node_assignment, cost_center_plan, credit_control_area, distribution_channel, division, document_type, employee_tolerance_group, exchange_rate, factory_calendar, fiscal_year_period, fiscal_year_variant, group_chart_of_accounts, house_bank, internal_order, internal_order_budget_profile, internal_order_original_budget, internal_order_original_budget_year, internal_order_type, internal_order_type_budget_profile, internal_order_type_settlement_profile, plan_revaluation_order, plan_revaluation_order_item, plant, posting_period_rule, posting_period_variant, profit_center, profit_center_group, profit_center_group_leaf, profit_center_hierarchy, profit_center_node, profit_center_node_assignment, purchasing_group, purchasing_org, purchasing_org_plant, sales_area, sales_org, sales_org_distribution_channel, sales_org_division, sales_org_text, settlement_distribution_rule, settlement_document, settlement_profile, special_gl_config, storage_location, tax_code
+- `modules/foundation/supplier-company-schema.ts`: supplier_company_code
+- `modules/foundation/supplier-partner-schema.ts`: supplier_partner_function, supplier_purchasing_partner
+- `modules/foundation/supplier-purchasing-schema.ts`: supplier_purchasing_org
 
-**inventory (53)** — `schema.ts`: material `material`,`material_type(_valuation)`,`material_group`,`material_plant`,`material_valuation`,`industry_sector`,`account_category_reference`,`valuation_class(_reference)`,`material_period_control`,`material_number_range_group`,`material_uom_conversion`,`mrp_controller`,`planning_file` · movements `movement_type`,`material_document(_line)`,`stock_quantity` · sales-facing `material_sales`,`serial_number` · `reservation_header(_item)` · **production orders (physically here, not in `production`):** `production_order`,`production_order_component`,`production_scheduling_profile` · physical inventory `physical_inventory_document(_item)`,`physical_inventory_difference_allocation`,`physical_inventory_recount_link` · batches (18) `batch`,`batch_level_configuration(_conversion)`,`batch_status_management`,`batch_status_plant(_conversion)`,`batch_number_assignment`,`batch_assigned_receipt`,`batch_condition_table(_field)`,`batch_access_sequence(_step)`,`batch_search_procedure(_step)`,`batch_search_allocation`,`batch_search_strategy(_key)`,`batch_strategy_type`,`batch_sort_sequence(_criterion)`,`batch_conversion_check(_conflict)`,`batch_document_management`.
+### inventory (53)
+- `modules/inventory/schema.ts`: account_category_reference, batch, batch_access_sequence, batch_access_step, batch_assigned_receipt, batch_condition_table, batch_condition_table_field, batch_conversion_check, batch_conversion_conflict, batch_document_management, batch_level_configuration, batch_level_conversion, batch_number_assignment, batch_search_allocation, batch_search_procedure, batch_search_procedure_step, batch_search_strategy, batch_search_strategy_key, batch_sort_sequence, batch_sort_sequence_criterion, batch_status_management, batch_status_plant, batch_status_plant_conversion, batch_strategy_type, industry_sector, material, material_document, material_document_line, material_group, material_number_range_group, material_period_control, material_plant, material_sales, material_type, material_type_valuation, material_uom_conversion, material_valuation, movement_type, mrp_controller, physical_inventory_difference_allocation, physical_inventory_document, physical_inventory_item, physical_inventory_recount_link, planning_file, production_order, production_order_component, production_scheduling_profile, reservation_header, reservation_item, serial_number, stock_quantity, valuation_class, valuation_class_reference
 
-**production (49)** — `schema.ts`: `planned_order`,`mrp_run`,`mrp_dependent_requirement` · work centers `work_center_category`,`work_center`,`work_center_capacity`,`work_center_costing` · BOM `bom_usage`,`bom_status`,`bom_item_category`,`material_bom(_item)` · routing `routing_task_list_type`,`routing_usage`,`routing_status`,`routing_control_key`,`routing_standard_value_key(_parameter)`,`routing`,`routing_sequence`,`routing_material_assignment`,`routing_operation(_value)`,`routing_component_allocation` · `production_version_rule`,`production_version(_finding)` · confirmations `production_confirmation`,`production_confirmation_activity`,`production_confirmation_operation`,`production_confirmation_cancellation` · `production_order_operation(_value)` · settlement `production_order_type_settlement_profile`,`production_order_settlement_distribution_rule` · COGI queue `production_goods_movement_failure(_line/_attempt/_revision)` · availability `availability_checking_group`,`availability_checking_rule`,`availability_check_scope`,`production_order_availability_run`,`production_order_component_commitment_event` · order type `production_order_type(_parameter)`,`production_checking_control` · `wip_batch_activation`,`report_layout`.
+### people (27)
+- `modules/people/schema.ts`: absence, delegation, delegation_approval, delegation_scope, employee, employee_record, job, leave_quota, org_hierarchy, org_unit, pay_component, pay_component_config, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, position, position_assignment, record_field, record_field_value, record_type, salary_payment, salary_structure, salary_structure_assignment, salary_structure_component, time_recording, time_type
 
-**purchasing (44)** — `schema.ts`: requisitions/POs `purchase_requisition_item(_assignment)`,`purchase_order(_item/_schedule_line/_assignment)`,`document_release` · sourcing `purchasing_info_record(_org/_price)`,`purchasing_source_list(_entry)`,`purchasing_quota_arrangement(_item)` · RFQ/quotation `purchasing_rfq_event(_item)`,`purchasing_rfq(_item)`,`purchasing_quotation(_item)` · contracts/SA `purchasing_contract_type`,`purchase_contract(_item)`,`scheduling_agreement_type`,`scheduling_agreement(_item/_release/_release_line/_schedule_line)`,`scheduling_release_profile(_assignment)` · invoice verification `supplier_invoice(_item)`,`parked_supplier_invoice(_item)`,`supplier_invoice_payment_block(_event)`,`gr_ir_maintenance_link` · also hosts **customer**-side `customer_invoice(_line)` (used by finance) · `purchase_delivery_completion_policy(_plant)` · vendor eval `vendor_evaluation_criterion(_assessment)`.
+### platform (shared) (40)
+- `platform/tables/audit-trail.ts`: change_document, change_document_item, document_flow_link, document_index, document_status_history
+- `platform/tables/lock.ts`: enqueue_entry, lock_object, lock_wait_log
+- `platform/tables/numbering.ts`: number_range, number_range_allocation, number_range_object
+- `platform/tables/reference.ts`: bank_master, country, currency, unit_of_measure
+- `platform/tables/registry.ts`: config_activity, config_activity_status, term_alias, term_registry
+- `platform/tables/security.ts`: app_user, audit_access_log, auth_org_restriction, capability, password_reset_token, position_capability, role, role_capability, sod_rule, user_capability, user_capability_scope, user_role, user_session
+- `platform/tables/system.ts`: job_definition, job_log, job_run, mail_server_config, message_catalog, notification
+- `platform/tables/tenancy.ts`: client, client_settings
 
-**sales (39)** — `schema.ts`: orders `sales_order(_line)`,`sales_order_schedule`,`sales_document_type`,`sales_document_partner`,`sales_partner_function`,`customer_sales_partner` · pricing `sales_condition_record`,`sales_condition_type`,`sales_document_condition`,`sales_pricing_procedure(_step)`,`sales_procedure_determination` · delivery/shipping `delivery(_line)`,`delivery_picking`,`delivery_picking_serial`,`shipping_point`,`shipping_point_determination`,`shipping_condition` · billing `billing_document(_line)`,`sales_billing_plan(_date/_type)`,`sales_billing_split_criterion`,`sales_invoice_list_item`,`sales_down_payment_request`,`sales_account_determination` · rebates `sales_rebate_agreement`,`sales_rebate_accrual` · returns `sales_returns_configuration` · batch `sales_batch_determination_rule` · incompletion `incompletion_procedure(_field)`,`incompletion_group`,`incompletion_assignment`,`incompletion_status_group`,`sales_incompletion_log`.
+### production (49)
+- `modules/production/schema.ts`: availability_check_scope, availability_checking_group, availability_checking_rule, bom_item_category, bom_status, bom_usage, material_bom, material_bom_item, mrp_dependent_requirement, mrp_run, planned_order, production_checking_control, production_confirmation, production_confirmation_activity, production_confirmation_cancellation, production_confirmation_operation, production_goods_movement_failure, production_goods_movement_failure_attempt, production_goods_movement_failure_line, production_goods_movement_failure_revision, production_order_availability_run, production_order_component_commitment_event, production_order_operation, production_order_operation_value, production_order_settlement_distribution_rule, production_order_type, production_order_type_parameter, production_order_type_settlement_profile, production_version, production_version_finding, production_version_rule, report_layout, routing, routing_component_allocation, routing_control_key, routing_material_assignment, routing_operation, routing_operation_value, routing_sequence, routing_standard_value_key, routing_standard_value_parameter, routing_status, routing_task_list_type, routing_usage, wip_batch_activation, work_center, work_center_capacity, work_center_category, work_center_costing
 
-**people (27)** — `schema.ts`: `record_type`,`record_field(_value)`,`employee(_record)`,`org_unit`,`org_hierarchy`,`position(_assignment)`,`job`,`pay_component(_config)`, payroll phase 1 (9277) `salary_structure`,`salary_structure_component`(FK→`pay_component`),`salary_structure_assignment`(FK→`employee`), payroll phase 2 (9278) `payroll_run`(FK→`company_code`; 9281 adds `predecessor_run_id` self-FK and drops the one-run-per-period index for the coverage trigger; 9279 adds `document_number`,`document_fiscal_year`,`posted_by`,`posted_at`,`posting_request_key`),`payroll_run_exception`,`payroll_result`(FK→run,`employee`),`payroll_result_line`(FK→result), payroll phase 4 (9280) `salary_payment`(FK→`payroll_run`, unique per run), `time_recording`,`time_type`(+`is_paid`),`absence`,`leave_quota` · delegation `delegation`,`delegation_scope`,`delegation_approval` (migration `9269_delegation.sql`).
+### purchasing (44)
+- `modules/purchasing/schema.ts`: customer_invoice, customer_invoice_line, document_release, gr_ir_maintenance_link, parked_supplier_invoice, parked_supplier_invoice_item, purchase_contract, purchase_contract_item, purchase_delivery_completion_plant, purchase_delivery_completion_policy, purchase_order, purchase_order_assignment, purchase_order_item, purchase_order_schedule_line, purchase_requisition_assignment, purchase_requisition_item, purchasing_contract_type, purchasing_info_record, purchasing_info_record_org, purchasing_info_record_price, purchasing_quota_arrangement, purchasing_quota_arrangement_item, purchasing_quotation, purchasing_quotation_item, purchasing_rfq, purchasing_rfq_event, purchasing_rfq_event_item, purchasing_rfq_item, purchasing_source_list, purchasing_source_list_entry, scheduling_agreement, scheduling_agreement_item, scheduling_agreement_release, scheduling_agreement_release_line, scheduling_agreement_schedule_line, scheduling_agreement_type, scheduling_release_profile, scheduling_release_profile_assignment, supplier_invoice, supplier_invoice_item, supplier_invoice_payment_block, supplier_invoice_payment_block_event, vendor_evaluation_assessment, vendor_evaluation_criterion
 
-**quality (4)** — `schema.ts`: `quality_lot`,`inspection_characteristic`,`inspection_result`,`usage_decision`.
+### quality (4)
+- `modules/quality/schema.ts`: inspection_characteristic, inspection_result, quality_lot, usage_decision
 
-**audit (3)** — `src/modules/audit/schema.ts` (migration `9276_audit_workspace.sql`): `audit_grant`,`audit_grant_scope`(FK→grant cascade),`audit_finding`. Also adds `audit_access_log.grant_id`. RLS tenant_isolation; no delete grants.
+### sales (39)
+- `modules/sales/schema.ts`: billing_document, billing_document_line, customer_sales_partner, delivery, delivery_line, delivery_picking, delivery_picking_serial, incompletion_assignment, incompletion_group, incompletion_procedure, incompletion_procedure_field, incompletion_status_group, sales_account_determination, sales_batch_determination_rule, sales_billing_plan, sales_billing_plan_date, sales_billing_plan_type, sales_billing_split_criterion, sales_condition_record, sales_condition_type, sales_document_condition, sales_document_partner, sales_document_type, sales_down_payment_request, sales_incompletion_log, sales_invoice_list_item, sales_order, sales_order_line, sales_order_schedule, sales_partner_function, sales_pricing_procedure, sales_pricing_procedure_step, sales_procedure_determination, sales_rebate_accrual, sales_rebate_agreement, sales_returns_configuration, shipping_condition, shipping_point, shipping_point_determination
 
-**platform/shared (40)** — `src/platform/tables/*.ts`: tenancy `client`,`client_settings` · security `app_user`,`role`,`capability`,`role_capability`,`user_role`,`auth_org_restriction`,`user_session`,`audit_access_log`(+`grant_id`, 9276),`sod_rule`,`password_reset_token`, authority model `position_capability`,`user_capability`,`user_capability_scope` (migration `9267_authority_model.sql`) · numbering `number_range_object`,`number_range`,`number_range_allocation` · locking `lock_object`,`lock_wait_log`,`enqueue_entry` · audit `change_document(_item)`,`document_flow_link`,`document_status_history`,`document_index` · registry `term_registry`,`term_alias`,`config_activity(_status)` · system `message_catalog`,`job_definition`,`job_run`,`job_log`,`mail_server_config`,`notification` (9270; job runtime/scheduler columns added by 9268/9271) · reference `country`,`currency`,`unit_of_measure`,`bank_master`.
-
-## Cross-module table access
-
-| Table(s) | Owner | Also touched by | Why |
-|---|---|---|---|
-| foundation master data (cost/profit center, internal order, company code, plant, storage loc, payment terms, tax code, chart of accounts, fiscal year, etc.) | foundation | finance, inventory, production, purchasing, sales (nearly all) | account assignment, org/period validation |
-| `purchase_order(_item)`, `supplier_invoice`, `customer_invoice`, `gr_ir_maintenance_link` | purchasing | finance (ageing, dunning, clearing, GR/IR reclass), inventory (GR posting) | invoice/PO docs live in purchasing schema though `customer_invoice` sounds finance-owned |
-| `journal_entry(_line)` | finance | foundation, inventory (read-only typing via `platform/posting`) | universal journal is sole posting sink |
-| `material_document(_line)`, `stock_quantity` | inventory | production (issue/receipt for orders), purchasing (GR vs PO), sales (delivery issue), quality (reads receipt lines; writes only via `postTransferInTx`) | inventory owns all stock movement; others trigger via its posting fns |
-| `production_order(_component)` | **inventory**, not production | production (BOM/routing snapshot, confirmations) | gotcha: persistence lives in inventory's schema |
-| `sales_order`, `billing_document` | sales | finance (credit-memo exposure calc) | |
-| `quality_lot`, `inspection_result`, `usage_decision` | quality | — (inventory never reads quality; confirmed one-directional) | |
-| platform tables (`change_document`, `number_range`, `lock_object`, `app_user`/`role`/`capability`) | platform | all 9 modules | audit, numbering, locking, auth |
-| `employee`, `pay_component` | people | — (no inbound) | near-leaf module |
-| `company_code`, `cost_center`, `pay_component_config`, `position_assignment` | foundation / people | people `payroll-structure.ts` (readiness: company, chart, currency, cost-centre standing), `payroll-run.ts` (selection, segments, snapshot; also `currency.decimal_places`, `absence`/`time_type`) | raw SQL reads |
-| `audit_grant` | audit | `platform/auth` (`effectiveGrants`, `verifyServiceAuthorityInTx` via `audit/read-only.ts`) | a live grant cuts authority to read-only |
-| `audit_access_log` | platform | audit (insert only: views, searches, exports, refusals with `grant_id`) | the audited auditor |
-| `fiscal_year_period`, `company_code` | foundation | audit (PERIOD scope validation) | |
-| `delegation(_scope/_approval)` | people | `platform/auth` | delegated authority is resolved at sign-in/capability check |
-| `position_capability`, `user_capability(_scope)` | platform | people (authority chart), `platform/auth`, `platform/notification` | authority model: capabilities granted per position/user, not only via roles |
-| `notification` | platform | purchasing (release waiting), sales output, jobs | written via `platform/notification` |
-| `output_type`, `output_message`, `output_condition_record` | foundation (`output-schema.ts`) | inventory (material-document output), sales (sales output) | moved out of inventory's schema on development |
-| `material_sales`, `serial_number` | inventory | sales (availability, delivery picking serials), finance (serial-number screens) | |
-
-## Module → module dependencies (schema/table imports)
-- **finance** ← foundation (company code, COA, credit areas, partner/payment-terms), purchasing (`purchase_order`,`supplier_invoice`,`customer_invoice` schemas), sales (`billing_document`).
-- **foundation** ← finance (`gl_account` vocabulary), inventory (standard-config reference, material schema).
-- **inventory** ← finance/foundation (typing, account determination, business partner, characteristics, number ranges), production (BOM/routing/order-status snapshots, WIP batch), purchasing (account assignment, delivery completion).
-- **production** ← finance/foundation (typing, cost center/settlement), inventory (goods issue/receipt, scheduling profile, storage location, unit conversion — delegates posting to inventory), purchasing (requisitions, receipt-unit-basis).
-- **purchasing** ← finance (asset acquisition, clearing, DP clearing), foundation (partner/payment-terms/org master data, release strategy), inventory (goods issue, batch posting, unit conversion, valuation class), people (typing only).
-- **quality** ← inventory only (material document, `postTransferInTx`).
-- **sales** ← finance (credit check, invoice posting), foundation (partner, customer sales area), inventory (goods issue, storage location, unit conversion).
-- **people** ← platform only.
-- **audit** ← platform only (reads foundation `company_code`/`fiscal_year_period` by raw SQL). `platform/auth` ← audit (`read-only.ts`).
-- **platform** (admin module) ← `src/platform/*` infra only.
-
-See `modules/<name>.md` for file-level detail, `shared.md` for platform-infra usage.
+## Cross-module access
+| table | owner | also used by |
+|---|---|---|
+| account_determination | foundation | dev/walkthrough-asset.ts, finance, inventory, people, platform/tenancy, purchasing, sales |
+| accounting_reversal_link | finance | people |
+| activity_rate | foundation | platform/tenancy |
+| activity_type | foundation | platform/tenancy, production |
+| allocation_structure_assignment | foundation | production |
+| app_user | platform/tables | audit, finance, foundation, inventory, people, platform, platform/auth, platform/job, platform/notification, platform/tenancy, production, purchasing |
+| asset_class | finance | foundation, purchasing |
+| asset_transaction | finance | dev/walkthrough-asset.ts |
+| asset_transaction_type | finance | foundation, purchasing |
+| audit_access_log | platform/tables | audit, people, platform, platform/auth, platform/security |
+| auth_org_restriction | platform/tables | finance, inventory, platform, platform/auth, platform/tenancy, production |
+| availability_check_scope | production | sales |
+| availability_checking_group | production | sales |
+| availability_checking_rule | production | sales |
+| bank_account | foundation | finance, people |
+| bank_master | platform/tables | foundation, platform/tenancy |
+| batch | inventory | sales |
+| batch_level_configuration | inventory | production |
+| batch_number_assignment | inventory | platform/tenancy |
+| batch_status_management | inventory | platform/tenancy |
+| billing_document | sales | finance, platform/tenancy |
+| bp_role | foundation | inventory, purchasing, sales |
+| business_partner | foundation | finance, inventory, purchasing, sales |
+| capability | platform/tables | audit, inventory, platform, platform/auth, platform/tenancy, production |
+| change_document | platform/tables | finance, foundation, inventory, platform/change, platform/notification, production, purchasing |
+| change_document_item | platform/tables | finance, foundation, platform/change, purchasing |
+| characteristic | foundation | inventory, platform/tenancy, purchasing |
+| chart_of_accounts | foundation | finance, people, platform/tenancy, sales |
+| class_assignment | foundation | inventory |
+| class_type | foundation | inventory |
+| classification_class | foundation | inventory, platform/tenancy |
+| client | platform/tables | finance, platform, platform/tenancy, purchasing |
+| client_settings | platform/tables | platform/tenancy |
+| company_code | foundation | audit, finance, inventory, people, platform, platform/periods, platform/tenancy, production, purchasing, sales |
+| config_activity | platform/tables | platform/tenancy |
+| config_activity_status | platform/tables | foundation, platform/tenancy |
+| controlling_area | foundation | inventory, platform/tenancy, production |
+| controlling_area_company | foundation | inventory, platform/tenancy, production, purchasing |
+| cost_center | foundation | finance, inventory, people, platform/tenancy, production, purchasing |
+| cost_center_hierarchy | foundation | platform/tenancy |
+| country | platform/tables | foundation, inventory |
+| credit_control_area | foundation | finance, platform/tenancy |
+| credit_determination | finance | sales |
+| credit_risk_category | finance | platform/tenancy |
+| currency | platform/tables | finance, foundation, inventory, people, platform/i18n, purchasing, sales |
+| customer_company_code | foundation | finance |
+| customer_credit | finance | sales |
+| customer_down_payment_request | finance | sales |
+| customer_invoice | purchasing | finance, platform/tenancy |
+| customer_invoice_line | purchasing | finance |
+| customer_sales_area | foundation | sales |
+| delegation | people | platform/auth, platform/notification |
+| delegation_approval | people | platform/auth |
+| delegation_scope | people | platform/auth |
+| delivery | sales | platform/tenancy |
+| delivery_picking_serial | sales | inventory |
+| depreciation_area | finance | foundation |
+| depreciation_key | finance | foundation |
+| distribution_channel | foundation | inventory, platform/tenancy |
+| division | foundation | platform/tenancy |
+| document_flow_link | platform/tables | platform/document |
+| document_index | platform/tables | foundation, platform/document |
+| document_release | purchasing | inventory, platform/attention, production |
+| document_status_history | platform/tables | platform/document |
+| document_type | foundation | finance, platform/posting, platform/tenancy |
+| down_payment_request_fulfillment | finance | sales |
+| employee | people | platform, platform/auth, platform/notification, platform/tenancy, purchasing |
+| employee_tolerance_group | foundation | finance, platform/tenancy |
+| enqueue_entry | platform/tables | platform/auth, platform/job, platform/lock |
+| exchange_rate | foundation | finance, platform/tenancy, purchasing |
+| factory_calendar | foundation | production |
+| financial_statement_assignment | finance | foundation |
+| financial_statement_node | finance | foundation |
+| financial_statement_version | finance | foundation |
+| fiscal_year_period | foundation | audit, finance, platform/periods, production |
+| fiscal_year_variant | foundation | finance, inventory, platform/periods, platform/tenancy, production |
+| fixed_asset | finance | dev/walkthrough-asset.ts, purchasing |
+| gl_account | finance | foundation, people, platform/posting, platform/tenancy, production, purchasing, sales |
+| gl_account_company | finance | foundation |
+| gl_account_group | finance | foundation |
+| house_bank | foundation | finance, people, platform/tenancy |
+| incompletion_group | sales | foundation |
+| industry | foundation | platform/tenancy |
+| industry_sector | inventory | platform/tenancy |
+| internal_order | foundation | finance, purchasing |
+| internal_order_budget_profile | foundation | platform/tenancy |
+| internal_order_type | foundation | platform/tenancy |
+| internal_order_type_budget_profile | foundation | platform/tenancy |
+| job_definition | platform/tables | platform/job |
+| job_log | platform/tables | platform/job |
+| job_run | platform/tables | platform/job |
+| journal_entry | finance | foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing |
+| journal_entry_line | finance | dev/walkthrough-asset.ts, foundation, people, platform/posting, platform/tenancy, production, purchasing |
+| lock_wait_log | platform/tables | platform/lock |
+| material | inventory | foundation, production, purchasing, sales |
+| material_bom | production | platform/tenancy |
+| material_document | inventory | finance, production, purchasing, quality, sales |
+| material_document_line | inventory | dev/walkthrough-asset.ts, finance, production, purchasing, quality, sales |
+| material_group | inventory | platform/tenancy, purchasing |
+| material_period_control | inventory | platform/tenancy |
+| material_plant | inventory | foundation, production, purchasing, sales |
+| material_sales | inventory | sales |
+| material_type | inventory | platform/tenancy |
+| material_uom_conversion | inventory | foundation, purchasing |
+| material_valuation | inventory | purchasing, sales |
+| movement_type | inventory | finance, platform/tenancy, production, purchasing, sales |
+| mrp_controller | inventory | production |
+| notification | platform/tables | platform/notification |
+| number_range | platform/tables | foundation, inventory, platform/numbering, platform/tenancy, purchasing, sales |
+| number_range_allocation | platform/tables | foundation, inventory, platform/numbering, platform/posting |
+| number_range_object | platform/tables | foundation, inventory, platform/tenancy |
+| outgoing_payment | finance | dev/walkthrough-asset.ts |
+| output_condition_record | foundation | sales |
+| output_message | foundation | inventory, sales |
+| output_type | foundation | inventory, sales |
+| parked_supplier_invoice | purchasing | foundation |
+| password_reset_token | platform/tables | platform |
+| pay_component | people | platform/tenancy |
+| pay_component_config | people | platform/tenancy |
+| payment_document | finance | purchasing |
+| payment_method | foundation | finance, platform/tenancy |
+| payment_proposal_item | finance | purchasing |
+| payment_run | finance | purchasing |
+| payment_terms | foundation | finance, platform/tenancy, purchasing |
+| payroll_run_exception | people | platform/tenancy |
+| planning_file | inventory | production |
+| plant | foundation | finance, inventory, platform, platform/auth, platform/tenancy, production, purchasing, sales |
+| position_assignment | people | platform/auth, platform/notification |
+| position_capability | platform/tables | platform/auth, platform/notification |
+| posting_period_rule | foundation | platform/periods |
+| posting_period_variant | foundation | platform/periods, platform/tenancy |
+| production_order | inventory | platform/tenancy, production |
+| production_order_component | inventory | production |
+| production_order_type | production | inventory, platform/tenancy |
+| production_order_type_parameter | production | platform/tenancy |
+| production_version | production | platform/tenancy |
+| profit_center | foundation | finance, platform/tenancy |
+| profit_center_hierarchy | foundation | platform/tenancy |
+| purchase_contract | purchasing | platform/attention |
+| purchase_order | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, platform/attention, production |
+| purchase_order_item | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, inventory, production |
+| purchase_order_schedule_line | purchasing | production |
+| purchase_requisition_item | purchasing | platform/attention, production |
+| purchasing_contract_type | purchasing | platform/tenancy |
+| purchasing_group | foundation | inventory, platform/tenancy, purchasing |
+| purchasing_org | foundation | platform/tenancy, purchasing |
+| purchasing_org_plant | foundation | platform/tenancy, purchasing |
+| purchasing_quotation | purchasing | foundation |
+| purchasing_rfq | purchasing | foundation |
+| purchasing_rfq_event | purchasing | foundation |
+| record_type | people | platform/tenancy |
+| release_group | foundation | purchasing |
+| release_strategy | foundation | platform/tenancy, purchasing |
+| release_strategy_criterion | foundation | purchasing |
+| release_strategy_step | foundation | platform/attention, purchasing |
+| reservation_header | inventory | production |
+| reservation_item | inventory | production |
+| reversal_reason | finance | foundation |
+| role | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
+| role_capability | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
+| routing | production | platform/tenancy |
+| sales_account_determination | sales | foundation |
+| sales_area | foundation | platform/tenancy, sales |
+| sales_billing_plan_type | sales | foundation |
+| sales_condition_record | sales | platform/tenancy |
+| sales_condition_type | sales | foundation |
+| sales_document_type | sales | foundation |
+| sales_org | foundation | inventory, platform/tenancy, sales |
+| sales_org_distribution_channel | foundation | platform/tenancy |
+| sales_org_division | foundation | platform/tenancy |
+| sales_org_text | foundation | platform/tenancy |
+| sales_partner_function | sales | foundation |
+| sales_pricing_procedure | sales | foundation |
+| sales_pricing_procedure_step | sales | foundation |
+| sales_procedure_determination | sales | foundation |
+| sales_returns_configuration | sales | foundation |
+| scheduling_agreement | purchasing | platform/attention |
+| scheduling_agreement_type | purchasing | platform/tenancy |
+| settlement_document | foundation | production |
+| settlement_profile | foundation | platform/tenancy, production |
+| shipping_condition | sales | foundation |
+| sod_rule | platform/tables | platform |
+| special_gl_config | foundation | finance, sales |
+| stock_quantity | inventory | dev/walkthrough-volume.ts, production, sales |
+| storage_location | foundation | inventory, platform/tenancy, production, purchasing |
+| supplier_company_code | foundation | finance, purchasing |
+| supplier_invoice | purchasing | dev/walkthrough-asset.ts, finance, foundation |
+| supplier_invoice_item | purchasing | finance |
+| supplier_purchasing_org | foundation | purchasing |
+| tax_code | foundation | finance, platform/tenancy, purchasing, sales |
+| tax_return_run | finance | platform/tenancy |
+| term_alias | platform/tables | platform/registry |
+| term_registry | platform/tables | platform/registry |
+| time_type | people | platform/tenancy |
+| unit_of_measure | platform/tables | foundation, inventory, production, purchasing, quality, sales |
+| user_capability | platform/tables | people, platform/auth, platform/notification |
+| user_capability_scope | platform/tables | platform/auth |
+| user_role | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
+| user_session | platform/tables | finance, inventory, platform, platform/auth, platform/job, platform/lock, production |
+| valuation_class | inventory | foundation, platform/tenancy |
+| vendor_down_payment | finance | foundation, purchasing |
+| vendor_down_payment_clearing | finance | purchasing |
+| work_center | production | platform/tenancy |

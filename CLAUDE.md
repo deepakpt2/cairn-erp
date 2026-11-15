@@ -1,16 +1,26 @@
 # Cairn — Claude Code Notes
 
 ## Codebase map
-A persistent map of this repo lives in `docs/codemap/`. Check it first when unsure where something lives or what depends on what — it's cheaper than rescanning the tree.
+A persistent, index-only map of this repo lives in `docs/codemap/` (tables, no prose). Check it first when unsure where something lives or what depends on what — it's cheaper than rescanning the tree.
 
-- `docs/codemap/README.md` — index: every module, one-line purpose, entry points
+- `docs/codemap/README.md` — index: every module, one-line purpose, entry points, query recipes
 - `docs/codemap/import-graph.json` — raw `madge` import graph (`src/`)
-- `docs/codemap/modules/{audit,finance,foundation,inventory,people,platform,production,purchasing,quality,sales}.md` — per-module: files, exports, DB tables, dependencies, tests/scripts, gotchas
-- `docs/codemap/shared.md` — cross-cutting infra (`src/platform/*`, `src/ui/*`) and which modules use each piece
-- `docs/codemap/database.md` — every table → owning module, cross-module access, relations
-- `docs/codemap/unassigned.md` — everything else (config, docker, drizzle migrations, pre-existing docs/notes)
+- `docs/codemap/modules/{audit,finance,foundation,inventory,people,platform,production,purchasing,quality,sales}.md` — per-module: Gotchas, then tables `file | exports | tables`, routes, owned tables, dependencies, tests
+- `docs/codemap/shared.md` — cross-cutting infra (`src/platform/*`, `src/ui/*`, `src/worker/*`, app shell), RLS / SECURITY DEFINER / job / demo gotchas, shared unit → users
+- `docs/codemap/database.md` — tables per schema file, cross-module table access
+- `docs/codemap/unassigned.md` — everything else (config, docker, drizzle migrations, scripts, pre-existing docs/notes)
 
-**Keep it current:** when you add/move/delete files, change a module's dependencies, or add/change a DB table, update the relevant `docs/codemap/*` file in the same change. Stale map entries are worse than no map.
+**Reading rules (token budget):**
+- **Never read `docs/codemap/import-graph.json` whole** (280 KB) — not with Read, `cat`, `head` or a large range. Query it with `jq` only, e.g. `jq '."modules/quality/lot.ts"' docs/codemap/import-graph.json` (imports of a file) or `jq -r 'to_entries[] | select(.value | index("platform/db/client.ts")) | .key' docs/codemap/import-graph.json` (importers). Keys are paths relative to `src/`.
+- Prefer `grep -n '<file or table>' docs/codemap/...` over reading a whole module file; read a module's `## Gotchas` block before changing that module.
+
+**Keep it current:** when you add/move/delete files, change a module's dependencies, or add/change a DB table, run `node scripts/codemap-index.mjs` in the same change (after `npx madge --json --ts-config tsconfig.json --extensions ts,tsx src > docs/codemap/import-graph.json` if imports changed); `--check` reports a stale map. It rewrites only the generated tables and keeps each file's title, purpose line and `## Gotchas`. Edit Gotchas by hand: one short bullet per non-obvious rule, no narrative prose. Stale map entries are worse than no map.
+
+## Migration history is off-limits
+`drizzle/history/` (386 superseded migrations, 2.4 MB) stays in the workspace and in git — schema-contract tests and `scripts/lint-ip.ts` read it — but Claude must not read or search it. `.claude/settings.json` denies `Read(./drizzle/history/**)`; that rule does not cover shell commands, so:
+- Always exclude it from searches: `grep -r --exclude-dir=history …`, `rg --glob '!drizzle/history/**' …`, `find … -path ./drizzle/history -prune -o …`.
+- Never `cat`/`head`/`sed` a file under it. Current schema lives in `src/**/schema*.ts`, `src/platform/tables/*.ts`, `drizzle/0000_baseline.sql` and `drizzle/9*.sql`; for a column's history use `git log -S '<name>' -- drizzle/`, or ask the user.
+- Never move it, delete it, or add it to `.gitignore`.
 
 ## Environment & commands
 Claude runs in the **workbench** container. The repo is shared with the **app** container, which runs `npm run dev` permanently on http://app:3000.

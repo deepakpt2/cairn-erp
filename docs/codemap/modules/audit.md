@@ -1,31 +1,43 @@
 # Audit
-
-Auditor workspace (AUDIT.WORKSPACE): time-boxed, scoped, read-only access for a person acting as auditor; posting structurally impossible while a grant is live; the auditor's own views/searches/exports logged; working state (findings, notes, bookmarks, requests to management) with status and response. SAP analog: GRC Emergency Access Management (grant) + SAP Audit Management (findings) + AIS (read-only tree). Migration `drizzle/9276_audit_workspace.sql`. 3 module files, 3 routes.
-
-## Files
-- `src/modules/audit/schema.ts` — tables `auditGrant`(`audit_grant`, `valid_to` NOT NULL, status `DRAFT|ACTIVE|EXPIRED|REVOKED`), `auditGrantScope`(`audit_grant_scope`, kind `COMPANY_CODE|PERIOD|MODULE`, FK→grant cascade), `auditFinding`(`audit_finding`, kind `FINDING|NOTE|BOOKMARK|REQUEST`, status `OPEN|ANSWERED|ACCEPTED|WITHDRAWN`); vocab consts `AUDIT_GRANT_STATUSES`,`AUDIT_SCOPE_KINDS`,`AUDIT_SCOPE_MODULES`(`FIN,INV,PROD,PROC,SALES,CO,PEOPLE`),`AUDIT_FINDING_KINDS`,`AUDIT_FINDING_STATUSES`. Uses house `auditColumns` (`changed_by/changed_at`, not the spec's `updated_*`).
-- `src/modules/audit/read-only.ts` — the "cannot post" rule, imported by **platform/auth** (leaf: imports only `pattern.ts` + db type). Exports `READ_KIND_ACTIONS`(`DISPLAY,VIEW,ANALYSIS,DOCUMENTS`), `AUDIT_GRANT_EXCEPTIONS`(`AUDIT.EVIDENCE.EXPORT`), `READ_SUFFIX`(`.read`), `isAuditorReadable`, `liveAuditGrantId`(by dates+revocation, not stored status), `capabilityCatalogue`, `restrictToReadOnly`(expands patterns vs catalogue, keeps read-kind codes + covered `<code>.read` variants), `isAuditorReadableCapability`.
-- `src/modules/audit/workspace.ts` — service. Consts `AUDIT_WORKSPACE_CAPABILITY`,`AUDIT_TRAIL_CAPABILITY`,`AUDIT_EXPORT_CAPABILITY`,`AUDIT_GRANT_CAPABILITY`(`AUDIT.ACCESS.GRANT`),`AUDIT_RESPOND_CAPABILITY`(`AUDIT.REQUEST.RESPOND`), routes, `AUDIT_DRILL_THROUGH`(FS10N→FAGLL03→FB03→ME23N/VA03/MB03…, each with the capability the screen tests), `AuditError(message, remedy, code)`. Grants: `createAuditGrant`(authority via `verifyServiceAuthorityInTx`; requestKey UUID→grantId idempotent), `revokeAuditGrant`, `refreshGrantStatus`, `activeGrantFor`, `grantCovers`/`scopeGap`, `effectiveGrantStatus`, `listGrants`, `listGrantableUsers`. Reads: `assertAuditRead`, `recordAuditView`, `searchChangeHistory`(AUDIT.TRAIL.VIEW, wraps `changeHistory`), `exportEvidence`(CSV, EXPORT log) — refusals commit (EXPIRED + CAPABILITY_DENIED log) before throwing. Working state: `raiseFinding`, `respondToFinding`(never by raiser), `listFindings`, `listFindingsRaisedBy`. `logAuditAccess` (append-only), `auditWorkspaceView` (no writes during render).
-- `src/app/audit/workspace/{page.tsx,WorkspaceClient.tsx,actions.ts}` — `/audit/workspace`: grant banner or why-none, drill-through table (per-link "opens for you"), change-history search (terms kept across React form reset), own working state. `LogWorkspaceView` island → `logWorkspaceViewAction`; `searchHistoryAction`.
-- `src/app/audit/grants/{page.tsx,GrantForms.tsx,actions.ts}` — `/audit/grants` (AUDIT.ACCESS.GRANT): create form (`auditorUserId`,`validFrom`,`validTo`,`scopeKind[]`/`scopeValue[]` positional,`reason`,`requestKey`), list, revoke (`grantId`,`reason`). `createAuditGrantAction`,`revokeAuditGrantAction`.
-- `src/app/audit/findings/{page.tsx,FindingForms.tsx,actions.ts}` — `/audit/findings`: raise (AUDIT.WORKSPACE; `?objectClass=&objectKey=` pre-fills a bookmark), export (AUDIT.EVIDENCE.EXPORT, client-side CSV download), management table with respond form (AUDIT.REQUEST.RESPOND, hidden on own rows). `raiseFindingAction`,`respondToFindingAction`,`exportEvidenceAction`,`logFindingsViewAction`.
-
-## Pages & routes
-`/audit/workspace`, `/audit/grants`, `/audit/findings` — launchpad area `audit` (`nav.area.audit`). Registry rows (9276): `AUDIT.WORKSPACE` (aliases `AIS`,`GRC_FIREFIGHTER`), `AUDIT.TRAIL.VIEW` (`SM20`,`SCU3`), `AUDIT.EVIDENCE.EXPORT` (`AUDIT_EXPORT`), `AUDIT.ACCESS.GRANT`, `AUDIT.REQUEST.RESPOND`. No API routes.
-
-## Database
-**Owns:** `audit_grant`, `audit_grant_scope`, `audit_finding` (RLS `tenant_isolation`; cairn_app: grant/finding `select,insert,update`, scope `select,insert`; no deletes). **Adds** `audit_access_log.grant_id` (+partial index). **Seeds** capabilities `AUDIT.ACCESS.GRANT`(MAINTAIN), `AUDIT.REQUEST.RESPOND`(CHANGE) — also in `scripts/seed.ts`.
-**Reads/writes others':** `audit_access_log` (platform, insert only), `change_document(_item)` (`recordChange` on grant/revoke/raise/respond; `changeHistory` for search), `app_user`, `company_code`+`fiscal_year_period` (foundation; PERIOD scope = period of the scoped company codes' variant, open or closed), `capability` (catalogue for the read-only rule).
-
-## Depends on
-platform/db, platform/change, platform/auth (`session` `loadCapabilities`/`hasCapability`, `service-authority`, `pattern`), platform/tables/security. **Depended on by:** `platform/auth/authority.ts` (`effectiveGrants` cuts to read-only under a live grant) and `platform/auth/service-authority.ts` (named refusal) — via `read-only.ts`; `platform/tenancy/demo-audit.ts`.
-
-## Tests & scripts
-`tests/audit-workspace.test.ts` (18: scope/period/duplicate/idempotency refusals, in/out-of-scope reads, expiry commits EXPIRED, revoke, catalogue-driven no-write proof incl. service boundary, findings/own-response, logging, 6-call-site regression) · helper `tests/helpers/audit-actor.ts` (`createAuditActor`, `AUDITOR_CAPABILITIES`, `CONTROLLER_CAPABILITIES`). Demo: phase `D6_AUDIT` (`src/platform/tenancy/demo-audit.ts`, `buildDemoAudit`, `demoAuditPrerequisitesMissing`, fixed `DEMO_AUDIT_GRANT_REQUEST_KEY`); account `demo.auditor` (role `DEMO_AUDITOR`, display-only), `DEMO_CONTROLLER` holds grant/respond.
+Auditor workspace: time-boxed scoped read-only grants, no-post rule, audited auditor, findings/requests. Routes: `/audit/{workspace,grants,findings}`. Paths relative to `src/`; tables are SQL names.
 
 ## Gotchas
-- Under a live grant, **everything** non-read is stripped centrally — including from admins. The close cockpit (`FIN.CLOSE.COCKPIT`, action POST) therefore never opens for an auditor; the workspace marks it unavailable.
-- Grant scope (company/period/module) is enforced only by the audit module's own reads (search, export, `assertAuditRead`); the linked business screens use the auditor's display capabilities and are **not** filtered by grant scope (agreed known gap).
-- Expanded role patterns lose `<code>.read` variants unless the pattern covered them; demo roles are expanded at grant time, so e.g. `FIN.RPT.SUBLEDGER.TIE.read` is not held by `DEMO_AUDITOR`.
-- `effectiveGrants()` runs one extra query per resolution (`liveAuditGrantId`), plus a catalogue read only for grant holders.
-- Demo claim: a COMPLETED installation whose record lacks a phase added by a later build now appends and runs it (RESUME) instead of refusing; recorded-but-unfinished phases still refuse. A resumed run resets every demo password.
+- Live audit grant strips every non-read capability centrally (admins too); close cockpit never opens for an auditor.
+- Grant scope (company/period/module) is enforced only by audit's own reads (`assertAuditRead`, search, export); linked business screens are not scope-filtered (known gap).
+- `effectiveGrants()` costs one extra query (`liveAuditGrantId`) per resolution.
+- Demo phase `D6_AUDIT`; a COMPLETED install missing a later phase RESUMEs it and resets every demo password.
+
+## Files (12)
+| file | exports | tables |
+|---|---|---|
+| **app/audit/findings/** | | |
+| actions.ts | logFindingsViewAction, raiseFindingAction, respondToFindingAction, exportEvidenceAction |  |
+| FindingForms.tsx | LogFindingsView, RaiseFindingForm, RespondForm, ExportEvidenceForm |  |
+| page.tsx | AuditFindingsPage |  |
+| **app/audit/grants/** | | |
+| actions.ts | createAuditGrantAction, revokeAuditGrantAction |  |
+| GrantForms.tsx | CreateGrantForm, RevokeGrantForm |  |
+| page.tsx | AuditGrantsPage |  |
+| **app/audit/workspace/** | | |
+| actions.ts | logWorkspaceViewAction, searchHistoryAction |  |
+| page.tsx | AuditorWorkspacePage |  |
+| WorkspaceClient.tsx | LogWorkspaceView, ChangeHistorySearch |  |
+| **modules/audit/** | | |
+| read-only.ts | READ_KIND_ACTIONS, AUDIT_GRANT_EXCEPTIONS, isAuditorReadable, liveAuditGrantId, capabilityCatalogue, restrictToReadOnly, READ_SUFFIX, isAuditorReadableCapability | audit_grant, capability |
+| schema.ts | AUDIT_GRANT_STATUSES, AUDIT_SCOPE_KINDS, AUDIT_SCOPE_MODULES, AUDIT_FINDING_KINDS, AUDIT_FINDING_STATUSES, auditGrant, auditGrantScope, auditFinding | audit_finding, audit_grant, audit_grant_scope |
+| workspace.ts | AUDIT_WORKSPACE_CAPABILITY, AUDIT_TRAIL_CAPABILITY, AUDIT_EXPORT_CAPABILITY, AUDIT_GRANT_CAPABILITY, AUDIT_RESPOND_CAPABILITY, AUDIT_WORKSPACE_ROUTE, AUDIT_GRANT_ROUTE, AUDIT_FINDING_ROUTE, AUDIT_GRANT_OBJECT_CLASS, AUDIT_FINDING_OBJECT_CLASS, AUDIT_RESPONSE_STATUSES, AUDIT_DRILL_THROUGH, AuditError, effectiveGrantStatus, scopeGap, grantCovers, logAuditAccess, refreshGrantStatus, activeGrantFor, createAuditGrant, revokeAuditGrant, listGrants, listGrantableUsers, assertAuditRead, recordAuditView, searchChangeHistory, exportEvidence, listFindings, listFindingsRaisedBy, raiseFinding, respondToFinding, auditWorkspaceView | app_user, audit_access_log, audit_finding, audit_grant, audit_grant_scope, company_code, fiscal_year_period |
+
+## Routes (3)
+`/audit/findings` · `/audit/grants` · `/audit/workspace`
+
+## Tables owned (3)
+audit_finding, audit_grant, audit_grant_scope
+
+## Depends on
+platform/auth, platform/change, platform/db, platform/i18n, platform/tables
+
+## Used by
+platform/auth, platform/tenancy
+
+## Tests (1)
+audit-workspace

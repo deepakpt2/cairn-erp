@@ -1,32 +1,28 @@
 # Unassigned
+Everything outside `src/` modules and `shared.md`. Not dead code by default.
 
-Repo content outside the 9 business modules (`modules/*.md`) and cross-cutting runtime code (`shared.md`): build/deploy config, pre-existing project docs, dev notes, migration history. Not dead code by default.
+## Root config
+`package.json` (scripts `db:*`, `test:*`, `typecheck`, `build:check`, `lint:ip`) · `tsconfig.json` (`@/*`→`src/*`; excludes `notes/walk-*.ts`) · `next.config.ts` · `drizzle.config.ts` (→ `src/platform/schema.ts`) · `tailwind.config.ts`, `postcss.config.js` · `vitest.config.ts` + `vitest.{browser-harness,stage3,stage3-db,ui-contract,walkthrough}.config.ts` · `.env.example`, `.env.development.example`, `.env.docker.example`, `.env.test` (tracked, erp_test only) · `.gitignore`, `.dockerignore`, `LICENSE`
 
-## Build/tooling config (root)
-`package.json`,`package-lock.json` (deps + scripts: `dev`,`build`,`db:*`,`smoke:*`,`walkthrough:*`,etc.) · `tsconfig.json` (`@/*→src/*`; excludes `notes/walk-{a..e}.ts`) · `next.config.ts`,`next-env.d.ts` · `drizzle.config.ts`(→`src/platform/schema.ts`) · `tailwind.config.ts`,`postcss.config.js` · `vitest.config.ts` + 5 tier-specific vitest configs (`browser-harness`,`stage3`,`stage3-db`,`ui-contract`,`walkthrough`) · `.env.example`,`.env.development.example`,`.env.docker.example` · `.env.test` (workbench test env, no secrets, tracked; loaded by `tests/test-env.ts` — see `shared.md`) · `.gitignore`,`.dockerignore`,`LICENSE`
-
-## Docker — `docker/`
-`docker-compose.yml`,`Dockerfile`,`entrypoint.sh`,`bootstrap-db.mjs`,`sshd_config`,`postgres/10-app-role.sh`,`postgres/sync-credentials.sh` (+ root-level `docker-compose.yml`/`Dockerfile` equivalents for local dev)
+## Docker
+`docker/`: `docker-compose.yml`, `Dockerfile`, `entrypoint.sh`, `bootstrap-db.mjs`, `sshd_config`, `postgres/10-app-role.sh`, `postgres/sync-credentials.sh` · root `docker-compose.yml`, `Dockerfile`
+Volumes: `postgres_data` (DB), `./credentials` → `/app/credentials` (rw, demo passwords), `walkthrough-seed.ts` (ro).
 
 ## Migrations — `drizzle/`
-- `0000_baseline.sql` — schema-only `pg_dump` (PG 17.11) replacing the old chain; inserts the 386 old filenames into `cairn_migration` as applied, and carries seed rows four old migrations inserted (`capability`,`config_activity`,`term_registry`,`term_alias`). Known issues: emits `SET transaction_timeout` (PG17-only) and 445 `OWNER TO cairn_integration_migrator` (role exists only on the integration cluster).
-- `9267_authority_model.sql` … `9275_initial_stock_entry.sql` — post-baseline migrations (authority model, job runtime, delegation, notification, job scheduler, production order company code not stored, demo installation, demo password fingerprint, initial stock entry). New schema changes go here as `9xxx_<name>.sql`.
-- `history/` — 386 superseded migrations (`0000_init` … `9266_*`); never applied by the migrator, read by tests that cross-check migrations against Drizzle schema.
-- `meta/*_snapshot.json` — Drizzle Kit snapshots.
-Not catalogued per-file — see `database.md` for table ownership; grep `drizzle/history/*.sql` for a table's history.
+| path | note |
+|---|---|
+| `0000_baseline.sql` | PG 17 `pg_dump`; marks the 386 old files applied; PG17-only settings |
+| `9267_*.sql` … `9285_*.sql` | post-baseline migrations; new ones are `9xxx_<name>.sql`, applied in name order by `src/platform/db/migrate.ts` |
+| `history/` | 386 superseded files; never applied; read by schema-contract tests and `scripts/lint-ip.ts`. **Do not read or grep** (see CLAUDE.md) |
+| `meta/*_snapshot.json` | drizzle-kit snapshots |
 
-## Root cross-module script
-`walkthrough-seed.ts` (115KB) — demo/e2e seed touching most modules (`npm run walkthrough:seed`); depends on `src/dev/walkthrough-{asset,volume}.ts` (`shared.md`). `walkthrough-run.md` — accompanying notes.
+## Scripts and seeds
+`scripts/codemap-index.mjs` (regenerates `docs/codemap/` tables) · `scripts/*.ts` (see `package.json`; demo: `demo-provision.ts`, `demo-signin-check.ts`; test DB: `with-test-env.ts`, `test-db.ts`) · `walkthrough-seed.ts` (115 KB, cross-module seed) + `walkthrough-run.md`
 
-## Pre-existing project docs (not maintained by this codemap)
-**Root:** `AGENTS.md` (contributor/agent instructions), `CAIRN.md`+`CAIRN-2.md`…`CAIRN-7.md` (design/decision log; `R-`/`D-`/`§` refs cited in code comments point here), `implementation-status.md` (status of built screens), `IMPLEMENTATION-STATUS.md` (DI-020 commit/test status — separate file, differs only by case: avoid case-insensitive checkouts), `implemented-functions.md`, `onboarding-manual.md`, `inventory-architecture-audit.md`, `INCIDENT-QM-MIGRATION-TARGET.md`
-
-**`docs/`** (27 files): `OPEN-GAPS.md` (deferred gaps from payroll item 4 / phases 1–5b, cost centre planning item 5, activity prices item 6, assessment item 7 and BOM explosion item 8, with the two diagnosed pre-existing test failures), `demo-restart-and-safety.md` (operator reference for interrupted demo-data installs), `fresh-server-installation.md` (clean host → running deployment, empty or with demo company), `co09-availability-audit.md`,`DEFERRED_ISSUES.md`,`DEVELOPMENT-OPERATIONS.md`,`ko01-audit.md`,`ko22-audit.md`,`ko88-audit.md`,`kop1-audit.md`,`mb5m-audit.md`,`me31k-audit.md`,`me31l-audit.md`,`me32k-me33k-audit.md`,`me38-audit.md`,`me84-audit.md`,`migration-authoring.md`,`operational-readiness.md`,`PHASE1-DIAGNOSTIC-INVENTORY.{csv,md}`,`PLATFORM-ADMIN-BOOTSTRAP-REVIEW.md`,`production-goods-movement-failure-persistence.md`,`production-order-cost-basis-proposal.md`,`production-tcode-order.md`,`PROJECT-STATUS.md`,`screen-link-audit.md`,`usage-audit.md`
-
-**`notes/`** (13 files): `coverage-reconciliation.md`,`people-increment-{1,2,3}.md`,`statement-version-browser-acceptance.md`,`statement-version-gap.md` (dev progress) · `module-api.txt`,`seed-api-inventory.txt` (scratch) · `walk-{a,b,c,d,e}.ts` — **excluded from `tsconfig.json` include** (doc snippets, not executable; keep out of module file lists)
+## Project docs (not maintained here)
+Root: `AGENTS.md`, `CAIRN.md`, `CAIRN-2.md`…`CAIRN-7.md` (R-/D-/§ refs in comments), `implementation-status.md`, `IMPLEMENTATION-STATUS.md` (case-only name clash), `implemented-functions.md`, `onboarding-manual.md`, `inventory-architecture-audit.md`, `INCIDENT-QM-MIGRATION-TARGET.md`
+`docs/`: `OPEN-GAPS.md` (deferred gaps, items 4–8), `DEFERRED_ISSUES.md`, `DEVELOPMENT-OPERATIONS.md`, `demo-restart-and-safety.md`, `fresh-server-installation.md`, `migration-authoring.md`, `operational-readiness.md`, `PROJECT-STATUS.md`, `*-audit.md` (t-code audits), `PHASE1-DIAGNOSTIC-INVENTORY.{csv,md}`, `PLATFORM-ADMIN-BOOTSTRAP-REVIEW.md`, `production-*.md`, `screen-link-audit.md`, `usage-audit.md`
+`notes/`: dev notes; `walk-{a..e}.ts` are doc snippets excluded from tsconfig.
 
 ## Misc
-`.logs/` (1 file, runtime log dir) · `.claude/` (1 file, assistant project settings)
-
-## Coverage
-Everything under `src/`, `tests/`, `scripts/` is in the 9 module docs or `shared.md`. This file covers the rest: root config, `docker/`, `drizzle/`, pre-existing docs/notes.
+`.logs/next-dev.log` (dev server log, gitignored) · `.claude/settings.json` (shared permissions) · `.claude/settings.local.json` (local)

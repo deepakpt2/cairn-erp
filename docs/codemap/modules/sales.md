@@ -1,161 +1,150 @@
 # Sales
+Sales orders, pricing procedures, delivery & shipping points, billing (plans, collective, invoice lists, down payments), rebates, returns & credit memos/requests, incompletion, output, registers/analysis, batch & serial determination. Routes: `/sales/*`, `/config/{batch-determination,billing-split,incompletion,pricing-procedure,sales-account-determination,sales-document-types,sales-returns,shipping-points}`. Paths relative to `src/`; tables are SQL names.
 
-**Purpose:** Order-to-invoice chain for a sold-to customer: sales order (what/price, posts nothing) → outbound delivery (reserves+ships) → goods issue (hands off to inventory's movement/valuation/journal engine) → billing document (hands off to finance's accounting-invoice service for the receivable). Pricing read from condition records the module owns; credit judgement, receivable journal, and (DI-020 follow-on) credit-memo reversal composed in from finance. On `development` also: condition-technique pricing procedures, revenue account determination, document-type/partner/incompletion/output config, availability (ATP) + schedule lines, shipping points, batch determination + pick serials, returns (651) and credit memos/requests, billing plans, down payments, rebates, collective billing/split, invoice lists, registers and analysis.
+## Gotchas
+- No counters: delivered/billed/exposure summed live (`fulfillment-quantities.ts`, `exposure.ts`); returns (LR/RE) excluded.
+- Billing is two-stage: row OPEN before `postCustomerInvoice`, POSTED only via `linkPostedInvoice` (retryable).
+- Credit checked at delivery creation, pick and goods issue. One delivery = one plant.
+- `/sales/credit-memo` is finance code (`finance/customer-credit-memo`); the sales G2/CR flow is `/sales/credit-memo-request`.
+- Import cycles: `sales/credit-memo` ↔ `finance/customer-credit-memo` ↔ `sales/partners`; `sales/delivery` ↔ inventory reversal.
+- `rebate.ts` posts accruals directly via `platform/posting.postJournalEntry`.
+- Invoice lists use type `IL` (constant wins over the header comment). Document types are rows (9226).
+- `batch-sort-rules.ts` exists to keep `postgres` out of the client bundle.
 
-## Files
-### Core chain (orders, delivery, billing)
-- `src/modules/sales/schema.ts` — Drizzle tables (39 now; full list under Database). Order/delivery/billing core: `salesOrder`, `salesOrderLine`, `salesOrderSchedule`, `delivery`, `deliveryLine`, `deliveryPicking`, `deliveryPickingSerial`, `billingDocument`, `billingDocumentLine`; plus pricing, document-type, shipping, billing-plan/down-payment/rebate, partner, incompletion, batch-rule tables. Exports `salesTableNames`, `ORDER_STATUSES`, `ORDER_LINE_STATUSES`, `DELIVERY_STATUSES`, `BILLING_STATUSES`, `BILLING_SPLIT_CRITERIA`, `DELIVERED_SPLIT_CRITERIA`, `DELIVERED_BILLING_PLAN_TYPES`, `BILLING_PLAN_DATE_STATUSES`, `BILLING_PLAN_DATE_RULES`, `DOWN_PAYMENT_REQUEST_STATUSES`, `REBATE_AGREEMENT_STATUSES`, `REBATE_ACCRUAL_STATUSES`, `PARTNER_FUNCTIONS`, `PARTNER_DOCUMENT_CATEGORIES`, `DELIVERED_PARTNER_FUNCTIONS`, `INCOMPLETION_GROUPS`, `INCOMPLETION_DOCUMENT_CATEGORIES`, `DELIVERED_INCOMPLETION_GROUPS`. (`CONDITION_TYPES`, `SALES_ORDER_TYPE` removed — now `salesConditionType`/`salesDocumentType` rows.)
-- `src/modules/sales/sales-order.ts` — order create/change/cancel, credit-area resolution, credit-block release; now prices via pricing procedure, writes partners/schedule lines/incompletion log/output, service-authority checks. Exports: `createSalesOrder`, `changeSalesOrder`, `cancelSalesOrder`, `getSalesOrder`, `listSalesOrderDocuments`, `salesOrderChoices`, `releaseSalesOrderCredit`, `creditAreaFor`, `SalesOrderError`, `SALES_ORDER_CAPABILITY`, `SALES_ORDER_RELEASE_CAPABILITY`, `SALES_ORDER_CREATE_CAPABILITY`, `SALES_ORDER_ROUTE`, `SALES_ORDER_OBJECT_CLASS`.
-- `src/modules/sales/delivery.ts` — delivery create, pick confirmation, goods-issue posting (delegates to inventory's `postGoodsIssue`), cancellation; now also ATP re-check, shipping-point/delivery-terms determination, batch determination, pick serial capture (inventory `serial-number`), partners, incompletion block, output. Exports: `createDelivery`, `confirmDeliveryPicks`, `postDeliveryGoodsIssue`, `cancelDelivery`, `getDelivery`, `listDeliveries`, `listDeliverableOrderLines`, `standingDetermination`, `DeliveryError`, `DELIVERY_GOODS_ISSUE_MOVEMENT` ('601'), `DELIVERY_CAPABILITY`, `DELIVERY_PICK_CAPABILITY`, `DELIVERY_GOODS_ISSUE_CAPABILITY`, `SALES_DELIVERY_CREATE_CAPABILITY`, `DELIVERY_ROUTE` (`DELIVERY_TYPE` removed).
-- `src/modules/sales/billing.ts` — billing doc creation from goods-issued delivery or billing-plan date, posts via finance's `postCustomerInvoice`, cancels via `cancelCustomerInvoice`; collective billing (due list grouped by split criteria), split-criterion config, revenue account determination per line, down-payment clearing, rebate accrual/reversal, invoice-list relevance, output. Exports: `createBillingFromDelivery`, `createBillingFromPlanDate`, `postBillingDocument`, `cancelBillingDocument`, `linkPostedInvoice`, `getBilling`, `listBillableDeliveries`, `listBillings`, `billingDueList`, `groupDueList`, `billDueList`, `listSplitCriteria`, `saveSplitCriterion`, `setSplitCriterionStatus`, `chartOfAccountsFor`, `revenueAccountFor`, `salesDocumentFlow`, `goodsIssueStands`, `BillingError`, `INVOICE_LIST_SCHEDULES`, `BILLING_CAPABILITY`, `BILLING_CANCEL_CAPABILITY`, `SALES_BILLING_CREATE_CAPABILITY`, `SPLIT_DEFINE_CAPABILITY`, `BILLING_ROUTE`, `BILLING_SPLIT_ROUTE`, `REVENUE_EVENT` (`BILLING_TYPE` removed).
-- `src/modules/sales/fulfillment-quantities.ts` — source of truth for delivered/billed qty per order line, read live from delivery/billing rows (no stored counter); now excludes returns deliveries (`LR`). Exports: `orderLineProgress`, `deliveredOf`, `billedOf`, `fulfillmentDocumentsOf`.
-- `src/modules/sales/exposure.ts` — open sales commitments (undelivered order value + delivered-not-billed value) per customer/credit area, consumed by finance's credit engine; now excludes returns orders/deliveries. Exports: `openSalesCommitments`.
-- `src/modules/sales/goods-issue-reversal.ts` — called by inventory's material-document reversal: refuses reversing a billed goods issue, rolls delivery back to PICKED/OPEN when reversed. Exports: `refuseGoodsIssueReversal`, `noteGoodsIssueReversed`, `GoodsIssueReversalError`.
-- `src/modules/sales/availability.ts` — ATP check vs plant stock + production's checking group/rule, writes `sales_order_schedule` lines. Exports: `availableToPromise`, `confirmOrderLines`, `writeScheduleLines`, `scheduleLinesOf`, `AvailabilityError`, `ORDER_CHECKING_RULE`, `DELIVERY_CHECKING_RULE`, `AVAILABILITY_ROUTE`.
-- `src/modules/sales/partners.ts` — partner functions sold-to/ship-to/bill-to/payer: customer partner master (KNVP) + per-document partners (VBPA). Exports: `resolvePartners`, `documentPartners`, `writeDocumentPartners`, `partnersForDocument`, `listPartnerFunctions`, `listCustomerPartners`, `saveCustomerPartner`, `changeCustomerPartnerStatus`, `partnerAddress`, `isPartnerFunction`, `PartnerError`, `PARTNER_CAPABILITY`, `PARTNER_ROUTE`, `PARTNER_ALIASES`.
-- `src/modules/sales/material-sales.ts` — reads inventory's `material_sales` view per sales area (salable? sales unit). Exports: `readMaterialSales`, `assertMaterialSalesArea`, `MaterialSalesError`, `MATERIAL_SALES_ROUTE`.
+## Files (96)
+| file | exports | tables |
+|---|---|---|
+| **app/config/batch-determination/** | | |
+| actions.ts | saveBatchRuleAction |  |
+| BatchDetermination.tsx | BatchDetermination |  |
+| page.tsx | BatchDeterminationPage |  |
+| **app/config/billing-split/** | | |
+| actions.ts | setSplitCriterionAction |  |
+| BillingSplit.tsx | BillingSplit |  |
+| page.tsx | BillingSplitPage |  |
+| **app/config/incompletion/** | | |
+| actions.ts | saveIncompletionStatusGroupAction, changeIncompletionStatusGroupAction, saveIncompletionProcedureAction, saveIncompletionProcedureFieldAction, withdrawIncompletionProcedureFieldAction, assignIncompletionProcedureAction, withdrawIncompletionAssignmentAction |  |
+| IncompletionSetup.tsx | IncompletionSetup |  |
+| page.tsx | IncompletionPage |  |
+| **app/config/pricing-procedure/** | | |
+| actions.ts | defineConditionTypeAction, changeConditionTypeAction, defineProcedureAction, changeProcedureAction, addStepAction, changeStepAction, defineDeterminationAction, changeDeterminationAction |  |
+| page.tsx | PricingProcedurePage |  |
+| PricingProcedureSetup.tsx | PricingProcedureSetup |  |
+| **app/config/sales-account-determination/** | | |
+| actions.ts | defineAccountDeterminationAction, changeAccountDeterminationAction |  |
+| page.tsx | SalesAccountDeterminationPage |  |
+| SalesAccountDeterminationSetup.tsx | SalesAccountDeterminationSetup |  |
+| **app/config/sales-document-types/** | | |
+| actions.ts | defineDocumentTypeAction, changeDocumentTypeAction, setDocumentTypeActiveAction |  |
+| page.tsx | SalesDocumentTypesPage |  |
+| SalesDocumentTypeSetup.tsx | SalesDocumentTypeSetup |  |
+| **app/config/sales-returns/** | | |
+| actions.ts | saveReturnsConfigurationAction |  |
+| page.tsx | SalesReturnsConfigurationPage |  |
+| ReturnsChainSetup.tsx | ReturnsChainSetup |  |
+| **app/config/shipping-points/** | | |
+| actions.ts | defineShippingPointAction, changeShippingPointAction, defineShippingConditionAction, changeShippingConditionAction, assignShippingPointAction, changeShippingPointAssignmentAction |  |
+| page.tsx | ShippingPointsPage |  |
+| ShippingConditionSetup.tsx | ShippingConditionSetup |  |
+| ShippingPointAssignmentSetup.tsx | ShippingPointAssignmentSetup |  |
+| ShippingPointSetup.tsx | ShippingPointSetup |  |
+| **app/sales/analysis/** | | |
+| page.tsx | SalesAnalysisPage |  |
+| **app/sales/billing-plans/** | | |
+| actions.ts | saveBillingPlanAction |  |
+| BillingPlans.tsx | BillingPlans |  |
+| page.tsx | SalesBillingPlansPage |  |
+| **app/sales/billing/** | | |
+| actions.ts | createBillingAction, billDueListAction, billPlanDateAction, cancelBillingAction, requestDownPaymentAction, cancelDownPaymentAction, rebillDeliveryAction |  |
+| Billing.tsx | Billing |  |
+| page.tsx | SalesBillingPage |  |
+| **app/sales/conditions/** | | |
+| actions.ts | saveConditionAction |  |
+| Conditions.tsx | Conditions |  |
+| page.tsx | SalesConditionsPage |  |
+| **app/sales/credit-memo-request/** | | |
+| actions.ts | createCreditMemoRequestAction, releaseBillingBlockAction, createCreditMemoAction, postCreditMemoAction |  |
+| CreditMemoRequest.tsx | CreditMemoRequest |  |
+| page.tsx | SalesCreditMemoRequestPage |  |
+| **app/sales/credit-memo/** | | |
+| actions.ts | postCreditMemoAction, cancelCreditMemoAction |  |
+| CreditMemo.tsx | CreditMemo |  |
+| page.tsx | SalesCreditMemoPage |  |
+| **app/sales/delivery/** | | |
+| actions.ts | createDeliveryAction, confirmPicksAction, postGoodsIssueAction, cancelDeliveryAction, releaseDeliveryCreditAction |  |
+| Delivery.tsx | Delivery |  |
+| page.tsx | SalesDeliveryPage |  |
+| **app/sales/documents/** | | |
+| page.tsx | SalesDocumentsPage |  |
+| **app/sales/incomplete/** | | |
+| page.tsx | IncompleteDocumentsPage |  |
+| **app/sales/invoice-lists/** | | |
+| actions.ts | createInvoiceListAction, releaseInvoiceListAction, cancelInvoiceListAction |  |
+| InvoiceLists.tsx | InvoiceLists |  |
+| page.tsx | SalesInvoiceListsPage |  |
+| **app/sales/orders/** | | |
+| actions.ts | createOrderAction, changeOrderAction, cancelOrderAction, releaseCreditAction |  |
+| Orders.tsx | Orders |  |
+| page.tsx | SalesOrdersPage |  |
+| **app/sales/output/** | | |
+| actions.ts | runSalesOutputAction, dispatchSalesOutputAction, reissueSalesOutputAction, setSalesOutputRecipientAction, saveOutputConditionAction, setOutputConditionStatusAction |  |
+| page.tsx | SalesOutputPage |  |
+| SalesOutput.tsx | SalesOutput |  |
+| **app/sales/rebate-agreements/** | | |
+| actions.ts | saveRebateAgreementAction, releaseRebateAgreementAction, settleRebateAgreementAction |  |
+| page.tsx | SalesRebateAgreementsPage |  |
+| RebateAgreements.tsx | RebateAgreements |  |
+| **app/sales/returns/** | | |
+| actions.ts | createReturnsOrderAction, createReturnsDeliveryAction, receiveReturnsDeliveryAction |  |
+| page.tsx | SalesReturnsPage |  |
+| Returns.tsx | Returns |  |
+| **modules/sales/** | | |
+| account-determination-maintenance.ts | ACCOUNT_DETERMINATION_CAPABILITY, ACCOUNT_DETERMINATION_OBJECT_CLASS, AccountDeterminationMaintenanceError, listAccountDetermination, defineAccountDetermination, changeAccountDeterminationStatus | chart_of_accounts, gl_account, sales_account_determination, sales_org |
+| account-determination.ts | ACCOUNT_DETERMINATION_ROUTE, ACCOUNT_KEYS, DELIVERED_ACCOUNT_DETERMINATION, SalesAccountDeterminationError, determineSalesAccount, determineLineAccounts | sales_account_determination |
+| analysis.ts | ANALYSIS_KINDS, ANALYSIS_KIND_MEANING, GROUP_BY, GROUP_BY_MEANING, PERIODS, ANALYSIS_LIMIT, listAnalysis | billing_document, billing_document_line, business_partner, delivery, delivery_line, material, sales_area, sales_condition_type, sales_document_condition, sales_document_type, sales_order, sales_order_line, sales_returns_configuration |
+| availability.ts | AVAILABILITY_ROUTE, ORDER_CHECKING_RULE, DELIVERY_CHECKING_RULE, AvailabilityError, availableToPromise, confirmOrderLines, writeScheduleLines, scheduleLinesOf | availability_check_scope, availability_checking_group, availability_checking_rule, delivery, delivery_line, material_plant, material_sales, sales_order, sales_order_line, sales_order_schedule, stock_quantity |
+| batch-determination.ts | BATCH_DETERMINATION_ROUTE, BATCH_DETERMINATION_CAPABILITY, batchRuleInput, BatchDeterminationError, saveBatchDeterminationRule, listBatchDeterminationRules, determineBatches, determineBatchesOn, determineBatchesForDelivery, SORT_RULES, SORT_RULE_MEANING | batch, stock_quantity |
+| batch-sort-rules.ts | SORT_RULES, SORT_RULE_MEANING |  |
+| billing-plan.ts | BILLING_PLAN_ROUTE, BILLING_PLAN_CAPABILITY, BILLING_PLAN_OBJECT_CLASS, BillingPlanError, billingPlanDateInput, billingPlanSaveInput, itemKey, plansForItems, planTypeChoices, getBillingPlan, listBillingPlans, listBillablePlanDates, loadBillablePlanDate, saveBillingPlan, markPlanDateBilled, releasePlanDateForBilling | sales_billing_plan, sales_billing_plan_date, sales_billing_plan_type, sales_order, sales_order_line |
+| billing.ts | BILLING_CAPABILITY, BILLING_CANCEL_CAPABILITY, BILLING_ROUTE, BILLING_OBJECT_CLASS, BILLING_SPLIT_ROUTE, SPLIT_DEFINE_CAPABILITY, REVENUE_EVENT, BillingError, billingCreateInput, billingCancelInput, listSplitCriteria, saveSplitCriterion, setSplitCriterionStatus, groupDueList, billDueList, billingPlanDateBillingInput, getBilling, billingDueList, listBillableDeliveries, listBillings, chartOfAccountsFor, revenueAccountFor, INVOICE_LIST_SCHEDULES, SALES_BILLING_CREATE_CAPABILITY, createBillingFromDelivery, createBillingFromPlanDate, linkPostedInvoice, postBillingDocument, cancelBillingDocument, salesDocumentFlow, goodsIssueStands | account_determination, billing_document, billing_document_line, company_code, customer_sales_area, delivery, delivery_line, incompletion_status_group, material_document_line, material_sales, sales_billing_plan, sales_billing_plan_date, sales_billing_split_criterion, sales_document_partner, sales_document_type, sales_incompletion_log, sales_order, sales_order_line |
+| conditions.ts | CONDITION_CAPABILITY, CONDITION_OBJECT_CLASS, CONDITION_ROUTE, CONDITION_ALIASES, ConditionError, conditionInput, saveSalesCondition, listSalesConditions | bp_role, business_partner, currency, material, sales_area, sales_condition_record, sales_condition_type |
+| credit-memo.ts | CREDIT_MEMO_TRANSACTION, CREDIT_MEMO_ROUTE, CREDIT_MEMO_REQUEST_CAPABILITY, CREDIT_MEMO_RELEASE_CAPABILITY, CREDIT_MEMO_POST_CAPABILITY, CreditMemoError, createCreditMemo, postCreditMemo, createCreditMemoRequest, releaseBillingBlock, listCreditMemoRequests | billing_document, billing_document_line, sales_order, sales_order_line |
+| delivering-plant.ts | CUSTOMER_MASTER_ROUTE, MATERIAL_MASTER_ROUTE, DeliveringPlantError, deliveryTermsFor, deliveringPlantFor | customer_sales_area, material_sales |
+| delivery.ts | DELIVERY_CAPABILITY, DELIVERY_PICK_CAPABILITY, DELIVERY_GOODS_ISSUE_CAPABILITY, DELIVERY_ROUTE, DELIVERY_OBJECT_CLASS, DELIVERY_GOODS_ISSUE_MOVEMENT, DeliveryError, deliveryItemInput, deliveryCreateInput, deliveryPickItemInput, deliveryPickInput, deliveryIssueInput, deliveryCancelInput, standingDetermination, getDelivery, listDeliverableOrderLines, listDeliveries, SALES_DELIVERY_CREATE_CAPABILITY, createDelivery, confirmDeliveryPicks, postDeliveryGoodsIssue, cancelDelivery | billing_document, business_partner, credit_determination, delivery, delivery_line, delivery_picking, incompletion_status_group, material, plant, sales_incompletion_log, sales_order, sales_order_line, unit_of_measure |
+| document-type-maintenance.ts | DOCUMENT_TYPE_OBJECT_CLASS, SalesDocumentTypeError, listSalesDocumentTypes, defineSalesDocumentType, changeSalesDocumentType, setSalesDocumentTypeActive, activeSalesDocumentTypes, DOCUMENT_TYPE_DEFINE_CAPABILITY | billing_document, delivery, number_range, sales_document_type, sales_order |
+| document-type.ts | STANDARD_ORDER_TYPE, STANDARD_DELIVERY_TYPE, STANDARD_BILLING_TYPE, STANDARD_BILLING_CANCELLATION_TYPE, STANDARD_RETURNS_DELIVERY_TYPE, STANDARD_RETURNS_ORDER_TYPE, STANDARD_CREDIT_MEMO_TYPE, STANDARD_CREDIT_MEMO_REQUEST_TYPE, STANDARD_DOWN_PAYMENT_REQUEST_TYPE, STANDARD_INVOICE_LIST_TYPE, STANDARD_REBATE_SETTLEMENT_TYPE, STANDARD_SALES_DOCUMENT_TYPES, salesDocumentTypeFor, DOCUMENT_TYPE_ROUTE, DOCUMENT_TYPE_DEFINE_CAPABILITY, DOCUMENT_TYPE_REMEDY | sales_document_type |
+| down-payment.ts | DOWN_PAYMENT_OBJECT_CLASS, DownPaymentError, downPaymentRequestInput, downPaymentCancelInput, requestDownPaymentFromPlanDate, cancelDownPaymentRequest, orderDownPayments, clearDownPaymentsForInvoice | billing_document, billing_document_line, customer_down_payment_request, down_payment_request_fulfillment, sales_down_payment_request, special_gl_config |
+| exposure.ts | openSalesCommitments | billing_document, delivery, delivery_line, sales_order, sales_order_line |
+| fulfillment-quantities.ts | orderLineProgress, fulfillmentDocumentsOf, deliveredOf, billedOf | billing_document, billing_document_line, delivery, delivery_line |
+| goods-issue-reversal.ts | GoodsIssueReversalError, refuseGoodsIssueReversal, noteGoodsIssueReversed | billing_document, delivery, delivery_line |
+| incompletion.ts | INCOMPLETION_CAPABILITY, INCOMPLETION_PROCESS_CAPABILITY, INCOMPLETION_ROUTE, INCOMPLETION_WORKLIST_ROUTE, ORDER_ROUTE, DELIVERY_ROUTE, INCOMPLETION_STATUS_GROUP_OBJECT_CLASS, INCOMPLETION_PROCEDURE_OBJECT_CLASS, INCOMPLETION_PROCEDURE_FIELD_OBJECT_CLASS, INCOMPLETION_ASSIGNMENT_OBJECT_CLASS, BLOCKED_FUNCTIONS, IncompletionError, checkableFields, evaluateIncompletion, readIncompletion, blockingEntries, describeBlocked, blockedFor, listIncompleteDocuments, listIncompletionConfiguration, saveIncompletionStatusGroup, changeIncompletionStatusGroupStatus, saveIncompletionProcedure, changeIncompletionProcedureStatus, saveIncompletionProcedureField, withdrawIncompletionProcedureField, assignIncompletionProcedure, withdrawIncompletionAssignment | delivery, delivery_line, delivery_picking, incompletion_assignment, incompletion_group, incompletion_procedure, incompletion_procedure_field, incompletion_status_group, sales_document_partner, sales_document_type, sales_incompletion_log, sales_order, sales_order_line, sales_order_schedule |
+| invoice-list.ts | INVOICE_LIST_OBJECT_CLASS, INVOICE_LIST_TYPE, INVOICE_LIST_CREATE_CAPABILITY, INVOICE_LIST_RELEASE_CAPABILITY, INVOICE_LIST_ROUTE, InvoiceListError, invoiceListDueDocuments, getInvoiceList, listInvoiceLists, createInvoiceListInputSchema, createInvoiceList, releaseInvoiceList, cancelInvoiceList | billing_document, billing_document_line, company_code, customer_sales_area, material_sales, sales_document_partner, sales_invoice_list_item, tax_code |
+| material-sales.ts | MATERIAL_SALES_ROUTE, MaterialSalesError, readMaterialSales, assertMaterialSalesArea | material_sales |
+| output.ts | SALES_OUTPUT_ROUTE, SALES_OUTPUT_CAPABILITY, SALES_OUTPUT_ADMIN_CAPABILITY, SALES_OUTPUT_OBJECT_CLASS, OUTPUT_CONDITION_OBJECT_CLASS, SALES_OUTPUT_CATEGORIES, DELIVERED_SALES_OUTPUT_TYPES, CATEGORY_OUTPUT_TYPE, SalesOutputError, ACCESS_SEQUENCE_VIEW, determineSalesOutputs, recordSalesOutputs, renderSalesDocument, dispatchSalesOutput, reissueSalesOutput, setSalesOutputRecipient, listSalesOutput, determineSalesOutputsForSelection, dispatchPendingSalesOutput, saveOutputConditionRecord, listOutputConditionRecords, setOutputConditionRecordStatus, salesOutputTypeChoices | billing_document, billing_document_line, business_partner, delivery, delivery_line, material, output_condition_record, output_message, output_type, sales_order, sales_order_line |
+| partners.ts | PARTNER_CAPABILITY, PARTNER_OBJECT_CLASS, PARTNER_ROUTE, PARTNER_ALIASES, PartnerError, isPartnerFunction, resolvePartners, documentPartners, writeDocumentPartners, partnersForDocument, listPartnerFunctions, listCustomerPartners, saveCustomerPartner, changeCustomerPartnerStatus, partnerAddress | bp_role, business_partner, customer_sales_partner, sales_document_partner, sales_partner_function |
+| pricing-procedure-maintenance.ts | PRICING_DEFINE_CAPABILITY, PRICING_PROCEDURE_OBJECT_CLASS, CONDITION_TYPE_OBJECT_CLASS, DETERMINATION_OBJECT_CLASS, CONDITION_CLASSES, CALCULATION_TYPES, CONDITION_LEVELS, PricingProcedureMaintenanceError, listPricingConfiguration, defineConditionType, changeConditionType, definePricingProcedure, changePricingProcedure, addPricingProcedureStep, changePricingProcedureStep, defineProcedureDetermination, changeProcedureDetermination, conditionRecordsStanding | sales_area, sales_condition_record, sales_condition_type, sales_document_condition, sales_order, sales_pricing_procedure, sales_pricing_procedure_step, sales_procedure_determination |
+| pricing-procedure.ts | PRICING_PROCEDURE_ROUTE, STANDARD_PRICING_PROCEDURE, DELIVERED_CONDITION_TYPES, DELIVERED_PRICING_STEPS, STANDARD_DOCUMENT_PRICING_PROCEDURE, PricingProcedureError, roundAmount, resolvePricingProcedure, priceDocument, taxStep, TAX_CONDITION_TYPE, TAX_ACCOUNT_KEY, TAX_STEP_NUMBER, taxConditionFor, writeDocumentConditions, documentConditionsOf, salesDocumentConditionsOf, scaleLineConditions, pricingProcedureDeterminationRows | company_code, material_valuation, sales_condition_record, sales_condition_type, sales_document_condition, sales_pricing_procedure_step, sales_procedure_determination, tax_code |
+| pricing.ts | PricingError, resolveCustomerSalesData, assertMaterialAtPlant | customer_sales_area, material_plant |
+| rebate.ts | REBATE_ROUTE, REBATE_CAPABILITY, REBATE_SETTLEMENT_CAPABILITY, REBATE_TRANSACTION, REBATE_AGREEMENT_OBJECT_CLASS, REBATE_ACCRUAL_OBJECT_CLASS, RebateError, saveRebateAgreement, releaseRebateAgreement, listRebateAgreements, rebateAccrualsForBilling, rebateRegister, rebateConditionTypes, accrueRebatesForBilling, reverseRebateAccrualsForBilling, settleRebateAgreement | billing_document, billing_document_line, bp_role, business_partner, company_code, customer_sales_area, material_sales, sales_condition_record, sales_condition_type, sales_order, sales_rebate_accrual, sales_rebate_agreement |
+| registers.ts | REGISTER_KINDS, REGISTER_KIND_MEANING, REGISTER_LIMIT, listDocumentRegister, listDueRegister, listRegisterChoices | billing_document, business_partner, delivery, material, plant, sales_area, sales_document_type, sales_order, sales_order_line, sales_returns_configuration |
+| returns-configuration.ts | RETURNS_CONFIGURATION_ROUTE, RETURNS_DEFINE_CAPABILITY, ReturnsConfigurationError, returnsChain, getReturnsConfiguration, saveReturnsConfiguration | movement_type, sales_document_type, sales_order, sales_returns_configuration |
+| returns.ts | RETURNS_RECEIPT_TRANSACTION, RETURNS_ROUTE, RETURNS_ORDER_CAPABILITY, RETURNS_DELIVERY_CAPABILITY, RETURNS_RECEIPT_CAPABILITY, RETURNS_RECEIPT_CODE, RETURNS_RECEIPT_REVERSAL_CODE, ReturnsError, DELIVERED_RETURNS_RECEIPT_MOVEMENT, DELIVERED_RETURNS_MOVEMENTS, ensureReturnsMovements, resolveReturnsMovement, postReturnsReceipt, postReturnsReceiptInTx, RETURNS_DELIVERY_TRANSACTION, createReturnsDelivery, postReturnsDelivery, RETURNS_ORDER_TRANSACTION, createReturnsOrder, listReturnsOrders, listReturnsDeliveries | billing_document, billing_document_line, business_partner, delivery, delivery_line, material, material_document, material_document_line, movement_type, plant, sales_order, sales_order_line, stock_quantity |
+| sales-order.ts | SALES_ORDER_CAPABILITY, SALES_ORDER_RELEASE_CAPABILITY, SALES_ORDER_OBJECT_CLASS, SALES_ORDER_ROUTE, SalesOrderError, orderLineInput, orderCreateInput, orderChangeInput, creditAreaFor, getSalesOrder, SALES_ORDER_CREATE_CAPABILITY, createSalesOrder, changeSalesOrder, cancelSalesOrder, listSalesOrderDocuments, salesOrderChoices, releaseSalesOrderCredit | bp_role, business_partner, company_code, credit_determination, customer_credit, material, plant, sales_area, sales_order, sales_order_line, sales_order_schedule, unit_of_measure |
+| schema.ts | ORDER_STATUSES, ORDER_LINE_STATUSES, salesDocumentType, salesReturnsConfiguration, salesOrder, salesOrderLine, salesOrderSchedule, salesConditionType, salesConditionRecord, salesPricingProcedure, salesPricingProcedureStep, salesProcedureDetermination, salesAccountDetermination, salesDocumentCondition, salesTableNames, shippingCondition, shippingPoint, shippingPointDetermination, DELIVERY_STATUSES, delivery, deliveryLine, deliveryPicking, deliveryPickingSerial, BILLING_STATUSES, billingDocument, billingDocumentLine, BILLING_SPLIT_CRITERIA, DELIVERED_SPLIT_CRITERIA, salesInvoiceListItem, salesBillingSplitCriterion, salesBillingPlanType, DELIVERED_BILLING_PLAN_TYPES, BILLING_PLAN_DATE_STATUSES, BILLING_PLAN_DATE_RULES, salesBillingPlan, salesBillingPlanDate, salesDownPaymentRequest, DOWN_PAYMENT_REQUEST_STATUSES, REBATE_AGREEMENT_STATUSES, salesRebateAgreement, REBATE_ACCRUAL_STATUSES, salesRebateAccrual, PARTNER_FUNCTIONS, PARTNER_DOCUMENT_CATEGORIES, DELIVERED_PARTNER_FUNCTIONS, salesPartnerFunction, customerSalesPartner, salesDocumentPartner, INCOMPLETION_GROUPS, INCOMPLETION_DOCUMENT_CATEGORIES, DELIVERED_INCOMPLETION_GROUPS, incompletionGroup, incompletionStatusGroup, incompletionProcedure, incompletionProcedureField, incompletionAssignment, salesIncompletionLog, salesBatchDeterminationRule | billing_document, billing_document_line, customer_sales_partner, delivery, delivery_line, delivery_picking, delivery_picking_serial, incompletion_assignment, incompletion_group, incompletion_procedure, incompletion_procedure_field, incompletion_status_group, sales_account_determination, sales_batch_determination_rule, sales_billing_plan, sales_billing_plan_date, sales_billing_plan_type, sales_billing_split_criterion, sales_condition_record, sales_condition_type, sales_document_condition, sales_document_partner, sales_document_type, sales_down_payment_request, sales_incompletion_log, sales_invoice_list_item, sales_order, sales_order_line, sales_order_schedule, sales_partner_function, sales_pricing_procedure, sales_pricing_procedure_step, sales_procedure_determination, sales_rebate_accrual, sales_rebate_agreement, sales_returns_configuration, shipping_condition, shipping_point, shipping_point_determination |
+| shipping-point-maintenance.ts | SHIPPING_POINT_CAPABILITY, SHIPPING_POINT_OBJECT_CLASS, SHIPPING_CONDITION_OBJECT_CLASS, SHIPPING_POINT_DETERMINATION_OBJECT_CLASS, ShippingPointMaintenanceError, listShippingPointConfiguration, defineShippingPoint, changeShippingPointStatus, defineShippingCondition, changeShippingConditionStatus, assignShippingPoint, changeShippingPointAssignmentStatus | customer_sales_area, material_sales, plant, shipping_condition, shipping_point, shipping_point_determination |
+| shipping-point.ts | SHIPPING_POINT_ROUTE, SHIPPING_POINT_ALIASES, ShippingPointError, shippingPointFor, shippingConditionOf, loadingGroupOf | customer_sales_area, material_sales, shipping_condition, shipping_point, shipping_point_determination |
 
-### Pricing & account determination
-- `src/modules/sales/conditions.ts` — condition-record (price) maintenance: insert-only, close-day-before supersession, never overwrite; now any condition type from `sales_condition_type` (default PR00; refuses unknown types and `MATERIAL_COST`), type code prefixes the condition number. Exports: `saveSalesCondition`, `listSalesConditions`, `ConditionError`, `CONDITION_CAPABILITY`, `CONDITION_ROUTE`, `CONDITION_ALIASES`.
-- `src/modules/sales/pricing.ts` — pre-pricing checks only now (price itself moved to `pricing-procedure.ts`): customer-sales-area resolution, material-at-plant check. Exports: `resolveCustomerSalesData`, `assertMaterialAtPlant`, `PricingError` (`priceItem`, `itemNetAmount`, `PRICING_CONDITION_TYPE` removed).
-- `src/modules/sales/pricing-procedure.ts` — condition technique: procedure determination, ordered steps, document pricing (PR00, K007, KF00, HD00, VPRS, MWST, BO01 delivered), tax step, stored document conditions + scaling to delivered qty. Exports: `resolvePricingProcedure`, `priceDocument`, `taxStep`, `taxConditionFor`, `writeDocumentConditions`, `documentConditionsOf`, `salesDocumentConditionsOf`, `scaleLineConditions`, `roundAmount`, `pricingProcedureDeterminationRows`, `PricingProcedureError`, `STANDARD_PRICING_PROCEDURE`, `DELIVERED_CONDITION_TYPES`, `DELIVERED_PRICING_STEPS`, `TAX_CONDITION_TYPE`, `PRICING_PROCEDURE_ROUTE`.
-- `src/modules/sales/pricing-procedure-maintenance.ts` — config CRUD for condition types, procedures/steps, procedure determination. Exports: `listPricingConfiguration`, `defineConditionType`, `changeConditionType`, `definePricingProcedure`, `changePricingProcedure`, `addPricingProcedureStep`, `changePricingProcedureStep`, `defineProcedureDetermination`, `changeProcedureDetermination`, `conditionRecordsStanding`, `PricingProcedureMaintenanceError`, `PRICING_DEFINE_CAPABILITY`, `CONDITION_CLASSES`, `CALCULATION_TYPES`, `CONDITION_LEVELS`.
-- `src/modules/sales/account-determination.ts` — revenue account determination (VKOA): 5-part key → G/L account per account key/condition line. Exports: `determineSalesAccount`, `determineLineAccounts`, `SalesAccountDeterminationError`, `ACCOUNT_KEYS`, `DELIVERED_ACCOUNT_DETERMINATION`, `ACCOUNT_DETERMINATION_ROUTE`.
-- `src/modules/sales/account-determination-maintenance.ts` — VKOA config CRUD. Exports: `listAccountDetermination`, `defineAccountDetermination`, `changeAccountDeterminationStatus`, `AccountDeterminationMaintenanceError`, `ACCOUNT_DETERMINATION_CAPABILITY`.
+## Routes (22)
+`/config/batch-determination` · `/config/billing-split` · `/config/incompletion` · `/config/pricing-procedure` · `/config/sales-account-determination` · `/config/sales-document-types` · `/config/sales-returns` · `/config/shipping-points` · `/sales/analysis` · `/sales/billing-plans` · `/sales/billing` · `/sales/conditions` · `/sales/credit-memo-request` · `/sales/credit-memo` · `/sales/delivery` · `/sales/documents` · `/sales/incomplete` · `/sales/invoice-lists` · `/sales/orders` · `/sales/output` · `/sales/rebate-agreements` · `/sales/returns`
 
-### Document types, incompletion & output
-- `src/modules/sales/document-type.ts` — document types as rows (code, number range, cancellation type, active); standard codes OR/LF/F2/S1/LR/RE/G2/CR/DP/IL/B1. Exports: `salesDocumentTypeFor`, `STANDARD_*_TYPE` constants, `STANDARD_SALES_DOCUMENT_TYPES`, `DOCUMENT_TYPE_ROUTE`, `DOCUMENT_TYPE_DEFINE_CAPABILITY`, `DOCUMENT_TYPE_REMEDY`.
-- `src/modules/sales/document-type-maintenance.ts` — document-type config CRUD. Exports: `listSalesDocumentTypes`, `defineSalesDocumentType`, `changeSalesDocumentType`, `setSalesDocumentTypeActive`, `activeSalesDocumentTypes`, `SalesDocumentTypeError`.
-- `src/modules/sales/incompletion.ts` — incompletion procedures/status groups/assignments config, evaluation into `sales_incompletion_log`, blocked-function checks (delivery/billing), worklist; notifies via platform notification. Exports: `evaluateIncompletion`, `readIncompletion`, `blockingEntries`, `describeBlocked`, `blockedFor`, `listIncompleteDocuments`, `checkableFields`, `listIncompletionConfiguration`, `saveIncompletionStatusGroup`, `changeIncompletionStatusGroupStatus`, `saveIncompletionProcedure`, `changeIncompletionProcedureStatus`, `saveIncompletionProcedureField`, `withdrawIncompletionProcedureField`, `assignIncompletionProcedure`, `withdrawIncompletionAssignment`, `IncompletionError`, `BLOCKED_FUNCTIONS`, `INCOMPLETION_CAPABILITY`, `INCOMPLETION_PROCESS_CAPABILITY`, `INCOMPLETION_ROUTE`, `INCOMPLETION_WORKLIST_ROUTE`.
-- `src/modules/sales/output.ts` — order confirmation/delivery note/invoice output: determination via foundation's output condition records, render, dispatch/reissue, output list. Exports: `determineSalesOutputs`, `recordSalesOutputs`, `renderSalesDocument`, `dispatchSalesOutput`, `reissueSalesOutput`, `setSalesOutputRecipient`, `listSalesOutput`, `determineSalesOutputsForSelection`, `dispatchPendingSalesOutput`, `saveOutputConditionRecord`, `listOutputConditionRecords`, `setOutputConditionRecordStatus`, `salesOutputTypeChoices`, `SalesOutputError`, `SALES_OUTPUT_CATEGORIES`, `SALES_OUTPUT_CAPABILITY`, `SALES_OUTPUT_ADMIN_CAPABILITY`, `SALES_OUTPUT_ROUTE`.
-
-### Shipping & batches
-- `src/modules/sales/shipping-point.ts` — shipping-point determination (shipping condition + loading group + plant). Exports: `shippingPointFor`, `shippingConditionOf`, `loadingGroupOf`, `ShippingPointError`, `SHIPPING_POINT_ROUTE`, `SHIPPING_POINT_ALIASES`.
-- `src/modules/sales/shipping-point-maintenance.ts` — config CRUD for shipping points/conditions/assignments. Exports: `listShippingPointConfiguration`, `defineShippingPoint`, `changeShippingPointStatus`, `defineShippingCondition`, `changeShippingConditionStatus`, `assignShippingPoint`, `changeShippingPointAssignmentStatus`, `ShippingPointMaintenanceError`, `SHIPPING_POINT_CAPABILITY`.
-- `src/modules/sales/delivering-plant.ts` — honours customer-sales-area delivering plant, complete-delivery and order-combination flags. Exports: `deliveryTermsFor`, `deliveringPlantFor`, `DeliveringPlantError`, `CUSTOMER_MASTER_ROUTE`, `MATERIAL_MASTER_ROUTE`.
-- `src/modules/sales/batch-determination.ts` — batch rules + proposal of batches for delivery items from inventory batch stock. Exports: `saveBatchDeterminationRule`, `listBatchDeterminationRules`, `determineBatches`, `determineBatchesOn`, `determineBatchesForDelivery`, `batchRuleInput`, `BatchDeterminationError`, `BATCH_DETERMINATION_CAPABILITY`, `BATCH_DETERMINATION_ROUTE` (re-exports sort rules).
-- `src/modules/sales/batch-sort-rules.ts` — DB-free sort-rule constants for client components. Exports: `SORT_RULES`, `SortRule`, `SORT_RULE_MEANING`.
-
-### Returns & credit
-- `src/modules/sales/returns.ts` — returns order (RE), returns delivery (LR), returns receipt (movement 651 into RETURNS stock, own inventory posting path). Exports: `createReturnsOrder`, `createReturnsDelivery`, `postReturnsDelivery`, `postReturnsReceipt`, `postReturnsReceiptInTx`, `listReturnsOrders`, `listReturnsDeliveries`, `ensureReturnsMovements`, `resolveReturnsMovement`, `ReturnsError`, `DELIVERED_RETURNS_MOVEMENTS`, `RETURNS_ORDER_CAPABILITY`, `RETURNS_DELIVERY_CAPABILITY`, `RETURNS_RECEIPT_CAPABILITY`, `RETURNS_ROUTE`.
-- `src/modules/sales/returns-configuration.ts` — which doc types/movement the returns chain uses (config). Exports: `returnsChain`, `getReturnsConfiguration`, `saveReturnsConfiguration`, `ReturnsConfigurationError`, `RETURNS_DEFINE_CAPABILITY`, `RETURNS_CONFIGURATION_ROUTE`.
-- `src/modules/sales/credit-memo.ts` — sales credit memo (G2) priced from the original billing line, and credit memo request (CR) with billing block/release; receivable via finance's `postCustomerCreditMemo`. Exports: `createCreditMemo`, `postCreditMemo`, `createCreditMemoRequest`, `releaseBillingBlock`, `listCreditMemoRequests`, `CreditMemoError`, `CREDIT_MEMO_REQUEST_CAPABILITY`, `CREDIT_MEMO_RELEASE_CAPABILITY`, `CREDIT_MEMO_POST_CAPABILITY`, `CREDIT_MEMO_ROUTE`.
-
-### Billing plans, down payments, rebates, invoice lists
-- `src/modules/sales/billing-plan.ts` — periodic/milestone billing plans (FPLA/FPLT) per order item; plan dates billed via `createBillingFromPlanDate`. Exports: `saveBillingPlan`, `getBillingPlan`, `listBillingPlans`, `listBillablePlanDates`, `loadBillablePlanDate`, `markPlanDateBilled`, `releasePlanDateForBilling`, `plansForItems`, `planTypeChoices`, `itemKey`, `BillingPlanError`, `BILLING_PLAN_CAPABILITY`, `BILLING_PLAN_ROUTE`.
-- `src/modules/sales/down-payment.ts` — down-payment request from a plan date (finance's down-payment request service) and clearing against the final invoice. Exports: `requestDownPaymentFromPlanDate`, `cancelDownPaymentRequest`, `orderDownPayments`, `clearDownPaymentsForInvoice`, `DownPaymentError`.
-- `src/modules/sales/rebate.ts` — rebate agreements (save/release), accrual on billing post, reversal on cancel, settlement credit memo. Exports: `saveRebateAgreement`, `releaseRebateAgreement`, `listRebateAgreements`, `rebateAccrualsForBilling`, `rebateRegister`, `rebateConditionTypes`, `accrueRebatesForBilling`, `reverseRebateAccrualsForBilling`, `settleRebateAgreement`, `RebateError`, `REBATE_CAPABILITY`, `REBATE_SETTLEMENT_CAPABILITY`, `REBATE_ROUTE`.
-- `src/modules/sales/invoice-list.ts` — invoice lists (VF21/VF24): groups due billing docs per payer schedule; list release posts the single receivable. Exports: `invoiceListDueDocuments`, `getInvoiceList`, `listInvoiceLists`, `createInvoiceList`, `releaseInvoiceList`, `cancelInvoiceList`, `createInvoiceListInputSchema`, `InvoiceListError`, `INVOICE_LIST_TYPE`, `INVOICE_LIST_CREATE_CAPABILITY`, `INVOICE_LIST_RELEASE_CAPABILITY`, `INVOICE_LIST_ROUTE`.
-
-### Registers & analysis
-- `src/modules/sales/registers.ts` — document registers and due lists (VA05/VL06/VF05). Exports: `listDocumentRegister`, `listDueRegister`, `listRegisterChoices`, `REGISTER_KINDS`, `REGISTER_KIND_MEANING`, `REGISTER_LIMIT`.
-- `src/modules/sales/analysis.ts` — sales analysis (MCTA-style) grouped by customer/material/org/doc type/period. Exports: `listAnalysis`, `ANALYSIS_KINDS`, `GROUP_BY`, `PERIODS`, `ANALYSIS_LIMIT`.
-
-### Screens (`src/app/sales/*`, `src/app/config/*`)
-- `src/app/sales/orders/page.tsx`, `Orders.tsx`, `actions.ts` — sales order screen (list, detail, create, change, cancel, release-credit form actions); grid now grows (posted `lineCount`, max 999 rows) and actions pass session `authorization`.
-- `src/app/sales/delivery/page.tsx`, `Delivery.tsx`, `actions.ts` — delivery screen (create from open order lines, pick confirmation, goods-issue posting, cancel, release-credit); actions pass session `authorization`.
-- `src/app/sales/billing/page.tsx`, `Billing.tsx`, `actions.ts` — billing screen (bill a goods-issued delivery, collective billing from due list, plan-date billing, down-payment requests, rebate accruals, output, document flow display, cancel).
-- `src/app/sales/conditions/page.tsx`, `Conditions.tsx`, `actions.ts` — condition-record maintenance screen.
-- `src/app/sales/credit-memo/page.tsx`, `CreditMemo.tsx`, `actions.ts` — routed under `/sales/` and implemented against `@/modules/finance/customer-credit-memo` and `@/modules/finance/customer-invoice`; page now also reads `listBillings` from `sales/billing` (billing `deliveryNumber` nullable for plan-date docs). See Gotchas.
-- `src/app/sales/credit-memo-request/page.tsx`, `CreditMemoRequest.tsx`, `actions.ts` — credit memo request create, billing-block release, credit memo post (`sales/credit-memo`).
-- `src/app/sales/returns/page.tsx`, `Returns.tsx`, `actions.ts` — returns order → returns delivery → returns receipt.
-- `src/app/sales/billing-plans/page.tsx`, `BillingPlans.tsx`, `actions.ts` — billing plan maintenance per order item.
-- `src/app/sales/invoice-lists/page.tsx`, `InvoiceLists.tsx`, `actions.ts` — create/release/cancel invoice lists.
-- `src/app/sales/rebate-agreements/page.tsx`, `RebateAgreements.tsx`, `actions.ts` — rebate agreement maintain/release/settle.
-- `src/app/sales/output/page.tsx`, `SalesOutput.tsx`, `actions.ts` — output list, dispatch/reissue, output condition records.
-- `src/app/sales/documents/page.tsx` — document registers/due lists (read-only, `sales/registers`).
-- `src/app/sales/analysis/page.tsx` — sales analysis (read-only, `sales/analysis` + `registers`).
-- `src/app/sales/incomplete/page.tsx` — incomplete-documents worklist (`sales/incompletion`).
-- `src/app/config/pricing-procedure/page.tsx`, `PricingProcedureSetup.tsx`, `actions.ts` — condition types, procedures, determination.
-- `src/app/config/sales-account-determination/page.tsx`, `SalesAccountDeterminationSetup.tsx`, `actions.ts` — VKOA maintenance.
-- `src/app/config/sales-document-types/page.tsx`, `SalesDocumentTypeSetup.tsx`, `actions.ts` — sales document types.
-- `src/app/config/incompletion/page.tsx`, `IncompletionSetup.tsx`, `actions.ts` — incompletion procedures/status groups/assignments.
-- `src/app/config/billing-split/page.tsx`, `BillingSplit.tsx`, `actions.ts` — billing split criteria (`sales/billing`).
-- `src/app/config/sales-returns/page.tsx`, `ReturnsChainSetup.tsx`, `actions.ts` — returns chain config.
-- `src/app/config/shipping-points/page.tsx`, `ShippingPointSetup.tsx`, `ShippingConditionSetup.tsx`, `ShippingPointAssignmentSetup.tsx`, `actions.ts` — shipping points, conditions, determination.
-- `src/app/config/batch-determination/page.tsx`, `BatchDetermination.tsx`, `actions.ts` — batch determination rules.
-
-## Pages & API routes
-- `/sales/orders` — create/change/cancel sales order; shows credit determination + release form.
-- `/sales/delivery` — create delivery from order's open lines; confirm picks; post goods issue; cancel.
-- `/sales/billing` — bill a goods-issued delivery (posts receivable via finance); collective billing, plan-date billing, down payments; cancel billing doc.
-- `/sales/conditions` — maintain condition records (VK11/VK12/VK13 aliases), any configured condition type.
-- `/sales/credit-memo` — customer credit memo against billing document/invoice; entirely finance logic surfaced under sales URL space (DI-020's re-bill-after-cancellation path).
-- `/sales/credit-memo-request` — credit memo request (CR), billing-block release, sales credit memo (G2).
-- `/sales/returns` — returns order/delivery/receipt (651).
-- `/sales/billing-plans` — billing plans per order item.
-- `/sales/invoice-lists` — invoice lists (VF21/VF24).
-- `/sales/rebate-agreements` — rebate agreements, settlement.
-- `/sales/output` — sales output list/dispatch, output condition records.
-- `/sales/documents` — registers and due lists (VA05/VL06/VF05).
-- `/sales/analysis` — sales analysis.
-- `/sales/incomplete` — incompletion worklist.
-- `/config/pricing-procedure`, `/config/sales-account-determination`, `/config/sales-document-types`, `/config/incompletion`, `/config/billing-split`, `/config/sales-returns`, `/config/shipping-points`, `/config/batch-determination` — sales configuration screens.
-
-## Database
-**Owns:** `sales_order`, `sales_order_line`, `sales_condition_record`, `delivery`, `delivery_line`, `delivery_picking`, `billing_document`, `billing_document_line`, `sales_order_schedule`, `sales_document_type`, `sales_returns_configuration`, `sales_condition_type`, `sales_pricing_procedure`, `sales_pricing_procedure_step`, `sales_procedure_determination`, `sales_account_determination`, `sales_document_condition`, `shipping_condition`, `shipping_point`, `shipping_point_determination`, `delivery_picking_serial`, `sales_invoice_list_item`, `sales_billing_split_criterion`, `sales_billing_plan_type`, `sales_billing_plan`, `sales_billing_plan_date`, `sales_down_payment_request`, `sales_rebate_agreement`, `sales_rebate_accrual`, `sales_partner_function`, `customer_sales_partner`, `sales_document_partner`, `incompletion_group`, `incompletion_status_group`, `incompletion_procedure`, `incompletion_procedure_field`, `incompletion_assignment`, `sales_incompletion_log`, `sales_batch_determination_rule` (`salesTableNames` lists only 9 — order/condition/pricing/doc-type tables — see Gotchas).
-
-**Reads/writes other modules' tables:**
-- `business_partner`, `bp_role` (foundation) — customer identity, CUSTOMER role check on order/condition save.
-- `company_code`, `sales_area`, `plant`, `tax_code` (foundation) — master data orders/conditions validate against (sales-org/distribution-channel/division config is foundation's, out of scope here).
-- `customer_sales_area` (foundation) — order-block, sales status, pricing procedure defaults, read in `pricing.ts`; also delivering plant/complete-delivery flags (`delivering-plant.ts`), shipping condition (`shipping-point.ts`), invoice-list schedule (`billing.ts`/`invoice-list.ts`).
-- `chart_of_accounts`, `account_determination` (foundation) — revenue account/chart lookup in `billing.ts`/`account-determination-maintenance.ts`; `gl_account` (finance) FK target of `sales_account_determination`.
-- `output_type`, `output_condition_record`, `output_message` (foundation `output-schema`) — sales output determination/dispatch.
-- `material`, `material_plant` (inventory) — material existence, plant extension checks.
-- `material_sales` (inventory) — sales view per sales area (`material-sales.ts`, `availability.ts`, `billing.ts`).
-- `batch`, `stock_quantity` (inventory) — batch determination; `movement_type` (inventory) — returns movement config (651).
-- `availability_checking_group`, `availability_checking_rule`, `availability_check_scope` (production) — ATP in `availability.ts`.
-- `unit_of_measure`, `currency` (platform reference) — UoM decimal-scale, currency validation.
-- `customer_credit`, `credit_determination` (finance, via `finance/credit`) — credit area resolution, BLOCKED/RELEASED/PASSED display; sales only reads, via `listCreditDeterminations`/`standingDetermination`.
-- `customer_down_payment_request`, `down_payment_request_fulfillment` (finance) — read in `down-payment.ts`; written via finance services.
-- `material_document_line` (inventory) — raw SQL in `billing.ts`/`goodsIssueStands`, checks goods issue not reversed before billing.
-- `customer_invoice`/journal tables (finance) — written by `postCustomerInvoice`/`cancelCustomerInvoice` (called from `billing.ts`/`invoice-list.ts`) and `postCustomerCreditMemo` (`credit-memo.ts`, `rebate.ts`); sales stores only returned document numbers. `rebate.ts` also posts accrual journals directly via `platform/posting`.
+## Tables owned (39)
+billing_document, billing_document_line, customer_sales_partner, delivery, delivery_line, delivery_picking, delivery_picking_serial, incompletion_assignment, incompletion_group, incompletion_procedure, incompletion_procedure_field, incompletion_status_group, sales_account_determination, sales_batch_determination_rule, sales_billing_plan, sales_billing_plan_date, sales_billing_plan_type, sales_billing_split_criterion, sales_condition_record, sales_condition_type, sales_document_condition, sales_document_partner, sales_document_type, sales_down_payment_request, sales_incompletion_log, sales_invoice_list_item, sales_order, sales_order_line, sales_order_schedule, sales_partner_function, sales_pricing_procedure, sales_pricing_procedure_step, sales_procedure_determination, sales_rebate_accrual, sales_rebate_agreement, sales_returns_configuration, shipping_condition, shipping_point, shipping_point_determination
 
 ## Depends on
-- **finance** — `checkSalesDocumentCredit`, `listCreditDeterminations`, `releaseDocument`, `customerCredit` schema (credit judgement at order save, delivery create, pick, goods issue, billing release — §14.8 check points); `postCustomerInvoice`/`cancelCustomerInvoice` (receivable hand-off, never posted directly by sales); `postCustomerCreditMemo`/`CustomerCreditMemoError` (credit memo, rebate settlement); `customer-down-payment-request`/`customer-down-payment-clearing` (down payments); `glAccount` schema.
-- **inventory** — `postGoodsIssue` (stock movement/valuation/journal, delivery's goods-issue step runs in its own tx), `toBaseQuantity`/`UnitConversionError` (order-line unit conversion), `resolveStorageLocation`/`storageLocationRequired` (pick location), `materialPlant`/`material` schema, `lineNotReversed` (reversal check used by billing); `capturePickSerialsOn`/`releasePickSerialsOn` (serial-number), returns receipt helpers (`balance-update`, `batch-control-use`, `material-document-output`, `material-period-control`, `getMaterialPeriodControlInTx`, `warehouse-stocks.RETURNS`), `materialSales`/`batch`/`stockQuantity`/`movementType` schema.
-- **production** — availability checking group/rule/scope schema (ATP).
-- **foundation** — business partner+customer role, company code, sales area, plant, tax code, customer-sales-area master data; sales-org/distribution-channel/division config is foundation's, not sales'; `chartOfAccounts`/`accountDetermination` schema; `output-schema` + `output-notify` (output).
-- **Shared/platform** — `platform/db/client` (`withTenant`, `Tx`), `platform/change` (`recordChange` audit trail), `platform/numbering` (`allocateNumber`, SO/DL/F2 number ranges), `platform/tables/tenancy`+`platform/tables/reference` (tenant/currency/UoM base tables), `platform/auth/current` (`can`, `requireSession` in `src/app/sales` actions/pages); `platform/auth/service-authority` + `auth/session` (`hasOrgAccess`) in order/delivery/billing, `platform/periods` + `platform/posting` (returns, rebate), `platform/notification` (incompletion).
+finance, foundation, inventory, platform/auth, platform/change, platform/db, platform/i18n, platform/notification, platform/numbering, platform/periods, platform/posting, platform/tables, production, ui/fields
 
 ## Used by
-`grep -rln "@/modules/sales\|src/modules/sales" ...` outside module itself hits only:
-- `src/modules/finance/credit.ts` — imports `openSalesCommitments` from `sales/exposure.ts`, composes undelivered-order+delivered-not-billed value into its own credit basis (one sanctioned cross-module read, per module's §5.1 "compose through owners").
-- `src/modules/finance/customer-credit-memo.ts` — imports `sales/partners` + `sales/schema` (cycle: `sales/credit-memo` → finance → `sales/partners`).
-- `src/modules/inventory/material-document-reversal.ts` — calls `sales/goods-issue-reversal`; `src/modules/inventory/serial-number.ts` — `sales/schema`.
-- `src/modules/foundation/standard-config.ts` (seeds sales account determination, doc types, pricing procedure, returns movements), `src/modules/foundation/customer-sales-areas.ts` (`sales/schema`, `sales/shipping-point`).
-- `src/app/foundation/partners/customer-partner-actions.ts`, `CustomerPartnerPanel.tsx` — customer partner functions via `sales/partners`.
-- `src/platform/schema.ts` (re-exports `sales/schema`), `src/platform/attention/sources.ts` (billing, credit-memo, delivery, incompletion, invoice-list worklists), `src/platform/tenancy/demo-sales.ts`, `demo-masters.ts`, `demo-organisation.ts` (demo data), `src/dev/walkthrough-volume.ts`.
-- `tests/sales-order.test.ts`, `tests/sales-delivery.test.ts` — exercise module directly (plus the new tests below).
-- `scripts/browser-smoke/sales-order-to-invoice.ts` — drives full chain through screens.
+dev/walkthrough-volume.ts, finance, foundation, inventory, platform/attention, platform/tenancy
 
-No other module (purchasing, inventory proper, etc.) imports sales — edge runs almost entirely sales-depends-on-finance; exposure is the one reverse composition point. (On `development` this no longer holds: finance, inventory and foundation now import sales — see above.)
-
-## Tests
-- `tests/sales-order.test.ts` — creation/pricing/tax/unit-scale refusals, replay-by-request-key, change re-pricing, version-conflict/drop-item guards, rejected-line handling, credit block/release/re-raise on change, condition-record supersession, date-sensitive pricing.
-- `tests/sales-delivery.test.ts` (DI-020) — full delivery→pick→goods-issue→billing chain vs. real inventory/finance engines (no mocks): over-delivery/duplicate-item/unknown-item refusals, pick over/under-confirmation + append-only correction history, goods-issue completeness/idempotency, stock/valuation/journal assertions, order-line-frozen-after-delivery guard, billing-once enforcement, reversed-goods-issue-blocks-billing, credit block at delivery/pick/goods-issue/billing + held-then-released retry, billing cancellation mirroring receivable.
-- Orders/pricing: `sales-order-progress`, `sales-pricing-chain`, `sales-pricing-procedure`, `sales-pricing-procedure-screen-contract`, `sales-account-determination`, `sales-document-type`, `sales-document-type-maintenance`, `sales-document-type-maintenance-contract`, `sales-partners`, `sales-incompletion`, `sales-availability`, `material-sales` (`.test.ts`).
-- Delivery/shipping: `sales-delivery-terms`, `sales-shipping-point`, `shipping-point-ui-contract`, `sales-batch-determination`, `batch-determination-contract`, `sales-serial-numbers`, `serial-number-contract`, `order-fulfillment-ui-contract`.
-- Billing: `sales-billing-plan`, `sales-billing-rebill-contract`, `sales-collective-billing`, `sales-down-payment`, `sales-invoice-list`, `sales-rebate`, `sales-output`.
-- Returns/credit: `sales-returns-configuration`, `sales-returns-configuration-contract`, `sales-returns-screen-contract`, `sales-credit-request-screen-contract`.
-- Reporting: `sales-registers`, `sales-analysis`.
-- Helper: `tests/helpers/sales-actor.ts`.
-
-## Scripts
-`scripts/browser-smoke/sales-order-to-invoice.ts` — Playwright walkthrough of same DI-020 chain through actual screens (order→delivery→over-delivery refusal→pick→goods issue→billing→re-bill-is-a-no-op→credit block at delivery/pick), asserts on-screen text + tables read back via `withTenant`.
-
-## Non-obvious behavior / gotchas
-- No counters, everything summed live: delivered/billed qty never stored on order line; `fulfillment-quantities.ts` sums delivery/billing rows each read, `exposure.ts` same for credit — deliberate anti-drift design; makes both files load-bearing for every quantity/value check. Both now filter out returns docs (`LR`/`RE`) — a return never reduces delivered qty or credit exposure.
-- Pricing was PR00-only on `main` (DI-018); on `development` it is the condition technique (`pricing-procedure.ts`: PR00/K007/KF00/HD00/VPRS/MWST/BO01), still no scales/dynamic condition tables/requirement routines. Billing never re-prices: it scales the order's stored `sales_document_condition` rows to the issued qty.
-- Credit exposure undercounts sales documents: DI-019 still OPEN (`docs/DEFERRED_ISSUES.md`) — `exposure.ts` composition only wired into finance's basis for a narrowed case; general gap persists.
-- `salesTableNames` looks stale: lists 9 (`sales_order`, `sales_order_line`, `sales_condition_record`, `sales_document_type`, pricing tables, `sales_document_condition`), omitting delivery/billing/shipping/partner/incompletion/billing-plan/rebate etc. tables though all defined in same `schema.ts` and owned by this module — check whatever audit/registration script consumes this constant.
-- `/sales/credit-memo` is a sales URL with almost zero sales-module code: logic only from `@/modules/finance/customer-credit-memo`/`customer-invoice` (page now just lists via `sales/billing.listBillings`) — the re-bill-after-cancellation gap DI-020 left open, closed via finance's invoice engine. Screen-catalog (`src/ui/shell/screen-catalog.ts`) files it `area: "sales"`/`family: "sales-billing"` for nav, but capability `FIN.AR.CREDITMEMO.POST` registered `module: 'FIN'` in `scripts/seed.ts` — by code/capability it's finance; only URL/nav say sales. The genuinely sales-side G2/CR credit memo lives at `/sales/credit-memo-request` (`sales/credit-memo.ts`).
-- Credit blocked at 3 points: `delivery.ts` checks at delivery creation, pick, AND goods issue (CAIRN.md §14.8); a breach at goods-issue blocks billing but doesn't undo the movement (that's inventory's reversal screen).
-- One delivery number per plant: `createDelivery` refuses to mix plants across lines in one delivery; caller must split by plant.
-- Billing is a two-stage commit: doc row written OPEN before `postCustomerInvoice` (own tx); only `linkPostedInvoice` flips to POSTED — a crash between leaves retryable OPEN, not half-posted.
-- Thin but not unfinished: every file cites CAIRN.md section numbers + DI-### markers for what's deliberately unbuilt (discount pricing, full exposure basis). Chain (order→delivery→pick→goods issue→billing→invoice→cancellation) fully implemented/tested; gap is pricing/condition breadth, not fulfillment depth.
-- Import cycles: `sales/credit-memo` → `finance/customer-credit-memo` → `sales/partners`, and `sales/delivery` → inventory ↔ `inventory/material-document-reversal` → `sales/goods-issue-reversal`. Inventory reversal of a billed goods issue is refused by sales; an unbilled one rolls the delivery back to PICKED/OPEN.
-- Invoice-list-relevant billing docs (billing type list type + payer's sales-area invoicing schedule) post **no** receivable; the list release posts it once. `invoice-list.ts` header says the list is type `LR`, but code uses `STANDARD_INVOICE_LIST_TYPE = 'IL'` (`LR` is the returns delivery type) — trust the constant.
-- `rebate.ts` posts accrual journals itself via `platform/posting.postJournalEntry` (not via a finance service); cancelling a billing reverses its accruals but leaves already-settled credit memos alone.
-- `batch-sort-rules.ts` exists only so client components can import sort constants without pulling `postgres` into the browser bundle via `batch-determination.ts`.
-- Document types are rows now (`sales_document_type`, migration 9226): number range, cancellation type and active flag come from config via `salesDocumentTypeFor`, not constants; a deactivated type refuses creation.
+## Tests (25)
+material-sales, sales-account-determination, sales-analysis, sales-availability, sales-batch-determination, sales-billing-plan, sales-collective-billing, sales-delivery-terms, sales-delivery, sales-document-type-maintenance, sales-document-type, sales-down-payment, sales-incompletion, sales-invoice-list, sales-order-progress, sales-order, sales-output, sales-partners, sales-pricing-chain, sales-pricing-procedure, sales-rebate, sales-registers, sales-returns-configuration, sales-serial-numbers, sales-shipping-point

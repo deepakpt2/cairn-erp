@@ -1,16 +1,27 @@
 # Cairn Codemap
+Index of `src/` (1,324 files, 448 tables), refreshed 2026-11-15 on `development`. Tables only, no prose: each module file is Gotchas → Files (file | exports | tables) → Routes → Tables owned → Depends on → Used by → Tests.
 
-Persistent map of the Cairn ERP codebase (branch `development`, refreshed 2026-11-14) (Next.js App Router + Drizzle/Postgres, multi-tenant, SAP-style modules). Built from the actual code (imports, schemas, routes), not an assumed layout. Use this to find files/dependencies without rescanning the repo; update the relevant file here whenever code moves.
+## How to use (cheapest first)
+1. **grep one row, don't read a whole file:** `grep -n 'bom-explosion' docs/codemap/modules/production.md`, `grep -rn '| quality_lot' docs/codemap/`.
+2. Read the `## Gotchas` block only: `awk '/^## Gotchas/{p=1;next} /^## /{p=0} p' docs/codemap/modules/<m>.md`.
+3. **`import-graph.json` (280 KB): never read it whole.** Query with `jq`:
+   - imports of a file: `jq '."modules/quality/lot.ts"' docs/codemap/import-graph.json`
+   - importers of a file: `jq -r 'to_entries[] | select(.value | index("platform/posting/index.ts")) | .key' docs/codemap/import-graph.json`
+   - keys are paths relative to `src/`. Regenerate with `npx madge --json --ts-config tsconfig.json --extensions ts,tsx src > docs/codemap/import-graph.json`.
 
-## Files in this folder
-- `import-graph.json` — raw `madge --json` import graph of `src/` (1,325 nodes, full coverage)
-- `modules/<name>.md` — one file per business module (below; 10 incl. `audit`)
-- `shared.md` — cross-cutting infra (`src/platform/*`, `src/ui/*`, `src/worker/*`, auth/authority/db/tenancy & demo install/locking/posting/jobs/notifications/attention/i18n/etc.) and which modules use each piece
-- `database.md` — all 448 Drizzle tables (+2 SQL-only) → owning module, cross-module reads/writes, relations
-- `unassigned.md` — everything not in a module or shared.md: root config, `docker/`, `drizzle/` (baseline + `history/`), pre-existing project docs/notes
+## Regenerating
+`node scripts/codemap-index.mjs` rewrites every generated section (Files, Routes, Tables owned, Depends on, Used by, Tests, database tables) from the source and keeps the hand-written parts (title, purpose, `## Gotchas`). `--check` exits 1 when the map is stale. Refresh `import-graph.json` with madge first when imports changed. Ownership is read from the existing tables; move a row by hand to reassign a file.
+
+## Files
+| file | content |
+|---|---|
+| `modules/<m>.md` | one per business module (below) |
+| `shared.md` | `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, app shell; RLS / SECURITY DEFINER / jobs / demo gotchas; shared unit → users |
+| `database.md` | tables per schema file; cross-module table access |
+| `unassigned.md` | root config, docker, `drizzle/`, scripts, project docs |
+| `import-graph.json` | raw madge graph (jq only) |
 
 ## Business modules
-
 | Module | Purpose | Entry points | Doc |
 |---|---|---|---|
 | **finance** | GL, AP/AR, period close, fixed assets, consolidation, tax | `/finance/*`, `/config/{chart-of-accounts,consolidation,credit-control-areas,fiscal-year-variants,gl-accounts,intercompany-clearing}` | [modules/finance.md](modules/finance.md) |
@@ -24,14 +35,11 @@ Persistent map of the Cairn ERP codebase (branch `development`, refreshed 2026-1
 | **audit** | Auditor workspace: time-boxed scoped read-only grants, no-post rule, audited auditor, findings/requests | `/audit/{workspace,grants,findings}` | [modules/audit.md](modules/audit.md) |
 | **platform** (admin) | User/role/organisation-scope administration, job monitor, notifications inbox | `/platform/*` (incl. `jobs`, `notifications`) | [modules/platform.md](modules/platform.md) |
 
-Boundary notes (surprising but confirmed by import analysis, not guessed):
-- `foundation` bundles two cohesive-but-distinct areas: enterprise structure/master data AND controlling masters/reporting.
-- `purchasing`'s schema also hosts `customer_invoice(_line)`, used by finance.
-- `production_order(_component)` tables physically live in `inventory`'s schema, not production's.
-- The `platform` *module* (admin UI, `src/modules/platform`) is distinct from `src/platform/*` *infra* (see `shared.md`) — same name, different things.
-- `output_type`/`output_message` moved from inventory's schema to `foundation/output-schema.ts` on `development`.
-- `audit` reaches into `platform/auth`: `effectiveGrants()` and `verifyServiceAuthorityInTx()` call `modules/audit/read-only.ts`, so a live audit grant cuts every user's authority to read-only centrally.
-- Background work runs in a separate process: `npm run worker` (`src/worker/`) claims jobs that web requests queue (see `shared.md`).
+## Boundaries
+- `production_order*` tables live in inventory's schema; `customer_invoice*` in purchasing's; `output_*` in `foundation/output-schema.ts`.
+- `src/modules/platform` (admin UI) ≠ `src/platform/*` (infra, `shared.md`).
+- A live audit grant cuts every user to read-only centrally (`platform/auth` → `modules/audit/read-only.ts`).
+- Background work runs in `npm run worker` (`src/worker/`).
 
 ## Coverage
-Every file under `src/`, `tests/`, `scripts/` appears in exactly one `modules/*.md` or `shared.md`. Everything else in the repo is in `unassigned.md`. Verified by cross-checking file lists against `find src tests scripts -type f` at build time; the `development` refresh was checked for every added file (202) and found none missing.
+Every `src/` file is in exactly one `modules/*.md` or `shared.md` (ownership: `src/modules/<m>` by folder; `src/app` by screen area or the services it imports). Tests are listed under the module whose code they import; contract tests that read files as text are not mapped (`ls tests | grep <topic>`). Scripts and everything else: `unassigned.md`.

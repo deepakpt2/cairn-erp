@@ -1,275 +1,326 @@
 # Finance
+GL, AP/AR, period close, fixed assets, consolidation, tax. Routes: `/finance/*`, `/config/{chart-of-accounts,consolidation,credit-control-areas,fiscal-year-variants,gl-accounts,intercompany-clearing}`. Paths relative to `src/`; tables are SQL names.
 
-**Purpose:** GL (chart of accounts, journal postings, parking, clearing, reversal), AP/AR (invoices, credit memos, down payments, payments, dunning, credit management, ageing), period close (accruals, FX valuation, GR/IR reclass, close cockpit, carryforward), fixed assets (acquisition, depreciation, retirement), group consolidation (data basis, areas, units, monitor, consolidated statements).
+## Gotchas
+- Journal amounts are always > 0; direction is `debit_credit` (S/H). No balance tables: balances, ageing, NBV are derived from `journal_entry_line` / `asset_transaction` at read time.
+- `postGlDocument` (gl-document.ts) is idempotent on `requestKey`, runs `onPosted` in the caller's tx, and refuses without `authorization` (`{userId, sessionId}`); tests use `tests/helpers/finance-actor.ts`.
+- Intercompany = two balanced journals in one tx, each line stamped with the trading partner.
+- Down-payment requests are noted items (no journal until paid). Clearing never mutates the original line (standing partial model).
+- `gl_account.is_balance_sheet` is CHECK-pinned to account type; services must still set it.
+- Close cockpit DAG cycles are caught in app code (`findDependencyCycle`), not the DB.
+- `CREDIT.BLOCKED` fan-out fires on transition only; recipients resolved by the job worker.
+- Foundation's `services.ts` writes finance's `gl_account` (cross-module write).
 
-## Files
+## Files (227)
+| file | exports | tables |
+|---|---|---|
+| **app/config/chart-of-accounts/** | | |
+| actions.ts | saveChartOfAccountsAction, setChartOfAccountsActiveAction, saveGroupChartOfAccountsAction, setGroupChartOfAccountsActiveAction |  |
+| ChartLifecycleControl.tsx | ChartLifecycleControl |  |
+| ChartOfAccountsForm.tsx | ChartOfAccountsForm, ActionMessage |  |
+| ChartOfAccountsList.tsx | ChartOfAccountsList |  |
+| ChartOfAccountsValueHelp.tsx | ChartOfAccountsValueHelp, ChartLanguageField |  |
+| GroupChartOfAccounts.tsx | GroupChartOfAccountsPanel, GroupChartOfAccountsForm, GroupChartOfAccountsList |  |
+| page.tsx | ChartOfAccountsPage |  |
+| **app/config/chart-of-accounts/copy/** | | |
+| actions.ts | copyChart |  |
+| CopyChartForm.tsx | CopyChartForm |  |
+| page.tsx | CopyChartOfAccountsPage |  |
+| **app/config/consolidation/** | | |
+| actions.ts | saveBasisAction, saveAreaAction, saveUnitAction, saveGroupAction, assignUnitAction, saveGroupAccountAction, saveMappingAction, saveMethodAction, saveVersionAction, saveTaskAction, activateAreaAction |  |
+| ConsolidationWorkbenchShell.tsx | ConsolidationWorkbenchShell |  |
+| page.tsx | ConsolidationWorkbenchPage |  |
+| **app/config/credit-control-areas/** | | |
+| actions.ts | createCreditControlAreaAction |  |
+| CreditControlAreaSetup.tsx | CreditControlAreaSetup |  |
+| page.tsx | CreditControlAreasPage |  |
+| **app/config/fiscal-year-variants/** | | |
+| actions.ts | saveFiscalYearVariantAction, setFiscalYearVariantActiveAction, saveFiscalYearPeriodsAction |  |
+| AssignCompanyCodesUI.tsx | AssignmentMessage, AssignCompanyCodesUI |  |
+| FiscalYearVariants.tsx | ActionMessage, FiscalYearVariantForm, FiscalYearVariantPanel, FiscalYearVariantList |  |
+| page.tsx | FiscalYearVariantsPage |  |
+| **app/config/fiscal-year-variants/assign-company-codes/** | | |
+| actions.ts | assignFiscalYearVariantAction |  |
+| page.tsx | AssignFiscalYearVariantPage |  |
+| **app/config/gl-accounts/** | | |
+| AccountGroups.tsx | AccountGroupsPanel |  |
+| actions.ts | saveGlAccountAction, setGlAccountBlocksAction, deleteGlAccountAction, saveAccountGroupAction, setAccountGroupActiveAction, saveAccountGroupFieldStatusAction |  |
+| fieldStatus.ts | ACCOUNT_TYPES, DEFAULT_FIELD_STATUS, DEFAULT_LANGUAGE_KEY, DEFAULT_SORT_KEY, FIELD_STATUSES, GL_ACCOUNT_FIELDS, GL_ACCOUNT_TYPES, RECONCILIATION_TYPES, STORAGE_MANDATORY_FIELDS, SUPPORTED_LANGUAGE_KEYS, accountNumberInRange, deriveGlAccountType, deriveIsBalanceSheet, isBalanceSheetAccountType, resolveFieldStatus |  |
+| GlAccountDialog.tsx | GlAccountActionMessage, GlAccountDialog, ReasonField |  |
+| GlAccountFields.tsx | GlAccountFields |  |
+| GlAccountInitialScreen.tsx | GlAccountInitialScreen |  |
+| GlAccountModeScreen.tsx | GlAccountModeScreen |  |
+| GlAccountsList.tsx | GlAccountsList |  |
+| GlAccountValueHelp.tsx | GlAccountValueHelp |  |
+| page.tsx | GlAccountsPage |  |
+| **app/config/gl-accounts/edit/** | | |
+| page.tsx | EditGlAccountPage |  |
+| **app/config/gl-accounts/new/** | | |
+| page.tsx | NewGlAccountPage |  |
+| **app/config/gl-accounts/transfer/** | | |
+| page.tsx | Page |  |
+| TransferShell.tsx | TransferShell |  |
+| **app/config/gl-accounts/view/** | | |
+| page.tsx | ViewGlAccountPage |  |
+| **app/config/intercompany-clearing/** | | |
+| actions.ts | saveIntercompanyConfigAction, deleteIntercompanyConfigAction |  |
+| IntercompanyClearing.tsx | IntercompanyClearing |  |
+| page.tsx | IntercompanyClearingPage |  |
+| **app/finance/accruals/** | | |
+| AccrualShell.tsx | AccrualShell |  |
+| actions.ts | postAccrualAction, reverseAccrualAction |  |
+| **app/finance/assets/** | | |
+| page.tsx | AssetsPage |  |
+| **app/finance/assets/acquire/** | | |
+| AcquireForm.tsx | AcquireForm |  |
+| actions.ts | simulateAction, postAction, reverseAction |  |
+| page.tsx | AcquireAssetPage |  |
+| **app/finance/assets/change/** | | |
+| actions.ts | changeAction, assignmentAction, depreciationAction, deactivateAction |  |
+| AssetChange.tsx | AssetChange |  |
+| page.tsx | ChangeAssetPage |  |
+| **app/finance/assets/depreciate/** | | |
+| actions.ts | executeAction |  |
+| DepreciateForm.tsx | DepreciateForm |  |
+| page.tsx | DepreciatePage |  |
+| **app/finance/assets/history/** | | |
+| HistoryForm.tsx | HistoryForm |  |
+| page.tsx | AssetHistoryPage |  |
+| **app/finance/assets/history/export/** | | |
+| route.ts | GET |  |
+| **app/finance/assets/new/** | | |
+| actions.ts | createAction |  |
+| AssetCreate.tsx | AssetCreate |  |
+| page.tsx | CreateAssetPage |  |
+| **app/finance/assets/retire/** | | |
+| actions.ts | simulateAction, postAction, reverseAction |  |
+| page.tsx | RetireAssetPage |  |
+| RetireForm.tsx | RetireForm |  |
+| **app/finance/balance-sheet/** | | |
+| BalanceSheetShell.tsx | BalanceSheetShell |  |
+| page.tsx | Page |  |
+| **app/finance/carryforward/** | | |
+| actions.ts | executeCarryforwardAction |  |
+| CarryforwardShell.tsx | CarryforwardShell |  |
+| **app/finance/cash-flow/** | | |
+| CashflowShell.tsx | CashflowShell |  |
+| page.tsx | CashflowPage |  |
+| **app/finance/clearing-reset/** | | |
+| page.tsx | ClearingResetPage |  |
+| ResetForm.tsx | ResetForm |  |
+| **app/finance/close-cockpit/** | | |
+| actions.ts | createListAction, releaseListAction, finalizeListAction, processScheduledAction, executeTaskAction, evidenceAction, signoffAction, overrideAction, reopenAction |  |
+| CloseCockpitShell.tsx | CloseCockpitShell |  |
+| **app/finance/consolidated-statements/** | | |
+| ConsolidatedStatementsShell.tsx | ConsolidatedStatementsShell |  |
+| page.tsx | ConsolidatedStatementsPage |  |
+| **app/finance/consolidation-monitor/** | | |
+| actions.ts | executeTaskAction, executeTaskGroupAction, cancelExecutionAction |  |
+| ConsolidationMonitorShell.tsx | ConsolidationMonitorShell |  |
+| page.tsx | ConsolidationMonitorPage |  |
+| **app/finance/credit-monitor/** | | |
+| CreditMonitorShell.tsx | CreditMonitorShell |  |
+| page.tsx | Page |  |
+| **app/finance/credit-release/** | | |
+| actions.ts | recheckAction, releaseAction, bulkReleaseAction, rejectAction, reblockAction |  |
+| CreditReleaseShell.tsx | CreditReleaseShell |  |
+| page.tsx | Page |  |
+| **app/finance/credit/** | | |
+| actions.ts | loadCreditAction, saveCreditAction |  |
+| CreditShell.tsx | CreditShell |  |
+| page.tsx | Page |  |
+| **app/finance/customer-ageing/** | | |
+| page.tsx | CustomerAgeingPage |  |
+| **app/finance/customer-balances/** | | |
+| page.tsx | CustomerBalancesPage |  |
+| **app/finance/customer-clearing/** | | |
+| actions.ts | clearAction |  |
+| CustomerClearing.tsx | CustomerClearing |  |
+| page.tsx | CustomerClearingPage |  |
+| **app/finance/customer-down-payment-clearing/** | | |
+| actions.ts | postCustomerClearingAction |  |
+| CustomerDownPaymentClearing.tsx | CustomerDownPaymentClearing |  |
+| page.tsx | CustomerDownPaymentClearingPage |  |
+| **app/finance/customer-down-payment-request/** | | |
+| actions.ts | postRequestAction |  |
+| CustomerDownPaymentRequest.tsx | CustomerDownPaymentRequest |  |
+| page.tsx | CustomerDownPaymentRequestPage |  |
+| **app/finance/customer-down-payment/** | | |
+| actions.ts | postDownPaymentAction |  |
+| CustomerDownPayment.tsx | CustomerDownPayment |  |
+| page.tsx | CustomerDownPaymentPage |  |
+| **app/finance/customer-invoice/** | | |
+| actions.ts | postInvoiceAction, cancelInvoiceAction |  |
+| CustomerInvoice.tsx | CustomerInvoice |  |
+| page.tsx | CustomerInvoicePage |  |
+| **app/finance/document-reversal/** | | |
+| page.tsx | DocumentReversalPage |  |
+| **app/finance/dunning/** | | |
+| page.tsx | DunningPage |  |
+| **app/finance/fx/valuation/** | | |
+| page.tsx | FxValuationPage |  |
+| ValuationForm.tsx | ValuationForm |  |
+| **app/finance/fx/valuation/export/** | | |
+| route.ts | GET |  |
+| **app/finance/gl-clearing/** | | |
+| actions.ts | clearAction |  |
+| GlClearing.tsx | GlClearing |  |
+| page.tsx | GlClearingPage |  |
+| **app/finance/grir-reclass/** | | |
+| GrIrForm.tsx | GrIrForm |  |
+| page.tsx | GrIrReclassPage |  |
+| **app/finance/grir-reclass/export/** | | |
+| route.ts | GET |  |
+| **app/finance/incoming-payment/** | | |
+| actions.ts | postPaymentAction |  |
+| IncomingPayment.tsx | IncomingPayment |  |
+| page.tsx | IncomingPaymentPage |  |
+| **app/finance/intercompany/** | | |
+| actions.ts | postIntercompanyAction |  |
+| IntercompanyPosting.tsx | IntercompanyPosting |  |
+| page.tsx | IntercompanyPage |  |
+| **app/finance/journal/** | | |
+| page.tsx | JournalPage |  |
+| **app/finance/journal/balances/** | | |
+| BalanceReportForm.tsx | BalanceReportForm |  |
+| BalancesForm.tsx | BalancesForm |  |
+| page.tsx | GlBalancesPage |  |
+| **app/finance/journal/document/** | | |
+| DocumentDisplay.tsx | DocumentDisplay |  |
+| page.tsx | JournalDocumentPage |  |
+| **app/finance/journal/items/** | | |
+| ItemsForm.tsx | ItemsForm |  |
+| page.tsx | JournalItemsPage |  |
+| **app/finance/journal/new/** | | |
+| actions.ts | postJournalAction |  |
+| JournalForm.tsx | JournalForm |  |
+| **app/finance/journal/park/** | | |
+| actions.ts | parkAction, completeAction, postAction, deleteAction |  |
+| page.tsx | ParkedJournalPage |  |
+| ParkedJournal.tsx | ParkedJournal |  |
+| **app/finance/outgoing-payment/** | | |
+| actions.ts | postPaymentAction |  |
+| OutgoingPayment.tsx | OutgoingPayment |  |
+| page.tsx | OutgoingPaymentPage |  |
+| **app/finance/payment-run/** | | |
+| actions.ts | createRunAction, proposalAction, executeAction, cancelRunAction |  |
+| page.tsx | PaymentRunPage |  |
+| PaymentRun.tsx | PaymentRun |  |
+| **app/finance/profit-loss/** | | |
+| page.tsx | Page |  |
+| ProfitLossShell.tsx | ProfitLossShell |  |
+| **app/finance/subledger-tie-out/** | | |
+| SubledgerTieShell.tsx | SubledgerTieShell |  |
+| **app/finance/tax/report/** | | |
+| page.tsx | TaxReportPage |  |
+| TaxReportForm.tsx | TaxReportForm |  |
+| **app/finance/trial-balance/** | | |
+| TrialBalanceShell.tsx | TrialBalanceShell |  |
+| **app/finance/vendor-ageing/export/** | | |
+| route.ts | GET |  |
+| **app/finance/vendor-balances/** | | |
+| page.tsx | VendorBalancesPage |  |
+| **app/finance/vendor-clearing/** | | |
+| actions.ts | clearAction |  |
+| page.tsx | VendorClearingPage |  |
+| VendorClearing.tsx | VendorClearing |  |
+| **app/finance/vendor-credit-memo/** | | |
+| actions.ts | postMemoAction, cancelMemoAction |  |
+| page.tsx | VendorCreditMemoPage |  |
+| VendorCreditMemo.tsx | VendorCreditMemo |  |
+| **app/finance/vendor-down-payment-clearing/** | | |
+| actions.ts | postClearingAction |  |
+| page.tsx | VendorDownPaymentClearingPage |  |
+| VendorDownPaymentClearing.tsx | VendorDownPaymentClearing |  |
+| **app/finance/vendor-down-payment-request/** | | |
+| actions.ts | postVendorRequestAction |  |
+| page.tsx | VendorDownPaymentRequestPage |  |
+| VendorDownPaymentRequest.tsx | VendorDownPaymentRequest |  |
+| **app/finance/vendor-down-payment/** | | |
+| actions.ts | postDownPaymentAction |  |
+| page.tsx | VendorDownPaymentPage |  |
+| VendorDownPayment.tsx | VendorDownPayment |  |
+| **app/finance/vendor-invoice/** | | |
+| actions.ts | postInvoiceAction, cancelInvoiceAction |  |
+| page.tsx | VendorInvoicePage |  |
+| VendorInvoice.tsx | VendorInvoice |  |
+| **modules/finance/** | | |
+| accrual.ts | ACCRUAL_CAPABILITY, AccrualError, postAccrualDocument, getAccrualDocument, listDueAccruals, listAccrualDocuments, executeAccrualReversal | accounting_reversal_link, accrual_document, journal_entry, journal_entry_line, reversal_reason |
+| ageing-derivation.ts | AgeingDerivationError, validateAgeingSelection, deriveAgeingItems, aggregateAgeingPartners | business_partner, customer_invoice, gl_account, journal_entry, journal_entry_line, payment_terms, special_gl_config, supplier_invoice, vendor_invoice |
+| asset-acquisition.ts | ASSET_ACQUIRE_CAPABILITY, AssetAcquisitionError, ASSET_ACQUISITION_CLASS, simulateAssetAcquisition, recordAssetAcquisition, postAssetAcquisition, reverseAssetAcquisition, markAssetAcquisitionsReversedTx, getAssetTransactions | asset_class, asset_depreciation, asset_transaction, asset_transaction_type, document_type, fixed_asset, gl_account |
+| asset-depreciation.ts | ASSET_DEPRECIATE_CAPABILITY, AssetDepreciationError, ASSET_DEPRECIATION_RUN_CLASS, executeDepreciationRun, listDepreciationRuns, getDepreciationRunItems, getPostedDepreciation | asset_assignment, asset_class, asset_depreciation, asset_depreciation_posting, asset_depreciation_run, asset_depreciation_run_item, asset_retirement, asset_transaction, depreciation_key, document_type, fiscal_year_period, fixed_asset, gl_account |
+| asset-history.ts | ASSET_REPORT_CAPABILITY, AssetHistoryError, getAssetHistorySheet, assetHistoryCsv | asset_depreciation, asset_depreciation_posting, asset_retirement, asset_transaction, company_code, depreciation_area, fiscal_year_period, fixed_asset |
+| asset-master.ts | ASSET_CREATE_CAPABILITY, ASSET_CHANGE_CAPABILITY, AssetMasterError, ASSET_CLASS, createAsset, changeAsset, changeAssetAssignment, changeAssetDepreciation, deactivateAsset, getAsset, listAssets | asset_assignment, asset_class, asset_depreciation, cost_center, depreciation_area, depreciation_key, fixed_asset, plant, profit_center |
+| asset-retirement.ts | ASSET_RETIRE_CAPABILITY, AssetRetirementError, ASSET_RETIREMENT_CLASS, simulateAssetRetirement, postAssetRetirement, reverseAssetRetirement, getAssetRetirements, listRetireableAssets | asset_class, asset_depreciation_posting, asset_retirement, asset_transaction, asset_transaction_type, document_type, fixed_asset, gl_account |
+| balance-sheet.ts | BALANCE_SHEET_CAPABILITY, BALANCE_CALCULATION_TYPES, DEFAULT_BALANCE_CALCULATION_TYPE, MIN_SUMMARY_LEVEL, MAX_SUMMARY_LEVEL, DEFAULT_SUMMARY_LEVEL, calculateBalanceSheet | exchange_rate, financial_statement_assignment, financial_statement_node, financial_statement_version, gl_account, journal_entry, journal_entry_line |
+| carryforward.ts | CARRYFORWARD_CAPABILITY, CLOSE_LEDGERS, DEFAULT_LEDGER, RUN_STATUSES, RESULT_STATUSES, CarryforwardError, executeCarryforward, getCarryforwardRun, listCarryforwardRuns, listCarryforwardResults | account_determination, carryforward_result, carryforward_run, gl_account, journal_entry, journal_entry_line |
+| cash-flow-vocabulary.ts | CASHFLOW_CAPABILITY, CASHFLOW_ROUTE, CASHFLOW_LEDGER, CASHFLOW_METHODS, CASHFLOW_METHOD_LABELS, ACCOUNT_CLASSES |  |
+| cash-flow.ts | CashflowError, calculateCashflow, *./cash-flow-vocabulary | account_determination, asset_class, bank_account, company_code, fiscal_year_period, fiscal_year_variant, gl_account, journal_entry, journal_entry_line |
+| chart-of-accounts-copy.ts | copyChartOfAccounts, listChartCopies | change_document, chart_of_accounts, gl_account, gl_account_group, gl_account_group_field_status, group_chart_accounts |
+| clearing-reset.ts | CLEARING_RESET_CAPABILITY, ClearingResetError, getClearingDocument, resetClearingTx, resetClearing | clearing_reset, gl_clearing_allocation, gl_clearing_residual, journal_entry, journal_entry_line |
+| close-cockpit.ts | CLOSE_COCKPIT_CAPABILITY, TASK_LIST_ID_MAX, TASK_ID_MAX, TASK_NAME_MAX, TASK_LIST_STATUSES, TASK_STATUSES, EXECUTION_MODES, EXECUTION_STATUSES, CLOSE_TASK_HANDLERS, CLOSE_TASK_HANDLER_CODES, CloseCockpitError, periodEndDate, findDependencyCycle, upsertTemplateTask, listTemplateTasks, createTaskListFromTemplate, getTaskList, listTaskLists, listTasks, listExecutions, listEvents, releaseTaskList, executeTask, processScheduledExecutions, attachEvidence, signOffTask, overrideTaskStatus, reopenTask, finalizeTaskList | closing_execution_log, closing_task_dependency, closing_task_event, closing_task_instance, closing_task_list, closing_task_template, closing_task_template_dependency, journal_entry |
+| consolidated-statements-vocabulary.ts | CONSOLIDATED_STATEMENTS_CAPABILITY, CONSOLIDATED_STATEMENTS_ROUTE, STATEMENT_VIEWS, STATEMENT_VIEW_LABELS, STATEMENT_SECTIONS, SECTION_LABELS |  |
+| consolidated-statements.ts | ConsolidatedStatementsError, calculateConsolidatedStatements, *./consolidated-statements-vocabulary | company_code, consolidation_account_mapping, consolidation_area, consolidation_group, consolidation_group_account, consolidation_task_status, consolidation_unit, consolidation_unit_assignment, consolidation_version, fiscal_year_period, fiscal_year_variant, gl_account, journal_entry, journal_entry_line |
+| consolidation-monitor-vocabulary.ts | CONSOLIDATE_CAPABILITY, CONSOLIDATION_MONITOR_ROUTE, CONSOLIDATION_MONITOR_AUTHORITIES, EXECUTION_MODES, EXECUTION_MODE_LABELS, MONITOR_TASK_STATUSES, EXECUTION_STATUSES, ERROR_POLICIES, WARNING_POLICIES, SUPPORTED_TASK_TYPES |  |
+| consolidation-monitor.ts | ConsolidationMonitorError, getConsolidationMonitor, executeConsolidationTask, executeConsolidationTaskGroup, cancelConsolidationExecution, CONSOLIDATE_CAPABILITY, *./consolidation-monitor-vocabulary | company_code, consolidation_account_mapping, consolidation_area, consolidation_execution, consolidation_execution_log, consolidation_group, consolidation_method, consolidation_task, consolidation_task_status, consolidation_unit, consolidation_unit_assignment, consolidation_version, fiscal_year_period, fiscal_year_variant, journal_entry, journal_entry_line |
+| consolidation-vocabulary.ts | CONSOLIDATION_CAPABILITY, CONSOLIDATION_FOLDERS, DATA_PROVIDERS, METHOD_KINDS, TASK_TYPES |  |
+| consolidation-workbench.ts | ConsolidationError, DIMENSION_SOURCES, listConsolidationAreas, getConsolidationWorkbench, saveDataBasis, saveArea, saveUnit, saveGroup, assignUnit, saveGroupAccount, saveMapping, saveMethod, saveVersion, saveTask, activateArea, *./consolidation-vocabulary | chart_of_accounts, company_code, consolidation_account_mapping, consolidation_area, consolidation_data_basis, consolidation_dimension, consolidation_group, consolidation_group_account, consolidation_method, consolidation_task, consolidation_unit, consolidation_unit_assignment, consolidation_version, fiscal_year_variant, gl_account |
+| credit-control-area-contract.ts | CREDIT_CONTROL_AREA_ACTIVITY, CREDIT_CONTROL_AREA_LOCKS, CREDIT_CONTROL_AREA_DEFAULTS |  |
+| credit-control-area-maintenance.ts | creditControlAreaSetupValuesSchema, filterCreditControlAreaSetupByCompanyScope, CreditControlAreaMaintenanceError, listCreditControlAreaSetup, createCreditControlAreaSetup, CREDIT_CONTROL_AREA_CAPABILITY, CREDIT_CONTROL_AREA_ACTIVITY, CREDIT_CONTROL_AREA_DEFAULTS | app_user, auth_org_restriction, company_code, credit_control_area, currency, role, role_capability, user_role, user_session |
+| credit.ts | CREDIT_CAPABILITY, CREDIT_DECISIONS, CREDIT_BLOCK_REASONS, CreditError, getCreditExposure, getCustomerCredit, listCreditConfig, saveCustomerCredit, listCreditAudit, evaluateCreditCheck, CREDIT_MONITOR_CAPABILITY, listCreditMonitor, CREDIT_RELEASE_CAPABILITY, CREDIT_OVERRIDE_CAPABILITY, DETERMINATION_STATUSES, checkSalesDocumentCredit, listCreditDeterminations, recheckDocument, releaseDocument, releaseDocumentsBulk, rejectReleaseRequest, reblockDocument, listReleaseEvents | business_partner, company_code, credit_change_audit, credit_control_area, credit_determination, credit_release_event, currency, customer_credit, exchange_rate, journal_entry, journal_entry_line |
+| customer-ageing.ts | CUSTOMER_AGEING_CAPABILITY, CustomerAgeingError, getCustomerAgeing |  |
+| customer-balances.ts | CUSTOMER_BALANCE_CAPABILITY, CustomerBalanceError, getCustomerBalances | customer_company_code, journal_entry, journal_entry_line |
+| customer-clearing.ts | CUSTOMER_CLEARING_CAPABILITY, CustomerClearingError, getCustomerClearing, clearCustomerItems | change_document, change_document_item, customer_company_code, journal_entry, journal_entry_line |
+| customer-credit-memo.ts | CUSTOMER_CREDIT_MEMO_CAPABILITY, CustomerCreditMemoError, getCustomerCreditMemo, postCustomerCreditMemo | account_determination, billing_document, customer_company_code, customer_invoice, customer_invoice_line, payment_terms, profit_center, tax_code |
+| customer-down-payment-clearing.ts | CUSTOMER_DOWN_PAYMENT_CLEARING_CAPABILITY, CustomerDownPaymentClearingError, getCustomerDownPaymentClearing, getCustomerDownPaymentClearingTx, clearCustomerDownPayments, clearCustomerDownPaymentsTx | customer_company_code, customer_down_payment, customer_down_payment_clearing, customer_down_payment_clearing_item, customer_invoice, journal_entry, journal_entry_line |
+| customer-down-payment-request.ts | CUSTOMER_DOWN_PAYMENT_REQUEST_CAPABILITY, CustomerDownPaymentRequestError, resolveRequestTarget, createCustomerDownPaymentRequest, createCustomerDownPaymentRequestTx, fulfilledSoFar, getCustomerDownPaymentRequests, applyRequestFulfillment, reverseCustomerDownPaymentRequest, reverseCustomerDownPaymentRequestTx, downPaymentCreditLine | customer_company_code, customer_down_payment_request, document_type, down_payment_request_fulfillment, journal_entry_line, special_gl_config |
+| customer-down-payment.ts | CUSTOMER_DOWN_PAYMENT_CAPABILITY, CustomerDownPaymentError, postCustomerDownPayment, getCustomerDownPayments | customer_company_code, customer_down_payment, journal_entry_line |
+| customer-invoice.ts | CUSTOMER_INVOICE_CAPABILITY, CustomerInvoiceError, getCustomerInvoice, listCustomerInvoiceTaxCodes, postCustomerInvoice, cancelCustomerInvoice | account_determination, customer_company_code, customer_invoice, customer_invoice_line, payment_terms, profit_center, tax_code |
+| document-display.ts | DOCUMENT_FLOW_CAPABILITY, FIN_JOURNAL_DISPLAY_CAPABILITY, DocumentDisplayError, getJournalDocument, resolveDocumentNumber | customer_company_code, journal_entry, journal_entry_line, parked_journal_header, supplier_company_code |
+| document-reversal.ts | DOCUMENT_REVERSE_CAPABILITY, DocumentReversalError, getDocumentForReversal, reverseDocument | accounting_reversal_link, journal_entry, journal_entry_line, reversal_reason |
+| dunning.ts | DUNNING_CAPABILITY, DunningError, getDunningRun, listDunningRuns, proposeDunningRun, excludeDunningAccount, finalizeDunningRun, cancelDunningRun | customer_company_code, customer_invoice, dunning_notice, dunning_run, dunning_run_account, dunning_run_company, dunning_run_item, journal_entry, journal_entry_line |
+| fx-valuation.ts | FX_VALUATION_CAPABILITY, FxValuationError, FX_RATE_TYPES, executeFxValuation, getFxValuationRun, fxValuationCsv | account_determination, exchange_rate, fx_valuation_item, fx_valuation_run, gl_account, journal_entry, journal_entry_line |
+| gl-account-group-maintenance.ts | accountGroupValuesSchema, accountGroupMaintenanceInputSchema, accountGroupLifecycleInputSchema, accountGroupFieldStatusInputSchema, GlAccountGroupMaintenanceError, listAccountGroups, accountGroupFieldStatusMatrices, accountGroupChoices, groupAccountChoices, saveAccountGroup, setAccountGroupActive, saveAccountGroupFieldStatus | chart_of_accounts, gl_account, gl_account_group, gl_account_group_field_status, group_chart_accounts |
+| gl-account-group-schema.ts | glAccountGroup, glAccountGroupFieldStatus, groupChartAccounts, ACCOUNT_TYPES, FIELD_STATUSES, GL_ACCOUNT_FIELDS, GL_ACCOUNT_TYPES, RECONCILIATION_TYPES, SUPPORTED_LANGUAGE_KEYS | gl_account_group, gl_account_group_field_status, group_chart_accounts |
+| gl-account-transfer.ts | GL_ACCOUNT_TRANSFER_CAPABILITY, GlAccountTransferError, listAccountSegments, transferGlAccounts | gl_account, gl_account_company, gl_account_transfer_result, gl_account_transfer_run |
+| gl-account-vocabulary.ts | GL_ACCOUNT_FIELDS, FIELD_STATUSES, ACCOUNT_TYPES, GL_ACCOUNT_TYPES, RECONCILIATION_TYPES, SUPPORTED_LANGUAGE_KEYS, DEFAULT_LANGUAGE_KEY, DEFAULT_SORT_KEY, deriveGlAccountType, deriveIsBalanceSheet, isBalanceSheetAccountType, accountNumberInRange, DEFAULT_FIELD_STATUS, resolveFieldStatus, STORAGE_MANDATORY_FIELDS, GL_ACCOUNT_FIELD_LABELS | client |
+| gl-balances.ts | GL_BALANCE_CAPABILITY, GlBalanceError, getGlBalances, getGlBalanceReport | exchange_rate, gl_account, journal_entry, journal_entry_line |
+| gl-clearing.ts | GL_CLEARING_CAPABILITY, GlClearingError, getGlClearing, clearGlItems | account_determination, change_document, change_document_item, customer_invoice, document_type, employee_tolerance_group, exchange_rate, gl_account, gl_account_company, gl_clearing_allocation, gl_clearing_residual, journal_entry, journal_entry_line, residual_reason, supplier_invoice, vendor_invoice |
+| gl-document.ts | GL_DOCUMENT_CAPABILITY, GlDocumentError, postGlDocument | cost_center, document_type, gl_account, gl_account_company, internal_order, journal_entry, journal_entry_line, journal_posting_request, profit_center |
+| grir-reclass.ts | GRIR_RECLASS_CAPABILITY, GrIrReclassError, executeGrIrAnalysis, getGrIrRun, grIrCsv | account_determination, grir_reclass_item, grir_reclass_run, material_document, material_document_line, movement_type, purchase_order, purchase_order_item, supplier_invoice, supplier_invoice_item |
+| incoming-payment.ts | IncomingPaymentError, getReceivables, INCOMING_PAYMENT_CAPABILITY, postIncomingPayment | account_determination, customer_company_code, customer_invoice, employee_tolerance_group, incoming_payment, journal_entry, journal_entry_line, payment_terms |
+| intercompany.ts | INTERCOMPANY_CAPABILITY, INTERCOMPANY_CONFIG_CAPABILITY, IntercompanyError, listIntercompanyConfigs, saveIntercompanyConfig, deleteIntercompanyConfig, postIntercompany, listCompanyChoices | change_document, change_document_item, company_code, document_type, exchange_rate, gl_account, gl_account_company, intercompany_clearing_config, intercompany_document_header, journal_entry_line |
+| journal-items.ts | JOURNAL_ITEMS_CAPABILITY, JournalItemsError, JOURNAL_ITEMS_CAP, getJournalItems, JOURNAL_ITEM_PAGE_SIZES, DEFAULT_ITEMS_PAGE_SIZE | gl_account, gl_account_company, journal_entry, journal_entry_line |
+| ledger-journal.ts | LEDGER_JOURNAL_STATUSES, ledgerJournalStatus |  |
+| outgoing-payment.ts | OUTGOING_PAYMENT_CAPABILITY, OutgoingPaymentError, getPayables, postOutgoingPayment | account_determination, employee_tolerance_group, journal_entry, journal_entry_line, outgoing_payment, payment_terms, supplier_company_code, vendor_invoice |
+| parked-journal.ts | PARKED_JOURNAL_CAPABILITY, ParkedJournalError, parkJournal, editParkedJournal, completeParkedJournal, postParkedJournal, deleteParkedJournal, listParkedJournals, getParkedJournal | cost_center, document_type, gl_account, parked_journal_header, parked_journal_line, profit_center, tax_code |
+| payment-run.ts | PAYMENT_RUN_CAPABILITY, PaymentRunError, getPaymentRun, listPaymentRuns, listBankChoices, createPaymentRun, generateProposal, executePaymentRun, cancelPaymentRun | bank_account, house_bank, journal_entry, journal_entry_line, payment_document, payment_method, payment_proposal_item, payment_run, payment_run_company, payment_run_method, supplier_company_code, supplier_invoice |
+| profit-loss.ts | PROFIT_LOSS_CAPABILITY, calculateProfitLoss, TrialBalanceError |  |
+| schema.ts | glAccount, journalEntry, journalEntryLine, journalPostingRequest, taxReturnRun, fxValuationRun, fxValuationItem, grirReclassRun, grirReclassItem, accrualDocument, closingTaskTemplate, closingTaskTemplateDependency, closingTaskList, closingTaskInstance, closingTaskDependency, closingExecutionLog, closingTaskEvent, carryforwardRun, carryforwardResult, paymentRun, paymentRunCompany, paymentRunMethod, paymentProposalItem, paymentDocument, outgoingPayment, vendorDownPayment, vendorDownPaymentClearing, customerDownPayment, customerDownPaymentClearing, customerDownPaymentClearingItem, customerDownPaymentRequest, downPaymentRequestFulfillment, vendorDownPaymentRequest, vendorDpRequestFulfillment, assetClass, depreciationArea, depreciationKey, fixedAsset, assetAssignment, assetDepreciation, assetTransactionType, assetTransaction, assetRetirement, assetDepreciationRun, assetDepreciationRunItem, assetDepreciationPosting, parkedJournalHeader, parkedJournalLine, incomingPayment, reversalReason, accountingReversalLink, clearingReset, dunningRun, dunningRunCompany, dunningRunAccount, dunningRunItem, dunningNotice, vendorInvoice, vendorInvoiceLine, creditRiskCategory, creditRepresentativeGroup, customerCreditGroup, creditBlockReason, customerCredit, creditChangeAudit, creditDetermination, creditReleaseEvent, financialStatementVersion, financialStatementNode, financialStatementAssignment, glAccountCompany, glAccountTransferRun, glAccountTransferResult, consolidationDataBasis, consolidationDimension, consolidationArea, consolidationUnit, consolidationGroup, consolidationUnitAssignment, consolidationGroupAccount, consolidationAccountMapping, consolidationMethod, consolidationVersion, consolidationTask, consolidationExecution, consolidationExecutionLog, consolidationTaskStatus, residualReason, glClearingAllocation, glClearingResidual, intercompanyClearingConfig, intercompanyDocumentHeader | accounting_reversal_link, accrual_document, asset_assignment, asset_class, asset_depreciation, asset_depreciation_posting, asset_depreciation_run, asset_depreciation_run_item, asset_retirement, asset_transaction, asset_transaction_type, carryforward_result, carryforward_run, clearing_reset, closing_execution_log, closing_task_dependency, closing_task_event, closing_task_instance, closing_task_list, closing_task_template, closing_task_template_dependency, consolidation_account_mapping, consolidation_area, consolidation_data_basis, consolidation_dimension, consolidation_execution, consolidation_execution_log, consolidation_group, consolidation_group_account, consolidation_method, consolidation_task, consolidation_task_status, consolidation_unit, consolidation_unit_assignment, consolidation_version, credit_block_reason, credit_change_audit, credit_determination, credit_release_event, credit_representative_group, credit_risk_category, customer_credit, customer_credit_group, customer_down_payment, customer_down_payment_clearing, customer_down_payment_clearing_item, customer_down_payment_request, depreciation_area, depreciation_key, down_payment_request_fulfillment, dunning_notice, dunning_run, dunning_run_account, dunning_run_company, dunning_run_item, financial_statement_assignment, financial_statement_node, financial_statement_version, fixed_asset, fx_valuation_item, fx_valuation_run, gl_account, gl_account_company, gl_account_transfer_result, gl_account_transfer_run, gl_clearing_allocation, gl_clearing_residual, grir_reclass_item, grir_reclass_run, incoming_payment, intercompany_clearing_config, intercompany_document_header, journal_entry, journal_entry_line, journal_posting_request, outgoing_payment, parked_journal_header, parked_journal_line, payment_document, payment_proposal_item, payment_run, payment_run_company, payment_run_method, residual_reason, reversal_reason, tax_return_run, vendor_down_payment, vendor_down_payment_clearing, vendor_down_payment_request, vendor_dp_request_fulfillment, vendor_invoice, vendor_invoice_line |
+| subledger-tie-out.ts | SUBLEDGER_TIE_CAPABILITY, TIE_LEDGER, SubledgerTieError, calculateSubledgerTie | company_code, customer_company_code, gl_account, journal_entry, journal_entry_line, supplier_company_code |
+| tax-report.ts | TAX_REPORT_CAPABILITY, TaxReportError, executeTaxReport, listTaxReturnRuns | account_determination, company_code, document_type, journal_entry, journal_entry_line, tax_code, tax_return_run |
+| trial-balance.ts | TRIAL_BALANCE_CAPABILITY, STATEMENT_LEDGERS, TrialBalanceError, calculateTrialBalance, listStatementVersions | exchange_rate, financial_statement_assignment, financial_statement_node, financial_statement_version, gl_account, journal_entry, journal_entry_line |
+| vendor-ageing.ts | VENDOR_AGEING_CAPABILITY, VendorAgeingError, getVendorAgeing, vendorAgeingCsv |  |
+| vendor-balances.ts | VENDOR_BALANCE_CAPABILITY, VendorBalanceError, getVendorBalances | journal_entry, journal_entry_line, supplier_company_code |
+| vendor-clearing.ts | VENDOR_CLEARING_CAPABILITY, VendorClearingError, getVendorClearing, clearVendorItems | journal_entry, journal_entry_line, supplier_company_code |
+| vendor-credit-memo.ts | VENDOR_CREDIT_MEMO_CAPABILITY, VendorCreditMemoError, getVendorCreditMemo, postVendorCreditMemo | account_determination, cost_center, payment_terms, profit_center, supplier_company_code, tax_code, vendor_invoice, vendor_invoice_line |
+| vendor-down-payment-clearing.ts | VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY, VendorDownPaymentClearingError, getDownPaymentClearingTx, getDownPaymentClearing, getOrderAdvances, clearDownPaymentsTx, clearDownPayments | journal_entry, journal_entry_line, purchase_order, supplier_company_code, vendor_down_payment, vendor_down_payment_clearing, vendor_invoice |
+| vendor-down-payment-request.ts | VENDOR_DOWN_PAYMENT_REQUEST_CAPABILITY, VendorDownPaymentRequestError, resolveRequestTarget, createVendorDownPaymentRequest, fulfilledSoFar, getVendorDownPaymentRequests, applyVendorRequestFulfillment, downPaymentDebitLine | document_type, journal_entry_line, special_gl_config, supplier_company_code, vendor_down_payment_request, vendor_dp_request_fulfillment |
+| vendor-down-payment.ts | VENDOR_DOWN_PAYMENT_CAPABILITY, VendorDownPaymentError, resolveSpecialGlAccount, judgeAdvanceOrder, postVendorDownPayment, getVendorDownPayments | journal_entry_line, purchase_order, special_gl_config, supplier_company_code, vendor_down_payment, vendor_down_payment_request |
+| vendor-invoice.ts | VENDOR_INVOICE_CAPABILITY, VendorInvoiceError, getVendorInvoice, listVendorInvoiceTaxCodes, postVendorInvoice, cancelVendorInvoice | account_determination, cost_center, payment_terms, profit_center, supplier_company_code, tax_code, vendor_invoice, vendor_invoice_line |
+| walkthrough-credit-preflight.ts | readWalkthroughCreditPrerequisiteSnapshot, walkthroughCreditPrerequisiteError | company_code, credit_control_area |
 
-### src/modules/finance — GL core, journal & clearing
-- `src/modules/finance/schema.ts` — core Drizzle schema (largest file, 2490 lines): `glAccount`, `journalEntry`/`journalEntryLine` (universal journal) + all finance subledger/run tables (see Database).
-- `src/modules/finance/gl-account-group-schema.ts` — `glAccountGroup`, `glAccountGroupFieldStatus` (FS00 field-status matrix), `groupChartAccounts` (consolidation target accounts).
-- `src/modules/finance/gl-account-group-maintenance.ts` — account group CRUD + field-status matrix. Exports: `listAccountGroups`, `accountGroupFieldStatusMatrices`, `accountGroupChoices`, `groupAccountChoices`.
-- `src/modules/finance/gl-account-vocabulary.ts` — shared vocabulary (account types, field statuses, language keys) used by schema/services/FS00 screen. Exports: `GL_ACCOUNT_FIELDS`, `ACCOUNT_TYPES`, `GL_ACCOUNT_TYPES`, `deriveGlAccountType`, `deriveIsBalanceSheet`.
-- `src/modules/finance/gl-account-transfer.ts` — transfer GL account company-code segment between company codes. Exports: `listAccountSegments`, `transferGlAccounts`.
-- `src/modules/finance/gl-document.ts` — FB50-style direct GL document posting; lines may carry an `internalOrder` (validated: company, validity, deletion/posting lock); `postGlDocument(input, {tx?, authorization?})` verifies capability + company-code scope in-tx. Exports: `postGlDocument`.
-- `src/modules/finance/gl-balances.ts` — balance/balance-report queries. Exports: `getGlBalances`, `getGlBalanceReport`.
-- `src/modules/finance/gl-clearing.ts` — manual GL open-item clearing. Exports: `getGlClearing`, `clearGlItems`.
-- `src/modules/finance/journal-items.ts` — journal line item list/filter report (FBL*-style). Exports: `getJournalItems`.
-- `src/modules/finance/ledger-journal.ts` — status-derivation helper for ledger journal views. Exports: `ledgerJournalStatus`.
-- `src/modules/finance/document-display.ts` — journal document display, drill-down, document flow. Exports: `getJournalDocument`, `resolveDocumentNumber`.
-- `src/modules/finance/document-reversal.ts` — document reversal (FB08). Exports: `getDocumentForReversal`, `reverseDocument`.
-- `src/modules/finance/parked-journal.ts` — park/edit/complete/post/delete preliminary journal docs (FV50/FBV0). Exports: `parkJournal`, `editParkedJournal`, `completeParkedJournal`, `postParkedJournal`, `deleteParkedJournal`, `listParkedJournals`, `getParkedJournal`.
-- `src/modules/finance/clearing-reset.ts` — reset/undo open-item clearing (FBRA). Exports: `getClearingDocument`, `resetClearing`, `resetClearingTx`.
-- `src/modules/finance/chart-of-accounts-copy.ts` — bulk-copy chart of accounts + GL accounts to new chart. Exports: `copyChartOfAccounts`, `listChartCopies`.
+## Routes (61)
+`/config/chart-of-accounts` · `/config/chart-of-accounts/copy` · `/config/consolidation` · `/config/credit-control-areas` · `/config/fiscal-year-variants` · `/config/fiscal-year-variants/assign-company-codes` · `/config/gl-accounts` · `/config/gl-accounts/edit` · `/config/gl-accounts/new` · `/config/gl-accounts/transfer` · `/config/gl-accounts/view` · `/config/intercompany-clearing` · `/finance/assets` · `/finance/assets/acquire` · `/finance/assets/change` · `/finance/assets/depreciate` · `/finance/assets/history` · `/finance/assets/history/export` · `/finance/assets/new` · `/finance/assets/retire` · `/finance/balance-sheet` · `/finance/cash-flow` · `/finance/clearing-reset` · `/finance/consolidated-statements` · `/finance/consolidation-monitor` · `/finance/credit-monitor` · `/finance/credit-release` · `/finance/credit` · `/finance/customer-ageing` · `/finance/customer-balances` · `/finance/customer-clearing` · `/finance/customer-down-payment-clearing` · `/finance/customer-down-payment-request` · `/finance/customer-down-payment` · `/finance/customer-invoice` · `/finance/document-reversal` · `/finance/dunning` · `/finance/fx/valuation` · `/finance/fx/valuation/export` · `/finance/gl-clearing` · `/finance/grir-reclass` · `/finance/grir-reclass/export` · `/finance/incoming-payment` · `/finance/intercompany` · `/finance/journal` · `/finance/journal/balances` · `/finance/journal/document` · `/finance/journal/items` · `/finance/journal/park` · `/finance/outgoing-payment` · `/finance/payment-run` · `/finance/profit-loss` · `/finance/tax/report` · `/finance/vendor-ageing/export` · `/finance/vendor-balances` · `/finance/vendor-clearing` · `/finance/vendor-credit-memo` · `/finance/vendor-down-payment-clearing` · `/finance/vendor-down-payment-request` · `/finance/vendor-down-payment` · `/finance/vendor-invoice`
 
-### src/modules/finance — AR (customer) processes
-- `src/modules/finance/customer-invoice.ts` — FB70 customer invoice post/cancel; lines may post by `components` (split revenue accounts) with caller-supplied `taxAmount`/`taxAccount` (billing-driven), else tax determined from code. Exports: `postCustomerInvoice`, `cancelCustomerInvoice`, `getCustomerInvoice`, `listCustomerInvoiceTaxCodes`.
-- `src/modules/finance/customer-credit-memo.ts` — FB75 customer credit memo; can reference/partially cancel an invoice; billing reference must match the billing's payer partner (`sales/partners`), not just its sold-to. Exports: `postCustomerCreditMemo`, `getCustomerCreditMemo`.
-- `src/modules/finance/customer-clearing.ts` — manual clearing of open customer items (F-32). Exports: `getCustomerClearing`, `clearCustomerItems`.
-- `src/modules/finance/customer-balances.ts` — customer balance display report. Exports: `getCustomerBalances`.
-- `src/modules/finance/customer-ageing.ts` — customer open-item ageing report. Exports: `getCustomerAgeing`.
-- `src/modules/finance/customer-down-payment.ts` — customer down payment (special G/L, DZ journal) posting (F-29). Exports: `postCustomerDownPayment`, `getCustomerDownPayments`.
-- `src/modules/finance/customer-down-payment-request.ts` — customer down payment noted item/request (F-37), no journal until fulfilled. Exports: `createCustomerDownPaymentRequest`, `createCustomerDownPaymentRequestTx`, `reverseCustomerDownPaymentRequest`, `reverseCustomerDownPaymentRequestTx` (withdraw; refused once any receipt stands against it), `applyRequestFulfillment`, `getCustomerDownPaymentRequests`.
-- `src/modules/finance/customer-down-payment-clearing.ts` — transfers standing down payments against open invoices (F-39). Exports: `getCustomerDownPaymentClearing`, `getCustomerDownPaymentClearingTx`, `clearCustomerDownPayments`, `clearCustomerDownPaymentsTx` (`*Tx` variants used by `sales/down-payment.ts`).
-- `src/modules/finance/incoming-payment.ts` — incoming customer payment with clearing (F-28); input `authorization` checked for capability + company-code scope. Exports: `getReceivables`, `postIncomingPayment`.
-- `src/modules/finance/dunning.ts` — dunning run (propose/exclude/finalize/cancel) over overdue customer items (F150); propose/finalize take `{authorization}` and check every run company code is in scope. Exports: `proposeDunningRun`, `excludeDunningAccount`, `finalizeDunningRun`, `cancelDunningRun`, `getDunningRun`, `listDunningRuns`.
-- `src/modules/finance/credit.ts` — customer credit master (FD32), credit-check evaluation, credit exposure monitor (F.31); a newly BLOCKED sales document enqueues a `CREDIT.BLOCKED` fan-out to credit-release holders (credit control area/sales org scope), release notifies the order's creator (`CREDIT.RELEASED`). Exports: `getCustomerCredit`, `saveCustomerCredit`, `evaluateCreditCheck`, `getCreditExposure`, `listCreditAudit`.
-- `src/modules/finance/credit-control-area-contract.ts` — shared constants/activities for credit control area maintenance screen+service.
-- `src/modules/finance/credit-control-area-maintenance.ts` — credit control area setup CRUD (config screen under src/app/config). Exports: `listCreditControlAreaSetup`, `createCreditControlAreaSetup`.
-- `src/modules/finance/walkthrough-credit-preflight.ts` — reads foundation company-code/credit-control-area state to preflight seed walkthrough's credit scenario. Exports: `readWalkthroughCreditPrerequisiteSnapshot`, `walkthroughCreditPrerequisiteError`.
-- `src/modules/finance/ageing-derivation.ts` — shared ageing-item derivation used by customer+vendor ageing reports. Exports: `deriveAgeingItems`, `aggregateAgeingPartners`, `validateAgeingSelection`.
-
-### src/modules/finance — AP (vendor) processes
-- `src/modules/finance/vendor-invoice.ts` — FB60 vendor invoice post/cancel. Exports: `postVendorInvoice`, `cancelVendorInvoice`, `getVendorInvoice`, `listVendorInvoiceTaxCodes`.
-- `src/modules/finance/vendor-credit-memo.ts` — FB65 vendor credit memo. Exports: `postVendorCreditMemo`, `getVendorCreditMemo`.
-- `src/modules/finance/vendor-clearing.ts` — manual clearing of open vendor items (F-44). Exports: `getVendorClearing`, `clearVendorItems`.
-- `src/modules/finance/vendor-balances.ts` — vendor balance display report. Exports: `getVendorBalances`.
-- `src/modules/finance/vendor-ageing.ts` — vendor open-item ageing report, with CSV export. Exports: `getVendorAgeing`, `vendorAgeingCsv`.
-- `src/modules/finance/vendor-down-payment.ts` — vendor down payment (special G/L, KA journal) posting (F-48), optionally against a PO. Exports: `postVendorDownPayment`, `getVendorDownPayments`, `judgeAdvanceOrder`, `resolveSpecialGlAccount`.
-- `src/modules/finance/vendor-down-payment-request.ts` — vendor down payment noted item/request (F-47). Exports: `createVendorDownPaymentRequest`, `applyVendorRequestFulfillment`, `getVendorDownPaymentRequests`.
-- `src/modules/finance/vendor-down-payment-clearing.ts` — transfers standing vendor down payments against open invoices (F-54), optionally tied to a PO/invoice from procurement. Exports: `getDownPaymentClearing`, `clearDownPayments`, `getOrderAdvances`.
-- `src/modules/finance/outgoing-payment.ts` — outgoing vendor payment with clearing (F-53); `{authorization}` capability + company-code scope check. Exports: `getPayables`, `postOutgoingPayment`.
-- `src/modules/finance/payment-run.ts` — automatic payment run (F110): parameters, proposal generation, execution, cancellation. Exports: `createPaymentRun`, `generateProposal`, `executePaymentRun`, `cancelPaymentRun`, `listBankChoices`.
-
-### src/modules/finance — Intercompany & GR/IR
-- `src/modules/finance/intercompany.ts` — intercompany posting (FB01, two balanced journals in one transaction) + OBYA pair-clearing-account config. Exports: `postIntercompany`, `saveIntercompanyConfig`, `deleteIntercompanyConfig`, `listIntercompanyConfigs`, `listCompanyChoices`.
-- `src/modules/finance/grir-reclass.ts` — GR/IR reclassification analysis + accrual run (F.19-style); `{authorization}` capability + company-code scope check. Exports: `executeGrIrAnalysis`, `getGrIrRun`, `grIrCsv`.
-
-### src/modules/finance — Period close & reporting
-- `src/modules/finance/accrual.ts` — accrual/deferral document posting with scheduled reversal (FBS1); passes `authorization` through to `postGlDocument`. Exports: `postAccrualDocument`, `listDueAccruals`, `executeAccrualReversal`, `listAccrualDocuments`.
-- `src/modules/finance/fx-valuation.ts` — FX valuation run on open items/balances (FAGL_FC_VAL/F.05). Exports: `executeFxValuation`, `getFxValuationRun`, `fxValuationCsv`.
-- `src/modules/finance/close-cockpit.ts` — period-end close task template/task-list engine with dependency graph, execution log, event trail. Exports: `createTaskListFromTemplate`, `releaseTaskList`, `executeTask`, `processScheduledExecutions`, `attachEvidence`, `signOffTask`, `findDependencyCycle`.
-- `src/modules/finance/carryforward.ts` — balance carryforward/year-end close (F.16/FAGLGVTR): balance-sheet openings derived at read time, P&L accounts transferred to retained earnings; passes `authorization` through to its GL posting. Exports: `executeCarryforward`, `getCarryforwardRun`, `listCarryforwardRuns`, `listCarryforwardResults`.
-- `src/modules/finance/trial-balance.ts` — trial balance/financial statement calculation engine (also backs balance sheet & P&L versions). Exports: `calculateTrialBalance`, `listStatementVersions`.
-- `src/modules/finance/balance-sheet.ts` — balance sheet statement view. Exports: `calculateBalanceSheet`.
-- `src/modules/finance/profit-loss.ts` — P&L statement view (re-exports `TrialBalanceError`). Exports: `calculateProfitLoss`.
-- `src/modules/finance/cash-flow-vocabulary.ts` — cash flow statement vocabulary (methods, account classes, selection/result types).
-- `src/modules/finance/cash-flow.ts` — cash flow statement calculation (re-exports vocabulary). Exports: `calculateCashflow`.
-- `src/modules/finance/subledger-tie-out.ts` — reconciles GL reconciliation accounts against AR/AP subledger totals. Exports: `calculateSubledgerTie`.
-- `src/modules/finance/tax-report.ts` — tax advance return execution/report (tax_return_run); `{authorization}` capability + company-code scope check. Exports: `executeTaxReport`, `listTaxReturnRuns`.
-
-### src/modules/finance — Fixed assets
-- `src/modules/finance/asset-master.ts` — asset master create/change/deactivate, assignment + depreciation-parameter maintenance. Exports: `createAsset`, `changeAsset`, `changeAssetAssignment`, `changeAssetDepreciation`, `deactivateAsset`.
-- `src/modules/finance/asset-acquisition.ts` — asset acquisition posting/simulation/reversal. Exports: `simulateAssetAcquisition`, `recordAssetAcquisition`, `postAssetAcquisition`, `reverseAssetAcquisition`, `getAssetTransactions`.
-- `src/modules/finance/asset-depreciation.ts` — depreciation run execution (planned/repeat/restart/unplanned) (AFAB). Exports: `executeDepreciationRun`, `listDepreciationRuns`, `getDepreciationRunItems`, `getPostedDepreciation`.
-- `src/modules/finance/asset-retirement.ts` — asset retirement posting (complete/percent/amount scope) + reversal. Exports: `simulateAssetRetirement`, `postAssetRetirement`, `reverseAssetRetirement`, `listRetireableAssets`, `getAssetRetirements`.
-- `src/modules/finance/asset-history.ts` — asset value/transaction history sheet report, with CSV export. Exports: `getAssetHistorySheet`, `assetHistoryCsv`.
-
-### src/modules/finance — Consolidation
-- `src/modules/finance/consolidation-vocabulary.ts` — consolidation domain vocabulary (folders, data providers, method/task kinds, area/unit/group shapes).
-- `src/modules/finance/consolidation-workbench.ts` — config workbench for data basis, areas, units, groups, mappings, methods, versions, tasks (re-exports vocabulary). Exports: `getConsolidationWorkbench`, `saveDataBasis`, `saveArea`, `saveUnit`, `saveGroup`, `assignUnit`, `saveGroupAccount`, `saveMapping`, `saveMethod`, `saveVersion`, `saveTask`.
-- `src/modules/finance/consolidation-monitor-vocabulary.ts` — monitor-specific vocabulary (execution modes, task/execution statuses, error/warning policies, supported task types).
-- `src/modules/finance/consolidation-monitor.ts` — executes/tracks consolidation task runs (re-exports monitor vocabulary). Exports: `getConsolidationMonitor`, `executeConsolidationTask`, `executeConsolidationTaskGroup`, `cancelConsolidationExecution`.
-- `src/modules/finance/consolidated-statements-vocabulary.ts` — consolidated statement view/section vocabulary.
-- `src/modules/finance/consolidated-statements.ts` — calculates consolidated financial statements across consolidation units (re-exports vocabulary). Exports: `calculateConsolidatedStatements`.
-
-### src/app/config/chart-of-accounts — Chart of accounts config screens
-- `actions.ts` — server actions: save/activate chart of accounts and group chart of accounts.
-- `page.tsx` — chart of accounts maintenance page.
-- `ChartOfAccountsForm.tsx` — create/edit form.
-- `ChartOfAccountsList.tsx` — list.
-- `ChartLifecycleControl.tsx` — activate/deactivate control.
-- `ChartOfAccountsValueHelp.tsx` — F4 value-help picker for a chart.
-- `GroupChartOfAccounts.tsx` — group chart of accounts (OB13) maintenance UI.
-- `copy/actions.ts` — server action wrapping `copyChartOfAccounts`.
-- `copy/page.tsx` — copy chart of accounts page.
-- `copy/CopyChartForm.tsx` — copy chart form.
-
-### src/app/config/consolidation — Consolidation config screen
-- `actions.ts` — server actions (`saveBasisAction`, `saveAreaAction`, `saveUnitAction`, `saveGroupAction`, `assignUnitAction`, `saveGroupAccountAction`, `saveMappingAction`, more) wrapping consolidation-workbench service calls.
-- `ConsolidationWorkbenchShell.tsx` — workbench shell UI (tabs for data basis/areas/units/groups/mappings/methods/versions/tasks).
-- `page.tsx` — consolidation config page.
-
-### src/app/config/credit-control-areas
-- `actions.ts` — server action `createCreditControlAreaAction`.
-- `CreditControlAreaSetup.tsx` — setup UI.
-- `page.tsx` — config page.
-
-### src/app/config/fiscal-year-variants
-- `actions.ts` — save/activate fiscal year variant + periods.
-- `FiscalYearVariants.tsx` — maintenance UI.
-- `page.tsx` — config page.
-- `assign-company-codes/actions.ts` — server action `assignFiscalYearVariantAction`.
-- `assign-company-codes/page.tsx` — assignment page.
-- `AssignCompanyCodesUI.tsx` — assignment UI (fiscal year variant to company codes).
-
-### src/app/config/gl-accounts — GL account master (FS00) config screens
-- `actions.ts` — server actions: save/block/delete GL account, save account group, set account group active, save field-status row.
-- `fieldStatus.ts` — baseline field-status fallback vocabulary (used when no DB row exists for a field).
-- `page.tsx` — GL accounts landing page.
-- `GlAccountInitialScreen.tsx` — FS00 "initial screen" (chart/account/company selection).
-- `GlAccountModeScreen.tsx` — create/change/display mode screen shell.
-- `GlAccountFields.tsx` — field-by-field form renderer driven by field-status matrix.
-- `GlAccountDialog.tsx` — modal dialog wrapper for account create/edit.
-- `GlAccountsList.tsx` — list/search.
-- `GlAccountValueHelp.tsx` — F4 value-help picker for a GL account.
-- `AccountGroups.tsx` — account group registry + field-status matrix maintenance UI.
-- `new/page.tsx` — create-mode page.
-- `edit/page.tsx` — change-mode page.
-- `view/page.tsx` — display-mode page.
-- `transfer/page.tsx` — account transfer page.
-- `transfer/TransferShell.tsx` — transfer-between-company-codes UI.
-
-### src/app/config/intercompany-clearing
-- `actions.ts` — save/delete OBYA intercompany clearing pair config.
-- `IntercompanyClearing.tsx` — clearing config UI.
-- `page.tsx` — config page.
-
-### src/app/finance — Journal & GL screens
-- `journal/page.tsx` — journal area landing page.
-- `journal/new/actions.ts`, `JournalForm.tsx`, `page.tsx` — FB50-style direct GL posting screen.
-- `journal/park/actions.ts`, `ParkedJournal.tsx`, `page.tsx` — park/complete/post/delete parked journal screen.
-- `journal/document/DocumentDisplay.tsx`, `page.tsx` — journal document display/drill-down screen.
-- `journal/items/ItemsForm.tsx`, `page.tsx` — journal line items report screen.
-- `journal/balances/BalancesForm.tsx`, `BalanceReportForm.tsx`, `page.tsx` — GL balance / balance report screens.
-- `gl-clearing/actions.ts`, `GlClearing.tsx`, `page.tsx` — GL open-item clearing screen.
-- `clearing-reset/ResetForm.tsx`, `page.tsx` — clearing reset (FBRA) screen.
-- `document-reversal/page.tsx` — document reversal screen.
-- `trial-balance/TrialBalanceShell.tsx`, `page.tsx` — trial balance screen.
-- `balance-sheet/BalanceSheetShell.tsx`, `page.tsx` — balance sheet screen.
-- `profit-loss/ProfitLossShell.tsx`, `page.tsx` — P&L screen.
-- `cash-flow/CashflowShell.tsx`, `page.tsx` — cash flow statement screen.
-- `subledger-tie-out/SubledgerTieShell.tsx`, `page.tsx` — subledger tie-out screen.
-- `tax/report/TaxReportForm.tsx`, `page.tsx` — tax report screen.
-
-### src/app/finance — AR screens
-- `customer-invoice/actions.ts`, `CustomerInvoice.tsx`, `page.tsx` — FB70 customer invoice posting screen.
-- `customer-clearing/actions.ts`, `CustomerClearing.tsx`, `page.tsx` — F-32 customer clearing screen.
-- `customer-balances/page.tsx` — customer balance display.
-- `customer-ageing/page.tsx` — customer ageing report.
-- `customer-down-payment/actions.ts`, `CustomerDownPayment.tsx`, `page.tsx` — F-29 down payment screen.
-- `customer-down-payment-request/actions.ts`, `CustomerDownPaymentRequest.tsx`, `page.tsx` — F-37 request screen.
-- `customer-down-payment-clearing/actions.ts`, `CustomerDownPaymentClearing.tsx`, `page.tsx` — F-39 clearing screen.
-- `incoming-payment/actions.ts`, `IncomingPayment.tsx`, `page.tsx` — F-28 incoming payment screen.
-- `dunning/page.tsx` — dunning run screen.
-- `credit/actions.ts`, `CreditShell.tsx`, `page.tsx` — FD32 credit master screen.
-- `credit-monitor/CreditMonitorShell.tsx`, `page.tsx` — F.31 credit monitor screen.
-- `credit-release/actions.ts`, `CreditReleaseShell.tsx`, `page.tsx` — blocked sales-order credit release screen.
-- `vendor-credit-memo/actions.ts`, `VendorCreditMemo.tsx`, `page.tsx` — FB65 vendor credit memo screen (also used against customer invoices — see module file).
-
-### src/app/finance — AP screens
-- `vendor-invoice/actions.ts`, `VendorInvoice.tsx`, `page.tsx` — FB60 vendor invoice posting screen.
-- `vendor-clearing/actions.ts`, `VendorClearing.tsx`, `page.tsx` — F-44 vendor clearing screen.
-- `vendor-balances/page.tsx` — vendor balance display.
-- `vendor-ageing/page.tsx`, `vendor-ageing/export/route.ts` — vendor ageing report + CSV export route.
-- `vendor-down-payment/actions.ts`, `VendorDownPayment.tsx`, `page.tsx` — F-48 down payment screen.
-- `vendor-down-payment-request/actions.ts`, `VendorDownPaymentRequest.tsx`, `page.tsx` — F-47 request screen.
-- `vendor-down-payment-clearing/actions.ts`, `VendorDownPaymentClearing.tsx`, `page.tsx` — F-54 clearing screen.
-- `outgoing-payment/actions.ts`, `OutgoingPayment.tsx`, `page.tsx` — F-53 outgoing payment screen.
-- `payment-run/actions.ts`, `PaymentRun.tsx`, `page.tsx` — F110 payment run screen.
-
-### src/app/finance — Intercompany & GR/IR screens
-- `intercompany/actions.ts`, `IntercompanyPosting.tsx`, `page.tsx` — intercompany posting screen.
-- `grir-reclass/GrIrForm.tsx`, `page.tsx`, `export/route.ts` — GR/IR reclass screen + CSV export.
-
-### src/app/finance — Period close & asset screens
-- `accruals/AccrualShell.tsx`, `actions.ts`, `page.tsx` — accrual posting/reversal screen.
-- `fx/valuation/ValuationForm.tsx`, `page.tsx`, `export/route.ts` — FX valuation run screen + CSV export.
-- `close-cockpit/CloseCockpitShell.tsx`, `actions.ts`, `page.tsx` — close cockpit screen.
-- `carryforward/CarryforwardShell.tsx`, `actions.ts`, `page.tsx` — balance carryforward screen.
-- `assets/page.tsx` — fixed assets landing page.
-- `assets/new/AssetCreate.tsx`, `actions.ts`, `page.tsx` — asset master create screen.
-- `assets/change/AssetChange.tsx`, `actions.ts`, `page.tsx` — asset master change screen.
-- `assets/acquire/AcquireForm.tsx`, `actions.ts`, `page.tsx` — asset acquisition screen.
-- `assets/depreciate/DepreciateForm.tsx`, `actions.ts`, `page.tsx` — depreciation run screen.
-- `assets/retire/RetireForm.tsx`, `actions.ts`, `page.tsx` — asset retirement screen.
-- `assets/history/HistoryForm.tsx`, `page.tsx`, `export/route.ts` — asset history sheet screen + CSV export.
-
-### src/app/finance — Consolidation screens
-- `consolidated-statements/ConsolidatedStatementsShell.tsx`, `page.tsx` — consolidated statements screen.
-- `consolidation-monitor/ConsolidationMonitorShell.tsx`, `actions.ts`, `page.tsx` — consolidation monitor screen.
-
-## Pages & API routes
-- `/finance/journal`, `/finance/journal/new`, `/finance/journal/park`, `/finance/journal/document`, `/finance/journal/items`, `/finance/journal/balances` — direct posting, parking, document display, line-item and balance reports.
-- `/finance/gl-clearing`, `/finance/clearing-reset`, `/finance/document-reversal` — GL open-item clearing, clearing reset, document reversal.
-- `/finance/trial-balance`, `/finance/balance-sheet`, `/finance/profit-loss`, `/finance/cash-flow`, `/finance/subledger-tie-out`, `/finance/tax/report` — statement/reporting screens.
-- `/finance/customer-invoice`, `/finance/customer-clearing`, `/finance/customer-balances`, `/finance/customer-ageing` — AR core screens.
-- `/finance/customer-down-payment`, `/finance/customer-down-payment-request`, `/finance/customer-down-payment-clearing` — AR special-GL down payment screens.
-- `/finance/incoming-payment`, `/finance/dunning`, `/finance/credit`, `/finance/credit-monitor`, `/finance/credit-release` — AR payments, dunning, credit management.
-- `/finance/vendor-invoice`, `/finance/vendor-clearing`, `/finance/vendor-balances`, `/finance/vendor-ageing` (+ `/export`) — AP core screens.
-- `/finance/vendor-down-payment`, `/finance/vendor-down-payment-request`, `/finance/vendor-down-payment-clearing` — AP special-GL down payment screens.
-- `/finance/outgoing-payment`, `/finance/payment-run` — AP payments and automatic payment run.
-- `/finance/vendor-credit-memo` — vendor and customer credit memo screen (shared route).
-- `/finance/intercompany` — intercompany posting.
-- `/finance/grir-reclass` (+ `/export`) — GR/IR reclassification run.
-- `/finance/accruals`, `/finance/fx/valuation` (+ `/export`), `/finance/close-cockpit`, `/finance/carryforward` — period close screens.
-- `/finance/assets`, `/finance/assets/new`, `/finance/assets/change`, `/finance/assets/acquire`, `/finance/assets/depreciate`, `/finance/assets/retire`, `/finance/assets/history` (+ `/export`) — fixed asset screens.
-- `/finance/consolidated-statements`, `/finance/consolidation-monitor` — consolidation runtime screens.
-- `/config/chart-of-accounts` (+ `/copy`), `/config/gl-accounts` (+ `/new`, `/edit`, `/view`, `/transfer`), `/config/consolidation`, `/config/credit-control-areas`, `/config/fiscal-year-variants` (+ `/assign-company-codes`), `/config/intercompany-clearing` — finance-owned config screens.
-
-## Database
-**Owns** (schema.ts files): `gl_account`, `gl_account_group`, `gl_account_group_field_status`, `group_chart_accounts`, `gl_account_company`, `gl_account_transfer_run`, `gl_account_transfer_result`, `journal_entry`, `journal_entry_line`, `journal_posting_request`, `tax_return_run`, `fx_valuation_run`, `fx_valuation_item`, `grir_reclass_run`, `grir_reclass_item`, `accrual_document`, `closing_task_template`, `closing_task_template_dependency`, `closing_task_list`, `closing_task_instance`, `closing_task_dependency`, `closing_execution_log`, `closing_task_event`, `carryforward_run`, `carryforward_result`, `payment_run`, `payment_run_company`, `payment_run_method`, `payment_proposal_item`, `payment_document`, `outgoing_payment`, `vendor_down_payment`, `vendor_down_payment_clearing`, `customer_down_payment`, `customer_down_payment_clearing`, `customer_down_payment_clearing_item`, `customer_down_payment_request`, `down_payment_request_fulfillment`, `vendor_down_payment_request`, `vendor_dp_request_fulfillment`, `asset_class`, `depreciation_area`, `depreciation_key`, `fixed_asset`, `asset_assignment`, `asset_depreciation`, `asset_transaction_type`, `asset_transaction`, `asset_retirement`, `asset_depreciation_run`, `asset_depreciation_run_item`, `asset_depreciation_posting`, `parked_journal_header`, `parked_journal_line`, `incoming_payment`, `reversal_reason`, `accounting_reversal_link`, `clearing_reset`, `dunning_run`, `dunning_run_company`, `dunning_run_account`, `dunning_run_item`, `dunning_notice`, `vendor_invoice`, `vendor_invoice_line`, `credit_risk_category`, `credit_representative_group`, `customer_credit_group`, `credit_block_reason`, `customer_credit`, `credit_change_audit`, `credit_determination`, `credit_release_event`, `financial_statement_version`, `financial_statement_node`, `financial_statement_assignment`, `consolidation_data_basis`, `consolidation_dimension`, `consolidation_area`, `consolidation_unit`, `consolidation_group`, `consolidation_unit_assignment`, `consolidation_group_account`, `consolidation_account_mapping`, `consolidation_method`, `consolidation_version`, `consolidation_task`, `consolidation_execution`, `consolidation_execution_log`, `consolidation_task_status`, `residual_reason`, `gl_clearing_allocation`, `gl_clearing_residual`, `intercompany_clearing_config`, `intercompany_document_header`.
-
-**Reads/writes tables owned by other modules:**
-- `chart_of_accounts`, `group_chart_of_accounts`, `company_code`, `credit_control_area`, `fiscal_year_variant`, `business_partner`, `customer_company`/`supplier_company`, `payment_terms`, `bank_account`, `house_bank`, `payment_method`, `exchange_rate`, `document_type` — owned by **foundation**; finance reads constantly for account/company/partner master data, payment-terms baseline-date derivation, bank/payment-method lookups in payment postings.
-- `customer_invoice`, `customer_invoice_line`, `supplier_invoice` — owned by **purchasing** (module-boundary quirk: both customer- and supplier-side invoice-verification tables live in `src/modules/purchasing/schema.ts`); finance reads for ageing, dunning, incoming/down-payment clearing, GL clearing, credit-memo cancellation matching.
-- `purchase_order` — owned by **purchasing**; read by vendor down payment / down payment clearing to resolve the order an advance was raised against.
-- `billing_document` — owned by **sales**; read by `customer-credit-memo.ts` when a credit memo is issued against a billing document.
-- `activeBlockedInvoiceNumbers` (blocked-invoice helper) — owned by **purchasing**; read by `payment-run.ts` to exclude blocked invoices from the payment proposal.
+## Tables owned (95)
+accounting_reversal_link, accrual_document, asset_assignment, asset_class, asset_depreciation, asset_depreciation_posting, asset_depreciation_run, asset_depreciation_run_item, asset_retirement, asset_transaction, asset_transaction_type, carryforward_result, carryforward_run, clearing_reset, closing_execution_log, closing_task_dependency, closing_task_event, closing_task_instance, closing_task_list, closing_task_template, closing_task_template_dependency, consolidation_account_mapping, consolidation_area, consolidation_data_basis, consolidation_dimension, consolidation_execution, consolidation_execution_log, consolidation_group, consolidation_group_account, consolidation_method, consolidation_task, consolidation_task_status, consolidation_unit, consolidation_unit_assignment, consolidation_version, credit_block_reason, credit_change_audit, credit_determination, credit_release_event, credit_representative_group, credit_risk_category, customer_credit, customer_credit_group, customer_down_payment, customer_down_payment_clearing, customer_down_payment_clearing_item, customer_down_payment_request, depreciation_area, depreciation_key, down_payment_request_fulfillment, dunning_notice, dunning_run, dunning_run_account, dunning_run_company, dunning_run_item, financial_statement_assignment, financial_statement_node, financial_statement_version, fixed_asset, fx_valuation_item, fx_valuation_run, gl_account, gl_account_company, gl_account_group, gl_account_group_field_status, gl_account_transfer_result, gl_account_transfer_run, gl_clearing_allocation, gl_clearing_residual, grir_reclass_item, grir_reclass_run, group_chart_accounts, incoming_payment, intercompany_clearing_config, intercompany_document_header, journal_entry, journal_entry_line, journal_posting_request, outgoing_payment, parked_journal_header, parked_journal_line, payment_document, payment_proposal_item, payment_run, payment_run_company, payment_run_method, residual_reason, reversal_reason, tax_return_run, vendor_down_payment, vendor_down_payment_clearing, vendor_down_payment_request, vendor_dp_request_fulfillment, vendor_invoice, vendor_invoice_line
 
 ## Depends on
-- Other modules:
-  - **foundation** — company codes, chart of accounts, credit control areas, fiscal year variants, business partners, customer/supplier company extensions, payment terms, bank/house bank/payment method master data. Nearly every finance service resolves ≥1 foundation master record before posting.
-  - **purchasing** — `customer_invoice`/`supplier_invoice`/`purchase_order` tables + blocked-invoice helper, used by ageing, dunning, down-payment, clearing, payment-run flows reconciling against invoice-verification documents.
-  - **sales** — `billing_document` + `sales/partners` (`documentPartners`, payer check), used only by customer credit memo issuance.
-  - No direct dependency on **controlling** found in this module's scope; cost/profit center fields on journal lines are plain varchar FK-free columns.
-- Shared/platform:
-  - `@/platform/tables/tenancy` — `client`, `auditColumns` on every table (multi-tenant scoping, standard audit columns).
-  - `@/platform/db/client` — `withTenant`/`Tx` transaction wrapper used by virtually every service function.
-  - `@/platform/posting` (+ `/decimal`) — canonical posting engine (`postJournalEntry`, `PostingError`) every document-creating flow posts through, plus decimal/scaled-amount helpers.
-  - `@/platform/periods` (+ `/windows`) — period derivation/validation (`derivePosition`, `getCompanyCode`) enforcing open posting periods.
-  - `@/platform/numbering` — document/run number range assignment.
-  - `@/platform/lock/enqueue` — advisory locking for concurrent run execution (payment run, depreciation run, clearing).
-  - `@/platform/auth/capability-policy`, `@/platform/auth/current`, `@/platform/auth/session` — capability codes (e.g. `FIN.JOURNAL.POST`, `FIN.CREDIT.MAINTAIN`) and actor/session resolution.
-  - `@/platform/auth/service-authority` — in-tx actor/capability/company-code scope verification (`verifyServiceAuthorityInTx`) for posting services.
-  - `@/platform/job/queue`, `@/platform/notification/{notify,creator,jobs/fanout}` — credit block/release notifications (`credit.ts`).
-  - `@/platform/change` — `recordChange` audit-trail logging on mutations.
-  - `@/platform/i18n` — localized labels/messages in service and screen code.
-  - `@/platform/tables/reference` — shared reference-table helpers.
-  - `@/ui/*` — shared UI component library used throughout `src/app/finance` and `src/app/config/*` screens (38 files import from it).
+foundation, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/lock, platform/notification, platform/numbering, platform/periods, platform/posting, platform/tables, platform/tenancy, purchasing, sales, ui/fields, ui/lock
 
 ## Used by
-- **sales** module (`src/app/sales/credit-memo/actions.ts`, `CreditMemo.tsx`, `page.tsx`) imports `@/modules/finance/customer-credit-memo` and `@/modules/finance/customer-invoice` (`cancelCustomerInvoice`, `listCustomerInvoiceTaxCodes`) to drive sales-side credit memo screen; `src/modules/sales/down-payment.ts` calls the `*Tx` down-payment request/clearing functions.
-- **foundation** and **purchasing** modules import finance's `journalEntry`/`journalEntryLine` schema types (e.g. `src/modules/foundation/chart-of-accounts-maintenance.ts`, `cost-center-definition.ts`, `tax-code-definition.ts`, `internal-order.ts`, `src/modules/purchasing/invoice-verification.ts`) to type account-assignment fields and join against journal lines.
-- Many `tests/*.test.ts` files exercise finance services directly (contract, schema-contract, completion/workflow tests) — see Tests.
-- `scripts/browser-smoke/*.ts` smoke-drive nearly every finance screen end to end, plus cross-module smoke scripts (`sales-order-to-invoice.ts`, `cost-center-report.ts`, `profit-center-report.ts`) traversing into finance screens as part of a larger walkthrough.
+dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales
 
-## Tests
-tests/accrual.test.ts, tests/asset-acquisition.test.ts, tests/asset-depreciation.test.ts, tests/asset-history.test.ts, tests/asset-master.test.ts, tests/asset-retirement.test.ts, tests/balance-sheet-index-contract.test.ts, tests/balance-sheet.test.ts, tests/carryforward.test.ts, tests/cash-flow-schema-contract.test.ts, tests/cash-flow.test.ts, tests/chart-of-accounts-copy.test.ts, tests/chart-of-accounts-migration-contract.test.ts, tests/clearing-reset.test.ts, tests/close-cockpit.test.ts, tests/consolidated-statements-schema-contract.test.ts, tests/consolidated-statements.test.ts, tests/consolidation-monitor-schema-contract.test.ts, tests/consolidation-monitor.test.ts, tests/consolidation-workbench-schema-contract.test.ts, tests/consolidation-workbench.test.ts, tests/credit-notification.test.ts, tests/helpers/finance-actor.ts, tests/credit-control-area-atomicity.test.ts, tests/credit-control-area-capability.test.ts, tests/credit-control-area-maintenance-contract.test.ts, tests/credit-control-area-maintenance.test.ts, tests/credit-control-area-validation.test.ts, tests/credit-monitor.test.ts, tests/credit-release.test.ts, tests/credit.test.ts, tests/customer-ageing.test.ts, tests/customer-balances.test.ts, tests/customer-clearing.test.ts, tests/customer-credit-memo.test.ts, tests/customer-down-payment-clearing.test.ts, tests/customer-down-payment-request.test.ts, tests/customer-down-payment.test.ts, tests/customer-invoice.test.ts, tests/document-display.test.ts, tests/document-reversal.test.ts, tests/dunning.test.ts, tests/fx-valuation.test.ts, tests/gl-account-activity-registry.test.ts, tests/gl-account-master-maintenance.test.ts, tests/gl-account-master-schema-contract.test.ts, tests/gl-account-transfer.test.ts, tests/gl-balances.test.ts, tests/gl-clearing-schema-contract.test.ts, tests/gl-clearing.test.ts, tests/gl-document.test.ts, tests/gl-reporting-completion.test.ts, tests/gl-reporting-index-contract.test.ts, tests/gl-reporting-suite.test.ts, tests/grir-reclass.test.ts, tests/helpers/credit-control-area-authorized.ts, tests/incoming-payment-completion.test.ts, tests/incoming-payment.test.ts, tests/intercompany-schema-contract.test.ts, tests/intercompany.test.ts, tests/invoice-advance-clearing.test.ts, tests/journal-document-display-ui-contract.test.ts, tests/journal-document-display.test.ts, tests/journal-items.test.ts, tests/outgoing-payment-completion.test.ts, tests/outgoing-payment.test.ts, tests/parked-journal.test.ts, tests/payment-run.test.ts, tests/profit-loss.test.ts, tests/statement-version-onboarding.test.ts, tests/subledger-tie-out.test.ts, tests/subledger-tie-schema-contract.test.ts, tests/tax-code-definition.test.ts, tests/tax-report.test.ts, tests/trial-balance.test.ts, tests/vendor-ageing.test.ts, tests/vendor-balances.test.ts, tests/vendor-clearing.test.ts, tests/vendor-credit-memo.test.ts, tests/vendor-down-payment-clearing.test.ts, tests/vendor-down-payment-request.test.ts, tests/vendor-down-payment.test.ts, tests/vendor-invoice.test.ts, tests/walkthrough-credit-preflight.test.ts
-
-## Scripts
-scripts/browser-smoke/accrual.ts, scripts/browser-smoke/asset-acquisition.ts, scripts/browser-smoke/asset-depreciation.ts, scripts/browser-smoke/asset-history.ts, scripts/browser-smoke/asset-master.ts, scripts/browser-smoke/asset-retirement.ts, scripts/browser-smoke/balance-sheet.ts, scripts/browser-smoke/carryforward.ts, scripts/browser-smoke/cash-flow.ts, scripts/browser-smoke/chart-of-accounts-copy.ts, scripts/browser-smoke/chart-of-accounts.ts, scripts/browser-smoke/checks.ts, scripts/browser-smoke/clearing-reset.ts, scripts/browser-smoke/close-cockpit.ts, scripts/browser-smoke/consolidated-statements.ts, scripts/browser-smoke/consolidation-monitor.ts, scripts/browser-smoke/consolidation-workbench.ts, scripts/browser-smoke/cost-center-report.ts, scripts/browser-smoke/credit-monitor.ts, scripts/browser-smoke/credit-release.ts, scripts/browser-smoke/credit.ts, scripts/browser-smoke/customer-ageing.ts, scripts/browser-smoke/customer-balances.ts, scripts/browser-smoke/customer-clearing.ts, scripts/browser-smoke/customer-down-payment-clearing.ts, scripts/browser-smoke/customer-down-payment-request.ts, scripts/browser-smoke/customer-down-payment.ts, scripts/browser-smoke/customer-invoice.ts, scripts/browser-smoke/document-display.ts, scripts/browser-smoke/document-reversal.ts, scripts/browser-smoke/dunning.ts, scripts/browser-smoke/fiscal-year-variants.ts, scripts/browser-smoke/fx-valuation.ts, scripts/browser-smoke/gl-account-transfer.ts, scripts/browser-smoke/gl-accounts.ts, scripts/browser-smoke/gl-balances.ts, scripts/browser-smoke/gl-clearing.ts, scripts/browser-smoke/gl-document.ts, scripts/browser-smoke/gl-reporting-suite.ts, scripts/browser-smoke/gl-reporting.ts, scripts/browser-smoke/grir-reclass.ts, scripts/browser-smoke/incoming-payment-completion.ts, scripts/browser-smoke/incoming-payment.ts, scripts/browser-smoke/intercompany.ts, scripts/browser-smoke/journal-document-display.ts, scripts/browser-smoke/journal-items.ts, scripts/browser-smoke/outgoing-payment-completion.ts, scripts/browser-smoke/outgoing-payment.ts, scripts/browser-smoke/parked-journal.ts, scripts/browser-smoke/payment-run.ts, scripts/browser-smoke/profit-center-report.ts, scripts/browser-smoke/profit-loss.ts, scripts/browser-smoke/statement-version-acceptance.ts, scripts/browser-smoke/subledger-tie-out.ts, scripts/browser-smoke/tax-report.ts, scripts/browser-smoke/trial-balance.ts, scripts/browser-smoke/vendor-ageing.ts, scripts/browser-smoke/vendor-balances.ts, scripts/browser-smoke/vendor-clearing.ts, scripts/browser-smoke/vendor-credit-memo.ts, scripts/browser-smoke/vendor-down-payment-clearing.ts, scripts/browser-smoke/vendor-down-payment-request.ts, scripts/browser-smoke/vendor-down-payment.ts, scripts/browser-smoke/vendor-invoice.ts, scripts/plan-fb03.mts
-
-## Non-obvious behavior / gotchas
-- `gl_account.isBalanceSheet` derived, check-pinned, not user input: constraint `gl_account_balance_sheet_derived` forces `isBalanceSheet = (glAccountType = 'BALANCE_SHEET')`; DB only rejects inconsistent writes, doesn't compute the value — services must still set it correctly.
-- `journal_entry_line.amountLocal`/`amountDocument` always positive; direction lives in `debitCredit` ('S'/'H'). Check constraint enforces amount > 0 — never encode sign in amount.
-- No balance-summary tables for GL or assets: balances, ageing, trial balance, carryforward openings, asset NBV all derived at read time from `journal_entry_line` (or `asset_transaction`/`asset_retirement`), not a running-totals table.
-- Carryforward never closes the prior period, safely re-runnable: P&L transfer document lands inside source year's totals, so re-running only posts the still-untransferred delta; a test run changes nothing (per `carryforward.ts` header comment).
-- Down payment requests (customer and vendor) are "noted items" with no journal until receipt/payment fulfills them — `customer_down_payment_request`/`vendor_down_payment_request` are the document of record; no GL posting at request creation.
-- Credit check exposure includes unbilled commitments: `evaluateCreditCheck` in `credit.ts` adds un-billed sales order/delivery commitments (via `openSalesCommitments`, swallowed to `'0'` on error) on top of open AR exposure before comparing to credit limit.
-- Intercompany posting is two balanced journals in one DB transaction — either side failing rolls back both; each line stamps a trading-partner company (VBUND/RCOMP parity) for consolidation elimination. OBYA clearing account resolution falls back from pair-specific override to company code's configured account; validated as extended to that company code before posting (3 distinct failure messages: missing account, account not in chart, account not extended to company).
-- "purchasing" module, not finance, owns `customer_invoice`/`supplier_invoice` tables despite the customer-facing name — module-boundary quirk; finance's ageing, dunning, clearing, credit-memo code all read these cross-module.
-- Vendor/customer down payment clearing never creates value, only transfers it: applied totals (settles vs. applies) must agree by construction; partially-applied item keeps original line open alongside new offsetting line ("standing partial model") rather than mutating original; remaining amounts always derived from journal lines, never a side table.
-- Close cockpit tasks form a DAG with explicit cycle detector (`findDependencyCycle`, DFS over task→predecessor edges): task templates/lists carry self-referencing parent/predecessor FKs with `taskId <> predecessorTaskId` checks, but cross-task cycles only caught at application layer, not DB.
-- Group-side consolidation account master (`group_chart_accounts`) ships with no maintenance UI — exists only to be referenced by `gl_account.groupAccountNumber`, intentionally starts empty until a consolidation round populates it (per schema comment, "R-51/D-123").
-- Posting services (`gl-document`, payments, dunning, GR/IR, tax report, accrual, carryforward) now refuse without a live `authorization` (`{userId, sessionId}`) even though the option is typed optional — callers outside `src/app` (scripts, seeds, tests) must pass one; tests use `tests/helpers/finance-actor.ts` (`financePoster`/`financeInputPoster` wrappers).
-- `CREDIT.BLOCKED` fan-out is idempotent per (sales document, determination) and fires only on a transition into BLOCKED; recipients are resolved by the job worker, not in the posting tx.
+## Tests (99)
+accrual, asset-acquisition, asset-depreciation, asset-history, asset-master, asset-retirement, balance-sheet, blocked-invoice, carryforward, cash-flow, clearing-reset, close-cockpit, consolidated-statements, consolidation-monitor, consolidation-workbench, controlling-settlement-reversal-contract, cost-allocation-cycle, cost-center-report, credit-control-area-atomicity, credit-control-area-maintenance, credit-control-area-validation, credit-monitor, credit-notification, credit-release, credit, customer-ageing, customer-balances, customer-clearing, customer-credit-memo, customer-down-payment-clearing, customer-down-payment-request, customer-down-payment, customer-invoice, document-display-contract, document-display, document-reversal, dunning, fx-valuation, gl-account-transfer, gl-balances, gl-clearing, gl-document, gl-reporting-completion, gl-reporting-suite, grir-reclass, incoming-payment-completion, incoming-payment, intercompany, internal-order, invoice-account-assignment, invoice-advance-clearing, journal-document-display, journal-items, material-document-reversal-accounting, material-sales, outgoing-payment-completion, outgoing-payment, parked-journal, payment-run, payroll-posting, profit-center-report, profit-loss, purchase-order-advance, salary-payment, sales-analysis, sales-availability, sales-batch-determination, sales-billing-plan, sales-collective-billing, sales-delivery-terms, sales-delivery, sales-document-type-maintenance, sales-down-payment, sales-incompletion, sales-invoice-list, sales-order-progress, sales-order, sales-output, sales-partners, sales-pricing-chain, sales-pricing-procedure, sales-rebate, sales-registers, sales-serial-numbers, sales-shipping-point, statement-version-onboarding, subledger-tie-out, tax-report, trial-balance, vendor-ageing, vendor-balances, vendor-clearing, vendor-credit-memo, vendor-down-payment-clearing, vendor-down-payment-request, vendor-down-payment, vendor-invoice, walkthrough-credit-preflight, walkthrough-seed-contract

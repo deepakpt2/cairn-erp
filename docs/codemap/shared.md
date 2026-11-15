@@ -1,114 +1,223 @@
-# Shared / Cross-cutting
-
-Infra not owned by any business module; every module depends on some of this.
-
-## Files
-
-**Auth — `src/platform/auth/`**: `session.ts` (cookie encode/parse, login tracking; exports `SESSION_COOKIE`, `SESSION_TTL_MINUTES`, `MAX_FAILED_ATTEMPTS`, `encodeSessionCookie`, `parseSessionCookie`, `AuthenticatedUser`, `AuthOutcome`, `AuthError`, `revokeSessionById`; re-exports `hasCapability`,`patternGrants`,`patternMatches` from `pattern.ts`) · `current.ts` (`getSession`, `requireSession`, `requireCapability`, `AuthzError`, `can`) · `password.ts` (`hashPassword`, `verifyPassword`, `checkPasswordPolicy`) · `capability-policy.ts` (capability constants e.g. `CFG.FIN.CCA.MAINTAIN`; explicit-grant-only set) · `pattern.ts` (capability wildcard matching: `patternGrants`,`hasCapability`,`patternMatches`) · `authority.ts` (unified "may X do capability C at org O on date D": unions role→`role_capability`, position→`position_capability`, direct→`user_capability`(+`user_capability_scope`), read live, never copied; `LEVEL_OF_KEY`,`ORG_LEVELS`,`SCOPE_KEYS`,`ScopeKey`,`OrgScope`,`AuthorityGrant`,`effectiveGrants`,`loadRestrictions`,`withinScope`,`grantMatches`,`canWith`,`canUser`,`canTx`; under a live audit grant `effectiveGrants` returns only read-kind grants via `modules/audit/read-only.ts`) · `service-authority.ts` (refuses a non-read capability by name while the actor holds a live audit grant; in-tx "who is acting / holds authority / plant in reach" verdict for production/sales/inventory posting services, fails closed on missing CC/plant grant: `verifyServiceAuthorityInTx`,`scopeRefusal`,`refusePlantOutsideScopeInTx`,`ServiceAuthorityVerdict`)
-
-**DB client — `src/platform/db/`**: `client.ts` (`Db`, `Tx`, `db()`, `withTenant()`, `withTenantAs()` (also `SET LOCAL cairn.user`), `assertApplicationRole()`, `closeDb()`) · `migrate.ts` (`runMigrations`, `db:migrate` entry) · `target-guard.ts` (`registerProtected`, `isProtected`, `validateTarget`)
-
-**Platform tables (Drizzle) — `src/platform/tables/`**: `tenancy.ts`→`client`,`clientSettings` · `security.ts`→`appUser`,`role`,`capability`,`roleCapability`,`userRole`,`authOrgRestriction`,`positionCapability`,`userCapability`,`userCapabilityScope`,`userSession`,`auditAccessLog`,`sodRule`,`passwordResetToken` · `numbering.ts`→`numberRangeObject`,`numberRange`,`numberRangeAllocation` · `lock.ts`→`lockObject`,`lockWaitLog`,`enqueueEntry` · `audit-trail.ts`→`changeDocument`,`changeDocumentItem`,`documentFlowLink`,`documentStatusHistory`,`documentIndex` · `registry.ts`→`termRegistry`,`termAlias`,`configActivity`,`configActivityStatus` · `system.ts`→`messageCatalog`,`jobDefinition`,`jobRun` (now with idempotency key, cursor/chunks, heartbeat, blocked/dead-letter cols; `BlockedOn`),`jobLog`,`notification`,`mailServerConfig` · `reference.ts`→`country`,`currency`,`unitOfMeasure`,`bankMaster` · `index.ts` re-exports all. `src/platform/schema.ts` — the aggregate schema `drizzle.config.ts` points at; re-exports platform/tables + every module's schema.ts (now incl. `modules/foundation/output-schema`). `demo_installation`/`demo_installation_phase` exist only in raw SQL (`drizzle/9273_*`, `9274_*`), not in Drizzle.
-
-**Tenancy — `src/platform/tenancy/`**: `index.ts` (`createTenant` — now also creates a separate tenant administrator (`tenantAdministrator` input) and runs `recomputeActivityStatus`; `listTenants`, `TenancyError`, `ConfigReadiness`) · `provisioning.ts` (owner-token check only; session gate + `PROVISION_CAPABILITY` removed) · `config-activity-status.ts` (`recomputeActivityStatus` — marks config-workbench steps complete from evidence in the tenant, one-way) · `standard-structure.ts` (`STANDARD_STRUCTURE`, `applyStandardStructure`) · `walkthrough-install-guard.ts`/`walkthrough-provisioning.ts` (fresh-tenant-only guards for demo seed) · **demo installation**: `demo-provisioning.ts` (eligibility census by row count, advisory-locked claim, global phase ledger in `demo_installation*`; `isDemoProvisioningEnabled`,`claimDemoInstallation`,`start/complete/failDemoPhase`,`DEMO_PHASE_PLAN` (11 phases, `D7_PAYROLL` last),`buildDemoTimeline`,`acquireDemoProvisioningLock`; a COMPLETED record missing a later-added phase is RESUMEd with it appended) · `demo-organisation.ts` (`DEMO_ACTOR`,`DEMO_IDENTITY`,`DEMO_STRUCTURE`,`buildDemoOrganisation`) · `demo-people.ts` (`buildDemoPeople`,`listDemoAccounts`,`withActingUser`,`setEveryPassword`) · `demo-masters.ts` (`buildDemoMasters`,`STANDARD_TAX_CODE`,`PURCHASE_PRICES`) · `demo-procurement.ts`,`demo-production.ts`,`demo-sales.ts`,`demo-quality.ts`,`demo-finance.ts`,`demo-audit.ts`,`demo-payroll.ts` (`buildDemo<Area>` phase builders; `demo-payroll.ts` = phase `D7_PAYROLL`: pay components + mappings, time types incl. UNPAID, structures STAFF/MGMT, assignments for all employees but 10000016; `demo-audit.ts` = phase `D6_AUDIT`: grant to `demo.auditor`, findings, one answer; `demoAuditPrerequisitesMissing`) · `demo-credentials.ts` (generate/fingerprint/write `demo-credentials.txt` to `/app/credentials`)
-
-**Locking — `src/platform/lock/` + `src/ui/lock/`**: `lock/index.ts` (`acquireLock`,`acquireLocks`,`currentLocks`,`LockTimeoutError`) · `lock/enqueue.ts` (`openForChange`,`heartbeatChangeLock`,`releaseChangeLock`,`EnqueueError`; lock view now carries `ownerSessionId`) · `ui/lock/ChangeLock.tsx` (`useChangeLockClaim`,`useChangeLock`) · `ui/lock/claim.ts`,`claim-lifecycle.ts`,`remedy.ts` (claim state machine, display-only messaging)
-
-**Job runtime — `src/platform/job/`**: `index.ts` (barrel; queue half for requests, execute half for the worker only) · `queue.ts` (in caller's tx: `enqueue`,`requestCancel`,`retryRun`,`logLine`,`reapOrphans`,`purgeFinished`,`ensureDefinition`) · `execute.ts` (worker-only: `claimNext` via SECURITY DEFINER `job_claim_next`, `runClaimed` chunked run w/ heartbeat, lock blocking, backoff) · `registry.ts` (`registerJob`,`handlerFor`,`registeredJobs`,`clearJobRegistry`) · `scheduler.ts` (`tickScheduler` — enqueues due `job_definition.schedule` per tenant via `job_all_clients`, idempotency-keyed) · `cron.ts` (`parseCron`,`cronMatches`,`nextDueAfter`) · `monitor.ts` (`listRuns`,`listLogs`,`reapFor`,`isTerminal` — `/platform/jobs` screen) · `types.ts` (`JobHandler`,`JobContext`,`JobStatus`,`JobBlockedError`,`backoffMs`,`shouldEnqueue`, timing constants `HEARTBEAT_MS`,`POLL_INTERVAL_MS`…)
-
-**Worker — `src/worker/`** (new top-level process, `npm run worker` = `tsx src/worker/index.ts`): `index.ts` (`runWorker`,`stopWorker`,`main`; poll/claim/run loop, SIGTERM-graceful; env `CAIRN_WORKER_ID`,`CAIRN_WORKER_POLL_MS`,`CAIRN_WORKER_QUEUES`) · `jobs.ts` (side-effect imports registering every handler: `people/jobs/grant-expiring`, `notification/jobs/fanout`)
-
-**Notifications — `src/platform/notification/` + shell**: `notify.ts` (in caller's tx: `notifyOn`,`notifyAll`; inbox `listInbox`,`unreadCount`,`markSeen`,`markAllSeen`,`getNotification`) · `recipients.ts` (`resolveRecipients` from authority, never caller-supplied) · `creator.ts` (`recipientFor`,`creatorOf`) · `routing.ts` (`NOTIFICATION_ROUTES`,`routeForNotification` → screen link) · `types.ts` (`NotificationKind`,`NotificationObjectClass`,`NotifyInput`,`NotificationRow/View`) · `jobs/fanout.ts` (`FANOUT_JOB='NOTIFY.FANOUT'`,`fanoutJob`) · `ui/shell/NotificationBell.tsx` (unread count in SessionBar)
-
-**Attention — `src/platform/attention/` + `src/ui/attention/`**: `panel.ts` (`attentionFor` — per-user "waiting on you" groups, skips sources the user can't act on, org-narrowed, oldest first; `mayAct`,`ATTENTION_VISIBLE`) · `sources.ts` (`ATTENTION_SOURCES` per-module queries, `ATTENTION_QUERY_LIMIT`) · `types.ts` (`AttentionRow`,`AttentionSource`,`AttentionGroup`) · `ui/attention/AttentionPanel.tsx` (`AttentionPanel`, rendered on home `/`)
-
-**Numbering — `src/platform/numbering/`**: `index.ts` (`allocateNumber`,`defineRange`,`rangeStatus`,`NumberRangeError`) · `format.ts` (`formatNumber`)
-
-**Posting — `src/platform/posting/`**: `index.ts` (`postJournalEntry`,`reverseJournalEntry`,`computeTotals`,`PostingError`) · `decimal.ts` (scaled-bigint money math, `MONEY_SCALE=4`: `toScaled`,`fromScaled`,`sumScaled`,`equalsScaled`,`multiplyScaled`)
-
-**Periods — `src/platform/periods/`**: `index.ts` (`derivePosition`,`periodDates` (period → inclusive dates; refuses special periods),`checkPostingAllowed`,`periodStatus`,`PeriodError`) · `windows.ts` (`periodWindows`)
-
-**Change/audit — `src/platform/change/`**: `index.ts` (`recordChange`,`changeHistory`) · `partner-data-history.ts` (masks sensitive fields; `isPartnerSensitiveHistoryClass`,`isPartnerHistoryMaskedField`,`projectPartnerHistorySnapshot`)
-
-**Document flow — `src/platform/document/index.ts`**: `linkDocuments`,`recordStatusChange`,`indexDocument`,`documentFlow`. Used only by inventory (GR, return delivery) + purchasing (invoice verification) to chain PO→GR→invoice.
-
-**i18n — `src/platform/i18n/index.ts`**: 5,025 lines; `LOCALES`,`DEFAULT_LOCALE`,`t()`. `LOCALES=['en']` only.
-
-**Registry — `src/platform/registry/` + `src/app/registry/`**: `registry/index.ts` (`resolveTerm`,`searchRegistry`,`suggestRegistry`,`aliasesFor`,`coverageLabel`) · `registry/suggest.ts` (ranking internals) · `app/registry/{page.tsx,actions.ts,RegistrySearch.tsx,screen-terms.ts}` (`/registry` page)
-
-**Security — `src/platform/security/`**: `bank-data-encryption.ts`,`bank-data-keyring.ts`,`bank-data-reveal.ts`,`bank-record-id.ts` (IBAN/account encrypt/decrypt/reveal, keyring from `CAIRN_BANK_DATA_KEYRING_JSON`) · `bank-profile-{gb,in,jp,kw,us}.ts` (per-country format validators) · `partner-bank-profile.ts`,`partner-bank-profile-activation.ts`,`partner-bank-profile-readiness.ts`,`partner-bank-view.ts` (mechanism under foundation's partner-bank master data; foundation owns the data, this owns country-validation/encryption).
-
-**UI shell — `src/ui/shell/`**: `screen-catalog.ts` (`SCREENS`,`ScreenArea`,`SCREEN_AREAS` — splits `foundation` into `foundation`/`controlling`/`configuration` areas though all live under `modules/foundation`; adds `/platform/jobs`, `/platform/notifications`, `/people/authority`, areas `people` (`/people/employees|organization|assignments|authority|time-leave|salary-structures`; people config screens stay in `configuration`) and `audit` (`/audit/workspace|grants|findings`), many sales/config screens) · `screen-links.ts` (`screenHref`,`matchScreen`,`screensInArea`,`relatedLinks`,`ALSO`) · `screen-access.ts` (`visibleScreenIds`) · `CommandBar.tsx`,`RelatedScreens.tsx`,`RelatedScreensAccess.tsx`,`SessionBar.tsx` (now hosts `NotificationBell` + `SessionMenu`),`SessionMenu.tsx`(`SessionMenu` dropdown),`NotificationBell.tsx`,`StatusBar.tsx`,`WorkIndicator.tsx`,`SubmitButton.tsx`,`Spinner.tsx`,`ScrollToTop.tsx`,`navigation-click.ts` (chrome)
-
-**UI fields — `src/ui/fields/`**: `ConstrainedField.tsx` (bound to foundation's constrained-value lists) · `SearchIcon.tsx`
-
-**App root — `src/app/`**: `layout.tsx`,`page.tsx` (home; renders `AttentionPanel`),`globals.css`,`command.ts`(`executeCommand`)
-
-**Auth/health API — `src/app/api/`**: `auth/signin/route.ts`,`auth/signout/route.ts`,`auth/redirect.ts`(`relativeRedirect`),`health/live/route.ts`
-
-**Tenant onboarding — `src/app/clients/`**: `page.tsx`,`new/page.tsx`,`new/TenantForm.tsx` (now also collects the tenant administrator),`actions.ts`(`createTenantAction`,`OnboardState`)
-
-**Auth screens — `src/app/{signin,forgot-password,reset-password}/`**: sign-in/forgot/reset pages+form
-
-**Config shell — `src/app/config/{page.tsx,WorkbenchTree.tsx,actions.ts}`**: nav tree for all `/config/*` (`WorkbenchActivity`,`WorkbenchTree`) · `actions.ts` (`recheckConfigurationStatusAction` → `recomputeActivityStatus`; "recheck" button on `/config`)
-
-**Dev helpers — `src/dev/`**: `walkthrough-asset.ts`(`runWalkthroughAssetProcurement`) · `walkthrough-volume.ts`(`runWalkthroughVolume`) — used by root `walkthrough-seed.ts`
-
-## Used by (module → shared piece)
-| Piece | Used by |
-|---|---|
-| `platform/auth` | all 9 modules + api/clients/config |
-| `platform/db` | finance,foundation,inventory,people,platform,production,purchasing,quality,sales,api |
-| `platform/tenancy` | clients,config,finance,foundation,inventory,platform,production,purchasing |
-| `platform/lock`+`ui/lock` | config,controlling,finance,foundation,inventory,platform,production,purchasing,quality |
-| `platform/numbering` | config,finance,foundation,inventory,production,purchasing,quality,sales |
-| `platform/posting` | finance,foundation,inventory,people,production,purchasing |
-| `platform/periods` | config,finance,foundation,inventory,people,production,purchasing |
-| `platform/change` | config,finance,foundation,inventory,people,platform,production,purchasing,quality,sales |
-| `platform/document` | inventory, purchasing only |
-| `platform/i18n` | all 9 modules |
-| `platform/registry` | registry route, command bar only |
-| `platform/security` | foundation only |
-| `platform/tables` | all 9 modules |
-| `platform/auth/authority`+`service-authority` | finance,foundation,inventory,people,production,purchasing,quality,sales + attention/notification |
-| `platform/tenancy` demo-* | `scripts/demo-provision.ts`, `scripts/seed.ts` only |
-| `platform/job` | finance,foundation,people,platform,production,purchasing, notification fanout, worker, seed |
-| `platform/notification` | finance,foundation,people,platform,production,purchasing,sales, NotificationBell, worker |
-| `platform/attention`+`ui/attention` | home page `/` only |
-| `worker` | standalone process (`npm run worker`); not imported by the web app (imports platform/job, platform/db, and handlers via `jobs.ts`) |
-| `ui/shell` | registry, root layout only |
-| `ui/fields` | config,finance,inventory,purchasing,sales |
-
-## Tests
-**Auth/session/security:** `action-security`, `auth`, `bank-data-encryption`, `bank-data-keyring`, `bank-data-reveal`, `bank-profile-{gb,in,jp,kw,us}`, `bank-record-id`, `partner-bank-history`, `partner-bank-profile`, `partner-bank-view`, `default-privilege-audit`
-**DB/migration/tenancy:** `db-client-target`, `db-credentials`, `db-target-guard`, `migration-grant-policy`, `integration-db-config`, `isolation`, `test-tenant-isolation`, `tenant-creation-service`, `tenant-provisioning`, `onboarding-admission`, `docker-provisioning-contract`, `test-db-provisioning-reference-contract`, `audit-access-log-append-only`
-**Locking:** `dialog-enqueue`, `change-lock-claim`, `change-lock-claim-lifecycle`, `change-lock-configuration-browser-targets-contract`, `change-lock-ux-contract`, `lock-display-only-remedy-contract`, `session-change-lock`
-**Numbering/posting/registry:** `numbering`, `posting`, `registry-suggest`
-**UI shell contracts:** `screen-links`, `shell-navigation-contract`, `related-screens-access`, `work-indicator-contract`, `hidden-attribute-display-contract`, `dom-identifier-wiring`, `document-display-contract`, `scr144-screens-contract`, `browser-targets`, `server-action-exports`, `vocabulary-exception-boundary`
-**Walkthrough/dev tooling:** `standard-reference-data`, `sync-db-app-role`, `walkthrough-provisioning-contract`, `walkthrough-role-capability-catalogue-contract`, `walkthrough-seed-contract`, `ip-lint-allowlist-contract`, `global-setup`, `helpers`, `health-live`
-# NEW TESTS (development branch)
-**Job/worker/notifications:** `job-runtime`, `job-monitor`, `job-notification`, `worker`, `notification`, `attention`
-**Audit:** `audit-workspace` (helper `helpers/audit-actor.ts`)
-**Payroll:** `payroll-structure`, `payroll-run` (helper `helpers/payroll-actor.ts`)
-**Demo installation/tenancy:** `demo-credentials`, `demo-organisation`, `demo-masters`, `demo-procurement`, `demo-production`, `demo-sales`, `demo-quality`, `demo-finance`, `demo-reconciliation`, `demo-safety-matrix`, `demo-provisioning-contract`, `config-activity-status`
-**Python:** `backup_manifest_test.py`, `deployment_diagnostic_test.py`, `deployment_routing_test.py`
-(all filenames above take `.test.ts` suffix unless otherwise shown)
-
-**Test infrastructure:** `tests/test-env.ts` (`loadTestEnv`; side-effect import in every vitest config — loads `.env.test` over the container env, refuses any DB URL that isn't erp_test, forbids erp_dev)
-
-## Scripts
-`bootstrap.ts`, `create-dev-tenant.ts`, `reset-db.ts`, `seed-reference.ts`, `sync-db-app-role.ts`, `test-db.ts`, `test-integration.ts`, `integration-db-config.ts`, `check-registry.ts`, `lint-ip.ts`, `smoke-test.ts`, `standard-reference-data.ts`, `browser-smoke.ts`, `browser-smoke/targets.ts`, `browser-smoke/database-guards.ts`, `browser-smoke/scr144-close-the-gaps.ts`, `backup-integration-db.py`, `diagnose-docker-db.py`, `integration-cluster-identity.sql`
-# NEW SCRIPTS
-`demo-provision.ts` (installs the demo company into an empty DB via `tenancy/demo-*`), `demo-signin-check.ts`, `browser-smoke/actor.ts`, `with-test-env.ts` (runs a command with `tests/test-env.ts` loaded; used by `npm run test:db:migrate` / `test:db:seed`)
+# Shared
+Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, app shell (`app/` root, `/config` workbench, auth, clients, registry). Paths relative to `src/`.
 
 ## Gotchas
-- i18n is single-locale in practice (`LOCALES=['en']`) despite full multi-locale scaffolding.
-- `platform/document` is a narrow 2-consumer utility (inventory GR/return-delivery, purchasing invoice-verification), not general infra.
-- UI area taxonomy (`ScreenArea`) splits foundation into `foundation`/`controlling`/`configuration` though all code lives under `modules/foundation` — don't assume 1:1 with module split.
-- `src/platform/schema.ts` is the sole Drizzle entrypoint — new tables must be re-exported there.
-- Money math never floats — all currency goes through `platform/posting/decimal.ts` scaled-bigint arithmetic.
-- Jobs: requests only `enqueue` (platform/job/queue) in their own tx; the `npm run worker` process claims runs through SECURITY DEFINER fns (`job_claim_next`, `job_orphan_clients`) because `cairn_app` can't see across tenants under FORCE RLS, then works via `withTenant`.
-- A job handler only exists if `src/worker/jobs.ts` imports it (side-effect registration); missing import = every claimed run fails "no handler registered".
-- `tickScheduler` (platform/job/scheduler.ts) has no caller in src/scripts — the worker loop doesn't invoke it, so `job_definition.schedule` jobs aren't auto-enqueued yet.
-- Notifications are written in the business tx (rollback-safe); "notify whoever may act" goes via the `NOTIFY.FANOUT` job, which resolves recipients from authority in the worker. A notification is a pointer, never a permission.
-- Demo installation refuses unless the DB holds no tenant (row-count census, advisory lock); progress ledger is global (`demo_installation*`), not tenant-scoped.
+- **RLS:** tenant tables are FORCE RLS (313 in the baseline) on `cairn.client`; only `withTenant`/`withTenantAs` (`SET LOCAL cairn.client` / `cairn.user`) see rows. `client.ts` refuses a superuser runtime role. Never call `withTenant` inside a `tx` (it opens a new transaction).
+- **SECURITY DEFINER:** `job_claim_next`, `job_orphan_clients`, `job_all_clients`, `notification_deliver` and the payroll triggers run as their owner. Every object must be owned by `cairn_integration_migrator`; migrating as `erp_user` breaks them.
+- **Jobs:** requests only `enqueue` in their own tx; the worker claims cross-tenant via `job_claim_next`, then works in `withTenant`. A handler exists only if `src/worker/jobs.ts` imports it. `tickScheduler` has no caller yet.
+- **Notifications** are written in the business tx; "whoever may act" goes through the `NOTIFY.FANOUT` job. A notification is a pointer, never a permission.
+- **Demo install:** refuses a non-empty DB; global phase ledger in `demo_installation*` (SQL-only tables). Phases append to `DEMO_PHASE_PLAN`; a FAILED marker blocks resume.
+- Money never floats: `platform/posting/decimal.ts` scaled bigints. `platform/schema.ts` is the only Drizzle entrypoint; new tables are re-exported there.
+- `ScreenArea` splits foundation into foundation/controlling/configuration; not 1:1 with modules. i18n is effectively `en` only.
+
+## Used by
+| shared unit | used by |
+|---|---|
+| app/command.ts | ui/shell |
+| app/registry | app/command.ts |
+| platform/attention | app/page.tsx, ui/attention |
+| platform/auth | app/api, app/clients, app/config, app/page.tsx, audit, finance, foundation, inventory, people, platform, platform/attention, platform/job, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
+| platform/change | audit, finance, foundation, inventory, people, platform, platform/lock, platform/posting, platform/security, platform/tenancy, production, purchasing, quality, sales |
+| platform/db | app/api, app/config, audit, dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/notification, platform/numbering, platform/periods, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales, worker/index.ts |
+| platform/document | inventory, platform/posting, purchasing |
+| platform/i18n | app/clients, app/config, app/layout.tsx, app/page.tsx, app/registry, app/signin, audit, finance, foundation, inventory, people, platform, platform/attention, platform/notification, production, purchasing, sales, ui/attention, ui/fields, ui/lock, ui/shell |
+| platform/job | finance, foundation, people, platform, platform/notification, production, purchasing, worker/index.ts |
+| platform/lock | finance, foundation, inventory, platform, platform/job, platform/posting, production, purchasing, quality, ui/lock |
+| platform/notification | finance, foundation, people, platform, platform/job, production, purchasing, sales, ui/shell, worker/jobs.ts |
+| platform/numbering | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, quality, sales |
+| platform/periods | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
+| platform/posting | finance, foundation, inventory, people, production, purchasing, sales |
+| platform/registry | app/command.ts, app/registry |
+| platform/schema.ts | platform/db |
+| platform/security | foundation |
+| platform/tables | audit, finance, foundation, inventory, people, platform, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/notification, platform/numbering, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales |
+| platform/tenancy | app/clients, app/config, app/page.tsx, finance, foundation, inventory, platform, production, purchasing |
+| ui/attention | app/page.tsx |
+| ui/fields | finance, foundation, inventory, purchasing, sales |
+| ui/lock | finance, foundation, inventory, platform, production, purchasing, quality |
+| ui/shell | app/layout.tsx, app/page.tsx, app/registry |
+| worker/jobs.ts | worker/index.ts |
+
+## Files (138)
+| file | exports | tables |
+|---|---|---|
+| **app/** | | |
+| command.ts | executeCommand |  |
+| layout.tsx | viewport, RootLayout |  |
+| page.tsx | LaunchpadPage |  |
+| **app/api/auth/** | | |
+| redirect.ts | relativeRedirect |  |
+| **app/api/auth/signin/** | | |
+| route.ts | POST |  |
+| **app/api/auth/signout/** | | |
+| route.ts | POST |  |
+| **app/api/health/live/** | | |
+| route.ts | GET |  |
+| **app/clients/** | | |
+| actions.ts | createTenantAction |  |
+| page.tsx | TenantsPage |  |
+| **app/clients/new/** | | |
+| page.tsx | CreateTenantPage |  |
+| TenantForm.tsx | TenantForm |  |
+| **app/config/** | | |
+| actions.ts | recheckConfigurationStatusAction |  |
+| page.tsx | WorkbenchPage |  |
+| WorkbenchTree.tsx | WorkbenchTree |  |
+| **app/forgot-password/** | | |
+| page.tsx | ForgotPasswordPage |  |
+| **app/registry/** | | |
+| actions.ts | suggestRegistryTerms |  |
+| page.tsx | RegistryPage |  |
+| RegistrySearch.tsx | RegistrySearch |  |
+| screen-terms.ts | screenTerms, resolveScreen |  |
+| **app/reset-password/** | | |
+| page.tsx | ResetPasswordPage |  |
+| ResetPasswordForm.tsx | ResetPasswordForm |  |
+| **app/signin/** | | |
+| page.tsx | SignInPage |  |
+| **dev/** | | |
+| walkthrough-asset.ts | runWalkthroughAssetProcurement | account_determination, asset_transaction, fixed_asset, journal_entry_line, material_document_line, outgoing_payment, purchase_order, purchase_order_item, supplier_invoice |
+| walkthrough-volume.ts | runWalkthroughVolume | purchase_order, purchase_order_item, stock_quantity |
+| **platform/** | | |
+| schema.ts | *./tables, *../modules/audit/schema, *../modules/finance/schema, *../modules/foundation/schema, *../modules/foundation/output-schema, *../modules/inventory/schema, *../modules/people/schema, *../modules/production/schema, *../modules/quality/schema, *../modules/sales/schema |  |
+| **platform/attention/** | | |
+| panel.ts | ATTENTION_VISIBLE, attentionFor, mayAct |  |
+| sources.ts | ATTENTION_QUERY_LIMIT, ATTENTION_SOURCES | document_release, purchase_contract, purchase_order, purchase_requisition_item, release_strategy_step, scheduling_agreement |
+| types.ts |  |  |
+| **platform/auth/** | | |
+| authority.ts | LEVEL_OF_KEY, ORG_LEVELS, SCOPE_KEYS, KEY_OF_LEVEL, patternsOf, withinScope, withinRestrictions, grantMatches, canWith, effectiveGrants, loadRestrictions, canUser, canTx, patternMatches | auth_org_restriction, delegation, delegation_approval, delegation_scope, employee, position_assignment, position_capability, role, role_capability, user_capability, user_capability_scope, user_role |
+| capability-policy.ts | CREDIT_CONTROL_AREA_CAPABILITY, PRODUCTION_GOODS_MOVEMENT_REPROCESS_CAPABILITY, PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY, PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY, PRODUCTION_ORDER_COST_DISPLAY_CAPABILITY, EXPLICIT_GRANT_ONLY_CAPABILITIES |  |
+| current.ts | getSession, requireSession, requireCapability, AuthzError, can |  |
+| password.ts | hashPassword, verifyPassword, checkPasswordPolicy |  |
+| pattern.ts | patternGrants, hasCapability, patternMatches |  |
+| service-authority.ts | verifyServiceAuthorityInTx, scopeRefusal, refusePlantOutsideScopeInTx | app_user, auth_org_restriction, capability, plant, role, role_capability, user_role, user_session |
+| session.ts | SESSION_COOKIE, SESSION_TTL_MINUTES, MAX_FAILED_ATTEMPTS, AuthError, encodeSessionCookie, parseSessionCookie, attemptSignIn, signIn, createSession, logonLanguageKeyFromPreferences, resolveSession, revokeSession, revokeAllSessions, revokeSessionById, loadCapabilities, loadOrgRestrictions, hasOrgAccess, tokenHashFor, constantTimeEquals, hasCapability, patternGrants, patternMatches | app_user, audit_access_log, auth_org_restriction, enqueue_entry, user_session |
+| **platform/change/** | | |
+| index.ts | recordChange, changeHistory | change_document, change_document_item |
+| partner-data-history.ts | PARTNER_BANK_OBJECT_CLASS, PARTNER_CONTACT_OBJECT_CLASS, MASKED_HISTORY_VALUE, isPartnerSensitiveHistoryClass, isPartnerHistoryMaskedField, projectPartnerHistorySnapshot, projectPartnerHistoryStoredValue |  |
+| **platform/db/** | | |
+| client.ts | sql, db, directSql, assertApplicationRole, withTenant, withTenantAs, closeDb |  |
+| migrate.ts | runMigrations |  |
+| target-guard.ts | registerProtected, isProtected, validateTarget |  |
+| **platform/document/** | | |
+| index.ts | linkDocuments, recordStatusChange, indexDocument, documentFlow | document_flow_link, document_index, document_status_history |
+| **platform/i18n/** | | |
+| index.ts | LOCALES, DEFAULT_LOCALE, LOCALE_DIRECTION, t | Currency, currency |
+| **platform/job/** | | |
+| cron.ts | parseCron, cronMatches, nextDueAfter |  |
+| execute.ts | claimNext, runClaimed | app_user, enqueue_entry, job_definition, job_run, user_session |
+| index.ts | enqueue, requestCancel, retryRun, logLine, reapOrphans, purgeFinished, ensureDefinition, claimNext, runClaimed, registerJob, handlerFor, registeredJobs, clearJobRegistry, ENQUEUE_THRESHOLD_MS, DEFAULT_CHUNK_SIZE, DEFAULT_GRACE_SECONDS, DEFAULT_RETENTION_DAYS, HEARTBEAT_MS, HEARTBEAT_TIMEOUT_MS, BACKOFF_BASE_MS, BACKOFF_CAP_MS, LOCK_RETRY_DELAY_MS, POLL_INTERVAL_MS, JobBlockedError, backoffMs, shouldEnqueue |  |
+| monitor.ts | isTerminal, listRuns, listLogs, reapFor | job_definition, job_log, job_run |
+| queue.ts | enqueue, requestCancel, retryRun, logLine, reapOrphans, purgeFinished, ensureDefinition | job_definition, job_log, job_run |
+| registry.ts | registerJob, handlerFor, registeredJobs, clearJobRegistry |  |
+| scheduler.ts | tickScheduler | job_definition, job_run |
+| types.ts | ENQUEUE_THRESHOLD_MS, DEFAULT_CHUNK_SIZE, HEARTBEAT_MS, HEARTBEAT_TIMEOUT_MS, BACKOFF_BASE_MS, BACKOFF_CAP_MS, LOCK_RETRY_DELAY_MS, DEFAULT_GRACE_SECONDS, DEFAULT_RETENTION_DAYS, POLL_INTERVAL_MS, JobBlockedError, backoffMs, shouldEnqueue |  |
+| **platform/lock/** | | |
+| enqueue.ts | ENQUEUE_STALE_MS, EnqueueError, openForChange, heartbeatChangeLock, releaseChangeLock, assertChangeLock, listEnqueue, deleteEnqueueEntry, openChangeForSession, assertChangeForSession, displayOnlyMessage | enqueue_entry, user_session |
+| index.ts | acquireLock, acquireLocks, currentLocks, LockTimeoutError | lock_wait_log |
+| **platform/notification/** | | |
+| creator.ts | recipientFor, creatorOf | app_user, change_document |
+| notify.ts | notifyOn, notifyAll, markSeen, markAllSeen, listInbox, unreadCount, getNotification | notification |
+| recipients.ts | resolveRecipients | delegation, employee, position_assignment, position_capability, role, role_capability, user_capability, user_role |
+| routing.ts | NOTIFICATION_ROUTES, routeForNotification |  |
+| types.ts |  |  |
+| **platform/notification/jobs/** | | |
+| fanout.ts | FANOUT_JOB, fanoutJob |  |
+| **platform/numbering/** | | |
+| format.ts | formatNumber |  |
+| index.ts | NumberRangeError, allocateNumber, rangeStatus, defineRange, formatNumber | number_range, number_range_allocation |
+| **platform/periods/** | | |
+| index.ts | ACCOUNT_TYPE_LABELS, PeriodError, derivePosition, periodDates, checkPostingAllowed, periodStatus, getVariant, getCompanyCode, getPostingPeriodVariant, buildPeriodRows, periodWindows | company_code, fiscal_year_period, fiscal_year_variant, posting_period_rule, posting_period_variant |
+| windows.ts | periodWindows |  |
+| **platform/posting/** | | |
+| decimal.ts | MONEY_SCALE, toScaled, fromScaled, sumScaled, equalsScaled, multiplyScaled, DecimalError |  |
+| index.ts | JOURNAL_DOCUMENT_CLASS, postJournalEntry, reverseJournalEntry, computeTotals, PostingError | document_type, gl_account, journal_entry, journal_entry_line, number_range_allocation |
+| **platform/registry/** | | |
+| index.ts | resolveTerm, searchRegistry, suggestRegistry, aliasesFor, coverageLabel | term_alias, term_registry |
+| suggest.ts | compactCode, suggestionWords, equallyNear, exactOwnIdentifier, rankSuggestions, rankRegistry |  |
+| **platform/security/** | | |
+| bank-data-encryption.ts | isBankDataKeyId, BankDataEncryptionError, encryptBankData, decryptBankData, reencryptBankData, reencryptBankDataBatch, verifyBankDataBatchOnActiveKey |  |
+| bank-data-keyring.ts | BANK_DATA_KEYRING_ENV, BankDataKeyringConfigError, loadBankDataKeyring, parseBankDataKeyring |  |
+| bank-data-reveal.ts | PARTNER_DISPLAY_CAPABILITY, PARTNER_BANK_REVEAL_CAPABILITY, BANK_REVEAL_FIELDS, BANK_REVEAL_PURPOSES, authorizeAndRecordBankRevealAttempt, recordBankRevealOutcome | audit_access_log |
+| bank-profile-gb.ts | GB_IBAN_PATTERN, validateGreatBritainBankProfile |  |
+| bank-profile-in.ts | INDIA_IFSC_PATTERN, validateIndiaBankProfile |  |
+| bank-profile-jp.ts | validateJapanBankProfile |  |
+| bank-profile-kw.ts | KUWAIT_IBAN_PATTERN, validateKuwaitBankProfile |  |
+| bank-profile-us.ts | validateUnitedStatesBankProfile |  |
+| bank-record-id.ts | generateBankRecordId, isBankRecordId |  |
+| partner-bank-profile-activation.ts | PARTNER_BANK_PROFILE_ACTIVATE_CAPABILITY, PARTNER_BANK_PROFILE_ACTIVATION_EVIDENCE, validatePartnerBankProfileActivationCommand |  |
+| partner-bank-profile-readiness.ts | PARTNER_BANK_PROFILE_POLICIES, PARTNER_BANK_PROFILE_AUTHORING_COUNTRIES, resolvePartnerBankProfileReadiness |  |
+| partner-bank-profile.ts | validatePartnerBankProfile |  |
+| partner-bank-view.ts | BANK_ACCOUNT_VIEW_MASK, projectPartnerBankNormalView |  |
+| **platform/tables/** | | |
+| audit-trail.ts | changeDocument, changeDocumentItem, documentFlowLink, documentStatusHistory, documentIndex | change_document, change_document_item, document_flow_link, document_index, document_status_history |
+| index.ts | *./tenancy, *./security, *./numbering, *./lock, *./audit-trail, *./registry, *./system, *./reference |  |
+| lock.ts | lockObject, lockWaitLog, enqueueEntry | enqueue_entry, lock_object, lock_wait_log |
+| numbering.ts | numberRangeObject, numberRange, numberRangeAllocation | number_range, number_range_allocation, number_range_object |
+| reference.ts | country, currency, unitOfMeasure, bankMaster | bank_master, country, currency, unit_of_measure |
+| registry.ts | termRegistry, termAlias, configActivity, configActivityStatus | config_activity, config_activity_status, term_alias, term_registry |
+| security.ts | appUser, role, capability, roleCapability, userRole, authOrgRestriction, positionCapability, userCapability, userCapabilityScope, userSession, auditAccessLog, sodRule, passwordResetToken | app_user, audit_access_log, auth_org_restriction, capability, password_reset_token, position_capability, role, role_capability, sod_rule, user_capability, user_capability_scope, user_role, user_session |
+| system.ts | messageCatalog, jobDefinition, jobRun, jobLog, notification, mailServerConfig | job_definition, job_log, job_run, mail_server_config, message_catalog, notification |
+| tenancy.ts | auditColumns, client, clientSettings | client, client_settings |
+| **platform/tenancy/** | | |
+| config-activity-status.ts | recomputeActivityStatus | account_determination, activity_rate, activity_type, app_user, batch_number_assignment, batch_status_management, characteristic, chart_of_accounts, classification_class, company_code, config_activity, config_activity_status, cost_center, cost_center_hierarchy, credit_control_area, distribution_channel, division, document_type, employee_tolerance_group, exchange_rate, fiscal_year_variant, gl_account, house_bank, industry, industry_sector, material_bom, material_group, material_period_control, material_type, movement_type, number_range, pay_component, payment_method, payment_terms, plant, posting_period_variant, production_order_type, production_order_type_parameter, production_version, profit_center, profit_center_hierarchy, purchasing_group, purchasing_org, record_type, release_strategy, role, routing, sales_area, sales_condition_record, sales_org, settlement_profile, storage_location, tax_code, valuation_class, work_center |
+| demo-activity-price.ts | buildDemoActivityPrice | activity_type |
+| demo-assessment.ts | buildDemoAssessment | account_determination, company_code, gl_account |
+| demo-audit.ts | DEMO_AUDIT_GRANT_REQUEST_KEY, demoAuditPrerequisitesMissing, buildDemoAudit | app_user, role_capability |
+| demo-bom-structure.ts | buildDemoBomStructure |  |
+| demo-co-plan.ts | buildDemoCoPlan | company_code, controlling_area_company, journal_entry, journal_entry_line |
+| demo-credentials.ts | DEMO_CREDENTIALS_FILENAME, DEFAULT_CREDENTIALS_DIR, generateDemoPassword, fingerprintDemoPassword, renderDemoCredentialReport, writeDemoCredentials, readDemoCredentials, dirname |  |
+| demo-finance.ts | buildDemoFinance | tax_return_run |
+| demo-masters.ts | STANDARD_TAX_CODE, materialUnit, PURCHASE_PRICES, buildDemoMasters | credit_risk_category |
+| demo-organisation.ts | DEMO_ACTOR, DEMO_IDENTITY, DEMO_STRUCTURE, DEMO_FOUNDER_ACCOUNTS, buildDemoOrganisation, demoClientKey | purchasing_org_plant |
+| demo-payroll-offcycle.ts | buildDemoPayrollOffCycle | company_code, payroll_run_exception |
+| demo-payroll-pay.ts | buildDemoPayrollPay | bank_master |
+| demo-payroll-post.ts | buildDemoPayrollPost | app_user, auth_org_restriction, company_code |
+| demo-payroll-run.ts | ensureEmployee, buildDemoPayrollRun | company_code, employee |
+| demo-payroll.ts | DEMO_PAYROLL_UNASSIGNED, buildDemoPayroll | pay_component, pay_component_config, time_type |
+| demo-people.ts | buildDemoPeople, listDemoAccounts, withActingUser, setEveryPassword | app_user, capability, role, user_role |
+| demo-procurement.ts | buildDemoProcurement |  |
+| demo-production.ts | buildDemoProduction | account_determination, production_order, production_order_type, production_order_type_parameter |
+| demo-provisioning.ts | DEMO_PROVISION_OPERATION, DEMO_ADVISORY_LOCK_KEY, DEMO_CLAIM_LOCK_KEY, DEMO_PHASE_PLAN, isDemoProvisioningEnabled, censusDemoEligibility, claimDemoInstallation, startDemoPhase, completeDemoPhase, completeDemoPhases, failDemoPhase, completeDemoInstallation, buildDemoTimeline, acquireDemoProvisioningLock, readDemoPasswordState, recordDemoPasswordIssued, readDemoInstallation |  |
+| demo-quality.ts | buildDemoQuality |  |
+| demo-sales.ts | buildDemoSales | account_determination, billing_document, customer_invoice, delivery |
+| index.ts | TenancyError, createTenant, listTenants, configReadiness, getTenant, markActivityComplete | app_user, client, client_settings, config_activity, config_activity_status, internal_order_budget_profile, internal_order_type, internal_order_type_budget_profile, number_range_object, purchasing_contract_type, role, role_capability, scheduling_agreement_type, user_role |
+| provisioning.ts | ProvisioningError, assertProvisioningToken, authorizeProvisioning |  |
+| standard-structure.ts | STANDARD_STRUCTURE, STRUCTURE_ACTIVITIES, applyStandardStructure, applyStandardStructureInTransaction | company_code, controlling_area, credit_control_area, plant, purchasing_org, purchasing_org_plant, sales_area, sales_org, sales_org_distribution_channel, sales_org_division, sales_org_text, storage_location |
+| walkthrough-install-guard.ts | WALKTHROUGH_INSTALL_OPERATION, WALKTHROUGH_INSTALL_OBJECT_CLASS, WALKTHROUGH_INSTALL_REASON, assertFreshWalkthroughTenantInventory, assertFreshWalkthroughFirstAdmin, assertWalkthroughScopeSet, assertWalkthroughCheckpointRequest, assertWalkthroughCheckpointActor, assertWalkthroughDatabaseTarget, assertWalkthroughSeedRuntime |  |
+| walkthrough-provisioning.ts | assertFreshWalkthroughTenant | app_user, auth_org_restriction, client, user_role |
+| **ui/attention/** | | |
+| AttentionPanel.tsx | AttentionPanel |  |
+| **ui/fields/** | | |
+| ConstrainedField.tsx | ConstrainedField |  |
+| SearchIcon.tsx | SearchIcon |  |
+| **ui/lock/** | | |
+| ChangeLock.tsx | ChangeLock, useChangeLockClaim, useChangeLock, LockNotice, ClaimFailureNotice |  |
+| claim-lifecycle.ts | observeChangeLockClaim |  |
+| claim.ts | IDLE_CLAIM, claimKey, phaseOf, shouldDispatch, awaitingClaim, projectClaim, claimNotice, failureDetail, failureText, failureNoticeView, changeLockClaim |  |
+| remedy.ts | displayOnlyRemedy |  |
+| **ui/shell/** | | |
+| CommandBar.tsx | CommandBar |  |
+| navigation-click.ts | isNavigationClick |  |
+| NotificationBell.tsx | NotificationBell |  |
+| RelatedScreens.tsx | RelatedScreens |  |
+| RelatedScreensAccess.tsx | RelatedScreensAccess |  |
+| screen-access.ts | visibleScreenIds |  |
+| screen-catalog.ts | SCREENS, SCREEN_AREAS |  |
+| screen-links.ts | ALSO, screenHref, matchScreen, screensInArea, relatedLinks |  |
+| ScrollToTop.tsx | ScrollToTop |  |
+| SessionBar.tsx | SessionBar |  |
+| SessionMenu.tsx | SessionMenu |  |
+| Spinner.tsx | Spinner |  |
+| StatusBar.tsx | StatusBar |  |
+| SubmitButton.tsx | SubmitButton |  |
+| WorkIndicator.tsx | WorkIndicator |  |
+| **worker/** | | |
+| index.ts | runWorker, stopWorker, main |  |
+| jobs.ts |  |  |
+
+## Routes (11)
+`/` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/registry` · `/reset-password` · `/signin`
+
+## Tables owned (40)
+app_user, audit_access_log, auth_org_restriction, bank_master, capability, change_document, change_document_item, client, client_settings, config_activity, config_activity_status, country, currency, document_flow_link, document_index, document_status_history, enqueue_entry, job_definition, job_log, job_run, lock_object, lock_wait_log, mail_server_config, message_catalog, notification, number_range, number_range_allocation, number_range_object, password_reset_token, position_capability, role, role_capability, sod_rule, term_alias, term_registry, unit_of_measure, user_capability, user_capability_scope, user_role, user_session

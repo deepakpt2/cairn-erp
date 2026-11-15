@@ -52,3 +52,6 @@ tmp/
 
 # Crash dumps from the workbench (multi-GB); never commit.
 /core.[0-9]*
+
+# Claude Code personal settings (shared rules live in .claude/settings.json)
+.claude/settings.local.json
