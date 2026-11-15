@@ -81,8 +81,14 @@ export async function claimNext(
   workerId: string,
   queues: string[] | null = null,
 ): Promise<ClaimedRun | null> {
+  // Drizzle's `sql` tag expands a JS array into a parenthesised list of scalars, `($2, $3)`, not an
+  // array parameter — so `${queues}` sent `('DEFAULT')` to a `text[]` argument and failed with
+  // "malformed array literal". Build the array explicitly. An empty list means every queue, as null does.
+  const queueArg = queues && queues.length > 0
+    ? sql`array[${sql.join(queues.map((queue) => sql`${queue}`), sql`, `)}]::text[]`
+    : sql`null::text[]`;
   const rows = (await db().execute(
-    sql`select run_id, run_client, run_job_code from job_claim_next(${workerId}, ${queues})`,
+    sql`select run_id, run_client, run_job_code from job_claim_next(${workerId}, ${queueArg})`,
   )) as unknown as Array<{ run_id: string; run_client: string; run_job_code: string }>;
 
   const row = rows[0];

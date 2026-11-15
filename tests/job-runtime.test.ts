@@ -323,6 +323,15 @@ describe('claiming', () => {
     expect(claimed!.client).toBe(other.client);
   });
 
+  it('claims by named queue, as the worker container does (CAIRN_JOB_QUEUES=DEFAULT)', async () => {
+    // Regression: a queue list used to reach Postgres as `('DEFAULT')`, a scalar, and the
+    // worker crashed with "malformed array literal" on every poll.
+    const id = await queueRun(tenant.client, 'JOBTEST.QUEUED');
+    expect(await claimNext(WORKER, ['NO_SUCH_QUEUE', 'ANOTHER'])).toBeNull();
+    const claimed = await claimNext(WORKER, ['DEFAULT']);
+    expect(claimed?.runId).toBe(id);
+  });
+
   it('gives one run to one claim, and nothing to the next', async () => {
     await queueRun(tenant.client, 'JOBTEST.ONCE');
     const first = await claimNext(WORKER, null);
