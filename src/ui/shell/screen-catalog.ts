@@ -16,6 +16,7 @@ export type ScreenArea =
   | 'production'
   | 'controlling'
   | 'configuration'
+  | 'people'
   | 'audit';
 
 export interface ScreenLink {
@@ -2828,16 +2829,14 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["lot"],
   },
   {
-    // People has no screen area of its own yet, for the reason the quality entry above records: a `people`
-    // value in `ScreenArea` and `SCREEN_AREAS` needs its `nav.area.people` label in src/platform/i18n/index.ts,
-    // a file carrying uncommitted owner work. Until that label can land, the employee master sits in the
-    // Foundation area beside the other business masters, under its own family.
+    // The People area (nav.area.people, payroll phase 1): the employee master and the other People
+    // transaction screens. People configuration screens stay in the Configuration area.
     id: "/people/employees",
     path: "/people/employees",
     query: {},
     code: "PEOPLE.EMPLOYEE.CREATE",
     title: "Employees",
-    area: "foundation",
+    area: "people",
     family: "people-employee-master",
     accepts: ["employee", "q"],
   },
@@ -2852,9 +2851,8 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["type"],
   },
   {
-    // The pay structure of 9195, in the configuration area beside the record types it depends on: the
-    // `people` area still waits on its nav label (see the note above), and a configuration screen belongs to
-    // configuration regardless.
+    // The pay components of 9195, in the configuration area beside the record types it depends on: a
+    // configuration screen belongs to configuration, even now that People has its own area.
     id: "/config/pay-components",
     path: "/config/pay-components",
     query: {},
@@ -2865,15 +2863,13 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["component", "chart", "q"],
   },
   {
-    // The org block of 9194 sits in the same area for the same reason the employee master above does: a
-    // `people` ScreenArea needs a nav label in src/platform/i18n/index.ts, which carries uncommitted owner
-    // work, so both People transaction screens are filed beside the other business masters.
+    // The org block of 9194, in the People area beside the employee master.
     id: "/people/organization",
     path: "/people/organization",
     query: {},
     code: "PEOPLE.ORGUNIT.CREATE",
     title: "Organisation",
-    area: "foundation",
+    area: "people",
     family: "people-organization",
     accepts: ["unit", "position", "job", "q"],
   },
@@ -2883,7 +2879,7 @@ export const SCREENS: readonly ScreenLink[] = [
     query: {},
     code: "PEOPLE.ASSIGNMENT.MAINTAIN",
     title: "Assignments",
-    area: "foundation",
+    area: "people",
     family: "people-organization",
     accepts: ["employee", "position", "q"],
   },
@@ -2895,22 +2891,31 @@ export const SCREENS: readonly ScreenLink[] = [
     query: {},
     code: "PEOPLE.AUTHORITY.VIEW",
     title: "Authority",
-    area: "foundation",
+    area: "people",
     family: "people-organization",
     accepts: ["user"],
   },
   {
-    // Time and leave sits in the foundation area beside the other People
-    // transaction screens: a `people` ScreenArea needs a nav label in
-    // src/platform/i18n/index.ts, which carries uncommitted owner work.
+    // Time and leave, in the People area beside the other People transaction screens.
     id: "/people/time-leave",
     path: "/people/time-leave",
     query: {},
     code: "PEOPLE.TIME.ENTER",
     title: "Time & leave",
-    area: "foundation",
+    area: "people",
     family: "people-time-leave",
     accepts: ["employee", "type", "status", "q"],
+  },
+  {
+    // Payroll phase 1 (9277): salary structures, their components and amount rules.
+    id: "/people/salary-structures",
+    path: "/people/salary-structures",
+    query: {},
+    code: "PEOPLE.PAYROLL.STRUCTURE.DEFINE",
+    title: "Salary structures",
+    area: "people",
+    family: "people",
+    accepts: ["structure"],
   },
   {
     id: "/audit/workspace",
@@ -2955,5 +2960,6 @@ export const SCREEN_AREAS: readonly ScreenArea[] = [
   'production',
   'controlling',
   'configuration',
+  'people',
   'audit',
 ];

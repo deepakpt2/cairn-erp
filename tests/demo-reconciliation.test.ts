@@ -58,7 +58,7 @@ const TAX = '220000';
  *
  * Not "the tenant exists" — a run that stopped after sales leaves a tenant that
  * balances to nothing. Reconciling a half-built company would report the absences
- * as agreements, so every check asks for all ten phases first.
+ * as agreements, so every check asks for all eleven phases first.
  */
 async function installationStands(): Promise<boolean> {
   return withTenant(CLIENT, async (tx) => {

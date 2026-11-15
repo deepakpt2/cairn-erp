@@ -16,7 +16,7 @@
 
 **sales (39)** — `schema.ts`: orders `sales_order(_line)`,`sales_order_schedule`,`sales_document_type`,`sales_document_partner`,`sales_partner_function`,`customer_sales_partner` · pricing `sales_condition_record`,`sales_condition_type`,`sales_document_condition`,`sales_pricing_procedure(_step)`,`sales_procedure_determination` · delivery/shipping `delivery(_line)`,`delivery_picking`,`delivery_picking_serial`,`shipping_point`,`shipping_point_determination`,`shipping_condition` · billing `billing_document(_line)`,`sales_billing_plan(_date/_type)`,`sales_billing_split_criterion`,`sales_invoice_list_item`,`sales_down_payment_request`,`sales_account_determination` · rebates `sales_rebate_agreement`,`sales_rebate_accrual` · returns `sales_returns_configuration` · batch `sales_batch_determination_rule` · incompletion `incompletion_procedure(_field)`,`incompletion_group`,`incompletion_assignment`,`incompletion_status_group`,`sales_incompletion_log`.
 
-**people (19)** — `schema.ts`: `record_type`,`record_field(_value)`,`employee(_record)`,`org_unit`,`org_hierarchy`,`position(_assignment)`,`job`,`pay_component(_config)`,`time_recording`,`time_type`,`absence`,`leave_quota` · delegation `delegation`,`delegation_scope`,`delegation_approval` (migration `9269_delegation.sql`).
+**people (22)** — `schema.ts`: `record_type`,`record_field(_value)`,`employee(_record)`,`org_unit`,`org_hierarchy`,`position(_assignment)`,`job`,`pay_component(_config)`, payroll phase 1 (9277) `salary_structure`,`salary_structure_component`(FK→`pay_component`),`salary_structure_assignment`(FK→`employee`), `time_recording`,`time_type`(+`is_paid`),`absence`,`leave_quota` · delegation `delegation`,`delegation_scope`,`delegation_approval` (migration `9269_delegation.sql`).
 
 **quality (4)** — `schema.ts`: `quality_lot`,`inspection_characteristic`,`inspection_result`,`usage_decision`.
 
@@ -37,6 +37,7 @@
 | `quality_lot`, `inspection_result`, `usage_decision` | quality | — (inventory never reads quality; confirmed one-directional) | |
 | platform tables (`change_document`, `number_range`, `lock_object`, `app_user`/`role`/`capability`) | platform | all 9 modules | audit, numbering, locking, auth |
 | `employee`, `pay_component` | people | — (no inbound) | near-leaf module |
+| `company_code`, `cost_center`, `pay_component_config`, `position_assignment` | foundation / people | people `payroll-structure.ts` (readiness: company, chart, currency, cost-centre standing) | raw SQL reads |
 | `audit_grant` | audit | `platform/auth` (`effectiveGrants`, `verifyServiceAuthorityInTx` via `audit/read-only.ts`) | a live grant cuts authority to read-only |
 | `audit_access_log` | platform | audit (insert only: views, searches, exports, refusals with `grant_id`) | the audited auditor |
 | `fiscal_year_period`, `company_code` | foundation | audit (PERIOD scope validation) | |

@@ -11,7 +11,9 @@
 - `src/modules/people/record-types.ts` — config layer (DV-012): fields a record type asks for + kind. Exports: `defineRecordType`, `changeRecordType`, `addRecordField`, `changeRecordField`, `getRecordType`, `listRecordTypes`, `RecordTypeConfigError`.
 - `src/app/people/employees/actions.ts` — wraps employee-master writes: `createEmployeeAction`, `changeEmployeeAction`, `createRecordAction`, `delimitRecordAction`, `changeRecordValuesAction`; logs `CAPABILITY_DENIED` on refusal.
 - `src/app/people/employees/Employees.tsx` — client: create/change master, write/correct/delimit record, grouped by type.
-- `src/app/people/employees/page.tsx` — `/people/employees` page; loads employees, record types, selection.
+- `src/app/people/employees/page.tsx` — `/people/employees` page; loads employees, record types, selection; plus the **Pay structure** section (current structure, history, readiness this month, assign/end forms) shown only with `PEOPLE.PAYROLL.STRUCTURE.DEFINE` or `PEOPLE.PAYROLL.RESULT`.
+- `src/app/people/employees/PayStructure.tsx` — client: `AssignStructureForm`, `EndAssignmentForm` (actions in `salary-structures/actions.ts`).
+- `src/app/people/salary-structures/{page.tsx,StructureForms.tsx,actions.ts}` — `/people/salary-structures` (`PEOPLE.PAYROLL.STRUCTURE.DEFINE`): list, `?structure=` detail with rules, define/change/component forms; actions also `assignStructureAction`,`endAssignmentAction` used by the employee screen.
 - `src/app/config/people-record-types/actions.ts` — `defineRecordTypeAction`, `changeRecordTypeAction`, `addRecordFieldAction`, `changeRecordFieldAction`.
 - `src/app/config/people-record-types/RecordTypes.tsx` — client: define type+first field, list, add/correct fields, retire/restore.
 - `src/app/config/people-record-types/page.tsx` — `/config/people-record-types` page.
@@ -28,6 +30,7 @@
 - `src/app/people/assignments/page.tsx` — `/people/assignments` page; reads `ended`/`to` redirect params into confirmation.
 
 ### Pay components & record types (pay structure)
+- `src/modules/people/payroll-structure.ts` — payroll phase 1 (9277): salary structures (T510) and their components' amount rule (`FIXED`|`PERCENT_OF_BASE`, never on `pay_component`), employee structure assignment (infotype 0008, inclusive `valid_to`, overlap refused under advisory lock, `requestKey` idempotent), and `validateEmployeeForRun(tx, client, personnelNumber, from, to)` → `{ready, reasons[], notes[]}` (never throws; reasons `NO_STRUCTURE`,`OVERLAPPING_STRUCTURES`,`STRUCTURE_NOT_VALID`,`STRUCTURE_EMPTY`,`COMPONENT_UNMAPPED`,`NO_POSITION`,`NO_COST_CENTRE`,`NO_COMPANY`; note `CURRENCY_DIFFERS`). Company = position assignment's `company_code`, else its cost centre's; chart/currency from `company_code`. Exports also `defineSalaryStructure`,`changeSalaryStructure`,`setStructureComponent`,`listStructures`,`getStructure`,`listAssignableComponents`,`assignStructure`,`endAssignment`,`assignmentFor`,`listAssignments`,`employeeRunReadiness`,`defaultPayrollCurrency`, `PayrollStructureError(message, remedy, code)`, `PAYROLL_RESULT_CAPABILITY`. Service signature `(input, capabilities[])` like `pay-components.ts`. Calculates and posts nothing.
 - `src/modules/people/pay-components.ts` — `pay_component` defs + per-chart GL/cost mapping; validates against `gl_account`, `chart_of_accounts`, `cost_center` (other modules' tables). Exports: `definePayComponent`, `changePayComponent`, `savePayComponentMapping`, `getPayComponent`, `listPayComponents`, `listChartsForMapping`, `listAccountsForSide`, `listCostCentresForMapping`, `isPayComponentError`, `listOpenPayComponents`, `PayComponentError`.
 - `src/app/config/pay-components/actions.ts` — `defineComponentAction`, `changeComponentAction`, `defineMappingAction`, `changeMappingAction`; `CLEAR`/`NONE` sentinel: "field not sent" vs "clear field."
 - `src/app/config/pay-components/PayComponents.tsx` — client: define component, list, select chart, define/correct mapping (debit/credit selects, cost-receiver choice).
@@ -52,13 +55,14 @@
 - `/people/employees` — master+dated records (create, write/correct/delimit).
 - `/people/organization` — units/positions/jobs, `STRUCTURE`/`REPORTS_TO` (tabbed).
 - `/people/assignments` — position→cost centre→employee, history, open span.
-- `/people/time-leave` — time types, absence req/decision, leave quota, recordings.
+- `/people/time-leave` — time types (incl. Paid/unpaid, 9277), absence req/decision, leave quota, recordings.
+- `/people/salary-structures` — salary structures and component amount rules (payroll phase 1).
 - `/people/authority` — read-only authority chart of viewer's reporting line: positions, grants by org level, delegations (`PEOPLE.AUTHORITY.VIEW`). No delegation-maintenance screen yet (service + tests only).
 - `/config/people-record-types` — define/retire record types+fields (DV-012).
 - `/config/pay-components` — define/retire pay components+GL/cost mapping.
 
 ## Database
-**Owns:** `record_type`, `record_field`, `employee`, `employee_record`, `record_field_value`, `org_unit`, `job`, `position`, `org_hierarchy`, `position_assignment`, `pay_component`, `pay_component_config`, `time_type`, `absence`, `leave_quota`, `time_recording`, `delegation`, `delegation_scope`, `delegation_approval` (migration `drizzle/9269_delegation.sql`, RLS forced; also adds `audit_access_log.delegation_id`).
+**Owns:** `record_type`, `record_field`, `employee`, `employee_record`, `record_field_value`, `org_unit`, `job`, `position`, `org_hierarchy`, `position_assignment`, `pay_component`, `pay_component_config`, `salary_structure`, `salary_structure_component`, `salary_structure_assignment` (9277), `time_type` (+`is_paid`, 9277), `absence`, `leave_quota`, `time_recording`, `delegation`, `delegation_scope`, `delegation_approval` (migration `drizzle/9269_delegation.sql`, RLS forced; also adds `audit_access_log.delegation_id`).
 
 **Related, not owned:** `position_capability`, `user_capability`, `user_capability_scope` (authority model, `drizzle/9267_authority_model.sql`) are Drizzle-defined in `src/platform/tables/security.ts` (platform); 9267 also adds the org-level scope columns to `position_assignment`. Read by `authority-chart.ts`/`jobs/grant-expiring.ts`.
 
@@ -104,6 +108,7 @@
 - `tests/authority-model.test.ts` — authority resolver (`platform/auth/authority`) over people structure: role grants unchanged, plant-scoped/position grants, expired/future grants stop matching (no sweep), delegation provenance, pattern/exact-grant matching, tenant isolation.
 - `tests/chain-of-command.test.ts` — user→employee→position→REPORTS_TO resolution, skips vacant positions, line ends in org unit, no-position answer, ring refusal, dated spans.
 - `tests/delegation.test.ts` — state machine, three creation flows, one- vs two-sided approval, acceptance, revoke/close, derived (not copied) delegate authority.
+- `tests/payroll-structure.test.ts` — payroll phase 1 (22): structures/components/% cap/unknown component/formula refused, assignment validity incl. inclusive last day, overlap by name, idempotency, end keeps history, every readiness reason, currency note, joiner coverage, posts nothing, `time_type.is_paid` default. Helper `tests/helpers/payroll-actor.ts` (`buildPayrollFixture`, `payrollEmployee`, `PAYROLL_AUTH`).
 - `tests/people-time-leave.test.ts` — time-type define/change/retire, absence request/overlap/approve/reject/cancel, search by status/type, leave-quota entitlement/taken/remaining on approval, recording create/overwrite, tenant isolation, open-absence-on-a-day lookup.
 
 ## Scripts
@@ -114,6 +119,7 @@
 - pay-components (CFG.PEOPLE.PAYCOMPONENT.DEFINE): component+mapping definition, kind-side refusals, cost-object requirement, workbench route-link regression (activity had no route before `9195`).
 
 ## Non-obvious behavior / gotchas
+- Payroll phase 1: payroll capabilities (`PEOPLE.PAYROLLRUN.EXECUTE`, `PEOPLE.PAYROLL.RESULT`, `PEOPLE.PAYROLL.IMPORT`, `PEOPLE.PAYROLL.STRUCTURE.DEFINE`) are granted to no role (history/9199 withholds payroll); the demo reaches them via `demo.admin`'s `*`. Readiness covers the days the employee holds a position (joiners/leavers), so a structure starting mid-month on a full-month position is refused with the first uncovered day.
 - No deletes: every table append-only/retire-only at DB privilege level (migrations `9193`-`9197` revoke DELETE); exception `org_hierarchy` (app can delete — move = delete+reinsert single edge, not history).
 - Overlap checks use advisory lock (`pg_advisory_xact_lock(hashtextextended(...))`) before checking, in `employee-master.ts`/`assignment.ts`/`time-leave.ts` — PK is backstop only; concurrent writers could both see a day as free.
 - Only newest *open* record/assignment/mapping-row correctable in place; else new dated row required. `changeRecordValues`/`changeAssignment` enforce "no newer row AND still open."

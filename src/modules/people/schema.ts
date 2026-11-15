@@ -643,6 +643,128 @@ export const payComponentConfig = pgTable(
   ],
 );
 
+// ── 9277: payroll phase 1 — salary structures and their assignment ─────────
+// SAP: pay scale group/level (T510) is the structure; basic pay infotype 0008 is the
+// assignment. A wage type (pay_component) carries no amount rule of its own: the rule
+// lives on the structure component, so the same component can be 10 % of base in one
+// structure and a fixed amount in another. Nothing here calculates or posts.
+// Dates follow the house convention: valid_to is the last day that applies (inclusive).
+
+export const SALARY_STRUCTURE_ROUTE = '/people/salary-structures';
+export const SALARY_STRUCTURE_CAPABILITY = 'PEOPLE.PAYROLL.STRUCTURE.DEFINE';
+export const SALARY_STRUCTURE_OBJECT_CLASS = 'salary_structure';
+export const SALARY_ASSIGNMENT_OBJECT_CLASS = 'salary_structure_assignment';
+
+/** How a component's amount is reached. A formula is deliberately absent (DV-001); adding one is a new value here. */
+export const AMOUNT_KINDS = ['FIXED', 'PERCENT_OF_BASE'] as const;
+export type AmountKind = (typeof AMOUNT_KINDS)[number];
+
+/** A named set of pay components. It names what is paid; it never names a person. Retired by validity, never deleted. */
+export const salaryStructure = pgTable(
+  'salary_structure',
+  {
+    client: tenant(),
+    code: varchar('code', { length: 10 }).notNull(),
+    name: varchar('name', { length: 60 }).notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    validTo: date('valid_to', { mode: 'string' }),
+    isValid: boolean('is_valid').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.code] }),
+    check('salary_structure_code_format_ck', sql`${t.code} ~ '^([A-Z][A-Z0-9]{1,9})$'`),
+    check('salary_structure_name_length_ck', sql`length(trim(${t.name})) > 0`),
+    check('salary_structure_currency_format_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check('salary_structure_period_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
+/**
+ * One component inside one structure, and the rule that reaches its amount.
+ *
+ * The rule lives here, never on `payComponent`: a component is a name for a kind of pay, and the same
+ * wage type is 10 % of base in one structure and a fixed amount in another. Storing the rule here is
+ * what keeps that possible, and what keeps a formula engine a later, additive `AMOUNT_KINDS` value
+ * rather than a rewrite.
+ */
+export const salaryStructureComponent = pgTable(
+  'salary_structure_component',
+  {
+    client: tenant(),
+    structureCode: varchar('structure_code', { length: 10 }).notNull(),
+    componentCode: varchar('component_code', { length: 10 }).notNull(),
+    amountKind: varchar('amount_kind', { length: 20 }).notNull(),
+    /** FIXED: the amount. PERCENT_OF_BASE: the percentage, stored as a rate (7.5 = 7.5 %). */
+    amountValue: numeric('amount_value', { precision: 23, scale: 4 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.structureCode, t.componentCode] }),
+    foreignKey({
+      name: 'salary_structure_component_structure_fk',
+      columns: [t.client, t.structureCode],
+      foreignColumns: [salaryStructure.client, salaryStructure.code],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'salary_structure_component_component_fk',
+      columns: [t.client, t.componentCode],
+      foreignColumns: [payComponent.client, payComponent.code],
+    }).onDelete('restrict'),
+    check('salary_structure_component_kind_ck', sql`${t.amountKind} in ('FIXED','PERCENT_OF_BASE')`),
+    check('salary_structure_component_value_ck', sql`${t.amountValue} >= 0`),
+    check(
+      'salary_structure_component_percent_ck',
+      sql`${t.amountKind} <> 'PERCENT_OF_BASE' or ${t.amountValue} <= 100`,
+    ),
+  ],
+);
+
+/**
+ * What one employee is paid, and from when. SAP infotype 0008.
+ *
+ * The base lives here rather than on the structure: two people on the same structure are paid
+ * different amounts, and the structure is what they share, not what they are paid. Ending one sets
+ * `validTo`; the row stays, so history reads back.
+ */
+export const salaryStructureAssignment = pgTable(
+  'salary_structure_assignment',
+  {
+    client: tenant(),
+    assignmentId: varchar('assignment_id', { length: 36 }).notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    structureCode: varchar('structure_code', { length: 10 }).notNull(),
+    /** PERCENT_OF_BASE components compute from this. */
+    baseAmount: numeric('base_amount', { precision: 23, scale: 4 }).notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    validTo: date('valid_to', { mode: 'string' }),
+    requestKey: varchar('request_key', { length: 64 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.assignmentId] }),
+    index('salary_assignment_employee_idx').on(t.client, t.personnelNumber),
+    uniqueIndex('salary_assignment_request_key_uq')
+      .on(t.client, t.requestKey)
+      .where(sql`${t.requestKey} is not null`),
+    foreignKey({
+      name: 'salary_assignment_employee_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'salary_assignment_structure_fk',
+      columns: [t.client, t.structureCode],
+      foreignColumns: [salaryStructure.client, salaryStructure.code],
+    }).onDelete('restrict'),
+    check('salary_assignment_currency_format_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check('salary_assignment_base_ck', sql`${t.baseAmount} >= 0`),
+    check('salary_assignment_period_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
 // ── 9197: time and leave ────────────────────────────────────────────────────
 // §8.10: time_recording, absence, attendance, leave_quota — Time data.
 // §10.8: PEOPLE.TIME.ENTER (absence and attendance entry), PEOPLE.LEAVE.VIEW
@@ -667,6 +789,8 @@ export const timeType = pgTable(
     description: varchar('description', { length: 200 }),
     typeKind: varchar('type_kind', { length: 12 }).notNull(),
     reducesQuota: boolean('reduces_quota').notNull().default(false),
+    /** Leave without pay is false. A later payroll phase deducts these days; phase 1 only makes them identifiable (9277). */
+    isPaid: boolean('is_paid').notNull().default(true),
     isValid: boolean('is_valid').notNull().default(true),
     ...auditColumns,
   },

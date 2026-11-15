@@ -89,6 +89,13 @@ function TimeTypeForm({ canWrite }: { canWrite: boolean }) {
           </select>
         </div>
         <div className="col-span-1 sm:col-span-1">
+          <label className="block text-xs text-ink-soft mb-1">Paid</label>
+          <select name="isPaid" className="w-full border rounded px-2 py-1 text-sm" defaultValue="yes">
+            <option value="yes">yes</option>
+            <option value="no">no (leave without pay)</option>
+          </select>
+        </div>
+        <div className="col-span-1 sm:col-span-1">
           <label className="block text-xs text-ink-soft mb-1">&nbsp;</label>
           <button
             type="submit"
@@ -365,6 +372,7 @@ function TimeTypeList({ timeTypes }: { timeTypes: TimeTypeView[] }) {
             <th className="text-ink-soft">Name</th>
             <th className="text-ink-soft">Kind</th>
             <th className="text-ink-soft">Reduces quota</th>
+            <th className="text-ink-soft">Paid</th>
             <th className="text-ink-soft">Valid</th>
           </tr>
         </thead>
@@ -375,6 +383,7 @@ function TimeTypeList({ timeTypes }: { timeTypes: TimeTypeView[] }) {
               <td>{t.name}</td>
               <td>{textLabel(t.typeKind)}</td>
               <td>{t.reducesQuota ? 'yes' : 'no'}</td>
+              <td>{t.isPaid ? 'yes' : 'unpaid'}</td>
               <td>{t.isValid ? 'yes' : 'retired'}</td>
             </tr>
           ))}

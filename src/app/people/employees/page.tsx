@@ -3,7 +3,18 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { EMPLOYEE_CAPABILITY, EMPLOYEE_ROUTE, RECORD_CAPABILITY, getEmployee, listEmployees } from '@/modules/people/employee-master';
 import { listRecordTypes } from '@/modules/people/record-types';
+import {
+  PAYROLL_RESULT_CAPABILITY,
+  SALARY_STRUCTURE_CAPABILITY,
+  SALARY_STRUCTURE_ROUTE,
+  defaultPayrollCurrency,
+  employeeRunReadiness,
+  listAssignments,
+  listStructures,
+} from '@/modules/people/payroll-structure';
+import { randomUUID } from 'node:crypto';
 import Employees from './Employees';
+import { AssignStructureForm, EndAssignmentForm } from './PayStructure';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +77,114 @@ export default async function PeopleEmployeesPage({ searchParams }: {
         canCreateMaster={can(session, EMPLOYEE_CAPABILITY)}
         canMaintainRecords={can(session, RECORD_CAPABILITY)}
       />
+      {selected && (
+        <PayStructureSection
+          client={client}
+          personnelNumber={personnelNumber}
+          canRead={can(session, SALARY_STRUCTURE_CAPABILITY) || can(session, PAYROLL_RESULT_CAPABILITY)}
+          canAssign={can(session, SALARY_STRUCTURE_CAPABILITY)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Pay structure (payroll phase 1, SAP infotype 0008): the employee's structure, base amount, currency
+ * and dates, the history, an assignment form, and whether a run for this month could include them.
+ * Pay is sensitive: the section is shown only to whoever may define structures or read a result.
+ */
+async function PayStructureSection({
+  client,
+  personnelNumber,
+  canRead,
+  canAssign,
+}: {
+  client: string;
+  personnelNumber: string;
+  canRead: boolean;
+  canAssign: boolean;
+}) {
+  if (!canRead) {
+    return (
+      <section className="panel p-4" aria-label="Pay structure">
+        <h2 className="panel-title">Pay structure</h2>
+        <p className="text-sm text-ink-soft">
+          Pay is shown only to holders of {SALARY_STRUCTURE_CAPABILITY} or {PAYROLL_RESULT_CAPABILITY}.
+        </p>
+      </section>
+    );
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const monthFrom = `${today.slice(0, 8)}01`;
+  const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const [assignments, structures, currency, readiness] = await Promise.all([
+    listAssignments(client, personnelNumber),
+    listStructures(client),
+    defaultPayrollCurrency(client),
+    employeeRunReadiness(client, personnelNumber, monthFrom, monthEnd),
+  ]);
+  const current = assignments.find((a) => a.validFrom <= today && (a.validTo === null || a.validTo >= today)) ?? null;
+
+  return (
+    <section className="panel space-y-3 p-4" aria-label="Pay structure">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="panel-title">Pay structure</h2>
+        <Link href={SALARY_STRUCTURE_ROUTE} className="text-sm underline">Salary structures</Link>
+      </div>
+      {current ? (
+        <p className="text-sm">
+          Current: <span className="code">{current.structureCode}</span> {current.structureName ? `— ${current.structureName}` : ''}, base{' '}
+          <strong>{current.baseAmount} {current.currency}</strong>, from {current.validFrom} to {current.validTo ?? 'open'}.
+        </p>
+      ) : (
+        <p className="text-sm text-ink-soft">No pay structure stands for {personnelNumber} today.</p>
+      )}
+
+      <div className="text-sm">
+        <span className="field-label">Payroll readiness {monthFrom} to {monthEnd}</span>
+        {readiness.ready ? (
+          <p><span className="chip">ready</span> A run for this period could include {personnelNumber}. Nothing is calculated here.</p>
+        ) : (
+          <ul className="list-disc pl-5">
+            {readiness.reasons.map((r) => (
+              <li key={`${r.code}-${r.message}`}>{r.message}{r.remedy ? <span className="text-ink-soft"> {r.remedy}</span> : null}</li>
+            ))}
+          </ul>
+        )}
+        {readiness.notes.map((n) => <p key={n.message} className="text-xs text-ink-soft">Note: {n.message}</p>)}
+      </div>
+
+      {assignments.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="grid-table">
+            <thead><tr><th>Structure</th><th>Base</th><th>From</th><th>To</th>{canAssign && <th>End</th>}</tr></thead>
+            <tbody>
+              {assignments.map((a) => (
+                <tr key={a.assignmentId}>
+                  <td className="code">{a.structureCode}</td>
+                  <td className="code">{a.baseAmount} {a.currency}</td>
+                  <td className="text-xs">{a.validFrom}</td>
+                  <td className="text-xs">{a.validTo ?? 'open'}</td>
+                  {canAssign && (
+                    <td>{a.validTo === null || a.validTo >= today ? <EndAssignmentForm assignmentId={a.assignmentId} defaultEnd={a.validTo ?? monthEnd} /> : '—'}</td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {canAssign && (
+        <AssignStructureForm
+          personnelNumber={personnelNumber}
+          structures={structures.filter((s) => s.isValid).map((s) => ({ code: s.code, name: s.name, currency: s.currency }))}
+          defaultCurrency={currency ?? ''}
+          requestKey={randomUUID()}
+          today={today}
+        />
+      )}
+    </section>
   );
 }

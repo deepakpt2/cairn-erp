@@ -3348,6 +3348,9 @@
     "modules/people/employee-master.ts",
     "modules/people/record-types.ts"
   ],
+  "app/people/employees/PayStructure.tsx": [
+    "app/people/salary-structures/actions.ts"
+  ],
   "app/people/employees/actions.ts": [
     "modules/people/employee-master.ts",
     "platform/auth/current.ts",
@@ -3357,7 +3360,9 @@
   ],
   "app/people/employees/page.tsx": [
     "app/people/employees/Employees.tsx",
+    "app/people/employees/PayStructure.tsx",
     "modules/people/employee-master.ts",
+    "modules/people/payroll-structure.ts",
     "modules/people/record-types.ts",
     "platform/auth/current.ts"
   ],
@@ -3376,6 +3381,19 @@
     "app/people/organization/Organization.tsx",
     "modules/people/org-structure.ts",
     "platform/auth/current.ts"
+  ],
+  "app/people/salary-structures/StructureForms.tsx": [
+    "app/people/salary-structures/actions.ts"
+  ],
+  "app/people/salary-structures/actions.ts": [
+    "modules/people/payroll-structure.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/people/salary-structures/page.tsx": [
+    "app/people/salary-structures/StructureForms.tsx",
+    "modules/people/payroll-structure.ts",
+    "platform/auth/current.ts",
+    "platform/i18n/index.ts"
   ],
   "app/people/time-leave/TimeLeave.tsx": [
     "app/people/time-leave/actions.ts",
@@ -6324,6 +6342,12 @@
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
+  "modules/people/payroll-structure.ts": [
+    "modules/people/schema.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
   "modules/people/record-types.ts": [
     "modules/people/schema.ts",
     "platform/auth/current.ts",
@@ -7669,6 +7693,15 @@
     "platform/tenancy/demo-provisioning.ts",
     "platform/tenancy/index.ts",
     "platform/tenancy/standard-structure.ts"
+  ],
+  "platform/tenancy/demo-payroll.ts": [
+    "modules/people/pay-components.ts",
+    "modules/people/payroll-structure.ts",
+    "modules/people/schema.ts",
+    "modules/people/time-leave.ts",
+    "platform/db/client.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-people.ts": [
     "modules/people/assignment.ts",

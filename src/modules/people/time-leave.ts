@@ -98,6 +98,8 @@ const defineTimeTypeInput = z.object({
   description: optionalText(200),
   typeKind: typeKind,
   reducesQuota: z.boolean().optional(),
+  /** Leave without pay is false. Defaults to paid. Payroll phase 1 (9277). */
+  isPaid: z.boolean().optional(),
   changedBy: actor,
 });
 
@@ -107,6 +109,7 @@ const changeTimeTypeInput = z.object({
   name: kept(60).optional(),
   description: z.string().trim().max(200).nullable().optional(),
   isValid: z.boolean().optional(),
+  isPaid: z.boolean().optional(),
   changedBy: actor,
 });
 
@@ -185,6 +188,8 @@ export interface TimeTypeView {
   description: string | null;
   typeKind: TimeTypeKind;
   reducesQuota: boolean;
+  /** False for leave without pay — the days a later payroll phase deducts. */
+  isPaid: boolean;
   isValid: boolean;
   createdBy: string;
   changedBy: string | null;
@@ -354,12 +359,13 @@ async function employeeActive(tx: Tx, client: string, number: string): Promise<b
   return rows[0]?.is_active !== false;
 }
 
-async function getTimeType(tx: Tx, client: string, code: string): Promise<{ code: string; name: string; typeKind: string; reducesQuota: boolean; isValid: boolean }> {
+async function getTimeType(tx: Tx, client: string, code: string): Promise<{ code: string; name: string; typeKind: string; reducesQuota: boolean; isPaid: boolean; isValid: boolean }> {
   const rows = await tx.select({
     code: timeType.code,
     name: timeType.name,
     typeKind: timeType.typeKind,
     reducesQuota: timeType.reducesQuota,
+    isPaid: timeType.isPaid,
     isValid: timeType.isValid,
   }).from(timeType).where(and(
     eq(timeType.client, client),
@@ -403,6 +409,7 @@ export async function defineTimeType(
       description: parsed.description ?? null,
       typeKind: parsed.typeKind,
       reducesQuota: parsed.reducesQuota ?? false,
+      isPaid: parsed.isPaid ?? true,
       isValid: true,
       createdBy: parsed.changedBy,
     });
@@ -412,7 +419,7 @@ export async function defineTimeType(
       objectKey: parsed.code,
       changeType: 'CREATE',
       changedBy: parsed.changedBy,
-      after: { code: parsed.code, name: parsed.name, kind: parsed.typeKind },
+      after: { code: parsed.code, name: parsed.name, kind: parsed.typeKind, isPaid: parsed.isPaid ?? true },
     });
     return undefined;
   });
@@ -432,10 +439,11 @@ export async function changeTimeType(
       eq(timeType.code, parsed.code),
     )).limit(1);
     if (!standing) refusal('TIME_TYPE_UNKNOWN', parsed.code);
-    const patch: { name?: string; description?: string | null; isValid?: boolean } = {};
+    const patch: { name?: string; description?: string | null; isValid?: boolean; isPaid?: boolean } = {};
     if (parsed.name !== undefined) patch.name = parsed.name;
     if (parsed.description !== undefined) patch.description = parsed.description;
     if (parsed.isValid !== undefined) patch.isValid = parsed.isValid;
+    if (parsed.isPaid !== undefined) patch.isPaid = parsed.isPaid;
     if (Object.keys(patch).length === 0) refusal('NOTHING_TO_CHANGE');
     await tx.update(timeType).set({ ...patch, changedBy: parsed.changedBy, changedAt: new Date() }).where(and(
       eq(timeType.client, parsed.client),
@@ -447,7 +455,7 @@ export async function changeTimeType(
       objectKey: parsed.code,
       changeType: 'CHANGE',
       changedBy: parsed.changedBy,
-      before: { name: standing!.name, isValid: standing!.isValid },
+      before: { name: standing!.name, isValid: standing!.isValid, isPaid: standing!.isPaid },
       after: patch,
     });
     return undefined;
@@ -794,6 +802,7 @@ export async function getTimeTypeView(clientInput: string, codeValue: string): P
       description: null,
       typeKind: row.typeKind as TimeTypeKind,
       reducesQuota: row.reducesQuota,
+      isPaid: row.isPaid,
       isValid: row.isValid,
       createdBy: '',
       changedBy: null,
@@ -1009,6 +1018,7 @@ export async function listTimeTypes(clientInput: string, openOnly?: boolean): Pr
         description: null,
         typeKind: row.typeKind as TimeTypeKind,
         reducesQuota: row.reducesQuota,
+        isPaid: row.isPaid,
         isValid: row.isValid,
         createdBy: '',
         changedBy: null,

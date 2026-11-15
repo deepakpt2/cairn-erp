@@ -41,6 +41,7 @@ import { buildDemoSales } from '../src/platform/tenancy/demo-sales';
 import { buildDemoFinance } from '../src/platform/tenancy/demo-finance';
 import { buildDemoQuality } from '../src/platform/tenancy/demo-quality';
 import { buildDemoAudit, demoAuditPrerequisitesMissing } from '../src/platform/tenancy/demo-audit';
+import { buildDemoPayroll } from '../src/platform/tenancy/demo-payroll';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -313,6 +314,16 @@ async function runAuditPhase(ctx: PhaseContext): Promise<Record<string, unknown>
   };
 }
 
+/**
+ * The payroll phase (payroll phase 1): pay components and their account mappings, time types incl.
+ * an unpaid leave, two salary structures, and assignments for every employee but one. Calculates
+ * and posts nothing.
+ */
+async function runPayrollPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoPayroll({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -324,6 +335,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D4_FINANCE: runFinancePhase,
   D5_QUALITY: runQualityPhase,
   D6_AUDIT: runAuditPhase,
+  D7_PAYROLL: runPayrollPhase,
 };
 
 async function main(): Promise<number> {

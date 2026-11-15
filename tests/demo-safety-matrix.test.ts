@@ -55,7 +55,7 @@ interface RestartRow {
 }
 
 /**
- * The ten phases, and how each one behaves when the run is stopped inside it.
+ * The eleven phases, and how each one behaves when the run is stopped inside it.
  *
  * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
  * people are split because the second takes minutes and opens administrator
@@ -122,6 +122,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     writes: 'One time-boxed, scoped, read-only audit grant to the auditor, the auditor’s findings, note, bookmark and requests, and the controller’s answer to one request.',
     resumesBy: 'Request-keyed grant (`DEMO_AUDIT_GRANT_REQUEST_KEY` becomes the grant id); findings are found by subject before they are raised, and a request is answered only while still open.',
     guaranteedBy: ['buildDemoAudit'],
+  },
+  {
+    phase: 'D7_PAYROLL',
+    writes: 'Pay components and their account mappings, time types including an unpaid leave, two salary structures, and a structure assignment for every demo employee but one. Nothing is calculated or posted.',
+    resumesBy: 'Adoption for components, mappings, time types and structures; request-keyed assignments (`DEMO-SAL-*`).',
+    guaranteedBy: ['buildDemoPayroll'],
   },
 ];
 
