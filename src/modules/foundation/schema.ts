@@ -1806,3 +1806,136 @@ export const planRevaluationOrderItem = pgTable('plan_revaluation_order_item', {
     foreignColumns: [planRevaluationOrder.client, planRevaluationOrder.revaluationNumber],
   }).onDelete('cascade'),
 ]);
+
+/* ── 9284: cost allocation cycles (KSU1/KSU2/KSU3, executed by KSU5) ──────────────────────────
+ * A cycle is a reusable definition of segments; each segment relieves sender cost centres of their
+ * posted cost and charges receiver cost centres by a rule. Only ASSESSMENT executes today: it
+ * bundles everything into the one account the tenant names on posting event CO_ASSESSMENT.
+ * DISTRIBUTION stands in the vocabulary (SAP keeps one cycle object for both) and is refused at run
+ * time, never silently treated as assessment. Receivers are cost centres or cost centre groups only.
+ */
+export const ALLOCATION_CATEGORIES = ['ASSESSMENT', 'DISTRIBUTION'] as const;
+export const SENDER_RULES = ['POSTED'] as const;
+export const RECEIVER_RULES = ['PERCENTAGE', 'PORTION', 'FIXED_AMOUNT'] as const;
+export type ReceiverRule = (typeof RECEIVER_RULES)[number];
+export const ALLOCATION_RUN_STATUSES = ['EXECUTED', 'CANCELLED'] as const;
+
+const tenantKey = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
+
+export const costAllocationCycle = pgTable('cost_allocation_cycle', {
+  client: tenantKey(),
+  controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+  cycleCode: varchar('cycle_code', { length: 6 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  /**
+   * ASSESSMENT bundles into one account; DISTRIBUTION preserves the original cost element. Both stand
+   * in the vocabulary because SAP keeps one cycle object for both — only ASSESSMENT is executed today,
+   * and a DISTRIBUTION cycle is refused at run time rather than being silently treated as assessment.
+   */
+  category: varchar('category', { length: 12 }).notNull(),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.controllingArea, t.cycleCode] }),
+  foreignKey({ name: 'cost_allocation_cycle_area_fk', columns: [t.client, t.controllingArea], foreignColumns: [controllingArea.client, controllingArea.controllingArea] }).onDelete('cascade'),
+  check('cost_allocation_cycle_code_ck', sql`${t.cycleCode} ~ '^[A-Z0-9]{1,6}$'`),
+  check('cost_allocation_cycle_category_ck', sql`${t.category} in ('ASSESSMENT','DISTRIBUTION')`),
+  check('cost_allocation_cycle_span_ck', sql`${t.validTo} >= ${t.validFrom}`),
+]);
+
+export const costAllocationSegment = pgTable('cost_allocation_segment', {
+  client: tenantKey(),
+  controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+  cycleCode: varchar('cycle_code', { length: 6 }).notNull(),
+  segmentNumber: smallint('segment_number').notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  senderRule: varchar('sender_rule', { length: 12 }).notNull().default('POSTED'),
+  receiverRule: varchar('receiver_rule', { length: 14 }).notNull(),
+  /** Optional restriction on the cost elements assessed. Null = all. */
+  costElementFrom: varchar('cost_element_from', { length: 10 }),
+  costElementTo: varchar('cost_element_to', { length: 10 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.controllingArea, t.cycleCode, t.segmentNumber] }),
+  foreignKey({ name: 'cost_allocation_segment_cycle_fk', columns: [t.client, t.controllingArea, t.cycleCode], foreignColumns: [costAllocationCycle.client, costAllocationCycle.controllingArea, costAllocationCycle.cycleCode] }).onDelete('cascade'),
+  check('cost_allocation_segment_number_ck', sql`${t.segmentNumber} between 1 and 999`),
+  check('cost_allocation_segment_sender_ck', sql`${t.senderRule} in ('POSTED')`),
+  check('cost_allocation_segment_receiver_ck', sql`${t.receiverRule} in ('PERCENTAGE','PORTION','FIXED_AMOUNT')`),
+  check('cost_allocation_segment_element_ck', sql`(${t.costElementFrom} is null and ${t.costElementTo} is null) or (${t.costElementFrom} is not null and ${t.costElementTo} is not null and ${t.costElementFrom} <= ${t.costElementTo})`),
+]);
+
+export const costAllocationSender = pgTable('cost_allocation_sender', {
+  client: tenantKey(),
+  controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+  cycleCode: varchar('cycle_code', { length: 6 }).notNull(),
+  segmentNumber: smallint('segment_number').notNull(),
+  itemNumber: smallint('item_number').notNull(),
+  costCenter: varchar('cost_center', { length: 10 }),
+  groupName: varchar('group_name', { length: 24 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.controllingArea, t.cycleCode, t.segmentNumber, t.itemNumber] }),
+  foreignKey({ name: 'cost_allocation_sender_segment_fk', columns: [t.client, t.controllingArea, t.cycleCode, t.segmentNumber], foreignColumns: [costAllocationSegment.client, costAllocationSegment.controllingArea, costAllocationSegment.cycleCode, costAllocationSegment.segmentNumber] }).onDelete('cascade'),
+  check('cost_allocation_sender_exactly_one_ck', sql`(${t.costCenter} is not null and ${t.groupName} is null) or (${t.costCenter} is null and ${t.groupName} is not null)`),
+]);
+
+export const costAllocationReceiver = pgTable('cost_allocation_receiver', {
+  client: tenantKey(),
+  controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+  cycleCode: varchar('cycle_code', { length: 6 }).notNull(),
+  segmentNumber: smallint('segment_number').notNull(),
+  itemNumber: smallint('item_number').notNull(),
+  costCenter: varchar('cost_center', { length: 10 }),
+  groupName: varchar('group_name', { length: 24 }),
+  /** PERCENTAGE: a share of 100. PORTION: a relative weight. FIXED_AMOUNT: the amount itself. */
+  weight: numeric('weight', { precision: 23, scale: 4 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.controllingArea, t.cycleCode, t.segmentNumber, t.itemNumber] }),
+  foreignKey({ name: 'cost_allocation_receiver_segment_fk', columns: [t.client, t.controllingArea, t.cycleCode, t.segmentNumber], foreignColumns: [costAllocationSegment.client, costAllocationSegment.controllingArea, costAllocationSegment.cycleCode, costAllocationSegment.segmentNumber] }).onDelete('cascade'),
+  check('cost_allocation_receiver_exactly_one_ck', sql`(${t.costCenter} is not null and ${t.groupName} is null) or (${t.costCenter} is null and ${t.groupName} is not null)`),
+  check('cost_allocation_receiver_weight_ck', sql`${t.weight} >= 0`),
+]);
+
+/**
+ * One execution of a cycle for one period. One EXECUTED run per cycle, year and period (partial
+ * unique index, as payroll_run): a correction is a reversal of the run's document, then
+ * cancelAssessmentRun (refused unless the document stands reversed), then a new run. Unlike a
+ * payroll run, which pays people once, a cycle is a repeatable close step.
+ */
+export const costAllocationRun = pgTable('cost_allocation_run', {
+  client: tenantKey(),
+  runId: varchar('run_id', { length: 36 }).notNull(),
+  controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+  cycleCode: varchar('cycle_code', { length: 6 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  period: smallint('period').notNull(),
+  status: varchar('status', { length: 10 }).notNull().default('EXECUTED'),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  companyCode: varchar('company_code', { length: 4 }).notNull(),
+  assessmentAccount: varchar('assessment_account', { length: 10 }).notNull(),
+  assessedTotal: numeric('assessed_total', { precision: 23, scale: 4 }).notNull(),
+  segmentCount: integer('segment_count').notNull().default(0),
+  senderCount: integer('sender_count').notNull().default(0),
+  receiverCount: integer('receiver_count').notNull().default(0),
+  iterations: integer('iterations').notNull().default(1),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  documentFiscalYear: integer('document_fiscal_year').notNull(),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  executedBy: varchar('executed_by', { length: 60 }).notNull(),
+  executedAt: timestamp('executed_at', { withTimezone: true }).notNull(),
+  cancelledBy: varchar('cancelled_by', { length: 60 }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+  cancelReason: varchar('cancel_reason', { length: 500 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId] }),
+  uniqueIndex('cost_allocation_run_live_uq').on(t.client, t.controllingArea, t.cycleCode, t.fiscalYear, t.period).where(sql`${t.status} <> 'CANCELLED'`),
+  foreignKey({ name: 'cost_allocation_run_cycle_fk', columns: [t.client, t.controllingArea, t.cycleCode], foreignColumns: [costAllocationCycle.client, costAllocationCycle.controllingArea, costAllocationCycle.cycleCode] }).onDelete('restrict'),
+  check('cost_allocation_run_period_ck', sql`${t.period} between 1 and 16`),
+  check('cost_allocation_run_iterations_ck', sql`${t.iterations} >= 1`),
+  check('cost_allocation_run_status_ck', sql`${t.status} in ('EXECUTED','CANCELLED')`),
+  check('cost_allocation_run_cancelled_ck', sql`${t.status} <> 'CANCELLED' or (${t.cancelledBy} is not null and ${t.cancelReason} is not null)`),
+]);

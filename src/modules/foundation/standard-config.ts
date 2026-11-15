@@ -314,6 +314,7 @@ const DOCUMENT_TYPES: Array<{
   { code: 'RV', name: 'Billing document', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD' },
   { code: 'PR', name: 'Payroll posting', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
   { code: 'PY', name: 'Payroll payment', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
+  { code: 'AL', name: 'Cost allocation', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
 ];
 
 /** Initial tenant-configured reversal reasons (SCR-072 / R-120); maintenance UI is a later act. */

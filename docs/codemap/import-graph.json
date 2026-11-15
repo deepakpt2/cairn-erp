@@ -1841,6 +1841,21 @@
     "modules/foundation/constrained-values.ts",
     "platform/auth/current.ts"
   ],
+  "app/controlling/allocation-cycles/CycleForms.tsx": [
+    "app/controlling/allocation-cycles/actions.ts",
+    "modules/foundation/cost-allocation-cycle.ts"
+  ],
+  "app/controlling/allocation-cycles/actions.ts": [
+    "modules/foundation/cost-allocation-cycle.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/controlling/allocation-cycles/page.tsx": [
+    "app/controlling/allocation-cycles/CycleForms.tsx",
+    "modules/foundation/activity-rate-definition.ts",
+    "modules/foundation/cost-allocation-cycle.ts",
+    "modules/foundation/cost-center-planning.ts",
+    "platform/auth/current.ts"
+  ],
   "app/controlling/cost-center-planning/PlanGrid.tsx": [
     "app/controlling/cost-center-planning/actions.ts"
   ],
@@ -5227,6 +5242,20 @@
     "platform/tables/registry.ts",
     "platform/tenancy/index.ts"
   ],
+  "modules/foundation/cost-allocation-cycle.ts": [
+    "modules/finance/gl-document.ts",
+    "modules/foundation/activity-rate-definition.ts",
+    "modules/foundation/cost-center-hierarchy.ts",
+    "modules/foundation/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/numbering/index.ts",
+    "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts"
+  ],
   "modules/foundation/cost-center-definition.ts": [
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
@@ -7746,6 +7775,16 @@
     "modules/foundation/cost-center-planning.ts",
     "modules/foundation/schema.ts",
     "platform/db/client.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
+  ],
+  "platform/tenancy/demo-assessment.ts": [
+    "modules/foundation/account-determination.ts",
+    "modules/foundation/cost-allocation-cycle.ts",
+    "modules/foundation/services.ts",
+    "platform/db/client.ts",
+    "platform/periods/index.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
     "platform/tenancy/demo-provisioning.ts"

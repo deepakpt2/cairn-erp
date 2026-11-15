@@ -48,6 +48,7 @@ import { buildDemoPayrollPay } from '../src/platform/tenancy/demo-payroll-pay';
 import { buildDemoPayrollOffCycle } from '../src/platform/tenancy/demo-payroll-offcycle';
 import { buildDemoCoPlan } from '../src/platform/tenancy/demo-co-plan';
 import { buildDemoActivityPrice } from '../src/platform/tenancy/demo-activity-price';
+import { buildDemoAssessment } from '../src/platform/tenancy/demo-assessment';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -385,6 +386,15 @@ async function runActivityPricePhase(ctx: PhaseContext): Promise<Record<string, 
   return { ...result };
 }
 
+/**
+ * Phase D14_ASSESSMENT: KSU5. Creates a dedicated allocation account, names it on CO_ASSESSMENT,
+ * defines the service-centre assessment cycle and runs it for the installation's period.
+ */
+async function runAssessmentPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoAssessment({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -403,6 +413,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D11_PAYROLL_OFFCYCLE: runPayrollOffCyclePhase,
   D12_CO_PLAN: runCoPlanPhase,
   D13_ACTIVITY_PRICE: runActivityPricePhase,
+  D14_ASSESSMENT: runAssessmentPhase,
 };
 
 async function main(): Promise<number> {

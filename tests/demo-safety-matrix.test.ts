@@ -55,7 +55,7 @@ interface RestartRow {
 }
 
 /**
- * The seventeen phases, and how each one behaves when the run is stopped inside it.
+ * The eighteen phases, and how each one behaves when the run is stopped inside it.
  *
  * A phase is a unit of resumption, not a unit of tidiness. The organisation and the
  * people are split because the second takes minutes and opens administrator
@@ -164,6 +164,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     writes: 'Three activity types (MIXH and PACKH on automatic price indicator 1, QCH manual at 25.00) with planned hours where D12 planned cost, and the activity prices calculated from the plan; the manual type is skipped.',
     resumesBy: 'Activity types adopted when standing; a rate save replaces its matrix; the calculation recomputes the same prices and is request-keyed (`DEMO-KSPI-<year>`).',
     guaranteedBy: ['buildDemoActivityPrice'],
+  },
+  {
+    phase: 'D14_ASSESSMENT',
+    writes: 'A dedicated allocation account 690000 in the demo chart, the CO_ASSESSMENT determination naming it, cycle SVC01 (Warehousing and Administration to Mixing 60 % and Packing 40 %), and its assessment run for the installation’s period as one AL document.',
+    resumesBy: 'Account and determination created only when missing; the cycle adopted when it stands; a period with a live run left as it is; the posting request-keyed (`ALLOC-SVC01-<year>-<period>`).',
+    guaranteedBy: ['buildDemoAssessment'],
   },
 ];
 

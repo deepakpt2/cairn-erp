@@ -1053,6 +1053,17 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    // Item 7 (9284): cost allocation cycles (KSU1/KSU2/KSU3) and assessment (KSU5).
+    id: "/controlling/allocation-cycles",
+    path: "/controlling/allocation-cycles",
+    query: {},
+    code: "CFG.COST.ALLOCATION.DEFINE",
+    title: "Cost allocation cycles",
+    area: "controlling",
+    family: "controlling-plan",
+    accepts: [],
+  },
+  {
     id: "/controlling/profit-center-report",
     path: "/controlling/profit-center-report",
     query: {},

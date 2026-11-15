@@ -78,6 +78,12 @@ export const POSTING_EVENTS: PostingEvent[] = [
   // carry the account, and the determination is where a tenant names it. Registered
   // with a seeded row, because the standard chart delivers the account it points at.
   { event: 'PAYROLL_NET_PAY', referenceAlias: 'PAYROLL_NET_PAY', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
+  // The account an assessment cycle (KSU5) posts through: every line, sender credit and receiver
+  // debit, carries it with a cost centre, so it nets to zero in the document — SAP's assessment cost
+  // element. There are no secondary cost elements here, so the tenant names one per chart. Registered
+  // with no seeded row: an account nobody chose is not an answer, and inventing an allocation account
+  // in the standard chart would be a chart-of-accounts decision, not a controlling one.
+  { event: 'CO_ASSESSMENT', referenceAlias: 'CO_ASSESSMENT', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
 ];
 
 export function postingEvent(event: string): PostingEvent | undefined {

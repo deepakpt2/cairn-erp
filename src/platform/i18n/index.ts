@@ -4114,6 +4114,7 @@ const en: Catalogue = {
   'acctDet.event.CASH_DISCOUNT': 'Cash discount',
   'acctDet.event.PAYMENT_DIFFERENCE': 'Payment difference',
   'acctDet.event.PAYROLL_NET_PAY': 'Payroll net pay payable',
+  'acctDet.event.CO_ASSESSMENT': 'Assessment (cost allocation)',
   'acctDet.valuationClass': 'Valuation Class',
   'acctDet.anyValuationClass': 'Any valuation class',
   'acctDet.chooseValuationClass': 'Choose valuation class',

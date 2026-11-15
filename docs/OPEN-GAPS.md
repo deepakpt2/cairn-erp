@@ -1,6 +1,6 @@
-# Open gaps — payroll (item 4, phases 1–5b), cost centre planning (item 5), activity prices (item 6)
+# Open gaps — payroll (item 4, phases 1–5b), cost centre planning (item 5), activity prices (item 6), assessment (item 7)
 
-Recorded 2026-11-15, at commit `a52ec282` on `development`; item 6 (KSPI) added after it. These are deferred, not forgotten: each was
+Recorded 2026-11-15, at commit `a52ec282` on `development`; items 6 (KSPI) and 7 (KSU5) added after it. These are deferred, not forgotten: each was
 either out of scope by its own spec or found while building and left for a later decision. Older
 deferrals made before this work stay in `DEFERRED_ISSUES.md`.
 
@@ -59,6 +59,21 @@ Status key: **Spec** = the item's own spec put it out of scope · **Found** = fo
 | K6 | No role holds `CO.PLAN.ACTIVITYPRICE.EXECUTE` | Spec · Decision | Only `demo.admin` in the demo. |
 | K7 | A calculated price goes stale when quantities change | Found | KP26 accepts the standing calculated price back unchanged; after changing a planned quantity the calculation must be run again. |
 | K8 | Prices are written into existing rows only | Found | Periods a pair never planned get no row and no price (the spec allowed upserting them). |
+
+## 3c. Assessment cycles (KSU5) — item 7
+
+| # | Gap | Kind | Notes |
+|---|---|---|---|
+| S1 | Distribution cycles (KSV5) | Spec | Definable (category DISTRIBUTION) but refused at run time by name; item #9. |
+| S2 | Order receivers | Spec | Receivers are cost centres or groups only; orders need a receiver-type dimension and an order-validity judge. |
+| S3 | Fixed-amount sending | Spec | Sender rule is POSTED (net posted actuals) only. |
+| S4 | Variable portions by tracing factor | Spec | Needs a tracing-factor master; refused by name. |
+| S5 | No iteration | Spec | One pass (`iterations: 1`); chained segments read the senders' cost before the run. `allocatePass` is the body a loop would call. |
+| S6 | No role holds `CFG.COST.ALLOCATION.DEFINE` or `CO.ASSESSMENT.EXECUTE` | Spec · Decision | Only `demo.admin` in the demo. |
+| S7 | Cross-company cycles | Decision (chosen) | A run whose centres span company codes is refused by name: one document per company and no cross-company clearing account. |
+| S8 | Currency asymmetry, deliberate | Decision (chosen) | The cost-centre report warns and excludes foreign-currency lines; a run refuses a company whose currency is not the area's. The report can show less; a run must not silently send less. |
+| S9 | Cross-company and currency-mismatch refusals are not covered by a test | Found | The test tenant's area has one company; both paths are straightforward but untested. |
+| S10 | Cancelling a run trusts the document's REVERSED status | Found | The test sets the status directly; the end-to-end path through `/finance/document-reversal` was not exercised. |
 
 ## 4. Demo data and environment
 
