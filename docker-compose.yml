@@ -11,6 +11,7 @@ services:
       POSTGRES_USER: cairn
       POSTGRES_PASSWORD: ${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD in .env}
       CAIRN_APP_DB_PASSWORD: ${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD in .env}
+      CAIRN_MIGRATOR_DB_PASSWORD: ${CAIRN_MIGRATOR_DB_PASSWORD:?Set CAIRN_MIGRATOR_DB_PASSWORD in .env}
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -55,7 +56,13 @@ services:
       # Printed as the sign-in address in the credential file.
       CAIRN_DEMO_LOGIN_URL: http://${CAIRN_HOST:-localhost}:3000
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
-      MIGRATION_DATABASE_URL: postgresql://cairn:${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
+      # Migrations run as cairn_integration_migrator, never the superuser: the baseline
+      # assigns every object to it and its SECURITY DEFINER functions run as it.
+      MIGRATION_DATABASE_URL: postgresql://cairn_integration_migrator:${CAIRN_MIGRATOR_DB_PASSWORD:?Set CAIRN_MIGRATOR_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
+      # Superuser login used only by db:ensure-migrator to create or repair that role on an
+      # existing volume. Passed separately, so this password needs no URL-safety.
+      CAIRN_DB_OWNER_USER: cairn
+      CAIRN_DB_OWNER_PASSWORD: ${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}
     depends_on:
       db:
         condition: service_healthy

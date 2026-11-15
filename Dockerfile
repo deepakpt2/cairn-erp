@@ -15,7 +15,7 @@ ENV CAIRN_ENV=production
 # demo:provision is last and exits 0 immediately unless ENABLE_DUMMY_DATA asks for it,
 # so a normal deployment's command is unchanged and the application still cannot start
 # until this command has completed successfully.
-CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run db:sync-role && npm run db:init-reference && npm run seed && npm run demo:provision"]
+CMD ["sh", "-c", "npm run db:ensure-migrator && npm run db:sync-role && npm run db:migrate && npm run db:sync-role && npm run db:init-reference && npm run seed && npm run demo:provision"]
 
 FROM dependencies AS builder
 COPY . .

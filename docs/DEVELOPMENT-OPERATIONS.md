@@ -342,7 +342,7 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 ### Credential Lifecycle on Fresh Deployment
 
 1. The `db` service starts PostgreSQL. On an empty data volume, `/docker-entrypoint-initdb.d/10-app-role.sh` runs once.
-2. `10-app-role.sh` creates the `cairn_app` application role with `CAIRN_APP_DB_PASSWORD`, restricted to `NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT`.
+2. `10-app-role.sh` creates the `cairn_app` application role with `CAIRN_APP_DB_PASSWORD`, restricted to `NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT`, and the migration role `cairn_integration_migrator` (`NOSUPERUSER CREATEDB CREATEROLE BYPASSRLS`, password `CAIRN_MIGRATOR_DB_PASSWORD`, ADMIN on `cairn_app` without INHERIT/SET), which owns the database. On a volume initialised before this, `npm run db:ensure-migrator` (first step of the `migrate` service, as the superuser) creates or repairs it.
 3. `CAIRN_APP_DB_PASSWORD` is embedded in `DATABASE_URL` by Docker Compose, so it **must be URL-safe** (hexadecimal is recommended).
 4. `POSTGRES_PASSWORD` is the PostgreSQL superuser password. It is never placed in an application URL and is not URL-validated.
 5. The one-shot `migrate` service runs `scripts/sync-db-app-role.ts` before migrations to ensure the restricted `cairn_app` login exists, runs migrations, then runs role synchronization again. The post-migration pass repairs and verifies the exact central-auth table ACLs in place; it does not use superuser credentials at runtime or grant blanket table privileges. It also checks the runtime connection is `NOSUPERUSER NOBYPASSRLS`, has no role memberships, has `USAGE` but not `CREATE` on `public`, and has only `SELECT, INSERT, UPDATE` on `app_user`, `user_session`, and `password_reset_token`.
@@ -359,12 +359,13 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 | `CAIRN_DATABASE_NAME` | Database created on a fresh volume and used by app/migration URLs | `cairn` or a fresh `cairn_migration_test_YYYYMMDD_<run-id>` |
 | `CAIRN_OWNER_DB_PASSWORD` | PostgreSQL superuser password (`POSTGRES_PASSWORD`) | `openssl rand -hex 32` |
 | `CAIRN_APP_DB_PASSWORD` | Application role password, embedded in `DATABASE_URL` | `openssl rand -hex 32` |
+| `CAIRN_MIGRATOR_DB_PASSWORD` | Migration role password, embedded in `MIGRATION_DATABASE_URL` | `openssl rand -hex 32` |
 
 ### Password Rules
 
-- `CAIRN_APP_DB_PASSWORD` **must be URL-safe**: only `A-Za-z0-9_-`. Hexadecimal (`0-9a-f`) is recommended and never requires URL-encoding.
+- `CAIRN_APP_DB_PASSWORD` and `CAIRN_MIGRATOR_DB_PASSWORD` **must be URL-safe**: only `A-Za-z0-9_-`. Hexadecimal (`0-9a-f`) is recommended and never requires URL-encoding.
 - `POSTGRES_PASSWORD` / `CAIRN_OWNER_DB_PASSWORD` may contain any characters; it is not placed in a URL.
-- Never reuse the same value for both passwords.
+- Never reuse the same value for any two passwords.
 - Never print, log, or commit password values.
 
 ### Fresh Deployment Commands
@@ -373,11 +374,12 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 # 1. Generate passwords (do not print them to shared output)
 openssl rand -hex 32   # CAIRN_OWNER_DB_PASSWORD
 openssl rand -hex 32   # CAIRN_APP_DB_PASSWORD
+openssl rand -hex 32   # CAIRN_MIGRATOR_DB_PASSWORD
 
 # 2. Copy the Docker env template and set the values
 cp .env.docker.example .env
 chmod 600 .env
-# Edit .env: set CAIRN_OWNER_DB_PASSWORD and CAIRN_APP_DB_PASSWORD to the generated values
+# Edit .env: set CAIRN_OWNER_DB_PASSWORD, CAIRN_APP_DB_PASSWORD and CAIRN_MIGRATOR_DB_PASSWORD to the generated values
 
 # 3. Deploy. The one-shot migrate service applies schema migrations, then
 #    initializes standard global reference rows atomically, then runs the

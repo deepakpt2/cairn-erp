@@ -95,6 +95,7 @@ openssl rand -hex 32     # run once per secret below
 |---|---|---|
 | `CAIRN_OWNER_DB_PASSWORD` | **Yes** | PostgreSQL superuser password. Never placed in a URL, so any characters are allowed. |
 | `CAIRN_APP_DB_PASSWORD` | **Yes** | The application role's password. **Must be URL-safe** — `A-Za-z0-9_-` only; hexadecimal is recommended. It is embedded in `DATABASE_URL`. |
+| `CAIRN_MIGRATOR_DB_PASSWORD` | **Yes** | Password of `cairn_integration_migrator`, the role that runs migrations and owns every database object. **Must be URL-safe** (embedded in `MIGRATION_DATABASE_URL`). |
 | `SESSION_SECRET` | **Yes** | Signs session cookies. |
 | `CAIRN_PROVISIONING_TOKEN` | Recommended | Gates tenant creation. Every tenant, the first one included, needs it. Leave blank and web provisioning is disabled. |
 | `CAIRN_HOST` | **Yes** for a real host | Your DNS name, without `https://`. Defaults to `cairn.deepakpt.com`, which is not yours. |
@@ -108,7 +109,7 @@ openssl rand -hex 32     # run once per secret below
 
 Two traps worth stating plainly:
 
-- **`CAIRN_APP_DB_PASSWORD` must be URL-safe.** If it contains anything outside
+- **`CAIRN_APP_DB_PASSWORD` and `CAIRN_MIGRATOR_DB_PASSWORD` must be URL-safe.** If either contains anything outside
   `A-Za-z0-9_-`, the database's initialisation script refuses to start and says so.
   Hexadecimal never needs encoding, which is why it is recommended.
 - **Changing `CAIRN_DATABASE_NAME` after the volume exists does nothing.** It is read
@@ -160,7 +161,9 @@ The first build takes several minutes. What happens, in order:
    `docker/postgres/10-app-role.sh` once, which creates the `cairn_app` login as
    `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`.
 2. **`migrate`** — a one-shot container that runs
-   `db:sync-role && db:migrate && db:sync-role && db:init-reference && seed && demo:provision`.
+   `db:ensure-migrator && db:sync-role && db:migrate && db:sync-role && db:init-reference && seed && demo:provision`.
+   `db:ensure-migrator` logs in as the superuser once to create or repair `cairn_integration_migrator`
+   (the baseline assigns every object to it); every later step runs as that role, never the superuser.
    It applies schema migrations, reconciles the least-privilege grants on the central
    authentication tables, inserts the standard reference data idempotently, runs the
    existing seed, and — last — provisions the demo dataset if you asked for it. It exits
@@ -257,7 +260,9 @@ leaving it on the host.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `network proxy declared as external, but could not be found` | No `proxy` network | `docker network create proxy`, then set up a reverse proxy on it. See §1. |
-| `CAIRN_APP_DB_PASSWORD must be URL-safe` from `10-app-role.sh` | The password contains characters outside `A-Za-z0-9_-` | Set a hex value: `openssl rand -hex 32`. |
+| `CAIRN_APP_DB_PASSWORD must be URL-safe` (or `CAIRN_MIGRATOR_DB_PASSWORD`) from `10-app-role.sh` | The password contains characters outside `A-Za-z0-9_-` | Set a hex value: `openssl rand -hex 32`. |
+| `Migration 0000_baseline.sql failed: role "cairn_integration_migrator" does not exist` | A build before the migrator role was added: migrations ran as the superuser and the role was never created | Add `CAIRN_MIGRATOR_DB_PASSWORD` to `.env`, then `docker compose up -d --build`. `db:ensure-migrator` creates the role and hands it the database. The failed baseline rolled back, so the volume needs no reset. |
+| `ensure-migrator-role failed: … objects in schema public are owned by a role other than cairn_integration_migrator` | The schema was migrated as another role | Rebuild on a fresh volume; mixed owners break the `SECURITY DEFINER` job and notification functions. |
 | `migrate` exits 1: *"This database already contains business data"* | `ENABLE_DUMMY_DATA=true` on a volume that already holds a tenant, user, document or posting | Point the deployment at a fresh volume, or set `ENABLE_DUMMY_DATA=false` and onboard the existing system. Nothing was written or deleted. |
 | `app` never starts, `migrate` exited non-zero | A migration, seed or provisioning step failed | `docker compose logs migrate`. The application is held back by design until the one-shot job succeeds. |
 | Site resolves but the proxy returns 502 | The `proxy` network exists but no proxy is attached to it, or `CAIRN_HOST` does not match the proxy's host rule | Check the proxy configuration and that `CAIRN_HOST` is your DNS name. |
