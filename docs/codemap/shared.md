@@ -38,7 +38,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/page.tsx, app/registry |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (152)
+## Files (154)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -205,6 +205,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | remedy.ts | displayOnlyRemedy |  |
 | **ui/shell/** | | |
 | CommandBar.tsx | CommandBar |  |
+| CommandBarLinks.tsx | CommandBarLinks |  |
+| launchpad.ts | launchpadFor |  |
 | menu-access.ts | menuScreenIds |  |
 | menu-path.ts | resolveMenuPath |  |
 | MenuPath.tsx | MenuPath |  |
@@ -217,7 +219,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | PersonalMenu.tsx | PersonalMenu |  |
 | RelatedScreens.tsx | RelatedScreens |  |
 | RelatedScreensAccess.tsx | RelatedScreensAccess |  |
-| screen-access.ts | visibleScreenIds |  |
+| screen-access.ts | namesReading, visibleScreenIds |  |
 | screen-catalog.ts | NAV_CHILD_ROUTES, NAV_MODULES, SCREENS, SCREEN_AREAS |  |
 | screen-links.ts | ALSO, screenHref, matchScreen, screensInArea, relatedLinks |  |
 | ScrollToTop.tsx | ScrollToTop |  |

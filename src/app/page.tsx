@@ -6,6 +6,7 @@ import { SCREEN_AREAS } from '@/ui/shell/screen-catalog';
 import { screenHref, screensInArea } from '@/ui/shell/screen-links';
 import { menuScreenIds } from '@/ui/shell/menu-access';
 import { buildNavTree } from '@/ui/shell/nav-tree';
+import { launchpadFor } from '@/ui/shell/launchpad';
 import { attentionFor } from '@/platform/attention/panel';
 import { AttentionPanel } from '@/ui/attention/AttentionPanel';
 
@@ -33,53 +34,57 @@ export default async function LaunchpadPage() {
     ? buildNavTree(menuScreenIds(session.user.capabilities)).filter((m) => m.categories.length > 0)
     : null;
 
-  const tiles = [
-    { href: '/foundation/partners', code: 'FND.PARTNER.DISPLAY', title: t('bp.title'), body: t('bp.subtitle'), meta: t('bp.general') },
-    {
-      href: '/clients',
-      code: 'CFG.PLT.CLIENT.DEFINE',
-      title: t('nav.tenants'),
-      body: t('tenants.subtitle'),
+  const view = session ? launchpadFor(session.user.capabilities) : null;
+  const setupTiles = {
+    tenants: {
+      href: '/clients', code: 'CFG.PLT.CLIENT.DEFINE', title: t('nav.tenants'), body: t('tenants.subtitle'),
       meta: `${tenants.length} tenant${tenants.length === 1 ? '' : 's'}`,
     },
-    {
-      href: '/config',
-      code: 'CFG.WORKBENCH',
-      title: t('nav.workbench'),
-      body: t('workbench.subtitle'),
+    workbench: {
+      href: '/config', code: 'CFG.WORKBENCH', title: t('nav.workbench'), body: t('workbench.subtitle'),
       meta: t('launchpad.workbenchMeta'),
     },
-    {
-      href: '/inventory/materials', code: 'INV.MATERIAL.DISPLAY', title: t('nav.materials'),
-      body: t('material.subtitle'), meta: t('launchpad.materialMeta'),
+    numberRanges: {
+      href: '/config/number-ranges', code: 'CFG.PLT.NUMBERRANGE.DEFINE', title: t('nr.title'), body: t('nr.subtitle'),
+      meta: t('launchpad.rangeMeta'),
     },
-    {
-      href: '/config/number-ranges', code: 'CFG.PLT.NUMBERRANGE.DEFINE', title: t('nr.title'),
-      body: t('nr.subtitle'), meta: t('launchpad.rangeMeta'),
-    },
-    {
-      href: '/finance/journal', code: 'FIN.JOURNAL.DISPLAY', title: t('nav.journal'),
-      body: t('journal.subtitle'), meta: t('launchpad.journalMeta'),
-    },
-    {
-      href: '/registry',
-      code: 'PLT.REGISTRY.SEARCH',
-      title: t('nav.registry'),
-      body: t('registry.subtitle'),
-      meta: 'Search by code or alias',
-    },
-  ];
+  } as const;
+  // Without a session (local development) there is nothing to tailor to: show the setup tiles as before.
+  const tiles = (view ? view.setup : (['tenants', 'workbench', 'numberRanges'] as const)).map((k) => setupTiles[k]);
+  const showStatus = !view || view.setup.includes('tenants');
 
   return (
     <div className="mx-auto max-w-6xl p-6">
       <header className="mb-6 border-b border-line pb-4">
         <h1 className="text-xl font-semibold tracking-tight">{t('launchpad.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('launchpad.subtitle')}</p>
+        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t(session ? 'launchpad.subtitleUser' : 'launchpad.subtitle')}</p>
       </header>
 
       <AttentionPanel groups={attention} today={today} />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {view && view.work.length > 0 && (
+        <section id="work" className="mb-6">
+          <h2 className="text-lg font-semibold tracking-tight">{t('launchpad.work')}</h2>
+          <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('launchpad.workLead')}</p>
+          {view.work.map((group) => (
+            <section key={group.module} className="mt-4" aria-label={group.label}>
+              <h3 className="border-b border-line pb-1 text-sm font-semibold">{group.label}</h3>
+              <ul className="mt-1 grid gap-x-4 sm:grid-cols-2 lg:grid-cols-3">
+                {group.items.map((item) => (
+                  <li key={item.id}>
+                    <Link href={item.href} className="flex min-h-11 items-center border-b border-line/60 px-1 text-sm hover:bg-surface">
+                      {item.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </section>
+      )}
+
+      {tiles.length > 0 && (
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {tiles.map((tile) => (
           <Link
             key={tile.href}
@@ -97,7 +102,9 @@ export default async function LaunchpadPage() {
           </Link>
         ))}
       </div>
+      )}
 
+      {showStatus && (
       <section className="panel mt-6 p-4">
         <div className="panel-header -m-4 mb-3 border-b">
           <h2 className="panel-title">{t('launchpad.status.title')}</h2>
@@ -121,6 +128,7 @@ export default async function LaunchpadPage() {
           ))}
         </ul>
       </section>
+      )}
 
       {modules ? (
         <section id="modules" className="mt-8">

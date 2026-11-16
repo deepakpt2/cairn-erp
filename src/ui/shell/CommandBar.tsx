@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { t } from '@/platform/i18n';
 import { executeCommand } from '@/app/command';
 import { SubmitButton } from './SubmitButton';
+import { CommandBarLinks } from './CommandBarLinks';
 
 /**
  * The command bar — CAIRN.md §19.1.
@@ -51,17 +53,9 @@ export function CommandBar() {
           />
         </form>
 
-        <nav className="flex w-full shrink-0 items-stretch border-t border-line sm:w-auto sm:border-t-0 sm:border-s">
-          <Link href="/clients" className="flex min-h-10 flex-1 items-center justify-center px-2 text-center text-xs hover:bg-paper sm:min-h-0 sm:flex-none sm:justify-start sm:px-3 sm:text-left sm:text-sm">
-            {t('nav.tenants')}
-          </Link>
-          <Link href="/config" className="flex min-h-10 flex-1 items-center justify-center px-2 text-center text-xs hover:bg-paper sm:min-h-0 sm:flex-none sm:justify-start sm:px-3 sm:text-left sm:text-sm">
-            {t('nav.workbench')}
-          </Link>
-          <Link href="/registry" className="flex min-h-10 flex-1 items-center justify-center px-2 text-center text-xs hover:bg-paper sm:min-h-0 sm:flex-none sm:justify-start sm:px-3 sm:text-left sm:text-sm">
-            {t('nav.registry')}
-          </Link>
-        </nav>
+        <Suspense fallback={null}>
+          <CommandBarLinks />
+        </Suspense>
       </div>
     </header>
   );

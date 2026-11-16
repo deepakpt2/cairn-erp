@@ -60,7 +60,7 @@ const READ_VERBS: readonly string[] = [
  */
 const ALWAYS_VISIBLE: readonly string[] = [];
 
-function namesReading(code: string): boolean {
+export function namesReading(code: string): boolean {
   const last = code.split('.').pop() ?? '';
   return READ_VERBS.includes(last);
 }
