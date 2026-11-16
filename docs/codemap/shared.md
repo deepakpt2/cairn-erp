@@ -38,7 +38,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/page.tsx, app/registry |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (151)
+## Files (153)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -209,11 +209,13 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | menu-path.ts | resolveMenuPath |  |
 | MenuPath.tsx | MenuPath |  |
 | nav-flag.ts | sidebarNavigationEnabled |  |
+| nav-personal.ts | MAX_FAVOURITES, MAX_RECENTS, EMPTY_PERSONAL, storageKey, parsePersonal, serializePersonal, recordRecent, toggleFavourite, resolveEntries |  |
 | nav-search.ts | searchNav |  |
 | nav-tree.ts | categorySlug, moduleHref, buildNavTree |  |
 | navigation-click.ts | isNavigationClick |  |
 | NavSidebar.tsx | NavSidebar |  |
 | NotificationBell.tsx | NotificationBell |  |
+| PersonalMenu.tsx | PersonalMenu |  |
 | RelatedScreens.tsx | RelatedScreens |  |
 | RelatedScreensAccess.tsx | RelatedScreensAccess |  |
 | screen-access.ts | visibleScreenIds |  |

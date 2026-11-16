@@ -3,6 +3,7 @@ import { SidebarMenu } from './SidebarMenu';
 import { buildNavTree } from './nav-tree';
 import { sidebarNavigationEnabled } from './nav-flag';
 import { menuScreenIds } from './menu-access';
+import { storageKey } from './nav-personal';
 
 /**
  * The collapsible sidebar (navigation Stage 3), behind `CAIRN_NAVIGATION=sidebar`.
@@ -16,5 +17,5 @@ export async function NavSidebar() {
   const session = await getSession();
   if (!session) return null;
   const tree = buildNavTree(menuScreenIds(session.user.capabilities));
-  return <SidebarMenu tree={tree} />;
+  return <SidebarMenu tree={tree} storageKey={storageKey(session.user.client, session.user.userId)} />;
 }

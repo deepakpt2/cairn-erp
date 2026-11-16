@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { t } from '@/platform/i18n';
 import { resolveMenuPath } from './menu-path';
 import type { NavModuleNode } from './nav-tree';
+import { PersonalMenu } from './PersonalMenu';
 
 /**
  * The sidebar: modules, expandable categories, the open screen marked.
@@ -14,7 +15,7 @@ import type { NavModuleNode } from './nav-tree';
  * its screens. The module and category holding the page being read open themselves and stay marked. On a narrow
  * screen the menu sits behind a Menu button; the full drawer behaviour is a later stage.
  */
-export function SidebarMenu({ tree }: { tree: NavModuleNode[] }) {
+export function SidebarMenu({ tree, storageKey }: { tree: NavModuleNode[]; storageKey: string }) {
   const pathname = usePathname() || '/';
   const search = useSearchParams();
   const path = resolveMenuPath(pathname, new URLSearchParams(search.toString()));
@@ -60,6 +61,7 @@ export function SidebarMenu({ tree }: { tree: NavModuleNode[] }) {
           <label htmlFor="sidebar-search" className="sr-only">{t('search.label')}</label>
           <input id="sidebar-search" name="q" type="search" maxLength={100} autoComplete="off" className="w-full" placeholder={t('search.placeholder')} />
         </form>
+        <PersonalMenu tree={tree} storageKey={storageKey} activeScreenId={activeScreen?.id ?? null} />
         <ul className="text-sm">
           {tree.map((module) => {
             const moduleOpen = openModules.has(module.id);
