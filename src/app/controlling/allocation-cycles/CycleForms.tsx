@@ -56,7 +56,7 @@ export function CycleForm({ area, cycle }: { area: string; cycle: CycleView | nu
           <span className="field-label">Category</span>
           <select name="category" defaultValue={cycle?.category ?? 'ASSESSMENT'} className="field-input">
             <option value="ASSESSMENT">Assessment</option>
-            <option value="DISTRIBUTION">Distribution (not executable yet)</option>
+            <option value="DISTRIBUTION">Distribution</option>
           </select>
         </label>
         <label>
@@ -172,19 +172,20 @@ export function DeleteForm({ area, cycleCode, segmentNumber, label }: { area: st
   );
 }
 
-/** KSU5: preview, then run one cycle for one period. */
+/** KSU5 / KSV5: preview, then run one cycle for one period. */
 export function ExecutePanel({ area, cycles, fiscalYear, periods, defaultPeriod }: {
   area: string; cycles: Array<{ cycleCode: string; name: string; category: string }>; fiscalYear: number; periods: number[]; defaultPeriod: number;
 }) {
   const [state, action, pending] = useActionState(executeAction, initial);
   const view = state.preview;
   return (
-    <section className="panel space-y-3 p-4" aria-label="Execute assessment">
-      <h2 className="panel-title">Execute assessment (KSU5)</h2>
+    <section className="panel space-y-3 p-4" aria-label="Execute cycle">
+      <h2 className="panel-title">Execute cycle (KSU5 assessment · KSV5 distribution)</h2>
       <p className="text-sm text-ink-soft">
-        Relieves the senders of their net posted cost in the period and charges the receivers by the segment&apos;s rule, through the
-        account named on posting event CO_ASSESSMENT — one AL document dated the last day of the period. One pass. A correction is a
-        reversal of the document, then cancelling the run below, then a new run.
+        Relieves the senders of their net posted cost in the period and charges the receivers by the segment&apos;s rule — one AL document
+        dated the last day of the period. An assessment posts through the account named on posting event CO_ASSESSMENT; a distribution
+        keeps each cost on the G/L account it was posted to. One pass. A correction is a reversal of the document, then cancelling the
+        run below, then a new run.
       </p>
       <form action={action} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="controllingArea" value={area} />
@@ -216,7 +217,7 @@ export function ExecutePanel({ area, cycles, fiscalYear, periods, defaultPeriod 
         <div className="space-y-2">
           <h3 className="text-sm font-semibold">
             {state.run ? `Posted as ${state.run.displayNumber}` : 'Preview'} · {view.cycleCode} · {view.period}/{view.fiscalYear} · dated {view.postingDate} ·
-            company {view.companyCode} · account {view.assessmentAccount} · {view.assessedTotal} {view.currency} · {view.iterations} iteration
+            {view.category.toLowerCase()} · company {view.companyCode} · {view.assessmentAccount ? `account ${view.assessmentAccount}` : 'original accounts'} · {view.assessedTotal} {view.currency} · {view.iterations} iteration
           </h3>
           {view.segments.map((s) => (
             <div key={s.segmentNumber} className="overflow-x-auto">
@@ -226,6 +227,7 @@ export function ExecutePanel({ area, cycles, fiscalYear, periods, defaultPeriod 
                 <tbody>
                   {s.senders.map((x) => <tr key={`s${x.costCenter}`}><td>relieved</td><td className="code">{x.costCenter} {x.name}</td><td></td><td className="code">−{x.amount}</td></tr>)}
                   {s.receivers.map((x) => <tr key={`r${x.costCenter}`}><td>charged</td><td className="code">{x.costCenter} {x.name}</td><td className="code">{x.weight}</td><td className="code">{x.amount}</td></tr>)}
+                  {(s.accounts ?? []).map((x) => <tr key={`a${x.costCenter}${x.glAccount}`} className="text-ink-soft"><td>account</td><td className="code">{x.costCenter} · {x.glAccount}</td><td></td><td className="code">{x.amount}</td></tr>)}
                 </tbody>
               </table>
             </div>
@@ -236,10 +238,11 @@ export function ExecutePanel({ area, cycles, fiscalYear, periods, defaultPeriod 
   );
 }
 
-export function CancelRunForm({ runId }: { runId: string }) {
+export function CancelRunForm({ area, runId }: { area: string; runId: string }) {
   const [state, action, pending] = useActionState(cancelRunAction, initial);
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" aria-label={`Cancel run ${runId}`}>
+      <input type="hidden" name="controllingArea" value={area} />
       <input type="hidden" name="runId" value={runId} />
       <Reason />
       <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={pending}>Cancel run</button>

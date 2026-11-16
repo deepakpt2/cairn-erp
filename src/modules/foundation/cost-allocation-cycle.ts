@@ -5,8 +5,21 @@
  * receiver cost centres by a rule. Assessment bundles everything into one account: every line of the
  * AL document — sender credit and receiver debit alike — carries the account the tenant named on
  * posting event CO_ASSESSMENT, and a cost centre, so the account nets to zero inside the document.
- * There are no secondary cost elements in this product; the original cost element is not preserved
- * (that is distribution, KSV5, defined here but refused at run time).
+ * There are no secondary cost elements in this product; assessment does not preserve the original
+ * account. Distribution (KSV5) does: the G/L account plays the cost element's role, so a distribution
+ * posts every line on the account the cost was posted to, and needs no CO_ASSESSMENT determination.
+ *
+ * Distribution rules (owner decisions, 2026-11-16):
+ * - The read is one net per (sender, account); a sender whose accounts net to zero or less is refused;
+ *   a negative per-account net is distributed (sender debited, receivers credited), never skipped.
+ * - Allocation output is never primary cost: lines on the document of any allocation run of the client,
+ *   and on a document that reverses one, are excluded from the read (by document, not by type: the
+ *   reversal of an AL document is an AB document). That also makes a re-run after reversal exact.
+ * - Because that exclusion hides a sender's own relief, a distribution sender that stands on the
+ *   document of a live run in the same company and period is refused, never relieved twice. A centre
+ *   cannot pass on cost it received from another cycle in the same period (chaining needs iteration, S5).
+ *   Assessment is left as shipped: it excludes only its own account, so a distribution's output is
+ *   assessable but an assessment's output is not distributable.
  *
  * The rules this file keeps (owner decisions, 2026-11-15):
  * - **Assessable cost is the sender's net balance** in the period: debits minus credits on its lines,
@@ -52,6 +65,7 @@ import {
 
 export const ALLOCATION_DEFINE_CAPABILITY = 'CFG.COST.ALLOCATION.DEFINE';
 export const ALLOCATION_EXECUTE_CAPABILITY = 'CO.ASSESSMENT.EXECUTE';
+export const DISTRIBUTION_EXECUTE_CAPABILITY = 'CO.DISTRIBUTION.EXECUTE';
 export const ALLOCATION_CYCLE_ROUTE = '/controlling/allocation-cycles';
 export const ASSESSMENT_EVENT = 'CO_ASSESSMENT';
 export const ALLOCATION_DOCUMENT_TYPE = 'AL';
@@ -71,6 +85,13 @@ export class AllocationCycleError extends Error {
 
 function fail(message: string, remedy?: string): never {
   throw new AllocationCycleError(message, remedy);
+}
+
+/** The execute capability a cycle of this category needs; an unrecognised category is refused, naming it. */
+export function executeCapabilityFor(category: string): string {
+  if (category === 'ASSESSMENT') return ALLOCATION_EXECUTE_CAPABILITY;
+  if (category === 'DISTRIBUTION') return DISTRIBUTION_EXECUTE_CAPABILITY;
+  return fail(`Cycle category ${category} is not recognised; only ASSESSMENT and DISTRIBUTION are built.`, 'Correct the cycle\'s category.');
 }
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
@@ -99,6 +120,12 @@ async function judge(tx: Tx, client: string, area: string, authorization: Servic
       fail(`Your Company Code scope does not cover company code ${company} of Controlling Area ${area}; a cycle spans every company of its area.`, 'Ask an administrator to extend your Company Code scope, then repeat the action.');
     }
   }
+}
+
+/** The capability a run of this cycle needs: its category decides it. A missing cycle is judged as assessment, then refused. */
+async function capabilityOfCycle(tx: Tx, client: string, area: string, cycleCode: string): Promise<string> {
+  const head = await cycleRow(tx, client, area, cycleCode);
+  return executeCapabilityFor(head?.category ?? 'ASSESSMENT');
 }
 
 // ── Input ───────────────────────────────────────────────────────────────────
@@ -471,6 +498,8 @@ export interface AssessmentSegmentView {
   total: string;
   senders: AssessmentLineView[];
   receivers: AssessmentLineView[];
+  /** Distribution only: what each sender sends per account (signed net). */
+  accounts?: Array<{ costCenter: string; glAccount: string; amount: string }>;
 }
 export interface AssessmentPreview {
   controllingArea: string;
@@ -480,7 +509,10 @@ export interface AssessmentPreview {
   postingDate: string;
   companyCode: string;
   currency: string;
-  assessmentAccount: string;
+  /** ASSESSMENT or DISTRIBUTION. */
+  category: string;
+  /** The CO_ASSESSMENT account; null for a distribution, which keeps each sender's own account. */
+  assessmentAccount: string | null;
   assessedTotal: string;
   iterations: number;
   segments: AssessmentSegmentView[];
@@ -514,6 +546,40 @@ export function allocatePass(segments: ResolvedSegment[], costOf: (centre: strin
     const shares = total === 0n ? segment.receivers.map(() => '0.0000') : allocateAmount(fromScaled(total), segment.receiverRule, segment.receivers.map((r) => r.weight), decimals);
     return { segment, senders, total, shares };
   });
+}
+
+/**
+ * Distribution: split every (sender, account) net among the segment's receivers. `nets` are signed
+ * scale-4 amounts, one per group; the result is signed shares, `[group][receiver]`, each group summing
+ * to its net exactly. PERCENTAGE and PORTION split each group by `allocateAmount`. FIXED_AMOUNT weights
+ * are amounts for the whole segment: they must sum to the segment total, each group is split in
+ * proportion to them, and the rounding is settled inside the largest group so every receiver ends with
+ * exactly its fixed amount.
+ */
+export function allocateGroups(rule: ReceiverRule, weights: string[], nets: bigint[], decimals = 4): bigint[][] {
+  const split = (net: bigint, r: ReceiverRule) => {
+    const abs = net < 0n ? -net : net;
+    const parts = allocateAmount(fromScaled(abs), r, weights, decimals).map((x) => toScaled(x));
+    return net < 0n ? parts.map((x) => -x) : parts;
+  };
+  if (rule !== 'FIXED_AMOUNT') return nets.map((n) => split(n, rule));
+  const unit = 10n ** BigInt(4 - decimals);
+  const w = weights.map((x) => toScaled(x));
+  const total = nets.reduce((a, b) => a + b, 0n);
+  const sumW = w.reduce((a, b) => a + b, 0n);
+  if (sumW !== total) fail(`The fixed amounts sum to ${fromScaled(sumW)}, but the senders send ${fromScaled(total)}.`, 'Make the fixed amounts add up to the amount sent.');
+  if (w.some((x) => x % unit !== 0n)) fail(`A fixed amount has more than ${decimals} decimal places.`, `Enter the amounts to ${decimals} decimal places.`);
+  const shares = nets.map((n) => split(n, 'PORTION'));
+  const deviation = w.map((f, r) => shares.reduce((s, g) => s + g[r]!, 0n) - f);
+  let largest = 0;
+  nets.forEach((n, i) => { if ((n < 0n ? -n : n) > (nets[largest]! < 0n ? -nets[largest]! : nets[largest]!)) largest = i; });
+  shares[largest] = shares[largest]!.map((x, r) => x - deviation[r]!);
+  nets.forEach((n, g) => {
+    if (shares[g]!.reduce((a, b) => a + b, 0n) !== n || shares[g]!.some((x) => (n < 0n ? x > 0n : x < 0n))) {
+      fail('The fixed amounts cannot be spread over the accounts without a share changing sign.', 'Check the fixed amounts against the amounts the senders send.');
+    }
+  });
+  return shares;
 }
 
 async function resolveNodes(tx: Tx, client: string, area: string, nodes: Array<{ costCenter: string | null; groupName: string | null }>): Promise<string[]> {
@@ -552,9 +618,7 @@ async function prepare(tx: Tx, p: z.infer<typeof runSchema>) {
   if (window.end < view.validFrom || window.end > view.validTo) {
     fail(`Cycle ${p.cycleCode} is valid ${view.validFrom} to ${view.validTo}; period ${p.period}/${p.fiscalYear} ends ${window.end}.`, 'Run a period inside the cycle\'s validity, or extend it.');
   }
-  if (view.category !== 'ASSESSMENT') {
-    fail(`Cycle ${p.cycleCode} is a distribution cycle. Distribution is not built; only assessment runs today.`, 'Define an assessment cycle for this allocation.');
-  }
+  executeCapabilityFor(view.category); // an unrecognised category is refused here, naming it
   if (view.segments.length === 0) fail(`Cycle ${p.cycleCode} has no segment.`, 'Define at least one segment with senders and receivers.');
 
   const [live] = await tx.select().from(costAllocationRun).where(and(
@@ -640,6 +704,10 @@ async function prepare(tx: Tx, p: z.infer<typeof runSchema>) {
   const open = await checkPostingAllowed(tx, p.client, company.postingPeriodVariant, 'S', position);
   if (!open.allowed) fail(`Period ${p.period} of fiscal year ${p.fiscalYear} is closed for posting: ${open.reason}`, open.remedy ?? 'Open the period (FIN.CLOSE.PERIOD).');
 
+  if (view.category === 'DISTRIBUTION') {
+    return prepareDistribution(tx, p, { resolved, senderSegment, names, companyCode, currency: context.currency, postingDate });
+  }
+
   // The assessment account, named by the tenant for the company's chart.
   const det = (await tx.execute(sql`
     select gl_account from account_determination
@@ -685,7 +753,7 @@ async function prepare(tx: Tx, p: z.infer<typeof runSchema>) {
 
   const preview: AssessmentPreview = {
     controllingArea: area, cycleCode: p.cycleCode, fiscalYear: p.fiscalYear, period: p.period, postingDate,
-    companyCode, currency: context.currency, assessmentAccount: account, assessedTotal: fromScaled(total), iterations: 1,
+    companyCode, currency: context.currency, category: 'ASSESSMENT', assessmentAccount: account, assessedTotal: fromScaled(total), iterations: 1,
     segments: pass.map((r) => ({
       segmentNumber: r.segment.segmentNumber, name: r.segment.name, receiverRule: r.segment.receiverRule, total: fromScaled(r.total),
       senders: r.senders.map((x) => ({ costCenter: x.centre, name: names.get(x.centre) ?? '', amount: fromScaled(x.amount) })),
@@ -709,6 +777,109 @@ async function prepare(tx: Tx, p: z.infer<typeof runSchema>) {
   return { preview, lines, counts: { segments: preview.segments.length, senders: senders.length, receivers: new Set(resolved.flatMap((s) => s.receivers.map((r) => r.costCenter))).size } };
 }
 
+/** The distribution read and posting (KSV5): per (sender, account), on the account the cost was posted to. */
+async function prepareDistribution(tx: Tx, p: z.infer<typeof runSchema>, c: {
+  resolved: ResolvedSegment[]; senderSegment: Map<string, number>; names: Map<string, string>;
+  companyCode: string; currency: string; postingDate: string;
+}) {
+  const senders = [...c.senderSegment.keys()];
+
+  // A sender already relieved (or charged) by a live allocation run in this period cannot be read:
+  // the artefact exclusion below hides that run's document, so the relief would be forgotten.
+  const standing = (await tx.execute(sql`
+    select distinct l.cost_center, r.cycle_code, r.run_id
+      from journal_entry_line l
+      join cost_allocation_run r on r.client = l.client and r.company_code = l.company_code
+                                and r.document_number = l.document_number and r.document_fiscal_year = l.fiscal_year
+     where l.client = ${p.client} and r.company_code = ${c.companyCode}
+       and r.fiscal_year = ${p.fiscalYear} and r.period = ${p.period} and r.status = 'EXECUTED'
+       and l.cost_center in (${list(senders)})
+     order by l.cost_center, r.cycle_code
+  `)) as unknown as Array<{ cost_center: string; cycle_code: string; run_id: string }>;
+  if (standing[0]) {
+    fail(
+      `Cost Centre ${standing[0].cost_center} already stands on the document of run ${standing[0].run_id} of cycle ${standing[0].cycle_code} in period ${p.period}/${p.fiscalYear}; distributing it again would relieve it twice.`,
+      'Reverse that run\'s document and cancel the run, or take the centre out of this cycle. A centre cannot pass on cost another cycle charged to it in the same period.',
+    );
+  }
+
+  // Net per (sender, account): POSTED or REVERSED documents, never an allocation run's document nor the
+  // reversal of one (matched by document, not by type: the reversal of an AL document is an AB document).
+  const balances = (await tx.execute(sql`
+    select l.cost_center, l.gl_account,
+           sum(case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end)::text as net
+      from journal_entry_line l
+      join journal_entry e on e.client = l.client and e.company_code = l.company_code
+                          and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
+     where l.client = ${p.client} and l.company_code = ${c.companyCode}
+       and e.fiscal_year = ${p.fiscalYear} and e.posting_period = ${p.period}
+       and e.status in ('POSTED', 'REVERSED')
+       and l.cost_center in (${list(senders)})
+       and not exists (select 1 from cost_allocation_run r
+                        where r.client = l.client and r.company_code = l.company_code
+                          and r.document_number = l.document_number and r.document_fiscal_year = l.fiscal_year)
+       and not exists (select 1 from cost_allocation_run r
+                        where r.client = e.client and r.company_code = e.company_code and r.document_number = e.reversal_of)
+     group by l.cost_center, l.gl_account
+     order by l.cost_center, l.gl_account
+  `)) as unknown as Array<{ cost_center: string; gl_account: string; net: string }>;
+
+  const decimalRows = (await tx.execute(sql`select decimal_places from currency where code = ${c.currency} limit 1`)) as unknown as Array<{ decimal_places: number }>;
+  const decimals = decimalRows[0] ? Number(decimalRows[0].decimal_places) : 2;
+
+  type Group = { centre: string; account: string; net: bigint };
+  const plan = c.resolved.map((segment) => {
+    const groups: Group[] = [];
+    const senderTotals: Array<{ centre: string; amount: bigint }> = [];
+    for (const centre of segment.senders) {
+      const own = balances.filter((b) => b.cost_center === centre
+        && (segment.costElementFrom === null || (b.gl_account >= segment.costElementFrom && b.gl_account <= segment.costElementTo!)));
+      const total = own.reduce((s, b) => s + toScaled(b.net), 0n);
+      if (total <= 0n) {
+        fail(`Cost Centre ${centre} carries a net cost of ${fromScaled(total)} in period ${p.period}/${p.fiscalYear} (segment ${segment.segmentNumber}); there is no cost to distribute.`, 'Check the period\'s postings on the centre, or take it out of the cycle.');
+      }
+      senderTotals.push({ centre, amount: total });
+      for (const b of own) if (toScaled(b.net) !== 0n) groups.push({ centre, account: b.gl_account, net: toScaled(b.net) });
+    }
+    const shares = allocateGroups(segment.receiverRule, segment.receivers.map((r) => r.weight), groups.map((g) => g.net), decimals);
+    return { segment, groups, senderTotals, shares };
+  });
+
+  const total = plan.reduce((s, x) => s + x.senderTotals.reduce((a, b) => a + b.amount, 0n), 0n);
+  const preview: AssessmentPreview = {
+    controllingArea: p.controllingArea, cycleCode: p.cycleCode, fiscalYear: p.fiscalYear, period: p.period, postingDate: c.postingDate,
+    companyCode: c.companyCode, currency: c.currency, category: 'DISTRIBUTION', assessmentAccount: null, assessedTotal: fromScaled(total), iterations: 1,
+    segments: plan.map((x) => ({
+      segmentNumber: x.segment.segmentNumber, name: x.segment.name, receiverRule: x.segment.receiverRule,
+      total: fromScaled(x.senderTotals.reduce((a, b) => a + b.amount, 0n)),
+      senders: x.senderTotals.map((t) => ({ costCenter: t.centre, name: c.names.get(t.centre) ?? '', amount: fromScaled(t.amount) })),
+      receivers: x.segment.receivers.map((r, i) => ({
+        costCenter: r.costCenter, name: c.names.get(r.costCenter) ?? '', weight: r.weight,
+        amount: fromScaled(x.shares.reduce((s, g) => s + g[i]!, 0n)),
+      })),
+      accounts: x.groups.map((g) => ({ costCenter: g.centre, glAccount: g.account, amount: fromScaled(g.net) })),
+    })),
+  };
+
+  // One AL document: per group, the sender's line opposite the net, the receivers' lines with it.
+  const label = p.cycleCode.slice(0, 18);
+  const lines: GlDocumentLineInput[] = [];
+  for (const x of plan) {
+    x.groups.forEach((g, gi) => {
+      const abs = g.net < 0n ? -g.net : g.net;
+      lines.push({ glAccount: g.account, debitCredit: g.net > 0n ? 'H' : 'S', amount: fromScaled(abs), costCenter: g.centre, assignment: label, lineText: x.segment.name.slice(0, 50) });
+      x.segment.receivers.forEach((r, i) => {
+        const share = x.shares[gi]![i]!;
+        if (share === 0n) return;
+        lines.push({ glAccount: g.account, debitCredit: share > 0n ? 'S' : 'H', amount: fromScaled(share < 0n ? -share : share), costCenter: r.costCenter, assignment: label, lineText: (c.names.get(r.costCenter) || r.costCenter).slice(0, 50) });
+      });
+    });
+  }
+  const totals = computeTotals(lines);
+  if (totals.debit !== totals.credit) fail(`The distribution does not balance: debits ${totals.debit}, credits ${totals.credit}.`, 'This is a defect, not a data problem; report it.');
+  return { preview, lines, counts: { segments: preview.segments.length, senders: senders.length, receivers: new Set(c.resolved.flatMap((s) => s.receivers.map((r) => r.costCenter))).size } };
+}
+
 function translate(error: unknown): never {
   if (error instanceof GlDocumentError || error instanceof PostingError || error instanceof NumberRangeError) throw new AllocationCycleError(error.message, (error as { remedy?: string }).remedy);
   if (error instanceof PeriodError) throw new AllocationCycleError(error.message, error.remedy);
@@ -720,7 +891,7 @@ export async function previewAssessment(raw: RunAssessmentInput, options: Author
   const p = parse(runSchema, raw);
   try {
     return await withTenant(p.client, async (tx) => {
-      await judge(tx, p.client, p.controllingArea, options.authorization, ALLOCATION_EXECUTE_CAPABILITY);
+      await judge(tx, p.client, p.controllingArea, options.authorization, await capabilityOfCycle(tx, p.client, p.controllingArea, p.cycleCode));
       return (await prepare(tx, p)).preview;
     });
   } catch (error) {
@@ -733,7 +904,8 @@ export async function runAssessment(raw: RunAssessmentInput, options: Authority 
   const p = parse(runSchema, raw);
   try {
     return await withTenant(p.client, async (tx) => {
-      await judge(tx, p.client, p.controllingArea, options.authorization, ALLOCATION_EXECUTE_CAPABILITY);
+      const capability = await capabilityOfCycle(tx, p.client, p.controllingArea, p.cycleCode);
+      await judge(tx, p.client, p.controllingArea, options.authorization, capability);
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`allocation:${p.client}:${p.controllingArea}:${p.cycleCode}:${p.fiscalYear}:${p.period}`}, 0))`);
       const { preview, lines, counts } = await prepare(tx, p);
       // A re-run after a cancelled run must not replay the old document: the key counts the runs.
@@ -755,21 +927,21 @@ export async function runAssessment(raw: RunAssessmentInput, options: Authority 
         documentType: ALLOCATION_DOCUMENT_TYPE,
         currency: preview.currency,
         reference: `AL-${p.cycleCode}-${p.period}`.slice(0, 16),
-        headerText: `Assessment ${p.cycleCode} ${p.fiscalYear}/${p.period}`.slice(0, 25),
+        headerText: `${preview.category === 'DISTRIBUTION' ? 'Distribution' : 'Assessment'} ${p.cycleCode} ${p.fiscalYear}/${p.period}`.slice(0, 25),
         lines,
         onPosted: async (inner, document) => {
           const now = new Date();
           await inner.insert(costAllocationRun).values({
             client: p.client, runId, controllingArea: p.controllingArea, cycleCode: p.cycleCode,
             fiscalYear: p.fiscalYear, period: p.period, status: 'EXECUTED', currency: preview.currency,
-            companyCode: preview.companyCode, assessmentAccount: preview.assessmentAccount, assessedTotal: preview.assessedTotal,
+            companyCode: preview.companyCode, category: preview.category, assessmentAccount: preview.assessmentAccount, assessedTotal: preview.assessedTotal,
             segmentCount: counts.segments, senderCount: counts.senders, receiverCount: counts.receivers, iterations: 1,
             documentNumber: document.documentNumber, documentFiscalYear: document.fiscalYear, requestKey,
             executedBy: p.changedBy, executedAt: now, createdBy: p.changedBy,
           });
           await recordChange(inner, {
             client: p.client, objectClass: ALLOCATION_RUN_OBJECT_CLASS, objectKey: runId, changeType: 'CREATE',
-            changedBy: p.changedBy, transactionCode: ALLOCATION_EXECUTE_CAPABILITY, reason: p.reason,
+            changedBy: p.changedBy, transactionCode: capability, reason: p.reason,
             after: { cycle: p.cycleCode, period: `${p.period}/${p.fiscalYear}`, document: document.documentNumber, assessedTotal: preview.assessedTotal },
           });
         },
@@ -790,7 +962,8 @@ export async function cancelAssessmentRun(raw: CancelRunInput, options: Authorit
   return withTenant(p.client, async (tx) => {
     const [run] = await tx.select().from(costAllocationRun).where(and(eq(costAllocationRun.client, p.client), eq(costAllocationRun.runId, p.runId))).limit(1);
     if (!run) fail(`Assessment run ${p.runId} does not exist.`);
-    await judge(tx, p.client, run.controllingArea, options.authorization, ALLOCATION_EXECUTE_CAPABILITY);
+    const capability = executeCapabilityFor(run.category);
+    await judge(tx, p.client, run.controllingArea, options.authorization, capability);
     if (run.status === 'CANCELLED') fail(`Assessment run ${p.runId} is already cancelled.`);
     const doc = (await tx.execute(sql`
       select status from journal_entry where client = ${p.client} and company_code = ${run.companyCode}
@@ -804,7 +977,7 @@ export async function cancelAssessmentRun(raw: CancelRunInput, options: Authorit
       .where(and(eq(costAllocationRun.client, p.client), eq(costAllocationRun.runId, p.runId)));
     await recordChange(tx, {
       client: p.client, objectClass: ALLOCATION_RUN_OBJECT_CLASS, objectKey: p.runId, changeType: 'CHANGE',
-      changedBy: p.changedBy, transactionCode: ALLOCATION_EXECUTE_CAPABILITY, reason: p.reason,
+      changedBy: p.changedBy, transactionCode: capability, reason: p.reason,
       before: { status: 'EXECUTED' }, after: { status: 'CANCELLED' },
     });
     return (await listRunsTx(tx, p.client, run.controllingArea)).find((r) => r.runId === p.runId)!;
@@ -813,6 +986,7 @@ export async function cancelAssessmentRun(raw: CancelRunInput, options: Authorit
 
 export interface RunRow {
   runId: string;
+  category: string;
   cycleCode: string;
   fiscalYear: number;
   period: number;
@@ -837,7 +1011,7 @@ async function listRunsTx(tx: Tx, client: string, area: string): Promise<RunRow[
      order by r.fiscal_year desc, r.period desc, r.cycle_code, r.executed_at desc
   `)) as unknown as Array<Record<string, unknown>>;
   return rows.map((r) => ({
-    runId: String(r.run_id), cycleCode: String(r.cycle_code), fiscalYear: Number(r.fiscal_year), period: Number(r.period),
+    runId: String(r.run_id), category: String(r.category), cycleCode: String(r.cycle_code), fiscalYear: Number(r.fiscal_year), period: Number(r.period),
     status: String(r.status), assessedTotal: String(r.assessed_total), currency: String(r.currency).trim(),
     documentNumber: String(r.document_number), displayNumber: String(r.display_number), iterations: Number(r.iterations),
     executedBy: String(r.executed_by), executedAt: r.executed_at instanceof Date ? r.executed_at.toISOString() : String(r.executed_at),

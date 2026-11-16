@@ -1,10 +1,10 @@
 /**
- * Cost allocation cycles — CFG.COST.ALLOCATION.DEFINE (KSU1/KSU2/KSU3) with the assessment run
- * panel, CO.ASSESSMENT.EXECUTE (KSU5). GET: `area`, `cycle`.
+ * Cost allocation cycles — CFG.COST.ALLOCATION.DEFINE (KSU1/KSU2/KSU3, KSV1/KSV2/KSV3) with the run
+ * panel: CO.ASSESSMENT.EXECUTE (KSU5) and CO.DISTRIBUTION.EXECUTE (KSV5). GET: `area`, `cycle`.
  *
  * A cycle's segments relieve sender cost centres of their net posted cost and charge receiver cost
  * centres by fixed percentages, portions or amounts, through the account named on posting event
- * CO_ASSESSMENT. Distribution cycles can be defined but not run. Receivers are cost centres or groups.
+ * CO_ASSESSMENT; a distribution keeps each cost on its original G/L account. Receivers are cost centres or groups.
  */
 import Link from 'next/link';
 
@@ -15,6 +15,7 @@ import {
   ALLOCATION_CYCLE_ROUTE,
   ALLOCATION_DEFINE_CAPABILITY,
   ALLOCATION_EXECUTE_CAPABILITY,
+  DISTRIBUTION_EXECUTE_CAPABILITY,
   getCycle,
   listCycles,
   listRuns,
@@ -33,10 +34,12 @@ export default async function AllocationCyclesPage({ searchParams }: {
 }) {
   const session = await requireSession(ALLOCATION_CYCLE_ROUTE);
   const canDefine = can(session, ALLOCATION_DEFINE_CAPABILITY);
-  const canExecute = can(session, ALLOCATION_EXECUTE_CAPABILITY);
+  const canAssess = can(session, ALLOCATION_EXECUTE_CAPABILITY);
+  const canDistribute = can(session, DISTRIBUTION_EXECUTE_CAPABILITY);
+  const canExecute = canAssess || canDistribute;
   const header = (
     <header className="border-b border-line pb-4">
-      <span className="code text-ink-faint">{ALLOCATION_DEFINE_CAPABILITY} · KSU1 / KSU2 / KSU3 · {ALLOCATION_EXECUTE_CAPABILITY} · KSU5</span>
+      <span className="code text-ink-faint">{ALLOCATION_DEFINE_CAPABILITY} · KSU1 / KSU2 / KSU3 · KSV1 / KSV2 / KSV3 · {ALLOCATION_EXECUTE_CAPABILITY} · KSU5 · {DISTRIBUTION_EXECUTE_CAPABILITY} · KSV5</span>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Cost allocation cycles</h1>
         <div className="flex gap-2">
@@ -46,7 +49,8 @@ export default async function AllocationCyclesPage({ searchParams }: {
       </div>
       <p className="mt-1 max-w-3xl text-sm text-ink-soft">
         Assessment moves the actual cost of service cost centres to the centres that consumed their services, bundled through one
-        assessment account. Receivers are cost centres or cost centre groups; a group&apos;s weight applies to each of its centres.
+        assessment account; distribution does the same but keeps each cost on the account it was posted to. Receivers are cost centres or
+        cost centre groups; a group&apos;s weight applies to each of its centres.
       </p>
     </header>
   );
@@ -54,7 +58,7 @@ export default async function AllocationCyclesPage({ searchParams }: {
     return (
       <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
         {header}
-        <p role="status" className="text-sm text-ink-soft">You do not hold the cycle capabilities. Ask for {ALLOCATION_DEFINE_CAPABILITY} or {ALLOCATION_EXECUTE_CAPABILITY}.</p>
+        <p role="status" className="text-sm text-ink-soft">You do not hold the cycle capabilities. Ask for {ALLOCATION_DEFINE_CAPABILITY}, {ALLOCATION_EXECUTE_CAPABILITY} or {DISTRIBUTION_EXECUTE_CAPABILITY}.</p>
       </main>
     );
   }
@@ -165,8 +169,8 @@ export default async function AllocationCyclesPage({ searchParams }: {
       {canDefine && area && <CycleForm key={selected?.cycleCode ?? 'new'} area={area} cycle={selected} />}
       {canDefine && selected && <DeleteForm area={area} cycleCode={selected.cycleCode} label={`Delete cycle ${selected.cycleCode}`} />}
 
-      {canExecute && area && cycles.length > 0 && (
-        <ExecutePanel area={area} cycles={cycles} fiscalYear={fiscalYear} periods={regular.map((p) => p.period)} defaultPeriod={current} />
+      {canExecute && area && cycles.some((c) => (c.category === 'DISTRIBUTION' ? canDistribute : canAssess)) && (
+        <ExecutePanel area={area} cycles={cycles.filter((c) => (c.category === 'DISTRIBUTION' ? canDistribute : canAssess))} fiscalYear={fiscalYear} periods={regular.map((p) => p.period)} defaultPeriod={current} />
       )}
 
       <section className="panel overflow-x-auto" aria-label="Runs">
@@ -175,18 +179,19 @@ export default async function AllocationCyclesPage({ searchParams }: {
           <p className="p-4 text-sm text-ink-soft">No cycle of this controlling area has run yet.</p>
         ) : (
           <table className="grid-table">
-            <thead><tr><th>Cycle</th><th>Period</th><th>Status</th><th>Assessed</th><th>Document</th><th>Iterations</th><th>By</th><th></th></tr></thead>
+            <thead><tr><th>Cycle</th><th>Category</th><th>Period</th><th>Status</th><th>Amount</th><th>Document</th><th>Iterations</th><th>By</th><th></th></tr></thead>
             <tbody>
               {runs.map((r) => (
                 <tr key={r.runId}>
                   <td className="code">{r.cycleCode}</td>
+                  <td className="text-xs">{r.category.toLowerCase()}</td>
                   <td>{r.period}/{r.fiscalYear}</td>
                   <td><span className={r.status === 'EXECUTED' ? 'chip chip-ok' : 'chip chip-warn'}>{r.status.toLowerCase()}</span>{r.cancelReason ? <span className="text-xs text-ink-soft"> {r.cancelReason}</span> : null}</td>
                   <td className="code">{r.assessedTotal} {r.currency}</td>
                   <td className="code"><Link href={`/finance/journal/document?document=${r.documentNumber}`} className="underline">{r.displayNumber}</Link></td>
                   <td>{r.iterations}</td>
                   <td className="text-xs">{r.executedBy}</td>
-                  <td>{canExecute && r.status === 'EXECUTED' ? <CancelRunForm runId={r.runId} /> : null}</td>
+                  <td>{(r.category === 'DISTRIBUTION' ? canDistribute : canAssess) && r.status === 'EXECUTED' ? <CancelRunForm area={area} runId={r.runId} /> : null}</td>
                 </tr>
               ))}
             </tbody>

@@ -60,20 +60,27 @@ Status key: **Spec** = the item's own spec put it out of scope · **Found** = fo
 | K7 | A calculated price goes stale when quantities change | Found | KP26 accepts the standing calculated price back unchanged; after changing a planned quantity the calculation must be run again. |
 | K8 | Prices are written into existing rows only | Found | Periods a pair never planned get no row and no price (the spec allowed upserting them). |
 
-## 3c. Assessment cycles (KSU5) — item 7
+## 3c. Assessment and distribution cycles (KSU5, KSV5) — items 7 and 9
 
 | # | Gap | Kind | Notes |
 |---|---|---|---|
-| S1 | Distribution cycles (KSV5) | Spec | Definable (category DISTRIBUTION) but refused at run time by name; item #9. |
+| S1 | Distribution cycles (KSV5) | **Closed** | Built by item #9: a distribution runs, preserving each sender's G/L account; see S11–S17. |
 | S2 | Order receivers | Spec | Receivers are cost centres or groups only; orders need a receiver-type dimension and an order-validity judge. |
 | S3 | Fixed-amount sending | Spec | Sender rule is POSTED (net posted actuals) only. |
 | S4 | Variable portions by tracing factor | Spec | Needs a tracing-factor master; refused by name. |
 | S5 | No iteration | Spec | One pass (`iterations: 1`); chained segments read the senders' cost before the run. `allocatePass` is the body a loop would call. |
-| S6 | No role holds `CFG.COST.ALLOCATION.DEFINE` or `CO.ASSESSMENT.EXECUTE` | Spec · Decision | Only `demo.admin` in the demo. |
+| S6 | No role holds `CFG.COST.ALLOCATION.DEFINE`, `CO.ASSESSMENT.EXECUTE` or `CO.DISTRIBUTION.EXECUTE` | Spec · Decision | Only `demo.admin` in the demo. |
 | S7 | Cross-company cycles | Decision (chosen) | A run whose centres span company codes is refused by name: one document per company and no cross-company clearing account. |
 | S8 | Currency asymmetry, deliberate | Decision (chosen) | The cost-centre report warns and excludes foreign-currency lines; a run refuses a company whose currency is not the area's. The report can show less; a run must not silently send less. |
-| S9 | Cross-company and currency-mismatch refusals are not covered by a test | Found | The test tenant's area has one company; both paths are straightforward but untested. |
-| S10 | Cancelling a run trusts the document's REVERSED status | Found | The test sets the status directly; the end-to-end path through `/finance/document-reversal` was not exercised. |
+| S9 | Cross-company and currency-mismatch refusals are not covered by a test | **Closed** | Item #9: a copy of company 1000 plus its assignment to the area is all it took; both refusals are tested at the end of `tests/cost-allocation-cycle.test.ts`. |
+| S10 | Cancelling a run trusts the document's REVERSED status | **Closed** | Item #9: the assessment cancel test and the distribution re-run test reverse through `reverseDocument` (an AB document), then cancel. |
+| S11 | Assessment and distribution identify allocation output differently | Decision (chosen) | Assessment excludes lines on its own account (so a manual posting to that account is not assessable, and a distribution's output *is* assessable); distribution excludes by document. Left as shipped; not harmonised. Distribution→assessment chaining works, assessment→distribution does not. |
+| S12 | A centre on a live run's document cannot be distributed in that period | Decision (chosen) | Excluding allocation documents hides a sender's own relief, so a second cycle would relieve it twice; the run is refused, naming the run and cycle. Order-independent, reproducible results; chaining across cycles needs iteration (S5). Cancelling the earlier run frees the centre. |
+| S13 | The allocation-output exclusion is client-wide, by document number and company | Decision (chosen) | Matches `client` + `company` + number + year for the document and `client` + `company` + `reversal_of` for its reversal (`journal_entry` stores no year beside `reversal_of`; one document reverses an original). A cancelled run's document stays excluded. |
+| S14 | `assessed_total` and the `assessment_*` names serve distribution too | Debt | `assessed_total` is the amount relieved for either kind; `assessment_account` is null for a distribution (CHECK by `category`). Renaming a shipped column is churn for a cosmetic gain. |
+| S15 | FIXED_AMOUNT in distribution is checked against the segment total | Decision (chosen) | The fixed amounts must sum to the senders' total; each (sender, account) group is split in proportion and the cents settled in the largest group, so each receiver gets exactly its amount. A share that would change sign is refused. |
+| S16 | An unrecognised category is unreachable end to end | Found | The cycle's CHECK allows ASSESSMENT and DISTRIBUTION only; the service's refusal is tested through `executeCapabilityFor`. |
+| S17 | A distribution document can be large | Found | groups × (1 + receivers) lines; `postGlDocument` imposes no line limit. Nothing is truncated or split. |
 
 ## 3d. BOM explosion and where-used (CS11 / CS12 / CS15) — item 8
 

@@ -167,8 +167,8 @@ const RESTART_MATRIX: readonly RestartRow[] = [
   },
   {
     phase: 'D14_ASSESSMENT',
-    writes: 'A dedicated allocation account 690000 in the demo chart, the CO_ASSESSMENT determination naming it, cycle SVC01 (Warehousing and Administration to Mixing 60 % and Packing 40 %), and its assessment run for the installation’s period as one AL document.',
-    resumesBy: 'Account and determination created only when missing; the cycle adopted when it stands; a period with a live run left as it is; the posting request-keyed (`ALLOC-SVC01-<year>-<period>`).',
+    writes: 'A dedicated allocation account 690000 in the demo chart, the CO_ASSESSMENT determination naming it, cycle SVC01 (Warehousing and Administration to Mixing 60 % and Packing 40 %), and its assessment run for the installation’s period as one AL document; then the distribution cycle DST01 (Maintenance and Facilities to Mixing 60 % and Packing 40 %, each cost kept on its own account) and its run for the same period as a second AL document.',
+    resumesBy: 'Account and determination created only when missing; each cycle adopted when it stands; a period with a live run left as it is; the postings request-keyed (`ALLOC-SVC01-<year>-<period>`, `ALLOC-DST01-<year>-<period>`).',
     guaranteedBy: ['buildDemoAssessment'],
   },
   {

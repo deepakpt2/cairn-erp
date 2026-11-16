@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
+import { reverseDocument } from '../src/modules/finance/document-reversal';
 import { saveCostCenter } from '../src/modules/foundation/cost-center-definition';
 import {
   AllocationCycleError,
@@ -238,11 +239,17 @@ describe('a run', () => {
   it('a run is cancelled only once its document stands reversed, and the period can then run again', async () => {
     const [r] = await withTenant(client, async (tx) => (await tx.execute(sql`select run_id from cost_allocation_run where client = ${client} and cycle_code = 'ASM1'`)) as unknown as Array<{ run_id: string }>);
     await expectRefusal(cancelAssessmentRun({ ...actor(), runId: r!.run_id, reason: REASON }, auth()), /stands POSTED/);
-    // The reversal service is the real path; here the original's status stands for it.
-    await withTenant(client, (tx) => tx.execute(sql`update journal_entry set status = 'REVERSED' where client = ${client} and document_number = ${documentNumber}`));
+    // S10: the real path. The reversal action posts an AB document and marks the original REVERSED.
+    const reversal = await reverseDocument({
+      client, changedBy: ACTOR, companyCode: '1000', documentNumber, fiscalYear: YEAR, reasonCode: '01',
+      documentDate: `${YEAR}-04-30`, postingDate: `${YEAR}-04-30`, confirmed: true, requestKey: `ksu5-rev-${documentNumber}`,
+    });
+    expect(reversal.reversalDocumentType).toBe('AB');
+    const [original] = await withTenant(client, async (tx) => (await tx.execute(sql`select status, reversed_by from journal_entry where client = ${client} and document_number = ${documentNumber}`)) as unknown as Array<{ status: string; reversed_by: string }>);
+    expect(original).toMatchObject({ status: 'REVERSED', reversed_by: reversal.reversalDocumentNumber });
     const cancelled = await cancelAssessmentRun({ ...actor(), runId: r!.run_id, reason: 'Reversed for correction' }, auth());
     expect(cancelled.status).toBe('CANCELLED');
-    // A REVERSED original still counts in the senders' net (its reversal would post the credit).
+    // The sender's primary cost is untouched by the reversal (it sits on the assessment account only).
     const again = await run('ASM1', 4);
     expect(again.documentNumber).not.toBe(documentNumber);
     expect(again.assessedTotal).toBe('1600.0000');
@@ -286,11 +293,6 @@ describe('refusals', () => {
     const view = await preview('CHAIN', 4);
     // One pass: segment 2 sends what CC2000 carried before the run.
     expect(view.segments.map((s) => s.total)).toEqual(['800.0000', '800.0000']);
-  });
-
-  it('13. a distribution cycle is refused by name', async () => {
-    await cycle('DIST', [{ number: 1, rule: 'PERCENTAGE', senders: ['CC2000'], receivers: [['CC1000', '100']] }], 'DISTRIBUTION');
-    await expectRefusal(run('DIST', 4), /Cycle DIST is a distribution cycle\. Distribution is not built/);
   });
 
   it('a group that does not resolve is refused', async () => {
@@ -352,5 +354,28 @@ describe('refusals', () => {
     await expectRefusal(run('ASM2', 4, { reason: '' }), /A reason is required/);
     await deleteCycle({ ...actor(), controllingArea: 'A000', cycleCode: 'ZERO', reason: REASON }, auth());
     expect(await getCycle(client, 'A000', 'ZERO')).toBeNull();
+  });
+});
+
+describe('S9 — cross-company and currency-mismatch refusals', () => {
+  it('a cycle across two company codes, and a company keeping its books in another currency, are refused', async () => {
+    // The second company is a copy of company 1000 (same chart and variants), nothing more.
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`insert into company_code
+        select (jsonb_populate_record(null::company_code, to_jsonb(c) || jsonb_build_object('company_code', '2000'::text, 'name', 'Second company'::text, 'created_by', ${ACTOR}::text))).*
+          from company_code c where c.client = ${client} and c.company_code = '1000'`);
+      await tx.insert(controllingAreaCompany).values({ client, controllingArea: 'A000', companyCode: '2000', createdBy: ACTOR }).onConflictDoNothing();
+    });
+    // Scopes are read when an actor is created: this one stands after company 2000 does.
+    controller = await createFinanceActor(client, { capabilities: ['CFG.COST.ALLOCATION.DEFINE', 'CO.ASSESSMENT.EXECUTE', 'FIN.JOURNAL.POST'] });
+    for (const [centre, name] of [['CC7000', 'Elsewhere'], ['CC7010', 'Elsewhere 2']] as const) {
+      await saveCostCenter({ client, changedBy: ACTOR, mode: 'CREATE', controllingArea: 'A000', costCenter: centre, validFrom: `${YEAR}-01-01`, validTo: `${YEAR}-12-31`, name, personResponsible: '', category: 'PRODUCTION', companyCode: '2000', reason: REASON });
+    }
+    await cycle('XCO', [{ number: 1, rule: 'PERCENTAGE', senders: ['CC2000'], receivers: [['CC7000', '100']] }]);
+    await expectRefusal(preview('XCO', 4), /spans company codes 1000 \(CC2000\); 2000 \(CC7000\)/);
+
+    await withTenant(client, (tx) => tx.execute(sql`update company_code set currency = 'EUR' where client = ${client} and company_code = '2000'`));
+    await cycle('XCUR', [{ number: 1, rule: 'PERCENTAGE', senders: ['CC7000'], receivers: [['CC7010', '100']] }]);
+    await expectRefusal(preview('XCUR', 4), /Company code 2000 keeps its books in EUR, Controlling Area A000 in USD/);
   });
 });

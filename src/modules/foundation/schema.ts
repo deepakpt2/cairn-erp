@@ -1915,7 +1915,11 @@ export const costAllocationRun = pgTable('cost_allocation_run', {
   status: varchar('status', { length: 10 }).notNull().default('EXECUTED'),
   currency: varchar('currency', { length: 3 }).notNull(),
   companyCode: varchar('company_code', { length: 4 }).notNull(),
-  assessmentAccount: varchar('assessment_account', { length: 10 }).notNull(),
+  /** ASSESSMENT | DISTRIBUTION, the cycle's category at the time of the run. */
+  category: varchar('category', { length: 12 }).notNull().default('ASSESSMENT'),
+  /** Present for an assessment run, absent for a distribution run (it keeps each sender's own account). */
+  assessmentAccount: varchar('assessment_account', { length: 10 }),
+  /** The amount relieved from the senders; the name is kept for both kinds. */
   assessedTotal: numeric('assessed_total', { precision: 23, scale: 4 }).notNull(),
   segmentCount: integer('segment_count').notNull().default(0),
   senderCount: integer('sender_count').notNull().default(0),
@@ -1937,5 +1941,7 @@ export const costAllocationRun = pgTable('cost_allocation_run', {
   check('cost_allocation_run_period_ck', sql`${t.period} between 1 and 16`),
   check('cost_allocation_run_iterations_ck', sql`${t.iterations} >= 1`),
   check('cost_allocation_run_status_ck', sql`${t.status} in ('EXECUTED','CANCELLED')`),
+  check('cost_allocation_run_category_ck', sql`${t.category} in ('ASSESSMENT','DISTRIBUTION')`),
+  check('cost_allocation_run_account_ck', sql`(${t.category} = 'ASSESSMENT' and ${t.assessmentAccount} is not null) or (${t.category} = 'DISTRIBUTION' and ${t.assessmentAccount} is null)`),
   check('cost_allocation_run_cancelled_ck', sql`${t.status} <> 'CANCELLED' or (${t.cancelledBy} is not null and ${t.cancelReason} is not null)`),
 ]);

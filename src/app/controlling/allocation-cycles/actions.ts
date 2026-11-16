@@ -7,10 +7,12 @@ import { can, requireSession } from '@/platform/auth/current';
 import {
   ALLOCATION_CYCLE_ROUTE,
   ALLOCATION_DEFINE_CAPABILITY,
-  ALLOCATION_EXECUTE_CAPABILITY,
   AllocationCycleError,
   cancelAssessmentRun,
   deleteCycle,
+  executeCapabilityFor,
+  getCycle,
+  listRuns,
   previewAssessment,
   runAssessment,
   saveCycle,
@@ -42,6 +44,11 @@ async function guard(capability: string) {
     actor: session.user.username,
     options: { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } },
   };
+}
+
+/** The capability a cycle's category needs; the service judges again, this only words the refusal early. */
+function capabilityOf(category: string | undefined): string {
+  try { return executeCapabilityFor(category ?? 'ASSESSMENT'); } catch { return executeCapabilityFor('ASSESSMENT'); }
 }
 
 async function attempt(work: () => Promise<CycleActionState>): Promise<CycleActionState> {
@@ -122,7 +129,9 @@ export async function deleteAction(_prev: CycleActionState, form: FormData): Pro
 
 /** Execute panel: `controllingArea`, `cycleCode`, `fiscalYear`, `period`, `reason`, `action` (preview | run). */
 export async function executeAction(_prev: CycleActionState, form: FormData): Promise<CycleActionState> {
-  const g = await guard(ALLOCATION_EXECUTE_CAPABILITY);
+  const session = await requireSession(ALLOCATION_CYCLE_ROUTE);
+  const cycle = await getCycle(session.user.client, text(form, 'controllingArea').toUpperCase(), text(form, 'cycleCode').toUpperCase());
+  const g = await guard(capabilityOf(cycle?.category));
   if ('refused' in g && g.refused) return g.refused;
   const mode = text(form, 'action') === 'run' ? 'run' : 'preview';
   const input = {
@@ -133,20 +142,24 @@ export async function executeAction(_prev: CycleActionState, form: FormData): Pr
   return attempt(async () => {
     if (mode === 'preview') {
       const preview = await previewAssessment(input, g.options);
-      return { ok: true, preview, message: `Preview: ${preview.assessedTotal} ${preview.currency} would be assessed in ${preview.segments.length} segment(s) through account ${preview.assessmentAccount}. Nothing is posted yet.` };
+      return { ok: true, preview, message: preview.category === 'DISTRIBUTION'
+        ? `Preview: ${preview.assessedTotal} ${preview.currency} would be distributed in ${preview.segments.length} segment(s), each cost on its original account. Nothing is posted yet.`
+        : `Preview: ${preview.assessedTotal} ${preview.currency} would be assessed in ${preview.segments.length} segment(s) through account ${preview.assessmentAccount}. Nothing is posted yet.` };
     }
     const run = await runAssessment(input, g.options);
     revalidatePath('/controlling/cost-center-report');
-    return { ok: true, run, preview: run, message: `Assessed ${run.assessedTotal} ${run.currency} as document ${run.displayNumber}, dated ${run.postingDate}.` };
+    return { ok: true, run, preview: run, message: `${run.category === 'DISTRIBUTION' ? 'Distributed' : 'Assessed'} ${run.assessedTotal} ${run.currency} as document ${run.displayNumber}, dated ${run.postingDate}.` };
   });
 }
 
 /** Cancel a run whose document stands reversed: `runId`, `reason`. */
 export async function cancelRunAction(_prev: CycleActionState, form: FormData): Promise<CycleActionState> {
-  const g = await guard(ALLOCATION_EXECUTE_CAPABILITY);
+  const session = await requireSession(ALLOCATION_CYCLE_ROUTE);
+  const standing = (await listRuns(session.user.client, text(form, 'controllingArea'))).find((r) => r.runId === text(form, 'runId'));
+  const g = await guard(capabilityOf(standing?.category));
   if ('refused' in g && g.refused) return g.refused;
   return attempt(async () => {
     const run = await cancelAssessmentRun({ client: g.client, changedBy: g.actor, runId: text(form, 'runId'), reason: text(form, 'reason') }, g.options);
-    return { ok: true, message: `Run of ${run.cycleCode} for ${run.period}/${run.fiscalYear} cancelled; the period can be assessed again.` };
+    return { ok: true, message: `Run of ${run.cycleCode} for ${run.period}/${run.fiscalYear} cancelled; the period can run again.` };
   });
 }

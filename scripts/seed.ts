@@ -417,6 +417,8 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'PEOPLE.PAYROLL.IMPORT', module: 'PEOPLE', action: 'CREATE', posting: false, description: 'Import a payroll result from an external provider' },
   { code: 'CFG.COST.ALLOCATION.DEFINE', module: 'CO', action: 'DEFINE', posting: false, description: 'Define and change cost allocation cycles and their segments (KSU1 / KSU2)' },
   { code: 'CO.ASSESSMENT.EXECUTE', module: 'CO', action: 'EXECUTE', posting: false, description: 'Execute an assessment cycle, relieving senders and charging receivers (KSU5)' },
+  // Migration 9287. Granted to no role, as CO.ASSESSMENT.EXECUTE is.
+  { code: 'CO.DISTRIBUTION.EXECUTE', module: 'CO', action: 'EXECUTE', posting: false, description: 'Run a distribution cycle, relieving senders and charging receivers on the original G/L account (KSV5)' },
   { code: 'CO.PLAN.ACTIVITYPRICE.EXECUTE', module: 'CO', action: 'EXECUTE', posting: false, description: 'Calculate activity prices from the plan (KSPI)' },
   { code: 'CO.PLAN.COSTCENTER.MAINTAIN', module: 'CO', action: 'MAINTAIN', posting: false, description: 'Plan primary costs per cost centre, cost element and period (KP06)' },
   // Migration 9286. Exact-grant-only and granted to no role, as PROD.ORDER.COST.DISPLAY is.
