@@ -2034,6 +2034,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["batch"],
   },
   {
+    id: "/inventory/stock-ageing",
+    path: "/inventory/stock-ageing",
+    query: {},
+    code: "INV.STOCK.AGEING.DISPLAY",
+    title: "Stock ageing and slow-moving items",
+    area: "inventory",
+    family: "stock",
+    accepts: ["material", "plant"],
+  },
+  {
     id: "/platform/jobs",
     path: "/platform/jobs",
     query: {},
