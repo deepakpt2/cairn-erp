@@ -146,3 +146,25 @@ describe('the flag', () => {
     expect(client).not.toContain('screen-access');
   });
 });
+
+describe('mobile drawer', () => {
+  const source = readFileSync('src/ui/shell/SidebarMenu.tsx', 'utf8');
+
+  it('keeps its drawer duties: backdrop, Escape, focus return, scroll lock, close on widening', () => {
+    expect(source).toContain('sidebar-backdrop');
+    expect(source).toContain("e.key === 'Escape'");
+    expect(source).toContain('toggleRef.current?.focus()');
+    expect(source).toContain("document.body.style.overflow = 'hidden'");
+    expect(source).toContain('(min-width: 768px)');
+  });
+
+  it('closes when any link in it is followed, even to the page already open', () => {
+    expect(source).toContain("closest('a[href]')");
+  });
+
+  it('leaves the desktop column alone: the drawer styling is reset from md up', () => {
+    expect(source).toContain('md:static');
+    expect(source).toContain('md:block');
+    expect(source).toContain('md:hidden');
+  });
+});

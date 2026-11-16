@@ -556,6 +556,7 @@ const en: Catalogue = {
   'status.menuPath': 'Menu path',
   'nav.sidebar': 'Main menu',
   'nav.sidebarToggle': 'Menu',
+  'nav.sidebarClose': 'Close',
   'nav.sidebarExpand': 'Show {name}',
   'menuPage.subtitle': 'The screens of this module that you can open, grouped by function. Type a name in the command box to go straight to one.',
   'menuPage.empty': 'Nothing in this module is open to you.',
