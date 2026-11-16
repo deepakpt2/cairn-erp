@@ -3654,6 +3654,12 @@
     "platform/auth/current.ts",
     "platform/db/client.ts"
   ],
+  "app/production/mrp-exception-monitor/page.tsx": [
+    "modules/production/mrp-exception-monitor.ts",
+    "modules/production/stock-requirements.ts",
+    "platform/auth/current.ts",
+    "platform/db/client.ts"
+  ],
   "app/production/mrp-run/MrpRunWorkbench.tsx": [
     "app/production/mrp-run/actions.ts",
     "modules/production/mrp-run.ts",
@@ -6643,6 +6649,12 @@
     "platform/db/client.ts",
     "platform/tables/reference.ts",
     "platform/tenancy/index.ts"
+  ],
+  "modules/production/mrp-exception-monitor.ts": [
+    "modules/production/stock-requirements.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts"
   ],
   "modules/production/mrp-explosion.ts": [
     "modules/inventory/unit-conversion.ts",

@@ -144,6 +144,22 @@ The engine (`sales/availability.ts`) existed before this item and runs when an o
 | A12 | The demo has no open supply for its demo material | Found | Both TRAD-JUICE purchase orders were received, so the erp_dev demo shows a stock-only partial confirmation. The receipts path is proved in tests. Two cancelled orders (SO-0000007, SO-0000008) remain from sizing the demo order against the customer's credit headroom. |
 | A13 | Migration 9288 was corrected by 9289 | Found | 9288 had been edited after it was applied and the ledger refused it; it is restored and 9289 widens `item_text` and clears the registry row's `our_table`. |
 
+## 3h. MRP exception monitor (MD06) — item 15
+
+| # | Gap | Kind | Notes |
+|---|---|---|---|
+| M1 | No MRP controller grouping (MD07) | Spec | No MRP controller master exists (item #18). |
+| M2 | Plant scope only | Spec | MD04 refuses an MRP area; so does the monitor. |
+| M3 | Recomputed on every run; ~16–20 ms per material | Found | Measured on the demo (11 materials in 173 ms, 5 in 85–118 ms): 50 materials is about a second, 500 about 8–10 s, more for materials with long lists. The default stays 50; the ceiling (500, refused above) is for a deliberate scan. |
+| M4 | The scan runs in material-number order, not urgency | Found | When the limit stops it, the unscanned materials may include urgent ones. Reported on the screen and in `warnings`; raise the limit or narrow the range. |
+| M5 | Counts are MD04's, per row | Found | A shortage usually carries a safety-breach row with it, so a shortage material shows both; totals sum rows, not materials. |
+| M6 | First exception date is that of the most urgent code | Decision | The spec said "first date short"; a material with only a breach or only past-due rows has no such date, so the date of its worst code is used. |
+| M7 | The exceptions filter keeps materials with any selected code | Decision | Each row still shows all its counts (they must equal MD04's); totals are the sums over the rows shown. |
+| M8 | The excluded count is within the material range | Decision | NONE and blank types are counted over the range asked for, and a material with no plant view is not counted anywhere. |
+| M9 | Existing demo roles hold a snapshot of expanded capabilities | Found | Demo provisioning expands `PROD.*` / `SALES.*` into exact codes when it runs, so on the existing erp_dev `demo.planner` lacks `PROD.MRP.EXCEPTION` and `demo.sales` lacks `SALES.ORDER.AVAILABILITY.CHECK` until a role is granted them. A fresh install gets both; `demo.admin` holds `*`. |
+| M10 | Drill-through not clicked in a browser | Found | No signed-in browser session was used. Verified by the exact-URL test, by MD04's page reading the same `material` and `plant` parameters, and by the route compiling on the dev server. |
+| M11 | Authority by session, not `heldCapabilities` | Decision | Like every other service here: the signed-in session is judged, with the user's Plant scope, before any planning data is read. |
+
 ## 4. Demo data and environment
 
 | # | Gap | Kind | Notes |

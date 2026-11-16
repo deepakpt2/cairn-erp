@@ -2307,6 +2307,17 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["material", "plant"],
   },
   {
+    // Item 15 (9290): MD06, the exception worklist over the stock/requirements list's own counts.
+    id: "/production/mrp-exception-monitor",
+    path: "/production/mrp-exception-monitor",
+    query: {},
+    code: "PROD.MRP.EXCEPTION",
+    title: "MRP exception monitor",
+    area: "production",
+    family: "planning",
+    accepts: ["plant", "materialFrom", "materialTo", "mrpType", "horizonEnd", "exceptions"],
+  },
+  {
     id: "/production/order-availability",
     path: "/production/order-availability",
     query: {},
