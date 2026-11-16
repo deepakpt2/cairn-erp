@@ -50,6 +50,7 @@ import { buildDemoCoPlan } from '../src/platform/tenancy/demo-co-plan';
 import { buildDemoActivityPrice } from '../src/platform/tenancy/demo-activity-price';
 import { buildDemoAssessment } from '../src/platform/tenancy/demo-assessment';
 import { buildDemoBomStructure } from '../src/platform/tenancy/demo-bom-structure';
+import { buildDemoCostEstimate } from '../src/platform/tenancy/demo-cost-estimate';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -406,6 +407,16 @@ async function runBomStructurePhase(ctx: PhaseContext): Promise<Record<string, u
   return { ...result };
 }
 
+/**
+ * Phase D16_COST_ESTIMATE: CK11N. Fills the costing data the demo lacked (control key flag, operation hours,
+ * work centre cost centres), then costs FG-CHOC on the anchor date and saves the estimate. Releases nothing;
+ * no price or rate is changed.
+ */
+async function runCostEstimatePhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoCostEstimate({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -426,6 +437,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D13_ACTIVITY_PRICE: runActivityPricePhase,
   D14_ASSESSMENT: runAssessmentPhase,
   D15_BOM_STRUCTURE: runBomStructurePhase,
+  D16_COST_ESTIMATE: runCostEstimatePhase,
 };
 
 async function main(): Promise<number> {

@@ -256,15 +256,18 @@ describe('production version', () => {
     expect(planningSource).toContain('A bill of material is selected through the production version. It is not entered.');
   });
 
-  it('does not show another tenant the version and refuses costing', async () => {
+  it('does not show another tenant the version, and selects it for costing like any other use', async () => {
     expect(await getProductionVersion(other.client, 'FG-1', '1000', '0001')).toBeNull();
     expect(holdsProductionVersionAuthority([PRODUCTION_VERSION_CREATE_CAPABILITY], 'CREATE')).toBe(true);
     expect(holdsProductionVersionAuthority([PRODUCTION_VERSION_CREATE_CAPABILITY], 'DISPLAY')).toBe(false);
     expect(holdsProductionVersionAuthority([PRODUCTION_VERSION_DISPLAY_CAPABILITY], 'DISPLAY')).toBe(true);
     expect(holdsProductionVersionAuthority([], 'DELETE')).toBe(false);
-    await expect(selectProductionVersion(tenant.client, {
-      materialNumber: 'FG-1', plant: '1000', keyDate: '2026-06-01', quantity: '10', unit: 'KG', context: 'COSTING',
-    })).rejects.toBeInstanceOf(ProductionVersionError);
+    // The CK11N refusal is gone: costing selects through the same rules (quantity range, validity, check status).
+    const common = { materialNumber: 'FG-1', plant: '1000', keyDate: '2026-06-01', quantity: '10', unit: 'KG', productionVersion: '0001' };
+    const costing = await selectProductionVersion(tenant.client, { ...common, context: 'COSTING' });
+    expect(costing).toMatchObject({ productionVersion: '0001' });
+    expect(costing).toEqual(await selectProductionVersion(tenant.client, { ...common, context: 'PLANNING' }));
+    await expect(selectProductionVersion(tenant.client, { ...common, quantity: '150', context: 'COSTING' })).rejects.toBeInstanceOf(ProductionVersionError);
   });
 
   it('reads a supplied null end of validity as open-ended and keeps an omitted one', async () => {

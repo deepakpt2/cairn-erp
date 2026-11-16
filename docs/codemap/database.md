@@ -48,8 +48,8 @@
 - `platform/tables/system.ts`: job_definition, job_log, job_run, mail_server_config, message_catalog, notification
 - `platform/tables/tenancy.ts`: client, client_settings
 
-### production (49)
-- `modules/production/schema.ts`: availability_check_scope, availability_checking_group, availability_checking_rule, bom_item_category, bom_status, bom_usage, material_bom, material_bom_item, mrp_dependent_requirement, mrp_run, planned_order, production_checking_control, production_confirmation, production_confirmation_activity, production_confirmation_cancellation, production_confirmation_operation, production_goods_movement_failure, production_goods_movement_failure_attempt, production_goods_movement_failure_line, production_goods_movement_failure_revision, production_order_availability_run, production_order_component_commitment_event, production_order_operation, production_order_operation_value, production_order_settlement_distribution_rule, production_order_type, production_order_type_parameter, production_order_type_settlement_profile, production_version, production_version_finding, production_version_rule, report_layout, routing, routing_component_allocation, routing_control_key, routing_material_assignment, routing_operation, routing_operation_value, routing_sequence, routing_standard_value_key, routing_standard_value_parameter, routing_status, routing_task_list_type, routing_usage, wip_batch_activation, work_center, work_center_capacity, work_center_category, work_center_costing
+### production (51)
+- `modules/production/schema.ts`: availability_check_scope, availability_checking_group, availability_checking_rule, bom_item_category, bom_status, bom_usage, material_bom, material_bom_item, material_cost_estimate, material_cost_estimate_item, mrp_dependent_requirement, mrp_run, planned_order, production_checking_control, production_confirmation, production_confirmation_activity, production_confirmation_cancellation, production_confirmation_operation, production_goods_movement_failure, production_goods_movement_failure_attempt, production_goods_movement_failure_line, production_goods_movement_failure_revision, production_order_availability_run, production_order_component_commitment_event, production_order_operation, production_order_operation_value, production_order_settlement_distribution_rule, production_order_type, production_order_type_parameter, production_order_type_settlement_profile, production_version, production_version_finding, production_version_rule, report_layout, routing, routing_component_allocation, routing_control_key, routing_material_assignment, routing_operation, routing_operation_value, routing_sequence, routing_standard_value_key, routing_standard_value_parameter, routing_status, routing_task_list_type, routing_usage, wip_batch_activation, work_center, work_center_capacity, work_center_category, work_center_costing
 
 ### purchasing (44)
 - `modules/purchasing/schema.ts`: customer_invoice, customer_invoice_line, document_release, gr_ir_maintenance_link, parked_supplier_invoice, parked_supplier_invoice_item, purchase_contract, purchase_contract_item, purchase_delivery_completion_plant, purchase_delivery_completion_policy, purchase_order, purchase_order_assignment, purchase_order_item, purchase_order_schedule_line, purchase_requisition_assignment, purchase_requisition_item, purchasing_contract_type, purchasing_info_record, purchasing_info_record_org, purchasing_info_record_price, purchasing_quota_arrangement, purchasing_quota_arrangement_item, purchasing_quotation, purchasing_quotation_item, purchasing_rfq, purchasing_rfq_event, purchasing_rfq_event_item, purchasing_rfq_item, purchasing_source_list, purchasing_source_list_entry, scheduling_agreement, scheduling_agreement_item, scheduling_agreement_release, scheduling_agreement_release_line, scheduling_agreement_schedule_line, scheduling_agreement_type, scheduling_release_profile, scheduling_release_profile_assignment, supplier_invoice, supplier_invoice_item, supplier_invoice_payment_block, supplier_invoice_payment_block_event, vendor_evaluation_assessment, vendor_evaluation_criterion
@@ -65,7 +65,7 @@
 |---|---|---|
 | account_determination | foundation | dev/walkthrough-asset.ts, finance, inventory, people, platform/tenancy, purchasing, sales |
 | accounting_reversal_link | finance | people |
-| activity_rate | foundation | platform/tenancy |
+| activity_rate | foundation | platform/tenancy, production |
 | activity_type | foundation | platform/tenancy, production |
 | allocation_structure_assignment | foundation | production |
 | app_user | platform/tables | audit, finance, foundation, inventory, people, platform, platform/auth, platform/job, platform/notification, platform/tenancy, production, purchasing |
@@ -167,7 +167,7 @@
 | material_sales | inventory | sales |
 | material_type | inventory | platform/tenancy |
 | material_uom_conversion | inventory | foundation, purchasing |
-| material_valuation | inventory | purchasing, sales |
+| material_valuation | inventory | platform/tenancy, production, purchasing, sales |
 | movement_type | inventory | finance, platform/tenancy, production, purchasing, sales |
 | mrp_controller | inventory | production |
 | notification | platform/tables | platform/notification |
@@ -224,6 +224,8 @@
 | role | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
 | role_capability | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
 | routing | production | platform/tenancy |
+| routing_control_key | production | platform/tenancy |
+| routing_operation | production | platform/tenancy |
 | sales_account_determination | sales | foundation |
 | sales_area | foundation | platform/tenancy, sales |
 | sales_billing_plan_type | sales | foundation |
@@ -266,3 +268,4 @@
 | vendor_down_payment | finance | foundation, purchasing |
 | vendor_down_payment_clearing | finance | purchasing |
 | work_center | production | platform/tenancy |
+| work_center_costing | production | platform/tenancy |

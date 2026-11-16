@@ -3641,6 +3641,19 @@
     "modules/production/production-order-display.ts",
     "platform/auth/current.ts"
   ],
+  "app/production/cost-estimate/CostEstimateForm.tsx": [
+    "app/production/cost-estimate/actions.ts"
+  ],
+  "app/production/cost-estimate/actions.ts": [
+    "modules/production/cost-estimate.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/production/cost-estimate/page.tsx": [
+    "app/production/cost-estimate/CostEstimateForm.tsx",
+    "modules/production/cost-estimate.ts",
+    "platform/auth/current.ts",
+    "platform/db/client.ts"
+  ],
   "app/production/mrp-run/MrpRunWorkbench.tsx": [
     "app/production/mrp-run/actions.ts",
     "modules/production/mrp-run.ts",
@@ -6596,6 +6609,16 @@
     "platform/posting/decimal.ts"
   ],
   "modules/production/conversion-outcome.ts": [],
+  "modules/production/cost-estimate.ts": [
+    "modules/foundation/activity-rate-definition.ts",
+    "modules/inventory/unit-conversion.ts",
+    "modules/production/mrp-explosion.ts",
+    "modules/production/production-version.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
+  ],
   "modules/production/material-bom-display.ts": [
     "modules/production/material-bom.ts"
   ],
@@ -7835,6 +7858,15 @@
     "modules/foundation/cost-center-planning.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
+  ],
+  "platform/tenancy/demo-cost-estimate.ts": [
+    "modules/production/cost-estimate.ts",
+    "modules/production/routing.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
     "platform/tenancy/demo-provisioning.ts"

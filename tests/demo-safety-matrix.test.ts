@@ -177,6 +177,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     resumesBy: 'Adoption: the item category, material, BOMs, routing and version are created only when missing; each BOM, routing and version is request-keyed.',
     guaranteedBy: ['buildDemoBomStructure'],
   },
+  {
+    phase: 'D16_COST_ESTIMATE',
+    writes: 'Costing data only where missing (control key PP01 relevant for costing, operation hours on the routing operations, a costing line on work centres WC01 and WC02), then one saved standard cost estimate of FG-CHOC on the anchor date. No price or rate is changed and nothing is released.',
+    resumesBy: 'Each fill is conditional on the value being missing; a SAVED estimate of the date is read back; the estimate is request-keyed (`DEMO-CK11N-FG-CHOC`).',
+    guaranteedBy: ['buildDemoCostEstimate'],
+  },
 ];
 
 describe('the demo installation, stopped part way through', () => {

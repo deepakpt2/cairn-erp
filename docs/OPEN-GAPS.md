@@ -106,6 +106,24 @@ Status key: **Spec** = the item's own spec put it out of scope · **Found** = fo
 | L6 | Orders as allocation receivers | Spec | Gap S2 above; when it closes, allocation lines appear here with no change. |
 | L7 | Settlement covered by a fixture, not a real run | Found | Test 16 writes a document with origin `order_settlement`, as `order-settlement.ts` posts it; the demo order IO-00000001 shows real settlement lines (document 1000/2026/90). |
 
+## 3f. Standard cost estimate (CK11N / CK13N) — item 12
+
+| # | Gap | Kind | Notes |
+|---|---|---|---|
+| E1 | No costing variant | Spec | One rule set, hard-coded and stated on the screen. `order-type-parameters.ts` says costing is not configured. |
+| E2 | No overhead | Spec | No costing sheet exists. Overhead is stored as zero (a CHECK enforces it) and shown with the reason. |
+| E3 | `workCenterCosting.formula` is not evaluated | Spec | So a work centre with several costing lines is refused: one operation quantity cannot be split across activity types. Same decision as KSPI. |
+| E4 | Not costed, refused by name | Spec | Co-products, special procurement, external processing (item or operation control key), subcontracting. |
+| E5 | One material at a time | Spec | The costing run over many materials (CK41N) and releasing to the material master (CK24, item #25) are separate items. **Nothing here writes `standardPrice`** (test 19). |
+| E6 | Cost component split is by origin, not the spec's literal reading | Decision | Material = every bought component at every level, activity = every operation at every level, so a made sub-assembly's operations stay visible as activity. Read literally, "material = Σ component costs" would put them in material. Total is the same. |
+| E7 | Added to the spec's tables | Decision | `in_total` on items (a made component's own lines explain its roll-up line and are not added twice), `controlling_area`, `plan_version` and `request_key` on the header, `item_text`, and a `NOT_COSTED` price source (an operation whose control key is not relevant for costing is listed at zero rather than hidden). The component column is `component_material` (the spec named two columns `materialNumber`). |
+| E8 | Activity lines carry the assembly's own level | Decision | 0 for the finished material, the roll-up line's level for a sub-assembly's operations. |
+| E9 | BOTH and phantom | Decision | A BOTH material costs as made when a production version resolves, else from its price. A phantom is costed from its BOM alone and rolled into its parent; it needs no routing. A MAKE material with no routing, or a BOM or routing not released for costing, is refused. |
+| E10 | The default lot size needs a version that covers 1 unit | Found | The BOM base quantity is read through a probe at quantity 1; a production version whose lot range excludes 1 refuses with its own message. Enter the lot size explicitly. |
+| E11 | Fiscal year of the costing date is found among year, year + 1 and year - 1 | Found | `planningContext` takes a fiscal year, not a date; shifted year variants are covered, nothing beyond one year either way. |
+| E12 | Demo operation hours are assumptions | Found | D16 filled the missing operation quantities and work centre costing lines, only where empty. The hours are invented (they make the estimate about twice the existing standard price of FG-CHOC); change them in `/production/routings` and cost again. |
+| E13 | Display needs the create capability | Decision | No separate display code. The capability is granted to no role (as `CO.PLAN.COSTCENTER.MAINTAIN`); the demo administrator reaches it through its wildcard role. |
+
 ## 4. Demo data and environment
 
 | # | Gap | Kind | Notes |

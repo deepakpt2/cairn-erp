@@ -803,7 +803,7 @@ export async function deleteProductionVersion(client: string, materialNumber: st
   });
 }
 
-/** Shared selector. Does not write. The plant run calls this through the shared explosion. CO01 calls this when the screen derives the component snapshot. Single-item planning and conversion may call it inside their own transaction. Costing does not stand. */
+/** Shared selector. Does not write. The plant run calls this through the shared explosion. CO01 calls this when the screen derives the component snapshot. Single-item planning and conversion may call it inside their own transaction. The standard cost estimate (CK11N) calls it with `context: 'COSTING'`; the context selects nothing differently — the lot-size range, the validity and the consistency check apply as for every other use. */
 export async function selectProductionVersion(client: string, input: {
   materialNumber: string;
   plant: string;
@@ -813,9 +813,6 @@ export async function selectProductionVersion(client: string, input: {
   productionVersion?: string | null;
   context?: 'PLANNING' | 'ORDER' | 'COSTING' | null;
 }, externalTx?: Tx): Promise<ProductionVersionView> {
-  if (input.context === 'COSTING') {
-    fail('COSTING', 'Product costing is not implemented. A production version is not costed.');
-  }
   const keyDate = dateOf(input.keyDate, 'Key date');
   const materialNumber = input.materialNumber.trim();
   const plant = input.plant.trim();

@@ -26,7 +26,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | platform/notification | finance, foundation, people, platform, platform/job, production, purchasing, sales, ui/shell, worker/jobs.ts |
 | platform/numbering | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, quality, sales |
 | platform/periods | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
-| platform/posting | finance, foundation, inventory, people, production, purchasing, sales |
+| platform/posting | finance, foundation, inventory, people, platform/tenancy, production, purchasing, sales |
 | platform/registry | app/command.ts, app/registry |
 | platform/schema.ts | platform/db |
 | platform/security | foundation |
@@ -38,7 +38,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/page.tsx, app/registry |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (138)
+## Files (139)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -166,6 +166,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | demo-audit.ts | DEMO_AUDIT_GRANT_REQUEST_KEY, demoAuditPrerequisitesMissing, buildDemoAudit | app_user, role_capability |
 | demo-bom-structure.ts | buildDemoBomStructure |  |
 | demo-co-plan.ts | buildDemoCoPlan | company_code, controlling_area_company, journal_entry, journal_entry_line |
+| demo-cost-estimate.ts | buildDemoCostEstimate | material_valuation, routing_control_key, routing_operation, work_center_costing |
 | demo-credentials.ts | DEMO_CREDENTIALS_FILENAME, DEFAULT_CREDENTIALS_DIR, generateDemoPassword, fingerprintDemoPassword, renderDemoCredentialReport, writeDemoCredentials, readDemoCredentials, dirname |  |
 | demo-finance.ts | buildDemoFinance | tax_return_run |
 | demo-masters.ts | STANDARD_TAX_CODE, materialUnit, PURCHASE_PRICES, buildDemoMasters | credit_risk_category |

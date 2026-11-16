@@ -2086,6 +2086,17 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    // Item 12 (9288): CK11N create and CK13N display of a standard cost estimate. Saved, never released.
+    id: "/production/cost-estimate",
+    path: "/production/cost-estimate",
+    query: {},
+    code: "PROD.COST.ESTIMATE.CREATE",
+    title: "Standard cost estimate",
+    area: "production",
+    family: "production-master",
+    accepts: [],
+  },
+  {
     id: "/production/boms",
     path: "/production/boms",
     query: {},
