@@ -320,7 +320,7 @@ const UNIT_SOURCE = new Map<string, {
   }],
 ]);
 
-function elementUnitKey(row: { elementType: string; documentNumber: string; documentItem: string }): string {
+export function elementUnitKey(row: { elementType: string; documentNumber: string; documentItem: string }): string {
   return `${row.elementType}|${row.documentNumber}|${row.documentItem}`;
 }
 
@@ -387,7 +387,7 @@ interface ResolvedElementUnits {
  * `inventory/unit-conversion.ts` that applies it, so the rounding is the posting path's rounding
  * and the refusal of a missing factor is its refusal.
  */
-async function resolveElementUnits(input: {
+export async function resolveElementUnits(input: {
   client: string;
   plant: string;
   materialNumber: string;
@@ -473,7 +473,7 @@ export function businessFunctionForStatus(status: string): '1' | '2' {
  * any other document's requirement does. Excluding the whole order instead would let two
  * lines of one material each claim the same opening stock.
  */
-interface ElementContext {
+export interface ElementContext {
   today: string;
   /** Planned orders standing FIRMED, for the planned-order scope "A". */
   firmedPlanned: ReadonlySet<string>;
@@ -572,7 +572,7 @@ function elementCounts(
  * already named. A technically complete order counts as released for supply, because
  * it was released to become complete.
  */
-async function scopeDocumentStates(
+export async function scopeDocumentStates(
   client: string,
   rows: readonly StockRequirementRow[],
   scope: ScopeOfCheckRow,

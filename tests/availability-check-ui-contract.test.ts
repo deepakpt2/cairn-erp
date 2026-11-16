@@ -12,7 +12,7 @@ describe('availability-check screen contract', () => {
     expect(page).toContain('does not calculate ATP');
     expect(form).toContain('not assigned');
     expect(form).toContain('not an ATP balance');
-    expect(form).toContain('They do not calculate ATP.');
+    expect(form).toContain('Production orders do not read this configuration.');   // the sales order does (9289)
     expect(form).toContain('X — all production orders');
     expect(form).not.toContain('created and released');
     expect(form).toContain('not checking control');

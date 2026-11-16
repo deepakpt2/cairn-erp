@@ -18,6 +18,7 @@ export interface SalesDocumentTypeChoice {
   numberRangeSubObject: string;
   cancellationDocumentType: string | null;
   invoiceListType: string | null;
+  availabilityCheckRule: string | null;
   isActive: boolean;
   documentsStanding: number;
 }
@@ -155,6 +156,8 @@ export function SalesDocumentTypeSetup({ types }: { types: SalesDocumentTypeChoi
                     <dd className="font-mono">{chosen.cancellationDocumentType ?? '—'}</dd>
                     <dt className="text-ink-faint">Invoice list type</dt>
                     <dd className="font-mono">{chosen.invoiceListType ?? '—'}</dd>
+                    <dt className="text-ink-faint">Availability rule</dt>
+                    <dd className="font-mono">{chosen.availabilityCheckRule ?? 'OR (default)'}</dd>
                     <dt className="text-ink-faint">Status</dt>
                     <dd>{chosen.isActive ? 'Offered' : 'Withdrawn'}</dd>
                     <dt className="text-ink-faint">Documents standing</dt>
@@ -200,6 +203,22 @@ export function SalesDocumentTypeSetup({ types }: { types: SalesDocumentTypeChoi
                         carry a schedule as well before a single document is listed. Blank is what every
                         delivered type carries, and it means what it has always meant: the document is
                         released to accounting the day it is billed.
+                      </span>
+                    </label>
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-medium">Availability checking rule</span>
+                      <input
+                        name="availabilityCheckRule"
+                        maxLength={2}
+                        defaultValue={chosen.availabilityCheckRule ?? ''}
+                        key={`avrule-${chosen.documentType}`}
+                        className="field w-full font-mono uppercase"
+                        placeholder="(OR)"
+                      />
+                      <span className="mt-1 block text-xs text-ink-faint">
+                        The checking rule an order of this type is checked under. Blank is the order rule OR,
+                        exactly as before: blank is not &quot;no check&quot;. A rule named here must stand, and a scope
+                        of check must stand for it for each checking group, or an order of this type is refused.
                       </span>
                     </label>
                     <input type="hidden" name="documentType" value={chosen.documentType} />

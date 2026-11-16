@@ -10,8 +10,11 @@ Sales orders, pricing procedures, delivery & shipping points, billing (plans, co
 - `rebate.ts` posts accruals directly via `platform/posting.postJournalEntry`.
 - Invoice lists use type `IL` (constant wins over the header comment). Document types are rows (9226).
 - `batch-sort-rules.ts` exists to keep `postgres` out of the client bundle.
+- ATP (`availability.ts`): `availableToPromise` counts stock, the scope's supply elements (MD04 rows, base unit, by date) and other orders' promises (unless scope `sales_requirements` is blank); `planOrderLines` decides quantity AND date; the order rule is the document type's `availability_check_rule`, blank = `OR` (never "no check"). A material with no group is confirmed in full.
+- `availability-check.ts` is the on-demand check: simulate (writes nothing) vs check (writes line + schedule + change document); an unconfigured line is reported, not thrown.
+- Demo phase `D17_SALES_AVAILABILITY`: group D1 on TRAD-JUICE at plant 2000 only; no document type names a rule.
 
-## Files (96)
+## Files (99)
 | file | exports | tables |
 |---|---|---|
 | **app/config/batch-determination/** | | |
@@ -84,6 +87,8 @@ Sales orders, pricing procedures, delivery & shipping points, billing (plans, co
 | page.tsx | SalesInvoiceListsPage |  |
 | **app/sales/orders/** | | |
 | actions.ts | createOrderAction, changeOrderAction, cancelOrderAction, releaseCreditAction |  |
+| availability-actions.ts | simulateAvailabilityAction, confirmAvailabilityAction |  |
+| AvailabilityPanel.tsx | AvailabilityPanel |  |
 | Orders.tsx | Orders |  |
 | page.tsx | SalesOrdersPage |  |
 | **app/sales/output/** | | |
@@ -102,7 +107,8 @@ Sales orders, pricing procedures, delivery & shipping points, billing (plans, co
 | account-determination-maintenance.ts | ACCOUNT_DETERMINATION_CAPABILITY, ACCOUNT_DETERMINATION_OBJECT_CLASS, AccountDeterminationMaintenanceError, listAccountDetermination, defineAccountDetermination, changeAccountDeterminationStatus | chart_of_accounts, gl_account, sales_account_determination, sales_org |
 | account-determination.ts | ACCOUNT_DETERMINATION_ROUTE, ACCOUNT_KEYS, DELIVERED_ACCOUNT_DETERMINATION, SalesAccountDeterminationError, determineSalesAccount, determineLineAccounts | sales_account_determination |
 | analysis.ts | ANALYSIS_KINDS, ANALYSIS_KIND_MEANING, GROUP_BY, GROUP_BY_MEANING, PERIODS, ANALYSIS_LIMIT, listAnalysis | billing_document, billing_document_line, business_partner, delivery, delivery_line, material, sales_area, sales_condition_type, sales_document_condition, sales_document_type, sales_order, sales_order_line, sales_returns_configuration |
-| availability.ts | AVAILABILITY_ROUTE, ORDER_CHECKING_RULE, DELIVERY_CHECKING_RULE, AvailabilityError, availableToPromise, confirmOrderLines, writeScheduleLines, scheduleLinesOf | availability_check_scope, availability_checking_group, availability_checking_rule, delivery, delivery_line, material_plant, material_sales, sales_order, sales_order_line, sales_order_schedule, stock_quantity |
+| availability-check.ts | AVAILABILITY_CHECK_CAPABILITY, AVAILABILITY_CHECK_ROUTE, SalesAvailabilityError, simulateSalesOrderAvailability, checkSalesOrderAvailability | sales_order, sales_order_line, sales_order_schedule |
+| availability.ts | AVAILABILITY_ROUTE, ORDER_CHECKING_RULE, DELIVERY_CHECKING_RULE, AvailabilityError, DEFAULT_HORIZON_DAYS, availableAt, availableToPromise, planOrderLines, confirmOrderLines, writeScheduleLines, scheduleLinesOf | availability_check_scope, availability_checking_group, availability_checking_rule, delivery, delivery_line, material_plant, material_sales, sales_order, sales_order_line, sales_order_schedule, stock_quantity |
 | batch-determination.ts | BATCH_DETERMINATION_ROUTE, BATCH_DETERMINATION_CAPABILITY, batchRuleInput, BatchDeterminationError, saveBatchDeterminationRule, listBatchDeterminationRules, determineBatches, determineBatchesOn, determineBatchesForDelivery, SORT_RULES, SORT_RULE_MEANING | batch, stock_quantity |
 | batch-sort-rules.ts | SORT_RULES, SORT_RULE_MEANING |  |
 | billing-plan.ts | BILLING_PLAN_ROUTE, BILLING_PLAN_CAPABILITY, BILLING_PLAN_OBJECT_CLASS, BillingPlanError, billingPlanDateInput, billingPlanSaveInput, itemKey, plansForItems, planTypeChoices, getBillingPlan, listBillingPlans, listBillablePlanDates, loadBillablePlanDate, saveBillingPlan, markPlanDateBilled, releasePlanDateForBilling | sales_billing_plan, sales_billing_plan_date, sales_billing_plan_type, sales_order, sales_order_line |
@@ -111,7 +117,7 @@ Sales orders, pricing procedures, delivery & shipping points, billing (plans, co
 | credit-memo.ts | CREDIT_MEMO_TRANSACTION, CREDIT_MEMO_ROUTE, CREDIT_MEMO_REQUEST_CAPABILITY, CREDIT_MEMO_RELEASE_CAPABILITY, CREDIT_MEMO_POST_CAPABILITY, CreditMemoError, createCreditMemo, postCreditMemo, createCreditMemoRequest, releaseBillingBlock, listCreditMemoRequests | billing_document, billing_document_line, sales_order, sales_order_line |
 | delivering-plant.ts | CUSTOMER_MASTER_ROUTE, MATERIAL_MASTER_ROUTE, DeliveringPlantError, deliveryTermsFor, deliveringPlantFor | customer_sales_area, material_sales |
 | delivery.ts | DELIVERY_CAPABILITY, DELIVERY_PICK_CAPABILITY, DELIVERY_GOODS_ISSUE_CAPABILITY, DELIVERY_ROUTE, DELIVERY_OBJECT_CLASS, DELIVERY_GOODS_ISSUE_MOVEMENT, DeliveryError, deliveryItemInput, deliveryCreateInput, deliveryPickItemInput, deliveryPickInput, deliveryIssueInput, deliveryCancelInput, standingDetermination, getDelivery, listDeliverableOrderLines, listDeliveries, SALES_DELIVERY_CREATE_CAPABILITY, createDelivery, confirmDeliveryPicks, postDeliveryGoodsIssue, cancelDelivery | billing_document, business_partner, credit_determination, delivery, delivery_line, delivery_picking, incompletion_status_group, material, plant, sales_incompletion_log, sales_order, sales_order_line, unit_of_measure |
-| document-type-maintenance.ts | DOCUMENT_TYPE_OBJECT_CLASS, SalesDocumentTypeError, listSalesDocumentTypes, defineSalesDocumentType, changeSalesDocumentType, setSalesDocumentTypeActive, activeSalesDocumentTypes, DOCUMENT_TYPE_DEFINE_CAPABILITY | billing_document, delivery, number_range, sales_document_type, sales_order |
+| document-type-maintenance.ts | DOCUMENT_TYPE_OBJECT_CLASS, SalesDocumentTypeError, listSalesDocumentTypes, defineSalesDocumentType, changeSalesDocumentType, setSalesDocumentTypeActive, activeSalesDocumentTypes, DOCUMENT_TYPE_DEFINE_CAPABILITY | availability_checking_rule, billing_document, delivery, number_range, sales_document_type, sales_order |
 | document-type.ts | STANDARD_ORDER_TYPE, STANDARD_DELIVERY_TYPE, STANDARD_BILLING_TYPE, STANDARD_BILLING_CANCELLATION_TYPE, STANDARD_RETURNS_DELIVERY_TYPE, STANDARD_RETURNS_ORDER_TYPE, STANDARD_CREDIT_MEMO_TYPE, STANDARD_CREDIT_MEMO_REQUEST_TYPE, STANDARD_DOWN_PAYMENT_REQUEST_TYPE, STANDARD_INVOICE_LIST_TYPE, STANDARD_REBATE_SETTLEMENT_TYPE, STANDARD_SALES_DOCUMENT_TYPES, salesDocumentTypeFor, DOCUMENT_TYPE_ROUTE, DOCUMENT_TYPE_DEFINE_CAPABILITY, DOCUMENT_TYPE_REMEDY | sales_document_type |
 | down-payment.ts | DOWN_PAYMENT_OBJECT_CLASS, DownPaymentError, downPaymentRequestInput, downPaymentCancelInput, requestDownPaymentFromPlanDate, cancelDownPaymentRequest, orderDownPayments, clearDownPaymentsForInvoice | billing_document, billing_document_line, customer_down_payment_request, down_payment_request_fulfillment, sales_down_payment_request, special_gl_config |
 | exposure.ts | openSalesCommitments | billing_document, delivery, delivery_line, sales_order, sales_order_line |

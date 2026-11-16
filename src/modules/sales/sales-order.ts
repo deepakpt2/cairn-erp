@@ -48,7 +48,7 @@ import { billedOf, deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from
 import { PricingError, assertMaterialAtPlant, resolveCustomerSalesData } from './pricing';
 import { MaterialSalesError, assertMaterialSalesArea } from './material-sales';
 import {
-  AvailabilityError, ORDER_CHECKING_RULE, confirmOrderLines, writeScheduleLines,
+  AvailabilityError, ORDER_CHECKING_RULE, planOrderLines, writeScheduleLines,
 } from './availability';
 import { salesOrder, salesOrderLine, salesOrderSchedule } from './schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_ORDER_TYPE, salesDocumentTypeFor } from './document-type';
@@ -605,12 +605,16 @@ async function confirmQuantities(
     lines: PricedLine[]; fallbackDate: string;
     /** A change re-asks the check for an order whose own promise must not be counted against it. */
     excludeSelf?: boolean;
+    /** The checking rule the order's document type names; blank is the order rule OR, as before. */
+    documentTypeRule?: string | null;
   },
-): Promise<Map<number, number>> {
-  return confirmOrderLines(tx, client, {
+): Promise<{ quantities: Map<number, number>; dates: Map<number, string | null> }> {
+  const named = (input.documentTypeRule ?? '').trim().toUpperCase();
+  const plans = await planOrderLines(tx, client, {
     salesOrg: input.salesOrg,
     distributionChannel: input.distributionChannel,
-    checkingRule: ORDER_CHECKING_RULE,
+    checkingRule: named || ORDER_CHECKING_RULE,
+    ...(named ? { ruleNamed: true } : {}),
     ...(input.excludeSelf ? { exclude: { orderNumber: input.orderNumber } } : {}),
     lines: input.lines.map((line) => ({
       lineNumber: line.lineNumber,
@@ -627,6 +631,10 @@ async function confirmQuantities(
     if (error instanceof AvailabilityError) throw new SalesOrderError(error.message, error.remedy);
     throw error;
   });
+  return {
+    quantities: new Map([...plans].map(([n, plan]) => [n, plan.confirmedQuantity])),
+    dates: new Map([...plans].map(([n, plan]) => [n, plan.confirmedDate])),
+  };
 }
 
 /** Record what was asked for and what was promised, on the schedule lines the delivery reads. */
@@ -634,7 +642,7 @@ async function recordSchedule(
   tx: Tx,
   input: {
     client: string; orderNumber: string; changedBy: string;
-    lines: PricedLine[]; confirmed: Map<number, number>; fallbackDate: string;
+    lines: PricedLine[]; confirmed: Map<number, number>; dates?: Map<number, string | null>; fallbackDate: string;
   },
 ): Promise<void> {
   await writeScheduleLines(tx, {
@@ -644,6 +652,7 @@ async function recordSchedule(
       requestedQuantity: Number(line.orderQuantity),
       confirmedQuantity: input.confirmed.get(line.lineNumber) ?? Number(line.orderQuantity),
       requestedDate: line.requestedDeliveryDate ?? input.fallbackDate,
+      ...(input.dates?.has(line.lineNumber) ? { confirmedDate: input.dates.get(line.lineNumber) } : {}),
     })),
   });
 }
@@ -811,10 +820,12 @@ export async function createSalesOrder(
 
     // What the plant can promise. Asked before the items are written, because the answer is part of
     // what an order is: an order that says ten where the plant can supply six is not an order for ten.
-    const confirmed = await confirmQuantities(tx, parsed.client, {
+    const checked = await confirmQuantities(tx, parsed.client, {
       orderNumber: number, salesOrg: parsed.salesOrg, distributionChannel: parsed.distributionChannel,
       delivered: () => 0, lines, fallbackDate: parsed.requestedDate ?? parsed.orderDate,
+      documentTypeRule: orderType.availabilityCheckRule,
     });
+    const confirmed = checked.quantities;
 
     for (const line of lines) {
       await tx.insert(salesOrderLine).values({
@@ -824,7 +835,7 @@ export async function createSalesOrder(
       });
     }
     await recordSchedule(tx, {
-      client: parsed.client, orderNumber: number, changedBy: parsed.changedBy, lines, confirmed,
+      client: parsed.client, orderNumber: number, changedBy: parsed.changedBy, lines, confirmed, dates: checked.dates,
       fallbackDate: parsed.requestedDate ?? parsed.orderDate,
     });
 
@@ -999,12 +1010,14 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
     // What the plant can promise now, re-asked for what has not gone out. This order's own promise is
     // not counted against itself, and a quantity already delivered is not asked for twice: the check
     // answers for the six that are still owed, not for the four the plant has already shipped.
-    const confirmedOnChange = await confirmQuantities(tx, parsed.client, {
+    const checkedOnChange = await confirmQuantities(tx, parsed.client, {
       orderNumber: parsed.orderNumber, salesOrg: before.salesOrg,
       distributionChannel: before.distributionChannel, excludeSelf: true,
       delivered: (lineNumber) => deliveredOf(progress, lineNumber), lines,
       fallbackDate: parsed.requestedDate ?? before.requestedDate ?? before.orderDate,
+      documentTypeRule: orderTypeOnChange?.availabilityCheckRule ?? null,
     });
+    const confirmedOnChange = checkedOnChange.quantities;
 
     for (const line of lines) {
       const [standing] = await tx.select({ status: salesOrderLine.status }).from(salesOrderLine)
@@ -1036,7 +1049,7 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
     }
     await recordSchedule(tx, {
       client: parsed.client, orderNumber: parsed.orderNumber, changedBy: parsed.changedBy,
-      lines, confirmed: confirmedOnChange,
+      lines, confirmed: confirmedOnChange, dates: checkedOnChange.dates,
       fallbackDate: parsed.requestedDate ?? before.requestedDate ?? before.orderDate,
     });
 

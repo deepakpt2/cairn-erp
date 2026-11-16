@@ -180,7 +180,8 @@ describe('availability-check configuration', () => {
       description: 'Daily check', noCheck: ' ', version: 1, reason: 'Lead time',
       extensions: { replenishmentLeadTime: '5' },
     })).rejects.toThrow(/replenishment lead time is not stored/i);
-    expect(availabilityCheckRefusal({ salesRequirements: 'X' })).toMatch(/Sales orders are not implemented/);
+    expect(availabilityCheckRefusal({ salesRequirements: 'X' })).toBeNull();   // a real control now (migration 9289)
+    expect(availabilityCheckRefusal({ totalSalesRequirements: 'X' })).toMatch(/Use Sales requirements/);
     expect(availabilityCheckRefusal({ storageLocationInspection: 'X' })).toMatch(/Storage-location inspection/);
     expect(availabilityCheckRefusal({ dependentReservations: 'X' })).toMatch(/not a reservation/);
     expect(availabilityCheckRefusal({ atpQuantity: '1' })).toMatch(/does not calculate/);

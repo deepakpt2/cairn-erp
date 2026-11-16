@@ -124,6 +124,26 @@ Status key: **Spec** = the item's own spec put it out of scope · **Found** = fo
 | E12 | Demo operation hours are assumptions | Found | D16 filled the missing operation quantities and work centre costing lines, only where empty. The hours are invented (they make the estimate about twice the existing standard price of FG-CHOC); change them in `/production/routings` and cost again. |
 | E13 | Display needs the create capability | Decision | No separate display code. The capability is granted to no role (as `CO.PLAN.COSTCENTER.MAINTAIN`); the demo administrator reaches it through its wildcard role. |
 
+## 3g. Sales availability check (ATP) — item 13
+
+The engine (`sales/availability.ts`) existed before this item and runs when an order is created or changed and when a delivery is created. This item extended it: supply counted over time, a confirmed date, a document-type rule, `salesRequirements`, and an on-demand check with a preview.
+
+| # | Gap | Kind | Notes |
+|---|---|---|---|
+| A1 | The check stays automatic on create and change | Decision | The spec said on demand only; it already ran automatically. Left as it is. The new action re-asks and previews; it never replaces the automatic check. |
+| A2 | No replenishment lead time | Spec | None is stored. A confirmed date is the date supply stands, not a transport-adjusted promise date. |
+| A3 | One confirmation per line; "later" means all of it later | Decision | A line is never split across dates. If the full quantity stands only later (inside the horizon) the line is confirmed in full on that date (`delayed`); delivery's own door check still limits what ships today. Where it never stands, what stands at the requested date is confirmed and the remainder is reported undated. |
+| A4 | Other orders' promises subtract regardless of date | Found | An order promised against a later receipt still reduces the near-term availability of the next order. Conservative: it can understate, never double-promise. |
+| A5 | Sales requirements come from confirmed promises, not requested quantities | Found | MD04 carries no sales-order element, so demand an order asked for and was not confirmed is not subtracted. |
+| A6 | Production-order scope `F` means released | Decision | There is no firming indicator on production orders. `F` counts released (and technically complete) orders, as the production availability check reads it. The spec said to refuse `F`; it is honoured instead, and not covered by a test (needs production-order fixtures). |
+| A7 | Restricted-use stock is refused | Spec | No such stock bucket. A scope asking for it is refused naming the flag. |
+| A8 | A missing scope row: tolerated for the default rule, refused for a named one | Decision | The default rule OR has always counted stock and promises with no scope and keeps doing so; a rule a document type names must have a scope for each group. |
+| A9 | Orders are always document type OR | Found | `createSalesOrder` takes the standard order type; a rule named on a type therefore applies to every order until order types are selectable. Blank is OR, not "no check" (the spec's reading would have switched checking off for every existing order). |
+| A10 | The horizon is a year past the latest date asked for | Decision | Plus the stock/requirements list's hit limit (500): if truncated the search ends at the last element returned. A receipt beyond the horizon is not searched for. |
+| A11 | Delivery's door check now counts the LF scope's supply | Found | Elements dated up to today (past receipts unless `B`). With no supply flags set the door check is unchanged. |
+| A12 | The demo has no open supply for its demo material | Found | Both TRAD-JUICE purchase orders were received, so the erp_dev demo shows a stock-only partial confirmation. The receipts path is proved in tests. Two cancelled orders (SO-0000007, SO-0000008) remain from sizing the demo order against the customer's credit headroom. |
+| A13 | Migration 9288 was corrected by 9289 | Found | 9288 had been edited after it was applied and the ledger refused it; it is restored and 9289 widens `item_text` and clears the registry row's `our_table`. |
+
 ## 4. Demo data and environment
 
 | # | Gap | Kind | Notes |

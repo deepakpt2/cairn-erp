@@ -4539,7 +4539,12 @@
     "modules/sales/invoice-list.ts",
     "platform/auth/current.ts"
   ],
+  "app/sales/orders/AvailabilityPanel.tsx": [
+    "app/sales/orders/availability-actions.ts",
+    "modules/sales/availability-check.ts"
+  ],
   "app/sales/orders/Orders.tsx": [
+    "app/sales/orders/AvailabilityPanel.tsx",
     "app/sales/orders/actions.ts",
     "modules/sales/sales-order.ts"
   ],
@@ -4547,8 +4552,14 @@
     "modules/sales/sales-order.ts",
     "platform/auth/current.ts"
   ],
+  "app/sales/orders/availability-actions.ts": [
+    "modules/sales/availability-check.ts",
+    "modules/sales/sales-order.ts",
+    "platform/auth/current.ts"
+  ],
   "app/sales/orders/page.tsx": [
     "app/sales/orders/Orders.tsx",
+    "modules/sales/availability-check.ts",
     "modules/sales/sales-order.ts",
     "platform/auth/current.ts"
   ],
@@ -7266,9 +7277,21 @@
     "modules/sales/schema.ts",
     "platform/db/client.ts"
   ],
+  "modules/sales/availability-check.ts": [
+    "modules/sales/availability.ts",
+    "modules/sales/document-type.ts",
+    "modules/sales/fulfillment-quantities.ts",
+    "modules/sales/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
   "modules/sales/availability.ts": [
     "modules/inventory/schema.ts",
+    "modules/production/order-availability.ts",
     "modules/production/schema.ts",
+    "modules/production/stock-requirements.ts",
     "modules/sales/schema.ts",
     "platform/db/client.ts"
   ],
@@ -7358,6 +7381,7 @@
     "platform/tables/reference.ts"
   ],
   "modules/sales/document-type-maintenance.ts": [
+    "modules/production/schema.ts",
     "modules/sales/document-type.ts",
     "modules/sales/schema.ts",
     "platform/change/index.ts",
@@ -8035,6 +8059,16 @@
     "modules/quality/usage-decision.ts",
     "platform/db/client.ts",
     "platform/tenancy/demo-masters.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
+  ],
+  "platform/tenancy/demo-sales-availability.ts": [
+    "modules/production/availability-check.ts",
+    "modules/sales/availability-check.ts",
+    "modules/sales/delivery.ts",
+    "modules/sales/sales-order.ts",
+    "platform/db/client.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
     "platform/tenancy/demo-provisioning.ts"

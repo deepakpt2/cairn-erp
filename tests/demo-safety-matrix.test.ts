@@ -183,6 +183,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     resumesBy: 'Each fill is conditional on the value being missing; a SAVED estimate of the date is read back; the estimate is request-keyed (`DEMO-CK11N-FG-CHOC`).',
     guaranteedBy: ['buildDemoCostEstimate'],
   },
+  {
+    phase: 'D17_SALES_AVAILABILITY',
+    writes: 'Availability configuration only where missing (checking rules OR and LF, group D1 with a scope for each, D1 assigned to TRAD-JUICE at the distribution centre), then one sales order for more TRAD-JUICE than the centre can promise, confirmed partially as it is raised, and the delivery created from that confirmation. No document type is changed and no other material is given a group.',
+    resumesBy: 'Each configuration row is created only when missing; the order and the delivery are request-keyed (`DEMO-ATP-ORDER-3`, `DEMO-ATP-DELIVERY-3`).',
+    guaranteedBy: ['buildDemoSalesAvailability'],
+  },
 ];
 
 describe('the demo installation, stopped part way through', () => {

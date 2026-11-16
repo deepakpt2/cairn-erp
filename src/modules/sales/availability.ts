@@ -20,11 +20,15 @@
  * A material with no checking group is not checked. Confirming nothing for a customer who was never
  * to be checked would be a promise broken for want of a configuration the tenant never asked for.
  *
- * And a scope the check cannot count is a refusal, not a silence. The scope rows carry flags for
- * purchase requisitions, planned orders, production orders, dependent requirements and reservations;
- * this check counts warehouse stock and what other orders have already been promised, and nothing
- * else. Counting less than the scope asked for without saying so is how a plant promises goods it has
- * not found.
+ * And a scope the check cannot count is a refusal, not a silence. Stock, the elements the scope selects
+ * (purchase orders and requisitions, planned and production orders, dependent requirements, reservations,
+ * counted by date in the base unit) and the promises other orders hold are all counted; restricted-use
+ * stock has no store here and a scope asking for it is refused. Counting less than the scope asked for
+ * without saying so is how a plant promises goods it has not found.
+ *
+ * Unit and horizon. Every counted element is brought into the base unit, and one that cannot be converted
+ * is refused naming the row. The search for supply is bounded: a year past the latest date asked for,
+ * and the stock/requirements list's own hit limit — a promise is never made from an unbounded search.
  *
  * Nothing here writes to `planning_file` and nothing transfers a requirement into MRP: decision (6)
  * drew that line, and MRP behaviour is untouched by this module.
@@ -36,6 +40,8 @@ import { materialPlant, materialSales } from '../inventory/schema';
 import {
   availabilityCheckScope, availabilityCheckingGroup, availabilityCheckingRule,
 } from '../production/schema';
+import { elementUnitKey, resolveElementUnits, scopeDocumentStates } from '../production/order-availability';
+import { StockRequirementsError, stockRequirementsList } from '../production/stock-requirements';
 import { salesOrderSchedule } from './schema';
 
 export const AVAILABILITY_ROUTE = '/config/availability-check';
@@ -49,24 +55,51 @@ export const AVAILABILITY_ROUTE = '/config/availability-check';
 export const ORDER_CHECKING_RULE = 'OR';
 export const DELIVERY_CHECKING_RULE = 'LF';
 
+/** Why a check was refused, for a caller that reports it per line instead of throwing it. */
+export type AvailabilityRefusal = 'NOT_CONFIGURED' | 'NO_SCOPE' | 'SCOPE_UNSUPPORTED' | 'UNIT_CONVERSION' | 'SUPPLY_LIST';
+
 export class AvailabilityError extends Error {
   remedy?: string;
-  constructor(message: string, remedy?: string) {
+  code: AvailabilityRefusal;
+  constructor(message: string, remedy?: string, code: AvailabilityRefusal = 'NOT_CONFIGURED') {
     super(message);
     this.name = 'AvailabilityError';
     this.remedy = remedy;
+    this.code = code;
   }
+}
+
+/** One dated element the scope of check counted, in the material's base unit. */
+export interface SupplyElement {
+  date: string;
+  elementType: string;
+  direction: 'RECEIPT' | 'REQUIREMENT';
+  documentNumber: string;
+  documentItem: string;
+  quantity: number;
 }
 
 export interface AvailabilityResult {
   checkingGroup: string;
   checkingRule: string;
-  /** What the plant can promise, in the material's base unit, never below zero. */
+  /** What the plant can promise at `date`, in the material's base unit, never below zero. */
   available: number;
+  /** The date `available` stands at: today, unless the caller asked for another. */
+  date: string;
   stockOnHand: number;
   safetyStock: number;
   /** What other open orders have already been promised and not yet delivered. */
   promisedToOthers: number;
+  /** Stock less safety stock less promises, before any dated element: the level supply moves up and down. */
+  baseline: number;
+  /** The dated elements the scope counted, oldest first. Empty when the scope counts none. */
+  elements: SupplyElement[];
+  /** The last date the element search covered; null when no element was searched for. */
+  horizonEnd: string | null;
+  /** True when the list reached its hit limit, so the search ends at the last element it returned. */
+  truncated: boolean;
+  /** Whether a scope row stood for the group and rule. A missing row counts stock and promises only. */
+  scopeStood: boolean;
 }
 
 /** What a schedule line says: what was asked for and by when, and what the check confirmed. */
@@ -78,12 +111,39 @@ export interface ScheduleLine {
   confirmedDate: string | null;
 }
 
+/** How far past the latest date asked for the search for supply goes, when the caller names no horizon. */
+export const DEFAULT_HORIZON_DAYS = 365;
+
+const todayOf = () => new Date().toISOString().slice(0, 10);
+
+function addDays(date: string, days: number): string {
+  const day = new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + days);
+  return day.toISOString().slice(0, 10);
+}
+
+/** The quantity standing at a date: the baseline plus every counted element dated on or before it, never below zero. */
+export function availableAt(result: Pick<AvailabilityResult, 'baseline' | 'elements'>, date: string): number {
+  let level = result.baseline;
+  for (const element of result.elements) {
+    if (element.date > date) break;
+    level += element.direction === 'RECEIPT' ? element.quantity : -element.quantity;
+  }
+  return round3(Math.max(0, level));
+}
+
 /**
  * The available quantity of a material at a plant, under the scope of check the tenant maintains.
  *
  * Returns null where the material carries no checking group, or where its group is maintained with
  * the no-check indicator set: either is a decision that this material is not checked, and a check
  * that answers anyway is a promise nobody asked for.
+ *
+ * Supply over time: when the scope counts purchase orders, requisitions, planned or production orders,
+ * dependent requirements or reservations, the stock/requirements list is read for them, each element
+ * is brought into the base unit (one it cannot convert is refused by name), and the quantity at a date
+ * is the baseline plus what stands by then. A scope that counts none of them never reads the list and
+ * answers exactly as before.
  */
 export async function availableToPromise(
   tx: Tx,
@@ -96,6 +156,12 @@ export async function availableToPromise(
     checkingRule: string;
     /** The document whose own promise is not counted against itself. */
     exclude?: { orderNumber: string };
+    /** The date `available` is read at. Default: today. */
+    date?: string;
+    /** The last date the search for supply covers. Default: a year past the date. */
+    horizonEnd?: string;
+    /** True when the rule was named by the document type; then a scope row must stand for it. */
+    ruleNamed?: boolean;
   },
 ): Promise<AvailabilityResult | null> {
   const [view] = await tx.select({ group: materialSales.availabilityCheckGroup })
@@ -140,7 +206,7 @@ export async function availableToPromise(
   if (!ruleRow) {
     throw new AvailabilityError(
       `No checking rule ${rule} stands, so the availability of ${input.materialNumber} cannot be checked.`,
-      `Maintain checking rule ${rule} at ${AVAILABILITY_ROUTE}: ${rule === ORDER_CHECKING_RULE ? 'OR is the context an order is created in' : 'LF is the context a delivery is created in'}.`,
+      `Maintain checking rule ${rule} at ${AVAILABILITY_ROUTE}: ${rule === ORDER_CHECKING_RULE ? 'OR is the context an order is created in' : rule === DELIVERY_CHECKING_RULE ? 'LF is the context a delivery is created in' : 'it is the rule the sales document type names'}.`,
     );
   }
 
@@ -149,32 +215,34 @@ export async function availableToPromise(
     eq(availabilityCheckScope.checkingGroup, group),
     eq(availabilityCheckScope.checkingRule, rule),
   )).limit(1);
-
-  // What the scope asks for that this check does not count. The flags stand in the master because
-  // SAP carries them; counting them is a later increment's work, and pretending to have counted them
-  // is the one thing a check must never do.
-  const flagged = (value: string) => value.trim() !== '' && value.trim() !== ' ';
-  const uncounted = [
-    ['purchase orders', flagged(scope?.purchaseOrders ?? '')],
-    ['purchase requisitions', flagged(scope?.purchaseRequisitions ?? '')],
-    ['planned orders', flagged(scope?.plannedOrders ?? '')],
-    ['production orders', flagged(scope?.productionOrders ?? '')],
-    ['dependent requirements', flagged(scope?.dependentRequirements ?? '')],
-    ['reservations', flagged(scope?.reservations ?? '')],
-    ['restricted-use stock', flagged(scope?.includeRestrictedUse ?? '')],
-  ].filter(([, set]) => set).map(([name]) => name as string);
-  if (uncounted.length > 0) {
+  if (!scope && input.ruleNamed) {
+    // A missing scope is not an empty scope. The default rule has always counted stock and promises
+    // without one and keeps doing so; a rule a document type names is a configuration, and one with no
+    // scope behind it is a configuration that was not finished.
     throw new AvailabilityError(
-      `The scope of check for group ${group} and rule ${rule} asks the check to count ${uncounted.join(', ')}, and this check counts warehouse stock and what other orders have been promised, and nothing else.`,
-      `Clear them at ${AVAILABILITY_ROUTE}, or leave the scope unmaintained: a check that counts less than it was configured to count promises goods it has not found.`,
+      `No scope of check stands for checking group ${group} and rule ${rule}, which the sales document type names, so the availability of ${input.materialNumber} cannot be checked.`,
+      `Maintain the scope of check for group ${group} and rule ${rule} at ${AVAILABILITY_ROUTE}. A missing scope is not an empty one.`,
+      'NO_SCOPE',
+    );
+  }
+
+  // What the scope asks for that this check cannot count. Restricted-use stock has no store here; every
+  // other flag is counted. Counting less than the scope asked for without saying so is how a plant
+  // promises goods it has not found.
+  const flagged = (value: string | undefined) => (value ?? '').trim() !== '';
+  if (flagged(scope?.includeRestrictedUse)) {
+    throw new AvailabilityError(
+      `The scope of check for group ${group} and rule ${rule} asks the check to count restricted-use stock, and no stock is held in that bucket.`,
+      `Clear it at ${AVAILABILITY_ROUTE}: a check that counts less than it was configured to count promises goods it has not found.`,
+      'SCOPE_UNSUPPORTED',
     );
   }
 
   // Warehouse stock. Returns stock is never counted: goods a customer sent back are not the
   // company's to promise until they have been inspected and transferred out of that bucket.
   const types = ['UNRESTRICTED'];
-  if (flagged(scope?.includeQualityStock ?? '')) types.push('QUALITY');
-  if (flagged(scope?.includeBlockedStock ?? '')) types.push('BLOCKED');
+  if (flagged(scope?.includeQualityStock)) types.push('QUALITY');
+  if (flagged(scope?.includeBlockedStock)) types.push('BLOCKED');
   // The stock types are this module's own vocabulary and nothing a caller can put a character into,
   // so the list is written into the statement rather than bound as a parameter that would have to be
   // repeated once per type.
@@ -187,8 +255,10 @@ export async function availableToPromise(
   `) as unknown as Promise<Array<{ quantity: string }>>);
   const stockOnHand = Number(stockRows[0]?.quantity ?? '0');
 
+  // The flag reads as an inclusion and acts as a deduction: with it set, the reserve is not available
+  // and comes off. MD04 and the production check read it the same way.
   let safetyStock = 0;
-  if (flagged(scope?.includeSafetyStock ?? '')) {
+  if (flagged(scope?.includeSafetyStock)) {
     const [plantRow] = await tx.select({ safetyStock: materialPlant.safetyStock }).from(materialPlant)
       .where(and(eq(materialPlant.client, client),
         eq(materialPlant.materialNumber, input.materialNumber),
@@ -197,111 +267,289 @@ export async function availableToPromise(
   }
 
   // What other open orders have already been promised and not shipped. Promising the same stock twice
-  // is the one failure an availability check exists to prevent, so it counts here even though no
-  // scope flag asks for it: it is what the promise is, not a stream of supply.
-  const promisedRows = await (tx.execute(sql`
-    select coalesce(sum(greatest(coalesce(sch.confirmed_quantity, 0) - coalesce(d.delivered, 0), 0)), 0)::text as promised
-      from sales_order_schedule sch
-      join sales_order_line l
-        on l.client = sch.client and l.order_number = sch.order_number
-       and l.line_number = sch.order_line_number
-      join sales_order o on o.client = l.client and o.order_number = l.order_number
-      left join (
-        select dl.client, dl.order_number, dl.order_line_number, sum(dl.delivery_quantity) as delivered
-          from delivery_line dl
-          join delivery dd on dd.client = dl.client and dd.delivery_number = dl.delivery_number
-         where dd.status <> 'CANCELLED'
-         group by 1, 2, 3
-      ) d on d.client = l.client and d.order_number = l.order_number and d.order_line_number = l.line_number
-     where sch.client = ${client} and l.material_number = ${input.materialNumber} and l.plant = ${input.plant}
-       and o.status = 'OPEN' and l.status = 'OPEN'
-       and (${input.exclude?.orderNumber ?? null}::varchar is null or o.order_number <> ${input.exclude?.orderNumber ?? null})
-  `) as unknown as Promise<Array<{ promised: string }>>);
-  const promisedToOthers = Number(promisedRows[0]?.promised ?? '0');
+  // is the one failure an availability check exists to prevent, so it counts unless the scope says
+  // otherwise (Sales requirements blank): what the promise is, not a stream of supply.
+  let promisedToOthers = 0;
+  if (scope?.salesRequirements !== ' ') {
+    const promisedRows = await (tx.execute(sql`
+      select coalesce(sum(greatest(coalesce(sch.confirmed_quantity, 0) - coalesce(d.delivered, 0), 0)), 0)::text as promised
+        from sales_order_schedule sch
+        join sales_order_line l
+          on l.client = sch.client and l.order_number = sch.order_number
+         and l.line_number = sch.order_line_number
+        join sales_order o on o.client = l.client and o.order_number = l.order_number
+        left join (
+          select dl.client, dl.order_number, dl.order_line_number, sum(dl.delivery_quantity) as delivered
+            from delivery_line dl
+            join delivery dd on dd.client = dl.client and dd.delivery_number = dl.delivery_number
+           where dd.status <> 'CANCELLED'
+           group by 1, 2, 3
+        ) d on d.client = l.client and d.order_number = l.order_number and d.order_line_number = l.line_number
+       where sch.client = ${client} and l.material_number = ${input.materialNumber} and l.plant = ${input.plant}
+         and o.status = 'OPEN' and l.status = 'OPEN'
+         and (${input.exclude?.orderNumber ?? null}::varchar is null or o.order_number <> ${input.exclude?.orderNumber ?? null})
+    `) as unknown as Promise<Array<{ promised: string }>>);
+    promisedToOthers = Number(promisedRows[0]?.promised ?? '0');
+  }
 
-  return {
+  const today = todayOf();
+  const date = input.date ?? today;
+  const supply = await countedSupply(tx, client, {
+    scope, materialNumber: input.materialNumber, plant: input.plant, today,
+    horizonEnd: input.horizonEnd ?? addDays(date < today ? today : date, DEFAULT_HORIZON_DAYS),
+  });
+
+  const baseline = round3(stockOnHand - safetyStock - promisedToOthers);
+  const result: AvailabilityResult = {
     checkingGroup: group,
     checkingRule: rule,
-    available: Math.max(0, stockOnHand - safetyStock - promisedToOthers),
+    available: 0,
+    date,
     stockOnHand,
     safetyStock,
     promisedToOthers,
+    baseline,
+    elements: supply.elements,
+    horizonEnd: supply.horizonEnd,
+    truncated: supply.truncated,
+    scopeStood: !!scope,
   };
+  result.available = availableAt(result, date);
+  return result;
+}
+
+/** The elements the scope selects from the stock/requirements list, each in the base unit, oldest first. */
+async function countedSupply(
+  tx: Tx,
+  client: string,
+  input: {
+    scope: typeof availabilityCheckScope.$inferSelect | undefined;
+    materialNumber: string; plant: string; today: string; horizonEnd: string;
+  },
+): Promise<{ elements: SupplyElement[]; horizonEnd: string | null; truncated: boolean }> {
+  const scope = input.scope;
+  const wanted = !!scope && [
+    scope.purchaseOrders, scope.purchaseRequisitions, scope.plannedOrders, scope.productionOrders,
+    scope.dependentRequirements, scope.reservations,
+  ].some((value) => value.trim() !== '');
+  if (!scope || !wanted) return { elements: [], horizonEnd: null, truncated: false };
+
+  let list;
+  try {
+    list = await stockRequirementsList({
+      client, today: input.today,
+      selection: { material: input.materialNumber, plant: input.plant, horizonEnd: input.horizonEnd, displayPastDue: true },
+    });
+  } catch (error) {
+    if (error instanceof StockRequirementsError) {
+      throw new AvailabilityError(error.message, error.remedy ?? 'Resolve the stock/requirements list for this material, then ask again.', 'SUPPLY_LIST');
+    }
+    throw error;
+  }
+
+  const wantedTypes = new Set<string>();
+  if (scope.purchaseOrders.trim()) wantedTypes.add('PURCHASE_ORDER');
+  if (scope.purchaseRequisitions.trim()) wantedTypes.add('PURCHASE_REQUISITION');
+  if (scope.plannedOrders.trim()) wantedTypes.add('PLANNED_ORDER');
+  if (scope.productionOrders.trim()) wantedTypes.add('PRODUCTION_ORDER');
+  if (scope.dependentRequirements.trim()) { wantedTypes.add('DEPENDENT_REQUIREMENT'); wantedTypes.add('PRODUCTION_COMPONENT'); }
+  if (scope.reservations.trim()) wantedTypes.add('RESERVATION');
+  const candidates = list.rows.filter((row) => wantedTypes.has(row.elementType));
+
+  // "Firmed" planned orders and "released" production orders are the narrower readings of A and F.
+  const states = await scopeDocumentStates(client, candidates, {
+    plannedOrders: scope.plannedOrders as 'X' | 'A' | ' ', productionOrders: scope.productionOrders as 'X' | 'F' | ' ',
+  } as never, input.today);
+  const counted = candidates.filter((row) => {
+    if (row.elementType === 'PLANNED_ORDER' && scope.plannedOrders === 'A' && !states.firmedPlanned.has(row.documentNumber)) return false;
+    if (row.elementType === 'PRODUCTION_ORDER' && scope.productionOrders === 'F' && !states.releasedProduction.has(row.documentNumber)) return false;
+    // "B": future receipts only. Past requirements still count — demand already missed is not cancelled.
+    if (scope.receiptsInPast === 'B' && row.direction === 'RECEIPT' && row.date < input.today) return false;
+    return true;
+  });
+
+  const units = await resolveElementUnits({
+    client, plant: input.plant, materialNumber: input.materialNumber, baseUnit: list.baseUnit || null, rows: counted,
+  });
+  if (units.blockers.length > 0) {
+    throw new AvailabilityError(
+      `The availability of ${input.materialNumber} cannot be counted: ${units.blockers[0]}${units.blockers.length > 1 ? ` (and ${units.blockers.length - 1} more)` : ''}.`,
+      'Bring the element into the material base unit (maintain the unit conversion), or clear the element from the scope of check. A unit is never assumed.',
+      'UNIT_CONVERSION',
+    );
+  }
+  const elements: SupplyElement[] = counted
+    .map((row) => ({
+      date: row.date,
+      elementType: row.elementType,
+      direction: row.direction,
+      documentNumber: row.documentNumber,
+      documentItem: row.documentItem,
+      quantity: round3(units.quantities.get(elementUnitKey(row))?.quantity ?? row.quantity),
+    }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.direction === b.direction ? 0 : a.direction === 'RECEIPT' ? -1 : 1));
+  const last = elements.length > 0 ? elements[elements.length - 1]!.date : input.today;
+  return { elements, horizonEnd: list.truncated ? (last < input.horizonEnd ? last : input.horizonEnd) : input.horizonEnd, truncated: list.truncated };
+}
+
+/** What the check decided for one order line. Quantities in the order unit unless named base. */
+export interface LinePlan {
+  lineNumber: number;
+  materialNumber: string;
+  plant: string;
+  /** False where the material is not checked (no group, or the no-check group): confirmed in full, as always. */
+  checked: boolean;
+  checkingGroup: string | null;
+  checkingRule: string | null;
+  requestedDate: string;
+  /** What the plant could supply at the requested date, in the order unit, before earlier lines' promises were taken. */
+  availableAtRequestedDate: number;
+  confirmedQuantity: number;
+  /** The date the confirmation stands at; null only where nothing was confirmed. */
+  confirmedDate: string | null;
+  /** Confirmed, but less than asked, at the requested date and at every date within the horizon. */
+  partial: boolean;
+  /** The full quantity stands, but later than asked: the confirmed date is that later date. */
+  delayed: boolean;
+  /** Less than the full quantity was confirmed and no date inside the horizon supplies the rest. */
+  remainderUndated: boolean;
+  /** The last date the search for supply covered. */
+  horizonEnd: string | null;
+  /** The elements that made the number, base unit. */
+  basis: SupplyElement[];
+  baseQuantity: number;
+  baseAsked: number;
 }
 
 /**
- * What each line gets: the check run once per material and plant, and the answers consumed in the
- * order the lines stand in — the first order to ask is the first to be promised, which is the only
+ * What each line gets, in full: the check run once per material and plant, and the answers consumed in
+ * the order the lines stand in — the first order to ask is the first to be promised, which is the only
  * rule a plant can defend when two customers want the same stock.
  *
  * Quantities are handled in the material's base unit, because that is the unit the stock is counted
  * in; the answer is handed back in the unit the line was ordered in.
  *
  * What has already gone out is not asked for again. A line with four delivered of ten is a line with
- * six still to promise, and a check that asked for ten after the plant had shipped four would promise
- * goods the plant no longer needs to find. What was delivered stays confirmed, and the check answers
- * for the rest.
+ * six still to promise. What was delivered stays confirmed, and the check answers for the rest.
+ *
+ * The date. The quantity stands at the requested date if it is all there. Otherwise the earliest date
+ * inside the horizon at which all of it stands is the confirmed date (the plant promises all of it by
+ * then — the line carries one confirmation, never a split across dates). Where it never all stands,
+ * what stands at the requested date is confirmed, and the remainder has no date: the plan says so.
  */
-export async function confirmOrderLines(
+export async function planOrderLines(
   tx: Tx,
   client: string,
   input: {
     salesOrg: string;
     distributionChannel: string;
     checkingRule: string;
+    /** True when the document type named the rule (a scope row must then stand). */
+    ruleNamed?: boolean;
     exclude?: { orderNumber: string };
     lines: Array<{ lineNumber: number; materialNumber: string; plant: string;
       orderQuantity: number; baseQuantity: number; requestedDate: string;
       /** Already delivered against this line, in the unit it was ordered in. */
       deliveredQuantity?: number }>;
   },
-): Promise<Map<number, number>> {
-  const byKey = new Map<string, { available: number | null; lines: typeof input.lines }>();
+): Promise<Map<number, LinePlan>> {
+  const byKey = new Map<string, typeof input.lines>();
   for (const line of input.lines) {
     const key = `${line.materialNumber}/${line.plant}`;
-    const bucket = byKey.get(key) ?? { available: null as number | null, lines: [] };
-    bucket.lines.push(line);
-    byKey.set(key, bucket);
+    byKey.set(key, [...(byKey.get(key) ?? []), line]);
   }
-  const confirmed = new Map<number, number>();
+  const today = todayOf();
+  const plans = new Map<number, LinePlan>();
   for (const bucket of byKey.values()) {
-    const first = bucket.lines[0];
+    const first = bucket[0]!;
+    const latest = bucket.reduce((m, l) => (l.requestedDate > m ? l.requestedDate : m), today);
     const result = await availableToPromise(tx, client, {
       materialNumber: first.materialNumber, plant: first.plant,
       salesOrg: input.salesOrg, distributionChannel: input.distributionChannel,
       checkingRule: input.checkingRule, ...(input.exclude ? { exclude: input.exclude } : {}),
+      ...(input.ruleNamed ? { ruleNamed: true } : {}),
+      horizonEnd: addDays(latest, DEFAULT_HORIZON_DAYS),
     });
-    // A material the tenant never configured a check for is confirmed in full. Promising nothing to a
-    // customer nobody decided to check would be a promise broken for want of a configuration.
-    if (!result) {
-      for (const line of bucket.lines) confirmed.set(line.lineNumber, line.orderQuantity);
-      continue;
-    }
-    let left = result.available;
-    for (const line of bucket.lines) {
+    let consumed = 0;
+    for (const line of bucket) {
       const delivered = line.deliveredQuantity ?? 0;
       const rate = line.orderQuantity > 0 ? line.baseQuantity / line.orderQuantity : 1;
-      const open = Math.max(0, line.orderQuantity - delivered);
       const asked = Math.max(0, line.baseQuantity - delivered * rate);
-      const given = Math.max(0, Math.min(asked, left));
-      left -= given;
-      const more = rate > 0 ? given / rate : given;
-      confirmed.set(line.lineNumber, round3(Math.min(line.orderQuantity, delivered + more)));
-      void open;
+      const toOrderUnit = (base: number) => round3(rate > 0 ? base / rate : base);
+      const common = {
+        lineNumber: line.lineNumber, materialNumber: line.materialNumber, plant: line.plant,
+        requestedDate: line.requestedDate, baseQuantity: line.baseQuantity, baseAsked: round3(asked),
+      };
+      if (!result) {
+        plans.set(line.lineNumber, {
+          ...common, checked: false, checkingGroup: null, checkingRule: null,
+          availableAtRequestedDate: line.orderQuantity, confirmedQuantity: round3(line.orderQuantity),
+          confirmedDate: line.orderQuantity > 0 ? line.requestedDate : null,
+          partial: false, delayed: false, remainderUndated: false, horizonEnd: null, basis: [],
+        });
+        continue;
+      }
+      // A requested date in the past is read as today: stock stands now, and a past date is not a promise to keep.
+      const at = line.requestedDate < today ? today : line.requestedDate;
+      const open = Math.max(0, availableAt(result, at) - consumed);
+      let given: number;
+      let date: string | null;
+      let delayed = false;
+      let undated = false;
+      if (asked <= open + 1e-9) {
+        given = asked;
+        date = given > 0 ? line.requestedDate : null;
+      } else {
+        const later = result.elements.map((e) => e.date).filter((d) => d > at && (result.horizonEnd === null || d <= result.horizonEnd));
+        const full = [...new Set(later)].sort().find((d) => availableAt(result, d) - consumed >= asked - 1e-9);
+        if (full) {
+          given = asked;
+          date = full;
+          delayed = true;
+        } else {
+          given = open;
+          date = given > 0 ? line.requestedDate : null;
+          undated = true;
+        }
+      }
+      consumed += given;
+      plans.set(line.lineNumber, {
+        ...common, checked: true, checkingGroup: result.checkingGroup, checkingRule: result.checkingRule,
+        availableAtRequestedDate: toOrderUnit(open),
+        confirmedQuantity: round3(Math.min(line.orderQuantity, delivered + toOrderUnit(given))),
+        confirmedDate: date,
+        partial: undated && given > 0 && given < asked - 1e-9, delayed, remainderUndated: undated,
+        horizonEnd: result.horizonEnd,
+        basis: result.elements.filter((e) => e.date <= (date ?? at)),
+      });
     }
   }
-  return confirmed;
+  return plans;
+}
+
+/** The confirmed quantities of the plan, per line — what the order screens and the delivery have always read. */
+export async function confirmOrderLines(
+  tx: Tx,
+  client: string,
+  input: Parameters<typeof planOrderLines>[2],
+): Promise<Map<number, number>> {
+  const plans = await planOrderLines(tx, client, input);
+  return new Map([...plans].map(([lineNumber, plan]) => [lineNumber, plan.confirmedQuantity]));
 }
 
 /**
  * Write the schedule lines an order line was confirmed by. Upserted, because a changed order re-runs
  * the check and the application role holds no DELETE on a promise the plant made.
  */
+const dateOf = (line: { confirmedQuantity: number; requestedDate: string; confirmedDate?: string | null }) =>
+  line.confirmedDate !== undefined ? line.confirmedDate : line.confirmedQuantity > 0 ? line.requestedDate : null;
+
 export async function writeScheduleLines(tx: Tx, input: {
   client: string;
   orderNumber: string;
   changedBy: string;
-  lines: Array<{ lineNumber: number; requestedQuantity: number; confirmedQuantity: number; requestedDate: string }>;
+  /** `confirmedDate` omitted: the requested date where something was confirmed, none where nothing was. */
+  lines: Array<{ lineNumber: number; requestedQuantity: number; confirmedQuantity: number; requestedDate: string; confirmedDate?: string | null }>;
 }): Promise<void> {
   for (const line of input.lines) {
     await tx.insert(salesOrderSchedule).values({
@@ -312,7 +560,7 @@ export async function writeScheduleLines(tx: Tx, input: {
       requestedDate: line.requestedDate,
       requestedQuantity: round3(line.requestedQuantity).toFixed(3),
       confirmedQuantity: round3(line.confirmedQuantity).toFixed(3),
-      confirmedDate: line.confirmedQuantity > 0 ? line.requestedDate : null,
+      confirmedDate: dateOf(line),
       createdBy: input.changedBy,
     }).onConflictDoUpdate({
       target: [
@@ -323,7 +571,7 @@ export async function writeScheduleLines(tx: Tx, input: {
         requestedDate: line.requestedDate,
         requestedQuantity: round3(line.requestedQuantity).toFixed(3),
         confirmedQuantity: round3(line.confirmedQuantity).toFixed(3),
-        confirmedDate: line.confirmedQuantity > 0 ? line.requestedDate : null,
+        confirmedDate: dateOf(line),
         changedBy: input.changedBy,
         changedAt: new Date(),
       },

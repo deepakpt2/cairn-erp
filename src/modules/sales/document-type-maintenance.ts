@@ -28,6 +28,7 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { billingDocument, delivery, salesDocumentType, salesOrder } from './schema';
 import { DOCUMENT_TYPE_DEFINE_CAPABILITY } from './document-type';
+import { availabilityCheckingRule } from '../production/schema';
 
 /** Re-exported so the screen and the contract test import the code from the module that owns it. */
 export { DOCUMENT_TYPE_DEFINE_CAPABILITY };
@@ -57,6 +58,8 @@ export interface SalesDocumentTypeRow {
    * starts listing, and no document already billed changes what it posts.
    */
   invoiceListType: string | null;
+  /** The checking rule an order of this type is checked under; blank is the order rule OR. */
+  availabilityCheckRule: string | null;
   isActive: boolean;
   /** How many documents of this type stand, over orders, deliveries and billing documents. */
   documentsStanding: number;
@@ -72,7 +75,7 @@ export async function listSalesDocumentTypes(client: string): Promise<SalesDocum
   return withTenant(client, async (tx) => {
     const rows = await tx.execute(sql`
       select t.document_type, t.name, t.number_range_object, t.number_range_sub_object,
-             t.cancellation_document_type, t.invoice_list_type, t.is_active,
+             t.cancellation_document_type, t.invoice_list_type, t.availability_check_rule, t.is_active,
              (select count(*) from sales_order o
                where o.client = t.client and o.document_type = t.document_type)
              + (select count(*) from delivery d
@@ -89,7 +92,7 @@ export async function listSalesDocumentTypes(client: string): Promise<SalesDocum
        order by t.document_type
     `) as unknown as Array<{
       document_type: string; name: string; number_range_object: string; number_range_sub_object: string;
-      cancellation_document_type: string | null; invoice_list_type: string | null; is_active: boolean;
+      cancellation_document_type: string | null; invoice_list_type: string | null; availability_check_rule: string | null; is_active: boolean;
       documents_standing: string | number; range_stands: boolean;
     }>;
     return rows.map((row) => ({
@@ -99,6 +102,7 @@ export async function listSalesDocumentTypes(client: string): Promise<SalesDocum
       numberRangeSubObject: row.number_range_sub_object,
       cancellationDocumentType: row.cancellation_document_type,
       invoiceListType: row.invoice_list_type,
+      availabilityCheckRule: row.availability_check_rule,
       isActive: Boolean(row.is_active),
       documentsStanding: Number(row.documents_standing ?? 0),
       rangeStands: Boolean(row.range_stands),
@@ -223,6 +227,12 @@ export interface ChangeSalesDocumentTypeInput {
    * when the document is billed, not when the type is maintained.
    */
   invoiceListType?: string | null;
+  /**
+   * The checking rule (OPJL) an order of this type is checked under. Omitted keeps what stands; blank or
+   * null clears it, and a cleared rule is the order rule OR — not "no check". A rule named here must
+   * stand, and a scope of check must stand for it before an order can be checked under it.
+   */
+  availabilityCheckRule?: string | null;
 }
 
 /** Redefine a type that stands: the name a screen shows, and what it cancels into. */
@@ -271,6 +281,18 @@ export async function changeSalesDocumentType(
         );
       }
     }
+    const rule = input.availabilityCheckRule === undefined ? row.availabilityCheckRule : (input.availabilityCheckRule?.trim().toUpperCase() || null);
+    if (rule) {
+      const [stands] = await tx.select({ rule: availabilityCheckingRule.checkingRule }).from(availabilityCheckingRule).where(and(
+        eq(availabilityCheckingRule.client, input.client), eq(availabilityCheckingRule.checkingRule, rule),
+      )).limit(1);
+      if (!stands) {
+        throw new SalesDocumentTypeError(
+          `Checking rule ${rule} does not stand, so ${code} cannot be checked under it.`,
+          `Define checking rule ${rule} at /config/availability-check first, with a scope of check for each checking group that is to be checked under it.`,
+        );
+      }
+    }
     if (lists) {
       const [counterpart] = await tx.select({ documentType: salesDocumentType.documentType }).from(salesDocumentType)
         .where(and(
@@ -284,7 +306,7 @@ export async function changeSalesDocumentType(
       }
     }
     await tx.update(salesDocumentType).set({
-      name: name.slice(0, 40), cancellationDocumentType: cancels, invoiceListType: lists,
+      name: name.slice(0, 40), cancellationDocumentType: cancels, invoiceListType: lists, availabilityCheckRule: rule,
       changedBy: input.changedBy, changedAt: new Date(),
     }).where(and(
       eq(salesDocumentType.client, input.client), eq(salesDocumentType.documentType, code),
@@ -294,12 +316,12 @@ export async function changeSalesDocumentType(
       changeType: 'CHANGE', changedBy: input.changedBy,
       before: {
         name: row.name, cancellationDocumentType: row.cancellationDocumentType ?? '',
-        invoiceListType: row.invoiceListType ?? '',
+        invoiceListType: row.invoiceListType ?? '', availabilityCheckRule: row.availabilityCheckRule ?? '',
       },
       after: {
-        name: name.slice(0, 40), cancellationDocumentType: cancels ?? '', invoiceListType: lists ?? '',
+        name: name.slice(0, 40), cancellationDocumentType: cancels ?? '', invoiceListType: lists ?? '', availabilityCheckRule: rule ?? '',
       },
-      fieldLabels: { name: 'Name', cancellationDocumentType: 'Cancels into', invoiceListType: 'Invoice list type' },
+      fieldLabels: { name: 'Name', cancellationDocumentType: 'Cancels into', invoiceListType: 'Invoice list type', availabilityCheckRule: 'Availability checking rule' },
     });
     // The table carries no version: a type is configuration, and two consultants saving the same type
     // is not the contention a document is. What is returned is the history's own count of the change.

@@ -158,6 +158,7 @@ export async function saveScopeAction(
       dependentRequirements: flag(form, 'dependentRequirements'),
       reservations: flag(form, 'reservations'),
       receiptsInPast: read(form, 'receiptsInPast') || ' ',
+      salesRequirements: read(form, 'salesRequirements') === 'NO' ? ' ' : read(form, 'salesRequirements') === 'X' ? 'X' : undefined,
       version: Number(read(form, 'version') || '0'),
       reason: read(form, 'reason'),
     });

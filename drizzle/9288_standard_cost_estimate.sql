@@ -105,7 +105,7 @@ on conflict (code) do nothing;
 insert into public.term_registry
   (id, our_code, our_table, title, term_type, module, description, coverage_tier, route_path,
    conformance_tier, deferral_note, is_searchable, created_by, created_at, changed_by, changed_at)
-select '9288a000-0000-4000-8000-000000000001', 'PROD.COST.ESTIMATE.CREATE', null, 'Standard cost estimate',
+select '9288a000-0000-4000-8000-000000000001', 'PROD.COST.ESTIMATE.CREATE', 'material_cost_estimate', 'Standard cost estimate',
        'TRANSACTION', 'PROD',
        'Cost one material in one plant on a costing date: multi-level BOM costed bottom-up, routing operations at plan activity prices, '
        || 'saved with its itemization. No overhead (no costing sheet). Never writes a price; release is a later step.',

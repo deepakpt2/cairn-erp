@@ -9,6 +9,7 @@ import {
   listSalesOrderDocuments,
   salesOrderChoices,
 } from '@/modules/sales/sales-order';
+import { AVAILABILITY_CHECK_CAPABILITY } from '@/modules/sales/availability-check';
 import Orders from './Orders';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,7 @@ export default async function SalesOrdersPage({ searchParams }: {
         selected={selected}
         canCreate={can(session, SALES_ORDER_CAPABILITY)}
         canRelease={can(session, SALES_ORDER_RELEASE_CAPABILITY)}
+        canCheckAvailability={can(session, AVAILABILITY_CHECK_CAPABILITY)}
       />
     </div>
   );

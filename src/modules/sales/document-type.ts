@@ -148,6 +148,8 @@ export interface ResolvedSalesDocumentType {
    * Null where the type is released to accounting on its own, which is every delivered type.
    */
   invoiceListType: string | null;
+  /** The checking rule an order of this type is checked under; null is the order rule OR, as before. */
+  availabilityCheckRule: string | null;
 }
 
 /**
@@ -173,6 +175,7 @@ export async function salesDocumentTypeFor(
        */
       pricingProcedure: salesDocumentType.pricingProcedure,
       invoiceListType: salesDocumentType.invoiceListType,
+      availabilityCheckRule: salesDocumentType.availabilityCheckRule,
     })
     .from(salesDocumentType)
     .where(

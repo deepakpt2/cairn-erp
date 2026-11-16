@@ -69,6 +69,12 @@ export const salesDocumentType = pgTable('sales_document_type', {
    * tenant maintains it.
    */
   invoiceListType: varchar('invoice_list_type', { length: 4 }),
+  /**
+   * The checking rule (OPJL) an order of this type is checked under. Blank is the order rule `OR`, as before
+   * this column stood — blank is not "no check". The key points at `availability_checking_rule` (a foreign key
+   * in migration 9289, not declared here: the production schema is not imported by this one).
+   */
+  availabilityCheckRule: varchar('availability_check_rule', { length: 2 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.documentType] }),

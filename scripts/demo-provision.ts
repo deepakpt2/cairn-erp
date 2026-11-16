@@ -51,6 +51,7 @@ import { buildDemoActivityPrice } from '../src/platform/tenancy/demo-activity-pr
 import { buildDemoAssessment } from '../src/platform/tenancy/demo-assessment';
 import { buildDemoBomStructure } from '../src/platform/tenancy/demo-bom-structure';
 import { buildDemoCostEstimate } from '../src/platform/tenancy/demo-cost-estimate';
+import { buildDemoSalesAvailability } from '../src/platform/tenancy/demo-sales-availability';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -417,6 +418,16 @@ async function runCostEstimatePhase(ctx: PhaseContext): Promise<Record<string, u
   return { ...result };
 }
 
+/**
+ * Phase D17_SALES_AVAILABILITY: the availability check made reachable. Configures checking rules OR and LF, group D1
+ * with a scope for each, assigns D1 to TRAD-JUICE at the distribution centre (only where missing), then raises one
+ * order for more than the centre can promise and creates the delivery from what was confirmed.
+ */
+async function runSalesAvailabilityPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoSalesAvailability({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -438,6 +449,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D14_ASSESSMENT: runAssessmentPhase,
   D15_BOM_STRUCTURE: runBomStructurePhase,
   D16_COST_ESTIMATE: runCostEstimatePhase,
+  D17_SALES_AVAILABILITY: runSalesAvailabilityPhase,
 };
 
 async function main(): Promise<number> {

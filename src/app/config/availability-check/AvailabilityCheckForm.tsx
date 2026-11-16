@@ -295,8 +295,17 @@ export default function AvailabilityCheckForm({
                 <option value="B">B — future only</option>
               </select>
             </label>
+            <label className="text-sm">Sales requirements
+              <select name="salesRequirements" defaultValue={scope?.salesRequirements === ' ' ? 'NO' : 'X'} className="field-input mt-1 w-full">
+                <option value="X">X — subtract what other open orders are promised</option>
+                <option value="NO">Do not subtract (the same stock can be promised twice)</option>
+              </select>
+            </label>
           </div>
-          <p className="text-sm text-ink-soft">These controls are stored only. They do not calculate ATP.</p>
+          <p className="text-sm text-ink-soft">
+            A sales order is checked under the rule its document type names (blank is OR) and a delivery under LF; the check counts the elements
+            ticked here, at the date asked for. Production orders do not read this configuration.
+          </p>
           <label className="block text-sm">Reason<input name="reason" className="field-input mt-1 w-full" required /></label>
           <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit" disabled={scopePending}>Save scope</button>
         </form>

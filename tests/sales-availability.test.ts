@@ -40,6 +40,10 @@ import {
   saveCheckingGroup, saveCheckingRule, saveScopeOfCheck,
 } from '../src/modules/production/availability-check';
 import { changeSalesOrder, createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { changeSalesDocumentType } from '../src/modules/sales/document-type-maintenance';
+import {
+  SalesAvailabilityError, checkSalesOrderAvailability, simulateSalesOrderAvailability,
+} from '../src/modules/sales/availability-check';
 import {
   confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, postDeliveryGoodsIssue,
 } from '../src/modules/sales/delivery';
@@ -465,13 +469,13 @@ describe('what the plant can promise', () => {
     await setSafetyStock(MAT.scope, STOCK - 6);
     await saveScopeOfCheck({
       client: tenant.client, changedBy: ACTOR, mode: 'CHANGE', checkingGroup: GROUP,
-      checkingRule: ORDER_CHECKING_RULE, ...BLANK_FLAGS, includeSafetyStock: 'X', plannedOrders: 'X',
-      version: 1, reason: 'ATP test: ask for planned orders',
+      checkingRule: ORDER_CHECKING_RULE, ...BLANK_FLAGS, includeSafetyStock: 'X', includeRestrictedUse: 'X',
+      version: 1, reason: 'ATP test: ask for restricted-use stock',
     });
-    // The check counts warehouse stock and what other orders have been promised, and nothing else.
-    // Counting less than the scope asked for without saying so is how a plant promises goods it has
-    // not found, so it says so, and it names the screen the flags stand on.
-    await expect(order(MAT.scope, 10)).rejects.toThrow(/count planned orders/);
+    // Restricted-use stock has no store, so the check cannot count it. (The supply flags — purchase and
+    // planned orders and the rest — are counted since 9289.) Counting less than the scope asked for
+    // without saying so is how a plant promises goods it has not found, so it says so.
+    await expect(order(MAT.scope, 10)).rejects.toThrow(/count restricted-use stock/);
     await saveScopeOfCheck({
       client: tenant.client, changedBy: ACTOR, mode: 'CHANGE', checkingGroup: GROUP,
       checkingRule: ORDER_CHECKING_RULE, ...BLANK_FLAGS, includeSafetyStock: 'X',
@@ -499,5 +503,384 @@ describe('what the plant can promise', () => {
     const read = await getSalesOrder(tenant.client, placed.orderNumber);
     expect(read!.lines[0].confirmedQuantity).toBe('10.000');
     expect(read!.lines[0].schedule[0].confirmedDate).toBe(DATE);
+  });
+
+  // ── Supply over time, and the check on demand (migration 9289) ────────────────────────────────────────
+  // Each test owns its material and, where it needs its own scope, its own checking group, so none is a
+  // test of what another left behind. Stock is 100 for every material; the safety stock sets what is free.
+
+  const today = new Date().toISOString().slice(0, 10);
+  const day = (offset: number) => {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
+  let groupSeq = 0;
+  const flags = (over: Partial<typeof BLANK_FLAGS & { salesRequirements: string }> = {}) => ({ ...BLANK_FLAGS, includeSafetyStock: 'X', ...over });
+
+  /** A checking group of its own with a scope for the order rule, and the material put in it. */
+  const configure = async (materialNumber: string, scope: Record<string, string> = {}, rule = ORDER_CHECKING_RULE) => {
+    const checkingGroup = `T${(++groupSeq).toString(36).toUpperCase()}`;
+    await saveCheckingGroup({
+      client: tenant.client, changedBy: ACTOR, mode: 'CREATE', checkingGroup, description: `ATP ${checkingGroup}`,
+      noCheck: ' ', version: 0, reason: 'ATP test: a group of its own',
+    });
+    await saveScopeOfCheck({
+      client: tenant.client, changedBy: ACTOR, mode: 'CREATE', checkingGroup, checkingRule: rule,
+      ...flags(), ...scope, version: 0, reason: 'ATP test: a scope of its own',
+    });
+    await maintainMaterialSales(tenant, { materialNumber, deliveringPlant: PLANT, availabilityCheckGroup: checkingGroup });
+    return checkingGroup;
+  };
+
+  const plannedOrder = async (materialNumber: string, quantity: number, finish: string, o: { unit?: string; firmed?: boolean } = {}) => {
+    const number = `P${String(++counter).padStart(9, '0')}`;
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      insert into planned_order (client, order_number, material_number, plant, quantity, unit, start_date, finish_date, firming_status, request_key, created_by)
+      values (${tenant.client}, ${number}, ${materialNumber}, ${PLANT}, ${quantity}, ${o.unit ?? 'UNT'}, ${finish}, ${finish},
+              ${o.firmed ? 'FIRMED' : 'OPEN'}, ${key('planned')}, ${ACTOR})`));
+    return number;
+  };
+
+  const purchaseOrder = async (materialNumber: string, quantity: number, due: string) => {
+    const number = `47${String(++counter).padStart(8, '0')}`;
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`insert into purchasing_org (client, purchasing_org, name, created_by) values (${tenant.client}, 'O943', 'ATP org', ${ACTOR}) on conflict do nothing`);
+      await tx.execute(sql`insert into purchasing_group (client, purchasing_group, name, created_by) values (${tenant.client}, 'G43', 'ATP group', ${ACTOR}) on conflict do nothing`);
+      await tx.execute(sql`insert into business_partner (client, partner_number, name, created_by) values (${tenant.client}, 'V943', 'ATP supplier', ${ACTOR}) on conflict do nothing`);
+      await tx.execute(sql`
+        insert into purchase_order (client, order_number, document_type, supplier_number, purchasing_org, purchasing_group, company_code, currency, document_date, release_status, created_by)
+        values (${tenant.client}, ${number}, 'STANDARD', 'V943', 'O943', 'G43', '1000', 'USD', ${due}, 'RELEASED', ${ACTOR})`);
+      await tx.execute(sql`
+        insert into purchase_order_item (client, order_number, item_number, item_category, material_number, short_text, quantity, unit, net_price, price_unit, net_value, plant, created_by)
+        values (${tenant.client}, ${number}, 10, 'STANDARD', ${materialNumber}, 'ATP supply', ${quantity}, 'UNT', 10, 1, ${quantity * 10}, ${PLANT}, ${ACTOR})`);
+    });
+    return number;
+  };
+
+  const orderAt = async (materialNumber: string, quantity: number, requested: string) => createSalesOrder({
+    ...base, requestKey: key(`${materialNumber}-at`),
+    lines: [{ lineNumber: undefined, materialNumber, plant: PLANT, orderQuantity: quantity, quantityUnit: 'UNT', taxCode: 'T10', requestedDeliveryDate: requested }],
+  }, { authorization: await salesAuthority(base.client) });
+
+  const simulate = async (orderNumber: string) => simulateSalesOrderAvailability({ client: tenant.client, orderNumber }, { authorization: await salesAuthority(base.client) });
+  const checkNow = async (orderNumber: string) => checkSalesOrderAvailability({ client: tenant.client, orderNumber }, { authorization: await salesAuthority(base.client) });
+  const standing = async (orderNumber: string) => (await getSalesOrder(tenant.client, orderNumber))!.lines[0];
+  const fresh = async (code: string, safety: number, scope: Record<string, string> = {}) => {
+    const materialNumber = `SD9243${code}`;
+    await addMaterial(materialNumber, null);
+    await setSafetyStock(materialNumber, safety);
+    await configure(materialNumber, scope);
+    return materialNumber;
+  };
+
+  it('ATP 1-4. full, partial and zero are confirmed and never exceed the request or go below zero', async () => {
+    const full = await fresh('A01', 90);                       // 10 free
+    const partial = await fresh('A02', 94);                    // 6 free
+    const none = await fresh('A03', 100);                      // nothing free
+    const f = (await simulate((await orderAt(full, 8, day(5))).orderNumber)).lines[0]!;
+    expect(f.proposed).toMatchObject({ confirmedQuantity: '8.000', confirmedDate: day(5), partial: false, delayed: false, remainderUndated: false });
+    const p = (await simulate((await orderAt(partial, 10, day(5))).orderNumber)).lines[0]!;
+    expect(p.proposed).toMatchObject({ confirmedQuantity: '6.000', confirmedDate: day(5), partial: true, remainderUndated: true });
+    const z = (await simulate((await orderAt(none, 10, day(5))).orderNumber)).lines[0]!;
+    expect(z.proposed).toMatchObject({ confirmedQuantity: '0.000', confirmedDate: null, partial: false, remainderUndated: true });
+    for (const r of [f, p, z]) {
+      expect(Number(r.proposed!.confirmedQuantity)).toBeLessThanOrEqual(Number(r.orderQuantity));
+      expect(Number(r.proposed!.confirmedQuantity)).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('ATP 3b. zero is distinguishable from never checked, before and after', async () => {
+    const none = await fresh('A04', 100);
+    const placed = await orderAt(none, 5, day(5));
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('0.000');
+    // A line raised before the check stood carries no confirmation: null, which is not zero.
+    await withTenant(tenant.client, (tx) => tx.execute(sql`update sales_order_line set confirmed_quantity = null where client = ${tenant.client} and order_number = ${placed.orderNumber}`));
+    const before = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(before.standing.confirmedQuantity).toBeNull();
+    expect(before.change).toBe('FIRST');
+    await checkNow(placed.orderNumber);
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('0.000');
+  });
+
+  it('ATP 5. a blank document type rule is checked under OR, as before — not unchecked', async () => {
+    const mat = await fresh('A05', 94);
+    const placed = await orderAt(mat, 10, day(5));
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');
+    const result = await simulate(placed.orderNumber);
+    expect(result).toMatchObject({ checkingRule: ORDER_CHECKING_RULE, ruleFromDocumentType: false });
+    expect(result.lines[0]!.skipped).toBeNull();
+  });
+
+  it('ATP 5b. a rule the document type names is used, and a scope must stand for it', async () => {
+    const mat = await fresh('A06', 94);                        // OR scope deducts safety stock: 6 free
+    const placed = await orderAt(mat, 10, day(5));
+    await saveCheckingRule({
+      client: tenant.client, changedBy: ACTOR, mode: 'CREATE', checkingRule: 'S1', description: 'Named by the type',
+      version: 0, reason: 'ATP test: a rule a document type can name',
+    });
+    await withTenant(tenant.client, (tx) => tx.execute(sql`update sales_document_type set availability_check_rule = 'S1' where client = ${tenant.client} and document_type = 'OR'`));
+    try {
+      // The rule is named and no scope stands for it: reported per line on demand, refused at order entry.
+      const missing = (await simulate(placed.orderNumber)).lines[0]!;
+      expect(missing.skipped).toMatchObject({ reason: 'NO_SCOPE' });
+      expect(missing.skipped!.message).toMatch(/group T[0-9A-Z] and rule S1/);
+      await expect(orderAt(mat, 1, day(5))).rejects.toThrow(/No scope of check stands for checking group T[0-9A-Z] and rule S1/);
+      // With a scope that does not deduct the reserve, the same order is promised all ten.
+      const group = (await withTenant(tenant.client, (tx) => tx.execute(sql`select availability_check_group as g from material_sales where client = ${tenant.client} and material_number = ${mat}`)) as unknown as Array<{ g: string }>)[0]!.g;
+      await saveScopeOfCheck({
+        client: tenant.client, changedBy: ACTOR, mode: 'CREATE', checkingGroup: group, checkingRule: 'S1',
+        ...BLANK_FLAGS, version: 0, reason: 'ATP test: a scope for the named rule',
+      });
+      const named = await simulate(placed.orderNumber);
+      expect(named).toMatchObject({ checkingRule: 'S1', ruleFromDocumentType: true });
+      expect(named.lines[0]!.proposed).toMatchObject({ confirmedQuantity: '10.000', partial: false });
+    } finally {
+      await withTenant(tenant.client, (tx) => tx.execute(sql`update sales_document_type set availability_check_rule = null where client = ${tenant.client} and document_type = 'OR'`));
+    }
+  });
+
+  it('ATP 5c. document type maintenance names the rule, keeps it when omitted, and clears it to the default', async () => {
+    const maintain = (extra: { availabilityCheckRule?: string | null }) => changeSalesDocumentType({
+      client: tenant.client, changedBy: ACTOR, documentType: 'OR', name: 'Standard order', ...extra,
+    });
+    const rule = async () => ((await withTenant(tenant.client, (tx) => tx.execute(sql`select availability_check_rule as r from sales_document_type where client = ${tenant.client} and document_type = 'OR'`))) as unknown as Array<{ r: string | null }>)[0]!.r;
+    await expect(maintain({ availabilityCheckRule: 'Z9' })).rejects.toThrow(/Checking rule Z9 does not stand/);
+    expect(await rule()).toBeNull();
+    await maintain({ availabilityCheckRule: ORDER_CHECKING_RULE });
+    expect(await rule()).toBe(ORDER_CHECKING_RULE);
+    await maintain({});                                         // omitted: kept
+    expect(await rule()).toBe(ORDER_CHECKING_RULE);
+    await maintain({ availabilityCheckRule: '' });              // blank: cleared — the order rule OR, not "no check"
+    expect(await rule()).toBeNull();
+  });
+
+  it('ATP 6, 7. a line that cannot be checked is reported and the others are still checked', async () => {
+    const good = await fresh('A07', 94);
+    const unchecked = `SD9243A08`;
+    await addMaterial(unchecked, null);
+    const ungrouped = `SD9243A09`;
+    await addMaterial(ungrouped, null);
+    await configure(ungrouped);
+    const placed = await createSalesOrder({
+      ...base, requestKey: key('mixed'),
+      lines: [good, unchecked, ungrouped].map((materialNumber) => ({ lineNumber: undefined, materialNumber, plant: PLANT, orderQuantity: 10, quantityUnit: 'UNT', taxCode: 'T10', requestedDeliveryDate: day(5) })),
+    }, { authorization: await salesAuthority(base.client) });
+    // After the order stands the third material's group is removed (no group row): reported, not thrown.
+    await maintainMaterialSales(tenant, { materialNumber: ungrouped, deliveringPlant: PLANT, availabilityCheckGroup: MISSING_GROUP });
+    const result = await simulate(placed.orderNumber);
+    expect(result.lines[0]!.proposed).toMatchObject({ confirmedQuantity: '6.000' });
+    expect(result.lines[1]!.skipped).toMatchObject({ reason: 'NOT_CHECKED' });
+    expect(result.lines[1]!.proposed).toBeNull();
+    expect(result.lines[2]!.skipped).toMatchObject({ reason: 'NOT_CONFIGURED' });
+    expect(result.lines[2]!.skipped!.message).toMatch(/no such group stands/);
+    // The write touches only what could be checked: the unchecked line keeps its full confirmation.
+    await checkNow(placed.orderNumber);
+    const read = await getSalesOrder(tenant.client, placed.orderNumber);
+    expect(read!.lines.map((l) => l.confirmedQuantity)).toEqual(['6.000', '10.000', '10.000']);
+  });
+
+  it('ATP 8. a supply flag that is blank excludes its element, and switching it on changes the confirmation', async () => {
+    const mat = await fresh('A10', 94);                        // 6 free
+    await purchaseOrder(mat, 20, day(3));
+    await plannedOrder(mat, 20, day(3));
+    const placed = await orderAt(mat, 10, day(5));
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');   // neither flag set: neither counted
+    const group = (await withTenant(tenant.client, (tx) => tx.execute(sql`select availability_check_group as g from material_sales where client = ${tenant.client} and material_number = ${mat}`)) as unknown as Array<{ g: string }>)[0]!.g;
+    const change = (over: Record<string, string>, version: number) => saveScopeOfCheck({
+      client: tenant.client, changedBy: ACTOR, mode: 'CHANGE', checkingGroup: group, checkingRule: ORDER_CHECKING_RULE,
+      ...flags(), ...over, version, reason: 'ATP test: toggle a supply flag',
+    });
+    await change({ purchaseOrders: 'X' }, 1);
+    let line = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(line.proposed).toMatchObject({ confirmedQuantity: '10.000', confirmedDate: day(3) === day(5) ? day(5) : day(5), delayed: false });
+    expect(line.proposed!.basis.map((b) => b.elementType)).toEqual(['PURCHASE_ORDER']);
+    expect(line.change).toBe('RAISED');
+    await change({ purchaseOrders: ' ' }, 2);
+    line = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(line.proposed).toMatchObject({ confirmedQuantity: '6.000' });
+    expect(line.proposed!.basis).toEqual([]);
+    await change({ plannedOrders: 'X' }, 3);
+    line = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(line.proposed!.basis.map((b) => b.elementType)).toEqual(['PLANNED_ORDER']);
+    expect(line.proposed).toMatchObject({ confirmedQuantity: '10.000' });
+  });
+
+  it('ATP 9. plannedOrders A counts only firmed planned orders', async () => {
+    const mat = await fresh('A11', 94, { plannedOrders: 'A' });
+    await plannedOrder(mat, 20, day(3));                        // open: not counted under A
+    const placed = await orderAt(mat, 10, day(5));
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');
+    await plannedOrder(mat, 20, day(3), { firmed: true });
+    const line = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(line.proposed).toMatchObject({ confirmedQuantity: '10.000' });
+    expect(line.proposed!.basis).toHaveLength(1);
+  });
+
+  it('ATP 10. sales requirements: another open order reduces what a new order is promised, unless the scope says otherwise', async () => {
+    const mat = await fresh('A12', 94);                        // 6 free
+    const first = await orderAt(mat, 6, day(5));
+    const second = await orderAt(mat, 6, day(5));
+    expect((await standing(first.orderNumber)).confirmedQuantity).toBe('6.000');
+    expect((await standing(second.orderNumber)).confirmedQuantity).toBe('0.000');   // the same stock is not promised twice
+    const group = (await withTenant(tenant.client, (tx) => tx.execute(sql`select availability_check_group as g from material_sales where client = ${tenant.client} and material_number = ${mat}`)) as unknown as Array<{ g: string }>)[0]!.g;
+    await saveScopeOfCheck({
+      client: tenant.client, changedBy: ACTOR, mode: 'CHANGE', checkingGroup: group, checkingRule: ORDER_CHECKING_RULE,
+      ...flags(), salesRequirements: ' ', version: 1, reason: 'ATP test: stop subtracting other orders',
+    });
+    expect((await simulate(second.orderNumber)).lines[0]!.proposed).toMatchObject({ confirmedQuantity: '6.000' });
+  });
+
+  it('ATP 11, 16. re-checking excludes the order\'s own promise; a confirmation is written and not re-derived', async () => {
+    const mat = await fresh('A13', 94);
+    const placed = await orderAt(mat, 6, day(5));
+    const first = await simulate(placed.orderNumber);
+    const second = await simulate(placed.orderNumber);
+    expect(second.lines[0]!.proposed).toEqual(first.lines[0]!.proposed);
+    expect(first.lines[0]!.proposed).toMatchObject({ confirmedQuantity: '6.000', availableAtRequestedDate: '6.000' });
+    expect(first.lines[0]!.change).toBe('UNCHANGED');
+    await checkNow(placed.orderNumber);
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');
+    // Stock moves on afterwards; the promise the plant made does not.
+    await setSafetyStock(mat, 100);
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');
+    expect((await getSalesOrder(tenant.client, placed.orderNumber))!.lines[0].schedule[0].confirmedQuantity).toBe('6.000');
+    // Asked again on demand, it can lower the promise — shown, then written only when confirmed.
+    const lowered = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(lowered).toMatchObject({ change: 'LOWERED' });
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');
+    await checkNow(placed.orderNumber);
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('0.000');
+  });
+
+  it('ATP 12. safety stock is deducted when includeSafetyStock is X, and not when blank', async () => {
+    const withReserve = await fresh('A14', 40);                // X: 60 free
+    const noReserve = await fresh('A15', 40, { includeSafetyStock: ' ' });   // blank: all 100 free
+    const a = await orderAt(withReserve, 100, day(5));
+    const b = await orderAt(noReserve, 100, day(5));
+    expect((await standing(a.orderNumber)).confirmedQuantity).toBe('60.000');
+    expect((await standing(b.orderNumber)).confirmedQuantity).toBe('100.000');
+  });
+
+  it('ATP 13, 14. an element in another unit is converted to the base unit; one that cannot be is reported naming the units', async () => {
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`insert into unit_of_measure (code, name, dimension, decimal_places, is_base_unit) values ('CAS', 'Case', 'COUNT', 0, false), ('ODD', 'Odd unit', 'COUNT', 0, false) on conflict (code) do nothing`);
+    });
+    const converted = await fresh('A16', 94, { plannedOrders: 'X' });
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      insert into material_uom_conversion (client, material_number, alternative_unit, base_unit, numerator, denominator, created_by)
+      values (${tenant.client}, ${converted}, 'CAS', 'UNT', 12, 1, ${ACTOR}) on conflict do nothing`));
+    await plannedOrder(converted, 1, day(3), { unit: 'CAS' });  // one case is twelve units
+    const placed = await orderAt(converted, 20, day(5));
+    expect((await simulate(placed.orderNumber)).lines[0]!.proposed).toMatchObject({ confirmedQuantity: '18.000' });   // 6 + 12
+    const broken = await fresh('A17', 94, { plannedOrders: 'X' });
+    await plannedOrder(broken, 5, day(3), { unit: 'ODD' });
+    const refused = await orderAt(broken, 1, day(5)).then(() => null, (e: Error) => e);
+    expect(refused?.message).toMatch(/cannot be counted/);
+    expect(refused?.message).toMatch(/ODD/);
+    expect(refused?.message).toMatch(/UNT|base unit/);
+  });
+
+  it('ATP 14b. a failed conversion is reported per line on demand', async () => {
+    const mat = await fresh('A18', 94);
+    const placed = await orderAt(mat, 10, day(5));
+    const group = (await withTenant(tenant.client, (tx) => tx.execute(sql`select availability_check_group as g from material_sales where client = ${tenant.client} and material_number = ${mat}`)) as unknown as Array<{ g: string }>)[0]!.g;
+    await plannedOrder(mat, 5, day(3), { unit: 'ODD' });
+    await saveScopeOfCheck({
+      client: tenant.client, changedBy: ACTOR, mode: 'CHANGE', checkingGroup: group, checkingRule: ORDER_CHECKING_RULE,
+      ...flags(), plannedOrders: 'X', version: 1, reason: 'ATP test: count planned orders',
+    });
+    const line = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(line.skipped).toMatchObject({ reason: 'UNIT_CONVERSION' });
+    expect(line.skipped!.message).toContain(mat);
+    expect(line.skipped!.message).toContain('ODD');
+  });
+
+  it('ATP 15. a scope of restricted-use stock is refused by name (no such stock is held)', async () => {
+    const mat = await fresh('A19', 94, { includeRestrictedUse: 'X' }).catch((e: Error) => e);
+    // Nothing could be ordered under it: the refusal is the check's own.
+    expect(typeof mat === 'string' || mat instanceof Error).toBe(true);
+    const material = typeof mat === 'string' ? mat : 'SD9243A19';
+    await expect(orderAt(material, 1, day(5))).rejects.toThrow(/restricted-use stock/);
+  });
+
+  it('ATP 7b. the earliest date at which the whole quantity stands is the confirmed date; a partial stands at the requested date', async () => {
+    const later = await fresh('A20', 94, { plannedOrders: 'X' });          // 6 free, +10 on day 8: all 10 stand on day 8
+    await plannedOrder(later, 10, day(8));
+    const placed = await orderAt(later, 10, day(5));
+    const line = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(line.proposed).toMatchObject({ confirmedQuantity: '10.000', confirmedDate: day(8), delayed: true, partial: false, remainderUndated: false, availableAtRequestedDate: '6.000' });
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('10.000');
+    expect((await getSalesOrder(tenant.client, placed.orderNumber))!.lines[0].schedule[0]).toMatchObject({ confirmedQuantity: '10.000', confirmedDate: day(8) });
+    // More is asked for than will ever stand inside the horizon: what stands now is confirmed, the rest is undated.
+    const never = await fresh('A21', 94, { plannedOrders: 'X' });
+    await plannedOrder(never, 2, day(8));
+    const short = await orderAt(never, 20, day(5));
+    const p = (await simulate(short.orderNumber)).lines[0]!.proposed!;
+    expect(p).toMatchObject({ confirmedQuantity: '6.000', confirmedDate: day(5), partial: true, remainderUndated: true, delayed: false });
+    expect(p.horizonEnd).not.toBeNull();
+    // A receipt beyond the horizon is not searched for.
+    const beyond = await fresh('A22', 94, { plannedOrders: 'X' });
+    await plannedOrder(beyond, 20, day(5 + 400));
+    const far = (await simulate((await orderAt(beyond, 10, day(5))).orderNumber)).lines[0]!.proposed!;
+    expect(far).toMatchObject({ confirmedQuantity: '6.000', remainderUndated: true });
+  });
+
+  it('ATP 8b. receipts in the past count unless the scope says future only (B)', async () => {
+    const mat = await fresh('A23', 94, { plannedOrders: 'X' });
+    await plannedOrder(mat, 10, day(-3));
+    const placed = await orderAt(mat, 10, day(5));
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('10.000');
+    const group = (await withTenant(tenant.client, (tx) => tx.execute(sql`select availability_check_group as g from material_sales where client = ${tenant.client} and material_number = ${mat}`)) as unknown as Array<{ g: string }>)[0]!.g;
+    await saveScopeOfCheck({
+      client: tenant.client, changedBy: ACTOR, mode: 'CHANGE', checkingGroup: group, checkingRule: ORDER_CHECKING_RULE,
+      ...flags(), plannedOrders: 'X', receiptsInPast: 'B', version: 1, reason: 'ATP test: future receipts only',
+    });
+    expect((await simulate(placed.orderNumber)).lines[0]!.proposed).toMatchObject({ confirmedQuantity: '6.000' });
+  });
+
+  it('ATP 4b. a re-check can raise a promise, and the preview says so beside the standing figure', async () => {
+    const mat = await fresh('A24', 94, { plannedOrders: 'X' });
+    const placed = await orderAt(mat, 10, day(5));
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');
+    await plannedOrder(mat, 10, day(2));
+    const line = (await simulate(placed.orderNumber)).lines[0]!;
+    expect(line.standing.confirmedQuantity).toBe('6.000');
+    expect(line.proposed).toMatchObject({ confirmedQuantity: '10.000' });
+    expect(line.change).toBe('RAISED');
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');   // a simulation writes nothing
+    const written = await checkNow(placed.orderNumber);
+    expect(written.written).toBe(true);
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('10.000');
+  });
+
+  it('ATP 17. the delivery ceiling is the confirmation the check wrote', async () => {
+    const mat = await fresh('A25', 94);
+    const placed = await orderAt(mat, 10, day(5));
+    const open = await listDeliverableOrderLines(tenant.client, { orderNumber: placed.orderNumber });
+    expect(open[0].confirmedQuantity).toBe('6.000');
+    await expect(createDelivery({
+      client: tenant.client, changedBy: ACTOR, orderNumber: placed.orderNumber, deliveryDate: DATE,
+      items: [{ orderLineNumber: open[0].lineNumber, quantity: '9' }], requestKey: key('atp-over'),
+    }, { authorization: await salesAuthority(base.client) })).rejects.toThrow(/6\.000 confirmed/);
+  });
+
+  it('ATP 18. an actor without the capability is refused by the service, before any write', async () => {
+    const mat = await fresh('A26', 94, { plannedOrders: 'X' });
+    const placed = await orderAt(mat, 10, day(5));
+    await plannedOrder(mat, 10, day(2));
+    const weak = await createSalesActor(tenant.client, { capabilities: ['SALES.ORDER.CREATE'] });
+    await expect(checkSalesOrderAvailability({ client: tenant.client, orderNumber: placed.orderNumber }, { authorization: weak.authorization })).rejects.toBeInstanceOf(SalesAvailabilityError);
+    await expect(simulateSalesOrderAvailability({ client: tenant.client, orderNumber: placed.orderNumber }, { authorization: weak.authorization })).rejects.toThrow(/AVAILABILITY\.CHECK|authority/);
+    await expect(checkSalesOrderAvailability({ client: tenant.client, orderNumber: placed.orderNumber })).rejects.toThrow(/signed-in user/);
+    expect((await standing(placed.orderNumber)).confirmedQuantity).toBe('6.000');
+  });
+
+  it('ATP 9b. an order that does not stand, or is not open, is refused whole', async () => {
+    await expect(simulate('SO-NOSUCH')).rejects.toThrow(/Sales order SO-NOSUCH does not stand/);
+    const mat = await fresh('A27', 94);
+    const placed = await orderAt(mat, 3, day(5));
+    await withTenant(tenant.client, (tx) => tx.execute(sql`update sales_order set status = 'CANCELLED' where client = ${tenant.client} and order_number = ${placed.orderNumber}`));
+    await expect(simulate(placed.orderNumber)).rejects.toThrow(/only an open order is checked/);
   });
 });

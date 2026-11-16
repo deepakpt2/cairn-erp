@@ -28,24 +28,23 @@ export const LOCK_OBJECT = 'AVAILABILITY_CHECK';
 
 export const AVAILABILITY_CHECK_GAPS = [
   'Replenishment lead time is not stored. Planned delivery days and in-house production days are MRP master data. Goods-receipt processing time is not stored, and no rule selects which time applies. Check-without-RLT is not stored, because either value would pretend the lead time is defined.',
-  'Purchase requisitions, purchase orders, planned orders, and dependent requirements keep their own unit. Stock, reservations, and production orders keep the base unit. This configuration does not convert one into the other.',
+  'Purchase requisitions, purchase orders, planned orders, and dependent requirements keep their own unit. Stock, reservations, and production orders keep the base unit. This configuration does not convert one into the other. The sales availability check does: every counted element is brought into the material base unit, and an element it cannot convert is refused by name.',
   'A production-order component is not a reservation. A requirement date is stored only when conversion copied it from a matching dependent requirement. This configuration does not reconcile those rows, does not invent one as the other, and does not calculate ATP.',
   'Storage-location inspection is not stored. Planned orders and dependent requirements have no storage location. A location check would omit them or invent a location.',
-  'Sales orders, deliveries, shipping notifications, stock in transfer, stock-transport releases, subcontracting, independent requirements, and a special-stock indicator are not stored. Their scope flags are refused.',
-  'Unrestricted-use stock has no inclusion switch in this scope. It is not treated as available.',
+  'Deliveries, shipping notifications, stock in transfer, stock-transport releases, subcontracting, independent requirements, and a special-stock indicator are not stored. Their scope flags are refused. Sales orders are stored: the scope flag Sales requirements says whether the promises other open sales orders hold are subtracted (default X).',
+  'Unrestricted-use stock has no inclusion switch in this scope because it is always available: it is the base of every availability check, and a switch would make that base optional. It is never treated as unavailable.',
   'Checking control is not stored on this screen. It is a separate record keyed by plant, order type, and business function 1 (creation) or 2 (release). A group, a rule, and a scope do not make that selection and do not run a check. The checking-group no-check indicator is not that control and is not an available quantity.',
-  'No transaction is bound to a checking rule. Order creation, conversion, MRP, and the stock/requirements list do not read this configuration. Saving a scope does not calculate an ATP quantity.',
+  'The sales order is the one transaction bound to a checking rule: an order is checked under the rule its document type names (blank is OR), and a delivery under LF. Production order creation, conversion, MRP, and the stock/requirements list do not read this configuration. Saving a scope does not calculate an ATP quantity.',
 ] as const;
 
 const REFUSED: Record<string, string> = {
-  totalSalesRequirements: 'Total sales requirements are not stored. Sales orders are not implemented.',
-  totalDeliveryRequirements: 'Total delivery requirements are not stored. Deliveries are not implemented.',
+  totalSalesRequirements: 'Total sales requirements are not stored. Use Sales requirements: it subtracts the promises other open sales orders hold.',
+  totalDeliveryRequirements: 'Total delivery requirements are not stored. A delivery is checked under rule LF; it is not an inclusion control.',
   replenishmentLeadTime: 'A replenishment lead time is not stored. Planned delivery days do not become an availability date.',
   checkWithoutReplenishmentLeadTime: 'Check without replenishment lead time is not stored. The lead time itself is not defined.',
   materialBlock: 'A material block during the availability check is not stored. No check runs.',
   advancedAtp: 'Advanced ATP is not stored.',
-  salesRequirements: 'Sales requirements are not an inclusion control. Sales orders are not implemented.',
-  deliveries: 'Deliveries are not an inclusion control. They are not implemented.',
+  deliveries: 'Deliveries are not an inclusion control. A delivery is checked under rule LF, and what it has promised is counted through the order.',
   shippingNotifications: 'Shipping notifications are not an inclusion control. They are not implemented.',
   stockInTransfer: 'Stock in transfer is not an inclusion control. No transit stock is stored.',
   dependentReservations: 'Dependent reservations are not an inclusion control. A production-order component is not a reservation.',
@@ -100,6 +99,8 @@ export interface ScopeOfCheckRow {
   dependentRequirements: Flag;
   reservations: Flag;
   receiptsInPast: PastReceiptScope;
+  /** Whether the promises other open sales orders hold are subtracted. */
+  salesRequirements: Flag;
   version: number;
 }
 
@@ -260,6 +261,7 @@ function scopeOf(row: typeof availabilityCheckScope.$inferSelect): ScopeOfCheckR
     dependentRequirements: flag(row.dependentRequirements),
     reservations: flag(row.reservations),
     receiptsInPast: row.receiptsInPast === 'B' ? 'B' : ' ',
+    salesRequirements: row.salesRequirements === ' ' ? ' ' : 'X',
     version: row.version,
   };
 }
@@ -496,6 +498,8 @@ export async function saveScopeOfCheck(input: {
   dependentRequirements: string;
   reservations: string;
   receiptsInPast: string;
+  /** Optional: a new scope defaults to X, a changed one keeps what stands. */
+  salesRequirements?: string;
   version: number;
   reason: string;
   extensions?: Record<string, string | undefined>;
@@ -516,6 +520,7 @@ export async function saveScopeOfCheck(input: {
     dependentRequirements: requireFlag(input.dependentRequirements, 'Dependent requirements'),
     reservations: requireFlag(input.reservations, 'Reservations'),
     receiptsInPast: requirePast(input.receiptsInPast),
+    ...(input.salesRequirements === undefined ? {} : { salesRequirements: requireFlag(input.salesRequirements, 'Sales requirements') }),
   };
 
   return withTenant(input.client, async (tx) => {
@@ -579,6 +584,12 @@ export async function saveScopeOfCheck(input: {
     });
     await finish(tx, input.client, input.changedBy);
     if (input.mode === 'DELETE') return null;
-    return { checkingGroup, checkingRule, ...flags!, version: input.mode === 'CREATE' ? 1 : existing!.version + 1 };
+    // Read back what stands, so a flag the caller did not name (Sales requirements) shows its stored value.
+    const [stored] = await tx.select().from(availabilityCheckScope).where(and(
+      eq(availabilityCheckScope.client, input.client),
+      eq(availabilityCheckScope.checkingGroup, checkingGroup),
+      eq(availabilityCheckScope.checkingRule, checkingRule),
+    ));
+    return scopeOf(stored!);
   });
 }

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState, useId, useRef, useState } from 'react';
 
 import type { SalesOrderView } from '@/modules/sales/sales-order';
+import { AvailabilityPanel } from './AvailabilityPanel';
 import {
   cancelOrderAction,
   changeOrderAction,
@@ -27,6 +28,7 @@ interface Props {
   selected: SalesOrderView | null;
   canCreate: boolean;
   canRelease: boolean;
+  canCheckAvailability?: boolean;
 }
 
 function money(value: string, currency: string): string {
@@ -206,7 +208,7 @@ function HeaderFields({ choices, selected }: { choices: Props['choices']; select
   );
 }
 
-export default function Orders({ documents, choices, selected, canCreate, canRelease }: Props) {
+export default function Orders({ documents, choices, selected, canCreate, canRelease, canCheckAvailability }: Props) {
   const [createState, createAction] = useActionState(createOrderAction, EMPTY);
   const [changeState, changeAction] = useActionState(changeOrderAction, EMPTY);
   const [cancelState, cancelAction] = useActionState(cancelOrderAction, EMPTY);
@@ -295,6 +297,8 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
               <Notice state={releaseState} />
             </div>
           ) : null}
+
+          {canCheckAvailability && selected.status === 'OPEN' ? <AvailabilityPanel orderNumber={selected.orderNumber} /> : null}
 
           {canCreate ? (
             <div className="mt-4 grid gap-4 lg:grid-cols-2">

@@ -1175,6 +1175,8 @@ export const availabilityCheckScope = pgTable('availability_check_scope', {
   dependentRequirements: char('dependent_requirements', { length: 1 }).notNull(),
   reservations: char('reservations', { length: 1 }).notNull(),
   receiptsInPast: char('receipts_in_past', { length: 1 }).notNull(),
+  /** Whether the promises other open sales orders hold are subtracted. Default 'X': the check always did. */
+  salesRequirements: char('sales_requirements', { length: 1 }).notNull().default('X'),
   version: integer('version').notNull().default(1),
   ...auditColumns,
 }, (t) => [
@@ -1200,6 +1202,7 @@ export const availabilityCheckScope = pgTable('availability_check_scope', {
   check('availability_check_scope_planned_ck', sql`${t.plannedOrders} in ('X', 'A', ' ')`),
   check('availability_check_scope_production_ck', sql`${t.productionOrders} in ('X', 'F', ' ')`),
   check('availability_check_scope_past_ck', sql`${t.receiptsInPast} in ('B', ' ')`),
+  check('availability_check_scope_sales_ck', sql`${t.salesRequirements} in ('X', ' ')`),
   check('availability_check_scope_version_ck', sql`${t.version} > 0`),
 ]);
 

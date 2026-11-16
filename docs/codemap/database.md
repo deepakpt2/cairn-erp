@@ -74,9 +74,9 @@
 | asset_transaction_type | finance | foundation, purchasing |
 | audit_access_log | platform/tables | audit, people, platform, platform/auth, platform/security |
 | auth_org_restriction | platform/tables | finance, inventory, platform, platform/auth, platform/tenancy, production |
-| availability_check_scope | production | sales |
-| availability_checking_group | production | sales |
-| availability_checking_rule | production | sales |
+| availability_check_scope | production | platform/tenancy, sales |
+| availability_checking_group | production | platform/tenancy, sales |
+| availability_checking_rule | production | platform/tenancy, sales |
 | bank_account | foundation | finance, people |
 | bank_master | platform/tables | foundation, platform/tenancy |
 | batch | inventory | sales |
@@ -118,6 +118,7 @@
 | delegation_approval | people | platform/auth |
 | delegation_scope | people | platform/auth |
 | delivery | sales | platform/tenancy |
+| delivery_line | sales | platform/tenancy |
 | delivery_picking_serial | sales | inventory |
 | depreciation_area | finance | foundation |
 | depreciation_key | finance | foundation |
@@ -163,7 +164,7 @@
 | material_document_line | inventory | dev/walkthrough-asset.ts, finance, production, purchasing, quality, sales |
 | material_group | inventory | platform/tenancy, purchasing |
 | material_period_control | inventory | platform/tenancy |
-| material_plant | inventory | foundation, production, purchasing, sales |
+| material_plant | inventory | foundation, platform/tenancy, production, purchasing, sales |
 | material_sales | inventory | sales |
 | material_type | inventory | platform/tenancy |
 | material_uom_conversion | inventory | foundation, purchasing |
@@ -232,6 +233,7 @@
 | sales_condition_record | sales | platform/tenancy |
 | sales_condition_type | sales | foundation |
 | sales_document_type | sales | foundation |
+| sales_order | sales | platform/tenancy |
 | sales_org | foundation | inventory, platform/tenancy, sales |
 | sales_org_distribution_channel | foundation | platform/tenancy |
 | sales_org_division | foundation | platform/tenancy |

@@ -103,6 +103,7 @@ export default async function SalesDocumentTypesPage() {
             numberRangeSubObject: type.numberRangeSubObject,
             cancellationDocumentType: type.cancellationDocumentType,
             invoiceListType: type.invoiceListType,
+            availabilityCheckRule: type.availabilityCheckRule,
             isActive: type.isActive,
             documentsStanding: type.documentsStanding,
           }))}
