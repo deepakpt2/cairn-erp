@@ -3,7 +3,6 @@ import { getSession } from '@/platform/auth/current';
 import { Suspense } from 'react';
 import { WorkIndicator } from './WorkIndicator';
 import { MenuPath } from './MenuPath';
-import { sidebarNavigationEnabled } from './nav-flag';
 
 // Intentionally visible in every environment, including production, for build verification.
 const DEVELOPMENT_UI_BUILD_CODE = 'DEV-SCR022-DISTCHANNEL-DIVISION-20261014';
@@ -30,7 +29,7 @@ export async function StatusBar() {
         </span>
         <span className="text-ink-faint">{session ? `${session.user.client} · ${session.user.username}` : t('status.noTenant')}</span>
         <Suspense fallback={null}>
-          <MenuPath linkLevels={sidebarNavigationEnabled()} />
+          <MenuPath linkLevels />
         </Suspense>
       </div>
 

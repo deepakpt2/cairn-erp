@@ -3,7 +3,6 @@ import { notFound, redirect } from 'next/navigation';
 import { requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { buildNavTree } from '@/ui/shell/nav-tree';
-import { sidebarNavigationEnabled } from '@/ui/shell/nav-flag';
 import { menuScreenIds } from '@/ui/shell/menu-access';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +14,6 @@ export const dynamic = 'force-dynamic';
  * page. It lists what this reader may be offered and grants nothing: every screen asks for its own authority.
  */
 export default async function ModulePage({ searchParams }: { searchParams: Promise<{ module?: string }> }) {
-  if (!sidebarNavigationEnabled()) notFound();
   const session = await requireSession('/menu');
   const { module: id } = await searchParams;
   if (id === 'dashboard') redirect('/');

@@ -1,9 +1,7 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { searchRegistry } from '@/platform/registry';
-import { sidebarNavigationEnabled } from '@/ui/shell/nav-flag';
 import { menuScreenIds } from '@/ui/shell/menu-access';
 import { searchNav, type AliasHit } from '@/ui/shell/nav-search';
 
@@ -17,7 +15,6 @@ export const dynamic = 'force-dynamic';
  * labelled as an alias. Finding a screen grants nothing — the page asks for its own authority.
  */
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  if (!sidebarNavigationEnabled()) notFound();
   const session = await requireSession('/search');
   const q = ((await searchParams).q ?? '').trim().slice(0, 100);
   let aliasHits: AliasHit[] = [];

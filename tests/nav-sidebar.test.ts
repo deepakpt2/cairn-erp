@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { NAV_MODULES, SCREENS } from '@/ui/shell/screen-catalog';
 import { visibleScreenIds } from '@/ui/shell/screen-access';
 import { menuScreenIds } from '@/ui/shell/menu-access';
 import { buildNavTree, categorySlug, moduleHref, type NavModuleNode } from '@/ui/shell/nav-tree';
-import { sidebarNavigationEnabled } from '@/ui/shell/nav-flag';
 import { resolveMenuPath } from '@/ui/shell/menu-path';
 
 const all = menuScreenIds(['*']);
@@ -117,25 +116,14 @@ describe('module page address in the menu path', () => {
   });
 });
 
-describe('the flag', () => {
-  const saved = process.env.CAIRN_NAVIGATION;
-  afterEach(() => { if (saved === undefined) delete process.env.CAIRN_NAVIGATION; else process.env.CAIRN_NAVIGATION = saved; });
-
-  it('is off unless set to exactly "sidebar"', () => {
-    for (const v of [undefined, '', '1', 'true', 'on', 'Sidebar']) {
-      if (v === undefined) delete process.env.CAIRN_NAVIGATION; else process.env.CAIRN_NAVIGATION = v;
-      expect(sidebarNavigationEnabled(), String(v)).toBe(false);
-    }
-    process.env.CAIRN_NAVIGATION = 'sidebar';
-    expect(sidebarNavigationEnabled()).toBe(true);
-  });
-
-  it('leaves the shell as it was when off: the layout keeps its plain main, and the sidebar and module page refuse to render', () => {
+describe('the shell', () => {
+  it('always carries the sidebar: no flag, and the module page and search render for every reader', () => {
     const layout = readFileSync('src/app/layout.tsx', 'utf8');
-    expect(layout).toContain('sidebarNavigationEnabled() ? (');
-    expect(layout).toContain('<main className="flex-1">{children}</main>');
-    expect(readFileSync('src/ui/shell/NavSidebar.tsx', 'utf8')).toContain('if (!sidebarNavigationEnabled()) return null;');
-    expect(readFileSync('src/app/menu/page.tsx', 'utf8')).toContain('if (!sidebarNavigationEnabled()) notFound();');
+    expect(layout).toContain('<NavSidebar />');
+    expect(layout).not.toContain('sidebarNavigationEnabled');
+    for (const f of ['src/ui/shell/NavSidebar.tsx', 'src/app/menu/page.tsx', 'src/app/search/page.tsx', 'src/app/page.tsx', 'src/ui/shell/StatusBar.tsx']) {
+      expect(readFileSync(f, 'utf8'), f).not.toMatch(/sidebarNavigationEnabled|CAIRN_NAVIGATION/);
+    }
   });
 
   it('decides on the server and ships the browser only labels and addresses', () => {
@@ -166,5 +154,18 @@ describe('mobile drawer', () => {
     expect(source).toContain('md:static');
     expect(source).toContain('md:block');
     expect(source).toContain('md:hidden');
+  });
+});
+
+describe('launchpad', () => {
+  const page = readFileSync('src/app/page.tsx', 'utf8');
+
+  it('states no hard-coded activity count', () => {
+    expect(page).not.toMatch(/\d+ activities/);
+  });
+
+  it('lists modules for a signed-in reader, and keeps the flat list only where there is no session', () => {
+    expect(page).toContain('buildNavTree(menuScreenIds(session.user.capabilities))');
+    expect(page).toContain('SCREEN_AREAS.map');
   });
 });

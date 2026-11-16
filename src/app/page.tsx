@@ -4,6 +4,8 @@ import { listTenants } from '@/platform/tenancy';
 import { requireSession } from '@/platform/auth/current';
 import { SCREEN_AREAS } from '@/ui/shell/screen-catalog';
 import { screenHref, screensInArea } from '@/ui/shell/screen-links';
+import { menuScreenIds } from '@/ui/shell/menu-access';
+import { buildNavTree } from '@/ui/shell/nav-tree';
 import { attentionFor } from '@/platform/attention/panel';
 import { AttentionPanel } from '@/ui/attention/AttentionPanel';
 
@@ -25,6 +27,12 @@ export default async function LaunchpadPage() {
     ? await attentionFor({ client: session.user.client, userId: session.user.userId }, today)
     : [];
 
+  // The menu is the way in: the launchpad lists the modules this reader may open instead of repeating every
+  // screen. Without a session (local development) there is no menu, so the flat list below stays as the index.
+  const modules = session
+    ? buildNavTree(menuScreenIds(session.user.capabilities)).filter((m) => m.categories.length > 0)
+    : null;
+
   const tiles = [
     { href: '/foundation/partners', code: 'FND.PARTNER.DISPLAY', title: t('bp.title'), body: t('bp.subtitle'), meta: t('bp.general') },
     {
@@ -39,7 +47,7 @@ export default async function LaunchpadPage() {
       code: 'CFG.WORKBENCH',
       title: t('nav.workbench'),
       body: t('workbench.subtitle'),
-      meta: '51 activities',
+      meta: t('launchpad.workbenchMeta'),
     },
     {
       href: '/inventory/materials', code: 'INV.MATERIAL.DISPLAY', title: t('nav.materials'),
@@ -114,6 +122,25 @@ export default async function LaunchpadPage() {
         </ul>
       </section>
 
+      {modules ? (
+        <section id="modules" className="mt-8">
+          <h2 className="text-lg font-semibold tracking-tight">{t('launchpad.modules')}</h2>
+          <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('launchpad.modulesLead')}</p>
+          <ul className="mt-3 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+            {modules.map((module) => (
+              <li key={module.id}>
+                <Link
+                  href={module.href}
+                  className="flex min-h-11 items-center justify-between gap-2 border border-transparent px-2 py-1 text-sm hover:border-line hover:bg-surface"
+                >
+                  <span>{module.label}</span>
+                  <span className="tabular text-2xs text-ink-faint">{module.count}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : (
       <section id="screens" className="mt-8">
         <h2 className="text-lg font-semibold tracking-tight">{t('nav.allScreens')}</h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('nav.screensLead')}</p>
@@ -140,6 +167,7 @@ export default async function LaunchpadPage() {
           );
         })}
       </section>
+      )}
     </div>
   );
 }

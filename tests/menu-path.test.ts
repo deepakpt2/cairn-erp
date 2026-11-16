@@ -72,10 +72,10 @@ describe('menu path', () => {
     }
   });
 
-  it('sits in the status bar as plain text unless the sidebar navigation is on', () => {
+  it('sits in the status bar with its levels linked', () => {
     const bar = readFileSync('src/ui/shell/StatusBar.tsx', 'utf8');
     const comp = readFileSync('src/ui/shell/MenuPath.tsx', 'utf8');
-    expect(bar).toContain('<MenuPath linkLevels={sidebarNavigationEnabled()} />');
+    expect(bar).toContain('<MenuPath linkLevels />');
     // Links exist only behind the prop, and the screen itself is never a link.
     expect(comp).toContain('linkLevels && href && !current');
     expect(comp).toContain('linkLevels = false');
