@@ -4,6 +4,8 @@ import './globals.css';
 import { CommandBar } from '@/ui/shell/CommandBar';
 import { RelatedScreensAccess } from '@/ui/shell/RelatedScreensAccess';
 import { StatusBar } from '@/ui/shell/StatusBar';
+import { NavSidebar } from '@/ui/shell/NavSidebar';
+import { sidebarNavigationEnabled } from '@/ui/shell/nav-flag';
 import { SessionBar } from '@/ui/shell/SessionBar';
 import { ScrollToTop } from '@/ui/shell/ScrollToTop';
 import { t, DEFAULT_LOCALE, LOCALE_DIRECTION } from '@/platform/i18n';
@@ -32,7 +34,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Suspense fallback={null}>
             <RelatedScreensAccess />
           </Suspense>
-          <main className="flex-1">{children}</main>
+          {sidebarNavigationEnabled() ? (
+            <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+              <Suspense fallback={null}>
+                <NavSidebar />
+              </Suspense>
+              <main className="min-w-0 flex-1">{children}</main>
+            </div>
+          ) : (
+            <main className="flex-1">{children}</main>
+          )}
           <ScrollToTop />
           <StatusBar />
         </div>

@@ -35,6 +35,9 @@ describe('screen links', () => {
       // Marks the notification seen, then redirects. It is a real page but
       // not a destination anyone navigates to, so it is not a catalog screen.
       '/platform/notifications/[id]',
+      // The module pages of the sidebar navigation: a list of screens, not a screen. Not found unless the
+      // navigation flag is on, and never a destination of its own in the catalogue.
+      '/menu',
     ];
     for (const route of excludedRoutes) pages.delete(route);
 

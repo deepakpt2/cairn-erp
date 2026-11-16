@@ -38,15 +38,15 @@ describe('menu path', () => {
     for (const s of SCREENS) {
       const path = resolveMenuPath(s.path, new URLSearchParams(s.query as Record<string, string>));
       expect(path, s.id).not.toBeNull();
-      expect(path!.screen.id, s.id).toBe(s.id);
+      expect(path!.screen!.id, s.id).toBe(s.id);
     }
   });
 
   it('puts a detail page under its list', () => {
-    expect(resolveMenuPath('/platform/users/jane', q())!.screen.path).toBe('/platform/users');
-    expect(resolveMenuPath('/platform/notifications/42', q())!.screen.path).toBe('/platform/notifications');
+    expect(resolveMenuPath('/platform/users/jane', q())!.screen!.path).toBe('/platform/users');
+    expect(resolveMenuPath('/platform/notifications/42', q())!.screen!.path).toBe('/platform/notifications');
     // A catalogued static page under the same prefix keeps its own path.
-    expect(resolveMenuPath('/platform/users/access', q())!.screen.path).toBe('/platform/users/access');
+    expect(resolveMenuPath('/platform/users/access', q())!.screen!.path).toBe('/platform/users/access');
   });
 
   it('names a parent for every dynamic page in the app, and every parent is a catalogued screen', () => {
@@ -72,11 +72,13 @@ describe('menu path', () => {
     }
   });
 
-  it('sits in the status bar as plain text, without links', () => {
+  it('sits in the status bar as plain text unless the sidebar navigation is on', () => {
     const bar = readFileSync('src/ui/shell/StatusBar.tsx', 'utf8');
     const comp = readFileSync('src/ui/shell/MenuPath.tsx', 'utf8');
-    expect(bar).toContain('<MenuPath />');
-    expect(comp).not.toContain('<Link');
+    expect(bar).toContain('<MenuPath linkLevels={sidebarNavigationEnabled()} />');
+    // Links exist only behind the prop, and the screen itself is never a link.
+    expect(comp).toContain('linkLevels && href && !current');
+    expect(comp).toContain('linkLevels = false');
     expect(comp).toContain('aria-current');
     expect(comp).toContain("t('status.menuPath')");
   });
