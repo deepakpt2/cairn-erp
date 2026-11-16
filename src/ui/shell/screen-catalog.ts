@@ -2678,6 +2678,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["order"],
   },
   {
+    id: "/sales/quotations",
+    path: "/sales/quotations",
+    query: {},
+    code: "SALES.QUOTATION.CREATE",
+    title: "Sales quotations",
+    area: "sales",
+    family: "sales-quotations",
+    accepts: ["quotation", "customer"],
+  },
+  {
     id: "/sales/conditions",
     path: "/sales/conditions",
     query: {},

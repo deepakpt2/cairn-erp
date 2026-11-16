@@ -52,6 +52,7 @@ import { buildDemoAssessment } from '../src/platform/tenancy/demo-assessment';
 import { buildDemoBomStructure } from '../src/platform/tenancy/demo-bom-structure';
 import { buildDemoCostEstimate } from '../src/platform/tenancy/demo-cost-estimate';
 import { buildDemoSalesAvailability } from '../src/platform/tenancy/demo-sales-availability';
+import { buildDemoSalesQuotation } from '../src/platform/tenancy/demo-sales-quotation';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -428,6 +429,15 @@ async function runSalesAvailabilityPhase(ctx: PhaseContext): Promise<Record<stri
   return { ...result };
 }
 
+/**
+ * Phase D18_SALES_QUOTATION: the quotation made reachable. One open quotation (changed, then raised to an order), one
+ * rejected with a reason, one expired by its date with the status still OPEN. Request-keyed throughout.
+ */
+async function runSalesQuotationPhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoSalesQuotation({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -450,6 +460,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D15_BOM_STRUCTURE: runBomStructurePhase,
   D16_COST_ESTIMATE: runCostEstimatePhase,
   D17_SALES_AVAILABILITY: runSalesAvailabilityPhase,
+  D18_SALES_QUOTATION: runSalesQuotationPhase,
 };
 
 async function main(): Promise<number> {

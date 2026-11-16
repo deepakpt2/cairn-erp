@@ -146,6 +146,7 @@ const STANDARD_RANGES: Array<{
   { objectCode: 'REBATE_AGR', subObject: '*', prefix: 'RA', length: 7 },
     { objectCode: 'SALESORD', subObject: 'RE', prefix: 'RO', length: 7 },
   { objectCode: 'SALESORD', subObject: 'CR', prefix: 'CR', length: 7 },
+  { objectCode: 'SALESORD', subObject: 'AG', prefix: 'SQ', length: 7 },
   { objectCode: 'DELIVERY', subObject: 'LR', prefix: 'RT', length: 7 },
   { objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', length: 7 },
   { objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', length: 7 },

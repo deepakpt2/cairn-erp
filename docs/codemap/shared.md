@@ -38,7 +38,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/page.tsx, app/registry |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (140)
+## Files (141)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -182,6 +182,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | demo-provisioning.ts | DEMO_PROVISION_OPERATION, DEMO_ADVISORY_LOCK_KEY, DEMO_CLAIM_LOCK_KEY, DEMO_PHASE_PLAN, isDemoProvisioningEnabled, censusDemoEligibility, claimDemoInstallation, startDemoPhase, completeDemoPhase, completeDemoPhases, failDemoPhase, completeDemoInstallation, buildDemoTimeline, acquireDemoProvisioningLock, readDemoPasswordState, recordDemoPasswordIssued, readDemoInstallation |  |
 | demo-quality.ts | buildDemoQuality |  |
 | demo-sales-availability.ts | buildDemoSalesAvailability | availability_check_scope, availability_checking_group, availability_checking_rule, delivery, delivery_line, material_plant, sales_order |
+| demo-sales-quotation.ts | buildDemoSalesQuotation | sales_condition_record |
 | demo-sales.ts | buildDemoSales | account_determination, billing_document, customer_invoice, delivery |
 | index.ts | TenancyError, createTenant, listTenants, configReadiness, getTenant, markActivityComplete | app_user, client, client_settings, config_activity, config_activity_status, internal_order_budget_profile, internal_order_type, internal_order_type_budget_profile, number_range_object, purchasing_contract_type, role, role_capability, scheduling_agreement_type, user_role |
 | provisioning.ts | ProvisioningError, assertProvisioningToken, authorizeProvisioning |  |

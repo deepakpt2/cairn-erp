@@ -4582,6 +4582,22 @@
     "modules/sales/output.ts",
     "platform/auth/current.ts"
   ],
+  "app/sales/quotations/Quotations.tsx": [
+    "app/sales/orders/Orders.tsx",
+    "app/sales/quotations/actions.ts",
+    "modules/sales/quotation.ts"
+  ],
+  "app/sales/quotations/actions.ts": [
+    "modules/sales/quotation.ts",
+    "modules/sales/sales-order.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/sales/quotations/page.tsx": [
+    "app/sales/quotations/Quotations.tsx",
+    "modules/sales/quotation.ts",
+    "modules/sales/sales-order.ts",
+    "platform/auth/current.ts"
+  ],
   "app/sales/rebate-agreements/RebateAgreements.tsx": [
     "app/sales/rebate-agreements/actions.ts",
     "modules/sales/rebate.ts"
@@ -7488,6 +7504,22 @@
     "modules/inventory/schema.ts",
     "platform/db/client.ts"
   ],
+  "modules/sales/quotation.ts": [
+    "modules/foundation/business-partner-schema.ts",
+    "modules/foundation/schema.ts",
+    "modules/sales/availability.ts",
+    "modules/sales/document-type.ts",
+    "modules/sales/partners.ts",
+    "modules/sales/pricing-procedure.ts",
+    "modules/sales/pricing.ts",
+    "modules/sales/sales-order.ts",
+    "modules/sales/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/numbering/index.ts"
+  ],
   "modules/sales/rebate.ts": [
     "modules/finance/customer-credit-memo.ts",
     "modules/foundation/business-partner-schema.ts",
@@ -8080,6 +8112,13 @@
     "modules/sales/availability-check.ts",
     "modules/sales/delivery.ts",
     "modules/sales/sales-order.ts",
+    "platform/db/client.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-people.ts",
+    "platform/tenancy/demo-provisioning.ts"
+  ],
+  "platform/tenancy/demo-sales-quotation.ts": [
+    "modules/sales/quotation.ts",
     "platform/db/client.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",

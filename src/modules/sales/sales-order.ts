@@ -71,9 +71,9 @@ export class SalesOrderError extends Error {
   }
 }
 
-const key = (max: number) => z.string().trim().transform((s) => s.toUpperCase()).pipe(z.string().min(1).max(max));
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date as YYYY-MM-DD.');
-const optionalKey = (max: number) => z.union([z.undefined(), z.literal(''), z.string().trim().transform((s) => s.toUpperCase()).pipe(z.string().max(max))]);
+export const key = (max: number) => z.string().trim().transform((s) => s.toUpperCase()).pipe(z.string().min(1).max(max));
+export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date as YYYY-MM-DD.');
+export const optionalKey = (max: number) => z.union([z.undefined(), z.literal(''), z.string().trim().transform((s) => s.toUpperCase()).pipe(z.string().max(max))]);
 
 export const orderLineInput = z.object({
   /** Present only to address an existing item on a change; a new item leaves it out. */
@@ -110,6 +110,12 @@ const documentFields = {
   creditControlArea: optionalKey(4),
   requestKey: z.union([z.undefined(), z.string().trim().min(8).max(64)]),
   /**
+   * The document this order answers, as a type and a number: 'AG' and the quotation number when the
+   * order is raised from a quotation. Absent on every order raised against nothing.
+   */
+  referenceDocumentType: optionalKey(2),
+  referenceDocumentNumber: optionalKey(20),
+  /**
    * An order's items, as many as the order has. This was a hundred and the grid that typed them was
    * ten, and the two disagreed about how large a large order was; the grid grows now (§5.4), so the
    * service stands at the number a sales order has always been allowed to carry.
@@ -133,7 +139,7 @@ export const orderChangeInput = z.object({
 export type OrderCreateInput = z.infer<typeof orderCreateInput>;
 export type OrderChangeInput = z.infer<typeof orderChangeInput>;
 
-function round2(value: number): string {
+export function round2(value: number): string {
   if (!Number.isFinite(value)) throw new SalesOrderError('A value did not scale to a number.');
   return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
 }
@@ -196,7 +202,7 @@ export async function creditAreaFor(
   return areas[0];
 }
 
-interface PricedLine {
+export interface PricedLine {
   lineNumber: number;
   materialNumber: string;
   plant: string;
@@ -218,7 +224,7 @@ interface PricedLine {
  * Judge and price every submitted item. The numbers are the document's: an item that will not pass is
  * a refusal of the whole save, so a partial set never stands.
  */
-async function priceLines(
+export async function priceLines(
   tx: Tx,
   client: string,
   input: {
@@ -800,6 +806,8 @@ export async function createSalesOrder(
       client: parsed.client,
       orderNumber: number,
       documentType: orderType.documentType,
+      referenceDocumentType: parsed.referenceDocumentType || null,
+      referenceDocumentNumber: parsed.referenceDocumentNumber || null,
       salesOrg: parsed.salesOrg,
       distributionChannel: parsed.distributionChannel,
       division: parsed.division,

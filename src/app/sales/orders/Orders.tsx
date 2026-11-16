@@ -52,7 +52,7 @@ function Notice({ state }: { state: OrderActionState }) {
   );
 }
 
-interface GridRow {
+export interface GridRow {
   id: number;
   /** The item this row addresses, or null on a row that has never been saved. */
   lineNumber: number | null;
@@ -83,7 +83,7 @@ const blankRow = (id: number, lineNumber: number | null = null): GridRow => ({
  * A blank row is not an item. The grid submits everything it has and the service ignores a row that
  * names no material, so a clerk can leave rows they decided not to use.
  */
-function ItemGrid({ initialRows, numbered }: { initialRows?: GridRow[]; numbered: boolean }) {
+export function ItemGrid({ initialRows, numbered }: { initialRows?: GridRow[]; numbered: boolean }) {
   const [rows, setRows] = useState<GridRow[]>(() => {
     const start = initialRows && initialRows.length > 0
       ? [...initialRows, ...Array.from({ length: SPARE_ROWS }, (_, n) => blankRow(-(n + 1)))]

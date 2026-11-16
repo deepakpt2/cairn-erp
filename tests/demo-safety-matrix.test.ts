@@ -189,6 +189,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     resumesBy: 'Each configuration row is created only when missing; the order and the delivery are request-keyed (`DEMO-ATP-ORDER-3`, `DEMO-ATP-DELIVERY-3`).',
     guaranteedBy: ['buildDemoSalesAvailability'],
   },
+  {
+    phase: 'D18_SALES_QUOTATION',
+    writes: 'Three sales quotations: an open one for CUS-2000 (three items, changed once with an item rejected, then raised to one sales order), a rejected one for CUS-3000, and an expired one for CUS-1000 given in the past whose status stays OPEN. The one order consumes a small quantity and a small part of the customer\'s credit headroom. Nothing else is changed.',
+    resumesBy: 'Every document is request-keyed (`DEMO-VA21-OPEN-1`, `DEMO-VA21-REJECTED-1`, `DEMO-VA21-EXPIRED-1`, `DEMO-VA21-ORDER-1`); the change and the rejection run only while the quotation still stands at its first version and open.',
+    guaranteedBy: ['buildDemoSalesQuotation'],
+  },
 ];
 
 describe('the demo installation, stopped part way through', () => {

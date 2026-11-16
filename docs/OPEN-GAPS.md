@@ -160,6 +160,26 @@ The engine (`sales/availability.ts`) existed before this item and runs when an o
 | M10 | Drill-through not clicked in a browser | Found | No signed-in browser session was used. Verified by the exact-URL test, by MD04's page reading the same `material` and `plant` parameters, and by the route compiling on the dev server. |
 | M11 | Authority by session, not `heldCapabilities` | Decision | Like every other service here: the signed-in session is judged, with the user's Plant scope, before any planning data is read. |
 
+## 3i. Sales quotation (VA21 / VA22 / VA23) — item 16
+
+Migration 9291. One screen (`/sales/quotations`), one service (`src/modules/sales/quotation.ts`), three tables, capability `SALES.QUOTATION.CREATE` (granted to no role by the migration).
+
+| # | Gap | Kind | Notes |
+|---|---|---|---|
+| Q1 | No printed quotation (output determination) | Not built | `recordSalesOutputs` and the output categories are untouched. It needs the `output_message_category_ck` and `output_condition_record` checks widened, a `documentFacts` branch, a `CATEGORY_OUTPUT_TYPE` entry, a seeded output type and a `/sales/output` filter. A separate item. |
+| Q2 | `VA01` / `VA02` / `VA03` aliases are missing on `SALES.ORDER.CREATE` | Found | The registry description claims them; no alias row exists (`VA03` stands only on the availability row of 9289). One alias row each, in a migration of its own. Not fixed here. |
+| Q3 | No rejection-reason master | Found | `sales_order_line.rejection_reason` and the quotation's are free 4-character codes. Two documents now carry one, which is the threshold the spec set for reporting it. |
+| Q4 | An order's quantity is not tracked against the quotation it came from | Decision | Several orders may be raised from one quotation. The copy result and the screen name every order already raised from it, but nothing sums what they consume. |
+| Q5 | The order is committed before the quotation's change document | Decision | `createSalesOrder` opens its own transaction. `ordersRaised` is read from the reference the order carries, so a missing audit row never loses the link; a replayed request writes no second audit row. |
+| Q6 | The change document type is `CHANGE`, not `UPDATE` | Found | `recordChange` has no `UPDATE`. The spec said `UPDATE`; the order's own change uses `CHANGE`, and so do the quotation's change, rejection and copy. |
+| Q7 | The `'ORDER' \| 'BILLING'` union appears three times in `pricing-procedure.ts`, not four | Found | Lines 856, 961 and 998 (the spec also named 986, which carries no such union). All three are widened. |
+| Q8 | A rejected item keeps its earlier confirmation | Found | As an order's does: the schedule is not rewritten for a rejected item, and it leaves the totals. |
+| Q9 | Quotation date in the past is accepted | Decision | A quotation may be given on a past date (the demo's expired one is), priced from the records standing then. Only `valid_to >= quotation_date` and `requested_date >= quotation_date` are enforced. |
+| Q10 | Changing an expired quotation is allowed | Decision | Extending `valid_to` is how an expired quotation is revived; only the copy is refused. |
+| Q11 | The demo role snapshot | Found | Existing demo roles hold expanded capability lists, so `SALES.QUOTATION.CREATE` was granted by hand to `DEMO_SALES_CLERK` on erp_dev (the only role holding `SALES.ORDER.CREATE`). A fresh installation gets it through the `SALES.*` expansion. erp_test has no demo tenant, so nothing was granted there. |
+| Q12 | Registry module of the availability row | Decision | The ATP row of 9289 said `SALES`; 9291 sets it to `SD`, as `SALES.ORDER.CREATE` is. Nothing gates or routes on `term_registry.module` (display and sorting only). |
+| Q13 | Browser not used | Found | Page and actions were verified by the source-contract test and by the services; no signed-in browser session was driven. |
+
 ## 4. Demo data and environment
 
 | # | Gap | Kind | Notes |

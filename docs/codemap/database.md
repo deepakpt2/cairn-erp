@@ -57,8 +57,8 @@
 ### quality (4)
 - `modules/quality/schema.ts`: inspection_characteristic, inspection_result, quality_lot, usage_decision
 
-### sales (39)
-- `modules/sales/schema.ts`: billing_document, billing_document_line, customer_sales_partner, delivery, delivery_line, delivery_picking, delivery_picking_serial, incompletion_assignment, incompletion_group, incompletion_procedure, incompletion_procedure_field, incompletion_status_group, sales_account_determination, sales_batch_determination_rule, sales_billing_plan, sales_billing_plan_date, sales_billing_plan_type, sales_billing_split_criterion, sales_condition_record, sales_condition_type, sales_document_condition, sales_document_partner, sales_document_type, sales_down_payment_request, sales_incompletion_log, sales_invoice_list_item, sales_order, sales_order_line, sales_order_schedule, sales_partner_function, sales_pricing_procedure, sales_pricing_procedure_step, sales_procedure_determination, sales_rebate_accrual, sales_rebate_agreement, sales_returns_configuration, shipping_condition, shipping_point, shipping_point_determination
+### sales (42)
+- `modules/sales/schema.ts`: billing_document, billing_document_line, customer_sales_partner, delivery, delivery_line, delivery_picking, delivery_picking_serial, incompletion_assignment, incompletion_group, incompletion_procedure, incompletion_procedure_field, incompletion_status_group, sales_account_determination, sales_batch_determination_rule, sales_billing_plan, sales_billing_plan_date, sales_billing_plan_type, sales_billing_split_criterion, sales_condition_record, sales_condition_type, sales_document_condition, sales_document_partner, sales_document_type, sales_down_payment_request, sales_incompletion_log, sales_invoice_list_item, sales_order, sales_order_line, sales_order_schedule, sales_partner_function, sales_pricing_procedure, sales_pricing_procedure_step, sales_procedure_determination, sales_quotation, sales_quotation_line, sales_quotation_schedule, sales_rebate_accrual, sales_rebate_agreement, sales_returns_configuration, shipping_condition, shipping_point, shipping_point_determination
 
 ## Cross-module access
 | table | owner | also used by |

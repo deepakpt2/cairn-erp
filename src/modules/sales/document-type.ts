@@ -28,6 +28,8 @@ import { salesDocumentType } from './schema';
  * these are the codes the chain asks for while no screen offers one.
  */
 export const STANDARD_ORDER_TYPE = 'OR';
+/** The quotation: the answer given before an order, drawn from the order's number object under its own sub-object. */
+export const STANDARD_QUOTATION_TYPE = 'AG';
 export const STANDARD_DELIVERY_TYPE = 'LF';
 export const STANDARD_BILLING_TYPE = 'F2';
 /** What an invoice cancels into — VF11, as opposed to a credit memo, which stands on its own. */
@@ -90,6 +92,7 @@ export interface StandardSalesDocumentType {
  */
 export const STANDARD_SALES_DOCUMENT_TYPES: StandardSalesDocumentType[] = [
   { documentType: STANDARD_ORDER_TYPE, name: 'Standard order', numberRangeObject: 'SALESORD', numberRangeSubObject: 'OR' },
+  { documentType: STANDARD_QUOTATION_TYPE, name: 'Quotation', numberRangeObject: 'SALESORD', numberRangeSubObject: 'AG' },
   { documentType: STANDARD_DELIVERY_TYPE, name: 'Outbound delivery', numberRangeObject: 'DELIVERY', numberRangeSubObject: 'LF' },
   {
     documentType: STANDARD_RETURNS_ORDER_TYPE, name: 'Returns',

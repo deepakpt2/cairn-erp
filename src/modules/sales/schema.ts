@@ -188,6 +188,7 @@ export const salesOrder = pgTable('sales_order', {
   check('sales_order_value_ck', sql`${t.netValue} >= 0 and ${t.taxValue} >= 0 and ${t.grossValue} >= 0`),
   check('sales_order_date_ck', sql`${t.requestedDate} is null or ${t.requestedDate} >= ${t.orderDate}`),
   check('sales_order_type_ck', sql`${t.documentType} ~ '^[A-Z0-9]{2}$'`),
+  index('sales_order_reference_idx').on(t.client, t.referenceDocumentType, t.referenceDocumentNumber),
   uniqueIndex('sales_order_request_key_uq').on(t.client, t.requestKey).where(sql`${t.requestKey} is not null`),
   foreignKey({
     name: 'sales_order_customer_fk',
@@ -288,6 +289,130 @@ export const salesOrderSchedule = pgTable('sales_order_schedule', {
   check('sales_order_schedule_number_ck', sql`${t.scheduleNumber} > 0`),
   check('sales_order_schedule_quantity_ck', sql`${t.requestedQuantity} > 0`),
   check('sales_order_schedule_confirmed_ck', sql`${t.confirmedQuantity} >= 0 and ${t.confirmedQuantity} <= ${t.requestedQuantity}`),
+]);
+
+/**
+ * One sales quotation (VA21). The answer given before the customer commits: the same items and the same
+ * price an order would carry, and nothing that binds the company. It lives in tables of its own because
+ * the availability check counts promises through `sales_order_schedule`; a quotation written there would
+ * take stock from the customer who actually orders it. Expiry is a fact about `valid_to`, computed on
+ * read and never written back.
+ */
+export const salesQuotation = pgTable('sales_quotation', {
+  client: tenant(),
+  quotationNumber: varchar('quotation_number', { length: 20 }).notNull(),
+  documentType: varchar('document_type', { length: 2 }).notNull().default('AG'),
+  salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+  distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),
+  division: varchar('division', { length: 2 }).notNull(),
+  customerNumber: varchar('customer_number', { length: 40 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  quotationDate: date('quotation_date', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }).notNull(),
+  requestedDate: date('requested_date', { mode: 'string' }),
+  purchaseOrderReference: varchar('purchase_order_reference', { length: 20 }),
+  headerText: varchar('header_text', { length: 100 }),
+  status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+  rejectionReason: varchar('rejection_reason', { length: 4 }),
+  netValue: numeric('net_value', { precision: 23, scale: 4 }).notNull().default('0'),
+  taxValue: numeric('tax_value', { precision: 23, scale: 4 }).notNull().default('0'),
+  grossValue: numeric('gross_value', { precision: 23, scale: 4 }).notNull().default('0'),
+  version: integer('version').notNull().default(1),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.quotationNumber] }),
+  check('sales_quotation_status_ck', sql`${t.status} in ('OPEN', 'REJECTED')`),
+  check('sales_quotation_rejection_ck', sql`(${t.status} = 'REJECTED' and ${t.rejectionReason} is not null) or (${t.status} = 'OPEN' and ${t.rejectionReason} is null)`),
+  check('sales_quotation_valid_ck', sql`${t.validTo} >= ${t.quotationDate}`),
+  check('sales_quotation_date_ck', sql`${t.requestedDate} is null or ${t.requestedDate} >= ${t.quotationDate}`),
+  check('sales_quotation_value_ck', sql`${t.netValue} >= 0 and ${t.taxValue} >= 0 and ${t.grossValue} >= 0`),
+  check('sales_quotation_version_ck', sql`${t.version} > 0`),
+  check('sales_quotation_type_ck', sql`${t.documentType} ~ '^[A-Z0-9]{2}$'`),
+  uniqueIndex('sales_quotation_request_key_uq').on(t.client, t.requestKey).where(sql`${t.requestKey} is not null`),
+  foreignKey({
+    name: 'sales_quotation_customer_fk',
+    columns: [t.client, t.customerNumber],
+    foreignColumns: [businessPartner.client, businessPartner.partnerNumber],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'sales_quotation_area_fk',
+    columns: [t.client, t.salesOrg, t.distributionChannel, t.division],
+    foreignColumns: [salesArea.client, salesArea.salesOrg, salesArea.distributionChannel, salesArea.division],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'sales_quotation_company_fk',
+    columns: [t.client, t.companyCode],
+    foreignColumns: [companyCode.client, companyCode.companyCode],
+  }).onDelete('cascade'),
+]);
+
+/** One item of a quotation. The quantity is named for what it is: a quotation quantity, not an order quantity. */
+export const salesQuotationLine = pgTable('sales_quotation_line', {
+  client: tenant(),
+  quotationNumber: varchar('quotation_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  quotationQuantity: numeric('quotation_quantity', { precision: 13, scale: 3 }).notNull(),
+  quantityUnit: char('quantity_unit', { length: 6 }).notNull().references(() => unitOfMeasure.code),
+  baseQuantity: numeric('base_quantity', { precision: 13, scale: 3 }).notNull(),
+  /** What the check would confirm. Null is "never checked", not zero. */
+  confirmedQuantity: numeric('confirmed_quantity', { precision: 13, scale: 3 }),
+  netPrice: numeric('net_price', { precision: 23, scale: 4 }).notNull().default('0'),
+  priceUnit: integer('price_unit').notNull().default(1),
+  netAmount: numeric('net_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  taxCode: varchar('tax_code', { length: 4 }),
+  taxRate: numeric('tax_rate', { precision: 7, scale: 4 }).notNull().default('0'),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  profitCenter: varchar('profit_center', { length: 20 }),
+  requestedDeliveryDate: date('requested_delivery_date', { mode: 'string' }),
+  conditionNumber: varchar('condition_number', { length: 18 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+  rejectionReason: varchar('rejection_reason', { length: 4 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.quotationNumber, t.lineNumber] }),
+  check('sales_quotation_line_quantity_ck', sql`${t.quotationQuantity} > 0 and ${t.baseQuantity} > 0`),
+  check('sales_quotation_line_price_ck', sql`${t.netPrice} >= 0 and ${t.priceUnit} > 0 and ${t.netAmount} >= 0`),
+  check('sales_quotation_line_tax_ck', sql`${t.taxRate} >= 0 and ${t.taxAmount} >= 0`),
+  check('sales_quotation_line_status_ck', sql`${t.status} in ('OPEN', 'REJECTED')`),
+  check('sales_quotation_line_rejection_ck', sql`(${t.status} = 'REJECTED' and ${t.rejectionReason} is not null) or (${t.status} = 'OPEN' and ${t.rejectionReason} is null)`),
+  check('sales_quotation_line_number_ck', sql`${t.lineNumber} > 0`),
+  foreignKey({
+    name: 'sales_quotation_line_header_fk',
+    columns: [t.client, t.quotationNumber],
+    foreignColumns: [salesQuotation.client, salesQuotation.quotationNumber],
+  }).onDelete('cascade'),
+  foreignKey({
+    name: 'sales_quotation_line_material_fk',
+    columns: [t.client, t.materialNumber],
+    foreignColumns: [material.client, material.materialNumber],
+  }).onDelete('cascade'),
+]);
+
+/** What the check would promise against a quotation item. Never read by the availability join. */
+export const salesQuotationSchedule = pgTable('sales_quotation_schedule', {
+  client: tenant(),
+  quotationNumber: varchar('quotation_number', { length: 20 }).notNull(),
+  quotationLineNumber: integer('quotation_line_number').notNull(),
+  scheduleNumber: integer('schedule_number').notNull(),
+  requestedDate: date('requested_date', { mode: 'string' }).notNull(),
+  requestedQuantity: numeric('requested_quantity', { precision: 13, scale: 3 }).notNull(),
+  confirmedQuantity: numeric('confirmed_quantity', { precision: 13, scale: 3 }).notNull().default('0'),
+  confirmedDate: date('confirmed_date', { mode: 'string' }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.quotationNumber, t.quotationLineNumber, t.scheduleNumber] }),
+  foreignKey({
+    name: 'sales_quotation_schedule_line_fk',
+    columns: [t.client, t.quotationNumber, t.quotationLineNumber],
+    foreignColumns: [salesQuotationLine.client, salesQuotationLine.quotationNumber, salesQuotationLine.lineNumber],
+  }).onDelete('cascade'),
+  check('sales_quotation_schedule_number_ck', sql`${t.scheduleNumber} > 0`),
+  check('sales_quotation_schedule_quantity_ck', sql`${t.requestedQuantity} > 0`),
+  check('sales_quotation_schedule_confirmed_ck', sql`${t.confirmedQuantity} >= 0 and ${t.confirmedQuantity} <= ${t.requestedQuantity}`),
 ]);
 
 /**

@@ -853,7 +853,7 @@ export async function writeDocumentConditions(
   tx: Tx,
   input: {
     client: string;
-    documentCategory: 'ORDER' | 'BILLING';
+    documentCategory: 'ORDER' | 'BILLING' | 'QUOTATION';
     documentNumber: string;
     currency: string;
     /** Every condition the document's lines carry. */
@@ -958,7 +958,7 @@ export async function writeDocumentConditions(
 export async function documentConditionsOf(
   tx: Tx,
   client: string,
-  documentCategory: 'ORDER' | 'BILLING',
+  documentCategory: 'ORDER' | 'BILLING' | 'QUOTATION',
   documentNumber: string,
 ): Promise<StoredCondition[]> {
   const rows = await tx.select({
@@ -995,7 +995,7 @@ export async function documentConditionsOf(
 /** The conditions a document was priced by, read back. */
 export async function salesDocumentConditionsOf(
   client: string,
-  documentCategory: 'ORDER' | 'BILLING',
+  documentCategory: 'ORDER' | 'BILLING' | 'QUOTATION',
   documentNumber: string,
 ): Promise<StoredCondition[]> {
   return withTenant(client, (tx) => documentConditionsOf(tx, client, documentCategory, documentNumber));
