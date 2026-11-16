@@ -18,6 +18,7 @@
 //
 import '../modules/people/jobs/grant-expiring';
 import '../platform/notification/jobs/fanout';
+import '../platform/mail/jobs/send';
 //
 // Adding a job means adding its import here. A job that is not imported is not
 // a job — it is a run that will fail the moment a worker claims it.

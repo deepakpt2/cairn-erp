@@ -3373,10 +3373,17 @@
     "app/globals.css",
     "platform/i18n/index.ts",
     "ui/shell/CommandBar.tsx",
+    "ui/shell/NavSidebar.tsx",
     "ui/shell/RelatedScreensAccess.tsx",
     "ui/shell/ScrollToTop.tsx",
     "ui/shell/SessionBar.tsx",
     "ui/shell/StatusBar.tsx"
+  ],
+  "app/menu/page.tsx": [
+    "platform/auth/current.ts",
+    "platform/i18n/index.ts",
+    "ui/shell/menu-access.ts",
+    "ui/shell/nav-tree.ts"
   ],
   "app/page.tsx": [
     "platform/attention/panel.ts",
@@ -3384,6 +3391,9 @@
     "platform/i18n/index.ts",
     "platform/tenancy/index.ts",
     "ui/attention/AttentionPanel.tsx",
+    "ui/shell/launchpad.ts",
+    "ui/shell/menu-access.ts",
+    "ui/shell/nav-tree.ts",
     "ui/shell/screen-catalog.ts",
     "ui/shell/screen-links.ts"
   ],
@@ -3537,6 +3547,19 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts"
+  ],
+  "app/platform/mail/MailForms.tsx": [
+    "app/platform/mail/actions.ts",
+    "platform/mail/service.ts"
+  ],
+  "app/platform/mail/actions.ts": [
+    "platform/auth/current.ts",
+    "platform/mail/service.ts"
+  ],
+  "app/platform/mail/page.tsx": [
+    "app/platform/mail/MailForms.tsx",
+    "platform/auth/current.ts",
+    "platform/mail/service.ts"
   ],
   "app/platform/notifications/[id]/page.tsx": [
     "platform/auth/current.ts",
@@ -4660,6 +4683,13 @@
     "modules/sales/returns.ts",
     "modules/sales/sales-order.ts",
     "platform/auth/current.ts"
+  ],
+  "app/search/page.tsx": [
+    "platform/auth/current.ts",
+    "platform/i18n/index.ts",
+    "platform/registry/index.ts",
+    "ui/shell/menu-access.ts",
+    "ui/shell/nav-search.ts"
   ],
   "app/signin/page.tsx": [
     "platform/i18n/index.ts"
@@ -7793,6 +7823,24 @@
     "platform/db/client.ts",
     "platform/tables/lock.ts"
   ],
+  "platform/mail/jobs/send.ts": [
+    "platform/db/client.ts",
+    "platform/job/registry.ts",
+    "platform/job/types.ts",
+    "platform/mail/service.ts",
+    "platform/tables/system.ts"
+  ],
+  "platform/mail/service.ts": [
+    "platform/auth/pattern.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/mail/transport.ts",
+    "platform/security/bank-data-encryption.ts",
+    "platform/security/bank-data-keyring.ts",
+    "platform/security/bank-record-id.ts",
+    "platform/tables/system.ts"
+  ],
+  "platform/mail/transport.ts": [],
   "platform/notification/creator.ts": [
     "platform/db/client.ts",
     "platform/tables/audit-trail.ts",
@@ -8246,12 +8294,34 @@
   "ui/shell/CommandBar.tsx": [
     "app/command.ts",
     "platform/i18n/index.ts",
+    "ui/shell/CommandBarLinks.tsx",
     "ui/shell/SubmitButton.tsx"
+  ],
+  "ui/shell/CommandBarLinks.tsx": [
+    "platform/auth/current.ts",
+    "platform/i18n/index.ts",
+    "ui/shell/launchpad.ts"
+  ],
+  "ui/shell/MenuPath.tsx": [
+    "platform/i18n/index.ts",
+    "ui/shell/menu-path.ts"
+  ],
+  "ui/shell/NavSidebar.tsx": [
+    "platform/auth/current.ts",
+    "ui/shell/SidebarMenu.tsx",
+    "ui/shell/menu-access.ts",
+    "ui/shell/nav-personal.ts",
+    "ui/shell/nav-tree.ts"
   ],
   "ui/shell/NotificationBell.tsx": [
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/notification/notify.ts"
+  ],
+  "ui/shell/PersonalMenu.tsx": [
+    "platform/i18n/index.ts",
+    "ui/shell/nav-personal.ts",
+    "ui/shell/nav-tree.ts"
   ],
   "ui/shell/RelatedScreens.tsx": [
     "platform/i18n/index.ts",
@@ -8270,10 +8340,17 @@
     "ui/shell/SessionMenu.tsx"
   ],
   "ui/shell/SessionMenu.tsx": [],
+  "ui/shell/SidebarMenu.tsx": [
+    "platform/i18n/index.ts",
+    "ui/shell/PersonalMenu.tsx",
+    "ui/shell/menu-path.ts",
+    "ui/shell/nav-tree.ts"
+  ],
   "ui/shell/Spinner.tsx": [],
   "ui/shell/StatusBar.tsx": [
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/shell/MenuPath.tsx",
     "ui/shell/WorkIndicator.tsx"
   ],
   "ui/shell/SubmitButton.tsx": [
@@ -8283,6 +8360,33 @@
     "platform/i18n/index.ts",
     "ui/shell/Spinner.tsx",
     "ui/shell/navigation-click.ts"
+  ],
+  "ui/shell/launchpad.ts": [
+    "platform/auth/session.ts",
+    "ui/shell/menu-access.ts",
+    "ui/shell/screen-access.ts",
+    "ui/shell/screen-catalog.ts",
+    "ui/shell/screen-links.ts"
+  ],
+  "ui/shell/menu-access.ts": [
+    "platform/auth/capability-policy.ts",
+    "platform/auth/session.ts",
+    "ui/shell/screen-access.ts",
+    "ui/shell/screen-catalog.ts"
+  ],
+  "ui/shell/menu-path.ts": [
+    "ui/shell/nav-tree.ts",
+    "ui/shell/screen-catalog.ts",
+    "ui/shell/screen-links.ts"
+  ],
+  "ui/shell/nav-personal.ts": [],
+  "ui/shell/nav-search.ts": [
+    "ui/shell/screen-catalog.ts",
+    "ui/shell/screen-links.ts"
+  ],
+  "ui/shell/nav-tree.ts": [
+    "ui/shell/screen-catalog.ts",
+    "ui/shell/screen-links.ts"
   ],
   "ui/shell/navigation-click.ts": [],
   "ui/shell/screen-access.ts": [
@@ -8302,6 +8406,7 @@
   ],
   "worker/jobs.ts": [
     "modules/people/jobs/grant-expiring.ts",
+    "platform/mail/jobs/send.ts",
     "platform/notification/jobs/fanout.ts"
   ]
 }

@@ -8,7 +8,7 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 - `PROTECTED_ROLE_CODES` and `isSystemRole` roles are never editable via UI.
 - Job cancel is a request (in-hand chunk finishes). Opening a notification is a mutating GET.
 
-## Files (25)
+## Files (28)
 | file | exports | tables |
 |---|---|---|
 | **app/platform/jobs/** | | |
@@ -19,6 +19,10 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 | actions.ts | openChangeLockAction, heartbeatEnqueueAction, releaseEnqueueAction, deleteEnqueueAction |  |
 | DeleteLock.tsx | DeleteLock |  |
 | page.tsx | LockMonitorPage |  |
+| **app/platform/mail/** | | |
+| actions.ts | saveMailConfigAction, testConnectionAction, sendTestMailAction |  |
+| MailForms.tsx | NodeForm, TestPanel |  |
+| page.tsx | MailPage |  |
 | **app/platform/notifications/** | | |
 | page.tsx | NotificationsPage |  |
 | **app/platform/notifications/[id]/** | | |
@@ -46,14 +50,14 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 | role-admin.ts | PLATFORM_ADMIN_ROLE_CODE, ROLE_MAINTAIN_CAPABILITY, USER_ROLE_MAINTAIN_CAPABILITY, RoleAdminError, getRoleAdminOverview, createRole, updateRoleMetadata, setRoleActive, grantCapabilityToRole, revokeCapabilityFromRole, grantRoleToUser, revokeRoleFromUser | app_user, audit_access_log, auth_org_restriction, capability, role, role_capability, sod_rule, user_role, user_session |
 | user-admin.ts | USER_ADMIN_VIEW_CAPABILITIES, canViewUserAdministration, UserAdminError, createUser, listUsers, getUserAdminDetails, changeUser, setUserLocked, initiatePasswordReset, requestPasswordReset, completePasswordReset | app_user, audit_access_log, capability, employee, password_reset_token, role, user_role, user_session |
 
-## Routes (8)
-`/platform/jobs` · `/platform/locks` · `/platform/notifications` · `/platform/notifications/[id]` · `/platform/roles` · `/platform/users` · `/platform/users/[username]` · `/platform/users/access`
+## Routes (9)
+`/platform/jobs` · `/platform/locks` · `/platform/mail` · `/platform/notifications` · `/platform/notifications/[id]` · `/platform/roles` · `/platform/users` · `/platform/users/[username]` · `/platform/users/access`
 
 ## Tables owned (0)
 —
 
 ## Depends on
-foundation, people, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/lock, platform/notification, platform/tables, platform/tenancy, ui/lock
+foundation, people, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/lock, platform/mail, platform/notification, platform/tables, platform/tenancy, ui/lock
 
 ## Used by
 app/forgot-password, app/reset-password, platform/tenancy, ui/lock

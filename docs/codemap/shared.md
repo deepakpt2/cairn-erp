@@ -16,29 +16,30 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | app/command.ts | ui/shell |
 | app/registry | app/command.ts |
 | platform/attention | app/page.tsx, ui/attention |
-| platform/auth | app/api, app/clients, app/config, app/page.tsx, audit, finance, foundation, inventory, people, platform, platform/attention, platform/job, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
-| platform/change | audit, finance, foundation, inventory, people, platform, platform/lock, platform/posting, platform/security, platform/tenancy, production, purchasing, quality, sales |
-| platform/db | app/api, app/config, audit, dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/notification, platform/numbering, platform/periods, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales, worker/index.ts |
+| platform/auth | app/api, app/clients, app/config, app/menu, app/page.tsx, app/search, audit, finance, foundation, inventory, people, platform, platform/attention, platform/job, platform/mail, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
+| platform/change | audit, finance, foundation, inventory, people, platform, platform/lock, platform/mail, platform/posting, platform/security, platform/tenancy, production, purchasing, quality, sales |
+| platform/db | app/api, app/config, audit, dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/periods, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales, worker/index.ts |
 | platform/document | inventory, platform/posting, purchasing |
-| platform/i18n | app/clients, app/config, app/layout.tsx, app/page.tsx, app/registry, app/signin, audit, finance, foundation, inventory, people, platform, platform/attention, platform/notification, production, purchasing, sales, ui/attention, ui/fields, ui/lock, ui/shell |
-| platform/job | finance, foundation, people, platform, platform/notification, production, purchasing, worker/index.ts |
+| platform/i18n | app/clients, app/config, app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search, app/signin, audit, finance, foundation, inventory, people, platform, platform/attention, platform/notification, production, purchasing, sales, ui/attention, ui/fields, ui/lock, ui/shell |
+| platform/job | finance, foundation, people, platform, platform/mail, platform/notification, production, purchasing, worker/index.ts |
 | platform/lock | finance, foundation, inventory, platform, platform/job, platform/posting, production, purchasing, quality, ui/lock |
+| platform/mail | platform, worker/jobs.ts |
 | platform/notification | finance, foundation, people, platform, platform/job, production, purchasing, sales, ui/shell, worker/jobs.ts |
 | platform/numbering | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, quality, sales |
 | platform/periods | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
 | platform/posting | finance, foundation, inventory, people, platform/tenancy, production, purchasing, sales |
-| platform/registry | app/command.ts, app/registry |
+| platform/registry | app/command.ts, app/registry, app/search |
 | platform/schema.ts | platform/db |
-| platform/security | foundation |
-| platform/tables | audit, finance, foundation, inventory, people, platform, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/notification, platform/numbering, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales |
+| platform/security | foundation, platform/mail |
+| platform/tables | audit, finance, foundation, inventory, people, platform, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales |
 | platform/tenancy | app/clients, app/config, app/page.tsx, finance, foundation, inventory, platform, production, purchasing |
 | ui/attention | app/page.tsx |
 | ui/fields | finance, foundation, inventory, purchasing, sales |
 | ui/lock | finance, foundation, inventory, platform, production, purchasing, quality |
-| ui/shell | app/layout.tsx, app/page.tsx, app/registry |
+| ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (154)
+## Files (157)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -119,6 +120,11 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | **platform/lock/** | | |
 | enqueue.ts | ENQUEUE_STALE_MS, EnqueueError, openForChange, heartbeatChangeLock, releaseChangeLock, assertChangeLock, listEnqueue, deleteEnqueueEntry, openChangeForSession, assertChangeForSession, displayOnlyMessage | enqueue_entry, user_session |
 | index.ts | acquireLock, acquireLocks, currentLocks, LockTimeoutError | lock_wait_log |
+| **platform/mail/** | | |
+| service.ts | MAIL_DEFINE_CAPABILITY, MAIL_OBJECT_CLASS, MailError, isValidMailAddress, retryDelaySeconds, getMailConfig, saveMailConfig, testMailConnection, sendTestMail, enqueueMail, sendOneMail, listMailQueue | mail_message, mail_server_config |
+| transport.ts | MailTransportError, deliverMail, probeConnection |  |
+| **platform/mail/jobs/** | | |
+| send.ts | MAIL_SEND_JOB, mailSendJob | mail_message |
 | **platform/notification/** | | |
 | creator.ts | recipientFor, creatorOf | app_user, change_document |
 | notify.ts | notifyOn, notifyAll, markSeen, markAllSeen, listInbox, unreadCount, getNotification | notification |
@@ -161,7 +167,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | reference.ts | country, currency, unitOfMeasure, bankMaster | bank_master, country, currency, unit_of_measure |
 | registry.ts | termRegistry, termAlias, configActivity, configActivityStatus | config_activity, config_activity_status, term_alias, term_registry |
 | security.ts | appUser, role, capability, roleCapability, userRole, authOrgRestriction, positionCapability, userCapability, userCapabilityScope, userSession, auditAccessLog, sodRule, passwordResetToken | app_user, audit_access_log, auth_org_restriction, capability, password_reset_token, position_capability, role, role_capability, sod_rule, user_capability, user_capability_scope, user_role, user_session |
-| system.ts | messageCatalog, jobDefinition, jobRun, jobLog, notification, mailServerConfig | job_definition, job_log, job_run, mail_server_config, message_catalog, notification |
+| system.ts | messageCatalog, jobDefinition, jobRun, jobLog, notification, mailServerConfig, mailMessage | job_definition, job_log, job_run, mail_message, mail_server_config, message_catalog, notification |
 | tenancy.ts | auditColumns, client, clientSettings | client, client_settings |
 | **platform/tenancy/** | | |
 | config-activity-status.ts | recomputeActivityStatus | account_determination, activity_rate, activity_type, app_user, batch_number_assignment, batch_status_management, characteristic, chart_of_accounts, classification_class, company_code, config_activity, config_activity_status, cost_center, cost_center_hierarchy, credit_control_area, distribution_channel, division, document_type, employee_tolerance_group, exchange_rate, fiscal_year_variant, gl_account, house_bank, industry, industry_sector, material_bom, material_group, material_period_control, material_type, movement_type, number_range, pay_component, payment_method, payment_terms, plant, posting_period_variant, production_order_type, production_order_type_parameter, production_version, profit_center, profit_center_hierarchy, purchasing_group, purchasing_org, record_type, release_strategy, role, routing, sales_area, sales_condition_record, sales_org, settlement_profile, storage_location, tax_code, valuation_class, work_center |
@@ -237,5 +243,5 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 ## Routes (13)
 `/` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/search` · `/signin`
 
-## Tables owned (40)
-app_user, audit_access_log, auth_org_restriction, bank_master, capability, change_document, change_document_item, client, client_settings, config_activity, config_activity_status, country, currency, document_flow_link, document_index, document_status_history, enqueue_entry, job_definition, job_log, job_run, lock_object, lock_wait_log, mail_server_config, message_catalog, notification, number_range, number_range_allocation, number_range_object, password_reset_token, position_capability, role, role_capability, sod_rule, term_alias, term_registry, unit_of_measure, user_capability, user_capability_scope, user_role, user_session
+## Tables owned (41)
+app_user, audit_access_log, auth_org_restriction, bank_master, capability, change_document, change_document_item, client, client_settings, config_activity, config_activity_status, country, currency, document_flow_link, document_index, document_status_history, enqueue_entry, job_definition, job_log, job_run, lock_object, lock_wait_log, mail_message, mail_server_config, message_catalog, notification, number_range, number_range_allocation, number_range_object, password_reset_token, position_capability, role, role_capability, sod_rule, term_alias, term_registry, unit_of_measure, user_capability, user_capability_scope, user_role, user_session

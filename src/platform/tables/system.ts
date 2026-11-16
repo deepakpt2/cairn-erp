@@ -11,7 +11,9 @@ import {
   jsonb,
   index,
   primaryKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { auditColumns, client } from './tenancy';
 
 /**
@@ -232,4 +234,47 @@ export const mailServerConfig = pgTable(
     lastTestResult: text('last_test_result'),
     ...auditColumns,
   },
+);
+
+/**
+ * Outbound mail queue (SOST). One row per message; the MAIL.SEND job drains it.
+ *
+ * A one-time credential (a reset link) never sits in `body_text`: the body holds the
+ * literal placeholder `{link}` and the value lives encrypted in `secret_encrypted`,
+ * joined only inside the send and nulled on any terminal outcome.
+ */
+export const mailMessage = pgTable(
+  'mail_message',
+  {
+    id: varchar('id', { length: 36 }).primaryKey(),
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    /** QUEUED | SENT | FAILED | DEAD */
+    status: varchar('status', { length: 16 }).notNull().default('QUEUED'),
+    toAddress: varchar('to_address', { length: 200 }).notNull(),
+    subject: varchar('subject', { length: 255 }).notNull(),
+    /** May contain the literal placeholder {link}. */
+    bodyText: text('body_text').notNull(),
+    /** The {link} value, encrypted. NULL once the row is SENT or DEAD. */
+    secretEncrypted: text('secret_encrypted'),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(5),
+    availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    objectClass: varchar('object_class', { length: 60 }),
+    objectKey: varchar('object_key', { length: 80 }),
+    /** MAIL-03 amendment: one document sends one file. */
+    attachmentName: varchar('attachment_name', { length: 200 }),
+    attachmentMime: varchar('attachment_mime', { length: 100 }),
+    /** base64 */
+    attachmentData: text('attachment_data'),
+    ...auditColumns,
+  },
+  (t) => [
+    index('mail_message_claim_idx').on(t.client, t.status, t.availableAt),
+    index('mail_message_created_idx').on(t.client, sql`${t.createdAt} desc`),
+    check('mail_message_status_ck', sql`${t.status} in ('QUEUED','SENT','FAILED','DEAD')`),
+  ],
 );

@@ -148,6 +148,21 @@ export const SCREENS: readonly ScreenLink[] = [
     },
   },
   {
+    id: "/platform/mail",
+    path: "/platform/mail",
+    query: {},
+    code: "CFG.PLT.MAIL.DEFINE",
+    title: "Mail server configuration",
+    area: "platform",
+    family: "platform",
+    accepts: [],
+    nav: {
+      module: "admin",
+      category: "Platform operations",
+      activity: "Mail & output",
+    },
+  },
+  {
     id: "/platform/users",
     path: "/platform/users",
     query: {},

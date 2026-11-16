@@ -38,14 +38,14 @@
 ### people (27)
 - `modules/people/schema.ts`: absence, delegation, delegation_approval, delegation_scope, employee, employee_record, job, leave_quota, org_hierarchy, org_unit, pay_component, pay_component_config, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, position, position_assignment, record_field, record_field_value, record_type, salary_payment, salary_structure, salary_structure_assignment, salary_structure_component, time_recording, time_type
 
-### platform (shared) (40)
+### platform (shared) (41)
 - `platform/tables/audit-trail.ts`: change_document, change_document_item, document_flow_link, document_index, document_status_history
 - `platform/tables/lock.ts`: enqueue_entry, lock_object, lock_wait_log
 - `platform/tables/numbering.ts`: number_range, number_range_allocation, number_range_object
 - `platform/tables/reference.ts`: bank_master, country, currency, unit_of_measure
 - `platform/tables/registry.ts`: config_activity, config_activity_status, term_alias, term_registry
 - `platform/tables/security.ts`: app_user, audit_access_log, auth_org_restriction, capability, password_reset_token, position_capability, role, role_capability, sod_rule, user_capability, user_capability_scope, user_role, user_session
-- `platform/tables/system.ts`: job_definition, job_log, job_run, mail_server_config, message_catalog, notification
+- `platform/tables/system.ts`: job_definition, job_log, job_run, mail_message, mail_server_config, message_catalog, notification
 - `platform/tables/tenancy.ts`: client, client_settings
 
 ### production (51)
@@ -158,6 +158,8 @@
 | journal_entry | finance | foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing |
 | journal_entry_line | finance | dev/walkthrough-asset.ts, foundation, people, platform/posting, platform/tenancy, production, purchasing |
 | lock_wait_log | platform/tables | platform/lock |
+| mail_message | platform/tables | platform/mail |
+| mail_server_config | platform/tables | platform/mail |
 | material | inventory | foundation, production, purchasing, sales |
 | material_bom | production | platform/tenancy |
 | material_document | inventory | finance, production, purchasing, quality, sales |
