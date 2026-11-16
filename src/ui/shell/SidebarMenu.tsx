@@ -56,6 +56,10 @@ export function SidebarMenu({ tree }: { tree: NavModuleNode[] }) {
         aria-label={t('nav.sidebar')}
         className={`${mobileOpen ? 'block' : 'hidden'} px-1 pb-3 md:sticky md:top-12 md:block md:max-h-[calc(100vh-6rem)] md:overflow-y-auto`}
       >
+        <form action="/search" method="get" role="search" className="px-2 pb-2 pt-1">
+          <label htmlFor="sidebar-search" className="sr-only">{t('search.label')}</label>
+          <input id="sidebar-search" name="q" type="search" maxLength={100} autoComplete="off" className="w-full" placeholder={t('search.placeholder')} />
+        </form>
         <ul className="text-sm">
           {tree.map((module) => {
             const moduleOpen = openModules.has(module.id);

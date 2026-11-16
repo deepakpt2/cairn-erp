@@ -38,7 +38,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/page.tsx, app/registry |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (149)
+## Files (151)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -75,6 +75,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | **app/reset-password/** | | |
 | page.tsx | ResetPasswordPage |  |
 | ResetPasswordForm.tsx | ResetPasswordForm |  |
+| **app/search/** | | |
+| page.tsx | SearchPage |  |
 | **app/signin/** | | |
 | page.tsx | SignInPage |  |
 | **dev/** | | |
@@ -207,6 +209,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | menu-path.ts | resolveMenuPath |  |
 | MenuPath.tsx | MenuPath |  |
 | nav-flag.ts | sidebarNavigationEnabled |  |
+| nav-search.ts | searchNav |  |
 | nav-tree.ts | categorySlug, moduleHref, buildNavTree |  |
 | navigation-click.ts | isNavigationClick |  |
 | NavSidebar.tsx | NavSidebar |  |
@@ -228,8 +231,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | index.ts | runWorker, stopWorker, main |  |
 | jobs.ts |  |  |
 
-## Routes (12)
-`/` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/signin`
+## Routes (13)
+`/` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/search` · `/signin`
 
 ## Tables owned (40)
 app_user, audit_access_log, auth_org_restriction, bank_master, capability, change_document, change_document_item, client, client_settings, config_activity, config_activity_status, country, currency, document_flow_link, document_index, document_status_history, enqueue_entry, job_definition, job_log, job_run, lock_object, lock_wait_log, mail_server_config, message_catalog, notification, number_range, number_range_allocation, number_range_object, password_reset_token, position_capability, role, role_capability, sod_rule, term_alias, term_registry, unit_of_measure, user_capability, user_capability_scope, user_role, user_session

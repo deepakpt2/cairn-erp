@@ -38,6 +38,7 @@ describe('screen links', () => {
       // The module pages of the sidebar navigation: a list of screens, not a screen. Not found unless the
       // navigation flag is on, and never a destination of its own in the catalogue.
       '/menu',
+      '/search',
     ];
     for (const route of excludedRoutes) pages.delete(route);
 
