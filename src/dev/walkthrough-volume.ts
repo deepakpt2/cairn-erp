@@ -26,6 +26,7 @@
 import { sql } from 'drizzle-orm';
 
 import { withTenant, type Tx } from '../platform/db/client';
+import { seedMrpController } from '../modules/inventory/mrp-controller-maintenance';
 
 import { getMaterialDetail, saveMaterialView } from '../modules/inventory/materials';
 import { getBusinessPartner, saveBusinessPartner } from '../modules/foundation/business-partners';
@@ -289,6 +290,7 @@ async function ensureMaterials(ctx: VolumeContext, counts: VolumeCounts): Promis
 
     const before = detail?.plants.find((row) => row.plant === ctx.plant);
     if (!before || before.mrpStatus === 'NOT_CREATED') {
+      await withTenant(ctx.tenant, (tx) => seedMrpController(tx, ctx.tenant, ctx.plant, '001', 'Primary planner', ctx.actor));
       await saveMaterialView({ ...common, view: 'MRP', expectedVersion: before?.version ?? 0, plant: ctx.plant,
         mrpType: 'REQUIREMENTS', mrpController: '001', procurementType: spec.procurement, lotSizing: 'EXACT',
         fixedLotSize: '0', minimumLotSize: '0', maximumLotSize: '0', safetyStock: '0', reorderPoint: '0',

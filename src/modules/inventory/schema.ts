@@ -159,10 +159,15 @@ export const valuationClassReference = pgTable('valuation_class_reference', {
   index('valuation_class_reference_class_idx').on(t.client, t.valuationClass),
 ]);
 
+/** T024D: an MRP controller is defined per plant — the same code may stand in two plants. */
 export const mrpController = pgTable('mrp_controller', {
-  client: tenant(), controller: varchar('controller', { length: 3 }).notNull(),
+  client: tenant(), plant: varchar('plant', { length: 10 }).notNull(),
+  controller: varchar('controller', { length: 3 }).notNull(),
   name: varchar('name', { length: 100 }).notNull(), isActive: boolean('is_active').notNull().default(true), ...auditColumns,
-}, (t) => [primaryKey({ columns: [t.client, t.controller] })]);
+}, (t) => [
+  primaryKey({ columns: [t.client, t.plant, t.controller] }),
+  foreignKey({ name: 'mrp_controller_plant_fk', columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }),
+]);
 
 export const material = pgTable('material', {
   client: tenant(), materialNumber: varchar('material_number', { length: 40 }).notNull(),
@@ -272,7 +277,7 @@ export const materialPlant = pgTable('material_plant', {
   foreignKey({ columns: [t.client, t.materialNumber], foreignColumns: [material.client, material.materialNumber] }).onDelete('cascade'),
   foreignKey({ columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }),
   foreignKey({ columns: [t.client, t.purchasingGroup], foreignColumns: [purchasingGroup.client, purchasingGroup.purchasingGroup] }),
-  foreignKey({ columns: [t.client, t.mrpController], foreignColumns: [mrpController.client, mrpController.controller] }),
+  foreignKey({ name: 'material_plant_mrp_controller_fk', columns: [t.client, t.plant, t.mrpController], foreignColumns: [mrpController.client, mrpController.plant, mrpController.controller] }),
   check('material_plant_codes_ck', sql`(${t.mrpType} is null or ${t.mrpType} in ('REQUIREMENTS','REORDER','NONE')) and (${t.procurementType} is null or ${t.procurementType} in ('BUY','MAKE','BOTH')) and (${t.lotSizing} is null or ${t.lotSizing} in ('EXACT','FIXED'))`),
   check('material_plant_quantities_ck', sql`${t.fixedLotSize} >= 0 and ${t.minimumLotSize} >= 0 and ${t.maximumLotSize} >= 0 and ${t.safetyStock} >= 0 and ${t.reorderPoint} >= 0 and ${t.plannedDeliveryDays} >= 0 and ${t.inHouseProductionDays} >= 0`),
   check('material_plant_tolerance_ck', sql`${t.overdeliveryTolerance} between 0 and 100 and ${t.underdeliveryTolerance} between 0 and 100`),

@@ -59,7 +59,7 @@ describe('routing execution-order audit', () => {
     Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     await withTenant(tenant.client, async (tx) => {
       await tx.insert(mrpController).values({
-        client: tenant.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
+        client: tenant.client, plant: PLANT, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
       }).onConflictDoNothing();
       await defineRange(tx, { client: tenant.client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });

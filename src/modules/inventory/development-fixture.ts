@@ -2,9 +2,12 @@
 import { withTenant } from '../../platform/db/client';
 import { applyMaterialDefaults } from './standard-config';
 import { getMaterialDetail, saveMaterialView } from './materials';
+import { seedMrpController } from './mrp-controller-maintenance';
 
 export async function seedDevelopmentMaterials(client: string) {
   await withTenant(client, (tx) => applyMaterialDefaults(tx, client, 'DEV_SEED'));
+  // A controller must stand in the plant the material names it in.
+  await withTenant(client, (tx) => seedMrpController(tx, client, '1000', '001', 'Primary planner', 'DEV_SEED'));
   const samples = [
     { number: 'RAW-STEEL', description: 'Carbon steel sheet', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY' as const, priceControl: 'MOVING_AVERAGE' as const, valuationClass: 'RAW_INVENTORY', price: '5.0000' },
     { number: 'PACK-CARTON', description: 'Shipping carton', type: 'RAW', group: 'PACKAGING', unit: 'PC', procurement: 'BUY' as const, priceControl: 'MOVING_AVERAGE' as const, valuationClass: 'RAW_INVENTORY', price: '2.0000' },

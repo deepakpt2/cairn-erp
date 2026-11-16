@@ -32,7 +32,7 @@ beforeAll(async () => {
   tenant = await createTenant('md13-display');
   other = await createTenant('md13-display-other');
   await withTenant(tenant.client, (tx) => tx.insert(mrpController).values({
-    client: tenant.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
+    client: tenant.client, plant: '1000', controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
   }).onConflictDoNothing());
   await materialOf(tenant.client, 'FG-13', 'Finished good');
   await materialOf(tenant.client, 'COMP-13', 'Component');

@@ -87,6 +87,7 @@ beforeAll(async () => {
   await withTenant(client, async (tx) => {
     for (const plant of [PLANT, QUIET]) {
       await tx.execute(sql`insert into plant (client, plant, name, country, created_by) values (${client}, ${plant}, ${`Plant ${plant}`}, 'KW', ${ACTOR}) on conflict do nothing`);
+      await tx.execute(sql`insert into mrp_controller (client, plant, controller, name, created_by) values (${client}, ${plant}, '001', 'Controller 001', ${ACTOR}) on conflict do nothing`);
       await tx.execute(sql`insert into storage_location (client, plant, storage_location, name, is_active, created_by) values (${client}, ${plant}, 'SL01', 'Store', true, ${ACTOR}) on conflict do nothing`);
     }
     await tx.execute(sql`insert into purchasing_group (client, purchasing_group, name, created_by) values (${client}, 'G94', 'Test group', ${ACTOR}) on conflict do nothing`);

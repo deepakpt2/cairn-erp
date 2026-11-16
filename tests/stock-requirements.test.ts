@@ -30,6 +30,7 @@ describe('SCR-130 stock/requirements list (MD04)', () => {
     client = tenant.client;
     await withTenant(client, async (tx) => {
       await tx.execute(sql`insert into plant (client, plant, name, country, created_by) values (${client}, ${PLANT}, 'Plant F', 'KW', ${ACTOR}) on conflict do nothing`);
+      await tx.execute(sql`insert into mrp_controller (client, plant, controller, name, created_by) values (${client}, ${PLANT}, '001', 'Controller 001', ${ACTOR}) on conflict do nothing`);
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
         select ${client}, ${MATERIAL}, 'Planned material', t.material_type, 'PC', ${ACTOR}

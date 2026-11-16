@@ -146,7 +146,7 @@ describe('CO01 production version and BOM snapshot', () => {
     client = tenant.client;
     await withTenant(client, async (tx) => {
       await tx.insert(mrpController).values({
-        client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
+        client, plant: PLANT, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
       }).onConflictDoNothing();
       await defineRange(tx, { client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });

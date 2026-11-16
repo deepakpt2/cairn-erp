@@ -117,7 +117,7 @@ describe('dependent requirements survive conversion', () => {
     Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
     await withTenant(tenant.client, async (tx) => {
       await tx.insert(mrpController).values({
-        client: tenant.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
+        client: tenant.client, plant: PLANT, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
       }).onConflictDoNothing();
       await defineRange(tx, { client: tenant.client, objectCode: 'MRPRUN', subObject: '*', prefix: 'MR', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client: tenant.client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
@@ -181,7 +181,7 @@ describe('dependent requirements survive conversion', () => {
     });
     await withTenant(other.client, async (tx) => {
       await tx.insert(mrpController).values({
-        client: other.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
+        client: other.client, plant: PLANT, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
       }).onConflictDoNothing();
       await defineRange(tx, { client: other.client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
     });

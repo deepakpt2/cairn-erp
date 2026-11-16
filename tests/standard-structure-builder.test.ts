@@ -21,6 +21,7 @@ import {
   salesOrgText,
   storageLocation,
 } from '../src/modules/foundation/schema';
+import { mrpController } from '../src/modules/inventory/schema';
 import { centralAddress } from '../src/modules/foundation/central-address-schema';
 import { changeDocument, changeDocumentItem } from '../src/platform/tables/audit-trail';
 import { configActivityStatus } from '../src/platform/tables/registry';
@@ -44,6 +45,7 @@ const STRUCTURE_TABLES = [
   { name: 'purchasing_org_plant', table: purchasingOrgPlant },
   { name: 'purchasing_org', table: purchasingOrg },
   { name: 'storage_location', table: storageLocation },
+  { name: 'mrp_controller', table: mrpController },
   { name: 'plant', table: plant },
   { name: 'controlling_area', table: controllingArea },
   { name: 'company_code', table: companyCode },

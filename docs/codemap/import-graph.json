@@ -1103,6 +1103,26 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
   ],
+  "app/config/mrp-controllers/MrpControllers.tsx": [
+    "app/config/mrp-controllers/actions.ts",
+    "modules/inventory/mrp-controller-key.ts",
+    "modules/inventory/mrp-controller-maintenance.ts",
+    "ui/lock/ChangeLock.tsx"
+  ],
+  "app/config/mrp-controllers/actions.ts": [
+    "modules/inventory/mrp-controller-maintenance.ts",
+    "platform/auth/current.ts",
+    "platform/lock/enqueue.ts"
+  ],
+  "app/config/mrp-controllers/page.tsx": [
+    "app/config/mrp-controllers/MrpControllers.tsx",
+    "modules/foundation/schema.ts",
+    "modules/inventory/mrp-controller-maintenance.ts",
+    "platform/auth/current.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/i18n/index.ts"
+  ],
   "app/config/number-range-objects/NumberRangeObjects.tsx": [
     "app/config/number-range-objects/actions.ts",
     "modules/foundation/number-ranges.ts",
@@ -3258,6 +3278,17 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
   ],
+  "app/inventory/stock-ageing/StockAgeingShell.tsx": [
+    "modules/inventory/stock-ageing.ts",
+    "platform/i18n/index.ts"
+  ],
+  "app/inventory/stock-ageing/page.tsx": [
+    "app/inventory/stock-ageing/StockAgeingShell.tsx",
+    "modules/inventory/stock-ageing.ts",
+    "platform/auth/current.ts",
+    "platform/db/client.ts",
+    "platform/i18n/index.ts"
+  ],
   "app/inventory/stock-overview/StockOverviewShell.tsx": [
     "modules/inventory/stock-overview.ts",
     "platform/i18n/index.ts"
@@ -4656,6 +4687,7 @@
     "modules/inventory/goods-issue.ts",
     "modules/inventory/goods-receipt.ts",
     "modules/inventory/materials.ts",
+    "modules/inventory/mrp-controller-maintenance.ts",
     "modules/inventory/production-orders.ts",
     "modules/inventory/production-receipt.ts",
     "modules/people/assignment.ts",
@@ -6025,6 +6057,7 @@
   "modules/inventory/constants.ts": [],
   "modules/inventory/development-fixture.ts": [
     "modules/inventory/materials.ts",
+    "modules/inventory/mrp-controller-maintenance.ts",
     "modules/inventory/standard-config.ts",
     "platform/db/client.ts"
   ],
@@ -6204,6 +6237,15 @@
     "platform/tenancy/index.ts"
   ],
   "modules/inventory/movement-type-vocabulary.ts": [],
+  "modules/inventory/mrp-controller-key.ts": [],
+  "modules/inventory/mrp-controller-maintenance.ts": [
+    "modules/foundation/schema.ts",
+    "modules/inventory/mrp-controller-key.ts",
+    "modules/inventory/schema.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/tenancy/index.ts"
+  ],
   "modules/inventory/physical-inventory-count.ts": [
     "modules/inventory/physical-inventory-posting-status.ts",
     "modules/inventory/physical-inventory-recount.ts",
@@ -6371,9 +6413,15 @@
   "modules/inventory/standard-config.ts": [
     "modules/foundation/schema.ts",
     "modules/inventory/industry-sector-definition.ts",
+    "modules/inventory/mrp-controller-maintenance.ts",
     "modules/inventory/schema.ts",
     "platform/db/client.ts",
     "platform/tenancy/index.ts"
+  ],
+  "modules/inventory/stock-ageing.ts": [
+    "modules/inventory/stock-types.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
   ],
   "modules/inventory/stock-overview.ts": [
     "modules/inventory/batch-posting.ts",
@@ -7915,9 +7963,11 @@
   ],
   "platform/tenancy/demo-bom-structure.ts": [
     "modules/inventory/materials.ts",
+    "modules/inventory/mrp-controller-maintenance.ts",
     "modules/production/material-bom.ts",
     "modules/production/production-version.ts",
     "modules/production/routing.ts",
+    "platform/db/client.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-provisioning.ts"
   ],
@@ -7967,6 +8017,7 @@
     "modules/foundation/supplier-purchasing.ts",
     "modules/foundation/tax-code-definition.ts",
     "modules/inventory/materials.ts",
+    "modules/inventory/mrp-controller-maintenance.ts",
     "modules/inventory/standard-config.ts",
     "modules/production/material-bom.ts",
     "modules/production/production-version.ts",

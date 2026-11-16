@@ -852,6 +852,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/mrp-controllers",
+    path: "/config/mrp-controllers",
+    query: {},
+    code: "CFG.PROD.MRPCONTROLLER.DEFINE",
+    title: "Define MRP controllers",
+    area: "configuration",
+    family: "production-config",
+    accepts: ["plant"],
+  },
+  {
     id: "/config/scheduling-profiles",
     path: "/config/scheduling-profiles",
     query: {},

@@ -131,6 +131,7 @@ describe('production reversal quantities', () => {
           from (select company_code from company_code where client = ${client} order by company_code limit 1) c
         on conflict (client, plant) do update set company_code = excluded.company_code
       `);
+      await tx.execute(sql`insert into mrp_controller (client, plant, controller, name, created_by) values (${client}, ${PLANT}, '001', 'Controller 001', ${ACTOR}) on conflict do nothing`);
       await tx.execute(sql`
         insert into material_plant (
           client, material_number, plant, mrp_type, mrp_controller, procurement_type, lot_sizing,

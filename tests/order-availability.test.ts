@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
-import { mrpController } from '../src/modules/inventory/schema';
 import { productionOrderComponentCommitmentEvent } from '../src/modules/production/schema';
 import { defineRange } from '../src/platform/numbering';
 import {
@@ -237,14 +236,12 @@ describe('CO09 slice 1 order availability check', () => {
     Object.assign(PROD_ACTOR, await createProductionActor(tenant.client));
 
     await withTenant(tenant.client, async (tx) => {
-      await tx.insert(mrpController).values({
-        client: tenant.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
-      }).onConflictDoNothing();
       await tx.execute(sql`
         insert into plant (client, plant, name, company_code, country, created_by)
         values (${tenant.client}, ${PLANT}, 'Plant Q90', ${tenant.companyCode}, 'KW', ${ACTOR})
         on conflict (client, plant) do update set company_code = excluded.company_code
       `);
+      await tx.execute(sql`insert into mrp_controller (client, plant, controller, name, created_by) values (${tenant.client}, ${PLANT}, '001', 'Controller 001', ${ACTOR}) on conflict do nothing`);
       await tx.execute(sql`
         insert into storage_location (client, plant, storage_location, name, is_active, created_by)
         values (${tenant.client}, ${PLANT}, 'SL90', 'Store 90', true, ${ACTOR}) on conflict do nothing

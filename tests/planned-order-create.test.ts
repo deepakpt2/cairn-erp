@@ -43,7 +43,7 @@ beforeAll(async () => {
   other = await createTenant('md11-create-other');
   await withTenant(tenant.client, async (tx) => {
     await tx.insert(mrpController).values({
-      client: tenant.client, controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
+      client: tenant.client, plant: '1000', controller: '001', name: 'Controller 001', isActive: true, createdBy: ACTOR,
     }).onConflictDoNothing();
     await defineRange(tx, { client: tenant.client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
   });

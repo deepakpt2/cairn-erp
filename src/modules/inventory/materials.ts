@@ -318,8 +318,15 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
         .where(and(eq(materialTypeValuation.materialType, base.materialType), eq(materialTypeValuation.valuationArea, input.plant)));
       if (quantityRow && !quantityRow.quantityUpdating && input.mrpType !== 'NONE') throw new MaterialError('A non-stock material cannot be planned for inventory.', 'Choose No planning for this type.');
       if (input.mrpController) {
-        const [controller] = await tx.select().from(mrpController).where(eq(mrpController.controller, input.mrpController));
-        if (!controller?.isActive) throw new MaterialError(`MRP controller ${input.mrpController} is not active or does not exist.`);
+        const [controller] = await tx.select().from(mrpController).where(and(
+          eq(mrpController.client, client),
+          eq(mrpController.plant, input.plant),
+          eq(mrpController.controller, input.mrpController),
+        ));
+        if (!controller?.isActive) throw new MaterialError(
+          `MRP controller ${input.mrpController} does not stand active in plant ${input.plant}.`,
+          `Maintain it at /config/mrp-controllers, or choose a controller that stands in plant ${input.plant}.`,
+        );
       }
       const min = toScaled(input.minimumLotSize, 3), max = toScaled(input.maximumLotSize, 3);
       if (max > 0n && max < min) throw new MaterialError('Maximum lot size must not be below minimum lot size.');
@@ -473,7 +480,9 @@ export async function materialChoices(client: string) {
       reference: accountCategoryReference.reference,
       isActive: accountCategoryReference.isActive,
     }).from(accountCategoryReference).where(eq(accountCategoryReference.client, client)),
-    controllers: await tx.select().from(mrpController).where(eq(mrpController.isActive, true)).orderBy(mrpController.controller),
+    controllers: await tx.select({ plant: mrpController.plant, controller: mrpController.controller, name: mrpController.name })
+      .from(mrpController).where(and(eq(mrpController.client, client), eq(mrpController.isActive, true)))
+      .orderBy(mrpController.plant, mrpController.controller),
     units: await tx.select().from(unitOfMeasure).orderBy(unitOfMeasure.code),
     plants: await tx.select().from(plant).where(and(eq(plant.isActive, true), isNotNull(plant.companyCode))).orderBy(plant.plant),
     companies: await tx.select().from(companyCode).orderBy(companyCode.companyCode),

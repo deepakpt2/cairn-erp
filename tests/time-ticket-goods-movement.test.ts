@@ -337,6 +337,7 @@ describe('CO11N confirmation goods movement', () => {
         values (${client}, ${PLANT}, 'Movement plant', ${COMPANY}, 'KW', ${LOCATION}, 'SYSTEM')
         on conflict (client, plant) do update set company_code = excluded.company_code, default_storage_location = excluded.default_storage_location
       `);
+      await tx.execute(sql`insert into mrp_controller (client, plant, controller, name, created_by) values (${client}, ${PLANT}, '001', 'Controller 001', ${ACTOR}) on conflict do nothing`);
       await tx.execute(sql`
         insert into storage_location (client, plant, storage_location, name, is_active, allow_negative_stock, created_by)
         values (${client}, ${PLANT}, ${LOCATION}, 'Store', true, false, ${ACTOR})

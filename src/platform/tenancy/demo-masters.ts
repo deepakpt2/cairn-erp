@@ -53,6 +53,7 @@ import {
 } from '../../modules/production/routing';
 import { createProductionVersion, getProductionVersion } from '../../modules/production/production-version';
 import { withTenant } from '../db/client';
+import { seedMrpController } from '../../modules/inventory/mrp-controller-maintenance';
 import { DEMO_ACTOR, DEMO_IDENTITY, DEMO_STRUCTURE } from './demo-organisation';
 import type { DemoTimeline } from './demo-provisioning';
 
@@ -348,6 +349,12 @@ export async function buildDemoMasters(input: BuildDemoMastersInput): Promise<De
   const to = '9999-12-31';
 
   await withTenant(client, (tx) => applyMaterialDefaults(tx, client, DEMO_ACTOR));
+  // OMD0 walkthrough: a second planner in the manufacturing plant, and the same code standing in the second
+  // plant under a different name — a controller is defined per plant.
+  await withTenant(client, async (tx) => {
+    await seedMrpController(tx, client, DEMO_STRUCTURE.manufacturingPlant, '002', 'Packaging planner', DEMO_ACTOR);
+    await seedMrpController(tx, client, DEMO_STRUCTURE.distributionPlant, '002', 'Warehouse planner', DEMO_ACTOR);
+  });
   await ensureProductionConfiguration(client);
   await ensureTaxCodes(client);
 
@@ -540,6 +547,7 @@ async function ensureMaterial(client: string, spec: MaterialSpec, from: string):
     const standing = detail?.plants.find((row) => row.plant === plant);
 
     if (!standing || standing.mrpStatus === 'NOT_CREATED' || standing.mrpStatus === 'INCOMPLETE') {
+      await withTenant(client, (tx) => seedMrpController(tx, client, plant, '001', 'Primary planner', DEMO_ACTOR));
       await saveMaterialView({
         ...common,
         view: 'MRP',

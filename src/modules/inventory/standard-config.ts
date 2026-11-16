@@ -4,12 +4,12 @@ import type { Tx } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
 import { plant } from '../foundation/schema';
 import { INDUSTRY_SECTOR_DEFAULTS } from './industry-sector-definition';
+import { seedMrpController } from './mrp-controller-maintenance';
 import {
   accountCategoryReference,
   materialGroup,
   materialType,
   materialTypeValuation,
-  mrpController,
   valuationClass,
   valuationClassReference,
   industrySector,
@@ -29,6 +29,9 @@ export const TYPE_UPDATING_DEFAULTS: Record<string, { quantityUpdating: boolean;
  * stand, so both call sites seed, each idempotently.
  */
 export async function seedTypeValuationForPlant(tx: Tx, client: string, plantCode: string, createdBy: string) {
+  // MRP controllers are defined per plant (T024D): the delivered '001' stands in every plant seeded here.
+  // A plant created later through the plant screen starts with none; /config/mrp-controllers is for that.
+  await seedMrpController(tx, client, plantCode, '001', 'Primary planner', createdBy);
   const types = await tx.select({ materialType: materialType.materialType })
     .from(materialType).where(eq(materialType.client, client));
   for (const t of types) {
@@ -93,7 +96,8 @@ export async function applyMaterialDefaults(tx: Tx, client: string, createdBy: s
       client, reference: '0001', valuationClass: c.valuationClass, createdBy,
     }).onConflictDoNothing();
   }
-  await tx.insert(mrpController).values({ client, controller: '001', name: 'Primary planner', createdBy }).onConflictDoNothing();
+  const standingPlants = await tx.select({ plant: plant.plant }).from(plant).where(eq(plant.client, client));
+  for (const row of standingPlants) await seedMrpController(tx, client, row.plant, '001', 'Primary planner', createdBy);
   for (const code of ['CFG.INV.MATERIALTYPE.DEFINE', 'CFG.INV.MATERIALGROUP.DEFINE', 'CFG.PROD.MRPCONTROLLER.DEFINE', 'CFG.INV.VALCLASS.DEFINE']) {
     await markActivityComplete(tx, client, code, createdBy);
   }

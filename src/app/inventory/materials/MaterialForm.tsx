@@ -23,6 +23,8 @@ export function MaterialForm({ view, number, plant, salesOrg, channel, initial, 
       <select name={name} defaultValue={value(name, fallback)} className="field-input">{blank && <option value="">{t('material.notSet')}</option>}{rows.map((r) => <option key={r.key} value={r.key}>{r.key} · {r.text}</option>)}</select>}
   </Field>;
   const coded = (name: string, label: string, codes: readonly string[], fallback: string) => options(name, label, codes.map((key) => ({ key, text: t(`material.code.${key}`) })), fallback, false);
+  // A controller is defined per plant: only the codes that stand in this view's plant are choices.
+  const plantControllers = choices.controllers.filter((r) => r.plant === plant);
   const unitOptions = choices.units.map((u) => ({ key: u.code, text: u.name }));
 
   return <section className="panel p-4" aria-labelledby="material-form-title">
@@ -66,7 +68,7 @@ export function MaterialForm({ view, number, plant, salesOrg, channel, initial, 
       {view === 'MRP' && <>
         <div className="grid gap-3 sm:grid-cols-3">
           {coded('mrpType', 'material.mrpType', MRP_TYPES, 'REQUIREMENTS')}
-          {options('mrpController', 'material.controller', choices.controllers.map((r) => ({ key: r.controller, text: r.name })), '001')}
+          {options('mrpController', 'material.controller', plantControllers.map((r) => ({ key: r.controller, text: r.name })), plantControllers.some((r) => r.controller === '001') ? '001' : '')}
           {coded('procurementType', 'material.procurement', PROCUREMENT_TYPES, currentType?.defaultProcurementType ?? 'BUY')}
           {coded('lotSizing', 'material.lotSizing', LOT_PROCEDURES, 'EXACT')}
           {decimal('fixedLotSize', 'material.fixedLot')}{decimal('minimumLotSize', 'material.minimumLot')}
@@ -80,6 +82,8 @@ export function MaterialForm({ view, number, plant, salesOrg, channel, initial, 
         </div>
         <p className="text-2xs text-ink-soft">{t('material.mrpMovementNote')}</p>
         <p className="text-2xs text-ink-soft">{t('material.mrpNote')}</p>
+        {plantControllers.length === 0 && <p role="status" className="text-2xs text-signal-error">{t('material.noControllerInPlant', { plant })}</p>}
+        <p className="text-2xs text-ink-soft">{t('material.controllerNote')} <Link className="underline" href="/config/mrp-controllers">{t('mrpController.title')}</Link></p>
       </>}
       {view === 'SALES' && <>
         <p className="text-sm text-ink-soft">{t('material.salesScope', { area: `${salesOrg}/${channel}` })}</p>

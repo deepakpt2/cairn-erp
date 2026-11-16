@@ -10,7 +10,7 @@ Stock/warehouse: goods movements, batches, physical inventory, material master. 
 - Initial stock (561, 9275) has no reversal; offset is retained earnings. RETURNS stock is unvalued.
 - `serial_number` is a capture record, not reconciled to `stock_quantity`.
 
-## Files (238)
+## Files (242)
 | file | exports | tables |
 |---|---|---|
 | **app/config/batch-access-sequences/** | | |
@@ -95,6 +95,9 @@ Stock/warehouse: goods movements, batches, physical inventory, material master. 
 | actions.ts | saveMovementTypeAction, checkMovementTypeAction, deleteMovementTypeAction |  |
 | MovementTypes.tsx | MovementTypes |  |
 | page.tsx | MovementTypesPage |  |
+| **app/config/mrp-controllers/** | | |
+| actions.ts | saveMrpControllerAction, setMrpControllerActiveAction, deleteMrpControllerAction |  |
+| MrpControllers.tsx | MrpControllers |  |
 | **app/config/scheduling-profiles/** | | |
 | actions.ts | saveSchedulingProfileAction, assignSchedulingProfileAction |  |
 | page.tsx | SchedulingProfilesPage |  |
@@ -279,6 +282,8 @@ Stock/warehouse: goods movements, batches, physical inventory, material master. 
 | migo.ts | MIGO_CAPABILITY, MIGO_ROUTE, MIGO_ALIAS, MIGO_ACTIONS, MIGO_REFERENCES, resolveMigoCell, migoMatrix |  |
 | movement-type-configuration.ts | ACTIVITY, ROUTE, MovementTypeConfigError, listMovementTypes, checkMovementType, saveMovementType, deleteMovementType | batch_search_allocation, change_document, material_document_line, movement_type, reservation_header |
 | movement-type-vocabulary.ts | MOVEMENT_DIRECTIONS, MOVEMENT_REFERENCES, MOVEMENT_KINDS, MOVEMENT_STOCK_TYPES, MOVEMENT_RULES, MOVEMENT_NEGATIVE_POLICIES, MOVEMENT_ASSIGNMENTS |  |
+| mrp-controller-key.ts | ACTIVITY, MRP_CONTROLLER_ROUTE, LOCK_OBJECT, mrpControllerKey, parseMrpControllerKey |  |
+| mrp-controller-maintenance.ts | MrpControllerError, listMrpControllers, saveMrpController, setMrpControllerActive, deleteMrpController, seedMrpController, ACTIVITY, LOCK_OBJECT, MRP_CONTROLLER_ROUTE, mrpControllerKey, parseMrpControllerKey | material, material_plant, mrp_controller, plant |
 | physical-inventory-count.ts | PHYSICAL_INVENTORY_COUNT_CAPABILITY, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY, PHYSICAL_INVENTORY_COUNT_ROUTE, PHYSICAL_INVENTORY_COUNT_ALIASES, countNamedRefusal, PhysicalInventoryCountError, getCountDocument, searchCountDocuments, submitCounts, clearCount, getCountHistory, getCountStatus | change_document, material, physical_inventory_document, physical_inventory_item, plant, stock_quantity |
 | physical-inventory-differences.ts | PHYSICAL_INVENTORY_DIFF_LIST_CAPABILITY, PHYSICAL_INVENTORY_DIFF_LIST_ROUTE, PHYSICAL_INVENTORY_DIFF_LIST_ALIASES, DIFFERENCE_PAGE_SIZE_DEFAULT, DIFFERENCE_PAGE_SIZE_MAX, PhysicalInventoryDifferenceError, labelOf, directionOf, listDifferences, getDifferenceDocument, openDifferenceWorkflow | currency, material, material_valuation, physical_inventory_document, physical_inventory_item, plant, storage_location |
 | physical-inventory-posting-status.ts | releaseDifferenceAllocations, recomputePostingStatus | physical_inventory_difference_allocation, physical_inventory_document, physical_inventory_item |
@@ -296,7 +301,7 @@ Stock/warehouse: goods movements, batches, physical inventory, material master. 
 | serial-number.ts | SERIAL_ROUTE, SERIAL_CAPABILITY, SerialNumberError, serialNumberInput, requiresSerialFor, saveSerialNumber, listSerialNumbers, capturePickSerialsOn, releasePickSerialsOn, serialsOfPick, SERIAL_STATUSES, SERIAL_STATUS_MEANING | delivery_picking_serial, material, serial_number |
 | serial-status.ts | SERIAL_STATUSES, SERIAL_STATUS_MEANING |  |
 | shelf-life-list.ts | SLED_LIST_CAPABILITY, SLED_LIST_ALIAS, SLED_LIST_ROUTE, DEFAULT_MAX_HITS, MAX_HITS_CAP, ShelfLifeListError, businessDate, listShelfLife | batch, material, material_document_line, plant, stock_quantity, storage_location |
-| standard-config.ts | TYPE_UPDATING_DEFAULTS, seedTypeValuationForPlant, applyMaterialDefaults | account_category_reference, industry_sector, material_group, material_type, material_type_valuation, mrp_controller, plant, valuation_class, valuation_class_reference |
+| standard-config.ts | TYPE_UPDATING_DEFAULTS, seedTypeValuationForPlant, applyMaterialDefaults | account_category_reference, industry_sector, material_group, material_type, material_type_valuation, plant, valuation_class, valuation_class_reference |
 | stock-ageing.ts | STOCK_AGEING_CAPABILITY, STOCK_AGEING_ALIASES, DEFAULT_MAX_HITS, MAX_HITS_CAP, DEFAULT_STOCK_TYPE, DEFAULT_AGE_BUCKETS, MAX_AGE_BUCKETS, DEFAULT_SLOW_MOVING_DAYS, DEFAULT_NON_MOVING_DAYS, DRIFT_TOLERANCE, StockAgeingError, bucketLabels, stockAgeing | material, material_document, material_document_line, material_valuation, movement_type, plant, stock_quantity |
 | stock-overview.ts | STOCK_OVERVIEW_CAPABILITY, STOCK_OVERVIEW_ALIAS, UNRESTRICTED, QUALITY, BLOCKED, EXPANSION_LEVELS, DEFAULT_MAX_HITS, MAX_HITS_CAP, StockOverviewError, stockOverview | batch_level_configuration, material, material_document, plant, stock_quantity, storage_location |
 | stock-posting-date.ts | STOCK_POSTINGDATE_CAPABILITY, STOCK_POSTINGDATE_ALIAS, DEFAULT_STOCK_TYPE, DEFAULT_MAX_HITS, MAX_HITS_CAP, StockPostingDateError, stockOnPostingDate | batch, material, material_document, material_document_line, movement_type, stock_quantity, storage_location |

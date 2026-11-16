@@ -16,6 +16,8 @@
  * Built through the product's services; idempotent by adoption.
  */
 import { getMaterialDetail, saveMaterialView } from '../../modules/inventory/materials';
+import { seedMrpController } from '../../modules/inventory/mrp-controller-maintenance';
+import { withTenant } from '../db/client';
 import { createMaterialBom, getMaterialBom, saveBomItemCategory } from '../../modules/production/material-bom';
 import { createProductionVersion, getProductionVersion } from '../../modules/production/production-version';
 import { createRouting, resolveRouting } from '../../modules/production/routing';
@@ -62,6 +64,7 @@ export async function buildDemoBomStructure(input: { client?: string; timeline: 
   const detail = await getMaterialDetail(client, PHANTOM);
   const view = detail?.plants.find((row) => row.plant === plant);
   if (!view || view.mrpStatus === 'NOT_CREATED' || view.mrpStatus === 'INCOMPLETE') {
+    await withTenant(client, (tx) => seedMrpController(tx, client, plant, '001', 'Primary planner', DEMO_ACTOR));
     await saveMaterialView({
       ...common, materialNumber: PHANTOM, view: 'MRP', expectedVersion: view?.version ?? 0, plant,
       mrpType: 'NONE', mrpController: '001', procurementType: 'MAKE', lotSizing: 'EXACT', fixedLotSize: '0',
