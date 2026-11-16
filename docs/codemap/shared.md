@@ -38,7 +38,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/page.tsx, app/registry |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (141)
+## Files (143)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -201,12 +201,14 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | remedy.ts | displayOnlyRemedy |  |
 | **ui/shell/** | | |
 | CommandBar.tsx | CommandBar |  |
+| menu-path.ts | resolveMenuPath |  |
+| MenuPath.tsx | MenuPath |  |
 | navigation-click.ts | isNavigationClick |  |
 | NotificationBell.tsx | NotificationBell |  |
 | RelatedScreens.tsx | RelatedScreens |  |
 | RelatedScreensAccess.tsx | RelatedScreensAccess |  |
 | screen-access.ts | visibleScreenIds |  |
-| screen-catalog.ts | NAV_MODULES, SCREENS, SCREEN_AREAS |  |
+| screen-catalog.ts | NAV_CHILD_ROUTES, NAV_MODULES, SCREENS, SCREEN_AREAS |  |
 | screen-links.ts | ALSO, screenHref, matchScreen, screensInArea, relatedLinks |  |
 | ScrollToTop.tsx | ScrollToTop |  |
 | SessionBar.tsx | SessionBar |  |

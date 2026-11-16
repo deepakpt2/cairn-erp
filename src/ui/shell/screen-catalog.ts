@@ -64,6 +64,16 @@ export interface ScreenLink {
   nav?: ScreenNav;
 }
 
+/**
+ * Pages that exist only as a child of a catalogued screen — a detail opened from a list, with an id in the
+ * address. They are not menu entries; the menu path shows the parent. Every dynamic page route must be named here
+ * (tests/menu-path.test.ts reads `src/app` to make sure none is forgotten).
+ */
+export const NAV_CHILD_ROUTES: readonly { pattern: RegExp; parent: string }[] = [
+  { pattern: /^\/platform\/users\/[^/]+$/, parent: '/platform/users' },
+  { pattern: /^\/platform\/notifications\/[^/]+$/, parent: '/platform/notifications' },
+];
+
 /** Level-1 modules in menu order. Labels are ours (AI-04). */
 export const NAV_MODULES: readonly { id: NavModule; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },

@@ -553,6 +553,7 @@ const en: Catalogue = {
   'material.reorderPoint': "Reorder point",
   'material.deliveryDays': "Planned delivery time (days)",
   'material.productionDays': "In-house production time (days)",
+  'status.menuPath': 'Menu path',
   'material.noControllerInPlant': 'No MRP controller stands in plant {plant}, so this view cannot name one.',
   'material.controllerNote': 'A controller is defined per plant; only the codes of this plant are offered. Maintain them at',
   'mrpController.title': 'Define MRP controllers',
