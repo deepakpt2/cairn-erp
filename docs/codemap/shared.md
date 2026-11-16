@@ -206,7 +206,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | RelatedScreens.tsx | RelatedScreens |  |
 | RelatedScreensAccess.tsx | RelatedScreensAccess |  |
 | screen-access.ts | visibleScreenIds |  |
-| screen-catalog.ts | SCREENS, SCREEN_AREAS |  |
+| screen-catalog.ts | NAV_MODULES, SCREENS, SCREEN_AREAS |  |
 | screen-links.ts | ALSO, screenHref, matchScreen, screensInArea, relatedLinks |  |
 | ScrollToTop.tsx | ScrollToTop |  |
 | SessionBar.tsx | SessionBar |  |

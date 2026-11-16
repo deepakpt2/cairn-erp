@@ -19,6 +19,38 @@ export type ScreenArea =
   | 'people'
   | 'audit';
 
+/**
+ * Navigation modules — level 1 of the menu hierarchy. The module a screen is *entered from* in the menu,
+ * which is not the same as `area` (where the code lives): `area` groups the catalogue, `nav` places it.
+ */
+export type NavModule = 'dashboard' | 'mm' | 'pp' | 'qm' | 'fico' | 'sd' | 'hr' | 'admin';
+
+/** One place a screen can be reached from in the menu: module > category > activity. */
+export interface NavPlacement {
+  module: NavModule;
+  /** Level 2: functional category. */
+  category: string;
+  /** Level 3: business activity. The screen itself is level 4. */
+  activity: string;
+}
+
+/**
+ * Navigation metadata. Describes where the screen sits in the menu and how it is found; it never
+ * decides who may open it. Authorization stays with the page's own `can()` check and `screen-access.ts`.
+ */
+export interface ScreenNav extends NavPlacement {
+  /** Display order within its activity. Absent: catalogue order. */
+  order?: number;
+  /** True keeps the screen out of the menu tree; it stays reachable by search and by link. */
+  hidden?: boolean;
+  /** Extra search words, in our own vocabulary. Reference (SAP) aliases live in the term registry, not here. */
+  keywords?: readonly string[];
+  /** Name of an icon from our own set. */
+  icon?: string;
+  /** Further menu contexts. The screen is one implementation, offered from several places. */
+  also?: readonly NavPlacement[];
+}
+
 export interface ScreenLink {
   id: string;
   path: string;
@@ -28,7 +60,21 @@ export interface ScreenLink {
   area: ScreenArea;
   family: string;
   accepts: readonly string[];
+  /** Menu placement. Optional so a new screen compiles; tests/screen-navigation.test.ts requires it. */
+  nav?: ScreenNav;
 }
+
+/** Level-1 modules in menu order. Labels are ours (AI-04). */
+export const NAV_MODULES: readonly { id: NavModule; label: string }[] = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'mm', label: 'MM – Materials Management' },
+  { id: 'pp', label: 'PP – Production Planning' },
+  { id: 'qm', label: 'QM – Quality Management' },
+  { id: 'fico', label: 'Finance & Controlling' },
+  { id: 'sd', label: 'SD – Sales & Distribution' },
+  { id: 'hr', label: 'HR – People' },
+  { id: 'admin', label: 'Administration' },
+];
 
 export const SCREENS: readonly ScreenLink[] = [
   {
@@ -40,6 +86,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "platform",
     accepts: [],
+    nav: {
+      module: "dashboard",
+      category: "Launchpad",
+      activity: "Launchpad",
+    },
   },
   {
     id: "/clients",
@@ -50,6 +101,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "tenants",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Tenants",
+      activity: "Tenant lifecycle",
+    },
   },
   {
     id: "/clients/new",
@@ -60,6 +116,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "tenants",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Tenants",
+      activity: "Tenant lifecycle",
+    },
   },
   {
     id: "/platform/roles",
@@ -70,6 +131,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "roles",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Security & access",
+      activity: "Roles & capabilities",
+    },
   },
   {
     id: "/platform/users",
@@ -80,6 +146,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "platform-users",
     accepts: ["q", "status"],
+    nav: {
+      module: "admin",
+      category: "Security & access",
+      activity: "Users",
+    },
   },
   {
     id: "/platform/users/access",
@@ -90,6 +161,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "platform-users",
     accepts: ["query", "user"],
+    nav: {
+      module: "admin",
+      category: "Security & access",
+      activity: "Users",
+    },
   },
   {
     id: "/config",
@@ -100,6 +176,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "workbench",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Configuration",
+      activity: "Configuration workbench",
+    },
   },
   {
     id: "/config/account-determination",
@@ -110,6 +191,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/activity-rates",
@@ -120,6 +206,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "cost-config",
     accepts: ["type", "year"],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Cost objects setup",
+    },
   },
   {
     id: "/config/activity-types",
@@ -130,6 +221,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "cost-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Cost objects setup",
+    },
   },
   {
     id: "/config/banks",
@@ -140,6 +236,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "bank-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Banks",
+    },
   },
   {
     id: "/config/batch-access-sequences",
@@ -150,6 +251,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-search-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch search setup",
+    },
   },
   {
     id: "/config/batch-classification",
@@ -160,6 +266,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-search-config",
     accepts: ["type"],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch search setup",
+    },
   },
   {
     id: "/config/batch-condition-tables",
@@ -170,6 +281,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-search-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch search setup",
+    },
   },
   {
     id: "/config/batch-determination",
@@ -180,6 +296,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-batch-determination",
     accepts: ["customer", "material", "delivery"],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales document setup",
+    },
   },
   {
     id: "/config/batch-conversion",
@@ -190,6 +311,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-document-management",
@@ -200,6 +326,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-initial-status",
@@ -210,6 +341,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: ["type"],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-level",
@@ -220,6 +356,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-management",
@@ -230,6 +371,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-number-assignment",
@@ -240,6 +386,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-number-ranges",
@@ -250,6 +401,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-search-allocations",
@@ -260,6 +416,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-search-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch search setup",
+    },
   },
   {
     id: "/config/batch-search-procedures",
@@ -270,6 +431,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-search-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch search setup",
+    },
   },
   {
     id: "/config/batch-status",
@@ -280,6 +446,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-status-plants",
@@ -290,6 +461,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: ["plant"],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/config/batch-strategy-types",
@@ -300,6 +476,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-search-config",
     accepts: ["type"],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch search setup",
+    },
   },
   {
     id: "/config/characteristics",
@@ -310,6 +491,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "classification-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Classification",
+    },
   },
   {
     id: "/config/chart-of-accounts",
@@ -320,6 +506,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/chart-of-accounts/copy",
@@ -330,6 +521,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/classes",
@@ -340,6 +536,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "classification-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Classification",
+    },
   },
   {
     id: "/config/company-codes",
@@ -350,6 +551,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "company-config",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Enterprise structure",
+      activity: "Company codes & controlling area",
+    },
   },
   {
     id: "/config/company-codes/assign-chart-of-accounts",
@@ -360,6 +566,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "company-config",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Enterprise structure",
+      activity: "Company codes & controlling area",
+    },
   },
   {
     id: "/config/credit-control-areas",
@@ -370,6 +581,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "credit",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Credit management",
+    },
   },
   {
     id: "/config/consolidation",
@@ -380,6 +596,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "consolidation",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Consolidation",
+    },
   },
   {
     id: "/config/controlling-area",
@@ -390,6 +611,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "company-config",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Enterprise structure",
+      activity: "Company codes & controlling area",
+    },
   },
   {
     id: "/config/controlling-area/assign-company-code",
@@ -400,6 +626,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "company-config",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Enterprise structure",
+      activity: "Company codes & controlling area",
+    },
   },
   {
     id: "/config/cost-center-hierarchy",
@@ -410,6 +641,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "cost-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Cost objects setup",
+    },
   },
   {
     id: "/config/cost-centers",
@@ -420,6 +656,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "cost-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Cost objects setup",
+    },
   },
   {
     id: "/config/settlement-configuration",
@@ -430,6 +671,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "cost-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Cost objects setup",
+    },
   },
   {
     id: "/config/distribution-channels",
@@ -440,6 +686,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-config",
     accepts: ["distributionChannel"],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales organisation structure",
+    },
   },
   {
     id: "/config/divisions",
@@ -450,6 +701,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-config",
     accepts: ["division"],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales organisation structure",
+    },
   },
   {
     id: "/config/document-types",
@@ -460,6 +716,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "document-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Document & posting control",
+    },
   },
   {
     id: "/config/exchange-rates",
@@ -470,6 +731,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "currency-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Currencies",
+    },
   },
   {
     id: "/config/fiscal-year-variants",
@@ -480,6 +746,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "period-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Fiscal years & periods",
+    },
   },
   {
     id: "/config/fiscal-year-variants/assign-company-codes",
@@ -490,6 +761,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "period-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Fiscal years & periods",
+    },
   },
   {
     id: "/config/gl-accounts",
@@ -500,6 +776,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/gl-accounts/edit",
@@ -510,6 +791,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/gl-accounts/new",
@@ -520,6 +806,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/gl-accounts/transfer",
@@ -530,6 +821,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: ["chartOfAccounts"],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/gl-accounts/view",
@@ -540,6 +836,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: ["account", "chart"],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/house-banks",
@@ -550,6 +851,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "bank-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Banks",
+    },
   },
   {
     id: "/config/industries",
@@ -560,6 +866,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "material-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Material master setup",
+    },
   },
   {
     id: "/config/industry-sectors",
@@ -570,6 +881,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "material-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Material master setup",
+    },
   },
   {
     id: "/config/intercompany-clearing",
@@ -580,6 +896,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "intercompany",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Intercompany",
+    },
   },
   {
     id: "/config/material-groups",
@@ -590,6 +911,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "material-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Material master setup",
+    },
   },
   {
     id: "/config/material-number-ranges",
@@ -600,6 +926,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "material-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Material master setup",
+    },
   },
   {
     id: "/config/material-period-control",
@@ -610,6 +941,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "material-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Material master setup",
+    },
   },
   {
     id: "/config/material-types",
@@ -620,6 +956,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "material-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Material master setup",
+    },
   },
   {
     id: "/config/movement-types",
@@ -630,6 +971,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "material-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Movement type setup",
+    },
   },
   {
     id: "/config/number-range-objects",
@@ -640,6 +986,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "number-ranges",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Enterprise structure",
+      activity: "Number ranges",
+    },
   },
   {
     id: "/config/number-ranges",
@@ -650,6 +1001,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "number-ranges",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Enterprise structure",
+      activity: "Number ranges",
+    },
   },
   {
     id: "/config/payment-methods",
@@ -660,6 +1016,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "payment-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Payment",
+    },
   },
   {
     id: "/config/payment-terms",
@@ -670,6 +1031,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "payment-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Payment",
+    },
   },
   {
     id: "/config/plants",
@@ -680,6 +1046,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "plant-config",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Enterprise structure",
+      activity: "Plants & storage locations",
+    },
   },
   {
     id: "/config/posting-period-variants",
@@ -690,6 +1061,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "period-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Fiscal years & periods",
+    },
   },
   {
     id: "/config/posting-period-variants/assign-company-codes",
@@ -700,6 +1076,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "period-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Fiscal years & periods",
+    },
   },
   {
     id: "/config/posting-periods",
@@ -710,6 +1091,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "period-config",
     accepts: ["company"],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Fiscal years & periods",
+    },
   },
   {
     id: "/config/profit-center-hierarchy",
@@ -720,6 +1106,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "cost-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Cost objects setup",
+    },
   },
   {
     id: "/config/profit-centers",
@@ -730,6 +1121,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "cost-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Cost objects setup",
+    },
   },
   {
     id: "/config/purchasing-groups",
@@ -740,6 +1136,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "purchasing-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Purchasing organisation",
+    },
   },
   {
     id: "/config/purchasing-orgs",
@@ -750,6 +1151,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "purchasing-config",
     accepts: ["purchasingOrg"],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Purchasing organisation",
+    },
   },
   {
     id: "/config/purchasing-orgs/assign-company",
@@ -760,6 +1166,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "purchasing-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Purchasing organisation",
+    },
   },
   {
     id: "/config/purchasing-orgs/assign-plant",
@@ -770,6 +1181,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "purchasing-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Purchasing organisation",
+    },
   },
   {
     id: "/config/release-strategies",
@@ -780,6 +1196,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "release-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Release & completion",
+    },
   },
   {
     id: "/config/delivery-completion",
@@ -790,6 +1211,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "release-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Release & completion",
+    },
   },
   {
     id: "/config/retained-earnings",
@@ -800,6 +1226,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "gl-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Chart of accounts & G/L master",
+    },
   },
   {
     id: "/config/sales-areas",
@@ -810,6 +1241,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-config",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales organisation structure",
+    },
   },
   {
     id: "/config/sales-orgs",
@@ -820,6 +1256,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-config",
     accepts: ["salesOrg"],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales organisation structure",
+    },
   },
   {
     id: "/config/sales-orgs/assign-company",
@@ -830,6 +1271,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-config",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales organisation structure",
+    },
   },
   {
     id: "/config/sales-orgs/assign-distribution-channel",
@@ -840,6 +1286,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-config",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales organisation structure",
+    },
   },
   {
     id: "/config/sales-orgs/assign-division",
@@ -850,6 +1301,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-config",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales organisation structure",
+    },
   },
   {
     id: "/config/mrp-controllers",
@@ -860,6 +1316,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "production-config",
     accepts: ["plant"],
+    nav: {
+      module: "pp",
+      category: "Configuration",
+      activity: "Production setup",
+    },
   },
   {
     id: "/config/scheduling-profiles",
@@ -870,6 +1331,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "production-config",
     accepts: ["plant"],
+    nav: {
+      module: "pp",
+      category: "Configuration",
+      activity: "Production setup",
+    },
   },
   {
     id: "/config/availability-check",
@@ -880,6 +1346,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "production-config",
     accepts: [],
+    nav: {
+      module: "pp",
+      category: "Configuration",
+      activity: "Production setup",
+    },
   },
   {
     id: "/config/production-order-types",
@@ -890,6 +1361,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "production-config",
     accepts: [],
+    nav: {
+      module: "pp",
+      category: "Configuration",
+      activity: "Production setup",
+    },
   },
   {
     id: "/config/order-type-parameters",
@@ -900,6 +1376,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "production-config",
     accepts: [],
+    nav: {
+      module: "pp",
+      category: "Configuration",
+      activity: "Production setup",
+    },
   },
   {
     id: "/config/checking-control",
@@ -910,6 +1391,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "production-config",
     accepts: [],
+    nav: {
+      module: "pp",
+      category: "Configuration",
+      activity: "Production setup",
+    },
   },
   {
     id: "/config/special-gl",
@@ -920,6 +1406,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "document-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Document & posting control",
+    },
   },
   {
     id: "/config/storage-locations",
@@ -930,6 +1421,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "plant-config",
     accepts: ["plant"],
+    nav: {
+      module: "admin",
+      category: "Enterprise structure",
+      activity: "Plants & storage locations",
+    },
   },
   {
     id: "/config/tax-codes",
@@ -940,6 +1436,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "tax-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Tax",
+    },
   },
   {
     id: "/config/tolerance-groups",
@@ -950,6 +1451,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "document-config",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Configuration",
+      activity: "Document & posting control",
+    },
   },
   {
     id: "/config/valuation-classes",
@@ -960,6 +1466,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "material-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Material master setup",
+    },
   },
   {
     id: "/config/wip-batch",
@@ -970,6 +1481,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "batch-config",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Configuration",
+      activity: "Batch management setup",
+    },
   },
   {
     id: "/controlling/cost-center-report",
@@ -980,6 +1496,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "controlling-reports",
     accepts: ["controllingArea", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Controlling reports",
+    },
   },
   {
     id: "/controlling/internal-order-display",
@@ -990,6 +1511,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "internal-orders",
     accepts: ["order"],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Internal orders",
+    },
   },
   {
     id: "/controlling/internal-order-line-items",
@@ -1000,6 +1526,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "internal-orders",
     accepts: ["order"],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Internal orders",
+    },
   },
   {
     id: "/controlling/internal-orders",
@@ -1010,6 +1541,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "internal-orders",
     accepts: ["order"],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Internal orders",
+    },
   },
   {
     id: "/controlling/order-settlement",
@@ -1020,6 +1556,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "order-settlement",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Order settlement",
+    },
   },
   {
     id: "/controlling/order-settlement-collective",
@@ -1030,6 +1571,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "order-settlement",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Order settlement",
+    },
   },
   {
     id: "/controlling/original-budget",
@@ -1040,6 +1586,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "order-budget",
     accepts: ["order"],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Order budget",
+    },
   },
   {
     id: "/controlling/original-budget-display",
@@ -1050,6 +1601,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "order-budget",
     accepts: ["order"],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Order budget",
+    },
   },
   {
     id: "/controlling/plan-revaluation",
@@ -1060,6 +1616,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "controlling-plan",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Planning & allocation",
+    },
   },
   {
     // Item 5 (9282): primary-cost planning per cost centre, element and period (KP06/KP07).
@@ -1071,6 +1632,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "controlling-plan",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Planning & allocation",
+    },
   },
   {
     // Item 7 (9284): cost allocation cycles (KSU1/KSU2/KSU3) and assessment (KSU5).
@@ -1082,6 +1648,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "controlling-plan",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Planning & allocation",
+    },
   },
   {
     id: "/controlling/profit-center-report",
@@ -1092,6 +1663,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "controlling-reports",
     accepts: ["controllingArea", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Controlling reports",
+    },
   },
   {
     id: "/controlling/settlement-rules",
@@ -1102,6 +1678,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "controlling",
     family: "order-settlement",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Order settlement",
+    },
   },
   {
     id: "/finance/accruals",
@@ -1112,6 +1693,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "close",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Closing & valuation",
+    },
   },
   {
     id: "/finance/assets",
@@ -1122,6 +1708,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "assets",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Asset accounting",
+      activity: "Assets",
+    },
   },
   {
     id: "/finance/assets/acquire",
@@ -1132,6 +1723,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "assets",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Asset accounting",
+      activity: "Assets",
+    },
   },
   {
     id: "/finance/assets/change",
@@ -1142,6 +1738,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "assets",
     accepts: ["asset", "company", "sub"],
+    nav: {
+      module: "fico",
+      category: "Asset accounting",
+      activity: "Assets",
+    },
   },
   {
     id: "/finance/assets/depreciate",
@@ -1152,6 +1753,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "assets",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Asset accounting",
+      activity: "Assets",
+    },
   },
   {
     id: "/finance/assets/history",
@@ -1162,6 +1768,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "assets",
     accepts: ["fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Asset accounting",
+      activity: "Assets",
+    },
   },
   {
     id: "/finance/assets/new",
@@ -1172,6 +1783,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "assets",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Asset accounting",
+      activity: "Assets",
+    },
   },
   {
     id: "/finance/assets/retire",
@@ -1182,6 +1798,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "assets",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Asset accounting",
+      activity: "Assets",
+    },
   },
   {
     id: "/finance/balance-sheet",
@@ -1192,6 +1813,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "statements",
     accepts: ["companyCode", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Financial reporting",
+      activity: "Financial statements",
+    },
   },
   {
     id: "/finance/carryforward",
@@ -1202,6 +1828,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "close",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Closing & valuation",
+    },
   },
   {
     id: "/finance/cash-flow",
@@ -1212,6 +1843,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "statements",
     accepts: ["fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Financial reporting",
+      activity: "Financial statements",
+    },
   },
   {
     id: "/finance/clearing-reset",
@@ -1222,6 +1858,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "journal",
     accepts: ["companyCode", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Accounting documents",
+    },
   },
   {
     id: "/finance/close-cockpit",
@@ -1232,6 +1873,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "close",
     accepts: ["company"],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Closing & valuation",
+    },
   },
   {
     id: "/finance/consolidated-statements",
@@ -1242,6 +1888,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "consolidation",
     accepts: ["fiscalYear", "group", "view"],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Consolidation",
+    },
   },
   {
     id: "/finance/consolidation-monitor",
@@ -1252,6 +1903,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "consolidation",
     accepts: ["fiscalYear", "group"],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Consolidation",
+    },
   },
   {
     id: "/finance/credit",
@@ -1262,6 +1918,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "credit",
     accepts: ["customer"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Credit management",
+    },
   },
   {
     id: "/finance/credit-monitor",
@@ -1272,6 +1933,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "credit",
     accepts: ["companyCode"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Credit management",
+    },
   },
   {
     id: "/finance/credit-release",
@@ -1282,6 +1948,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "credit",
     accepts: ["dateFrom", "dateTo", "salesOrg"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Credit management",
+    },
   },
   {
     id: "/finance/customer-ageing",
@@ -1292,6 +1963,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: ["companyCode", "customer", "keyDate"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer reports",
+    },
   },
   {
     id: "/finance/customer-balances",
@@ -1302,6 +1978,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: ["companyCode", "customer", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer reports",
+    },
   },
   {
     id: "/finance/customer-clearing",
@@ -1312,6 +1993,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: ["companyCode", "customer"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer accounting",
+    },
   },
   {
     id: "/finance/customer-down-payment",
@@ -1322,6 +2008,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer accounting",
+    },
   },
   {
     id: "/finance/customer-down-payment-clearing",
@@ -1332,6 +2023,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: ["companyCode", "customer"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer accounting",
+    },
   },
   {
     id: "/finance/customer-down-payment-request",
@@ -1342,6 +2038,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer accounting",
+    },
   },
   {
     id: "/finance/customer-invoice",
@@ -1352,6 +2053,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: ["companyCode", "invoice"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer accounting",
+    },
   },
   {
     id: "/finance/document-reversal",
@@ -1362,6 +2068,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "journal",
     accepts: ["companyCode", "documentNumber", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Accounting documents",
+    },
   },
   {
     id: "/finance/dunning",
@@ -1372,6 +2083,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer accounting",
+    },
   },
   {
     id: "/finance/fx/valuation",
@@ -1382,6 +2098,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "close",
     accepts: ["companyCode", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Closing & valuation",
+    },
   },
   {
     id: "/finance/gl-clearing",
@@ -1392,6 +2113,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "general-ledger",
     accepts: ["companyCode", "documentNumber", "glAccount"],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Clearing",
+    },
   },
   {
     id: "/finance/grir-reclass",
@@ -1402,6 +2128,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "close",
     accepts: ["companyCode", "keyDate"],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Closing & valuation",
+    },
   },
   {
     id: "/finance/incoming-payment",
@@ -1412,6 +2143,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "customer-accounting",
     accepts: ["companyCode", "customer"],
+    nav: {
+      module: "fico",
+      category: "Accounts receivable",
+      activity: "Customer accounting",
+    },
   },
   {
     id: "/finance/intercompany",
@@ -1422,6 +2158,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "intercompany",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Intercompany",
+    },
   },
   {
     id: "/finance/journal",
@@ -1432,6 +2173,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "journal",
     accepts: ["document"],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Accounting documents",
+    },
   },
   {
     id: "/finance/journal/balances",
@@ -1442,6 +2188,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "journal",
     accepts: ["account", "companyCode", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Financial reporting",
+      activity: "Ledger reports",
+    },
   },
   {
     id: "/finance/journal/document",
@@ -1452,6 +2203,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "journal",
     accepts: ["company", "document", "year"],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Accounting documents",
+    },
   },
   {
     id: "/finance/journal/items",
@@ -1462,6 +2218,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "journal",
     accepts: ["costCenter", "documentNumber", "fiscalYear", "profitCenter"],
+    nav: {
+      module: "fico",
+      category: "Financial reporting",
+      activity: "Ledger reports",
+    },
   },
   {
     id: "/finance/journal/new",
@@ -1472,6 +2233,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "journal",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Accounting documents",
+    },
   },
   {
     id: "/finance/journal/park",
@@ -1482,6 +2248,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "journal",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "General ledger",
+      activity: "Accounting documents",
+    },
   },
   {
     id: "/finance/outgoing-payment",
@@ -1492,6 +2263,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: ["companyCode", "vendor"],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor accounting",
+    },
   },
   {
     id: "/finance/payment-run",
@@ -1502,6 +2278,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor accounting",
+    },
   },
   {
     id: "/finance/profit-loss",
@@ -1512,6 +2293,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "statements",
     accepts: ["companyCode", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Financial reporting",
+      activity: "Financial statements",
+    },
   },
   {
     id: "/finance/subledger-tie-out",
@@ -1522,6 +2308,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "close",
     accepts: ["companyCode", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Closing & valuation",
+    },
   },
   {
     id: "/finance/tax/report",
@@ -1532,6 +2323,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "close",
     accepts: ["companyCode"],
+    nav: {
+      module: "fico",
+      category: "Period-end close",
+      activity: "Closing & valuation",
+    },
   },
   {
     id: "/finance/trial-balance",
@@ -1542,6 +2338,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "statements",
     accepts: ["companyCode", "fiscalYear"],
+    nav: {
+      module: "fico",
+      category: "Financial reporting",
+      activity: "Financial statements",
+    },
   },
   {
     id: "/finance/vendor-ageing",
@@ -1552,6 +2353,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: ["companyCode", "companyFrom", "companyTo", "keyDate", "supplier"],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor reports",
+    },
   },
   {
     id: "/finance/vendor-balances",
@@ -1562,6 +2368,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: ["companyCode", "fiscalYear", "supplier"],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor reports",
+    },
   },
   {
     id: "/finance/vendor-clearing",
@@ -1572,6 +2383,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: ["companyCode", "supplier"],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor accounting",
+    },
   },
   {
     id: "/finance/vendor-credit-memo",
@@ -1582,6 +2398,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: ["companyCode", "invoice"],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor accounting",
+    },
   },
   {
     id: "/sales/credit-memo",
@@ -1592,6 +2413,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-billing",
     accepts: ["billing", "customer", "invoice"],
+    nav: {
+      module: "sd",
+      category: "Billing",
+      activity: "Credit memos",
+    },
   },
   {
     id: "/finance/vendor-down-payment",
@@ -1602,6 +2428,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor accounting",
+    },
   },
   {
     id: "/finance/vendor-down-payment-clearing",
@@ -1612,6 +2443,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: ["companyCode", "vendor"],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor accounting",
+    },
   },
   {
     id: "/finance/vendor-down-payment-request",
@@ -1622,6 +2458,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor accounting",
+    },
   },
   {
     id: "/finance/vendor-invoice",
@@ -1632,6 +2473,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "finance",
     family: "vendor-accounting",
     accepts: ["companyCode", "invoice"],
+    nav: {
+      module: "fico",
+      category: "Accounts payable",
+      activity: "Vendor accounting",
+    },
   },
   {
     id: "/foundation/partners",
@@ -1642,6 +2488,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "foundation",
     family: "partners",
     accepts: ["company", "partner", "view"],
+    nav: {
+      module: "fico",
+      category: "Business partners",
+      activity: "Partner master (cross-module)",
+      also: [{ module: "mm", category: "Procurement", activity: "Suppliers" }, { module: "sd", category: "Sales", activity: "Customers" }],
+    },
   },
   {
     id: "/foundation/partners?new=1",
@@ -1652,6 +2504,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "foundation",
     family: "partners",
     accepts: ["company", "partner", "view"],
+    nav: {
+      module: "fico",
+      category: "Business partners",
+      activity: "Partner master (cross-module)",
+      also: [{ module: "mm", category: "Procurement", activity: "Suppliers" }, { module: "sd", category: "Sales", activity: "Customers" }],
+    },
   },
   {
     id: "/foundation/partners?view=CUSTOMER_COMPANY",
@@ -1662,6 +2520,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "foundation",
     family: "partners",
     accepts: ["company", "partner", "view"],
+    nav: {
+      module: "fico",
+      category: "Business partners",
+      activity: "Partner master (cross-module)",
+      also: [{ module: "sd", category: "Sales", activity: "Customers" }],
+    },
   },
   {
     id: "/foundation/partners?view=CUSTOMER_SALES",
@@ -1672,6 +2536,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "foundation",
     family: "partners",
     accepts: ["company", "partner", "view"],
+    nav: {
+      module: "fico",
+      category: "Business partners",
+      activity: "Partner master (cross-module)",
+      also: [{ module: "sd", category: "Sales", activity: "Customers" }],
+    },
   },
   {
     id: "/foundation/partners?view=SUPPLIER_COMPANY",
@@ -1682,6 +2552,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "foundation",
     family: "partners",
     accepts: ["company", "partner", "view"],
+    nav: {
+      module: "fico",
+      category: "Business partners",
+      activity: "Partner master (cross-module)",
+      also: [{ module: "mm", category: "Procurement", activity: "Suppliers" }],
+    },
   },
   {
     id: "/foundation/partners?view=SUPPLIER_PURCHASING",
@@ -1692,6 +2568,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "foundation",
     family: "partners",
     accepts: ["company", "partner", "view"],
+    nav: {
+      module: "fico",
+      category: "Business partners",
+      activity: "Partner master (cross-module)",
+      also: [{ module: "mm", category: "Procurement", activity: "Suppliers" }],
+    },
   },
   {
     id: "/foundation/partners/bank-profiles",
@@ -1702,6 +2584,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "foundation",
     family: "partners",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Business partners",
+      activity: "Partner master (cross-module)",
+      also: [{ module: "mm", category: "Procurement", activity: "Suppliers" }, { module: "sd", category: "Sales", activity: "Customers" }],
+    },
   },
   {
     id: "/inventory/serial-numbers",
@@ -1712,6 +2600,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "inventory-serial-numbers",
     accepts: ["material", "customer", "delivery"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Serial numbers",
+    },
   },
   {
     id: "/inventory/batch-classes",
@@ -1722,6 +2615,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "batches",
     accepts: ["type"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Batch management",
+    },
   },
   {
     id: "/inventory/batch-cockpit",
@@ -1732,6 +2630,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "batches",
     accepts: ["batch", "material", "plant", "supplier"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Batch management",
+    },
   },
   {
     id: "/inventory/batch-pickup",
@@ -1742,6 +2645,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "batches",
     accepts: ["batch", "material", "plant"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Batch management",
+    },
   },
   {
     id: "/inventory/batch-search-strategies",
@@ -1752,6 +2660,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "batches",
     accepts: ["type"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Batch management",
+    },
   },
   {
     id: "/inventory/batch-sort-sequences",
@@ -1762,6 +2675,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "batches",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Batch management",
+    },
   },
   {
     id: "/inventory/batches/change",
@@ -1772,6 +2690,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "batches",
     accepts: ["batch", "material", "plant"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Batch management",
+    },
   },
   {
     id: "/inventory/batches/display",
@@ -1782,6 +2705,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "batches",
     accepts: ["batch", "material", "plant"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Batch management",
+    },
   },
   {
     id: "/inventory/batches/new",
@@ -1792,6 +2720,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "batches",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Batch management",
+    },
   },
   {
     id: "/inventory/goods-issue",
@@ -1802,6 +2735,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "goods-movement",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Goods movements",
+    },
   },
   {
     id: "/inventory/goods-receipt",
@@ -1812,6 +2750,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "goods-movement",
     accepts: ["order"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Goods movements",
+    },
   },
   {
     id: "/inventory/material-document-list",
@@ -1822,6 +2765,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "material-documents",
     accepts: ["batch", "documentDateFrom", "documentDateTo"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Material documents",
+    },
   },
   {
     id: "/inventory/material-document-output",
@@ -1832,6 +2780,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "material-documents",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Material documents",
+    },
   },
   {
     id: "/inventory/material-documents",
@@ -1842,6 +2795,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "material-documents",
     accepts: ["document", "fiscalYear"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Material documents",
+    },
   },
   {
     id: "/inventory/materials",
@@ -1852,6 +2810,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "materials",
     accepts: ["material", "plant", "view"],
+    nav: {
+      module: "mm",
+      category: "Material master",
+      activity: "Material master",
+    },
   },
   {
     id: "/inventory/materials?new=1",
@@ -1862,6 +2825,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "materials",
     accepts: ["material", "plant", "view"],
+    nav: {
+      module: "mm",
+      category: "Material master",
+      activity: "Material master",
+    },
   },
   {
     id: "/inventory/materials?view=MRP",
@@ -1872,6 +2840,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "materials",
     accepts: ["material", "plant", "view"],
+    nav: {
+      module: "mm",
+      category: "Material master",
+      activity: "Material master",
+    },
   },
   {
     id: "/inventory/migo",
@@ -1882,6 +2855,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "goods-movement",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Goods movements",
+    },
   },
   {
     id: "/inventory/physical-inventory",
@@ -1892,6 +2870,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "physical-inventory",
     accepts: ["plant"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Physical inventory",
+    },
   },
   {
     id: "/inventory/physical-inventory-count",
@@ -1902,6 +2885,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "physical-inventory",
     accepts: ["year"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Physical inventory",
+    },
   },
   {
     id: "/inventory/physical-inventory-differences",
@@ -1912,6 +2900,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "physical-inventory",
     accepts: ["fiscalYear", "year"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Physical inventory",
+    },
   },
   {
     id: "/inventory/physical-inventory-posting",
@@ -1922,6 +2915,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "physical-inventory",
     accepts: ["year"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Physical inventory",
+    },
   },
   {
     id: "/inventory/physical-inventory-recount",
@@ -1932,6 +2930,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "physical-inventory",
     accepts: ["year"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Physical inventory",
+    },
   },
   {
     id: "/inventory/price-change",
@@ -1942,6 +2945,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "stock",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Valuation",
+      activity: "Material valuation",
+    },
   },
   {
     id: "/inventory/reservations",
@@ -1952,6 +2960,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "goods-movement",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Goods movements",
+    },
   },
   {
     id: "/inventory/return-delivery",
@@ -1962,6 +2975,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "goods-movement",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Goods movements",
+    },
   },
   {
     id: "/inventory/reversal",
@@ -1972,6 +2990,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "goods-movement",
     accepts: ["fiscalYear"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Goods movements",
+    },
   },
   {
     id: "/inventory/shelf-life-list",
@@ -1982,6 +3005,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "stock",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Stock reports",
+    },
   },
   {
     id: "/inventory/stock-overview",
@@ -1992,6 +3020,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "stock",
     accepts: ["batch", "material"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Stock reports",
+    },
   },
   {
     id: "/inventory/stock-posting-date",
@@ -2002,6 +3035,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "stock",
     accepts: ["batch", "dateFrom", "dateTo"],
+    nav: {
+      module: "mm",
+      category: "Valuation",
+      activity: "Stock valuation & ageing",
+    },
   },
   {
     id: "/inventory/stock-reconcile",
@@ -2012,6 +3050,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "stock",
     accepts: ["plant"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Stock reports",
+    },
   },
   {
     id: "/inventory/transfer-posting",
@@ -2022,6 +3065,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "goods-movement",
     accepts: ["material", "plant"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Goods movements",
+    },
   },
   {
     id: "/inventory/uom-conversion",
@@ -2032,6 +3080,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "materials",
     accepts: ["material"],
+    nav: {
+      module: "mm",
+      category: "Material master",
+      activity: "Material master",
+    },
   },
   {
     id: "/inventory/warehouse-stocks",
@@ -2042,6 +3095,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "stock",
     accepts: ["batch"],
+    nav: {
+      module: "mm",
+      category: "Inventory management",
+      activity: "Stock reports",
+    },
   },
   {
     id: "/inventory/stock-ageing",
@@ -2052,6 +3110,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "stock",
     accepts: ["material", "plant"],
+    nav: {
+      module: "mm",
+      category: "Valuation",
+      activity: "Stock valuation & ageing",
+    },
   },
   {
     id: "/platform/jobs",
@@ -2062,6 +3125,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "platform",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Platform operations",
+      activity: "Monitoring & tools",
+    },
   },
   {
     id: "/platform/notifications",
@@ -2072,6 +3140,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "platform",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Platform operations",
+      activity: "Monitoring & tools",
+    },
   },
   {
     id: "/platform/locks",
@@ -2082,6 +3155,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "platform",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Platform operations",
+      activity: "Monitoring & tools",
+    },
   },
   {
     id: "/production/bom-display",
@@ -2092,6 +3170,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: ["alternative", "material", "plant", "usage", "validOn"],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     // Item 8 (9285 registry only): CS11/CS12 explosion and CS15 where-used, a read of BOM master data,
@@ -2104,6 +3187,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: [],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     // Item 12 (9288): CK11N create and CK13N display of a standard cost estimate. Saved, never released.
@@ -2115,6 +3203,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: [],
+    nav: {
+      module: "fico",
+      category: "Controlling",
+      activity: "Product costing",
+      also: [{ module: "pp", category: "Master data", activity: "Product costing" }],
+    },
   },
   {
     id: "/production/boms",
@@ -2125,6 +3219,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: ["alternative", "material", "plant", "usage", "validOn"],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     id: "/production/confirmation-cancel",
@@ -2135,6 +3234,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["confirmation", "order"],
+    nav: {
+      module: "pp",
+      category: "Confirmations",
+      activity: "Order confirmations",
+    },
   },
   {
     id: "/production/confirmation-display",
@@ -2145,6 +3249,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["confirmation", "detail", "direction", "operation", "order", "page", "plant", "postingFrom", "postingTo", "recordedFrom", "recordedTo", "run", "sort"],
+    nav: {
+      module: "pp",
+      category: "Confirmations",
+      activity: "Order confirmations",
+    },
   },
   {
     id: "/production/mrp-run",
@@ -2155,6 +3264,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planning",
     accepts: [],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planning runs & lists",
+    },
   },
   {
     id: "/production/order-confirmation",
@@ -2165,6 +3279,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["material", "order", "plant"],
+    nav: {
+      module: "pp",
+      category: "Confirmations",
+      activity: "Order confirmations",
+    },
   },
   {
     id: "/production/order-information",
@@ -2175,6 +3294,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["batch", "component", "dateBasis", "dateFrom", "dateTo", "material", "movementType", "mrpController", "order", "plannedOrder", "plant", "selection", "storageLocation"],
+    nav: {
+      module: "pp",
+      category: "Production monitoring",
+      activity: "Order information",
+    },
   },
   {
     id: "/production/orders",
@@ -2185,6 +3309,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["order"],
+    nav: {
+      module: "pp",
+      category: "Production orders",
+      activity: "Production orders",
+    },
   },
   {
     id: "/production/planned-order-change",
@@ -2195,6 +3324,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planned-orders",
     accepts: ["material", "order", "plant"],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planned orders",
+    },
   },
   {
     id: "/production/planned-order-conversion",
@@ -2205,6 +3339,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planned-orders",
     accepts: ["material", "order", "plant"],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planned orders",
+    },
   },
   {
     id: "/production/planned-order-conversion-collective",
@@ -2215,6 +3354,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planned-orders",
     accepts: ["material", "mrpController", "orderFrom", "orderTo", "plant"],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planned orders",
+    },
   },
   {
     id: "/production/planned-order-create",
@@ -2225,6 +3369,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planned-orders",
     accepts: ["material", "plant"],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planned orders",
+    },
   },
   {
     id: "/production/planned-order-display",
@@ -2235,6 +3384,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planned-orders",
     accepts: ["material", "order", "plant"],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planned orders",
+    },
   },
   {
     id: "/production/production-order-change",
@@ -2245,6 +3399,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["material", "order", "plant"],
+    nav: {
+      module: "pp",
+      category: "Production orders",
+      activity: "Production orders",
+    },
   },
   {
     id: "/production/production-order-display",
@@ -2255,6 +3414,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["material", "order", "plant"],
+    nav: {
+      module: "pp",
+      category: "Production orders",
+      activity: "Production orders",
+    },
   },
   {
     id: "/production/production-version-display",
@@ -2265,6 +3429,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: ["material", "plant"],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     id: "/production/production-versions",
@@ -2275,6 +3444,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: ["material", "plant", "validOn"],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     id: "/production/routing-display",
@@ -2285,6 +3459,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: ["counter", "group", "material", "plant", "type"],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     id: "/production/routings",
@@ -2295,6 +3474,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: ["counter", "group", "material", "plant", "type", "validOn"],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     id: "/production/single-item-planning",
@@ -2305,6 +3489,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planning",
     accepts: ["material", "plant"],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planning runs & lists",
+    },
   },
   {
     id: "/production/single-level-planning",
@@ -2315,6 +3504,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planning",
     accepts: ["material", "plant"],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planning runs & lists",
+    },
   },
   {
     id: "/production/stock-requirements",
@@ -2325,6 +3519,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planning",
     accepts: ["material", "plant"],
+    nav: {
+      module: "pp",
+      category: "Production monitoring",
+      activity: "Stock/requirements",
+    },
   },
   {
     // Item 15 (9290): MD06, the exception worklist over the stock/requirements list's own counts.
@@ -2336,6 +3535,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planning",
     accepts: ["plant", "materialFrom", "materialTo", "mrpType", "horizonEnd", "exceptions"],
+    nav: {
+      module: "pp",
+      category: "Production monitoring",
+      activity: "Planning exceptions",
+    },
   },
   {
     id: "/production/order-availability",
@@ -2346,6 +3550,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "planning",
     accepts: ["order"],
+    nav: {
+      module: "pp",
+      category: "Production orders",
+      activity: "Production orders",
+    },
   },
   {
     id: "/production/order-cost-report",
@@ -2356,6 +3565,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["fiscalYear", "order", "periodFrom", "periodTo"],
+    nav: {
+      module: "pp",
+      category: "Production orders",
+      activity: "Order costs & settlement",
+    },
   },
   {
     id: "/production/order-settlement",
@@ -2366,6 +3580,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["order"],
+    nav: {
+      module: "pp",
+      category: "Production orders",
+      activity: "Order costs & settlement",
+    },
   },
   {
     id: "/production/time-ticket",
@@ -2376,6 +3595,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["operation", "order"],
+    nav: {
+      module: "pp",
+      category: "Confirmations",
+      activity: "Order confirmations",
+    },
   },
   {
     id: "/production/cogi",
@@ -2386,6 +3610,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-orders",
     accepts: ["id", "material", "movement", "operation", "order", "plant", "status"],
+    nav: {
+      module: "pp",
+      category: "Production monitoring",
+      activity: "Failed goods movements",
+    },
   },
   {
     id: "/production/work-center-display",
@@ -2396,6 +3625,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: ["plant", "workCenter"],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     id: "/production/work-centers",
@@ -2406,6 +3640,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "production",
     family: "production-master",
     accepts: ["plant", "workCenter"],
+    nav: {
+      module: "pp",
+      category: "Master data",
+      activity: "BOM, routing, work centre, version",
+    },
   },
   {
     id: "/purchasing/blocked-invoice",
@@ -2416,6 +3655,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "invoice-verification",
     accepts: ["companyFrom", "companyTo", "fiscalYear", "orderNumber", "supplier"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Invoice verification & GR/IR",
+      also: [{ module: "fico", category: "Accounts payable", activity: "Invoice verification" }],
+    },
   },
   {
     id: "/purchasing/contract-display",
@@ -2426,6 +3671,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "contracts",
     accepts: ["contract", "supplier"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Outline agreements: contracts",
+    },
   },
   {
     id: "/purchasing/contracts",
@@ -2436,6 +3686,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "contracts",
     accepts: ["contract"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Outline agreements: contracts",
+    },
   },
   {
     id: "/purchasing/delivery-schedule",
@@ -2446,6 +3701,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "scheduling-agreements",
     accepts: ["agreement"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Outline agreements: scheduling agreements",
+    },
   },
   {
     id: "/purchasing/delivery-schedule-display",
@@ -2456,6 +3716,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "scheduling-agreements",
     accepts: ["agreement"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Outline agreements: scheduling agreements",
+    },
   },
   {
     id: "/purchasing/grir-clearing",
@@ -2466,6 +3731,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "invoice-verification",
     accepts: ["companyFrom", "companyTo", "keyDate", "orderFrom", "orderTo"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Invoice verification & GR/IR",
+      also: [{ module: "fico", category: "Accounts payable", activity: "Invoice verification" }],
+    },
   },
   {
     id: "/purchasing/grir-reconciliation",
@@ -2476,6 +3747,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "invoice-verification",
     accepts: ["companyFrom", "companyTo", "keyDate", "orderFrom", "orderTo", "category"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Invoice verification & GR/IR",
+      also: [{ module: "fico", category: "Accounts payable", activity: "Invoice verification" }],
+    },
   },
   {
     id: "/purchasing/info-record",
@@ -2486,6 +3763,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "purchasing-sources",
     accepts: ["material", "plant", "supplier"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Sources of supply",
+    },
   },
   {
     id: "/purchasing/invoice-overview",
@@ -2496,6 +3778,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "invoice-verification",
     accepts: ["companyFrom", "companyTo", "document", "fiscalYear", "orderFrom", "orderTo", "purchasingOrg"],
+    nav: {
+      module: "mm",
+      category: "Purchasing reports",
+      activity: "Purchasing reports",
+      also: [{ module: "fico", category: "Accounts payable", activity: "Invoice verification" }],
+    },
   },
   {
     id: "/purchasing/invoice-verification",
@@ -2506,6 +3794,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "invoice-verification",
     accepts: ["invoice", "order"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Invoice verification & GR/IR",
+      also: [{ module: "fico", category: "Accounts payable", activity: "Invoice verification" }],
+    },
   },
   {
     id: "/purchasing/orders",
@@ -2516,6 +3810,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "purchase-orders",
     accepts: ["contract", "order", "requisition"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Purchase orders",
+    },
   },
   {
     id: "/purchasing/orders-by-account-assignment",
@@ -2526,6 +3825,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "purchase-orders",
     accepts: ["documentDateFrom", "documentDateTo"],
+    nav: {
+      module: "mm",
+      category: "Purchasing reports",
+      activity: "Purchasing reports",
+    },
   },
   {
     id: "/purchasing/parked-invoice",
@@ -2536,6 +3840,12 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "invoice-verification",
     accepts: ["order", "parked"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Invoice verification & GR/IR",
+      also: [{ module: "fico", category: "Accounts payable", activity: "Invoice verification" }],
+    },
   },
   {
     id: "/purchasing/purchase-order-display",
@@ -2546,6 +3856,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "purchase-orders",
     accepts: ["documentDateFrom", "documentDateTo", "order", "plant", "purchasingOrg", "supplier"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Purchase orders",
+    },
   },
   {
     id: "/purchasing/purchase-order-list",
@@ -2556,6 +3871,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "purchase-orders",
     accepts: ["documentDateFrom", "documentDateTo", "orderFrom", "orderTo"],
+    nav: {
+      module: "mm",
+      category: "Purchasing reports",
+      activity: "Purchasing reports",
+    },
   },
   {
     id: "/purchasing/quota-arrangement",
@@ -2566,6 +3886,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "purchasing-sources",
     accepts: ["material", "plant"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Sources of supply",
+    },
   },
   {
     id: "/purchasing/quotation",
@@ -2576,6 +3901,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "quotations",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Requests for quotation",
+    },
   },
   {
     id: "/purchasing/quotation-comparison",
@@ -2586,6 +3916,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "quotations",
     accepts: ["material", "plant", "purchasingOrg"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Requests for quotation",
+    },
   },
   {
     id: "/purchasing/quotation-display",
@@ -2596,6 +3931,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "quotations",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Requests for quotation",
+    },
   },
   {
     id: "/purchasing/requisition-list",
@@ -2606,6 +3946,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "requisitions",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Purchasing reports",
+      activity: "Purchasing reports",
+    },
   },
   {
     id: "/purchasing/requisitions",
@@ -2616,6 +3961,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "requisitions",
     accepts: ["req"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Purchase requisitions",
+    },
   },
   {
     id: "/purchasing/rfq",
@@ -2626,6 +3976,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "quotations",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Requests for quotation",
+    },
   },
   {
     id: "/purchasing/scheduling-agreement-display",
@@ -2636,6 +3991,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "scheduling-agreements",
     accepts: ["agreement", "supplier"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Outline agreements: scheduling agreements",
+    },
   },
   {
     id: "/purchasing/scheduling-agreement-releases",
@@ -2646,6 +4006,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "scheduling-agreements",
     accepts: [],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Outline agreements: scheduling agreements",
+    },
   },
   {
     id: "/purchasing/scheduling-agreements",
@@ -2656,6 +4021,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "scheduling-agreements",
     accepts: ["agreement"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Outline agreements: scheduling agreements",
+    },
   },
   {
     id: "/purchasing/source-list",
@@ -2666,6 +4036,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "purchasing-sources",
     accepts: ["material", "plant"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Sources of supply",
+    },
   },
   {
     id: "/purchasing/vendor-evaluation",
@@ -2676,6 +4051,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "purchasing",
     family: "purchasing-sources",
     accepts: ["purchasingOrg", "supplier"],
+    nav: {
+      module: "mm",
+      category: "Procurement",
+      activity: "Sources of supply",
+    },
   },
   {
     id: "/registry",
@@ -2686,6 +4066,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "platform",
     family: "platform",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Platform operations",
+      activity: "Search & registry",
+    },
   },
   {
     id: "/sales/orders",
@@ -2696,6 +4081,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-orders",
     accepts: ["order"],
+    nav: {
+      module: "sd",
+      category: "Sales",
+      activity: "Sales orders",
+    },
   },
   {
     id: "/sales/quotations",
@@ -2706,6 +4096,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-quotations",
     accepts: ["quotation", "customer"],
+    nav: {
+      module: "sd",
+      category: "Sales",
+      activity: "Quotations",
+    },
   },
   {
     id: "/sales/conditions",
@@ -2716,6 +4111,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-pricing",
     accepts: ["customer", "material"],
+    nav: {
+      module: "sd",
+      category: "Pricing & conditions",
+      activity: "Condition records",
+    },
   },
   {
     id: "/sales/delivery",
@@ -2726,6 +4126,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-delivery",
     accepts: ["delivery", "order"],
+    nav: {
+      module: "sd",
+      category: "Shipping",
+      activity: "Outbound deliveries",
+    },
   },
   {
     id: "/sales/billing",
@@ -2736,6 +4141,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-billing",
     accepts: ["billing", "customer", "delivery"],
+    nav: {
+      module: "sd",
+      category: "Billing",
+      activity: "Billing",
+    },
   },
   {
     id: "/sales/billing-plans",
@@ -2746,6 +4156,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-billing",
     accepts: ["order", "item", "customer"],
+    nav: {
+      module: "sd",
+      category: "Billing",
+      activity: "Billing",
+    },
   },
   {
     id: "/sales/rebate-agreements",
@@ -2756,6 +4171,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-rebate",
     accepts: ["customer", "agreement", "billing"],
+    nav: {
+      module: "sd",
+      category: "Pricing & conditions",
+      activity: "Rebate agreements",
+    },
   },
   {
     id: "/sales/output",
@@ -2769,6 +4189,11 @@ export const SCREENS: readonly ScreenLink[] = [
     // queue's own vocabulary and not a document's: there is no `order` here, and
     // a deep link that sends one is opened as an unfiltered list.
     accepts: ["dispatchTime", "documentCategory", "documentNumber", "outputType", "status", "transmissionMedium"],
+    nav: {
+      module: "sd",
+      category: "Sales",
+      activity: "Output",
+    },
   },
   {
     id: "/sales/returns",
@@ -2779,6 +4204,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-returns",
     accepts: ["order", "delivery", "customer"],
+    nav: {
+      module: "sd",
+      category: "Sales",
+      activity: "Returns",
+    },
   },
   {
     id: "/sales/credit-memo-request",
@@ -2789,6 +4219,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-credit",
     accepts: ["request", "customer"],
+    nav: {
+      module: "sd",
+      category: "Billing",
+      activity: "Credit memo requests",
+    },
   },
   {
     id: "/config/sales-document-types",
@@ -2799,6 +4234,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-document-types",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales document setup",
+    },
   },
   {
     id: "/config/pricing-procedure",
@@ -2809,6 +4249,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-pricing-procedure",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales document setup",
+    },
   },
   {
     id: "/config/sales-account-determination",
@@ -2819,6 +4264,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-account-determination",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales document setup",
+    },
   },
   {
     id: "/config/incompletion",
@@ -2829,6 +4279,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-incompletion",
     accepts: ["order", "delivery", "customer"],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales document setup",
+    },
   },
   {
     id: "/config/shipping-points",
@@ -2839,6 +4294,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "shipping-point",
     accepts: ["plant", "material", "customer"],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Shipping points",
+    },
   },
   {
     id: "/config/sales-returns",
@@ -2849,6 +4309,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-returns-configuration",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales document setup",
+    },
   },
   {
     id: "/config/billing-split",
@@ -2859,6 +4324,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "sales-billing-split",
     accepts: [],
+    nav: {
+      module: "sd",
+      category: "Configuration",
+      activity: "Sales document setup",
+    },
   },
   {
     id: "/sales/analysis",
@@ -2869,6 +4339,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-billing",
     accepts: ["customer", "material", "order", "billing"],
+    nav: {
+      module: "sd",
+      category: "Sales information",
+      activity: "Analysis & lists",
+    },
   },
   {
     id: "/sales/documents",
@@ -2879,6 +4354,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-billing",
     accepts: ["order", "delivery", "billing", "customer", "material"],
+    nav: {
+      module: "sd",
+      category: "Sales information",
+      activity: "Analysis & lists",
+    },
   },
   {
     id: "/sales/incomplete",
@@ -2889,6 +4369,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-billing",
     accepts: ["order", "delivery", "customer"],
+    nav: {
+      module: "sd",
+      category: "Sales information",
+      activity: "Analysis & lists",
+    },
   },
   {
     id: "/sales/invoice-lists",
@@ -2899,6 +4384,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "sales",
     family: "sales-billing",
     accepts: ["billing", "customer"],
+    nav: {
+      module: "sd",
+      category: "Billing",
+      activity: "Invoice lists",
+    },
   },
   {
     // Quality management has no screen area of its own yet: a `quality` entry in `ScreenArea` and
@@ -2913,6 +4403,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "quality-inspection",
     accepts: ["document", "lot", "material", "plant", "batch"],
+    nav: {
+      module: "qm",
+      category: "Inspection",
+      activity: "Inspection lots & results",
+    },
   },
   {
     id: "/quality/inspection",
@@ -2923,6 +4418,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "inventory",
     family: "quality-inspection",
     accepts: ["lot"],
+    nav: {
+      module: "qm",
+      category: "Inspection",
+      activity: "Inspection lots & results",
+    },
   },
   {
     // The People area (nav.area.people, payroll phase 1): the employee master and the other People
@@ -2935,6 +4435,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "people",
     family: "people-employee-master",
     accepts: ["employee", "q"],
+    nav: {
+      module: "hr",
+      category: "Personnel administration",
+      activity: "Employees",
+    },
   },
   {
     id: "/config/people-record-types",
@@ -2945,6 +4450,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "people-config",
     accepts: ["type"],
+    nav: {
+      module: "hr",
+      category: "Configuration",
+      activity: "People setup",
+    },
   },
   {
     // The pay components of 9195, in the configuration area beside the record types it depends on: a
@@ -2957,6 +4467,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "configuration",
     family: "people-config",
     accepts: ["component", "chart", "q"],
+    nav: {
+      module: "hr",
+      category: "Configuration",
+      activity: "People setup",
+    },
   },
   {
     // The org block of 9194, in the People area beside the employee master.
@@ -2968,6 +4483,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "people",
     family: "people-organization",
     accepts: ["unit", "position", "job", "q"],
+    nav: {
+      module: "hr",
+      category: "Personnel administration",
+      activity: "Organisation & authority",
+    },
   },
   {
     id: "/people/assignments",
@@ -2978,6 +4498,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "people",
     family: "people-organization",
     accepts: ["employee", "position", "q"],
+    nav: {
+      module: "hr",
+      category: "Personnel administration",
+      activity: "Organisation & authority",
+    },
   },
   {
     // The chart of authority sits with the other organisation screens: it is read by a
@@ -2990,6 +4515,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "people",
     family: "people-organization",
     accepts: ["user"],
+    nav: {
+      module: "hr",
+      category: "Personnel administration",
+      activity: "Organisation & authority",
+    },
   },
   {
     // Time and leave, in the People area beside the other People transaction screens.
@@ -3001,6 +4531,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "people",
     family: "people-time-leave",
     accepts: ["employee", "type", "status", "q"],
+    nav: {
+      module: "hr",
+      category: "Time & leave",
+      activity: "Time & leave",
+    },
   },
   {
     // Payroll phase 1 (9277): salary structures, their components and amount rules.
@@ -3012,6 +4547,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "people",
     family: "people",
     accepts: ["structure"],
+    nav: {
+      module: "hr",
+      category: "Payroll",
+      activity: "Payroll",
+    },
   },
   {
     // Payroll phase 2 (9278): propose, recalculate, release and cancel a run.
@@ -3023,6 +4563,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "people",
     family: "people",
     accepts: ["run"],
+    nav: {
+      module: "hr",
+      category: "Payroll",
+      activity: "Payroll",
+    },
   },
   {
     // Payroll phase 2 (9278): the results of a run, one slip per employee.
@@ -3034,6 +4579,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "people",
     family: "people",
     accepts: ["runId", "personnelNumber", "result"],
+    nav: {
+      module: "hr",
+      category: "Payroll",
+      activity: "Payroll",
+    },
   },
   {
     id: "/audit/workspace",
@@ -3044,6 +4594,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "audit",
     family: "audit",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Audit",
+      activity: "Auditor workspace",
+    },
   },
   {
     id: "/audit/grants",
@@ -3055,6 +4610,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "audit",
     family: "audit",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Audit",
+      activity: "Auditor access",
+    },
   },
   {
     id: "/audit/findings",
@@ -3065,6 +4625,11 @@ export const SCREENS: readonly ScreenLink[] = [
     area: "audit",
     family: "audit",
     accepts: [],
+    nav: {
+      module: "admin",
+      category: "Audit",
+      activity: "Auditor workspace",
+    },
   },
 ];
 
