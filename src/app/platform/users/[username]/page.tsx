@@ -5,6 +5,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { getUserAdminDetails, canViewUserAdministration } from '@/modules/platform/user-admin';
 import { ROLE_MAINTAIN_CAPABILITY } from '@/modules/platform/role-admin';
 import { MAINTAIN, PASSWORD_RESET } from '../constants';
+import { mfaStatus, MFA_ADMIN_CAPABILITY } from '@/platform/auth/mfa';
 import UserDetailControls from '../UserDetailControls';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,7 @@ export default async function UserDetailPage({
   const detail = await getUserAdminDetails(session.user.client, username, caps);
   if (!detail) notFound();
 
+  const mfa = await mfaStatus({ client: session.user.client, userId: detail.id });
   const status = detail.isActive ? (detail.isLocked ? 'Active · locked' : 'Active · unlocked') : (detail.isLocked ? 'Inactive · locked' : 'Inactive · unlocked');
 
   return (
@@ -57,6 +59,8 @@ export default async function UserDetailPage({
         isLocked={detail.isLocked}
         canMaintain={can(session, MAINTAIN)}
         canReset={can(session, PASSWORD_RESET)}
+        canResetMfa={can(session, MFA_ADMIN_CAPABILITY)}
+        mfaEnrolled={mfa.enrolled}
       />
 
       <section className="panel space-y-3 p-4">

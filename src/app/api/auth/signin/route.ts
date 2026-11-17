@@ -9,7 +9,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { relativeRedirect } from '@/app/api/auth/redirect';
 import { withTenant } from '@/platform/db/client';
-import { AuthError, SESSION_COOKIE, SESSION_TTL_MINUTES, createSession, signIn } from '@/platform/auth/session';
+import { setSessionCookie } from '@/app/api/auth/session-cookie';
+import { AuthError, createSession, signIn } from '@/platform/auth/session';
 
 export async function POST(request: NextRequest) {
   const form = await request.formData();
@@ -34,7 +35,17 @@ export async function POST(request: NextRequest) {
       username,
       password,
       ipAddress: clientIp(request),
+      userAgent: request.headers.get('user-agent'),
     });
+
+    // A second factor stands between this password and a session. No session is created, and then
+    // restricted: the user is sent to the challenge and the cookie is set only once a code is accepted.
+    if (user.mfaChallengeId) {
+      const q = new URLSearchParams({ challenge: user.mfaChallengeId, client: tenant });
+      if (user.mfaEnrolmentRequired) q.set('enrol', '1');
+      if (nextPath && nextPath !== '/') q.set('next', nextPath);
+      return relativeRedirect(`/signin/mfa?${q.toString()}`);
+    }
 
     const { token } = await withTenant(tenant, (tx) =>
       createSession(tx, {
@@ -47,15 +58,7 @@ export async function POST(request: NextRequest) {
 
     const response = relativeRedirect(nextPath);
 
-    response.cookies.set(SESSION_COOKIE, `${tenant}.${token}`, {
-      httpOnly: true,
-      sameSite: 'lax',
-      // Secure only where the connection is secure, so local development over
-      // plain HTTP still works without a flag that lies about the transport.
-      secure: (process.env.APP_BASE_URL ?? '').startsWith('https://'),
-      path: '/',
-      maxAge: SESSION_TTL_MINUTES * 60,
-    });
+    setSessionCookie(response, tenant, token);
 
     return response;
   } catch (error) {

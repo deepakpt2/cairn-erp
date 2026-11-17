@@ -28,6 +28,10 @@ const MESSAGES: Record<string, { title: string; detail: string }> = {
     title: 'This user is locked after too many failed attempts.',
     detail: 'An administrator must unlock the user before you can sign in again.',
   },
+  CAIRN_AUTH_MFA_ENDED: {
+    title: 'That second-factor step has ended.',
+    detail: 'It expired or ran out of attempts. Sign in again to start over. This does not lock the user.',
+  },
   CAIRN_AUTH: {
     title: 'Sign-in could not be completed.',
     detail: 'Try again. If it keeps failing, check that the tenant key is correct.',

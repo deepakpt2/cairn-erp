@@ -17,6 +17,8 @@ import {
   index,
   uniqueIndex,
   check,
+  bigint,
+  integer,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { auditColumns, client } from './tenancy';
@@ -382,5 +384,64 @@ export const passwordResetToken = pgTable(
   (t) => [
     index('password_reset_token_user_idx').on(t.userId),
     index('password_reset_token_expires_idx').on(t.expiresAt),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Two-factor authentication — AUTH-01
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One TOTP enrolment per user. `secretEncrypted` is a keyring envelope, never plaintext. PENDING protects nothing. */
+export const userMfa = pgTable(
+  'user_mfa',
+  {
+    client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+    userId: varchar('user_id', { length: 36 }).notNull().references(() => appUser.id, { onDelete: 'cascade' }),
+    secretEncrypted: text('secret_encrypted').notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('PENDING'),
+    enrolledAt: timestamp('enrolled_at', { withTimezone: true }),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    lastUsedStep: bigint('last_used_step', { mode: 'number' }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [primaryKey({ columns: [t.client, t.userId] })],
+);
+
+/** Ten per enrolment; stored as SHA-256 of the normalised code and marked used, never shown again. */
+export const userMfaRecoveryCode = pgTable(
+  'user_mfa_recovery_code',
+  {
+    id: varchar('id', { length: 36 }).primaryKey(),
+    client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+    userId: varchar('user_id', { length: 36 }).notNull().references(() => appUser.id, { onDelete: 'cascade' }),
+    codeHash: varchar('code_hash', { length: 64 }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [
+    index('user_mfa_recovery_code_user_idx').on(t.client, t.userId),
+    index('user_mfa_recovery_code_unused_idx').on(t.client, t.userId, t.usedAt),
+  ],
+);
+
+/** The only thing between a correct password and a session. Not a session; carries no authority. */
+export const mfaChallenge = pgTable(
+  'mfa_challenge',
+  {
+    id: varchar('id', { length: 36 }).primaryKey(),
+    client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+    userId: varchar('user_id', { length: 36 }).notNull().references(() => appUser.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(5),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    ipAddress: varchar('ip_address', { length: 45 }),
+    userAgent: varchar('user_agent', { length: 255 }),
+    ...auditColumns,
+  },
+  (t) => [
+    index('mfa_challenge_expires_idx').on(t.client, t.expiresAt),
+    index('mfa_challenge_user_idx').on(t.client, t.userId),
   ],
 );

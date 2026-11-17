@@ -33,7 +33,7 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 | page.tsx | RolesPage |  |
 | RoleManager.tsx | RoleManager |  |
 | **app/platform/users/** | | |
-| actions.ts | createUserAction, changeUserAction, setUserLockAction, initiatePasswordResetAction, requestPasswordResetAction, completePasswordResetAction, listUsersAction |  |
+| actions.ts | createUserAction, changeUserAction, setUserLockAction, initiatePasswordResetAction, requestPasswordResetAction, completePasswordResetAction, listUsersAction, resetMfaAction |  |
 | constants.ts | CREATE, MAINTAIN, PASSWORD_RESET |  |
 | page.tsx | UsersPage |  |
 | UserDetailControls.tsx | UserDetailControls |  |
@@ -63,5 +63,5 @@ foundation, people, platform/auth, platform/change, platform/db, platform/i18n, 
 ## Used by
 app/account, app/forgot-password, app/reset-password, platform/attention, platform/auth, platform/tenancy, ui/lock
 
-## Tests (5)
-change-lock-claim, password-reset-delivery, personal-account, purchasing-org-company-code-assignment-ui-contract, role-capability-select
+## Tests (6)
+change-lock-claim, password-reset-delivery, personal-account, purchasing-org-company-code-assignment-ui-contract, role-capability-select, totp-mfa

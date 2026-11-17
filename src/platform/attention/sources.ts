@@ -29,6 +29,7 @@ import {
 import { RELEASE_CAPABILITIES } from '@/modules/purchasing/release';
 import { pendingAccountActions } from '@/modules/platform/personal-account';
 import { appUser } from '@/platform/tables/security';
+import { mfaEnrolmentOutstanding } from '@/platform/auth/mfa';
 import { releaseStrategyStep } from '@/modules/foundation/characteristic-schema';
 
 import type { AttentionRow, AttentionSource } from './types';
@@ -46,7 +47,10 @@ const accountActions: AttentionSource = {
       .select({ mustChangePassword: appUser.mustChangePassword })
       .from(appUser)
       .where(and(eq(appUser.client, who.client), eq(appUser.id, who.userId))));
-    return pendingAccountActions({ mustChangePassword: user?.mustChangePassword ?? false }).map((a) => ({
+    return pendingAccountActions(
+      { mustChangePassword: user?.mustChangePassword ?? false },
+      { mfaEnrolmentOutstanding: await mfaEnrolmentOutstanding(who.client, who.userId) },
+    ).map((a) => ({
       source: '', title: '1 account action needed', detail: a.message, href: a.href, waitingSince: asOf.slice(0, 10),
       severity: 'BLOCKED' as const,
     }));

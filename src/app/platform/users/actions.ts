@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { CREATE, MAINTAIN, PASSWORD_RESET } from './constants';
+import { adminResetMfa, MfaError } from '@/platform/auth/mfa';
 import {
   changeUser,
   completePasswordReset,
@@ -236,6 +237,24 @@ export async function listUsersAction(
       })),
     };
   } catch (error) {
+    return refuse(error);
+  }
+}
+
+/** Lost device: deletes the enrolment and revokes every session. Needs the capability and a reason. */
+export async function resetMfaAction(_previous: UserActionState, formData: FormData): Promise<UserActionState> {
+  const session = await requireSession(ROUTE);
+  try {
+    await adminResetMfa({
+      client: session.user.client,
+      userId: text(formData, 'userId'),
+      changedBy: session.user.username,
+      reason: text(formData, 'reason'),
+    }, session.user.capabilities);
+    revalidatePath(ROUTE);
+    return { ok: true, message: 'Two-factor authentication was reset and the user was signed out everywhere.' };
+  } catch (error) {
+    if (error instanceof MfaError) return { ok: false, message: error.message, remedy: error.remedy };
     return refuse(error);
   }
 }

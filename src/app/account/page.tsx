@@ -7,6 +7,10 @@ import {
   registeredLogonLanguages, safeNextPath, type AccountSection,
 } from '@/modules/platform/personal-account';
 import { logonLanguageKeyFromPreferences } from '@/platform/auth/session';
+import { mfaStatus, mfaEnrolmentOutstanding, pendingEnrolment, isMfaRequired, MFA_POLICY_CAPABILITY } from '@/platform/auth/mfa';
+import { can } from '@/platform/auth/current';
+import { ConfirmPanel, DisablePanel, RegeneratePanel } from './MfaPanels';
+import { beginEnrolmentAction, setMfaRequiredAction } from './mfa-actions';
 import { changePasswordAction, revokeSessionAction, savePreferencesAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +33,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Para
   if (forced && section !== 'password') redirect(`${ACCOUNT_ROUTE}?section=password`);
 
   const next = safeNextPath(one(q.next));
-  const pending = pendingAccountActions(session.user);
+  const pending = pendingAccountActions(session.user, { mfaEnrolmentOutstanding: await mfaEnrolmentOutstanding(session.user.client, session.user.userId) });
   const { ok, error, remedy } = { ok: one(q.ok), error: one(q.error), remedy: one(q.remedy) };
 
   return (
@@ -82,13 +86,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Para
         </section>
       )}
 
-      {section === 'security' && (
-        <section className="panel p-4">
-          <h2 className="panel-title">Two-factor authentication</h2>
-          <p className="mt-2 text-sm text-ink-soft">Two-factor authentication is not available yet.</p>
-        </section>
-      )}
-
+      {section === 'security' && <SecuritySection session={session} setup={one(q.setup) === '1'} />}
       {section === 'sessions' && <SessionsSection session={session} />}
       {section === 'preferences' && <PreferencesSection session={session} />}
     </main>
@@ -139,5 +137,60 @@ async function PreferencesSection({ session }: { session: Awaited<ReturnType<typ
         <button type="submit" className="btn btn-primary">Save</button>
       </form>
     </section>
+  );
+}
+
+async function SecuritySection({ session, setup }: { session: Awaited<ReturnType<typeof requireSession>>; setup: boolean }) {
+  const { client, userId } = session.user;
+  const status = await mfaStatus({ client, userId });
+  const draft = !status.enrolled && (setup || status.pending) ? await pendingEnrolment({ client, userId }) : null;
+  const required = await isMfaRequired(client);
+  const canPolicy = can(session, MFA_POLICY_CAPABILITY);
+  return (
+    <>
+      <section className="panel p-4">
+        <h2 className="panel-title">Two-factor authentication</h2>
+        {status.enrolled ? (
+          <>
+            <p className="mt-2 text-sm">On since {status.confirmedAt?.slice(0, 10)} · {status.remainingRecoveryCodes} recovery code{status.remainingRecoveryCodes === 1 ? '' : 's'} left.</p>
+            <h3 className="mt-4 text-sm font-semibold">Recovery codes</h3>
+            <RegeneratePanel />
+            <h3 className="mt-4 text-sm font-semibold">Turn off</h3>
+            <p className="text-xs text-ink-soft">Needs your password and a current code.</p>
+            <DisablePanel />
+          </>
+        ) : draft ? (
+          <div className="mt-2 space-y-2 text-sm">
+            <p>Scan the QR code with an authenticator app, or enter the key by hand, then confirm with the code it shows. Nothing is protected until you confirm.</p>
+            {draft.qrDataUri && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={draft.qrDataUri} alt="QR code for your authenticator app" width={192} height={192} className="bg-white" />
+            )}
+            <p className="code select-all break-all">{draft.secretBase32.match(/.{1,4}/g)?.join(' ')}</p>
+            <p className="break-all text-xs text-ink-faint">URI: <span className="select-all">{draft.otpauthUri}</span></p>
+            <ConfirmPanel />
+          </div>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-ink-soft">Not set up. Sign-in asks for a password only.</p>
+            <form action={beginEnrolmentAction} className="mt-3"><button type="submit" className="btn btn-primary">Set up</button></form>
+          </>
+        )}
+      </section>
+
+      {canPolicy && (
+        <section className="panel p-4">
+          <h2 className="panel-title">Tenant policy</h2>
+          <form action={setMfaRequiredAction} className="mt-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="required" value="1" defaultChecked={required} />
+              Require two-factor authentication for everyone in this tenant.
+            </label>
+            <p className="text-xs text-ink-soft">Off by default. When on, a user who has none is taken to set it up after the password and before any session exists.</p>
+            <button type="submit" className="btn btn-primary">Save</button>
+          </form>
+        </section>
+      )}
+    </>
   );
 }

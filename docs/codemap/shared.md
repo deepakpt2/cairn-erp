@@ -16,8 +16,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | app/command.ts | ui/shell |
 | app/registry | app/command.ts |
 | platform/attention | app/page.tsx, ui/attention |
-| platform/auth | app/account, app/api, app/clients, app/config, app/menu, app/page.tsx, app/search, audit, finance, foundation, inventory, output, people, platform, platform/attention, platform/job, platform/mail, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
-| platform/change | audit, finance, foundation, inventory, output, people, platform, platform/lock, platform/mail, platform/posting, platform/security, platform/tenancy, production, purchasing, quality, sales |
+| platform/auth | app/account, app/api, app/clients, app/config, app/menu, app/page.tsx, app/search, app/signin, audit, finance, foundation, inventory, output, people, platform, platform/attention, platform/job, platform/mail, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
+| platform/change | audit, finance, foundation, inventory, output, people, platform, platform/auth, platform/lock, platform/mail, platform/posting, platform/security, platform/tenancy, production, purchasing, quality, sales |
 | platform/db | app/api, app/config, audit, dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, output, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/periods, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales, worker/index.ts |
 | platform/document | inventory, platform/posting, purchasing |
 | platform/i18n | app/clients, app/config, app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search, app/signin, audit, finance, foundation, inventory, people, platform, platform/attention, platform/notification, production, purchasing, sales, ui/attention, ui/fields, ui/lock, ui/shell |
@@ -30,7 +30,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | platform/posting | finance, foundation, inventory, people, platform/tenancy, production, purchasing, sales |
 | platform/registry | app/command.ts, app/registry, app/search |
 | platform/schema.ts | platform/db |
-| platform/security | foundation, platform/mail |
+| platform/security | foundation, platform/auth, platform/mail |
 | platform/tables | audit, finance, foundation, inventory, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales |
 | platform/tenancy | app/clients, app/config, app/page.tsx, finance, foundation, inventory, platform, production, purchasing |
 | ui/attention | app/page.tsx |
@@ -40,7 +40,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (160)
+## Files (168)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -49,9 +49,14 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | page.tsx | LaunchpadPage |  |
 | **app/account/** | | |
 | actions.ts | changePasswordAction, revokeSessionAction, savePreferencesAction |  |
+| mfa-actions.ts | beginEnrolmentAction, confirmEnrolmentAction, regenerateCodesAction, disableMfaAction, setMfaRequiredAction |  |
+| MfaPanels.tsx | ConfirmPanel, RegeneratePanel, DisablePanel |  |
 | page.tsx | AccountPage |  |
 | **app/api/auth/** | | |
 | redirect.ts | relativeRedirect |  |
+| session-cookie.ts | setSessionCookie |  |
+| **app/api/auth/mfa/** | | |
+| route.ts | POST |  |
 | **app/api/auth/signin/** | | |
 | route.ts | POST |  |
 | **app/api/auth/signout/** | | |
@@ -84,6 +89,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | page.tsx | SearchPage |  |
 | **app/signin/** | | |
 | page.tsx | SignInPage |  |
+| **app/signin/mfa/** | | |
+| page.tsx | MfaChallengePage |  |
 | **dev/** | | |
 | walkthrough-asset.ts | runWalkthroughAssetProcurement | account_determination, asset_transaction, fixed_asset, journal_entry_line, material_document_line, outgoing_payment, purchase_order, purchase_order_item, supplier_invoice |
 | walkthrough-volume.ts | runWalkthroughVolume | purchase_order, purchase_order_item, stock_quantity |
@@ -97,10 +104,13 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | authority.ts | LEVEL_OF_KEY, ORG_LEVELS, SCOPE_KEYS, KEY_OF_LEVEL, patternsOf, withinScope, withinRestrictions, grantMatches, canWith, effectiveGrants, loadRestrictions, canUser, canTx, patternMatches | auth_org_restriction, delegation, delegation_approval, delegation_scope, employee, position_assignment, position_capability, role, role_capability, user_capability, user_capability_scope, user_role |
 | capability-policy.ts | CREDIT_CONTROL_AREA_CAPABILITY, PRODUCTION_GOODS_MOVEMENT_REPROCESS_CAPABILITY, PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY, PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY, PRODUCTION_ORDER_COST_DISPLAY_CAPABILITY, INTERNAL_ORDER_COST_DISPLAY_CAPABILITY, STOCK_AGEING_DISPLAY_CAPABILITY, EXPLICIT_GRANT_ONLY_CAPABILITIES |  |
 | current.ts | getSession, requireSession, requireCapability, AuthzError, can |  |
+| mfa-challenge.ts | MFA_CHALLENGE_TTL_MINUTES, MFA_MAX_ATTEMPTS, createChallenge, tenantRequiresMfa | client_settings, mfa_challenge |
+| mfa.ts | MFA_SECTION, MFA_CHALLENGE_ROUTE, MFA_ADMIN_CAPABILITY, MFA_POLICY_CAPABILITY, MFA_REQUIRED_FLAG, RECOVERY_CODE_COUNT, MfaError, normaliseRecoveryCode, beginEnrolment, pendingEnrolment, confirmEnrolment, disableMfa, regenerateRecoveryCodes, mfaStatus, adminResetMfa, isMfaRequired, setMfaRequired, mfaEnrolmentOutstanding, challengeView, verifyChallenge, createChallenge | app_user, audit_access_log, client, client_settings, mfa_challenge, user_mfa, user_mfa_recovery_code |
 | password.ts | hashPassword, verifyPassword, checkPasswordPolicy |  |
 | pattern.ts | patternGrants, hasCapability, patternMatches |  |
 | service-authority.ts | verifyServiceAuthorityInTx, scopeRefusal, refusePlantOutsideScopeInTx | app_user, auth_org_restriction, capability, plant, role, role_capability, user_role, user_session |
-| session.ts | SESSION_COOKIE, SESSION_TTL_MINUTES, MAX_FAILED_ATTEMPTS, AuthError, encodeSessionCookie, parseSessionCookie, attemptSignIn, signIn, createSession, logonLanguageKeyFromPreferences, resolveSession, revokeSession, revokeAllSessions, revokeSessionById, loadCapabilities, loadOrgRestrictions, hasOrgAccess, tokenHashFor, constantTimeEquals, hasCapability, patternGrants, patternMatches | app_user, audit_access_log, auth_org_restriction, enqueue_entry, user_session |
+| session.ts | SESSION_COOKIE, SESSION_TTL_MINUTES, MAX_FAILED_ATTEMPTS, AuthError, encodeSessionCookie, parseSessionCookie, attemptSignIn, signIn, createSession, logonLanguageKeyFromPreferences, resolveSession, revokeSession, revokeAllSessions, revokeSessionById, loadCapabilities, loadOrgRestrictions, hasOrgAccess, tokenHashFor, constantTimeEquals, hasCapability, patternGrants, patternMatches | app_user, audit_access_log, auth_org_restriction, enqueue_entry, user_mfa, user_session |
+| totp.ts | TOTP_PERIOD_SECONDS, TOTP_DIGITS, TOTP_SKEW_STEPS, TOTP_SECRET_BYTES, base32Encode, base32Decode, generateSecret, stepAt, totpForStep, acceptTotp, otpauthUri |  |
 | **platform/change/** | | |
 | index.ts | recordChange, changeHistory | change_document, change_document_item |
 | partner-data-history.ts | PARTNER_BANK_OBJECT_CLASS, PARTNER_CONTACT_OBJECT_CLASS, MASKED_HISTORY_VALUE, isPartnerSensitiveHistoryClass, isPartnerHistoryMaskedField, projectPartnerHistorySnapshot, projectPartnerHistoryStoredValue |  |
@@ -170,7 +180,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | numbering.ts | numberRangeObject, numberRange, numberRangeAllocation | number_range, number_range_allocation, number_range_object |
 | reference.ts | country, currency, unitOfMeasure, bankMaster | bank_master, country, currency, unit_of_measure |
 | registry.ts | termRegistry, termAlias, configActivity, configActivityStatus | config_activity, config_activity_status, term_alias, term_registry |
-| security.ts | appUser, role, capability, roleCapability, userRole, authOrgRestriction, positionCapability, userCapability, userCapabilityScope, userSession, auditAccessLog, sodRule, passwordResetToken | app_user, audit_access_log, auth_org_restriction, capability, password_reset_token, position_capability, role, role_capability, sod_rule, user_capability, user_capability_scope, user_role, user_session |
+| security.ts | appUser, role, capability, roleCapability, userRole, authOrgRestriction, positionCapability, userCapability, userCapabilityScope, userSession, auditAccessLog, sodRule, passwordResetToken, userMfa, userMfaRecoveryCode, mfaChallenge | app_user, audit_access_log, auth_org_restriction, capability, mfa_challenge, password_reset_token, position_capability, role, role_capability, sod_rule, user_capability, user_capability_scope, user_mfa, user_mfa_recovery_code, user_role, user_session |
 | system.ts | messageCatalog, jobDefinition, jobRun, jobLog, notification, mailServerConfig, mailMessage | job_definition, job_log, job_run, mail_message, mail_server_config, message_catalog, notification |
 | tenancy.ts | auditColumns, client, clientSettings | client, client_settings |
 | **platform/tenancy/** | | |
@@ -246,8 +256,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | index.ts | runWorker, stopWorker, main |  |
 | jobs.ts |  |  |
 
-## Routes (14)
-`/` · `/account` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/search` · `/signin`
+## Routes (16)
+`/` · `/account` · `/api/auth/mfa` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/search` · `/signin` · `/signin/mfa`
 
-## Tables owned (41)
-app_user, audit_access_log, auth_org_restriction, bank_master, capability, change_document, change_document_item, client, client_settings, config_activity, config_activity_status, country, currency, document_flow_link, document_index, document_status_history, enqueue_entry, job_definition, job_log, job_run, lock_object, lock_wait_log, mail_message, mail_server_config, message_catalog, notification, number_range, number_range_allocation, number_range_object, password_reset_token, position_capability, role, role_capability, sod_rule, term_alias, term_registry, unit_of_measure, user_capability, user_capability_scope, user_role, user_session
+## Tables owned (44)
+app_user, audit_access_log, auth_org_restriction, bank_master, capability, change_document, change_document_item, client, client_settings, config_activity, config_activity_status, country, currency, document_flow_link, document_index, document_status_history, enqueue_entry, job_definition, job_log, job_run, lock_object, lock_wait_log, mail_message, mail_server_config, message_catalog, mfa_challenge, notification, number_range, number_range_allocation, number_range_object, password_reset_token, position_capability, role, role_capability, sod_rule, term_alias, term_registry, unit_of_measure, user_capability, user_capability_scope, user_mfa, user_mfa_recovery_code, user_role, user_session

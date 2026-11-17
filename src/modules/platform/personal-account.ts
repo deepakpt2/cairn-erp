@@ -234,13 +234,16 @@ export async function saveOwnPreferences(input: {
 // Pending actions — a query, never stored rows
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface PendingAccountAction { key: 'CHANGE_PASSWORD'; message: string; actionLabel: string; href: string }
+export interface PendingAccountAction { key: 'CHANGE_PASSWORD' | 'SET_UP_MFA'; message: string; actionLabel: string; href: string }
 
 /**
- * What the system requires of this person. The two-factor line of §8 is not here:
- * AUTH-01 is not built, so there is no tenant setting or enrolment to ask about.
+ * What the system requires of this person. `mfaEnrolmentOutstanding` (the tenant requires two-factor and
+ * this user has none) is read by the caller from `platform/auth/mfa`, which keeps this module pure.
  */
-export function pendingAccountActions(user: { mustChangePassword: boolean }): PendingAccountAction[] {
+export function pendingAccountActions(
+  user: { mustChangePassword: boolean },
+  extra: { mfaEnrolmentOutstanding?: boolean } = {},
+): PendingAccountAction[] {
   const rows: PendingAccountAction[] = [];
   if (user.mustChangePassword) {
     rows.push({
@@ -248,6 +251,15 @@ export function pendingAccountActions(user: { mustChangePassword: boolean }): Pe
       message: 'Your password must be changed. It was reset by an administrator.',
       actionLabel: 'Change password',
       href: `${ACCOUNT_ROUTE}?section=password`,
+    });
+  }
+  // While a password change is forced the security section is unreachable, so the line waits its turn.
+  if (extra.mfaEnrolmentOutstanding && !user.mustChangePassword) {
+    rows.push({
+      key: 'SET_UP_MFA',
+      message: 'Two-factor authentication is required for this tenant.',
+      actionLabel: 'Set up',
+      href: `${ACCOUNT_ROUTE}?section=security`,
     });
   }
   return rows;

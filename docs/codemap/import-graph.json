@@ -1,17 +1,39 @@
 {
+  "app/account/MfaPanels.tsx": [
+    "app/account/mfa-actions.ts"
+  ],
   "app/account/actions.ts": [
     "modules/platform/personal-account.ts",
     "platform/auth/current.ts"
   ],
-  "app/account/page.tsx": [
-    "app/account/actions.ts",
+  "app/account/mfa-actions.ts": [
     "modules/platform/personal-account.ts",
     "platform/auth/current.ts",
+    "platform/auth/mfa.ts"
+  ],
+  "app/account/page.tsx": [
+    "app/account/MfaPanels.tsx",
+    "app/account/actions.ts",
+    "app/account/mfa-actions.ts",
+    "modules/platform/personal-account.ts",
+    "platform/auth/current.ts",
+    "platform/auth/mfa.ts",
     "platform/auth/session.ts"
   ],
+  "app/api/auth/mfa/route.ts": [
+    "app/api/auth/redirect.ts",
+    "app/api/auth/session-cookie.ts",
+    "platform/auth/mfa.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts"
+  ],
   "app/api/auth/redirect.ts": [],
+  "app/api/auth/session-cookie.ts": [
+    "platform/auth/session.ts"
+  ],
   "app/api/auth/signin/route.ts": [
     "app/api/auth/redirect.ts",
+    "app/api/auth/session-cookie.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts"
   ],
@@ -3632,7 +3654,8 @@
     "app/platform/users/constants.ts",
     "modules/platform/role-admin.ts",
     "modules/platform/user-admin.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "platform/auth/mfa.ts"
   ],
   "app/platform/users/access/ScopeManager.tsx": [
     "app/platform/users/access/actions.ts",
@@ -3651,7 +3674,8 @@
   "app/platform/users/actions.ts": [
     "app/platform/users/constants.ts",
     "modules/platform/user-admin.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "platform/auth/mfa.ts"
   ],
   "app/platform/users/constants.ts": [],
   "app/platform/users/page.tsx": [
@@ -4727,6 +4751,9 @@
     "platform/registry/index.ts",
     "ui/shell/menu-access.ts",
     "ui/shell/nav-search.ts"
+  ],
+  "app/signin/mfa/page.tsx": [
+    "platform/auth/mfa.ts"
   ],
   "app/signin/page.tsx": [
     "platform/i18n/index.ts"
@@ -7810,6 +7837,7 @@
     "modules/sales/invoice-list.ts",
     "platform/attention/types.ts",
     "platform/auth/authority.ts",
+    "platform/auth/mfa.ts",
     "platform/db/client.ts",
     "platform/i18n/index.ts",
     "platform/tables/security.ts"
@@ -7831,6 +7859,21 @@
     "platform/auth/session.ts",
     "platform/db/client.ts"
   ],
+  "platform/auth/mfa-challenge.ts": [
+    "platform/db/client.ts"
+  ],
+  "platform/auth/mfa.ts": [
+    "platform/auth/mfa-challenge.ts",
+    "platform/auth/password.ts",
+    "platform/auth/session.ts",
+    "platform/auth/totp.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/security/bank-data-encryption.ts",
+    "platform/security/bank-data-keyring.ts",
+    "platform/tables/security.ts",
+    "platform/tables/tenancy.ts"
+  ],
   "platform/auth/password.ts": [],
   "platform/auth/pattern.ts": [
     "platform/auth/capability-policy.ts"
@@ -7843,10 +7886,14 @@
   "platform/auth/session.ts": [
     "platform/auth/authority.ts",
     "platform/auth/capability-policy.ts",
+    "platform/auth/mfa-challenge.ts",
     "platform/auth/password.ts",
     "platform/auth/pattern.ts",
     "platform/db/client.ts",
     "platform/tables/security.ts"
+  ],
+  "platform/auth/totp.ts": [
+    "platform/auth/session.ts"
   ],
   "platform/change/index.ts": [
     "platform/change/partner-data-history.ts",

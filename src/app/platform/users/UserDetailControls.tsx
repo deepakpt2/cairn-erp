@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { changeUserAction, initiatePasswordResetAction, setUserLockAction, type UserActionState } from './actions';
+import { changeUserAction, initiatePasswordResetAction, resetMfaAction, setUserLockAction, type UserActionState } from './actions';
 
 const EMPTY: UserActionState = { ok: false };
 
@@ -18,6 +18,8 @@ export default function UserDetailControls({
   isLocked,
   canMaintain,
   canReset,
+  canResetMfa,
+  mfaEnrolled,
 }: {
   id: string;
   fullName: string;
@@ -26,10 +28,13 @@ export default function UserDetailControls({
   isLocked: boolean;
   canMaintain: boolean;
   canReset: boolean;
+  canResetMfa: boolean;
+  mfaEnrolled: boolean;
 }) {
   const [changeState, changeAction, changing] = useActionState(changeUserAction, EMPTY);
   const [lockState, lockAction, locking] = useActionState(setUserLockAction, EMPTY);
   const [resetState, resetAction, resetting] = useActionState(initiatePasswordResetAction, EMPTY);
+  const [mfaState, mfaAction, mfaResetting] = useActionState(resetMfaAction, EMPTY);
 
   return (
     <div className="space-y-4">
@@ -71,6 +76,20 @@ export default function UserDetailControls({
         <p className="text-xs text-ink-faint">Locking revokes all currently persisted sessions. Unlocking resets the failed-login counter, but does not create a session or change the password.</p>
         <Notice state={lockState} />
       </section>
+
+      <aside className="rounded border border-line bg-row p-3 text-sm">
+        <h2 className="font-medium">Two-factor authentication</h2>
+        <p className="mt-1 text-ink-soft">{mfaEnrolled ? 'Enrolled. Reset it when the user has lost their device: the enrolment and recovery codes are deleted and every session of the user is revoked. The password is not changed.' : 'This user has no two-factor enrolment, so there is nothing to reset.'}</p>
+        <form action={mfaAction} className="mt-2 flex flex-wrap items-end gap-2">
+          <input type="hidden" name="userId" value={id} />
+          <label className="text-xs font-medium text-ink-soft">Reason
+            <input name="reason" required maxLength={200} disabled={!canResetMfa || !mfaEnrolled} className="mt-1 block min-h-10 w-72 border bg-transparent p-2" />
+          </label>
+          <button type="submit" className="btn btn-default" disabled={!canResetMfa || !mfaEnrolled || mfaResetting}>{mfaResetting ? 'Resetting…' : 'Reset two-factor'}</button>
+        </form>
+        {!canResetMfa && <p className="mt-2 text-xs text-signal-error">Resetting two-factor needs CFG.PLT.USER.MFA.RESET, which this session does not hold. Ask an administrator to grant CFG.PLT.USER.MFA.RESET to one of your roles.</p>}
+        <Notice state={mfaState} />
+      </aside>
 
       {canReset && (
         <aside className="rounded border border-line bg-row p-3 text-sm">

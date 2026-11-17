@@ -38,13 +38,13 @@
 ### people (27)
 - `modules/people/schema.ts`: absence, delegation, delegation_approval, delegation_scope, employee, employee_record, job, leave_quota, org_hierarchy, org_unit, pay_component, pay_component_config, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, position, position_assignment, record_field, record_field_value, record_type, salary_payment, salary_structure, salary_structure_assignment, salary_structure_component, time_recording, time_type
 
-### platform (shared) (41)
+### platform (shared) (44)
 - `platform/tables/audit-trail.ts`: change_document, change_document_item, document_flow_link, document_index, document_status_history
 - `platform/tables/lock.ts`: enqueue_entry, lock_object, lock_wait_log
 - `platform/tables/numbering.ts`: number_range, number_range_allocation, number_range_object
 - `platform/tables/reference.ts`: bank_master, country, currency, unit_of_measure
 - `platform/tables/registry.ts`: config_activity, config_activity_status, term_alias, term_registry
-- `platform/tables/security.ts`: app_user, audit_access_log, auth_org_restriction, capability, password_reset_token, position_capability, role, role_capability, sod_rule, user_capability, user_capability_scope, user_role, user_session
+- `platform/tables/security.ts`: app_user, audit_access_log, auth_org_restriction, capability, mfa_challenge, password_reset_token, position_capability, role, role_capability, sod_rule, user_capability, user_capability_scope, user_mfa, user_mfa_recovery_code, user_role, user_session
 - `platform/tables/system.ts`: job_definition, job_log, job_run, mail_message, mail_server_config, message_catalog, notification
 - `platform/tables/tenancy.ts`: client, client_settings
 
@@ -94,8 +94,8 @@
 | class_assignment | foundation | inventory |
 | class_type | foundation | inventory |
 | classification_class | foundation | inventory, platform/tenancy |
-| client | platform/tables | finance, platform, platform/tenancy, purchasing |
-| client_settings | platform/tables | platform, platform/tenancy |
+| client | platform/tables | finance, platform, platform/auth, platform/tenancy, purchasing |
+| client_settings | platform/tables | platform, platform/auth, platform/tenancy |
 | company_code | foundation | audit, finance, inventory, output, people, platform, platform/periods, platform/tenancy, production, purchasing, sales |
 | config_activity | platform/tables | platform/tenancy |
 | config_activity_status | platform/tables | foundation, platform/tenancy |
@@ -172,6 +172,7 @@
 | material_type | inventory | platform/tenancy |
 | material_uom_conversion | inventory | foundation, purchasing |
 | material_valuation | inventory | platform/tenancy, production, purchasing, sales |
+| mfa_challenge | platform/tables | platform/auth |
 | movement_type | inventory | finance, platform/tenancy, production, purchasing, sales |
 | mrp_controller | inventory | production |
 | notification | platform/tables | platform/notification |
@@ -267,6 +268,8 @@
 | unit_of_measure | platform/tables | foundation, inventory, production, purchasing, quality, sales |
 | user_capability | platform/tables | people, platform/auth, platform/notification |
 | user_capability_scope | platform/tables | platform/auth |
+| user_mfa | platform/tables | platform/auth |
+| user_mfa_recovery_code | platform/tables | platform/auth |
 | user_role | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
 | user_session | platform/tables | finance, inventory, platform, platform/auth, platform/job, platform/lock, production |
 | valuation_class | inventory | foundation, platform/tenancy |

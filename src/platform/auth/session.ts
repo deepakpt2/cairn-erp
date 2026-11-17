@@ -42,6 +42,7 @@ export { hasCapability, patternGrants } from './pattern';
 export { patternMatches } from './pattern';
 import { withTenant, type Tx } from '../db/client';
 import { verifyPassword } from './password';
+import { createChallenge, tenantRequiresMfa } from './mfa-challenge';
 import { appUser } from '../tables/security';
 
 export const SESSION_COOKIE = 'cairn_session';
@@ -180,7 +181,14 @@ interface UserRow {
  * raised by `signIn` *after* the transaction has committed.
  */
 export type AuthOutcome =
-  | { ok: true; user: AuthenticatedUser }
+  | {
+      ok: true;
+      user: AuthenticatedUser;
+      /** Set when a second factor stands between this password and a session (AUTH-01). */
+      mfaChallengeId?: string;
+      /** The tenant requires two-factor and this user has none yet: the challenge screen enrols. */
+      mfaEnrolmentRequired?: boolean;
+    }
   | { ok: false; code: string; message: string; remedy: string };
 
 function refuse(code: string, message: string, remedy: string): AuthOutcome {
@@ -205,6 +213,7 @@ export async function attemptSignIn(
     username: string;
     password: string;
     ipAddress?: string | null;
+    userAgent?: string | null;
   },
 ): Promise<AuthOutcome> {
   const rows = (await tx.execute(sql`
@@ -300,10 +309,20 @@ export async function attemptSignIn(
     return refuse('CAIRN_AUTH_INVALID', INVALID_MESSAGE, INVALID_REMEDY);
   }
 
+  // Second factor (AUTH-01). A password alone never yields a session for an enrolled user, and no session
+  // row is created and then restricted: the caller gets a challenge id instead. MFA failures count against
+  // the challenge, not the account, so the password counter is reset either way.
+  const mfaRows = (await tx.execute(sql`
+    select status from user_mfa where client = ${input.client} and user_id = ${user.id}
+  `)) as unknown as Array<{ status: string }>;
+  const enrolled = mfaRows[0]?.status === 'ACTIVE';
+  const required = enrolled ? false : await tenantRequiresMfa(tx, input.client);
+  const challenged = enrolled || required;
+
   await tx.execute(sql`
     update app_user
        set failed_login_count = '0',
-           last_login_at      = now(),
+           last_login_at      = case when ${challenged} then last_login_at else now() end,
            changed_by         = 'AUTH',
            changed_at         = now()
      where client = ${input.client} and id = ${user.id}
@@ -317,23 +336,31 @@ export async function attemptSignIn(
     userId: user.id,
     username: user.username,
     eventType: 'LOGIN',
-    detail: `Signed in with ${capabilities.length} capability pattern(s)`,
+    detail: challenged
+      ? (enrolled ? 'Password accepted; second factor required' : 'Password accepted; two-factor enrolment required')
+      : `Signed in with ${capabilities.length} capability pattern(s)`,
     ipAddress: input.ipAddress,
   });
 
-  return {
-    ok: true,
-    user: {
-      client: user.client,
-      userId: user.id,
-      username: user.username,
-      fullName: user.full_name,
-      email: user.email,
-      mustChangePassword: user.must_change_password,
-      capabilities,
-      grants,
-    },
+  const authenticated: AuthenticatedUser = {
+    client: user.client,
+    userId: user.id,
+    username: user.username,
+    fullName: user.full_name,
+    email: user.email,
+    mustChangePassword: user.must_change_password,
+    capabilities,
+    grants,
   };
+
+  if (challenged) {
+    const mfaChallengeId = await createChallenge(tx, {
+      client: input.client, userId: user.id, ipAddress: input.ipAddress, userAgent: input.userAgent,
+    });
+    return { ok: true, user: authenticated, mfaChallengeId, ...(required ? { mfaEnrolmentRequired: true } : {}) };
+  }
+
+  return { ok: true, user: authenticated };
 }
 
 /**
@@ -348,14 +375,19 @@ export async function signIn(input: {
   username: string;
   password: string;
   ipAddress?: string | null;
-}): Promise<AuthenticatedUser> {
+  userAgent?: string | null;
+}): Promise<AuthenticatedUser & { mfaChallengeId?: string; mfaEnrolmentRequired?: boolean }> {
   const outcome = await withTenant(input.client, (tx) => attemptSignIn(tx, input));
 
   if (!outcome.ok) {
     throw new AuthError(outcome.message, outcome.remedy, outcome.code);
   }
 
-  return outcome.user;
+  return {
+    ...outcome.user,
+    ...(outcome.mfaChallengeId ? { mfaChallengeId: outcome.mfaChallengeId } : {}),
+    ...(outcome.mfaEnrolmentRequired ? { mfaEnrolmentRequired: true } : {}),
+  };
 }
 
 /**
