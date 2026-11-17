@@ -869,6 +869,20 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
   ],
+  "app/config/factory-calendars/FactoryCalendarForms.tsx": [
+    "app/config/factory-calendars/actions.ts",
+    "modules/foundation/factory-calendar-constants.ts",
+    "modules/foundation/factory-calendar.ts"
+  ],
+  "app/config/factory-calendars/actions.ts": [
+    "modules/foundation/factory-calendar.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/config/factory-calendars/page.tsx": [
+    "app/config/factory-calendars/FactoryCalendarForms.tsx",
+    "modules/foundation/factory-calendar.ts",
+    "platform/auth/current.ts"
+  ],
   "app/config/fiscal-year-variants/AssignCompanyCodesUI.tsx": [
     "app/config/fiscal-year-variants/assign-company-codes/actions.ts",
     "platform/i18n/index.ts",
@@ -5559,6 +5573,14 @@
     "platform/tables/registry.ts",
     "platform/tenancy/index.ts"
   ],
+  "modules/foundation/factory-calendar-constants.ts": [],
+  "modules/foundation/factory-calendar.ts": [
+    "modules/foundation/factory-calendar-constants.ts",
+    "modules/foundation/schema.ts",
+    "platform/auth/pattern.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
   "modules/foundation/fiscal-year-variant-assignment.ts": [
     "modules/finance/schema.ts",
     "modules/foundation/controlling-area-company-compatibility.ts",
@@ -6833,6 +6855,8 @@
     "platform/posting/decimal.ts"
   ],
   "modules/production/capacity-load.ts": [
+    "modules/foundation/factory-calendar.ts",
+    "modules/inventory/unit-conversion.ts",
     "modules/production/production-version.ts",
     "modules/production/work-center.ts",
     "platform/auth/session.ts",

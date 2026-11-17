@@ -13,7 +13,7 @@ Enterprise structure & master data (partners, company codes, plants, orgs) + con
 - `internal-order-cost-report.ts` (KOB1) reads journal lines directly (no view); checks `CO.ORDER.COST.DISPLAY` (exact-grant-only) in the service before reading.
 - Demo phases `D12_CO_PLAN`, `D13_ACTIVITY_PRICE`, `D14_ASSESSMENT` (assessment SVC01 + distribution DST01).
 
-## Files (299)
+## Files (300)
 | file | exports | tables |
 |---|---|---|
 | **app/config/account-determination/** | | |
@@ -320,7 +320,8 @@ Enterprise structure & master data (partners, company codes, plants, orgs) + con
 | document-type-definition.ts | ACTIVITY, listDocumentTypes, listIntervalChoices, OBJECT_CLASS, ACCOUNT_TYPE_LETTERS, REVERSAL_MODES, documentTypeValuesSchema, documentTypeInputSchema, documentTypeDeleteInputSchema, documentTypeActiveInputSchema, DocumentTypeError, saveDocumentType, setDocumentTypeActive, deleteDocumentType | config_activity_status, document_type, journal_entry, number_range |
 | employee-tolerance-definition.ts | ACTIVITY, listEmployeeToleranceGroups, listToleranceCompanies, OBJECT_CLASS, toleranceGroupValuesSchema, toleranceGroupInputSchema, ToleranceGroupError, saveEmployeeToleranceGroup | company_code, config_activity_status, employee_tolerance_group |
 | exchange-rate-maintenance.ts | ACTIVITY, RATE_TYPES, listExchangeRates, listCurrencyChoices, OBJECT_CLASS, exchangeRateValuesSchema, exchangeRateInputSchema, exchangeRateDeleteInputSchema, ExchangeRateError, saveExchangeRate, deleteExchangeRate | config_activity_status, currency, exchange_rate |
-| factory-calendar.ts | FACTORY_CALENDAR_ROUTE, FACTORY_CALENDAR_CAPABILITY, FactoryCalendarError, WEEKDAYS, addDaysIso, weekdayIndex, countWorkingDays, workingDaysBetween, isWorkingDay, loadFactoryCalendars, sampleMonth, saveCalendarPeriod, deleteCalendarPeriod, saveHolidayCalendar, deleteHolidayCalendar, addHolidayDay, removeHolidayDay | factory_calendar, factory_calendar_period, holiday_calendar, holiday_calendar_day |
+| factory-calendar-constants.ts | WEEKDAYS |  |
+| factory-calendar.ts | FACTORY_CALENDAR_ROUTE, FACTORY_CALENDAR_CAPABILITY, FactoryCalendarError, addDaysIso, weekdayIndex, countWorkingDays, workingDaysBetween, isWorkingDay, loadFactoryCalendars, sampleMonth, saveCalendarPeriod, deleteCalendarPeriod, saveHolidayCalendar, deleteHolidayCalendar, addHolidayDay, removeHolidayDay, WEEKDAYS | factory_calendar, factory_calendar_period, holiday_calendar, holiday_calendar_day |
 | fiscal-year-variant-assignment.ts | fiscalYearVariantAssignmentValuesSchema, fiscalYearVariantAssignmentInputSchema, FiscalYearVariantAssignmentError, assignFiscalYearVariant, describePostedYears | company_code, config_activity_status, fiscal_year_variant, journal_entry |
 | fiscal-year-variant-maintenance.ts | FiscalYearVariantError, listFiscalYearVariants, fiscalYearVariantChoices, saveFiscalYearVariant, setFiscalYearVariantActive, saveFiscalYearPeriods | company_code, controlling_area, fiscal_year_period, fiscal_year_variant |
 | house-bank-definition.ts | ACTIVITY, listHouseBanks, listHouseBankCompanies, listBankChoices, HOUSE_BANK_OBJECT_CLASS, BANK_ACCOUNT_OBJECT_CLASS, listHouseBankCurrencies, listGlAccountChoices, houseBankValuesSchema, houseBankInputSchema, houseBankDeleteInputSchema, bankAccountValuesSchema, bankAccountInputSchema, bankAccountDeleteInputSchema, HouseBankError, saveHouseBank, deleteHouseBank, saveBankAccount, deleteBankAccount | bank_account, bank_master, company_code, config_activity_status, currency, gl_account, house_bank |

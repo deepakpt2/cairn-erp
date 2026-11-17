@@ -14,6 +14,7 @@ import { and, asc, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
 import { hasCapability } from '../../platform/auth/pattern';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { WEEKDAYS, type WeekdayFlags } from './factory-calendar-constants';
 import { factoryCalendar, factoryCalendarPeriod, holidayCalendar, holidayCalendarDay } from './schema';
 
 export const FACTORY_CALENDAR_ROUTE = '/config/factory-calendars';
@@ -32,9 +33,7 @@ export class FactoryCalendarError extends Error {
   }
 }
 
-export const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
-export type Weekday = (typeof WEEKDAYS)[number];
-export type WeekdayFlags = Record<Weekday, boolean>;
+export { WEEKDAYS, type Weekday, type WeekdayFlags } from './factory-calendar-constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dates — plain calendar arithmetic on YYYY-MM-DD, never through a timezone

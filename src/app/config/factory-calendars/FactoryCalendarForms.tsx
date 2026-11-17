@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 
 import type { HolidayCalendarView, PeriodView } from '@/modules/foundation/factory-calendar';
-import { WEEKDAYS } from '@/modules/foundation/factory-calendar';
+import { WEEKDAYS } from '@/modules/foundation/factory-calendar-constants';
 import {
   addHolidayAction, deleteHolidayCalendarAction, deletePeriodAction, removeHolidayAction,
   saveHolidayCalendarAction, savePeriodAction, type CalendarActionState,
