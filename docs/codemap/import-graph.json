@@ -4295,7 +4295,8 @@
     "app/purchasing/orders/actions.ts",
     "modules/purchasing/orders.ts",
     "modules/purchasing/release.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/orders/actions.ts": [
     "modules/purchasing/orders.ts",
@@ -4749,7 +4750,8 @@
   "app/sales/orders/Orders.tsx": [
     "app/sales/orders/AvailabilityPanel.tsx",
     "app/sales/orders/actions.ts",
-    "modules/sales/sales-order.ts"
+    "modules/sales/sales-order.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/orders/actions.ts": [
     "modules/sales/sales-order.ts",
@@ -8667,6 +8669,7 @@
   "ui/kit/Chip.tsx": [
     "ui/kit/cn.ts"
   ],
+  "ui/kit/Dialog.tsx": [],
   "ui/kit/Field.tsx": [
     "ui/kit/cn.ts"
   ],
@@ -8688,6 +8691,7 @@
     "ui/kit/Button.tsx",
     "ui/kit/Card.tsx",
     "ui/kit/Chip.tsx",
+    "ui/kit/Dialog.tsx",
     "ui/kit/Field.tsx",
     "ui/kit/KeyValue.tsx",
     "ui/kit/Notice.tsx",

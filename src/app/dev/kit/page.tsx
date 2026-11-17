@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import {
-  ActionRow, Button, Card, Chip, EmptyRow, Field, FormGrid, KeyValue, Notice, Page, Table, Td, Th,
+  ActionRow, Button, Card, Chip, Dialog, EmptyRow, Field, FormGrid, KeyValue, Notice, Page, Table, Td, Th,
 } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +27,7 @@ export default function KitPage() {
           <Notice tone="warn" title="Order blocked for credit." remedy="Release the block or lower the order value." />
           <Notice tone="error" title="Material not found." remedy="Check the material number." />
           <Notice tone="info" title="Prices are read from the condition record." />
+          <Dialog trigger={<Button>Open dialog</Button>} title="Confirm cancel" description="This cannot be undone." footer={<Button variant="danger">Cancel order</Button>}>Dialog body content.</Dialog>
         </div>
       </Card>
       <Card title="Form">

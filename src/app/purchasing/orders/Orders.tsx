@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import type { OrderChoices, OrderDocument } from '@/modules/purchasing/orders';
+import { ActionRow, Button, Notice } from '@/ui/kit';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import type { DocumentReleaseState } from '@/modules/purchasing/release';
 import {
@@ -381,10 +382,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                 {' '}({selectedRelease.steps.map((code, i) => `${i + 1}. ${code}`).join(' · ')}).
               </p>
               {releaseMessage.message && (
-                <p role="status" className={`mt-2 text-sm ${releaseMessage.ok ? 'text-ink' : 'text-red-700'}`}>
-                  {releaseMessage.message}
-                  {releaseMessage.remedy ? ` ${releaseMessage.remedy}` : ''}
-                </p>
+                <div className="mt-2"><Notice tone={releaseMessage.ok ? 'ok' : 'error'} title={releaseMessage.message} remedy={releaseMessage.remedy} /></div>
               )}
               <div className="mt-3 flex flex-wrap items-end gap-2">
                 {selectedRelease.status === 'PENDING' && (
@@ -398,17 +396,17 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                         ))}
                       </select>
                     </label>
-                    <button type="submit" className="btn btn-primary mt-2 min-h-11 sm:min-h-8" disabled={!canRelease}>
+                    <Button type="submit" className="mt-2" variant="primary" disabled={!canRelease}>
                       Release step {selectedRelease.currentStep + 1}
-                    </button>
+                    </Button>
                   </form>
                 )}
                 {(selectedRelease.currentStep > 0 || selectedRelease.status === 'RELEASED') && (
                   <form action={cancelAction}>
                     <input type="hidden" name="orderNumberValue" value={selected.orderNumber} />
-                    <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRelease}>
+                    <Button type="submit"  disabled={!canRelease}>
                       Cancel release
-                    </button>
+                    </Button>
                   </form>
                 )}
               </div>
@@ -422,11 +420,11 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
           {selected ? `Purchase order ${selected.orderNumber}` : 'New purchase order'}
         </h2>
         {draft?.warning && (
-          <p role="status" className="mt-2 text-sm text-amber-800">{draft.warning}</p>
+          <div className="mt-2"><Notice tone="warn" title={draft.warning} /></div>
         )}
 
         {lockMessage && (
-          <p role="status" className="mt-2 border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{lockMessage}</p>
+          <div className="mt-2"><Notice tone="warn" title={lockMessage} /></div>
         )}
         <form action={formAction}>
           <input type="hidden" name="payload" value={payload()} />
@@ -616,13 +614,13 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
             </table></div>
           </div>
 
-          <button
+          <Button
             type="button"
-            className="btn btn-default mt-2 min-h-11 sm:min-h-8"
+            className="mt-2" 
             onClick={() => setItems([...items, { ...EMPTY_ITEM }])}
           >
             Add item
-          </button>
+          </Button>
 
           <nav aria-label="Purchase order item detail" className="mt-4 flex flex-wrap gap-1 border-b border-line pb-2">
             {ITEM_TABS.map((tab) => (
@@ -690,15 +688,15 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                             <td className="num text-ink-soft">{item.quantity}</td>
                             {item.scheduleLines.length > 1 && (
                               <td>
-                                <button
+                                <Button
                                   type="button"
-                                  className="btn btn-default min-h-11 sm:min-h-8"
+                                  
                                   onClick={() => patch(active, {
                                     scheduleLines: item.scheduleLines.filter((_, i) => i !== lineIndex),
                                   })}
                                 >
                                   Remove
-                                </button>
+                                </Button>
                               </td>
                             )}
                           </tr>
@@ -713,15 +711,15 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                         </tr>
                       </tfoot>
                     </table></div>
-                    <button
+                    <Button
                       type="button"
-                      className="btn btn-default min-h-11 sm:min-h-8"
+                      
                       onClick={() => patch(active, {
                         scheduleLines: [...item.scheduleLines, { deliveryDate: '', quantity: '' }],
                       })}
                     >
                       Add schedule line
-                    </button>
+                    </Button>
                   </div>
                 );
               })()}
@@ -989,30 +987,30 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                               </td>
                               {items[active].assignments.length > 1 && (
                                 <td>
-                                  <button
+                                  <Button
                                     type="button"
-                                    className="btn btn-default min-h-11 sm:min-h-8"
+                                    
                                     onClick={() => patch(active, {
                                       assignments: items[active].assignments.filter((_, i) => i !== rowIndex),
                                     })}
                                   >
                                     Remove
-                                  </button>
+                                  </Button>
                                 </td>
                               )}
                             </tr>
                           ))}
                         </tbody>
                       </table></div>
-                      <button
+                      <Button
                         type="button"
-                        className="btn btn-default min-h-11 sm:min-h-8"
+                        
                         onClick={() => patch(active, {
                           assignments: [...items[active].assignments, { ...blankAssignment(), percentage: '0' }],
                         })}
                       >
                         Add assignment row
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1056,9 +1054,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
           )}
 
           {state.message && (
-            <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
-              {state.message}
-              {state.remedy ? ` ${state.remedy}` : ''}
+            <div className="mt-3"><Notice tone={state.ok ? 'ok' : 'error'} title={state.message} remedy={state.remedy}>
               {state.ok && state.orderNumber ? (
                 <>
                   {' '}
@@ -1067,17 +1063,17 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                   </a>
                 </>
               ) : null}
-            </p>
+            </Notice></div>
           )}
           {state.warnings?.map((warning) => (
-            <p key={warning} role="status" className="mt-1 text-sm text-amber-700">{warning}</p>
+            <div key={warning} className="mt-1"><Notice tone="warn" title={warning} /></div>
           ))}
 
-          <div className="mt-4 flex justify-end">
-            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canCreate || pending || viewOnly}>
+          <ActionRow>
+            <Button type="submit" variant="primary" disabled={!canCreate || pending || viewOnly}>
               {selected ? 'Save changes' : 'Save purchase order'}
-            </button>
-          </div>
+            </Button>
+          </ActionRow>
           </fieldset>
         </form>
       </section>

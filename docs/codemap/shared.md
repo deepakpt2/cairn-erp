@@ -42,7 +42,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (182)
+## Files (183)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -228,8 +228,9 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | Card.tsx | Card |  |
 | Chip.tsx | Chip |  |
 | cn.ts | cn |  |
+| Dialog.tsx | Dialog |  |
 | Field.tsx | Field, FormGrid, ActionRow |  |
-| index.ts | cn, Button, LinkButton, buttonVariants, Chip, Notice, Card, Page, Field, FormGrid, ActionRow, Table, Th, Td, EmptyRow, KeyValue |  |
+| index.ts | cn, Button, LinkButton, buttonVariants, Chip, Notice, Card, Page, Field, FormGrid, ActionRow, Table, Th, Td, EmptyRow, KeyValue, *./Dialog |  |
 | KeyValue.tsx | KeyValue |  |
 | Notice.tsx | Notice |  |
 | Page.tsx | Page |  |

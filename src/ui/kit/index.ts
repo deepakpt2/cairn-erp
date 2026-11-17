@@ -7,3 +7,4 @@ export { Page } from './Page';
 export { Field, FormGrid, ActionRow } from './Field';
 export { Table, Th, Td, EmptyRow } from './Table';
 export { KeyValue } from './KeyValue';
+export * from './Dialog';
