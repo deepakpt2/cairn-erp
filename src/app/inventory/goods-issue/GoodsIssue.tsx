@@ -93,7 +93,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
             </label>
           </div>
 
-          <table className="grid-table mt-3 text-sm">
+          <div className="table-scroll"><table className="grid-table mt-3 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                 <th>{t('mb1a.columnLine')}</th>
@@ -111,7 +111,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
                 <IssueLine key={n} n={n} chargesCostCentre={chargesCostCentre} />
               ))}
             </tbody>
-          </table>
+          </table></div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || posting}>
@@ -140,7 +140,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
             ) : '—'}
             {' · '}{t('mb1a.value')} {state.document.totalValue}
           </p>
-          <table className="grid-table mt-2 text-sm">
+          <div className="table-scroll"><table className="grid-table mt-2 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                 <th>{t('mb1a.columnLine')}</th>
@@ -176,7 +176,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </section>
       )}
     </>

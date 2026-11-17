@@ -275,7 +275,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                   {t('migo.openDocument')}
                 </Link>
               </p>
-              <table className="grid-table mt-2 text-sm">
+              <div className="table-scroll"><table className="grid-table mt-2 text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                     <th>{t('migo.columnLine')}</th>
@@ -298,7 +298,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </section>
           )}
         </section>
@@ -387,7 +387,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                 / {receipt.document.orderQuantity} · {t('migo.columnOrderOpen')}{' '}
                 <span data-order-open={receipt.document.lines[0]?.orderOpenAfter ?? ''}>{receipt.document.lines[0]?.orderOpenAfter ?? '—'}</span>
               </p>
-              <table className="grid-table mt-2 text-sm">
+              <div className="table-scroll"><table className="grid-table mt-2 text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                     <th>{t('migo.columnLine')}</th>
@@ -408,7 +408,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </section>
           )}
         </section>
@@ -443,7 +443,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
               </label>
             </div>
 
-            <table className="grid-table mt-3 text-sm">
+            <div className="table-scroll"><table className="grid-table mt-3 text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                   <th>{t('migo.columnLine')}</th>
@@ -458,7 +458,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
               <tbody>
                 {LINES.map((n) => <StockLine key={n} n={n} />)}
               </tbody>
-            </table>
+            </table></div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || posting}>
@@ -491,7 +491,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                   {t('migo.openDocument')}
                 </Link>
               </p>
-              <table className="grid-table mt-2 text-sm">
+              <div className="table-scroll"><table className="grid-table mt-2 text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                     <th>{t('migo.columnLine')}</th>
@@ -512,7 +512,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </section>
           )}
         </section>

@@ -63,19 +63,20 @@ export default {
         // Compact by default — §19.2. In rem (px equivalents at a 16px
         // root) so type scales with the reader's font-size setting
         // instead of standing fixed.
-        '2xs': ['0.65625rem', { lineHeight: '0.875rem' }],
-        xs: ['0.71875rem', { lineHeight: '1rem' }],
-        sm: ['0.78125rem', { lineHeight: '1.125rem' }],
-        base: ['0.84375rem', { lineHeight: '1.25rem' }],
+        '2xs': ['0.6875rem', { lineHeight: '0.9375rem' }],
+        xs: ['0.75rem', { lineHeight: '1.0625rem' }],
+        sm: ['0.8125rem', { lineHeight: '1.1875rem' }],
+        base: ['0.875rem', { lineHeight: '1.3125rem' }],
         lg: ['0.9375rem', { lineHeight: '1.375rem' }],
         xl: ['1.125rem', { lineHeight: '1.5rem' }],
         '2xl': ['1.375rem', { lineHeight: '1.75rem' }],
       },
       borderRadius: {
-        // Sharp edges — flat, not pill-shaped.
+        // Near-square edges (3-4px) — flat, not pill-shaped.
         none: '0',
-        sm: '0.0625rem',
-        DEFAULT: '0.125rem',
+        sm: '0.125rem',
+        DEFAULT: '0.1875rem',
+        md: '0.25rem',
       },
     },
   },

@@ -138,7 +138,7 @@ export default function Contracts({
 
       <section className="overflow-x-auto">
         <h2 className="mb-2 text-sm font-semibold">Outline agreements · ME3N</h2>
-        <table className="grid-table text-sm">
+        <div className="table-scroll"><table className="grid-table text-sm">
           <thead>
             <tr className="text-left">
               <th>Contract</th>
@@ -172,7 +172,7 @@ export default function Contracts({
               <tr><td className="text-ink-soft" colSpan={9}>No contracts stand.</td></tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       </section>
 
       {selected && (
@@ -186,7 +186,7 @@ export default function Contracts({
             {selected.category} contract. Called-off value {selected.calledOffValue} {selected.currency}. Remaining value {selected.remainingValue ?? 'not a value commitment'}. Release {selected.releaseStatus}.
             Goods receipt and invoice figures below are display only. They are not the remaining commitment, and this screen does not post them.
           </p>
-          <table className="grid-table">
+          <div className="table-scroll"><table className="grid-table">
             <thead>
               <tr className="text-left">
                 <th>Item</th>
@@ -211,7 +211,7 @@ export default function Contracts({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           <p>
             <Link className="underline" href={`/purchasing/orders?contract=${encodeURIComponent(selected.contractNumber)}&contractItem=${selected.items[0]?.itemNumber ?? ''}`}>
               Create a call-off purchase order
@@ -292,7 +292,7 @@ export default function Contracts({
               </label>
             )}
           </div>
-          <table className="grid-table text-sm">
+          <div className="table-scroll"><table className="grid-table text-sm">
             <thead>
               <tr className="text-left">
                 <th>Material</th>
@@ -320,7 +320,7 @@ export default function Contracts({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           <div className="flex gap-2">
             <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setItems([...items, { ...EMPTY }])}>Add item</button>
             <button className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending}>{pending ? 'Saving' : 'Save'}</button>

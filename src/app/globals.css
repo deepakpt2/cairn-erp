@@ -48,7 +48,7 @@
   }
 
   .panel {
-    @apply bg-surface border border-line;
+    @apply rounded bg-surface border border-line;
   }
 
   .panel-header {
@@ -132,7 +132,7 @@
      It was never defined, so those fields rendered with no border and no
      padding at all. Aliased here rather than renamed at every call site. */
   .input {
-    @apply w-full border border-line-strong bg-surface px-2 py-1.5 text-base text-ink
+    @apply w-full rounded border border-line-strong bg-surface px-2 py-1.5 text-base text-ink
            placeholder:text-ink-faint disabled:bg-sunken disabled:text-ink-faint;
   }
 
@@ -145,7 +145,7 @@
   /* ---- Buttons ------------------------------------------------------------ */
 
   .btn {
-    @apply inline-flex items-center gap-1.5 border px-2.5 py-1.5 text-sm font-medium
+    @apply inline-flex items-center gap-1.5 rounded border px-2.5 py-1.5 text-sm font-medium
            transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
 
@@ -164,7 +164,7 @@
   /* ---- Status indicators -------------------------------------------------- */
 
   .chip {
-    @apply inline-flex items-center border px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide;
+    @apply inline-flex items-center rounded-sm border px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide;
   }
 
   .chip-ok {
@@ -242,6 +242,63 @@
 
   .code {
     @apply font-mono text-xs tracking-tight;
+  }
+
+
+  /* ---- Mobile base (below md; desktop is untouched) ----------------------- */
+
+  /* iOS Safari zooms the page when a field under 16px takes focus, so fields are 16px here.
+     Controls get a 44px touch height; inside dense tables 36px, so a table stays readable. */
+  @media (max-width: 47.99rem) {
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      font-size: 0.9375rem;
+      padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+      overscroll-behavior-y: none;
+    }
+
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+    select,
+    textarea {
+      font-size: 1rem !important;
+      min-height: 2.75rem;
+    }
+
+    .btn {
+      min-height: 2.75rem;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+
+    .grid-table .btn,
+    .grid-table input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+    .grid-table select {
+      min-height: 2.25rem;
+    }
+
+    input[type='checkbox'],
+    input[type='radio'] {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    .field-label {
+      font-size: 0.75rem;
+    }
+
+    /* A table wider than the screen scrolls inside its own box, never the whole page. */
+    .table-scroll {
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .table-scroll .grid-table {
+      min-width: max-content;
+    }
   }
 
   /* ---- Responsive behaviour -------------------------------------------- */

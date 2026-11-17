@@ -129,7 +129,7 @@ export default function Agreements({
 
       <section className="overflow-x-auto">
         <h2 className="mb-2 text-sm font-semibold">Scheduling agreements · ME3L</h2>
-        <table className="grid-table text-sm">
+        <div className="table-scroll"><table className="grid-table text-sm">
           <thead>
             <tr className="text-left">
               <th>Agreement</th>
@@ -159,7 +159,7 @@ export default function Agreements({
               <tr><td className="text-ink-soft" colSpan={7}>No scheduling agreements stand.</td></tr>
             )}
           </tbody>
-        </table>
+        </table></div>
       </section>
 
       {selected && (
@@ -175,7 +175,7 @@ export default function Agreements({
           <p>
             Target and scheduled quantity are separate. A scheduled quantity is a delivery schedule line. It is not a goods receipt. This screen does not create a schedule line.
           </p>
-          <table className="grid-table">
+          <div className="table-scroll"><table className="grid-table">
             <thead>
               <tr className="text-left">
                 <th>Item</th>
@@ -198,7 +198,7 @@ export default function Agreements({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           {selected.scheduleLines.length === 0 && <p className="text-ink-soft">No delivery schedule line stands. ME38 is not this screen.</p>}
           {canRelease && selectedRelease?.status === 'PENDING' && (
             <form action={releaseAction} className="flex flex-wrap items-end gap-2">
@@ -267,7 +267,7 @@ export default function Agreements({
               <input className="input mt-1 w-full" type="date" value={header.validityEnd} onChange={(event) => setHeader({ ...header, validityEnd: event.target.value })} />
             </label>
           </div>
-          <table className="grid-table text-sm">
+          <div className="table-scroll"><table className="grid-table text-sm">
             <thead>
               <tr className="text-left">
                 <th>Material</th>
@@ -295,7 +295,7 @@ export default function Agreements({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
           <div className="flex gap-2">
             <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setItems([...items, { ...EMPTY }])}>Add item</button>
             <button className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending}>{pending ? 'Saving' : 'Save'}</button>
