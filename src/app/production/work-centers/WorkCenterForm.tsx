@@ -13,11 +13,13 @@ export default function WorkCenterForm({
   plants,
   categories,
   locked,
+  parameters,
 }: {
   document: WorkCenterView | null;
   plants: Array<{ plant: string; name: string }>;
   categories: Array<{ category: string; description: string }>;
   locked: boolean;
+  parameters: Array<{ parameter: string; description: string }>;
 }) {
   const [state, action, pending] = useActionState(saveWorkCenterAction, INITIAL);
   const saved = state.workCenter ?? document;
@@ -131,10 +133,20 @@ export default function WorkCenterForm({
             <input className="input" aria-label="Factory calendar" value={row.factoryCalendar ?? ''} maxLength={2} placeholder="Calendar" disabled={locked} onChange={(event) => setCapacities(capacities.map((item, itemIndex) => itemIndex === index ? { ...item, factoryCalendar: event.target.value } : item))} />
             <input className="input" aria-label="Start time" value={row.startTime ?? ''} maxLength={5} placeholder="HH:MM" disabled={locked} onChange={(event) => setCapacities(capacities.map((item, itemIndex) => itemIndex === index ? { ...item, startTime: event.target.value } : item))} />
             <input className="input" aria-label="End time" value={row.endTime ?? ''} maxLength={5} placeholder="HH:MM" disabled={locked} onChange={(event) => setCapacities(capacities.map((item, itemIndex) => itemIndex === index ? { ...item, endTime: event.target.value } : item))} />
+            <label className="sm:col-span-4 text-sm">
+              <span className="field-label">Standard value parameter (loads this capacity in CM01)</span>
+              <select className="input mt-1 w-full sm:w-64" aria-label="Standard value parameter" value={row.standardValueParameter ?? ''} disabled={locked}
+                onChange={(event) => setCapacities(capacities.map((item, itemIndex) => itemIndex === index ? { ...item, standardValueParameter: event.target.value || null } : item))}>
+                <option value="">None (load shows as Unassigned)</option>
+                {row.standardValueParameter && !parameters.some((p) => p.parameter === row.standardValueParameter) && <option value={row.standardValueParameter}>{row.standardValueParameter}</option>}
+                {parameters.map((p) => <option key={p.parameter} value={p.parameter}>{p.parameter} — {p.description}</option>)}
+              </select>
+              <span className="ml-2 text-ink-soft">{saved?.standardValueKey ? `Parameters of standard value key ${saved.standardValueKey}.` : 'Needs a standard value key on the work center; save one first.'}</span>
+            </label>
           </div>
         ))}
         {!locked && (
-          <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setCapacities([...capacities, { capacityCategory: '', description: null, factoryCalendar: null, baseUnit: null, startTime: null, endTime: null, breakMinutes: 0, utilization: null, individualCapacities: null, finiteScheduling: ' ', longTermPlanning: ' ', severalOperations: ' ' }])}>
+          <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setCapacities([...capacities, { capacityCategory: '', description: null, factoryCalendar: null, baseUnit: null, standardValueParameter: null, startTime: null, endTime: null, breakMinutes: 0, utilization: null, individualCapacities: null, finiteScheduling: ' ', longTermPlanning: ' ', severalOperations: ' ' }])}>
             Add capacity
           </button>
         )}

@@ -3598,6 +3598,22 @@ export const SCREENS: readonly ScreenLink[] = [
     },
   },
   {
+    // Item 20 (9300): CM01, work center capacity load. Derived on every read; nothing is scheduled or written.
+    id: "/production/capacity-load",
+    path: "/production/capacity-load",
+    query: {},
+    code: "PROD.CAPACITY.LOAD.DISPLAY",
+    title: "Capacity load",
+    area: "production",
+    family: "planning",
+    accepts: ["plant", "workCenterFrom", "workCenterTo", "capacityCategory", "dateFrom", "dateTo", "period", "workingDaysPerWeek", "includePlannedOrders", "statuses", "limit"],
+    nav: {
+      module: "pp",
+      category: "Material requirements planning",
+      activity: "Planning runs & lists",
+    },
+  },
+  {
     id: "/production/order-availability",
     path: "/production/order-availability",
     query: {},

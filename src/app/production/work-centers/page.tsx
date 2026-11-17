@@ -12,6 +12,7 @@ import {
   WORK_CENTER_LOCK,
   WORK_CENTER_ROUTE,
   getWorkCenter,
+  listStandardValueParameters,
   listWorkCenterCategories,
   listWorkCenters,
 } from '@/modules/production/work-center';
@@ -45,6 +46,7 @@ export default async function WorkCentersPage({ searchParams }: {
   const center = last(raw.workCenter);
   const creating = last(raw.create) === '1' || !center;
   const document = plant && center ? await getWorkCenter(session.user.client, plant, center) : null;
+  const parameters = await listStandardValueParameters(session.user.client, document?.standardValueKey);
   const [categories, centers, plants] = await Promise.all([
     listWorkCenterCategories(session.user.client),
     listWorkCenters(session.user.client),
@@ -106,6 +108,7 @@ export default async function WorkCentersPage({ searchParams }: {
           plants={plants}
           categories={categories.map((row) => ({ category: row.category, description: row.description }))}
           locked={false}
+          parameters={parameters}
         />
       )}
       {canCreate && <CategoryForm action={saveCategoryAction} initial={{ ok: false }} />}

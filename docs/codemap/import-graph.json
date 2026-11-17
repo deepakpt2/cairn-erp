@@ -3733,6 +3733,11 @@
     "platform/db/client.ts",
     "platform/lock/enqueue.ts"
   ],
+  "app/production/capacity-load/page.tsx": [
+    "modules/production/capacity-load.ts",
+    "platform/auth/current.ts",
+    "platform/db/client.ts"
+  ],
   "app/production/cogi/ProductionCogiWorkbench.tsx": [
     "app/production/cogi/actions.ts",
     "modules/production/production-cogi.ts"
@@ -6826,6 +6831,12 @@
     "platform/auth/session.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
+  ],
+  "modules/production/capacity-load.ts": [
+    "modules/production/production-version.ts",
+    "modules/production/work-center.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts"
   ],
   "modules/production/checking-control.ts": [
     "modules/foundation/schema.ts",

@@ -26,6 +26,7 @@ import {
   workCenterCapacity,
   workCenterCategory,
   workCenterCosting,
+  routingStandardValueParameter,
 } from './schema';
 
 export const WORK_CENTER_ACTIVITY = 'CFG.PROD.WORKCENTER.DEFINE';
@@ -65,6 +66,7 @@ export interface WorkCenterCapacityInput {
   description?: string | null;
   factoryCalendar?: string | null;
   baseUnit?: string | null;
+  standardValueParameter?: string | null;
   startTime?: string | null;
   endTime?: string | null;
   breakMinutes?: number | null;
@@ -111,6 +113,7 @@ export interface WorkCenterCapacityView {
   description: string | null;
   factoryCalendar: string | null;
   baseUnit: string | null;
+  standardValueParameter: string | null;
   startTime: string | null;
   endTime: string | null;
   breakMinutes: number;
@@ -196,7 +199,7 @@ function clock(raw: string | null | undefined, label: string): string | null {
   return raw;
 }
 
-function minutesBetween(start: string, end: string): number {
+export function minutesBetween(start: string, end: string): number {
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
   return (eh * 60 + em) - (sh * 60 + sm);
@@ -283,6 +286,7 @@ function prepareCapacities(rows: WorkCenterCapacityInput[] | undefined): WorkCen
       description: row.description ? descriptionOf(row.description) : null,
       factoryCalendar: asTyped(row.factoryCalendar, 'Factory calendar', /^[A-Z0-9]{2}$/, 2),
       baseUnit: asTyped(row.baseUnit, 'Capacity unit', /^[A-Z0-9]{1,6}$/, 6),
+      standardValueParameter: asTyped(row.standardValueParameter, 'Standard value parameter', /^[A-Z0-9]{1,6}$/, 6),
       startTime,
       endTime,
       breakMinutes,
@@ -454,6 +458,7 @@ async function readInTx(tx: Tx, client: string, plantCode: string, centerCode: s
       description: row.description,
       factoryCalendar: row.factoryCalendar,
       baseUnit: row.baseUnit,
+      standardValueParameter: row.standardValueParameter,
       startTime: row.startTime,
       endTime: row.endTime,
       breakMinutes: row.breakMinutes,
@@ -505,6 +510,7 @@ async function replaceChildren(
       description: row.description ?? null,
       factoryCalendar: row.factoryCalendar ?? null,
       baseUnit: row.baseUnit ?? null,
+      standardValueParameter: row.standardValueParameter ?? null,
       startTime: row.startTime ?? null,
       endTime: row.endTime ?? null,
       breakMinutes: row.breakMinutes ?? 0,
@@ -675,6 +681,22 @@ async function writeCenter(input: WorkCenterInput, mode: 'CREATE' | 'CHANGE'): P
     if (mode === 'CREATE' && flag(input.deletionFlag, 'Deletion flag') === 'X') {
       fail('A new work center is not created with a deletion flag.');
     }
+    // No foreign key backs standard_value_parameter (the parameter table is keyed by the standard value key,
+    // which lives on the work center, not on the capacity row). This lookup IS the constraint; do not add an FK.
+    for (const row of preparedCapacities) {
+      if (!row.standardValueParameter) continue;
+      if (!standardValueKey) {
+        fail('A standard value parameter needs a standard value key on the work center. Maintain one first.', `Capacity ${row.capacityCategory} names parameter ${row.standardValueParameter}.`);
+      }
+      const [known] = await tx.select({ p: routingStandardValueParameter.parameter }).from(routingStandardValueParameter).where(and(
+        eq(routingStandardValueParameter.client, input.client),
+        eq(routingStandardValueParameter.standardValueKey, standardValueKey),
+        eq(routingStandardValueParameter.parameter, row.standardValueParameter),
+      ));
+      if (!known) {
+        fail(`Parameter ${row.standardValueParameter} is not defined for standard value key ${standardValueKey}.`, 'Choose a parameter of that key, or leave it blank.');
+      }
+    }
     await assertReferences(tx, input.client, plantRow, preparedCapacities, preparedCosting);
     const area = preparedCosting.length > 0 && plantRow.companyCode
       ? await controllingAreaFor(tx, input.client, plantRow.companyCode)
@@ -754,4 +776,17 @@ export async function createWorkCenter(input: WorkCenterInput): Promise<WorkCent
 
 export async function changeWorkCenter(input: WorkCenterInput): Promise<WorkCenterView> {
   return writeCenter(input, 'CHANGE');
+}
+
+/** The parameters a capacity of a work center with this standard value key may name (CM01 mapping field). */
+export async function listStandardValueParameters(client: string, standardValueKey: string | null | undefined): Promise<Array<{ parameter: string; description: string; unit: string | null }>> {
+  if (!standardValueKey) return [];
+  return withTenant(client, (tx) => tx.select({
+    parameter: routingStandardValueParameter.parameter,
+    description: routingStandardValueParameter.description,
+    unit: routingStandardValueParameter.unit,
+  }).from(routingStandardValueParameter).where(and(
+    eq(routingStandardValueParameter.client, client),
+    eq(routingStandardValueParameter.standardValueKey, standardValueKey),
+  )).orderBy(asc(routingStandardValueParameter.parameter)));
 }

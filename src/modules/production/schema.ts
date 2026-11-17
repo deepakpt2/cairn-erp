@@ -157,6 +157,8 @@ export const workCenterCapacity = pgTable('work_center_capacity', {
   description: varchar('description', { length: 40 }),
   factoryCalendar: char('factory_calendar', { length: 2 }),
   baseUnit: varchar('base_unit', { length: 6 }),
+  /** The standard value parameter that loads this capacity (CM01). No FK: the parameter table is keyed by the work center's standard value key, so work-center.ts validates it. */
+  standardValueParameter: varchar('standard_value_parameter', { length: 6 }),
   startTime: varchar('start_time', { length: 5 }),
   endTime: varchar('end_time', { length: 5 }),
   breakMinutes: integer('break_minutes').notNull().default(0),
