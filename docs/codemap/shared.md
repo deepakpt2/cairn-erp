@@ -16,14 +16,14 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | app/command.ts | ui/shell |
 | app/registry | app/command.ts |
 | platform/attention | app/page.tsx, ui/attention |
-| platform/auth | app/api, app/clients, app/config, app/menu, app/page.tsx, app/search, audit, finance, foundation, inventory, people, platform, platform/attention, platform/job, platform/mail, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
-| platform/change | audit, finance, foundation, inventory, people, platform, platform/lock, platform/mail, platform/posting, platform/security, platform/tenancy, production, purchasing, quality, sales |
-| platform/db | app/api, app/config, audit, dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/periods, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales, worker/index.ts |
+| platform/auth | app/api, app/clients, app/config, app/menu, app/page.tsx, app/search, audit, finance, foundation, inventory, output, people, platform, platform/attention, platform/job, platform/mail, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
+| platform/change | audit, finance, foundation, inventory, output, people, platform, platform/lock, platform/mail, platform/posting, platform/security, platform/tenancy, production, purchasing, quality, sales |
+| platform/db | app/api, app/config, audit, dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, output, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/periods, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales, worker/index.ts |
 | platform/document | inventory, platform/posting, purchasing |
 | platform/i18n | app/clients, app/config, app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search, app/signin, audit, finance, foundation, inventory, people, platform, platform/attention, platform/notification, production, purchasing, sales, ui/attention, ui/fields, ui/lock, ui/shell |
-| platform/job | finance, foundation, people, platform, platform/mail, platform/notification, production, purchasing, worker/index.ts |
+| platform/job | finance, foundation, output, people, platform, platform/mail, platform/notification, production, purchasing, worker/index.ts |
 | platform/lock | finance, foundation, inventory, platform, platform/job, platform/posting, production, purchasing, quality, ui/lock |
-| platform/mail | platform, worker/jobs.ts |
+| platform/mail | output, platform, worker/jobs.ts |
 | platform/notification | finance, foundation, people, platform, platform/job, production, purchasing, sales, ui/shell, worker/jobs.ts |
 | platform/numbering | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, quality, sales |
 | platform/periods | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
@@ -36,10 +36,11 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/attention | app/page.tsx |
 | ui/fields | finance, foundation, inventory, purchasing, sales |
 | ui/lock | finance, foundation, inventory, platform, production, purchasing, quality |
+| ui/output | inventory, output, sales |
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (157)
+## Files (158)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -209,6 +210,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | claim-lifecycle.ts | observeChangeLockClaim |  |
 | claim.ts | IDLE_CLAIM, claimKey, phaseOf, shouldDispatch, awaitingClaim, projectClaim, claimNotice, failureDetail, failureText, failureNoticeView, changeLockClaim |  |
 | remedy.ts | displayOnlyRemedy |  |
+| **ui/output/** | | |
+| DocumentPrint.tsx | DocumentLetterhead, DocumentFooter, PrintButton, PrintNote, DownloadPdfButton |  |
 | **ui/shell/** | | |
 | CommandBar.tsx | CommandBar |  |
 | CommandBarLinks.tsx | CommandBarLinks |  |

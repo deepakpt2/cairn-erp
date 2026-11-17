@@ -2,6 +2,8 @@
 
 import { useActionState } from 'react';
 
+import type { LetterheadView } from '@/modules/output/document-layout';
+import { DocumentFooter, DocumentLetterhead, DownloadPdfButton, PrintButton, PrintNote } from '@/ui/output/DocumentPrint';
 import type {
   SalesOutputRow,
   listOutputConditionRecords,
@@ -9,6 +11,7 @@ import type {
 } from '@/modules/sales/output';
 import {
   dispatchSalesOutputAction,
+  downloadSalesOutputPdfAction,
   reissueSalesOutputAction,
   runSalesOutputAction,
   saveOutputConditionAction,
@@ -47,6 +50,8 @@ interface Props {
   canProcess: boolean;
   canAdmin: boolean;
   today: string;
+  /** Letterheads by company code, for the printable region of each rendered message. */
+  letterheads: Record<string, LetterheadView>;
 }
 
 function Notice({ state, label }: { state: SalesOutputActionState; label?: string }) {
@@ -60,7 +65,7 @@ function Notice({ state, label }: { state: SalesOutputActionState; label?: strin
   );
 }
 
-export default function SalesOutput({ rows, counts, conditions, types, canProcess, canAdmin, today }: Props) {
+export default function SalesOutput({ rows, counts, conditions, types, canProcess, canAdmin, today, letterheads }: Props) {
   const [runState, runAction, running] = useActionState(runSalesOutputAction, EMPTY);
   const [oneState, oneAction, dispatching] = useActionState(dispatchSalesOutputAction, EMPTY);
   const [reissueState, reissueSubmit, reissuing] = useActionState(reissueSalesOutputAction, EMPTY);
@@ -74,8 +79,8 @@ export default function SalesOutput({ rows, counts, conditions, types, canProces
         <h2 id="sales-output-run" className="text-sm font-semibold">The run</h2>
         <p className="mt-1 text-sm text-ink-soft">
           Determination happens as a document is written, so nothing that stands today is missing its output.
-          The run is what fills the past: it determines what stands missing and dispatches what is pending —
-          the periodic path, since the package carries no scheduler.
+          The run is what fills the past: it determines what stands missing and queues what is pending for the
+          OUTPUT.DISPATCH job, which renders and sends it — and also sweeps by itself every two minutes.
         </p>
         {canProcess ? (
           <form action={runAction} className="mt-3 flex flex-wrap items-end gap-3">
@@ -234,16 +239,32 @@ export default function SalesOutput({ rows, counts, conditions, types, canProces
                   </form>
                 </div>
                 {row.renderedDocument ? (
-                  <pre
-                    data-document-preview={row.documentNumber}
-                    className="mt-3 overflow-x-auto border border-line bg-surface-muted p-3 text-xs leading-5"
-                  >
-                    {row.renderedDocument}
-                  </pre>
+                  <div data-print-root className="mt-3 border border-line p-3">
+                    <DocumentLetterhead layout={letterheads[row.companyCode ?? '']} title={row.outputTypeDescription} />
+                    <pre
+                      data-document-preview={row.documentNumber}
+                      className="mt-3 overflow-x-auto border border-line bg-surface-muted p-3 text-xs leading-5"
+                    >
+                      {row.renderedDocument}
+                    </pre>
+                    <DocumentFooter layout={letterheads[row.companyCode ?? '']} />
+                    <div data-print-hide className="mt-3 flex flex-wrap items-center gap-3">
+                      <DownloadPdfButton
+                        action={downloadSalesOutputPdfAction}
+                        fields={{
+                          documentCategory: row.documentCategory, documentNumber: row.documentNumber,
+                          outputType: row.outputType, transmissionMedium: row.transmissionMedium,
+                          issueNumber: row.issueNumber,
+                        }}
+                      />
+                      <PrintButton />
+                    </div>
+                    <PrintNote />
+                  </div>
                 ) : (
                   <p className="mt-3 text-xs text-ink-faint">
-                    Nothing has been rendered for this message yet — a message carries the document as it was sent
-                    from the moment it is dispatched.
+                    Nothing has been rendered for this message yet — the OUTPUT.DISPATCH job renders it, usually
+                    within a couple of minutes of the document being saved, and keeps what it rendered with the message.
                   </p>
                 )}
               </details>

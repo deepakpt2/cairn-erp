@@ -32,8 +32,10 @@
  *
  * Determination runs **inside the transaction that wrote the document**, as the material document does,
  * so a document never stands with its output missing because the process died in between. Dispatch
- * renders the document and **stores the rendering on the message**: a copy asked for a year later is
- * the document as it went out, not a fresh reading of masters that have since moved.
+ * is a job (MAIL-03): the transaction writes the PENDING message and queues OUTPUT.DISPATCH, and the
+ * worker renders the document, **stores the rendering on the message** and, for EMAIL, attaches the PDF
+ * built from that rendering. A copy asked for a year later is the document as it went out, not a fresh
+ * reading of masters that have since moved.
  *
  * An output is issued **once**. A second dispatch is refused, and issuing again writes a new message
  * with the next issue number and a reason — because "we sent it twice" and "here is both" are only
@@ -57,7 +59,11 @@ import {
 import {
   outputConditionRecord, outputMessage, outputType,
 } from '../foundation/output-schema';
+import { salesOrg } from '../foundation/schema';
 import { material } from '../inventory/schema';
+import { enqueueOutputDispatch, enqueueOutputSweep, outputMessageKey } from '../output/dispatch-queue';
+import { renderStoredPdf } from '../output/download-pdf';
+import { emailRenderedDocument } from '../output/email-dispatch';
 import { type DocumentPartners, documentPartners } from './partners';
 import {
   billingDocument, billingDocumentLine, delivery, deliveryLine, salesOrder, salesOrderLine,
@@ -450,15 +456,25 @@ export async function determineSalesOutputs(tx: Tx, input: {
 }
 
 /**
- * The posting hook: determine a document's outputs and dispatch the immediate ones, inside the
- * caller's transaction. Returns the number of messages written.
+ * The posting hook: determine a document's outputs and queue the immediate ones for the
+ * OUTPUT.DISPATCH job, inside the caller's transaction. Returns the number of messages written.
+ *
+ * Nothing is rendered here (MAIL-03): the transaction writes PENDING rows and queues a run, and the
+ * worker reads the partners, materials and totals, builds the PDF and talks to the mail queue.
  */
 export async function recordSalesOutputs(tx: Tx, input: {
   client: string; changedBy: string;
   documentCategory: SalesOutputCategory; documentNumber: string;
 }): Promise<number> {
   const { created } = await determineSalesOutputs(tx, input);
-  await dispatchImmediateInTx(tx, input.client, input.changedBy, input.documentCategory, input.documentNumber);
+  const due = await tx.select().from(outputMessage).where(and(
+    eq(outputMessage.client, input.client),
+    eq(outputMessage.documentCategory, input.documentCategory),
+    eq(outputMessage.documentNumber, input.documentNumber),
+    eq(outputMessage.status, 'PENDING'),
+    eq(outputMessage.dispatchTime, 'IMMEDIATE'),
+  ));
+  for (const message of due) await enqueueOutputDispatch(tx, { client: input.client, message });
   return created;
 }
 
@@ -477,39 +493,37 @@ function messageKey(client: string, message: typeof outputMessage.$inferSelect) 
 /** Why an e-mail nobody is addressed to cannot be sent. The message records it in these words. */
 const NO_RECIPIENT = 'An EMAIL output needs a recipient, and the partner it is addressed to carries no e-mail address.';
 
-interface DispatchOutcome {
+export interface DispatchOutcome {
   status: 'PROCESSED' | 'ERROR';
   sendCount: number;
   errorText: string | null;
   rendered: string | null;
+  /** Characters the PDF could not represent, for an EMAIL; the job logs it. */
+  replacedCharacters: number;
 }
 
 /**
- * The one author of what dispatch does.
+ * The one author of what dispatch does, called by the OUTPUT.DISPATCH job for one PENDING message in
+ * that message's own transaction.
  *
- * Both paths come through here — the immediate dispatch that runs inside the transaction writing the
- * document, and the deliberate dispatch of one message from the screen — because two authors of the
- * same rule is how a rule becomes two rules. An EMAIL with nobody to send it to fails for real and
- * records why, rather than standing as though it were merely waiting: a missing address is not a
- * transient fault, and leaving it PENDING would say that it is.
+ * An EMAIL with nobody to send it to — or with mail not configured — fails for real and records why,
+ * rather than standing as though it were merely waiting. Whoever can put it right is told through the
+ * failed-output notification, queued with the failure.
  */
-async function dispatchInTx(
+export async function processSalesOutputMessage(
   tx: Tx, client: string, changedBy: string, message: typeof outputMessage.$inferSelect,
 ): Promise<DispatchOutcome> {
   const now = new Date();
-  if (message.transmissionMedium === 'EMAIL' && !message.recipient) {
-    // Whoever can put this right holds SALES.OUTPUT.PROCESS over the document's
-    // sales area. The document was written in this transaction, so its sales
-    // area is readable here and the fan-out can be queued with the failure
-    // rather than after it.
-    const facts = await documentFacts(
-      tx, client, message.documentCategory as SalesOutputCategory, message.documentNumber,
-    );
+  const facts = await documentFacts(
+    tx, client, message.documentCategory as SalesOutputCategory, message.documentNumber,
+  );
+
+  const fail = async (errorText: string): Promise<DispatchOutcome> => {
+    // Whoever can put this right holds SALES.OUTPUT.PROCESS over the document's sales area.
     const area: Record<string, string> = {};
     if (facts?.salesOrg) area.salesOrg = facts.salesOrg;
     if (facts?.distributionChannel) area.distributionChannel = facts.distributionChannel;
     if (facts?.division) area.division = facts.division;
-
     await enqueueOutputFailed(tx, {
       client,
       objectClass: SALES_OUTPUT_NOTIFICATION_CLASS,
@@ -519,24 +533,53 @@ async function dispatchInTx(
       issueNumber: message.issueNumber,
       capability: SALES_OUTPUT_CAPABILITY,
       orgs: [area],
-      previousStatus: message.status,
+      previousStatus: message.errorText ? 'ERROR' : message.status,
     });
-
     await tx.update(outputMessage).set({
       status: 'ERROR',
-      errorText: NO_RECIPIENT,
+      errorText: errorText.slice(0, 200),
       lastProcessedAt: now,
       changedBy, changedAt: now,
     }).where(messageKey(client, message));
-    return { status: 'ERROR', sendCount: message.sendCount, errorText: NO_RECIPIENT, rendered: null };
-  }
+    return { status: 'ERROR', sendCount: message.sendCount, errorText, rendered: null, replacedCharacters: 0 };
+  };
 
-  // Rendered here and not on another connection: the posting path dispatches before it commits, and a
-  // separate connection would not see a document that does not exist yet. What is stored is what was
-  // handed to the channel.
+  if (message.transmissionMedium === 'EMAIL' && !message.recipient) return fail(NO_RECIPIENT);
+
+  // The stored rendering is what the PDF is built from, and what a copy asked for next year reads.
   const rendered = await renderSalesDocument(
     tx, client, message.documentCategory as SalesOutputCategory, message.documentNumber,
   );
+
+  let replacedCharacters = 0;
+  if (message.transmissionMedium === 'EMAIL') {
+    let companyCode: string | null = null;
+    if (facts?.salesOrg) {
+      const [org] = await tx.select({ companyCode: salesOrg.companyCode }).from(salesOrg).where(and(
+        eq(salesOrg.client, client), eq(salesOrg.salesOrg, facts.salesOrg),
+      )).limit(1);
+      companyCode = org?.companyCode ?? null;
+    }
+    if (!companyCode) {
+      return fail(`Sales organisation ${facts?.salesOrg ?? '(none)'} is not assigned to a company code, so there is no letterhead to send the document on.`);
+    }
+    const [type] = await tx.select({ description: outputType.description }).from(outputType).where(and(
+      eq(outputType.client, client), eq(outputType.outputType, message.outputType),
+    )).limit(1);
+    const mailed = await emailRenderedDocument(tx, {
+      client, companyCode,
+      title: type?.description ?? message.outputType,
+      documentNumber: message.documentNumber,
+      objectClass: SALES_OUTPUT_OBJECT_CLASS,
+      objectKey: outputMessageKey(message),
+      recipient: message.recipient!,
+      renderedDocument: rendered,
+      changedBy,
+    });
+    if (!mailed.ok) return fail(mailed.errorText);
+    replacedCharacters = mailed.replacedCharacters;
+  }
+
   const sendCount = message.sendCount + 1;
   await tx.update(outputMessage).set({
     status: 'PROCESSED',
@@ -546,24 +589,7 @@ async function dispatchInTx(
     renderedDocument: rendered,
     changedBy, changedAt: now,
   }).where(messageKey(client, message));
-  return { status: 'PROCESSED', sendCount, errorText: null, rendered };
-}
-
-/** Dispatch this document's PENDING immediate messages, in the transaction that wrote it. */
-async function dispatchImmediateInTx(
-  tx: Tx, client: string, changedBy: string,
-  documentCategory: SalesOutputCategory, documentNumber: string,
-): Promise<void> {
-  const due = await tx.select().from(outputMessage).where(and(
-    eq(outputMessage.client, client),
-    eq(outputMessage.documentCategory, documentCategory),
-    eq(outputMessage.documentNumber, documentNumber),
-    eq(outputMessage.status, 'PENDING'),
-    eq(outputMessage.dispatchTime, 'IMMEDIATE'),
-  ));
-  for (const message of due) {
-    await dispatchInTx(tx, client, changedBy, message);
-  }
+  return { status: 'PROCESSED', sendCount, errorText: null, rendered, replacedCharacters };
 }
 
 /* ─── Rendering ──────────────────────────────────────────────────────────────────────────────── */
@@ -768,12 +794,13 @@ export interface SalesOutputDispatchResult {
 }
 
 /**
- * Dispatch one message: render the document, mark it PROCESSED, count the send and keep what was
- * rendered. Nothing here reaches a printer or a mail server; PROCESSED says the document was rendered
- * and handed to a channel.
+ * Dispatch one message — which now means *queue* it (MAIL-03). The message is put at PENDING and the
+ * OUTPUT.DISPATCH job renders it, emails it where that is the medium, and moves it to PROCESSED or
+ * ERROR. Nothing here renders a document, builds a PDF or opens a socket to a mail server.
  *
- * An EMAIL with nobody to send it to fails for real and records why, rather than succeeding quietly.
- * A message that already stands PROCESSED refuses: a repeat is a new output, which is `reissue`.
+ * A message that already stands PROCESSED refuses: a repeat is a new output, which is `reissue`. A
+ * message at ERROR is put back to PENDING, which is how a failed e-mail is made to succeed once its
+ * cause is fixed.
  */
 export async function dispatchSalesOutput(
   input: DispatchSalesOutputInput,
@@ -801,20 +828,23 @@ export async function dispatchSalesOutput(
       );
     }
 
-    const outcome = await dispatchInTx(tx, parsed.client, parsed.changedBy, message);
-
-    await recordChange(tx, {
-      client: parsed.client, objectClass: SALES_OUTPUT_OBJECT_CLASS,
-      objectKey: `${message.documentCategory}/${message.documentNumber}/${message.outputType}/${message.issueNumber}`,
-      changeType: 'CHANGE', changedBy: parsed.changedBy,
-      before: { status: message.status, sendCount: message.sendCount },
-      after: {
-        status: outcome.status,
-        sendCount: outcome.sendCount,
-        recipient: message.recipient ?? '',
-        ...(outcome.errorText ? { error: outcome.errorText } : {}),
-      },
-      fieldLabels: { sendCount: 'Times sent', recipient: 'Recipient' },
+    if (message.status !== 'PENDING') {
+      await tx.update(outputMessage).set({
+        // errorText stays: it is how the worker knows this message already failed once, and so
+        // that a second failure is the same episode and tells nobody twice.
+        status: 'PENDING', changedBy: parsed.changedBy, changedAt: new Date(),
+      }).where(messageKey(parsed.client, message));
+      await recordChange(tx, {
+        client: parsed.client, objectClass: SALES_OUTPUT_OBJECT_CLASS,
+        objectKey: `${message.documentCategory}/${message.documentNumber}/${message.outputType}/${message.issueNumber}`,
+        changeType: 'CHANGE', changedBy: parsed.changedBy,
+        before: { status: message.status },
+        after: { status: 'PENDING', recipient: message.recipient ?? '' },
+        fieldLabels: { recipient: 'Recipient' },
+      });
+    }
+    await enqueueOutputDispatch(tx, {
+      client: parsed.client, message, manual: { triggeredBy: parsed.changedBy },
     });
 
     return {
@@ -823,11 +853,11 @@ export async function dispatchSalesOutput(
       outputType: message.outputType,
       transmissionMedium: message.transmissionMedium,
       issueNumber: message.issueNumber,
-      status: outcome.status,
-      sendCount: outcome.sendCount,
+      status: 'PENDING',
+      sendCount: message.sendCount,
       recipient: message.recipient,
-      lastProcessedAt: new Date().toISOString(),
-      errorText: outcome.errorText,
+      lastProcessedAt: message.lastProcessedAt ? new Date(message.lastProcessedAt).toISOString() : null,
+      errorText: message.errorText,
     };
   });
 }
@@ -914,9 +944,7 @@ export async function reissueSalesOutput(
       fieldLabels: { issueNumber: 'Issue', reason: 'Reason', outputType: 'Output type' },
     });
 
-    // Dispatched here, in the transaction that wrote the new issue, and not by calling the screen's
-    // dispatch: that one opens a transaction of its own, and a second connection cannot see a document
-    // that is not committed yet. One author of what dispatch does, reached from both paths.
+    // Queued, not rendered: the OUTPUT.DISPATCH job picks the new issue up and does the rest.
     const [issued] = await tx.select().from(outputMessage).where(and(
       eq(outputMessage.client, parsed.client),
       eq(outputMessage.documentCategory, parsed.documentCategory),
@@ -925,7 +953,9 @@ export async function reissueSalesOutput(
       eq(outputMessage.transmissionMedium, parsed.transmissionMedium),
       eq(outputMessage.issueNumber, nextIssue),
     )).limit(1);
-    const outcome = await dispatchInTx(tx, parsed.client, parsed.changedBy, issued);
+    await enqueueOutputDispatch(tx, {
+      client: parsed.client, message: issued, manual: { triggeredBy: parsed.changedBy },
+    });
     return {
       issueNumber: nextIssue,
       determination: decision,
@@ -935,11 +965,11 @@ export async function reissueSalesOutput(
         outputType: issued.outputType,
         transmissionMedium: issued.transmissionMedium,
         issueNumber: issued.issueNumber,
-        status: outcome.status,
-        sendCount: outcome.sendCount,
+        status: 'PENDING',
+        sendCount: issued.sendCount,
         recipient: issued.recipient,
-        lastProcessedAt: new Date().toISOString(),
-        errorText: outcome.errorText,
+        lastProcessedAt: null,
+        errorText: null,
       },
     };
   });
@@ -980,7 +1010,7 @@ export async function setSalesOutputRecipient(input: {
         'Determine the outputs first.',
       );
     }
-    return mapRow(updated, null, null, null);
+    return mapRow(updated, null, null, null, null);
   });
 }
 
@@ -1004,6 +1034,8 @@ export interface SalesOutputRow {
   lastProcessedAt: string | null;
   errorText: string | null;
   renderedDocument: string | null;
+  /** The company code whose letterhead the document carries (sales organisation -> company code). */
+  companyCode: string | null;
 }
 
 function mapRow(
@@ -1011,6 +1043,7 @@ function mapRow(
   description: string | null,
   documentDate: string | null,
   customerNumber: string | null,
+  companyCode: string | null,
 ): SalesOutputRow {
   return {
     documentCategory: row.documentCategory,
@@ -1030,6 +1063,7 @@ function mapRow(
     lastProcessedAt: row.lastProcessedAt ? new Date(row.lastProcessedAt).toISOString() : null,
     errorText: row.errorText,
     renderedDocument: row.renderedDocument,
+    companyCode,
   };
 }
 
@@ -1098,11 +1132,22 @@ export async function listSalesOutput(input: {
       shown.map((row) => ({ category: row.message.documentCategory, number: row.message.documentNumber })),
     );
 
+    const orgs = [...new Set([...facts.values()].map((fact) => fact.salesOrg).filter((org) => org !== ''))];
+    const companyOf = new Map<string, string | null>();
+    if (orgs.length > 0) {
+      const found = await tx.select({ salesOrg: salesOrg.salesOrg, companyCode: salesOrg.companyCode })
+        .from(salesOrg).where(and(eq(salesOrg.client, input.client), inArray(salesOrg.salesOrg, orgs)));
+      for (const row of found) companyOf.set(row.salesOrg, row.companyCode);
+    }
+
     const statusCount = (code: string) => counts.find((c) => c.status === code)?.count ?? 0;
     return {
       rows: shown.map((row) => {
         const fact = facts.get(`${row.message.documentCategory}/${row.message.documentNumber}`);
-        return mapRow(row.message, row.description, fact?.documentDate ?? null, fact?.customerNumber ?? null);
+        return mapRow(
+          row.message, row.description, fact?.documentDate ?? null, fact?.customerNumber ?? null,
+          fact?.salesOrg ? companyOf.get(fact.salesOrg) ?? null : null,
+        );
       }),
       rowCount: shown.length,
       pending: statusCount('PENDING'),
@@ -1126,7 +1171,7 @@ async function factsFor(
   if (orders.length > 0) {
     const rows = await tx.select({
       documentNumber: salesOrder.orderNumber, documentDate: salesOrder.orderDate,
-      customerNumber: salesOrder.customerNumber,
+      customerNumber: salesOrder.customerNumber, salesOrg: salesOrder.salesOrg,
     }).from(salesOrder).where(and(
       eq(salesOrder.client, client), inArray(salesOrder.orderNumber, orders),
     ));
@@ -1135,7 +1180,7 @@ async function factsFor(
         documentNumber: row.documentNumber, documentDate: row.documentDate,
         documentYear: Number(row.documentDate.slice(0, 4)), currency: '',
         netValue: '0', taxValue: '0', grossValue: '0',
-        salesOrg: '', distributionChannel: '', division: '', documentType: '',
+        salesOrg: row.salesOrg, distributionChannel: '', division: '', documentType: '',
         customerNumber: row.customerNumber,
       });
     }
@@ -1144,7 +1189,7 @@ async function factsFor(
   if (deliveries.length > 0) {
     const rows = await tx.select({
       documentNumber: delivery.deliveryNumber, documentDate: delivery.deliveryDate,
-      customerNumber: delivery.customerNumber,
+      customerNumber: delivery.customerNumber, salesOrg: delivery.salesOrg,
     }).from(delivery).where(and(
       eq(delivery.client, client), inArray(delivery.deliveryNumber, deliveries),
     ));
@@ -1153,7 +1198,7 @@ async function factsFor(
         documentNumber: row.documentNumber, documentDate: row.documentDate,
         documentYear: Number(row.documentDate.slice(0, 4)), currency: '',
         netValue: '0', taxValue: '0', grossValue: '0',
-        salesOrg: '', distributionChannel: '', division: '', documentType: '',
+        salesOrg: row.salesOrg, distributionChannel: '', division: '', documentType: '',
         customerNumber: row.customerNumber,
       });
     }
@@ -1162,7 +1207,7 @@ async function factsFor(
   if (billings.length > 0) {
     const rows = await tx.select({
       documentNumber: billingDocument.billingNumber, documentDate: billingDocument.billingDate,
-      customerNumber: billingDocument.customerNumber,
+      customerNumber: billingDocument.customerNumber, salesOrg: billingDocument.salesOrg,
     }).from(billingDocument).where(and(
       eq(billingDocument.client, client), inArray(billingDocument.billingNumber, billings),
     ));
@@ -1171,7 +1216,7 @@ async function factsFor(
         documentNumber: row.documentNumber, documentDate: row.documentDate,
         documentYear: Number(row.documentDate.slice(0, 4)), currency: '',
         netValue: '0', taxValue: '0', grossValue: '0',
-        salesOrg: '', distributionChannel: '', division: '', documentType: '',
+        salesOrg: row.salesOrg, distributionChannel: '', division: '', documentType: '',
         customerNumber: row.customerNumber,
       });
     }
@@ -1242,30 +1287,22 @@ async function documentNumbersIn(
   return rows.map((r) => r.number);
 }
 
-/** Dispatch every PENDING message the selection names — the periodic dispatch run. */
+/**
+ * Queue a dispatch run for the PENDING messages the selection names. The run is a job: this counts
+ * what is waiting and queues one OUTPUT.DISPATCH run; the worker does the rendering and sending.
+ */
 export async function dispatchPendingSalesOutput(input: {
   client: string; changedBy: string; selection?: SalesOutputSelection;
-}): Promise<{ dispatched: number; failed: number; results: SalesOutputDispatchResult[] }> {
+}): Promise<{ queued: number }> {
   const list = await listSalesOutput({
     client: input.client,
     selection: { ...(input.selection ?? {}), status: 'PENDING', maxHits: MAX_HITS_CAP },
   });
-  const results: SalesOutputDispatchResult[] = [];
-  for (const row of list.rows) {
-    results.push(await dispatchSalesOutput({
-      client: input.client, changedBy: input.changedBy,
-      documentCategory: row.documentCategory as SalesOutputCategory,
-      documentNumber: row.documentNumber,
-      outputType: row.outputType,
-      transmissionMedium: row.transmissionMedium as 'PRINT' | 'EMAIL',
-      issueNumber: row.issueNumber,
-    }));
-  }
-  return {
-    dispatched: results.filter((r) => r.status === 'PROCESSED').length,
-    failed: results.filter((r) => r.status === 'ERROR').length,
-    results,
-  };
+  if (list.rows.length === 0) return { queued: 0 };
+  await withTenant(input.client, (tx) => enqueueOutputSweep(tx, {
+    client: input.client, triggeredBy: input.changedBy,
+  }));
+  return { queued: list.rows.length };
 }
 
 /* ─── Maintaining the records ────────────────────────────────────────────────────────────────── */
@@ -1515,5 +1552,47 @@ export async function salesOutputTypeChoices(client: string): Promise<Array<{
       dispatchTime: row.dispatchTime,
       isActive: row.isActive,
     }));
+  });
+}
+
+
+/**
+ * The PDF of one stored message, for the Download PDF control. Reads only the message's stored
+ * rendering and the document's company code; refuses a message that has not been rendered.
+ */
+export async function salesOutputPdf(input: {
+  client: string; documentCategory: SalesOutputCategory; documentNumber: string;
+  outputType: string; transmissionMedium: string; issueNumber: number;
+}) {
+  return renderStoredPdf({
+    client: input.client,
+    load: async (tx) => {
+      const [message] = await tx.select().from(outputMessage).where(and(
+        eq(outputMessage.client, input.client),
+        eq(outputMessage.documentCategory, input.documentCategory),
+        eq(outputMessage.documentNumber, input.documentNumber),
+        eq(outputMessage.outputType, input.outputType),
+        eq(outputMessage.transmissionMedium, input.transmissionMedium),
+        eq(outputMessage.issueNumber, input.issueNumber),
+      )).limit(1);
+      if (!message) return null;
+      const [type] = await tx.select({ description: outputType.description }).from(outputType).where(and(
+        eq(outputType.client, input.client), eq(outputType.outputType, message.outputType),
+      )).limit(1);
+      const facts = await documentFacts(tx, input.client, input.documentCategory, input.documentNumber);
+      let companyCode: string | null = null;
+      if (facts?.salesOrg) {
+        const [org] = await tx.select({ companyCode: salesOrg.companyCode }).from(salesOrg).where(and(
+          eq(salesOrg.client, input.client), eq(salesOrg.salesOrg, facts.salesOrg),
+        )).limit(1);
+        companyCode = org?.companyCode ?? null;
+      }
+      return {
+        renderedDocument: message.renderedDocument,
+        title: type?.description ?? message.outputType,
+        documentNumber: message.documentNumber,
+        companyCode,
+      };
+    },
   });
 }

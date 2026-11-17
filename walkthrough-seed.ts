@@ -28,6 +28,7 @@ import {
   salesOrg, salesOrgText, salesOrgDistributionChannel, salesOrgDivision,
 } from './src/modules/foundation/schema';
 import { configActivity } from './src/platform/tables/registry';
+import { documentLayout } from './src/modules/foundation/output-schema';
 import {
   readWalkthroughCreditPrerequisiteSnapshot,
   walkthroughCreditPrerequisiteError,
@@ -234,6 +235,20 @@ function dateIsValid(iso: string): boolean {
   const [y, m, d] = iso.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+/**
+ * A demo letterhead for the walkthrough company code, so /config/document-layout, the PDF and the print
+ * preview can be exercised without hand-crafting one. Insert-only: an existing layout is never touched.
+ */
+async function ensureDocumentLayout(tenant: string, summary: WalkthroughSummary) {
+  const inserted = await withTenant(tenant, (tx) => tx.insert(documentLayout).values({
+    client: tenant, companyCode: COMPANY,
+    headerText: 'Tax invoice',
+    footerText: 'Walkthrough Foods — bank details on request\nThis is a demonstration letterhead.',
+    showPageNumbers: true, createdBy: ACTOR,
+  }).onConflictDoNothing().returning({ companyCode: documentLayout.companyCode }));
+  record(summary, `document layout ${COMPANY}`, inserted.length > 0);
 }
 
 function record(summary: WalkthroughSummary, label: string, created: boolean) {
@@ -1271,6 +1286,7 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     await ensureFiNumberRange(tenant, summary);
     await ensureCreditRiskCategory(tenant, summary);
     await ensurePartners(tenant, summary);
+    await ensureDocumentLayout(tenant, summary);
     const assetConfiguration = await ensureAssetAcquisitionConfiguration(tenant, summary);
 
     const dates = { po: asOf, gr: addDays(asOf, 1), invoice: addDays(asOf, 2), productionStart: addDays(asOf, 3), productionFinish: addDays(asOf, 4), issue: addDays(asOf, 5), receipt: addDays(asOf, 6), sales: addDays(asOf, 7), delivery: addDays(asOf, 8), billing: addDays(asOf, 8) };

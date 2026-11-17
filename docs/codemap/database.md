@@ -15,13 +15,13 @@
 - `modules/finance/gl-account-group-schema.ts`: gl_account_group, gl_account_group_field_status, group_chart_accounts
 - `modules/finance/schema.ts`: accounting_reversal_link, accrual_document, asset_assignment, asset_class, asset_depreciation, asset_depreciation_posting, asset_depreciation_run, asset_depreciation_run_item, asset_retirement, asset_transaction, asset_transaction_type, carryforward_result, carryforward_run, clearing_reset, closing_execution_log, closing_task_dependency, closing_task_event, closing_task_instance, closing_task_list, closing_task_template, closing_task_template_dependency, consolidation_account_mapping, consolidation_area, consolidation_data_basis, consolidation_dimension, consolidation_execution, consolidation_execution_log, consolidation_group, consolidation_group_account, consolidation_method, consolidation_task, consolidation_task_status, consolidation_unit, consolidation_unit_assignment, consolidation_version, credit_block_reason, credit_change_audit, credit_determination, credit_release_event, credit_representative_group, credit_risk_category, customer_credit, customer_credit_group, customer_down_payment, customer_down_payment_clearing, customer_down_payment_clearing_item, customer_down_payment_request, depreciation_area, depreciation_key, down_payment_request_fulfillment, dunning_notice, dunning_run, dunning_run_account, dunning_run_company, dunning_run_item, financial_statement_assignment, financial_statement_node, financial_statement_version, fixed_asset, fx_valuation_item, fx_valuation_run, gl_account, gl_account_company, gl_account_transfer_result, gl_account_transfer_run, gl_clearing_allocation, gl_clearing_residual, grir_reclass_item, grir_reclass_run, incoming_payment, intercompany_clearing_config, intercompany_document_header, journal_entry, journal_entry_line, journal_posting_request, outgoing_payment, parked_journal_header, parked_journal_line, payment_document, payment_proposal_item, payment_run, payment_run_company, payment_run_method, residual_reason, reversal_reason, tax_return_run, vendor_down_payment, vendor_down_payment_clearing, vendor_down_payment_request, vendor_dp_request_fulfillment, vendor_invoice, vendor_invoice_line
 
-### foundation (94)
+### foundation (95)
 - `modules/foundation/business-partner-schema.ts`: bp_role, business_partner, industry, industry_text
 - `modules/foundation/central-address-schema.ts`: central_address
 - `modules/foundation/characteristic-schema.ts`: characteristic, characteristic_value, class_assignment, class_type, classification_class, release_code, release_group, release_strategy, release_strategy_criterion, release_strategy_step
 - `modules/foundation/customer-company-schema.ts`: customer_company_code
 - `modules/foundation/customer-sales-area-schema.ts`: customer_sales_area
-- `modules/foundation/output-schema.ts`: output_condition_record, output_message, output_type
+- `modules/foundation/output-schema.ts`: document_layout, output_condition_record, output_message, output_type
 - `modules/foundation/partner-bank-country-profile-schema.ts`: partner_bank_country_profile
 - `modules/foundation/partner-bank-profile-activation-audit-schema.ts`: partner_bank_profile_activation_audit
 - `modules/foundation/partner-bank-schema.ts`: partner_bank
@@ -96,7 +96,7 @@
 | classification_class | foundation | inventory, platform/tenancy |
 | client | platform/tables | finance, platform, platform/tenancy, purchasing |
 | client_settings | platform/tables | platform, platform/tenancy |
-| company_code | foundation | audit, finance, inventory, people, platform, platform/periods, platform/tenancy, production, purchasing, sales |
+| company_code | foundation | audit, finance, inventory, output, people, platform, platform/periods, platform/tenancy, production, purchasing, sales |
 | config_activity | platform/tables | platform/tenancy |
 | config_activity_status | platform/tables | foundation, platform/tenancy |
 | controlling_area | foundation | inventory, platform/tenancy, production |
@@ -126,6 +126,7 @@
 | division | foundation | platform/tenancy |
 | document_flow_link | platform/tables | platform/document |
 | document_index | platform/tables | foundation, platform/document |
+| document_layout | foundation | output |
 | document_release | purchasing | inventory, platform/attention, production |
 | document_status_history | platform/tables | platform/document |
 | document_type | foundation | finance, platform/posting, platform/tenancy |
@@ -179,7 +180,7 @@
 | number_range_object | platform/tables | foundation, inventory, platform/tenancy |
 | outgoing_payment | finance | dev/walkthrough-asset.ts |
 | output_condition_record | foundation | sales |
-| output_message | foundation | inventory, sales |
+| output_message | foundation | inventory, output, sales |
 | output_type | foundation | inventory, sales |
 | parked_supplier_invoice | purchasing | foundation |
 | password_reset_token | platform/tables | platform |

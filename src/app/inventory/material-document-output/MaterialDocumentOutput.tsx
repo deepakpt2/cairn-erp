@@ -3,9 +3,11 @@
 import { useActionState } from 'react';
 
 import { t } from '@/platform/i18n';
+import type { LetterheadView } from '@/modules/output/document-layout';
+import { DocumentFooter, DocumentLetterhead, DownloadPdfButton, PrintButton, PrintNote } from '@/ui/output/DocumentPrint';
 import type { OutputListResult, OutputSelection } from '@/modules/inventory/material-document-output';
 import {
-  dispatchOneAction, recipientAction, runOutputsAction, type OutputActionState,
+  dispatchOneAction, downloadSlipPdfAction, recipientAction, runOutputsAction, type OutputActionState,
 } from './actions';
 
 const INITIAL: OutputActionState = { ok: false, message: '' };
@@ -15,11 +17,12 @@ const STATUS_ALIAS: Record<string, string> = { PENDING: '0', PROCESSED: '1', ERR
 const MEDIUM_ALIAS: Record<string, string> = { PRINT: '1', EMAIL: '5' };
 const DISPATCH_ALIAS: Record<string, string> = { IMMEDIATE: '1', PERIODIC: '3' };
 
-export default function MaterialDocumentOutput({ result, selection, slip, route }: {
+export default function MaterialDocumentOutput({ result, selection, slip, route, letterheads }: {
   result: OutputListResult | null;
   selection: OutputSelection;
-  slip: { documentNumber: string; text: string } | null;
+  slip: { documentNumber: string; text: string; companyCode: string | null; stored: boolean } | null;
   route: string;
+  letterheads: Record<string, LetterheadView>;
 }) {
   const [runState, runAction, running] = useActionState(runOutputsAction, INITIAL);
   const [oneState, oneAction, dispatching] = useActionState(dispatchOneAction, INITIAL);
@@ -113,9 +116,23 @@ export default function MaterialDocumentOutput({ result, selection, slip, route 
       {slip && (
         <section aria-labelledby="output-slip" className="panel p-4">
           <h2 id="output-slip" className="text-sm font-semibold">{t('mb90.slip')} · {slip.documentNumber}</h2>
-          <pre data-slip={slip.documentNumber} className="mt-2 overflow-x-auto border border-line bg-surface-muted p-3 text-xs leading-5">
-            {slip.text}
-          </pre>
+          {!slip.stored ? (
+            <p className="mt-1 text-xs text-ink-faint">
+              Nothing has been rendered for this document yet, so this is read from the document as it stands
+              now. Once the OUTPUT.DISPATCH job has processed it, this shows what was sent.
+            </p>
+          ) : null}
+          <div data-print-root className="mt-2 border border-line p-3">
+            <DocumentLetterhead layout={letterheads[slip.companyCode ?? '']} title={t('mb90.slip')} />
+            <pre data-slip={slip.documentNumber} className="mt-2 overflow-x-auto border border-line bg-surface-muted p-3 text-xs leading-5">
+              {slip.text}
+            </pre>
+            <DocumentFooter layout={letterheads[slip.companyCode ?? '']} />
+            <div data-print-hide className="mt-3 flex flex-wrap items-center gap-3">
+              <PrintButton />
+            </div>
+            <PrintNote />
+          </div>
         </section>
       )}
 
@@ -187,6 +204,14 @@ export default function MaterialDocumentOutput({ result, selection, slip, route 
                             {t('mb90.dispatch')}
                           </button>
                         </form>
+                        <DownloadPdfButton
+                          action={downloadSlipPdfAction}
+                          fields={{
+                            documentNumber: row.documentNumber, outputType: row.outputType,
+                            transmissionMedium: row.transmissionMedium,
+                          }}
+                          disabled={!row.renderedDocument}
+                        />
                         <a
                           className="link text-xs"
                           href={`${route}?preview=${encodeURIComponent(row.documentNumber)}`}

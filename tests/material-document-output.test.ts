@@ -14,6 +14,8 @@ import {
   setRecipient,
 } from '../src/modules/inventory/material-document-output';
 import { createTenant, destroyTenant } from './helpers';
+import { runOutputDispatch } from './helpers/output-dispatch';
+import { saveMailConfig } from '../src/platform/mail/service';
 import { listInbox } from '../src/platform/notification/notify';
 import { registerJob } from '../src/platform/job/registry';
 import { ensureDefinition } from '../src/platform/job/queue';
@@ -47,10 +49,17 @@ describe('SCR-135 material document output (MB90)', () => {
   beforeAll(async () => {
     const tenant = await createTenant('scr135-mb90');
     client = tenant.client;
+    // An EMAIL output goes to the mail queue, which needs a node in use. Nothing is sent.
+    await saveMailConfig({
+      client, changedBy: ACTOR, host: 'smtp.example', port: 587, encryption: 'STARTTLS', username: '',
+      password: '', clearPassword: false, senderAddress: 'erp@example.com', senderName: 'ERP', isEnabled: true,
+    }, ['CFG.PLT.MAIL.DEFINE']);
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
-        insert into plant (client, plant, name, country, created_by)
-        values (${client}, '1000', 'Output plant', 'KW', ${ACTOR}) on conflict do nothing
+        insert into plant (client, plant, name, country, company_code, created_by)
+        select ${client}, '1000', 'Output plant', 'KW', c.company_code, ${ACTOR}
+          from (select company_code from company_code where client = ${client} order by company_code limit 1) c
+        on conflict do nothing
       `);
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
@@ -93,11 +102,15 @@ describe('SCR-135 material document output (MB90)', () => {
     if (client) await destroyTenant(client);
   });
 
-  it('determines and dispatches a receipt document’s slip as it posts', async () => {
+  it('determines a receipt document’s slip as it posts, and the job dispatches it', async () => {
     await withTenant(client, async (tx) => {
       const created = await recordOutputsForPostedDocument(tx, client, receiptDoc, ACTOR);
       expect(created).toBe(1);
     });
+    // Posting only wrote the message and queued the job: nothing is rendered in the transaction.
+    const waiting = await listOutputMessages({ client, selection: { documentFrom: receiptDoc, documentTo: receiptDoc } });
+    expect(waiting.rows[0]).toMatchObject({ status: 'PENDING', sendCount: 0, renderedDocument: null });
+    await runOutputDispatch(client);
     const list = await listOutputMessages({ client, selection: { documentFrom: receiptDoc, documentTo: receiptDoc } });
     expect(list.rows).toHaveLength(1);
     const row = list.rows[0];
@@ -172,24 +185,30 @@ describe('SCR-135 material document output (MB90)', () => {
       `);
     });
 
-    const failed = await dispatchMessage({
+    const queuedFirst = await dispatchMessage({
       client, changedBy: ACTOR, documentNumber: emailDoc, outputType: 'WE01', transmissionMedium: 'EMAIL',
     });
+    expect(queuedFirst.status).toBe('PENDING');
+    await runOutputDispatch(client);
+    const failed = (await listOutputMessages({ client, selection: { documentFrom: emailDoc, documentTo: emailDoc, transmissionMedium: 'EMAIL' } })).rows[0];
     expect(failed.status).toBe('ERROR');
     expect(failed.errorText).toMatch(/needs a recipient/);
-    expect(failed.slip).toBeNull();
+    expect(failed.renderedDocument).toBeNull();
 
     await setRecipient({
       client, changedBy: ACTOR, documentNumber: emailDoc, outputType: 'WE01',
       transmissionMedium: 'EMAIL', recipient: 'warehouse@example.test',
     });
-    const done = await dispatchMessage({
+    const requeued = await dispatchMessage({
       client, changedBy: ACTOR, documentNumber: emailDoc, outputType: 'WE01', transmissionMedium: 'EMAIL',
     });
+    expect(requeued.status).toBe('PENDING');
+    await runOutputDispatch(client);
+    const done = (await listOutputMessages({ client, selection: { documentFrom: emailDoc, documentTo: emailDoc, transmissionMedium: 'EMAIL' } })).rows[0];
     expect(done.status).toBe('PROCESSED');
     expect(done.sendCount).toBe(1);
     expect(done.errorText).toBeNull();
-    expect(done.slip).toContain(emailDoc);
+    expect(done.renderedDocument).toContain(emailDoc);
   });
 
   it('refuses a second dispatch of a processed message', async () => {
@@ -202,9 +221,15 @@ describe('SCR-135 material document output (MB90)', () => {
   });
 
   it('dispatches the pending periodic queue in one run', async () => {
+    // The sweeps that ran for the tests above already processed this message (the job takes every
+    // PENDING row); put it back to waiting so the screen's run has something to queue.
+    await withTenant(client, (tx) => tx.execute(sql`
+      update output_message set status = 'PENDING', send_count = 0, rendered_document = null, last_processed_at = null
+       where client = ${client} and output_type = 'WA01' and document_number = ${issueDoc}
+    `));
     const run = await dispatchPending({ client, changedBy: ACTOR, selection: { outputType: 'WA01' } });
-    expect(run.dispatched).toBe(1);
-    expect(run.failed).toBe(0);
+    expect(run.queued).toBe(1);
+    await runOutputDispatch(client);
     const list = await listOutputMessages({ client, selection: { outputType: 'WA01' } });
     expect(list.rows[0].status).toBe('PROCESSED');
     expect(list.rows[0].sendCount).toBe(1);
@@ -313,9 +338,12 @@ describe('SCR-135 material document output (MB90)', () => {
       });
     });
 
-    const failed = await dispatchMessage({
+    const queued = await dispatchMessage({
       client, changedBy: ACTOR, documentNumber: notifyDoc, outputType: 'WE01', transmissionMedium: 'EMAIL',
     });
+    expect(queued.status).toBe('PENDING');
+    await runOutputDispatch(client);
+    const failed = (await listOutputMessages({ client, selection: { documentFrom: notifyDoc, documentTo: notifyDoc } })).rows[0];
     expect(failed.status).toBe('ERROR');
 
     // One run per plant, and both attributed to the output rather than to the
@@ -338,9 +366,11 @@ describe('SCR-135 material document output (MB90)', () => {
 
     // Dispatching it again fails the same way, and that is the same episode:
     // both clerks already hold the message, unread.
-    const again = await dispatchMessage({
+    await dispatchMessage({
       client, changedBy: ACTOR, documentNumber: notifyDoc, outputType: 'WE01', transmissionMedium: 'EMAIL',
     });
+    await runOutputDispatch(client);
+    const again = (await listOutputMessages({ client, selection: { documentFrom: notifyDoc, documentTo: notifyDoc } })).rows[0];
     expect(again.status).toBe('ERROR');
     expect(await fanoutRuns(notifyDoc)).toHaveLength(2);
   });

@@ -598,6 +598,21 @@ export const SCREENS: readonly ScreenLink[] = [
     },
   },
   {
+    id: "/config/document-layout",
+    path: "/config/document-layout",
+    query: {},
+    code: "CFG.FND.DOCUMENT.LAYOUT.DEFINE",
+    title: "Document layout",
+    area: "configuration",
+    family: "foundation",
+    accepts: ["company"],
+    nav: {
+      module: "admin",
+      category: "Platform operations",
+      activity: "Mail & output",
+    },
+  },
+  {
     id: "/config/credit-control-areas",
     path: "/config/credit-control-areas",
     query: {},

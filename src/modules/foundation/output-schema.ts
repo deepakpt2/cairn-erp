@@ -23,6 +23,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import { auditColumns, client } from '../../platform/tables/tenancy';
+import { companyCode } from './schema';
 
 /**
  * The tenant column, in the shape every schema file in the package declares it: the first column on
@@ -225,4 +226,34 @@ export const outputMessage = pgTable('output_message', {
   check('output_message_reissue_ck', sql`${t.issueNumber} = 1 or ${t.reissueReason} is not null`),
   index('output_message_queue_idx').on(t.client, t.status, t.createdAt),
   index('output_message_document_idx').on(t.client, t.documentCategory, t.documentNumber),
+]);
+
+/**
+ * The letterhead of the documents a company code sends (MAIL-03): the graphic, the header and footer
+ * text, and *overrides*. The company's name and address are the company code's own and are read from
+ * it; empty here means "use the company code". One layout per company code, never one per document.
+ *
+ * The logo is base64 in text, not bytea: at most 256 KB decoded, served straight back as a data: URI.
+ * Its bytes never enter a change document or a log.
+ */
+export const documentLayout = pgTable('document_layout', {
+  client: tenant(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  displayName: varchar('display_name', { length: 160 }),
+  addressOverride: text('address_override'),
+  headerText: varchar('header_text', { length: 200 }),
+  footerText: text('footer_text'),
+  logoData: text('logo_data'),
+  logoMime: varchar('logo_mime', { length: 30 }),
+  logoFileName: varchar('logo_file_name', { length: 120 }),
+  showPageNumbers: boolean('show_page_numbers').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode] }),
+  foreignKey({
+    name: 'document_layout_company_code_fk',
+    columns: [t.client, t.companyCode],
+    foreignColumns: [companyCode.client, companyCode.companyCode],
+  }).onDelete('cascade'),
+  check('document_layout_logo_mime_ck', sql`${t.logoMime} is null or ${t.logoMime} in ('image/png', 'image/jpeg')`),
 ]);

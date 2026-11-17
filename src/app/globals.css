@@ -311,3 +311,63 @@
     opacity: 1;
   }
 }
+
+/*
+ * Printing an output document (MAIL-03 §8). Scoped to the `printing` class, which the Print button adds
+ * around window.print() and always removes again, so printing any other page is unaffected.
+ *
+ * The button also marks the region it printed (`data-print-active`): a queue shows many documents, and
+ * only the chosen one is printed. Everything inside <main> that neither contains nor sits inside that
+ * region is hidden, which is what keeps sibling rows and controls off the page.
+ */
+@media print {
+  @page { size: A4; margin: 15mm; }
+
+  /*
+   * 1. The application frame. <main> sits inside a flex row beside the navigation sidebar, not directly
+   *    under .ledger-frame, so the frame is hidden down the path to <main> rather than at one level.
+   */
+  body.printing .ledger-frame > *:not(:has(main)) { display: none !important; }
+  body.printing .ledger-frame *:has(> main) > *:not(main) { display: none !important; }
+  body.printing .ledger-frame,
+  body.printing .ledger-frame *:has(> main) { display: block !important; }
+  body.printing main { padding: 0 !important; margin: 0 !important; }
+
+  /* 2. Every block that neither contains nor belongs to the printable region. */
+  body.printing main > *:not(:has([data-print-root])) { display: none !important; }
+  body.printing main *:not(:has([data-print-active])):not([data-print-active]):not([data-print-active] *) { display: none !important; }
+  body.printing [data-print-root]:not([data-print-active]) { display: none !important; }
+
+  /* 3. The printable region itself: no panel chrome, no scrolling box. */
+  body.printing [data-print-root] {
+    border: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    max-width: none !important;
+  }
+
+  /* 4. The document body. Matches the PDF: Courier, black on white. */
+  body.printing pre {
+    border: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace !important;
+    font-size: 9pt !important;
+    line-height: 1.3 !important;
+    white-space: pre !important;
+  }
+
+  /* 5. Controls inside the region, and link URLs the browser would append. */
+  body.printing [data-print-hide] { display: none !important; }
+  body.printing button,
+  body.printing input,
+  body.printing select,
+  body.printing textarea,
+  body.printing form { display: none !important; }
+  body.printing a[href]::after { content: none !important; }
+
+  /* 6. Keep the logo. */
+  body.printing img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

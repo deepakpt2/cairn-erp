@@ -11,6 +11,7 @@ import {
   type SalesOutputCategory,
   type SalesOutputSelection,
 } from '@/modules/sales/output';
+import { letterheadViews } from '@/modules/output/document-layout';
 import SalesOutput from './SalesOutput';
 
 export const dynamic = 'force-dynamic';
@@ -60,6 +61,8 @@ export default async function SalesOutputPage({ searchParams }: {
     salesOutputTypeChoices(client),
   ]);
 
+  const letterheads = await letterheadViews(client, queue.rows.map((row) => row.companyCode ?? ''));
+
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
@@ -91,6 +94,7 @@ export default async function SalesOutputPage({ searchParams }: {
         canProcess={can(session, SALES_OUTPUT_CAPABILITY)}
         canAdmin={can(session, SALES_OUTPUT_ADMIN_CAPABILITY)}
         today={new Date().toISOString().slice(0, 10)}
+        letterheads={letterheads}
       />
     </div>
   );

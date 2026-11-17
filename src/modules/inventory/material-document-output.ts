@@ -38,6 +38,9 @@ import {
   enqueueOutputFailed,
 } from '../foundation/output-notify';
 import { outputMessage, outputType } from '../foundation/output-schema';
+import { enqueueOutputDispatch, enqueueOutputSweep, outputMessageKey } from '../output/dispatch-queue';
+import { renderStoredPdf } from '../output/download-pdf';
+import { emailRenderedDocument } from '../output/email-dispatch';
 import {
   material, materialDocument, materialDocumentLine, movementType,
 } from './schema';
@@ -231,8 +234,11 @@ export async function recordOutputsForDocument(
   return created;
 }
 
-/** Dispatch the immediate messages of a document written in this transaction. */
-async function dispatchImmediateInTx(tx: Tx, client: string, documentNumber: string, changedBy: string) {
+/**
+ * Queue the immediate messages of a document written in this transaction (MAIL-03). Nothing is
+ * rendered here: the OUTPUT.DISPATCH job renders the slip and sends it.
+ */
+async function dispatchImmediateInTx(tx: Tx, client: string, documentNumber: string, _changedBy: string) {
   const due = await tx.select().from(outputMessage).where(and(
     eq(outputMessage.client, client),
     eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
@@ -240,32 +246,7 @@ async function dispatchImmediateInTx(tx: Tx, client: string, documentNumber: str
     eq(outputMessage.status, 'PENDING'),
     eq(outputMessage.dispatchTime, 'IMMEDIATE'),
   ));
-  for (const message of due) {
-    const [type] = await tx.select().from(outputType).where(and(
-      eq(outputType.client, client), eq(outputType.outputType, message.outputType),
-    ));
-    if (!type?.isActive) continue;
-    if (message.transmissionMedium === 'EMAIL' && !message.recipient) continue;
-    // Rendered here, inside the posting transaction: a separate connection would not see a document
-    // that is not committed yet, and what is stored is what was sent.
-    const slip = await renderSlipIn(tx, client, documentNumber);
-    await tx.update(outputMessage).set({
-      status: 'PROCESSED',
-      sendCount: message.sendCount + 1,
-      lastProcessedAt: new Date(),
-      errorText: null,
-      renderedDocument: slip,
-      changedBy,
-      changedAt: new Date(),
-    }).where(and(
-      eq(outputMessage.client, client),
-      eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
-      eq(outputMessage.documentNumber, documentNumber),
-      eq(outputMessage.outputType, message.outputType),
-      eq(outputMessage.transmissionMedium, message.transmissionMedium),
-      eq(outputMessage.issueNumber, message.issueNumber),
-    ));
-  }
+  for (const message of due) await enqueueOutputDispatch(tx, { client, message });
 }
 
 /**
@@ -588,25 +569,16 @@ export async function renderSlip(input: {
 }
 
 /**
- * Dispatch one message: render the slip, mark it PROCESSED, count the send. An
- * EMAIL with no recipient fails and records why; a PROCESSED message refuses,
- * because a repeat is a new output.
+ * Dispatch one message — which now means *queue* it (MAIL-03): the message is put at PENDING and the
+ * OUTPUT.DISPATCH job renders the slip, emails it where that is the medium, and moves it to PROCESSED
+ * or ERROR. A PROCESSED message refuses, because a repeat is a new output.
  */
 export async function dispatchMessage(input: {
   client: string; changedBy: string; documentNumber: string;
   outputType: string; transmissionMedium: string;
 }): Promise<DispatchResult> {
-  const slip = await renderSlip({ client: input.client, documentNumber: input.documentNumber });
-
   return withTenant(input.client, async (tx) => {
-    const [message] = await tx.select().from(outputMessage).where(and(
-      eq(outputMessage.client, input.client),
-      eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
-      eq(outputMessage.documentNumber, input.documentNumber),
-      eq(outputMessage.issueNumber, 1),
-      eq(outputMessage.outputType, input.outputType),
-      eq(outputMessage.transmissionMedium, input.transmissionMedium),
-    ));
+    const [message] = await tx.select().from(outputMessage).where(messageWhere(input.client, input));
     if (!message) {
       throw new MaterialDocumentOutputError(
         `No ${input.outputType} output stands for material document ${input.documentNumber}.`,
@@ -619,107 +591,150 @@ export async function dispatchMessage(input: {
         'A repeat dispatch is a new output, which is deferred by name.',
       );
     }
-
-    const now = new Date();
-    if (message.transmissionMedium === 'EMAIL' && !message.recipient) {
-      // Whoever can put this right holds INV.MATERIALDOC.RECEIVEPRINT over the
-      // plant the document's lines stand in. A material document can span
-      // plants, so there is one fan-out per plant: a holder scoped to one of
-      // them is not responsible for the others.
-      const lines = await tx.select({ plant: materialDocumentLine.plant }).from(materialDocumentLine)
-        .where(and(
-          eq(materialDocumentLine.client, input.client),
-          eq(materialDocumentLine.materialDocumentNumber, input.documentNumber),
-        ));
-      const plants = [...new Set(lines.map((line) => line.plant).filter((plant) => plant !== ''))];
-
-      await enqueueOutputFailed(tx, {
-        client: input.client,
-        objectClass: MATERIAL_DOC_OUTPUT_NOTIFICATION_CLASS,
-        documentNumber: input.documentNumber,
-        outputType: message.outputType,
-        transmissionMedium: message.transmissionMedium,
-        issueNumber: message.issueNumber,
-        capability: MATERIAL_DOC_OUTPUT_CAPABILITY,
-        orgs: plants.map((plant) => ({ plant })),
-        previousStatus: message.status,
-      });
-
-      const [failed] = await tx.update(outputMessage).set({
-        status: 'ERROR',
-        errorText: 'An EMAIL output needs a recipient and none stands on the message.',
-        lastProcessedAt: now,
-        changedBy: input.changedBy, changedAt: now,
-      }).where(and(
-        eq(outputMessage.client, input.client),
-        eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
-        eq(outputMessage.documentNumber, input.documentNumber),
-        eq(outputMessage.issueNumber, 1),
-        eq(outputMessage.outputType, input.outputType),
-        eq(outputMessage.transmissionMedium, input.transmissionMedium),
-      )).returning();
-      return {
-        documentNumber: failed.documentNumber,
-        outputType: failed.outputType,
-        transmissionMedium: failed.transmissionMedium,
-        status: 'ERROR' as OutputStatus,
-        sendCount: failed.sendCount,
-        lastProcessedAt: failed.lastProcessedAt ? new Date(failed.lastProcessedAt).toISOString() : null,
-        errorText: failed.errorText,
-        slip: null,
-      };
+    if (message.status !== 'PENDING') {
+      await tx.update(outputMessage).set({
+        // errorText stays, so a second failure is the same episode (see the sales module).
+        status: 'PENDING', changedBy: input.changedBy, changedAt: new Date(),
+      }).where(messageWhere(input.client, input));
     }
-
-    const [done] = await tx.update(outputMessage).set({
-      status: 'PROCESSED',
-      sendCount: message.sendCount + 1,
-      lastProcessedAt: now,
-      errorText: null,
-      renderedDocument: slip,
-      changedBy: input.changedBy, changedAt: now,
-    }).where(and(
-      eq(outputMessage.client, input.client),
-      eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
-      eq(outputMessage.documentNumber, input.documentNumber),
-      eq(outputMessage.issueNumber, 1),
-      eq(outputMessage.outputType, input.outputType),
-      eq(outputMessage.transmissionMedium, input.transmissionMedium),
-    )).returning();
-
+    await enqueueOutputDispatch(tx, {
+      client: input.client, message, manual: { triggeredBy: input.changedBy },
+    });
     return {
-      documentNumber: done.documentNumber,
-      outputType: done.outputType,
-      transmissionMedium: done.transmissionMedium,
-      status: 'PROCESSED' as OutputStatus,
-      sendCount: done.sendCount,
-      lastProcessedAt: done.lastProcessedAt ? new Date(done.lastProcessedAt).toISOString() : null,
+      documentNumber: message.documentNumber,
+      outputType: message.outputType,
+      transmissionMedium: message.transmissionMedium,
+      status: 'PENDING' as OutputStatus,
+      sendCount: message.sendCount,
+      lastProcessedAt: message.lastProcessedAt ? new Date(message.lastProcessedAt).toISOString() : null,
       errorText: null,
-      slip,
+      slip: null,
     };
   });
 }
 
-/** Dispatch every PENDING message the selection names — the periodic run. */
+function messageWhere(client: string, key: {
+  documentNumber: string; outputType: string; transmissionMedium: string;
+}) {
+  return and(
+    eq(outputMessage.client, client),
+    eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
+    eq(outputMessage.documentNumber, key.documentNumber),
+    eq(outputMessage.issueNumber, 1),
+    eq(outputMessage.outputType, key.outputType),
+    eq(outputMessage.transmissionMedium, key.transmissionMedium),
+  );
+}
+
+/**
+ * The job's per-message work (MAIL-03): render the slip, email it with its PDF where that is the
+ * medium, and move the message to PROCESSED or ERROR. Returns SKIPPED for a message whose output type
+ * has been deactivated — it stays PENDING, as it always did.
+ */
+export async function processMaterialOutputMessage(
+  tx: Tx, client: string, changedBy: string, message: typeof outputMessage.$inferSelect,
+): Promise<{ status: 'PROCESSED' | 'ERROR' | 'SKIPPED'; errorText: string | null; replacedCharacters: number }> {
+  const [type] = await tx.select().from(outputType).where(and(
+    eq(outputType.client, client), eq(outputType.outputType, message.outputType),
+  ));
+  if (!type?.isActive) return { status: 'SKIPPED', errorText: null, replacedCharacters: 0 };
+
+  const now = new Date();
+  const where = messageWhere(client, message);
+
+  const fail = async (errorText: string) => {
+    // Whoever can put this right holds INV.MATERIALDOC.RECEIVEPRINT over the plant the document's
+    // lines stand in. A material document can span plants, so there is one fan-out per plant: a
+    // holder scoped to one of them is not responsible for the others.
+    const plants = await plantsOf(tx, client, message.documentNumber);
+    await enqueueOutputFailed(tx, {
+      client,
+      objectClass: MATERIAL_DOC_OUTPUT_NOTIFICATION_CLASS,
+      documentNumber: message.documentNumber,
+      outputType: message.outputType,
+      transmissionMedium: message.transmissionMedium,
+      issueNumber: message.issueNumber,
+      capability: MATERIAL_DOC_OUTPUT_CAPABILITY,
+      orgs: plants.map((plant) => ({ plant })),
+      previousStatus: message.errorText ? 'ERROR' : message.status,
+    });
+    await tx.update(outputMessage).set({
+      status: 'ERROR', errorText: errorText.slice(0, 200), lastProcessedAt: now,
+      changedBy, changedAt: now,
+    }).where(where);
+    return { status: 'ERROR' as const, errorText, replacedCharacters: 0 };
+  };
+
+  if (message.transmissionMedium === 'EMAIL' && !message.recipient) {
+    return fail('An EMAIL output needs a recipient and none stands on the message.');
+  }
+
+  const slip = await renderSlipIn(tx, client, message.documentNumber);
+
+  let replacedCharacters = 0;
+  if (message.transmissionMedium === 'EMAIL') {
+    const companyCode = await companyCodeOf(tx, client, message.documentNumber);
+    if (!companyCode) {
+      return fail('The plant of this document is not assigned to a company code, so there is no letterhead to send it on.');
+    }
+    const mailed = await emailRenderedDocument(tx, {
+      client, companyCode,
+      title: type.description,
+      documentNumber: message.documentNumber,
+      objectClass: 'output_message',
+      objectKey: outputMessageKey(message),
+      recipient: message.recipient!,
+      renderedDocument: slip,
+      changedBy,
+    });
+    if (!mailed.ok) return fail(mailed.errorText);
+    replacedCharacters = mailed.replacedCharacters;
+  }
+
+  await tx.update(outputMessage).set({
+    status: 'PROCESSED',
+    sendCount: message.sendCount + 1,
+    lastProcessedAt: now,
+    errorText: null,
+    renderedDocument: slip,
+    changedBy, changedAt: now,
+  }).where(where);
+  return { status: 'PROCESSED', errorText: null, replacedCharacters };
+}
+
+async function plantsOf(tx: Tx, client: string, documentNumber: string): Promise<string[]> {
+  const lines = await tx.select({ plant: materialDocumentLine.plant }).from(materialDocumentLine)
+    .where(and(
+      eq(materialDocumentLine.client, client),
+      eq(materialDocumentLine.materialDocumentNumber, documentNumber),
+    ));
+  return [...new Set(lines.map((line) => line.plant).filter((plant) => plant !== ''))];
+}
+
+/** The company code of the document's first plant that has one: plant -> company code. */
+async function companyCodeOf(tx: Tx, client: string, documentNumber: string): Promise<string | null> {
+  for (const code of await plantsOf(tx, client, documentNumber)) {
+    const [row] = await tx.select({ companyCode: plantTable.companyCode }).from(plantTable).where(and(
+      eq(plantTable.client, client), eq(plantTable.plant, code),
+    ));
+    if (row?.companyCode) return row.companyCode;
+  }
+  return null;
+}
+
+/** Queue a dispatch run for the PENDING messages the selection names. */
 export async function dispatchPending(input: {
   client: string; changedBy: string; selection?: OutputSelection;
-}): Promise<{ dispatched: number; failed: number; results: DispatchResult[] }> {
+}): Promise<{ queued: number }> {
   const list = await listOutputMessages({
     client: input.client,
     selection: { ...(input.selection ?? {}), status: 'PENDING', maxHits: MAX_HITS_CAP },
   });
-  const results: DispatchResult[] = [];
-  for (const row of list.rows) {
-    results.push(await dispatchMessage({
-      client: input.client, changedBy: input.changedBy,
-      documentNumber: row.documentNumber, outputType: row.outputType,
-      transmissionMedium: row.transmissionMedium,
-    }));
-  }
-  return {
-    dispatched: results.filter((r) => r.status === 'PROCESSED').length,
-    failed: results.filter((r) => r.status === 'ERROR').length,
-    results,
-  };
+  if (list.rows.length === 0) return { queued: 0 };
+  await withTenant(input.client, (tx) => enqueueOutputSweep(tx, {
+    client: input.client, triggeredBy: input.changedBy,
+  }));
+  return { queued: list.rows.length };
 }
 
 /** Set the recipient (and optionally the printer queue) on a message. */
@@ -785,4 +800,32 @@ export async function setRecipient(input: {
       companyCodes: [],
     };
   });
+}
+
+
+/** The PDF of one stored message, for the Download PDF control. Refuses a message not yet rendered. */
+export async function materialOutputPdf(input: {
+  client: string; documentNumber: string; outputType: string; transmissionMedium: string;
+}) {
+  return renderStoredPdf({
+    client: input.client,
+    load: async (tx) => {
+      const [message] = await tx.select().from(outputMessage).where(messageWhere(input.client, input));
+      if (!message) return null;
+      const [type] = await tx.select().from(outputType).where(and(
+        eq(outputType.client, input.client), eq(outputType.outputType, message.outputType),
+      ));
+      return {
+        renderedDocument: message.renderedDocument,
+        title: type?.description ?? message.outputType,
+        documentNumber: message.documentNumber,
+        companyCode: await companyCodeOf(tx, input.client, message.documentNumber),
+      };
+    },
+  });
+}
+
+/** The company code a material document's letterhead comes from (its plant's). */
+export async function materialDocumentCompanyCode(client: string, documentNumber: string): Promise<string | null> {
+  return withTenant(client, (tx) => companyCodeOf(tx, client, documentNumber));
 }

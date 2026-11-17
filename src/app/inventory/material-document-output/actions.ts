@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { PdfDownloadError } from '@/modules/output/download-pdf';
+import type { PdfDownloadState } from '@/ui/output/DocumentPrint';
 import {
   MATERIAL_DOC_OUTPUT_CAPABILITY,
   MATERIAL_DOC_OUTPUT_ROUTE,
@@ -10,6 +12,7 @@ import {
   determineOutputs,
   dispatchMessage,
   dispatchPending,
+  materialOutputPdf,
   setRecipient,
   type OutputSelection,
 } from '@/modules/inventory/material-document-output';
@@ -61,7 +64,7 @@ export async function runOutputsAction(
       ok: true,
       message: `Determined ${determined.created} output${determined.created === 1 ? '' : 's'} over ${determined.examined} document${determined.examined === 1 ? '' : 's'}`
         + `${determined.transfers > 0 ? ` (${determined.transfers} transfer${determined.transfers === 1 ? '' : 's'} earned none)` : ''}; `
-        + `dispatched ${run.dispatched}, failed ${run.failed}.`,
+        + `${run.queued} queued for the OUTPUT.DISPATCH job, which renders and sends them within a couple of minutes.`,
     };
   } catch (error) {
     if (error instanceof MaterialDocumentOutputError) return { ok: false, message: error.message, remedy: error.remedy };
@@ -85,9 +88,10 @@ export async function dispatchOneAction(
       transmissionMedium: text(form, 'transmissionMedium'),
     });
     revalidatePath(MATERIAL_DOC_OUTPUT_ROUTE);
-    return result.status === 'PROCESSED'
-      ? { ok: true, message: `Dispatched ${result.outputType} for ${result.documentNumber}; send count ${result.sendCount}.` }
-      : { ok: false, message: `${result.outputType} for ${result.documentNumber} failed.`, remedy: result.errorText ?? undefined };
+    return {
+      ok: true,
+      message: `${result.outputType} for ${result.documentNumber} is queued. The OUTPUT.DISPATCH job renders and sends it within a couple of minutes; refresh to see it processed.`,
+    };
   } catch (error) {
     if (error instanceof MaterialDocumentOutputError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
@@ -115,6 +119,26 @@ export async function recipientAction(
     return { ok: true, message: `Recipient recorded for ${text(form, 'outputType')} on ${text(form, 'documentNumber')}.` };
   } catch (error) {
     if (error instanceof MaterialDocumentOutputError) return { ok: false, message: error.message, remedy: error.remedy };
+    throw error;
+  }
+}
+
+/** Download PDF: built from the message's stored rendering only; refuses a message with none. */
+export async function downloadSlipPdfAction(form: FormData): Promise<PdfDownloadState> {
+  const session = await requireSession(MATERIAL_DOC_OUTPUT_ROUTE);
+  if (!can(session, MATERIAL_DOC_OUTPUT_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the material document output capability.' };
+  }
+  try {
+    const pdf = await materialOutputPdf({
+      client: session.user.client,
+      documentNumber: text(form, 'documentNumber'),
+      outputType: text(form, 'outputType'),
+      transmissionMedium: text(form, 'transmissionMedium'),
+    });
+    return { ok: true, fileName: pdf.fileName, base64: pdf.base64, warning: pdf.warning };
+  } catch (error) {
+    if (error instanceof PdfDownloadError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }
 }

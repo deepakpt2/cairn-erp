@@ -773,6 +773,20 @@
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
+  "app/config/document-layout/DocumentLayoutForm.tsx": [
+    "app/config/document-layout/actions.ts",
+    "modules/output/document-layout.ts",
+    "ui/output/DocumentPrint.tsx"
+  ],
+  "app/config/document-layout/actions.ts": [
+    "modules/output/document-layout.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/config/document-layout/page.tsx": [
+    "app/config/document-layout/DocumentLayoutForm.tsx",
+    "modules/output/document-layout.ts",
+    "platform/auth/current.ts"
+  ],
   "app/config/document-types/DocumentTypes.tsx": [
     "app/config/document-types/actions.ts",
     "modules/foundation/document-type-definition.ts",
@@ -3001,15 +3015,20 @@
   "app/inventory/material-document-output/MaterialDocumentOutput.tsx": [
     "app/inventory/material-document-output/actions.ts",
     "modules/inventory/material-document-output.ts",
-    "platform/i18n/index.ts"
+    "modules/output/document-layout.ts",
+    "platform/i18n/index.ts",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/inventory/material-document-output/actions.ts": [
     "modules/inventory/material-document-output.ts",
-    "platform/auth/current.ts"
+    "modules/output/download-pdf.ts",
+    "platform/auth/current.ts",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/inventory/material-document-output/page.tsx": [
     "app/inventory/material-document-output/MaterialDocumentOutput.tsx",
     "modules/inventory/material-document-output.ts",
+    "modules/output/document-layout.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
   ],
@@ -3553,12 +3572,15 @@
     "platform/mail/service.ts"
   ],
   "app/platform/mail/actions.ts": [
+    "modules/platform/user-admin.ts",
     "platform/auth/current.ts",
     "platform/mail/service.ts"
   ],
   "app/platform/mail/page.tsx": [
     "app/platform/mail/MailForms.tsx",
+    "modules/platform/user-admin.ts",
     "platform/auth/current.ts",
+    "platform/db/client.ts",
     "platform/mail/service.ts"
   ],
   "app/platform/notifications/[id]/page.tsx": [
@@ -4625,14 +4647,19 @@
   ],
   "app/sales/output/SalesOutput.tsx": [
     "app/sales/output/actions.ts",
-    "modules/sales/output.ts"
+    "modules/output/document-layout.ts",
+    "modules/sales/output.ts",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/sales/output/actions.ts": [
+    "modules/output/download-pdf.ts",
     "modules/sales/output.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/sales/output/page.tsx": [
     "app/sales/output/SalesOutput.tsx",
+    "modules/output/document-layout.ts",
     "modules/sales/output.ts",
     "platform/auth/current.ts"
   ],
@@ -5556,6 +5583,7 @@
     "platform/notification/jobs/fanout.ts"
   ],
   "modules/foundation/output-schema.ts": [
+    "modules/foundation/schema.ts",
     "platform/tables/tenancy.ts"
   ],
   "modules/foundation/partner-bank-country-profile-schema.ts": [
@@ -6190,6 +6218,9 @@
     "modules/foundation/output-schema.ts",
     "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
+    "modules/output/dispatch-queue.ts",
+    "modules/output/download-pdf.ts",
+    "modules/output/email-dispatch.ts",
     "platform/db/client.ts"
   ],
   "modules/inventory/material-document-reversal.ts": [
@@ -6520,6 +6551,42 @@
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
+  "modules/output/dispatch-queue.ts": [
+    "modules/foundation/output-notify.ts",
+    "platform/db/client.ts",
+    "platform/job/queue.ts"
+  ],
+  "modules/output/document-layout.ts": [
+    "modules/foundation/output-schema.ts",
+    "modules/foundation/schema.ts",
+    "platform/auth/pattern.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/output/download-pdf.ts": [
+    "modules/output/render-pdf.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/output/email-dispatch.ts": [
+    "modules/output/document-layout.ts",
+    "modules/output/render-pdf.ts",
+    "platform/db/client.ts",
+    "platform/mail/service.ts"
+  ],
+  "modules/output/jobs/dispatch.ts": [
+    "modules/foundation/output-notify.ts",
+    "modules/foundation/output-schema.ts",
+    "modules/inventory/material-document-output.ts",
+    "modules/output/dispatch-queue.ts",
+    "modules/sales/output.ts",
+    "platform/db/client.ts",
+    "platform/job/registry.ts",
+    "platform/job/types.ts"
+  ],
+  "modules/output/render-pdf.ts": [
+    "modules/output/document-layout.ts",
+    "platform/db/client.ts"
+  ],
   "modules/people/assignment.ts": [
     "modules/people/schema.ts",
     "platform/auth/current.ts",
@@ -6669,7 +6736,9 @@
     "platform/auth/session.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
-    "platform/tables/security.ts"
+    "platform/mail/service.ts",
+    "platform/tables/security.ts",
+    "platform/tables/tenancy.ts"
   ],
   "modules/production/availability-check.ts": [
     "modules/inventory/schema.ts",
@@ -7553,7 +7622,11 @@
     "modules/foundation/business-partner-schema.ts",
     "modules/foundation/output-notify.ts",
     "modules/foundation/output-schema.ts",
+    "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
+    "modules/output/dispatch-queue.ts",
+    "modules/output/download-pdf.ts",
+    "modules/output/email-dispatch.ts",
     "modules/sales/partners.ts",
     "modules/sales/schema.ts",
     "platform/change/index.ts",
@@ -8291,6 +8364,9 @@
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts"
   ],
+  "ui/output/DocumentPrint.tsx": [
+    "modules/output/document-layout.ts"
+  ],
   "ui/shell/CommandBar.tsx": [
     "app/command.ts",
     "platform/i18n/index.ts",
@@ -8405,6 +8481,7 @@
     "worker/jobs.ts"
   ],
   "worker/jobs.ts": [
+    "modules/output/jobs/dispatch.ts",
     "modules/people/jobs/grant-expiring.ts",
     "platform/mail/jobs/send.ts",
     "platform/notification/jobs/fanout.ts"

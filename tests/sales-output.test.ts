@@ -68,6 +68,8 @@ import { ensureDefinition } from '../src/platform/job/queue';
 import { runClaimed } from '../src/platform/job/execute';
 import { fanoutJob, FANOUT_JOB } from '../src/platform/notification/jobs/fanout';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
+import { runOutputDispatch } from './helpers/output-dispatch';
+import { saveMailConfig } from '../src/platform/mail/service';
 
 const ACTOR = 'SD9252_OUTPUT';
 const AREA = 'CCA1';
@@ -297,6 +299,13 @@ describe('the document the customer receives: output (9252)', () => {
       amount: 25, priceUnit: 1, validityFrom: '2026-01-01', validityTo: '2026-12-31',
       supersedeStanding: false,
     });
+    // An EMAIL output is handed to the mail queue, so the tenant needs a mail node in use. Nothing is
+    // sent: the queue is only written.
+    await saveMailConfig({
+      client: tenant.client, changedBy: ACTOR, host: 'smtp.example', port: 587, encryption: 'STARTTLS',
+      username: '', password: '', clearPassword: false, senderAddress: 'erp@example.com',
+      senderName: 'ERP', isEnabled: true,
+    }, ['CFG.PLT.MAIL.DEFINE']);
   }, 180_000);
 
   afterAll(async () => {
@@ -327,6 +336,12 @@ describe('the document the customer receives: output (9252)', () => {
     }, { authorization: await salesAuthority(tenant.client) });
     expect(billed.billing.status).toBe('POSTED');
     return billed.billing.billingNumber;
+  }
+
+  /** What the worker would have done by now: run OUTPUT.DISPATCH, then read the document's messages. */
+  async function settled(category: string, documentNumber: string) {
+    await runOutputDispatch(tenant.client);
+    return messages(category, documentNumber);
   }
 
   /** Every message that stands for one document, oldest issue first. */
@@ -382,14 +397,14 @@ describe('the document the customer receives: output (9252)', () => {
     const named = await bill(await place(CUSTOMER));
     const other = await bill(await place(OTHER_CUSTOMER));
 
-    const forNamed = await messages('BILLING', named);
+    const forNamed = await settled('BILLING', named);
     expect(forNamed).toHaveLength(1);
     expect(forNamed[0]).toMatchObject({
       outputType: 'RD00', transmissionMedium: 'EMAIL', status: 'PROCESSED',
       recipient: 'accounts@customer.example', sendCount: 1,
     });
 
-    const forOther = await messages('BILLING', other);
+    const forOther = await settled('BILLING', other);
     expect(forOther).toHaveLength(1);
     expect(forOther[0]).toMatchObject({
       outputType: 'RD00', transmissionMedium: 'PRINT', status: 'PROCESSED', recipient: null,
@@ -398,7 +413,11 @@ describe('the document the customer receives: output (9252)', () => {
 
   it('keeps what was sent with the message, so a copy read later is the document that went out', async () => {
     const billingNumber = await bill(await place(CUSTOMER));
-    const [message] = await messages('BILLING', billingNumber);
+    // The posting wrote the message and rendered nothing; the job renders it.
+    const [waiting] = await messages('BILLING', billingNumber);
+    expect(waiting).toMatchObject({ status: 'PENDING', sendCount: 0 });
+    expect(waiting.renderedDocument).toBeNull();
+    const [message] = await settled('BILLING', billingNumber);
     expect(message.renderedDocument).toBeTruthy();
 
     const document = message.renderedDocument ?? '';
@@ -424,7 +443,7 @@ describe('the document the customer receives: output (9252)', () => {
     });
 
     const billingNumber = await bill(await place(OTHER_CUSTOMER));
-    const [failed] = await messages('BILLING', billingNumber);
+    const [failed] = await settled('BILLING', billingNumber);
     expect(failed).toMatchObject({ transmissionMedium: 'EMAIL', status: 'ERROR', recipient: null });
     expect(failed.errorText).toMatch(/needs a recipient/);
     // Nothing was rendered, because nothing was sent.
@@ -445,9 +464,10 @@ describe('the document the customer receives: output (9252)', () => {
       client: tenant.client, changedBy: ACTOR, documentCategory: 'BILLING',
       documentNumber: billingNumber, outputType: 'RD00', transmissionMedium: 'EMAIL',
     });
-    expect(done).toMatchObject({ status: 'PROCESSED', sendCount: 1, recipient: 'later@customer.example' });
+    // Dispatch queues: the message stands pending until the job has run.
+    expect(done).toMatchObject({ status: 'PENDING', recipient: 'later@customer.example' });
 
-    const [repaired] = await messages('BILLING', billingNumber);
+    const [repaired] = await settled('BILLING', billingNumber);
     expect(repaired).toMatchObject({ status: 'PROCESSED', sendCount: 1 });
     expect(repaired.errorText).toBeNull();
     expect(repaired.renderedDocument).toContain(billingNumber);
@@ -455,7 +475,7 @@ describe('the document the customer receives: output (9252)', () => {
 
   it('issues an output once: a second dispatch is refused, and a re-issue stands beside the first', async () => {
     const billingNumber = await bill(await place(CUSTOMER));
-    const [first] = await messages('BILLING', billingNumber);
+    const [first] = await settled('BILLING', billingNumber);
     expect(first.status).toBe('PROCESSED');
 
     // A repeat is not a rewrite of the first: it is a new output, and the service says so.
@@ -470,9 +490,9 @@ describe('the document the customer receives: output (9252)', () => {
       reason: 'The customer said the first copy never arrived.',
     });
     expect(reissue.issueNumber).toBe(2);
-    expect(reissue.message).toMatchObject({ status: 'PROCESSED', issueNumber: 2 });
+    expect(reissue.message).toMatchObject({ status: 'PENDING', issueNumber: 2 });
 
-    const both = await messages('BILLING', billingNumber);
+    const both = await settled('BILLING', billingNumber);
     expect(both).toHaveLength(2);
     expect(both[0]).toMatchObject({ issueNumber: 1, status: 'PROCESSED', sendCount: 1, reissueReason: null });
     expect(both[1]).toMatchObject({ issueNumber: 2, status: 'PROCESSED', sendCount: 1 });
@@ -507,7 +527,8 @@ describe('the document the customer receives: output (9252)', () => {
     const sent = await dispatchPendingSalesOutput({
       client: tenant.client, changedBy: ACTOR, selection: { documentCategory: 'SALES_ORDER' },
     });
-    expect(sent.dispatched).toBe(run.created);
+    expect(sent.queued).toBe(run.created);
+    await runOutputDispatch(tenant.client);
 
     const orders = await listSalesOutput({
       client: tenant.client,
@@ -525,7 +546,7 @@ describe('the document the customer receives: output (9252)', () => {
       client: tenant.client, changedBy: ACTOR, orderNumber, deliveryDate: ORDER_DATE,
       items: [{ orderLineNumber: 10, quantity: '2' }], requestKey: key('delivery'),
     }, { authorization: await salesAuthority(tenant.client) });
-    const [message] = await messages('SALES_ORDER', orderNumber);
+    const [message] = await settled('SALES_ORDER', orderNumber);
     expect(message).toMatchObject({ outputType: 'BA00', status: 'PROCESSED' });
 
     await confirmDeliveryPicks({
@@ -539,7 +560,7 @@ describe('the document the customer receives: output (9252)', () => {
     }, { authorization: await salesAuthority(tenant.client) });
     expect(issued.delivery.status).toBe('GOODS_ISSUED');
 
-    const notes = await messages('DELIVERY', delivery.deliveryNumber);
+    const notes = await settled('DELIVERY', delivery.deliveryNumber);
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({ outputType: 'LD00', status: 'PROCESSED', transmissionMedium: 'PRINT' });
     expect(notes[0].renderedDocument).toContain('DELIVERY NOTE');
@@ -568,10 +589,9 @@ describe('the document the customer receives: output (9252)', () => {
       client: tenant.client, changedBy: ACTOR,
       selection: { documentCategory: 'SALES_ORDER', documentNumber: orderNumber },
     });
-    expect(dispatched.dispatched).toBe(1);
-    expect(dispatched.failed).toBe(0);
+    expect(dispatched.queued).toBe(1);
 
-    const [sent] = await messages('SALES_ORDER', orderNumber);
+    const [sent] = await settled('SALES_ORDER', orderNumber);
     expect(sent).toMatchObject({ status: 'PROCESSED', sendCount: 1 });
     expect(sent.renderedDocument).toContain('ORDER CONFIRMATION');
     expect(sent.renderedDocument).toContain(orderNumber);
@@ -710,12 +730,12 @@ describe('the document the customer receives: output (9252)', () => {
       });
     });
 
-    // The invoice is written and dispatched in one transaction, and it fails
-    // there and then. Before this increment that was the end of it: the message
-    // stood at ERROR until somebody happened to look at the queue.
+    // The invoice is written in one transaction and dispatched by the worker, and it fails there.
+    // Before the fan-out that was the end of it: the message stood at ERROR until somebody happened
+    // to look at the queue.
     const billingNumber = await bill(await place(quiet));
     quietBilling = billingNumber;
-    const [failed] = await messages('BILLING', billingNumber);
+    const [failed] = await settled('BILLING', billingNumber);
     expect(failed).toMatchObject({ transmissionMedium: 'EMAIL', status: 'ERROR', recipient: null });
 
     // The transaction recorded only that somebody has to be told, not who.
@@ -747,7 +767,9 @@ describe('the document the customer receives: output (9252)', () => {
       client: tenant.client, changedBy: ACTOR, documentCategory: 'BILLING',
       documentNumber: quietBilling, outputType: 'RD00', transmissionMedium: 'EMAIL',
     });
-    expect(again.status).toBe('ERROR');
+    expect(again.status).toBe('PENDING');
+    const [stillFailing] = await settled('BILLING', quietBilling);
+    expect(stillFailing.status).toBe('ERROR');
     expect(await fanoutRuns(quietBilling)).toHaveLength(1);
 
     // Give the partner an address and dispatch once more: the output goes out,
@@ -765,7 +787,9 @@ describe('the document the customer receives: output (9252)', () => {
       client: tenant.client, changedBy: ACTOR, documentCategory: 'BILLING',
       documentNumber: quietBilling, outputType: 'RD00', transmissionMedium: 'EMAIL',
     });
-    expect(sent.status).toBe('PROCESSED');
+    expect(sent.status).toBe('PENDING');
+    const [delivered] = await settled('BILLING', quietBilling);
+    expect(delivered.status).toBe('PROCESSED');
     expect(await fanoutRuns(quietBilling)).toHaveLength(1);
   });
 });

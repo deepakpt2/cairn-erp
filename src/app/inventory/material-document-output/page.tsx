@@ -7,10 +7,12 @@ import {
   MATERIAL_DOC_OUTPUT_ROUTE,
   MaterialDocumentOutputError,
   listOutputMessages,
+  materialDocumentCompanyCode,
   renderSlip,
   type OutputListResult,
   type OutputSelection,
 } from '@/modules/inventory/material-document-output';
+import { letterheadViews } from '@/modules/output/document-layout';
 import MaterialDocumentOutput from './MaterialDocumentOutput';
 
 export const dynamic = 'force-dynamic';
@@ -59,17 +61,28 @@ export default async function MaterialDocumentOutputPage({ searchParams }: {
     }
   }
 
-  let slip: { documentNumber: string; text: string } | null = null;
+  // The preview shows what was sent when the message carries a rendering, and only otherwise reads the
+  // document as it stands — and says so.
+  let slip: { documentNumber: string; text: string; companyCode: string | null; stored: boolean } | null = null;
   if (canRun && get('preview')) {
+    const documentNumber = get('preview');
+    const stored = result?.rows.find((row) => row.documentNumber === documentNumber && row.renderedDocument);
     try {
       slip = {
-        documentNumber: get('preview'),
-        text: await renderSlip({ client: session.user.client, documentNumber: get('preview') }),
+        documentNumber,
+        text: stored?.renderedDocument
+          ?? await renderSlip({ client: session.user.client, documentNumber }),
+        companyCode: stored?.companyCodes[0]
+          ?? await materialDocumentCompanyCode(session.user.client, documentNumber),
+        stored: Boolean(stored),
       };
     } catch {
       slip = null;
     }
   }
+  const letterheads = await letterheadViews(session.user.client, [
+    ...(slip?.companyCode ? [slip.companyCode] : []),
+  ]);
 
   return (
     <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
@@ -93,6 +106,7 @@ export default async function MaterialDocumentOutputPage({ searchParams }: {
           result={result}
           selection={selection}
           slip={slip}
+          letterheads={letterheads}
           route={MATERIAL_DOC_OUTPUT_ROUTE}
         />
       )}

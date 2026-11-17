@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { PdfDownloadError } from '@/modules/output/download-pdf';
+import type { PdfDownloadState } from '@/ui/output/DocumentPrint';
 import {
   SALES_OUTPUT_ADMIN_CAPABILITY,
   SALES_OUTPUT_CAPABILITY,
@@ -12,6 +14,7 @@ import {
   dispatchSalesOutput,
   determineSalesOutputsForSelection,
   reissueSalesOutput,
+  salesOutputPdf,
   saveOutputConditionRecord,
   setOutputConditionRecordStatus,
   setSalesOutputRecipient,
@@ -82,10 +85,10 @@ export async function runSalesOutputAction(
     revalidatePath(ROUTE);
     return {
       ok: true,
-      message: `The run examined ${determined.examined} documents, wrote ${determined.created} outputs that stood missing, and dispatched ${dispatched.dispatched} of what was pending${dispatched.failed ? `, with ${dispatched.failed} failing` : ''}.`,
-      remedy: determined.created === 0 && dispatched.dispatched === 0
+      message: `The run examined ${determined.examined} documents, wrote ${determined.created} outputs that stood missing, and queued ${dispatched.queued} pending for dispatch.`,
+      remedy: determined.created === 0 && dispatched.queued === 0
         ? 'Nothing was sent because nothing was due: a document earns an output only where a condition record stands for its sales area, document type and customer on the day it bears.'
-        : 'Each dispatch kept the document as it was rendered and sent, so a copy read later is the one the customer received.',
+        : 'The OUTPUT.DISPATCH job renders and sends them within a couple of minutes (see /platform/jobs). Each rendering is kept with its message, so a copy read later is the one the customer received.',
     };
   } catch (error) {
     return refuse(error);
@@ -116,17 +119,10 @@ export async function dispatchSalesOutputAction(
       issueNumber: optional(form, 'issueNumber') ? Number(optional(form, 'issueNumber')) : undefined,
     });
     revalidatePath(ROUTE);
-    if (result.status === 'ERROR') {
-      return {
-        ok: false,
-        message: `The ${result.outputType} output for ${result.documentNumber} failed: ${result.errorText}`,
-        remedy: 'Give the partner it is addressed to an e-mail address, or set a recipient on the message and dispatch it again.',
-      };
-    }
     return {
       ok: true,
-      message: `The ${result.outputType} output for ${result.documentNumber} went out by ${result.transmissionMedium.toLowerCase()}${result.recipient ? ` to ${result.recipient}` : ''}, and stands processed.`,
-      remedy: 'What was rendered is kept with the message, so this copy is the document the customer received and not a re-reading of masters that have moved since.',
+      message: `The ${result.outputType} output for ${result.documentNumber} is queued. It stands pending until the OUTPUT.DISPATCH job has rendered it${result.transmissionMedium === 'EMAIL' ? ' and queued the mail' : ''}, within a couple of minutes.`,
+      remedy: 'Refresh to see it processed. A failure is recorded on the message, with the reason.',
     };
   } catch (error) {
     return refuse(error);
@@ -170,10 +166,8 @@ export async function reissueSalesOutputAction(
     revalidatePath(ROUTE);
     return {
       ok: true,
-      message: `Issue ${reissue.issueNumber} of the ${reissue.message.outputType} output for ${reissue.message.documentNumber} went out, and issue 1 stands beside it as it was sent.`,
-      remedy: reissue.message.status === 'ERROR'
-        ? 'It stands in error and says why; correct the recipient and dispatch it again.'
-        : 'Two issues of one document are two things that were sent, which is what makes “we sent it twice” answerable.',
+      message: `Issue ${reissue.issueNumber} of the ${reissue.message.outputType} output for ${reissue.message.documentNumber} is queued for the OUTPUT.DISPATCH job, and issue 1 stands beside it as it was sent.`,
+      remedy: 'Two issues of one document are two things that were sent, which is what makes “we sent it twice” answerable. If the new issue fails it stands in error and says why.',
     };
   } catch (error) {
     return refuse(error);
@@ -299,6 +293,31 @@ export async function setOutputConditionStatusAction(
         : 'Documents no longer earn its output; the decision itself is kept, and can be put back.',
     };
   } catch (error) {
+    return refuse(error);
+  }
+}
+
+/**
+ * Download PDF: the one deliberately synchronous render. The PDF is built from the message's stored
+ * rendering, never from the masters, and the action refuses a message that has none yet.
+ */
+export async function downloadSalesOutputPdfAction(form: FormData): Promise<PdfDownloadState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, SALES_OUTPUT_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the sales output capability.', remedy: 'Ask for SALES.OUTPUT.PROCESS.' };
+  }
+  try {
+    const pdf = await salesOutputPdf({
+      client: session.user.client,
+      documentCategory: category(form),
+      documentNumber: text(form, 'documentNumber').toUpperCase(),
+      outputType: text(form, 'outputType').toUpperCase(),
+      transmissionMedium: text(form, 'transmissionMedium').toUpperCase() === 'EMAIL' ? 'EMAIL' : 'PRINT',
+      issueNumber: Number(text(form, 'issueNumber')) || 1,
+    });
+    return { ok: true, fileName: pdf.fileName, base64: pdf.base64, warning: pdf.warning };
+  } catch (error) {
+    if (error instanceof PdfDownloadError) return { ok: false, message: error.message, remedy: error.remedy };
     return refuse(error);
   }
 }
