@@ -20,8 +20,8 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 | DeleteLock.tsx | DeleteLock |  |
 | page.tsx | LockMonitorPage |  |
 | **app/platform/mail/** | | |
-| actions.ts | saveMailConfigAction, testConnectionAction, sendTestMailAction, saveSelfServiceResetAction |  |
-| MailForms.tsx | NodeForm, TestPanel, PasswordResetPanel |  |
+| actions.ts | saveMailConfigAction, testConnectionAction, sendTestMailAction, saveSelfServiceResetAction, flushMailQueueAction, deleteMailMessageAction, clearUnsentMailAction |  |
+| MailForms.tsx | NodeForm, TestPanel, PasswordResetPanel, FlushButton, DeleteMessageButton |  |
 | page.tsx | MailPage |  |
 | **app/platform/notifications/** | | |
 | page.tsx | NotificationsPage |  |

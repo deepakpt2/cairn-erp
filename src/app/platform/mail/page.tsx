@@ -4,7 +4,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { getMailConfig, listMailQueue, MAIL_DEFINE_CAPABILITY } from '@/platform/mail/service';
 import { isSelfServiceResetEnabled } from '@/modules/platform/user-admin';
 import { withTenant } from '@/platform/db/client';
-import { NodeForm, PasswordResetPanel, TestPanel } from './MailForms';
+import { DeleteMessageButton, FlushButton, NodeForm, PasswordResetPanel, TestPanel } from './MailForms';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +28,7 @@ export default async function MailPage() {
           <Link href="/" className="btn btn-default">Launchpad</Link>
         </div>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-          One outbound mail node per tenant. Messages are queued and sent by the MAIL.SEND job every five minutes; nothing is sent from a request.
+          One outbound mail node per tenant. Messages are queued and sent by the MAIL.SEND job every five minutes, or at once with Flush queue.
         </p>
       </header>
 
@@ -42,6 +42,7 @@ export default async function MailPage() {
           <section className="panel overflow-x-auto">
             <div className="panel-header">
               <h2 className="panel-title">Send queue</h2>
+              <FlushButton />
               <span className="text-2xs text-ink-faint tabular">last {QUEUE_LIMIT}</span>
             </div>
             {queue.length === 0 ? (
@@ -49,7 +50,7 @@ export default async function MailPage() {
             ) : (
               <table className="grid-table">
                 <thead>
-                  <tr><th>Created</th><th>To</th><th>Subject</th><th>Status</th><th className="text-end">Attempts</th><th>Last error</th></tr>
+                  <tr><th>Created</th><th>To</th><th>Subject</th><th>Status</th><th className="text-end">Attempts</th><th>Last error</th><th></th></tr>
                 </thead>
                 <tbody>
                   {queue.map((m) => (
@@ -60,6 +61,7 @@ export default async function MailPage() {
                       <td><span className={`chip ${m.status === 'SENT' ? 'chip-ok' : m.status === 'QUEUED' ? 'chip-neutral' : 'chip-error'}`}>{m.status}</span></td>
                       <td className="text-end tabular">{m.attempts}/{m.maxAttempts}</td>
                       <td className="text-xs text-ink-soft">{m.lastError ?? '—'}</td>
+                      <td><DeleteMessageButton messageId={m.id} /></td>
                     </tr>
                   ))}
                 </tbody>

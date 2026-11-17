@@ -25,6 +25,9 @@ import {
   sendOneMail,
   sendTestMail,
   listMailQueue,
+  deleteMailMessage,
+  clearUnsentMail,
+  flushMailQueue,
 } from '../src/platform/mail/service';
 import { mailSendJob } from '../src/platform/mail/jobs/send';
 import { createTenant, destroyTenant } from './helpers';
@@ -263,11 +266,42 @@ describe('isolation and grants', () => {
     expect((await listMailQueue(client, CAP)).map((r) => r.id)).toContain(id);
   });
 
-  it('13. cairn_app holds SELECT, INSERT, UPDATE on mail_message and no DELETE', async () => {
+  it('14. delete removes one message in this tenant only; clear removes unsent and keeps SENT', async () => {
+    await saveMailConfig(node(), CAP);
+    const sentId = await enqueue();
+    await send(sentId);
+    const queuedId = await enqueue();
+    const failedId = await enqueue();
+    deliver.mockRejectedValueOnce(new Error('boom'));
+    await send(failedId);
+
+    await expect(deleteMailMessage(client, queuedId, [])).rejects.toMatchObject({ code: 'MAIL_FORBIDDEN' });
+    expect(await deleteMailMessage(other, queuedId, CAP)).toBe(false);
+    expect(await deleteMailMessage(client, queuedId, CAP)).toBe(true);
+    expect(await deleteMailMessage(client, queuedId, CAP)).toBe(false);
+
+    expect(await clearUnsentMail(client, CAP)).toBeGreaterThanOrEqual(1);
+    const left = (await listMailQueue(client, CAP)).map((r) => r.id);
+    expect(left).toContain(sentId);
+    expect(left).not.toContain(failedId);
+  });
+
+  it('15. flush sends what is waiting now, ignoring the retry delay', async () => {
+    await saveMailConfig(node(), CAP);
+    const id = await enqueue();
+    deliver.mockRejectedValueOnce(new Error('boom'));
+    await send(id);
+    expect((await messageRow(id)).status).toBe('FAILED');
+    const outcome = await flushMailQueue(client, CAP);
+    expect(outcome.sent).toBeGreaterThanOrEqual(1);
+    expect((await messageRow(id)).status).toBe('SENT');
+  });
+
+  it('13. cairn_app holds SELECT, INSERT, UPDATE and DELETE on mail_message (queue clean-up, migration 9303)', async () => {
     const rows = (await withTenant(client, (tx) =>
       tx.execute(sql`select privilege_type from information_schema.role_table_grants
                       where table_name = 'mail_message' and grantee = 'cairn_app' order by 1`),
     )) as unknown as Array<{ privilege_type: string }>;
-    expect(rows.map((r) => r.privilege_type)).toEqual(['INSERT', 'SELECT', 'UPDATE']);
+    expect(rows.map((r) => r.privilege_type)).toEqual(['DELETE', 'INSERT', 'SELECT', 'UPDATE']);
   });
 });

@@ -6,6 +6,9 @@ import { can, requireSession } from '@/platform/auth/current';
 import {
   MAIL_DEFINE_CAPABILITY,
   MailError,
+  clearUnsentMail,
+  deleteMailMessage,
+  flushMailQueue,
   saveMailConfig,
   sendTestMail,
   testMailConnection,
@@ -97,7 +100,7 @@ export async function sendTestMailAction(_previous: MailActionState, formData: F
       session.user.capabilities,
     );
     revalidatePath(ROUTE);
-    return { ok: true, message: 'Test mail queued. It is sent by the next run of MAIL.SEND (every five minutes).' };
+    return { ok: true, message: 'Test mail queued. It is sent by the next MAIL.SEND run (every five minutes), or use Flush queue.' };
   } catch (error) {
     return refuse(error);
   }
@@ -114,6 +117,43 @@ export async function saveSelfServiceResetAction(_previous: MailActionState, for
     );
     revalidatePath(ROUTE);
     return { ok: true, message: enabled ? 'Users can now request their own password reset.' : 'Password reset is administrator-initiated only.' };
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+export async function flushMailQueueAction(_previous: MailActionState, _formData: FormData): Promise<MailActionState> {
+  const { session, denied } = await authorised();
+  if (denied) return denied;
+  try {
+    const r = await flushMailQueue(session.user.client, session.user.capabilities);
+    revalidatePath(ROUTE);
+    if (r.due === 0) return { ok: true, message: 'Nothing is waiting in the queue.' };
+    return { ok: r.failed === 0, message: `${r.due} waiting: ${r.sent} sent, ${r.failed} failed.${r.failed ? ' See Last error in the queue below.' : ''}` };
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+export async function deleteMailMessageAction(_previous: MailActionState, formData: FormData): Promise<MailActionState> {
+  const { session, denied } = await authorised();
+  if (denied) return denied;
+  try {
+    const gone = await deleteMailMessage(session.user.client, text(formData, 'messageId'), session.user.capabilities);
+    revalidatePath(ROUTE);
+    return { ok: gone, message: gone ? 'Message deleted.' : 'That message no longer exists.' };
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+export async function clearUnsentMailAction(_previous: MailActionState, _formData: FormData): Promise<MailActionState> {
+  const { session, denied } = await authorised();
+  if (denied) return denied;
+  try {
+    const n = await clearUnsentMail(session.user.client, session.user.capabilities);
+    revalidatePath(ROUTE);
+    return { ok: true, message: n === 0 ? 'No unsent messages to clear.' : `${n} unsent message${n === 1 ? '' : 's'} deleted.` };
   } catch (error) {
     return refuse(error);
   }

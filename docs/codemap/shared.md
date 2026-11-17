@@ -135,7 +135,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | enqueue.ts | ENQUEUE_STALE_MS, EnqueueError, openForChange, heartbeatChangeLock, releaseChangeLock, assertChangeLock, listEnqueue, deleteEnqueueEntry, openChangeForSession, assertChangeForSession, displayOnlyMessage | enqueue_entry, user_session |
 | index.ts | acquireLock, acquireLocks, currentLocks, LockTimeoutError | lock_wait_log |
 | **platform/mail/** | | |
-| service.ts | MAIL_DEFINE_CAPABILITY, MAIL_OBJECT_CLASS, MailError, isValidMailAddress, retryDelaySeconds, getMailConfig, saveMailConfig, testMailConnection, sendTestMail, enqueueMail, sendOneMail, listMailQueue | mail_message, mail_server_config |
+| service.ts | MAIL_DEFINE_CAPABILITY, MAIL_OBJECT_CLASS, MailError, isValidMailAddress, retryDelaySeconds, getMailConfig, saveMailConfig, testMailConnection, sendTestMail, flushMailQueue, deleteMailMessage, clearUnsentMail, enqueueMail, sendOneMail, listMailQueue | mail_message, mail_server_config |
 | transport.ts | MailTransportError, deliverMail, probeConnection |  |
 | **platform/mail/jobs/** | | |
 | send.ts | MAIL_SEND_JOB, mailSendJob | mail_message |

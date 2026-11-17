@@ -12,7 +12,7 @@
  *   with its own transaction, or does not send mail.
  */
 import { randomUUID } from 'node:crypto';
-import { desc, eq, and, sql } from 'drizzle-orm';
+import { asc, desc, eq, and, inArray, sql } from 'drizzle-orm';
 
 import { withTenant, type Tx } from '../db/client';
 import { hasCapability } from '../auth/pattern';
@@ -371,6 +371,66 @@ export async function sendTestMail(input: TestMailInput, capabilities: string[])
   );
   await recordTest(input.client, input.changedBy, `Test mail ${messageId} queued for ${toAddress}.`);
   return { messageId };
+}
+
+// ── flush ──────────────────────────────────────────────────────────────────
+
+export interface FlushOutcome {
+  due: number;
+  sent: number;
+  failed: number;
+}
+
+/**
+ * Send everything waiting now instead of at the next MAIL.SEND run. Same per-message path as the job
+ * (one transaction each, so a failure does not undo its neighbours), and it ignores the retry back-off:
+ * the person pressing the button has decided to try again. Rows that are DEAD or SENT are left alone.
+ */
+export async function flushMailQueue(client: string, capabilities: string[], limit = 100): Promise<FlushOutcome> {
+  requireDefine(capabilities);
+  const ids = (
+    await withTenant(client, (tx) =>
+      tx
+        .select({ id: mailMessage.id })
+        .from(mailMessage)
+        .where(and(eq(mailMessage.client, client), inArray(mailMessage.status, ['QUEUED', 'FAILED'])))
+        .orderBy(asc(mailMessage.availableAt))
+        .limit(Math.min(Math.max(limit, 1), 200)),
+    )
+  ).map((r) => r.id);
+  let sent = 0;
+  let failed = 0;
+  for (const id of ids) {
+    try {
+      const outcome = await withTenant(client, (tx) => sendOneMail(tx, client, id));
+      if (outcome === 'SENT') sent += 1;
+      else if (outcome !== 'SKIPPED') failed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { due: ids.length, sent, failed };
+}
+
+/** Delete one message, whatever its status. Returns false when it does not exist in this tenant. */
+export async function deleteMailMessage(client: string, messageId: string, capabilities: string[]): Promise<boolean> {
+  requireDefine(capabilities);
+  const rows = await withTenant(client, (tx) =>
+    tx.delete(mailMessage).where(and(eq(mailMessage.client, client), eq(mailMessage.id, messageId))).returning({ id: mailMessage.id }),
+  );
+  return rows.length > 0;
+}
+
+/** Delete every message that has not been sent (QUEUED, FAILED, DEAD). Sent history is kept. */
+export async function clearUnsentMail(client: string, capabilities: string[]): Promise<number> {
+  requireDefine(capabilities);
+  const rows = await withTenant(client, (tx) =>
+    tx
+      .delete(mailMessage)
+      .where(and(eq(mailMessage.client, client), inArray(mailMessage.status, ['QUEUED', 'FAILED', 'DEAD'])))
+      .returning({ id: mailMessage.id }),
+  );
+  return rows.length;
 }
 
 // ── queue ──────────────────────────────────────────────────────────────────

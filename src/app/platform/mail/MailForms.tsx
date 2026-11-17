@@ -4,6 +4,9 @@ import { useActionState } from 'react';
 
 import type { MailConfigView } from '@/platform/mail/service';
 import {
+  clearUnsentMailAction,
+  deleteMailMessageAction,
+  flushMailQueueAction,
   saveMailConfigAction,
   saveSelfServiceResetAction,
   sendTestMailAction,
@@ -106,5 +109,40 @@ export function PasswordResetPanel({ enabled, canMaintain, mailEnabled }: { enab
         <button type="submit" className="btn btn-primary" disabled={pending || !canMaintain}>{pending ? 'Saving…' : 'Save'}</button>
       </form>
     </section>
+  );
+}
+
+export function FlushButton() {
+  const [state, action, pending] = useActionState<MailActionState, FormData>(flushMailQueueAction, { ok: true });
+  const [clearState, clearAction, clearPending] = useActionState<MailActionState, FormData>(clearUnsentMailAction, { ok: true });
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+    <form action={action} className="flex flex-wrap items-center gap-3">
+      <button type="submit" className="btn btn-default" disabled={pending}>{pending ? 'Sending…' : 'Flush queue'}</button>
+      {state.message && (
+        <span role={state.ok ? 'status' : 'alert'} className={`text-xs ${state.ok ? 'text-signal-ok' : 'text-signal-error'}`}>{state.message}</span>
+      )}
+    </form>
+    <form
+      action={clearAction}
+      onSubmit={(e) => { if (!window.confirm('Delete every message that has not been sent (queued, failed and dead)? Sent messages are kept.')) e.preventDefault(); }}
+      className="flex flex-wrap items-center gap-3"
+    >
+      <button type="submit" className="btn btn-default" disabled={clearPending}>{clearPending ? 'Clearing…' : 'Clear unsent'}</button>
+      {clearState.message && (
+        <span role={clearState.ok ? 'status' : 'alert'} className={`text-xs ${clearState.ok ? 'text-signal-ok' : 'text-signal-error'}`}>{clearState.message}</span>
+      )}
+    </form>
+    </div>
+  );
+}
+
+export function DeleteMessageButton({ messageId }: { messageId: string }) {
+  const [state, action, pending] = useActionState<MailActionState, FormData>(deleteMailMessageAction, { ok: true });
+  return (
+    <form action={action} onSubmit={(e) => { if (!window.confirm('Delete this message from the queue?')) e.preventDefault(); }}>
+      <input type="hidden" name="messageId" value={messageId} />
+      <button type="submit" className="btn btn-default" disabled={pending} title={state.ok ? undefined : state.message}>{pending ? '…' : 'Delete'}</button>
+    </form>
   );
 }
