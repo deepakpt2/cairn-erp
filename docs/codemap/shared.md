@@ -16,7 +16,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | app/command.ts | ui/shell |
 | app/registry | app/command.ts |
 | platform/attention | app/page.tsx, ui/attention |
-| platform/auth | app/api, app/clients, app/config, app/menu, app/page.tsx, app/search, audit, finance, foundation, inventory, output, people, platform, platform/attention, platform/job, platform/mail, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
+| platform/auth | app/account, app/api, app/clients, app/config, app/menu, app/page.tsx, app/search, audit, finance, foundation, inventory, output, people, platform, platform/attention, platform/job, platform/mail, platform/notification, platform/security, platform/tenancy, production, purchasing, quality, sales, ui/shell |
 | platform/change | audit, finance, foundation, inventory, output, people, platform, platform/lock, platform/mail, platform/posting, platform/security, platform/tenancy, production, purchasing, quality, sales |
 | platform/db | app/api, app/config, audit, dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, output, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/periods, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales, worker/index.ts |
 | platform/document | inventory, platform/posting, purchasing |
@@ -31,7 +31,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | platform/registry | app/command.ts, app/registry, app/search |
 | platform/schema.ts | platform/db |
 | platform/security | foundation, platform/mail |
-| platform/tables | audit, finance, foundation, inventory, people, platform, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales |
+| platform/tables | audit, finance, foundation, inventory, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales |
 | platform/tenancy | app/clients, app/config, app/page.tsx, finance, foundation, inventory, platform, production, purchasing |
 | ui/attention | app/page.tsx |
 | ui/fields | finance, foundation, inventory, purchasing, sales |
@@ -40,13 +40,16 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (158)
+## Files (160)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
 | command.ts | executeCommand |  |
 | layout.tsx | viewport, RootLayout |  |
 | page.tsx | LaunchpadPage |  |
+| **app/account/** | | |
+| actions.ts | changePasswordAction, revokeSessionAction, savePreferencesAction |  |
+| page.tsx | AccountPage |  |
 | **app/api/auth/** | | |
 | redirect.ts | relativeRedirect |  |
 | **app/api/auth/signin/** | | |
@@ -88,7 +91,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | schema.ts | *./tables, *../modules/audit/schema, *../modules/finance/schema, *../modules/foundation/schema, *../modules/foundation/output-schema, *../modules/inventory/schema, *../modules/people/schema, *../modules/production/schema, *../modules/quality/schema, *../modules/sales/schema |  |
 | **platform/attention/** | | |
 | panel.ts | ATTENTION_VISIBLE, attentionFor, mayAct |  |
-| sources.ts | ATTENTION_QUERY_LIMIT, ATTENTION_SOURCES | document_release, purchase_contract, purchase_order, purchase_requisition_item, release_strategy_step, scheduling_agreement |
+| sources.ts | ATTENTION_QUERY_LIMIT, ATTENTION_SOURCES | app_user, document_release, purchase_contract, purchase_order, purchase_requisition_item, release_strategy_step, scheduling_agreement |
 | types.ts |  |  |
 | **platform/auth/** | | |
 | authority.ts | LEVEL_OF_KEY, ORG_LEVELS, SCOPE_KEYS, KEY_OF_LEVEL, patternsOf, withinScope, withinRestrictions, grantMatches, canWith, effectiveGrants, loadRestrictions, canUser, canTx, patternMatches | auth_org_restriction, delegation, delegation_approval, delegation_scope, employee, position_assignment, position_capability, role, role_capability, user_capability, user_capability_scope, user_role |
@@ -243,8 +246,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | index.ts | runWorker, stopWorker, main |  |
 | jobs.ts |  |  |
 
-## Routes (13)
-`/` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/search` · `/signin`
+## Routes (14)
+`/` · `/account` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/search` · `/signin`
 
 ## Tables owned (41)
 app_user, audit_access_log, auth_org_restriction, bank_master, capability, change_document, change_document_item, client, client_settings, config_activity, config_activity_status, country, currency, document_flow_link, document_index, document_status_history, enqueue_entry, job_definition, job_log, job_run, lock_object, lock_wait_log, mail_message, mail_server_config, message_catalog, notification, number_range, number_range_allocation, number_range_object, password_reset_token, position_capability, role, role_capability, sod_rule, term_alias, term_registry, unit_of_measure, user_capability, user_capability_scope, user_role, user_session

@@ -44,7 +44,7 @@ export async function attentionFor(
     loadRestrictions(tx, who.client, who.userId),
   ]));
 
-  const reachable = ATTENTION_SOURCES.filter((source) => canWith(grants, source.code, {}, restrictions));
+  const reachable = ATTENTION_SOURCES.filter((source) => source.code === '' || canWith(grants, source.code, {}, restrictions));
   if (reachable.length === 0) return [];
 
   const settled = await Promise.all(reachable.map(
@@ -62,7 +62,7 @@ export async function attentionFor(
 
   const groups: AttentionGroup[] = [];
   for (const { source, rows } of settled) {
-    const mine = rows.filter((row) => mayAct(grants, restrictions, source.code, row.orgs));
+    const mine = rows.filter((row) => source.code === '' || mayAct(grants, restrictions, source.code, row.orgs));
     if (mine.length === 0) continue;
 
     mine.sort(oldestFirst);

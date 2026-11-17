@@ -16,6 +16,7 @@
  */
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { forcedChangeRedirect } from '../../modules/platform/personal-account';
 import { withTenant } from '../db/client';
 import {
   SESSION_COOKIE,
@@ -46,7 +47,14 @@ export async function getSession(): Promise<SessionContext | null> {
  */
 export async function requireSession(nextPath?: string): Promise<SessionContext> {
   const session = await getSession();
-  if (session) return session;
+  if (session) {
+    // A user who must change their password reaches /account and nothing else (AUTH-02).
+    // Only calls that pass a path can be gated: actions and route handlers call this
+    // with none, so this is an interface gate, not a second authorisation layer.
+    const forced = forcedChangeRedirect(session.user.mustChangePassword, nextPath);
+    if (forced) redirect(forced);
+    return session;
+  }
 
   const next = nextPath ? `?next=${encodeURIComponent(nextPath)}` : '';
   redirect(`/signin${next}`);

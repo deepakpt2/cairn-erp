@@ -68,7 +68,7 @@
 | activity_rate | foundation | platform/tenancy, production |
 | activity_type | foundation | platform/tenancy, production |
 | allocation_structure_assignment | foundation | production |
-| app_user | platform/tables | audit, finance, foundation, inventory, people, platform, platform/auth, platform/job, platform/notification, platform/tenancy, production, purchasing |
+| app_user | platform/tables | audit, finance, foundation, inventory, people, platform, platform/attention, platform/auth, platform/job, platform/notification, platform/tenancy, production, purchasing |
 | asset_class | finance | foundation, purchasing |
 | asset_transaction | finance | dev/walkthrough-asset.ts |
 | asset_transaction_type | finance | foundation, purchasing |

@@ -14,7 +14,7 @@ const MODULE_IDS = new Set<NavModule>(NAV_MODULES.map((m) => m.id));
 
 /** The approved distribution of primary homes. A change here is a change to the approved tree. */
 const APPROVED_COUNTS: Record<NavModule, number> = {
-  dashboard: 1, mm: 94, pp: 37, qm: 2, fico: 106, sd: 30, hr: 10, admin: 23,
+  dashboard: 1, mm: 94, pp: 37, qm: 2, fico: 106, sd: 30, hr: 10, admin: 24,
 };
 
 describe('screen navigation metadata', () => {

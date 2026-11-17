@@ -27,9 +27,31 @@ import {
   schedulingAgreement,
 } from '@/modules/purchasing/schema';
 import { RELEASE_CAPABILITIES } from '@/modules/purchasing/release';
+import { pendingAccountActions } from '@/modules/platform/personal-account';
+import { appUser } from '@/platform/tables/security';
 import { releaseStrategyStep } from '@/modules/foundation/characteristic-schema';
 
 import type { AttentionRow, AttentionSource } from './types';
+
+/**
+ * What the system requires of the signed-in person (AUTH-02 §9). `code: ''` — it needs
+ * no authority, because it is about the reader's own account — and the panel treats
+ * that as reachable by everyone. One row per pending action, so it disappears at zero.
+ */
+const accountActions: AttentionSource = {
+  code: '',
+  label: 'attention.source.account',
+  async due(who, asOf) {
+    const [user] = await withTenant(who.client, (tx) => tx
+      .select({ mustChangePassword: appUser.mustChangePassword })
+      .from(appUser)
+      .where(and(eq(appUser.client, who.client), eq(appUser.id, who.userId))));
+    return pendingAccountActions({ mustChangePassword: user?.mustChangePassword ?? false }).map((a) => ({
+      source: '', title: '1 account action needed', detail: a.message, href: a.href, waitingSince: asOf.slice(0, 10),
+      severity: 'BLOCKED' as const,
+    }));
+  },
+};
 
 /**
  * How many rows one source may read. The panel is on the home page and is read
@@ -460,6 +482,7 @@ const creditMemosHeld: AttentionSource = {
  * there is no second place to remember.
  */
 export const ATTENTION_SOURCES: AttentionSource[] = [
+  accountActions,
   ...releaseSources,
   deliveriesToPick,
   deliveriesToIssue,

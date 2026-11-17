@@ -25,6 +25,8 @@ export type SessionMenuProps = {
   username: string;
   signOutLabel: string;
   signOutAction: string;
+  accountLabel: string;
+  accountHref: string;
 };
 
 export function SessionMenu({
@@ -32,6 +34,8 @@ export function SessionMenu({
   username,
   signOutLabel,
   signOutAction,
+  accountLabel,
+  accountHref,
 }: SessionMenuProps) {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -74,6 +78,14 @@ export function SessionMenu({
           role="menu"
           className="absolute end-0 top-full z-40 mt-1 min-w-[9rem] border border-line bg-surface py-1 text-2xs shadow-sm"
         >
+          {/* A plain link: the one screen a forced user is sent to must not need a script. */}
+          <a
+            href={accountHref}
+            role="menuitem"
+            className="block w-full px-3 py-1 text-start text-ink-soft hover:bg-sunken hover:text-accent"
+          >
+            {accountLabel}
+          </a>
           <form method="post" action={signOutAction}>
             <button
               type="submit"

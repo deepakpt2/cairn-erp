@@ -244,9 +244,11 @@ describe('the attention registry', () => {
   it('names every source by the capability that lets you act on it', () => {
     expect(ATTENTION_SOURCES.length).toBeGreaterThan(0);
     for (const source of ATTENTION_SOURCES) {
-      expect(source.code).toMatch(/^[A-Z][A-Z0-9._]+$/);
+      // `''` is the one exception: the reader's own account (AUTH-02), which needs a session, not authority.
+      if (source.code !== '') expect(source.code).toMatch(/^[A-Z][A-Z0-9._]+$/);
       expect(source.label.length).toBeGreaterThan(0);
     }
+    expect(ATTENTION_SOURCES.filter((s) => s.code === '').map((s) => s.label)).toEqual(['attention.source.account']);
   });
 
   it('resolves every source heading through the locale, never a hardcoded word', () => {

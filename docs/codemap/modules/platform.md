@@ -8,7 +8,7 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 - `PROTECTED_ROLE_CODES` and `isSystemRole` roles are never editable via UI.
 - Job cancel is a request (in-hand chunk finishes). Opening a notification is a mutating GET.
 
-## Files (28)
+## Files (29)
 | file | exports | tables |
 |---|---|---|
 | **app/platform/jobs/** | | |
@@ -46,6 +46,7 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 | ScopeManager.tsx | ScopeManager |  |
 | **modules/platform/** | | |
 | organisation-scope-admin.ts | ORGANISATION_SCOPE_ADMIN_CAPABILITY, OrganisationScopeAdminError, provisionWalkthroughFirstAdminScopesInTransaction, getOrganisationScopeAdminOverview, getUserOrganisationScopes, grantCompanyCodeScope, grantPlantScope, revokeOrganisationScope | app_user, audit_access_log, auth_org_restriction, client, company_code, plant, role, role_capability, user_role, user_session |
+| personal-account.ts | AccountError, ACCOUNT_ROUTE, ACCOUNT_SECTIONS, ALLOWED_WHILE_CHANGE_REQUIRED, forcedChangeRedirect, safeNextPath, changeOwnPassword, listOwnSessions, revokeOwnSession, registeredLogonLanguages, readOwnPreferences, saveOwnPreferences, pendingAccountActions | app_user, audit_access_log, user_session |
 | platform-admin-bootstrap.ts | PLATFORM_ADMIN_USER_CREATE_CAPABILITY, PLATFORM_ADMIN_USER_MAINTAIN_CAPABILITY, PLATFORM_ADMIN_CAPABILITIES, PLATFORM_ADMIN_BOOTSTRAP_TRANSACTION_CODE, PLATFORM_ADMIN_BOOTSTRAP_OBJECT_CLASS, bootstrapPlatformAdminInTransaction, PLATFORM_ADMIN_ROLE_CODE | audit_access_log, role, role_capability, user_role |
 | role-admin.ts | PLATFORM_ADMIN_ROLE_CODE, ROLE_MAINTAIN_CAPABILITY, USER_ROLE_MAINTAIN_CAPABILITY, RoleAdminError, getRoleAdminOverview, createRole, updateRoleMetadata, setRoleActive, grantCapabilityToRole, revokeCapabilityFromRole, grantRoleToUser, revokeRoleFromUser | app_user, audit_access_log, auth_org_restriction, capability, role, role_capability, sod_rule, user_role, user_session |
 | user-admin.ts | USER_ADMIN_VIEW_CAPABILITIES, canViewUserAdministration, UserAdminError, maskEmail, SELF_SERVICE_RESET_FLAG, isSelfServiceResetEnabled, setSelfServiceReset, createUser, listUsers, getUserAdminDetails, changeUser, setUserLocked, initiatePasswordReset, requestPasswordReset, completePasswordReset | app_user, audit_access_log, capability, client_settings, employee, password_reset_token, role, user_role, user_session |
@@ -60,7 +61,7 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 foundation, people, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/lock, platform/mail, platform/notification, platform/tables, platform/tenancy, ui/lock
 
 ## Used by
-app/forgot-password, app/reset-password, platform/tenancy, ui/lock
+app/account, app/forgot-password, app/reset-password, platform/attention, platform/auth, platform/tenancy, ui/lock
 
-## Tests (4)
-change-lock-claim, password-reset-delivery, purchasing-org-company-code-assignment-ui-contract, role-capability-select
+## Tests (5)
+change-lock-claim, password-reset-delivery, personal-account, purchasing-org-company-code-assignment-ui-contract, role-capability-select

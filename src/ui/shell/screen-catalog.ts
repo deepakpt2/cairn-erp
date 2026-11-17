@@ -598,6 +598,22 @@ export const SCREENS: readonly ScreenLink[] = [
     },
   },
   {
+    id: "/account",
+    path: "/account",
+    query: {},
+    code: "", // Claims no authority. It acts on your own account; a session is enough.
+    title: "My account",
+    area: "platform",
+    family: "platform",
+    accepts: [],
+    nav: {
+      module: "admin",
+      category: "Security & access",
+      activity: "My account",
+      hidden: true, // Out of the menu tree; reachable by search and by the username dropdown.
+    },
+  },
+  {
     id: "/config/document-layout",
     path: "/config/document-layout",
     query: {},

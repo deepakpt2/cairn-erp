@@ -14,13 +14,17 @@ describe('menu tree', () => {
   it('offers every screen the reader may see, under its primary home, and under each extra context', () => {
     const tree = buildNavTree(all);
     const leaves = leavesOf(tree);
-    for (const s of SCREENS.filter((x) => x.nav!.module !== 'dashboard' && all.has(x.id))) {
+    for (const s of SCREENS.filter((x) => x.nav!.module !== 'dashboard' && !x.nav!.hidden && all.has(x.id))) {
       const homes = [s.nav!, ...(s.nav!.also ?? [])];
       for (const h of homes) {
         expect(leaves.some((l) => l.id === s.id && l.module === h.module && l.category === h.category && l.activity === h.activity), `${s.id} under ${h.module}/${h.category}/${h.activity}`).toBe(true);
       }
       expect(leaves.filter((l) => l.id === s.id).length, s.id).toBe(homes.length);
     }
+  });
+
+  it('keeps a hidden screen (My account) out of the tree', () => {
+    expect(leavesOf(buildNavTree(all)).some((l) => l.id === '/account')).toBe(false);
   });
 
   it('puts the dashboard in as the launchpad alone, linking to it', () => {

@@ -28,6 +28,8 @@ const en: Catalogue = {
   'app.tagline': 'Enterprise resource planning',
   'auth.signIn': 'Sign in',
   'auth.signOut': 'Sign out',
+  'auth.myAccount': 'My account',
+  'attention.source.account': 'Your account',
   'auth.authorities': 'authorities',
   'auth.tenant': 'Tenant',
 

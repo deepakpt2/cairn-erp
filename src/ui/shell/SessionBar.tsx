@@ -53,6 +53,8 @@ export async function SessionBar() {
           username={session.user.username}
           signOutLabel={t('auth.signOut')}
           signOutAction={SIGNOUT_ACTION}
+          accountLabel={t('auth.myAccount')}
+          accountHref="/account"
         />
       </div>
     </div>

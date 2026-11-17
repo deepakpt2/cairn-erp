@@ -1,4 +1,14 @@
 {
+  "app/account/actions.ts": [
+    "modules/platform/personal-account.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/account/page.tsx": [
+    "app/account/actions.ts",
+    "modules/platform/personal-account.ts",
+    "platform/auth/current.ts",
+    "platform/auth/session.ts"
+  ],
   "app/api/auth/redirect.ts": [],
   "app/api/auth/signin/route.ts": [
     "app/api/auth/redirect.ts",
@@ -6718,6 +6728,14 @@
     "platform/tables/tenancy.ts",
     "platform/tenancy/walkthrough-install-guard.ts"
   ],
+  "modules/platform/personal-account.ts": [
+    "platform/auth/password.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/i18n/index.ts",
+    "platform/tables/security.ts"
+  ],
   "modules/platform/platform-admin-bootstrap.ts": [
     "modules/platform/role-admin.ts",
     "platform/change/index.ts",
@@ -7782,6 +7800,7 @@
   ],
   "platform/attention/sources.ts": [
     "modules/foundation/characteristic-schema.ts",
+    "modules/platform/personal-account.ts",
     "modules/purchasing/release.ts",
     "modules/purchasing/schema.ts",
     "modules/sales/billing.ts",
@@ -7792,7 +7811,8 @@
     "platform/attention/types.ts",
     "platform/auth/authority.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "platform/tables/security.ts"
   ],
   "platform/attention/types.ts": [
     "platform/auth/authority.ts"
@@ -7807,6 +7827,7 @@
   ],
   "platform/auth/capability-policy.ts": [],
   "platform/auth/current.ts": [
+    "modules/platform/personal-account.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts"
   ],
