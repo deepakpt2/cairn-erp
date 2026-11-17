@@ -114,7 +114,7 @@ export default async function CapacityLoadPage({ searchParams }: { searchParams:
               {CAPACITY_PERIODS.map((p) => <option key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</option>)}
             </select>
           </label>
-          <label><span className="field-label">Working days per week</span><input type="number" min={1} max={7} name="workingDaysPerWeek" defaultValue={wdpw} className="field-input w-24" /></label>
+          <label><span className="field-label">Working days per week (fallback)</span><input type="number" min={1} max={7} name="workingDaysPerWeek" defaultValue={wdpw} className="field-input w-24" /></label>
           <label className="flex items-center gap-1 text-sm"><input type="checkbox" name="includePlannedOrders" value="1" defaultChecked={includePlanned} /> Planned orders</label>
           <fieldset className="flex items-center gap-3">
             <legend className="field-label">Order status</legend>
@@ -134,7 +134,10 @@ export default async function CapacityLoadPage({ searchParams }: { searchParams:
           <section className="panel space-y-2 p-4" aria-label="Header">
             <h2 className="panel-title">Plant {report.plant}, {report.dateFrom} to {report.dateTo}, by {report.period.toLowerCase()}</h2>
             <p className="text-sm">
-              Assumed <strong>{report.workingDaysPerWeek} working days per week</strong>. Scanned <strong>{report.scanned.workCenters}</strong> work center{report.scanned.workCenters === 1 ? '' : 's'},{' '}
+              {report.calendarFallbackCount > 0
+                ? <>Declared <strong>{report.workingDaysPerWeek} working days per week</strong> used for <strong>{report.calendarFallbackCount}</strong> capacit{report.calendarFallbackCount === 1 ? 'y' : 'ies'} without calendar rules. </>
+                : null}
+              Scanned <strong>{report.scanned.workCenters}</strong> work center{report.scanned.workCenters === 1 ? '' : 's'},{' '}
               <strong>{report.scanned.orders}</strong> production order{report.scanned.orders === 1 ? '' : 's'} and <strong>{report.scanned.plannedOrders}</strong> planned order{report.scanned.plannedOrders === 1 ? '' : 's'}.
               {' '}Overall: available {fmt(report.totals.available)}, required {fmt(report.totals.required)}, load <Load value={report.totals.loadPercent} />.
             </p>

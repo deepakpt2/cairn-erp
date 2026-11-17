@@ -12,15 +12,19 @@
  * Individual capacities MULTIPLY available capacity. They would divide a scheduling *duration*, which this
  * report never computes.
  *
- * Three coarse assumptions are carried as warnings, never hidden: working days per week (no factory-calendar
- * rules are stored), the whole order's load dated at its scheduled start (operations carry no dates), and
- * time units that must match (there is no generic unit converter). Every defaulted field raises its own
- * warning. Nothing is written, cached or stored.
+ * Working days come from the factory calendar's rules (`workingDaysBetween`) where the capacity names a calendar
+ * that has them; otherwise from the declared working days per week, and the header says how many capacities fell
+ * back. Units are converted with `convertUnits`; only a refusal by the converter excludes a contribution. An
+ * order's load is spread evenly over its scheduled window, because operations carry no dates of their own: the
+ * header says that distribution is assumed. Every defaulted field raises its own warning. Nothing is written,
+ * cached or stored.
  */
 import { sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
 import { withTenant } from '../../platform/db/client';
+import { FactoryCalendarError, workingDaysBetween } from '../foundation/factory-calendar';
+import { convertUnits, UnitConversionError } from '../inventory/unit-conversion';
 import { ProductionVersionError, selectProductionVersion } from './production-version';
 import { minutesBetween } from './work-center';
 
@@ -68,7 +72,8 @@ export interface CapacityLoadQuery {
 }
 
 export type CapacityWarningCode =
-  | 'CAPACITY_WORKING_DAYS_ASSUMED' | 'CAPACITY_ORDER_DATES_COARSE' | 'CAPACITY_LOAD_TRUNCATED'
+  | 'CAPACITY_WORKING_DAYS_ASSUMED' | 'CAPACITY_CALENDAR_RULES_USED' | 'CAPACITY_LOAD_SPREAD'
+  | 'CAPACITY_ORDER_WINDOW_MISSING' | 'CAPACITY_LOAD_TRUNCATED'
   | 'CAPACITY_NO_TIMES' | 'CAPACITY_NO_UTILISATION' | 'CAPACITY_NO_INDIVIDUAL' | 'CAPACITY_NO_CALENDAR'
   | 'CAPACITY_UNIT_MISMATCH' | 'CAPACITY_UNIT_UNSTATED' | 'CAPACITY_NO_BASE_QTY' | 'CAPACITY_UNASSIGNED_LOAD'
   | 'CAPACITY_MIXED_UNITS' | 'PLANNED_NO_VERSION';
@@ -105,6 +110,8 @@ export interface CapacityLoadReport {
   dateTo: string;
   period: CapacityPeriod;
   workingDaysPerWeek: number;
+  /** How many capacities used the declared working days instead of real calendar rules, in at least one period. */
+  calendarFallbackCount: number;
   periods: string[];
   /** The dates each period column covers, clipped to the selection, for drilling through. */
   periodRanges: Record<string, { from: string; to: string; days: number }>;
@@ -165,6 +172,34 @@ export function effectiveDailyMinutes(c: {
   return (daily * (c.individualCapacities ?? 1) * (c.utilization ?? 100)) / 100;
 }
 
+/**
+ * How an order's load divides over the buckets of its scheduled window [start, finish]: the share of the window's
+ * calendar days falling in each bucket. Shares sum to 1 over the whole window; days outside the report's axis simply
+ * land in no bucket. A missing or unparseable finish puts everything on the start (`windowMissing`). Finish before
+ * start is the caller's refusal.
+ */
+export function windowShares(start: string, finish: string | null, period: CapacityPeriod): { shares: Map<string, number>; windowMissing: boolean } {
+  const valid = finish != null && ISO_DATE.test(finish) && toDate(toTime(finish)) === finish;
+  const shares = new Map<string, number>();
+  if (!valid) {
+    shares.set(bucketKey(start, period), 1);
+    return { shares, windowMissing: true };
+  }
+  const days = Math.round((toTime(finish!) - toTime(start)) / DAY_MS) + 1;
+  for (let t = toTime(start); t <= toTime(finish!); t += DAY_MS) {
+    const key = bucketKey(toDate(t), period);
+    shares.set(key, (shares.get(key) ?? 0) + 1 / days);
+  }
+  return { shares, windowMissing: false };
+}
+
+/** An inverted window has no meaningful distribution: refuse, naming the order. (The database also forbids it; this is the defence.) */
+export function checkWindow(label: string, start: string, finish: string | null): void {
+  if (finish && ISO_DATE.test(finish) && finish < start) {
+    fail(`${label} finishes (${finish}) before it starts (${start}), so its load cannot be distributed.`, 'Correct the scheduled dates of the order, then run the report again.');
+  }
+}
+
 /** standard value × operation quantity ÷ base quantity. Null when the base quantity is absent or zero. */
 export function requirementOf(value: number, operationQuantity: number, baseQuantity: number | null): number | null {
   if (baseQuantity == null || !(baseQuantity > 0)) return null;
@@ -189,14 +224,20 @@ interface Acc {
   row: CapacityRow | null; // null for an unassigned row
   workCenter: string; description: string;
   unit: string | null;
-  required: Map<string, number>;
+  /** Requirement by source unit, then bucket. Converted into `unit` at the end, so the converter rounds sums, not slivers. */
+  required: Map<string, Map<string, number>>;
+  /** Orders whose load was dated at their start for want of a usable finish date. */
+  windowMissing: Set<string>;
   warnings: CapacityWarning[];
   seen: Set<string>;
 }
 
 interface Operation {
+  /** The order the operation belongs to, for warnings. */
+  order: string;
   workCenter: string;
   start: string;
+  finish: string | null;
   quantity: number; // operation quantity, or the order's
   baseQuantity: number | null;
   values: Array<{ parameter: string; quantity: number; unit: string }>;
@@ -280,7 +321,7 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
     const orderNumbers = new Set<string>();
     if (centerList.length > 0) {
       const ops = (await tx.execute(sql`
-        select o.order_number, o.operation_number, o.work_center, p.scheduled_start,
+        select o.order_number, o.operation_number, o.work_center, p.scheduled_start, p.scheduled_finish,
                coalesce(o.operation_quantity, p.order_quantity)::float8 as quantity, o.base_quantity::float8 as base_quantity
           from production_order_operation o
           join production_order p on p.client = o.client and p.order_number = o.order_number
@@ -305,8 +346,10 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
       }
       for (const o of ops) {
         orderNumbers.add(String(o.order_number));
+        const finish = (o.scheduled_finish as string | null)?.trim() || null;
+        checkWindow(`Production order ${o.order_number}`, String(o.scheduled_start), finish);
         operations.push({
-          workCenter: String(o.work_center), start: String(o.scheduled_start), quantity: Number(o.quantity),
+          order: String(o.order_number), workCenter: String(o.work_center), start: String(o.scheduled_start), finish, quantity: Number(o.quantity),
           baseQuantity: o.base_quantity == null ? null : Number(o.base_quantity),
           values: byOp.get(`${o.order_number}/${o.operation_number}`) ?? [],
         });
@@ -318,7 +361,7 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
     let plannedNoVersion = 0;
     if (includePlanned && centerList.length > 0) {
       const planned = (await tx.execute(sql`
-        select order_number, material_number, plant, quantity::float8 as quantity, unit, start_date::text as start_date
+        select order_number, material_number, plant, quantity::float8 as quantity, unit, start_date::text as start_date, finish_date::text as finish_date
           from planned_order
          where client = ${client} and start_date >= ${input.dateFrom}::date and start_date <= ${input.dateTo}::date
          order by order_number
@@ -350,9 +393,11 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
             from routing_operation_value
            where client = ${client} and task_list_type = ${version.taskListType} and routing_group = ${version.routingGroup} and group_counter = ${version.groupCounter}
         `)) as unknown as Array<Record<string, unknown>>;
+        const pFinish = (po.finish_date as string | null) ?? null;
+        checkWindow(`Planned order ${po.order_number}`, String(po.start_date), pFinish);
         for (const o of ro) {
           operations.push({
-            workCenter: String(o.work_center), start: String(po.start_date),
+            order: String(po.order_number), workCenter: String(o.work_center), start: String(po.start_date), finish: pFinish,
             // A routing operation's quantity is the routing's own base, not this order's: the planned quantity scales it.
             quantity: Number(po.quantity),
             baseQuantity: o.base_quantity == null ? null : Number(o.base_quantity),
@@ -366,12 +411,12 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
     // Accumulators: one per capacity, plus one Unassigned per work centre that has an unmapped capacity.
     const accs = new Map<string, Acc>();
     for (const r of capRows) {
-      accs.set(`${r.workCenter}|${r.category}`, { row: r, workCenter: r.workCenter, description: r.description, unit: r.baseUnit, required: new Map(), warnings: [], seen: new Set() });
+      accs.set(`${r.workCenter}|${r.category}`, { row: r, workCenter: r.workCenter, description: r.description, unit: r.baseUnit, required: new Map(), windowMissing: new Set(), warnings: [], seen: new Set() });
     }
     const unassignedCenters = new Set(capRows.filter((r) => !r.parameter).map((r) => r.workCenter));
     for (const wc of unassignedCenters) {
       const d = capRows.find((r) => r.workCenter === wc)!.description;
-      accs.set(`${wc}|${UNASSIGNED_CATEGORY}`, { row: null, workCenter: wc, description: d, unit: null, required: new Map(), warnings: [], seen: new Set() });
+      accs.set(`${wc}|${UNASSIGNED_CATEGORY}`, { row: null, workCenter: wc, description: d, unit: null, required: new Map(), windowMissing: new Set(), warnings: [], seen: new Set() });
     }
     const warnOnce = (acc: Acc, w: CapacityWarning) => {
       const k = `${w.code}|${w.message}`;
@@ -379,7 +424,20 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
       acc.seen.add(k);
       acc.warnings.push(w);
     };
-    const contribute = (acc: Acc, op: Operation, param: string, quantity: number, unit: string, label: string) => {
+    // A converter refusal is the only reason a unit pair is excluded; probe each pair once and keep the reason.
+    const probes = new Map<string, string | null>();
+    const convertible = async (from: string, to: string): Promise<string | null> => {
+      const key = `${from}>${to}`;
+      if (!probes.has(key)) {
+        try { await convertUnits(tx, { quantity: 1, fromUnit: from, toUnit: to }); probes.set(key, null); }
+        catch (error) {
+          if (!(error instanceof UnitConversionError)) throw error;
+          probes.set(key, error.message);
+        }
+      }
+      return probes.get(key) ?? null;
+    };
+    const contribute = async (acc: Acc, op: Operation, param: string, quantity: number, unit: string, label: string) => {
       const req = requirementOf(quantity, op.quantity, op.baseQuantity);
       const where = { workCenter: acc.workCenter, capacityCategory: acc.row?.category ?? UNASSIGNED_CATEGORY, scope: 'ROW' as const };
       if (req == null) {
@@ -388,13 +446,20 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
       }
       if (acc.unit == null) {
         acc.unit = unit;
-        if (acc.row) warnOnce(acc, { ...where, code: 'CAPACITY_UNIT_UNSTATED', message: `${label} states no capacity unit, so ${unit} (the first contribution's unit) is used; contributions in another unit are excluded.` });
-      } else if (unit !== acc.unit) {
-        warnOnce(acc, { ...where, code: 'CAPACITY_UNIT_MISMATCH', message: `${label}: parameter ${param} is in ${unit} but the capacity is measured in ${acc.unit}. No conversion is made, so the contribution is excluded.` });
+        if (acc.row) warnOnce(acc, { ...where, code: 'CAPACITY_UNIT_UNSTATED', message: `${label} states no capacity unit, so ${unit} (the first contribution's unit) is used and the others are converted into it.` });
+      }
+      const refusal = await convertible(unit, acc.unit);
+      if (refusal) {
+        warnOnce(acc, { ...where, code: 'CAPACITY_UNIT_MISMATCH', message: `${label}: parameter ${param} is in ${unit} but the capacity is measured in ${acc.unit}, and they could not be converted (${refusal}). The contribution is excluded.` });
         return;
       }
-      const key = bucketKey(op.start, period);
-      acc.required.set(key, (acc.required.get(key) ?? 0) + req);
+      const { shares, windowMissing } = windowShares(op.start, op.finish, period);
+      if (windowMissing) acc.windowMissing.add(op.order);
+      let byBucket = acc.required.get(unit);
+      if (!byBucket) { byBucket = new Map(); acc.required.set(unit, byBucket); }
+      for (const [key, share] of shares) {
+        if (periodRanges[key]) byBucket.set(key, (byBucket.get(key) ?? 0) + req * share);
+      }
     };
 
     for (const op of operations) {
@@ -403,16 +468,32 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
       for (const cap of mapped) {
         const value = op.values.find((v) => v.parameter === cap.parameter);
         if (!value) continue;
-        contribute(accs.get(`${cap.workCenter}|${cap.category}`)!, op, cap.parameter!, value.quantity, value.unit, `Capacity ${cap.category} of work center ${cap.workCenter}`);
+        await contribute(accs.get(`${cap.workCenter}|${cap.category}`)!, op, cap.parameter!, value.quantity, value.unit, `Capacity ${cap.category} of work center ${cap.workCenter}`);
       }
       const un = accs.get(`${op.workCenter}|${UNASSIGNED_CATEGORY}`);
       if (un) {
         for (const v of op.values) {
           if (claimed.has(v.parameter)) continue;
-          contribute(un, op, v.parameter, v.quantity, v.unit, `Work center ${op.workCenter}`);
+          await contribute(un, op, v.parameter, v.quantity, v.unit, `Work center ${op.workCenter}`);
         }
       }
     }
+
+    // Working days of a capacity in a period: the calendar's rules where it names a calendar that has them, else the
+    // declared proportion. workingDaysBetween refuses with CALENDAR_NO_PERIOD rather than guess; that is caught here.
+    const fellBack = new Set<string>();
+    const workingDays = async (r: CapacityRow, key: string): Promise<number> => {
+      const range = periodRanges[key]!;
+      if (r.calendar) {
+        try {
+          return await workingDaysBetween(tx, client, { calendarId: r.calendar, from: range.from, to: range.to });
+        } catch (error) {
+          if (!(error instanceof FactoryCalendarError) || error.code !== 'CALENDAR_NO_PERIOD') throw error;
+        }
+      }
+      fellBack.add(`${r.workCenter}|${r.category}`);
+      return Math.round((range.days * wdpw) / 7);
+    };
 
     // Rows.
     const rows: CapacityLoadRow[] = [];
@@ -421,22 +502,38 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
       const where = { workCenter: acc.workCenter, capacityCategory: r?.category ?? UNASSIGNED_CATEGORY, scope: 'ROW' as const };
       const daily = r ? effectiveDailyMinutes(r) : 0;
       const rowWarnings = [...acc.warnings];
+
+      // Requirement per bucket, in the row's unit: each source unit's sum converted once.
+      const requiredBy = new Map<string, number>();
+      for (const [unit, byBucket] of acc.required) {
+        for (const [key, amount] of byBucket) {
+          const converted = unit === acc.unit ? amount : (await convertUnits(tx, { quantity: amount, fromUnit: unit, toUnit: acc.unit! })).quantity;
+          requiredBy.set(key, (requiredBy.get(key) ?? 0) + converted);
+        }
+      }
+
+      let totalAvailable = 0;
+      let totalRequired = 0;
+      const cells: CapacityLoadCell[] = [];
+      for (const p of periods) {
+        const available = r ? (daily ?? 0) * (daily == null ? 0 : await workingDays(r, p)) : 0;
+        const required = requiredBy.get(p) ?? 0;
+        totalAvailable += available;
+        totalRequired += required;
+        cells.push({ period: p, available: round3(available), required: round3(required), loadPercent: percent(required, available) });
+      }
       if (r) {
         if (daily == null) rowWarnings.push({ ...where, code: 'CAPACITY_NO_TIMES', message: `Capacity ${r.category} of work center ${r.workCenter} has no operating times, so its available capacity is shown as zero. Maintain start and finish times on CR02.` });
         if (r.utilization == null) rowWarnings.push({ ...where, code: 'CAPACITY_NO_UTILISATION', message: `Capacity ${r.category} of work center ${r.workCenter} states no utilisation, so 100% is used.` });
         if (r.individualCapacities == null) rowWarnings.push({ ...where, code: 'CAPACITY_NO_INDIVIDUAL', message: `Capacity ${r.category} of work center ${r.workCenter} states no individual capacities, so 1 is used.` });
-        if (!r.calendar) rowWarnings.push({ ...where, code: 'CAPACITY_NO_CALENDAR', message: `Capacity ${r.category} of work center ${r.workCenter}: no factory calendar is assigned, and no calendar rules are stored anywhere, so non-working days cannot be excluded.` });
+        if (!r.calendar || fellBack.has(`${r.workCenter}|${r.category}`)) {
+          rowWarnings.push({ ...where, code: 'CAPACITY_NO_CALENDAR', message: `Capacity ${r.category} of work center ${r.workCenter} ${r.calendar ? `names factory calendar ${r.calendar}, which has no rules covering the period` : 'names no factory calendar'}, so non-working days cannot be excluded.` });
+        }
       }
-      let totalAvailable = 0;
-      let totalRequired = 0;
-      const cells = periods.map((p) => {
-        const workingDays = Math.round((periodRanges[p].days * wdpw) / 7);
-        const available = (daily ?? 0) * workingDays;
-        const required = acc.required.get(p) ?? 0;
-        totalAvailable += available;
-        totalRequired += required;
-        return { period: p, available: round3(available), required: round3(required), loadPercent: percent(required, available) };
-      });
+      if (acc.windowMissing.size > 0) {
+        const list = [...acc.windowMissing].sort();
+        rowWarnings.push({ ...where, code: 'CAPACITY_ORDER_WINDOW_MISSING', message: `Work center ${acc.workCenter}: ${list.length} order${list.length === 1 ? ' has' : 's have'} no usable finish date (${list.slice(0, 5).join(', ')}${list.length > 5 ? ', …' : ''}), so all of ${list.length === 1 ? 'its' : 'their'} load is dated at the start.` });
+      }
       if (!r && totalRequired > 0) {
         rowWarnings.push({ ...where, code: 'CAPACITY_UNASSIGNED_LOAD', message: `Work center ${acc.workCenter}: ${round3(totalRequired)} ${acc.unit ?? ''} of load could not be attributed to a capacity, because the capacity carries no standard value parameter.`.replace('  ', ' ') });
       }
@@ -457,16 +554,21 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
     const required = rows.reduce((n, r) => n + r.total.required, 0);
     const mixed = units.size > 1;
 
+    const capacityCount = capRows.length;
     const header: CapacityWarning[] = [
-      { code: 'CAPACITY_WORKING_DAYS_ASSUMED', scope: 'HEADER', message: `Available capacity uses ${wdpw} working days per week, because no factory-calendar rules are stored. Non-working days are not excluded. Change the figure on the selection screen to match your plant. (Working days in a period are round(calendar days × ${wdpw} ÷ 7): a proportion, not a promise about which days.)` },
-      { code: 'CAPACITY_ORDER_DATES_COARSE', scope: 'HEADER', message: "Load is dated at the order's scheduled start, because operations carry no scheduled dates. Peaks are overstated." },
+      { code: 'CAPACITY_LOAD_SPREAD', scope: 'HEADER', message: "Each order's load is spread evenly across its scheduled start and finish, because operations carry no scheduled dates. The distribution within an order is assumed, not scheduled." },
     ];
+    if (fellBack.size > 0) {
+      header.unshift({ code: 'CAPACITY_WORKING_DAYS_ASSUMED', scope: 'HEADER', message: `Available capacity uses ${wdpw} working days per week for ${fellBack.size} of ${capacityCount} capacities, because no factory-calendar rules cover those calendars. Non-working days are not excluded for them. Maintain rules at /config/factory-calendars, or change the figure on the selection screen. (Working days in a period are round(calendar days × ${wdpw} ÷ 7): a proportion, not a promise about which days.)` });
+    } else if (capacityCount > 0) {
+      header.unshift({ code: 'CAPACITY_CALENDAR_RULES_USED', scope: 'HEADER', message: `Available capacity counts the working days of each capacity's factory calendar (all ${capacityCount} capacities have rules); the working days per week figure is not used.` });
+    }
     if (plannedNoVersion > 0) header.push({ code: 'PLANNED_NO_VERSION', scope: 'HEADER', message: `${plannedNoVersion} planned order${plannedNoVersion === 1 ? ' has' : 's have'} no selectable production version and contribute${plannedNoVersion === 1 ? 's' : ''} no load.` });
     if (notScanned > 0) header.push({ code: 'CAPACITY_LOAD_TRUNCATED', scope: 'HEADER', message: `${notScanned} work center${notScanned === 1 ? ' was' : 's were'} not scanned. The scan limit is ${limit}.` });
     if (mixed) header.push({ code: 'CAPACITY_MIXED_UNITS', scope: 'HEADER', message: `The rows are measured in more than one unit (${[...units].join(', ')}), so no overall load percentage is given.` });
 
     return {
-      plant, dateFrom: input.dateFrom, dateTo: input.dateTo, period, workingDaysPerWeek: wdpw, periods, periodRanges, rows,
+      plant, dateFrom: input.dateFrom, dateTo: input.dateTo, period, workingDaysPerWeek: wdpw, calendarFallbackCount: fellBack.size, periods, periodRanges, rows,
       totals: { available: round3(available), required: round3(required), loadPercent: mixed ? null : percent(required, available) },
       scanned: { workCenters: centers.size, orders: orderNumbers.size, plannedOrders: plannedScanned },
       warnings: [...header, ...rows.flatMap((r) => r.warnings)],

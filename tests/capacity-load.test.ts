@@ -7,13 +7,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import {
-  bucketKey, CAPACITY_LOAD_CAPABILITY, CAPACITY_LOAD_LIMIT_CEILING, CapacityLoadError, drillDownFor, effectiveDailyMinutes,
+  bucketKey, checkWindow, CAPACITY_LOAD_CAPABILITY, CAPACITY_LOAD_LIMIT_CEILING, CapacityLoadError, drillDownFor, effectiveDailyMinutes,
   isoWeekKey, loadCapacityReport, requirementOf, type CapacityLoadQuery, type CapacityLoadReport,
 } from '../src/modules/production/capacity-load';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { changeWorkCenter, createWorkCenter, getWorkCenter, saveWorkCenterCategory, WorkCenterError, type WorkCenterCapacityInput } from '../src/modules/production/work-center';
+import { saveCalendarPeriod, saveHolidayCalendar, addHolidayDay } from '../src/modules/foundation/factory-calendar';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'CM01-TEST';
@@ -37,7 +38,7 @@ async function center(workCenter: string, capacities: WorkCenterCapacityInput[],
 
 let seq = 0;
 async function order(o: {
-  start: string; status?: string; plant?: string; workCenter: string; workCenterPlant?: string; quantity?: number;
+  start: string; finish?: string | null; status?: string; plant?: string; workCenter: string; workCenterPlant?: string; quantity?: number;
   opQuantity?: number | null; base?: number | null; values: Array<[string, number, string]>;
 }) {
   const number = `9${String(++seq).padStart(5, '0')}`;
@@ -45,7 +46,7 @@ async function order(o: {
     await tx.execute(sql`
       insert into production_order (client, order_number, material_number, plant, order_quantity, unit_of_measure, scheduled_start, scheduled_finish, status,
         technically_completed_by, technically_completed_at, created_by)
-      values (${client}, ${number}, 'CM-FG', ${o.plant ?? PLANT}, ${o.quantity ?? 100}, 'PC', ${o.start}, '2026-12-31', ${o.status ?? 'RELEASED'},
+      values (${client}, ${number}, 'CM-FG', ${o.plant ?? PLANT}, ${o.quantity ?? 100}, 'PC', ${o.start}, ${o.finish === undefined ? o.start : o.finish}, ${o.status ?? 'RELEASED'},
         ${o.status === 'TECHNICALLY_COMPLETED' ? ACTOR : null}, ${o.status === 'TECHNICALLY_COMPLETED' ? new Date().toISOString() : null}, ${ACTOR})`);
     await tx.execute(sql`
       insert into production_order_operation (client, order_number, operation_number, sequence, execution_order, task_list_type, routing_group, group_counter,
@@ -107,6 +108,35 @@ beforeAll(async () => {
   await center('WC09', [cap('MAC', { standardValueParameter: 'MACH' })]);              // no base quantity
   await center('WC10', [cap('MAC', { standardValueParameter: 'MACH' })]);              // cross plant
 
+  // Calendar rules, spreading and unit conversion (the amended CM01).
+  await withTenant(client, (tx) => tx.execute(sql`
+    insert into factory_calendar (client, calendar_id, name) values (${client}, '01', 'Ruled'), (${client}, '02', 'No rules')`));
+  await saveHolidayCalendar({ client, changedBy: ACTOR, capabilities: ['CFG.FND.CALENDAR.DEFINE'], holidayCalendarId: 'H1', name: 'Holidays', validFromYear: 2026, validToYear: 2026 });
+  await addHolidayDay({ client, changedBy: ACTOR, capabilities: ['CFG.FND.CALENDAR.DEFINE'], holidayCalendarId: 'H1', date: '2026-06-03', description: 'Midweek' });
+  await saveCalendarPeriod({
+    client, changedBy: ACTOR, capabilities: ['CFG.FND.CALENDAR.DEFINE'], calendarId: '01', validFrom: '2026-01-01', validTo: '2026-12-31', holidayCalendarId: 'H1',
+    monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false,
+  });
+  await center('WC11', [cap('MAC', { standardValueParameter: 'MACH', factoryCalendar: '01' })]);
+  await center('WC12', [cap('MAC', { standardValueParameter: 'MACH', factoryCalendar: '02' })]);
+  await center('WC13', [cap('MAC', { standardValueParameter: 'MACH' })]);              // 7-day window
+  await center('WC14', [cap('MAC', { standardValueParameter: 'MACH' })]);              // 21-day window
+  await center('WC15', [cap('MAC', { standardValueParameter: 'MACH' }), cap('LAB', { standardValueParameter: 'LAB' })]); // 90:10
+  await center('WC16', [cap('MAC', { standardValueParameter: 'MACH' })]);              // one day
+  await center('WC17', [cap('MAC', { standardValueParameter: 'MACH' })]);              // no finish date
+  await center('WC18', [cap('MAC', { standardValueParameter: 'MACH' })]);              // MIN + HR
+  await center('WC19', [cap('MAC', { standardValueParameter: 'MACH' })]);              // unconvertible unit
+  await withTenant(client, (tx) => tx.execute(sql`
+    insert into unit_of_measure (code, name, dimension, decimal_places, is_base_unit) values ('XT9', 'Unseeded test unit', 'TIME', 2, false) on conflict do nothing`));
+  await order({ start: '2026-06-02', finish: '2026-06-08', workCenter: 'WC13', opQuantity: 1, base: 1, values: [['MACH', 700, 'MIN']] });
+  await order({ start: '2026-06-01', finish: '2026-06-21', workCenter: 'WC14', opQuantity: 1, base: 1, values: [['MACH', 700, 'MIN']] });
+  await order({ start: '2026-06-02', finish: '2026-06-08', workCenter: 'WC15', opQuantity: 1, base: 1, values: [['MACH', 90, 'MIN'], ['LAB', 10, 'MIN']] });
+  await order({ start: '2026-06-02', workCenter: 'WC16', opQuantity: 1, base: 1, values: [['MACH', 70, 'MIN']] });
+  await order({ start: '2026-06-02', finish: 'unknown', workCenter: 'WC17', opQuantity: 1, base: 1, values: [['MACH', 70, 'MIN']] });
+  await order({ start: '2026-06-02', workCenter: 'WC18', opQuantity: 1, base: 1, values: [['MACH', 90, 'MIN']] });
+  await order({ start: '2026-06-02', workCenter: 'WC18', opQuantity: 1, base: 1, values: [['MACH', 1, 'HR']] });
+  await order({ start: '2026-06-02', workCenter: 'WC19', opQuantity: 1, base: 1, values: [['MACH', 5, 'XT9']] });
+
   // 1, 5, 7, 8: WC01 (machine 90 / labour 30 per 120 base, quantity 300), WC02 unassigned.
   await order({ start: '2026-06-02', workCenter: 'WC01', opQuantity: 300, base: 120, values: [['MACH', 90, 'MIN'], ['LAB', 30, 'MIN']] });
   await order({ start: '2026-06-09', workCenter: 'WC02', opQuantity: 10, base: 1, values: [['MACH', 5, 'MIN']] });
@@ -128,6 +158,7 @@ beforeAll(async () => {
 }, 300_000);
 
 afterAll(async () => {
+  await withTenant(client, (tx) => tx.execute(sql`delete from unit_of_measure where code = 'XT9'`)).catch(() => undefined);
   if (tenant) await destroyTenant(tenant.client);
   if (other) await destroyTenant(other.client);
   await closeDb();
@@ -204,8 +235,9 @@ describe('attribution', () => {
     const row = rowOf(await report(), 'WC05', 'MAC');
     expect(row.total.required).toBe(0);
     const w = row.warnings.find((x) => x.code === 'CAPACITY_UNIT_MISMATCH')!;
-    expect(w.message).toContain('H');
+    expect(w.message).toContain(' H ');
     expect(w.message).toContain('MIN');
+    expect(w.message).toMatch(/UNIT_(NOT_FOUND|FACTOR_MISSING)/); // the converter's own reason is given
   });
 
   it('9b. an unstated capacity unit takes the first contribution’s and says so', async () => {
@@ -223,9 +255,47 @@ describe('attribution', () => {
 });
 
 describe('periods', () => {
-  it('10. all of an order’s load lands in the week of its scheduled start', async () => {
-    const row = rowOf(await report(), 'WC08', 'MAC');
-    expect(row.cells.map((c) => c.required)).toEqual([0, 100, 0, 0]);
+  it('10. a 7-day window with a load of 700 puts 100 in each day; 21 days over three weeks puts a third in each', async () => {
+    const days = rowOf(await report({ period: 'DAY' }), 'WC13', 'MAC');
+    const loaded = days.cells.filter((c) => c.required > 0);
+    expect(loaded).toHaveLength(7);
+    expect(loaded.every((c) => c.required === 100)).toBe(true);
+    expect(days.cells[1].period).toBe('2026-06-02');
+    const weeks = rowOf(await report(), 'WC14', 'MAC');
+    expect(weeks.cells.map((c) => c.required)).toEqual([233.333, 233.333, 233.333, 0]);
+  });
+
+  it('11a. an order of one day puts the whole load on that day', async () => {
+    const cells = rowOf(await report({ period: 'DAY' }), 'WC16', 'MAC').cells;
+    expect(cells.filter((c) => c.required > 0)).toEqual([expect.objectContaining({ period: '2026-06-02', required: 70 })]);
+  });
+
+  it('11b. a finish before the start refuses, naming the order', () => {
+    // The database forbids such an order, so the rule is asserted directly.
+    expect(() => checkWindow('Production order 900001', '2026-06-10', '2026-06-09')).toThrow(/Production order 900001.*2026-06-09/);
+    expect(() => checkWindow('Production order 900001', '2026-06-10', '2026-06-10')).not.toThrow();
+    expect(() => checkWindow('Production order 900001', '2026-06-10', 'unknown')).not.toThrow();
+  });
+
+  it('11c. a missing finish puts everything on the start and warns on the row', async () => {
+    const row = rowOf(await report(), 'WC17', 'MAC');
+    expect(row.cells.map((c) => c.required)).toEqual([70, 0, 0, 0]);
+    expect(row.warnings.map((w) => w.code)).toContain('CAPACITY_ORDER_WINDOW_MISSING');
+    expect(rowOf(await report(), 'WC13', 'MAC').warnings.map((w) => w.code)).not.toContain('CAPACITY_ORDER_WINDOW_MISSING');
+  });
+
+  it('spreading follows the operation durations: 90 and 10 are 90% and 10% of every day', async () => {
+    const r = await report({ period: 'DAY' });
+    const mac = rowOf(r, 'WC15', 'MAC').cells.filter((c) => c.required > 0);
+    const lab = rowOf(r, 'WC15', 'LAB').cells.filter((c) => c.required > 0);
+    expect(mac).toHaveLength(7);
+    for (let i = 0; i < 7; i += 1) expect(mac[i].required / (mac[i].required + lab[i].required)).toBeCloseTo(0.9, 2);
+    expect(rowOf(r, 'WC15', 'MAC').total.required).toBeCloseTo(90, 2);
+  });
+
+  it('a window that runs past the range loses only the part outside it', async () => {
+    const order9 = rowOf(await report({ dateTo: '2026-06-04', period: 'DAY' }), 'WC13', 'MAC');
+    expect(order9.total.required).toBe(300); // 2, 3 and 4 June of seven days
   });
 
   it('11. the axis holds every period, loaded or not', async () => {
@@ -255,9 +325,56 @@ describe('periods', () => {
   });
 });
 
+describe('calendar and units', () => {
+  it('11d. 90 MIN and 1 HR sum to 150 minutes, not 91 and not a refusal', async () => {
+    const row = rowOf(await report(), 'WC18', 'MAC');
+    expect(row.total.required).toBe(150);
+    expect(row.warnings.map((w) => w.code)).not.toContain('CAPACITY_UNIT_MISMATCH');
+  });
+
+  it('11e. a unit the converter refuses is excluded with its reason', async () => {
+    const row = rowOf(await report(), 'WC19', 'MAC');
+    expect(row.total.required).toBe(0);
+    const w = row.warnings.find((x) => x.code === 'CAPACITY_UNIT_MISMATCH')!;
+    expect(w.message).toContain('UNIT_FACTOR_MISSING');
+    expect(w.message).toContain('XT9');
+  });
+
+  it('11f. a capacity with calendar rules counts the real working days, a holiday excluded', async () => {
+    const r = await report();
+    const cells = rowOf(r, 'WC11', 'MAC').cells;
+    expect(cells[0].available).toBe(864 * 4); // week of 1 June: Mon–Fri less Wednesday 3 June
+    expect(cells[1].available).toBe(864 * 5);
+    expect(rowOf(r, 'WC11', 'MAC').warnings.map((w) => w.code)).not.toContain('CAPACITY_NO_CALENDAR');
+    // the declared figure is ignored where rules exist
+    expect(rowOf(await report({ workingDaysPerWeek: 7 }), 'WC11', 'MAC').cells[1].available).toBe(864 * 5);
+  });
+
+  it('11g. a calendar with no rules falls back to the proportion and says so on the row', async () => {
+    const r = await report();
+    const row = rowOf(r, 'WC12', 'MAC');
+    expect(row.cells[0].available).toBe(864 * 5);
+    const w = row.warnings.find((x) => x.code === 'CAPACITY_NO_CALENDAR')!;
+    expect(w.message).toContain('calendar 02');
+    expect((await report({ workingDaysPerWeek: 7 })).rows.find((x) => x.workCenter === 'WC12')!.cells[0].available).toBe(864 * 7);
+  });
+});
+
 describe('warnings and bounds', () => {
-  it('both assumptions are header warnings on every run', async () => {
-    expect(codes(await report(), 'HEADER')).toEqual(expect.arrayContaining(['CAPACITY_WORKING_DAYS_ASSUMED', 'CAPACITY_ORDER_DATES_COARSE']));
+  it('the spread is always a header warning; the working-days assumption names how many capacities fell back', async () => {
+    const r = await report();
+    expect(codes(r, 'HEADER')).toEqual(expect.arrayContaining(['CAPACITY_LOAD_SPREAD', 'CAPACITY_WORKING_DAYS_ASSUMED']));
+    const w = r.warnings.find((x) => x.code === 'CAPACITY_WORKING_DAYS_ASSUMED')!;
+    expect(r.calendarFallbackCount).toBeGreaterThan(0);
+    expect(w.message).toMatch(new RegExp(`${r.calendarFallbackCount} of \\d+ capacities`));
+    expect(w.message).toContain('/config/factory-calendars');
+  });
+
+  it('when every capacity has rules the header says so instead of warning', async () => {
+    const r = await report({ workCenterFrom: 'WC11', workCenterTo: 'WC11' });
+    expect(r.calendarFallbackCount).toBe(0);
+    expect(codes(r, 'HEADER')).toContain('CAPACITY_CALENDAR_RULES_USED');
+    expect(codes(r, 'HEADER')).not.toContain('CAPACITY_WORKING_DAYS_ASSUMED');
   });
 
   it('16. a limit above the ceiling is refused, naming the ceiling', async () => {
@@ -268,8 +385,9 @@ describe('warnings and bounds', () => {
     const r = await report({ limit: 3 });
     expect(r.scanned.workCenters).toBe(3);
     expect(r.truncated).toBe(true);
-    expect(r.notScanned).toBe(7);
-    expect(r.warnings.find((w) => w.code === 'CAPACITY_LOAD_TRUNCATED')!.message).toContain('7 work centers were not scanned');
+    const total = (await report()).scanned.workCenters;
+    expect(r.notScanned).toBe(total - 3);
+    expect(r.warnings.find((w) => w.code === 'CAPACITY_LOAD_TRUNCATED')!.message).toContain(`${total - 3} work centers were not scanned`);
   });
 
   it('15. a missing capability is refused before anything is read', async () => {
