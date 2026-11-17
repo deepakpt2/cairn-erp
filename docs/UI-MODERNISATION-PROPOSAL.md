@@ -1,88 +1,86 @@
-# Cairn UI Refresh Proposal
+# Cairn Mobile UI Proposal
 
-Status: proposal, for approval. Scope: look and feel only, plus making every screen usable on a phone. No change to business rules, service functions in `src/modules/*`, `actions.ts`, routes, permissions, the database, or what each screen shows.
+Status: proposal, for approval. Scope: **make the existing app usable on phones and tablets, best effort.** The desktop UI is not changed. No change to business rules, service functions, `actions.ts`, routes, permissions, the database, or what each screen shows.
 
-Revision note: an earlier draft proposed a component-library rebuild, command palette, PWA, dashboards and card layouts. That was dropped. This is an ERP: users want a pleasant, clean screen with everything they need visible at once.
+Revision note: earlier drafts covered a desktop visual refresh, a component library, PWA and more. Dropped. Only mobile is needed, and every screen should keep showing everything it shows today.
 
 ## 1. Principles
 
-1. **Everything stays on the screen.** No accordions, tabs, "show more", hidden columns, drawers for content, or card views that drop fields. If a screen shows a field or column today, it shows it afterwards, on desktop and on mobile.
-2. **Same layout, better finish.** Same pages, same positions of fields, buttons and tables. Users should recognise their screens immediately.
-3. **Density is a feature.** Rows stay compact. We improve readability (alignment, contrast, spacing rhythm, type), not whitespace.
-4. **No fancy features.** No animations beyond basic hover and focus, no dashboards, no new widgets.
-5. **CSS-first.** Most of the change lands in design tokens and the existing shared classes, so hundreds of pages improve without being edited.
+1. **Desktop is untouched.** Every mobile rule is scoped to small screens (below the `md` breakpoint, 768px) in CSS media queries or `max-md:` utilities. Above that width nothing renders differently.
+2. **Everything stays visible.** No hidden columns, accordions, tabs or card conversions. Same fields, same order, same columns.
+3. **Best effort, in layers.** A global CSS layer fixes most pages at once. Then we fix what is still broken, worst pages first. No promise that all 308 pages are perfect, and the heaviest configuration screens may remain "usable but clumsy".
+4. **No new dependencies.** Plain CSS and Tailwind already in the repo.
 
-## 2. Where we are today
+## 2. What is wrong today (from code review)
 
 | Area | Finding |
 |---|---|
-| Stack | Next 15, React 19, Tailwind 3.4. No component library. 308 pages, 429 `<table>`s. |
-| Styling | Tokens in `tailwind.config.ts`; shared classes in `globals.css` (`.grid-table`, `.btn-*`, `.chip-*`, `.field-*`, `.panel`, `.section-head`). |
-| Look | Warm paper, teal accent, 2px radii, 10.5–18px type (body 13.5px), light only. Functional but plain and a little harsh: tight borders everywhere, small type, flat grey headers. |
-| Mobile | Sidebar is already a drawer below `md`. Pages are desktop layouts squeezed down; breakpoints are inconsistent (about 2,400 `sm:`, 400 `lg:`, 34 `md:`); wide tables rely on a small-screen override. |
-| Keep | Server rendering, no-JS command bar, tabular numerals, contrast fixes, focus ring, RTL-safe logical properties. |
+| Viewport | `width=device-width, initial-scale=1` is set, so the page does render at phone width. No `theme-color`, no safe-area handling. |
+| Type and inputs | Body is 13.5px, inputs smaller than 16px. iOS Safari zooms the page when such an input is focused. |
+| Touch targets | Buttons, links and inputs are sized for a mouse; many are well under 44px tall. |
+| Tables | 429 `<table>`s styled as `.grid-table`. A small-screen override exists but there is no consistent horizontal-scroll container, so wide tables push the whole page sideways. |
+| Forms and grids | Many layouts use `sm:`/`lg:` multi-column grids (about 2,400 `sm:` uses against 34 `md:`), so breakpoints are inconsistent and some two-column forms never collapse cleanly. |
+| Shell | Sidebar is already a drawer below `md` (focus trap, Escape, scroll lock). Command bar, session bar and status bar are desktop-shaped and wrap awkwardly. Action buttons sit at the top or bottom of long pages. |
 
-## 3. Visual refresh (all screens, mostly via tokens and shared classes)
+Phase 0 below measures this instead of guessing.
 
-- **Typography:** self-hosted Inter (via `next/font`, tabular figures on) for crisper numbers and text. Body 14px (from 13.5px), table text 13px, clear title/section/label scale. Same density, easier to read.
-- **Colour:** keep the warm neutral and teal identity, but soften it: lighter borders, a subtle tinted table header instead of a heavy grey one, gentle row hover, calmer status chips (soft background, dark text, plus a small icon or text so meaning never depends on colour alone). Re-check all pairs for 4.5:1 contrast.
-- **Shape and depth:** 4–6px radius on controls and panels (from 2px), hairline borders, a very light shadow on popups only.
-- **Forms:** consistent label/field alignment, clear focus and error states, error text under the field, disabled and read-only states that look different from editable fields. Same fields in the same places.
-- **Buttons:** one primary per area, clear secondary and danger styles, consistent height.
-- **Tables:** sticky header on long lists, right-aligned tabular numbers, clearer totals row, readable row separators, selected-row highlight. Same columns.
-- **Icons:** a small set of Lucide icons only where they replace nothing visible: status chips, the search field, notification bell, sort arrows. No icon-only navigation.
-- **Page chrome:** cleaner top bar and sidebar styling (same items, same order), breadcrumb unchanged, status bar restyled. The command bar stays exactly as it works today.
-- **Optional dark theme:** cheap once tokens are variables; off by default. Include only if you want it.
+## 3. Approach
 
-## 4. Mobile and tablet (everything visible, nothing folded)
+### Layer A: global mobile CSS (`globals.css`, one media block, affects every page)
+- **Inputs:** 16px font and 44px minimum height for `input`, `select`, `textarea`, `.btn*`; `inputmode="decimal"` on numeric fields; native date and time pickers.
+- **Touch targets:** 44px minimum on links in menus, table row actions and chips; more space between adjacent actions.
+- **Base type:** body 14–15px on small screens only.
+- **Tables:** every `.grid-table` scrolls horizontally inside its own box (`display: block; overflow-x: auto` on the table, which needs no page edits), keeping all columns. Header row sticky, first column sticky (using logical `inset-inline-start`, so RTL works) with a solid background. The page itself never scrolls sideways.
+- **Form grids:** any multi-column field grid collapses to one column below `md`, in DOM order. Labels above fields.
+- **Panels and headers:** panel headers wrap instead of overflowing; long numbers, codes and names wrap or truncate with the full value still in the DOM.
+- **Safe areas and meta:** `viewport-fit=cover`, `env(safe-area-inset-*)` padding, `theme-color`, `touch-action: manipulation` to remove tap delay, `overscroll-behavior` so the drawer does not scroll the page behind it.
 
-- **Page layout:** content stacks in a single column on small screens. Field groups that sit side by side on desktop stack in the same order. All fields remain visible and in sequence; no collapsing.
-- **Tables:** keep them as tables, with **all columns**. Inside the table's own bordered container, scroll horizontally with a sticky first column (document number or key). Header stays sticky. The page itself never scrolls sideways. No conversion to cards, because cards hide or reorder data.
-- **Totals and key actions:** Save, Post, Release and other primary buttons stay in the same order as desktop, but the action row is sticky at the bottom on small screens so it is reachable without scrolling back up.
-- **Touch comfort:** 16px inputs (stops iOS zoom), 44px minimum height for buttons and inputs on touch screens, `inputmode` for number fields, native date pickers. Spacing between rows increases slightly on touch only, via a media query, not a separate layout.
-- **Navigation:** the existing drawer menu stays, restyled. The command bar stays at the top.
-- **Breakpoints:** standardise on `md` (768px) as the shell switch and drop ad-hoc breakpoints as pages are touched.
-- **Meta tags:** `theme-color`, and safe-area padding. No PWA, offline mode or app install.
+### Layer B: shell (`src/ui/shell/*`)
+- Command bar: logo, input and links stack cleanly in two rows; the input is full width and 16px.
+- Session bar and status bar: wrap, with the keyboard-hint text hidden on touch (hints only, no functionality).
+- Sidebar drawer: keep, enlarge touch targets, make the Menu button easy to reach.
+- **Sticky action row:** on small screens, the existing Save / Post / Release / Cancel button group sticks to the bottom of the viewport with safe-area padding. Same buttons, same order, no new actions. Done through a shared class, applied page by page where those groups exist.
+- Notification bell, session menu, personal menu: popups sized to the viewport.
 
-## 5. Optional: Classic / Refreshed switch
+### Layer C: page fixes
+Phase 0 produces a list of pages that still break after A and B (overflowing fixed-width elements, side-by-side blocks not using the shared grid, clipped buttons, tiny controls). Those get fixed individually by archetype: list, document, form, report, config.
 
-Because the refresh is token-based, both looks can coexist cheaply. `data-theme="classic" | "refreshed"` on `<html>` swaps the tokens (radius, font, colours, spacing). Layout and content are identical in both. The setting lives in the personal menu and a cookie, applied server-side so there is no flash. It also gives an instant rollback while the refresh settles. Cost: about 3–4 days. Recommended if some users are cautious about change; skip it if you'd rather ship one look.
-
-## 6. Delivery plan
+## 4. Delivery plan
 
 | Phase | Scope | Effort |
 |---|---|---|
-| 0. Audit | Playwright screenshots of all 308 pages at 390, 768 and 1280px. List pages that break on mobile (overflow, clipped buttons, tiny targets). Agree the palette and type on 3–4 sample screens | 1 wk |
-| 1. Tokens and shared classes | Move tokens to CSS variables; new font, colours, radii, table header, chips, buttons, fields via the existing classes in `globals.css`. Every screen changes at once with no page edits. Optional theme switch | 1–2 wks |
-| 2. Shell | Restyle command bar, session bar, sidebar, status bar, notification bell; mobile drawer polish; sticky action row | 1 wk |
-| 3. Mobile fixes | One shared scroll-container pattern for tables (sticky first column and header); single-column stacking for form grids; fix pages found in Phase 0, module by module | 3–4 wks |
-| 4. Polish | Accessibility pass (contrast, focus, targets), print/PDF views unchanged and checked, final regression screenshots | 1 wk |
+| 0. Audit | Playwright at 390px (and 768px), headless, one browser at a time. For every page: screenshot, `scrollWidth > clientWidth` overflow check, count of controls under 44px. Output: ranked list of broken pages and a before-set of screenshots. Uses the demo tenant | 3–4 days |
+| 1. Global CSS | Layer A, no page edits. Re-run the audit | 3–4 days |
+| 2. Shell | Layer B | 3–4 days |
+| 3. Page fixes | Layer C, worst-offending and most-used pages first (home, approvals/release, search and lookups, sales and purchasing documents, goods movements, stock counts, production confirmation, time and leave, reports). Configuration and admin screens last | 2–3 wks |
+| 4. Verify | Re-run audit; sample pages on a real phone or emulated devices (iPhone and Android Chrome); check desktop screenshots are unchanged | 2–3 days |
 
-Total about 7–9 weeks for one developer, and the visible refresh arrives after about 3. Phase 1 is the biggest single improvement for the least risk.
+Total about 4–5 weeks for one developer. Phases 1 and 2 (about 1.5 weeks) will already fix most pages.
 
-## 7. Engineering rules
+## 5. Engineering rules
 
-- Changes are in `tailwind.config.ts`, `globals.css`, `src/ui/*` and page layout classes. **Service functions and `actions.ts` are not modified.**
-- No new component library. If one popup or select needs behaviour we lack, we add a single Radix primitive for it; otherwise nothing new. Lucide is added for the few icons above. Either needs `npm install`, then `docker compose restart app`.
-- Update `docs/codemap/shared.md` and run `node scripts/codemap-index.mjs` if files move.
-- Existing tests keep passing; tests that assert on markup are fixed together with the page that changes.
-- Visual regression with Playwright at the three widths on a sample of pages, one browser at a time because of workbench memory.
-- Print and PDF output (`DocumentPrint`, exports) are not restyled by the refresh unless you ask.
+- All new rules sit inside `@media (max-width: 767px)` or `max-md:` classes, so the desktop render is unchanged. A before/after screenshot diff at 1280px on a page sample proves it.
+- Changes are in `globals.css`, `src/ui/*` and layout classes in pages. **Service functions and `actions.ts` are not modified.**
+- Printing, PDF, CSV and exports are unaffected.
+- Existing tests continue to pass; tests asserting class names or markup are fixed with the page that changes.
+- Audit and screenshot runs follow the workbench rules: native server on :3100, one Chromium at a time, low-memory flags, stopped afterwards.
+- No dependency changes, so no app container restart is needed.
+- If a file moves, update `docs/codemap/shared.md` and run `node scripts/codemap-index.mjs`.
+- Extend demo data only if a screen cannot be exercised on mobile without it (for example, enough rows to scroll a table).
 
-## 8. Risks
+## 6. Risks
 
 | Risk | Mitigation |
 |---|---|
-| Users dislike change | Same layout and density; optional Classic switch |
-| Larger type pushes content wider or taller | Check in Phase 0 on the densest screens; tune the scale before rollout |
-| Some wide screens still awkward on a phone | Table scroll with sticky key column; list any that need a per-page fix |
-| Tests assert on markup or strings | Triage in Phase 0 and fix with each change |
-| Scope creep into features | Look and feel only; ideas go to `docs/OPEN-GAPS.md` |
+| Very wide tables are awkward to read on a phone | Sticky key column and header, scroll inside the box; nothing hidden |
+| Some pages hard-code widths or use inline layout | Found by the overflow audit; fixed per page |
+| Sticky action row covers content | Bottom padding on page content; check on archetypes |
+| iOS and Android differences | Test both engines (WebKit and Chromium) in the audit |
+| Desktop regressions | Media-query scoping plus 1280px screenshot diff |
+| Admin and configuration screens stay clumsy | Accepted in "best effort"; listed after Phase 3 |
 
-## 9. Decisions needed
+## 7. Decisions needed
 
-1. Approve softening the existing teal and warm identity (rather than a new palette).
-2. Approve Inter as the font.
-3. Include the Classic / Refreshed switch (section 5)?
-4. Include the optional dark theme?
-5. Mobile scope: all screens made usable (recommended), or only the field-work screens first (approvals, goods movement, stock count, time and leave)?
+1. Should all 308 pages be targeted, or only the day-to-day ones first and configuration and admin later (recommended)?
+2. Should Phase 0 start now on the demo tenant? It runs a headless browser and needs the native server on :3100.
+3. Is the sticky bottom action row acceptable, or should buttons stay where they are on the page?
