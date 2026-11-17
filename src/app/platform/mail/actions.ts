@@ -10,6 +10,7 @@ import {
   sendTestMail,
   testMailConnection,
 } from '@/platform/mail/service';
+import { setSelfServiceReset, UserAdminError } from '@/modules/platform/user-admin';
 
 const ROUTE = '/platform/mail';
 
@@ -20,7 +21,7 @@ export interface MailActionState {
 }
 
 function refuse(error: unknown): MailActionState {
-  if (error instanceof MailError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof MailError || error instanceof UserAdminError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
 }
 
@@ -97,6 +98,22 @@ export async function sendTestMailAction(_previous: MailActionState, formData: F
     );
     revalidatePath(ROUTE);
     return { ok: true, message: 'Test mail queued. It is sent by the next run of MAIL.SEND (every five minutes).' };
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+/** Authentication policy, saved on the mail screen: the screen needs DEFINE, the service needs USER.MAINTAIN. */
+export async function saveSelfServiceResetAction(_previous: MailActionState, formData: FormData): Promise<MailActionState> {
+  const { session, denied } = await authorised();
+  if (denied) return denied;
+  try {
+    const { enabled } = await setSelfServiceReset(
+      { client: session.user.client, enabled: formData.get('selfServiceReset') === '1', changedBy: session.user.username },
+      session.user.capabilities,
+    );
+    revalidatePath(ROUTE);
+    return { ok: true, message: enabled ? 'Users can now request their own password reset.' : 'Password reset is administrator-initiated only.' };
   } catch (error) {
     return refuse(error);
   }

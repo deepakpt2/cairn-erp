@@ -95,7 +95,7 @@
 | class_type | foundation | inventory |
 | classification_class | foundation | inventory, platform/tenancy |
 | client | platform/tables | finance, platform, platform/tenancy, purchasing |
-| client_settings | platform/tables | platform/tenancy |
+| client_settings | platform/tables | platform, platform/tenancy |
 | company_code | foundation | audit, finance, inventory, people, platform, platform/periods, platform/tenancy, production, purchasing, sales |
 | config_activity | platform/tables | platform/tenancy |
 | config_activity_status | platform/tables | foundation, platform/tenancy |

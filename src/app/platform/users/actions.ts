@@ -7,6 +7,7 @@ import { CREATE, MAINTAIN, PASSWORD_RESET } from './constants';
 import {
   changeUser,
   completePasswordReset,
+  initiatePasswordReset,
   createUser,
   listUsers,
   setUserLocked,
@@ -138,7 +139,7 @@ export async function setUserLockAction(
 
 export async function initiatePasswordResetAction(
   _previous: UserActionState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<UserActionState> {
   const session = await requireSession(ROUTE);
   if (!can(session, PASSWORD_RESET)) {
@@ -148,14 +149,22 @@ export async function initiatePasswordResetAction(
       remedy: `Ask an administrator to grant ${PASSWORD_RESET} to one of your roles.`,
     };
   }
-  // D-033: the repository has no approved outbound delivery transport. Do not
-  // mint a token that cannot be delivered and, critically, never return a reset
-  // token to the browser. Public self-service recovery remains generic.
-  return {
-    ok: false,
-    message: 'Administrator-initiated password reset is unavailable until an approved delivery channel is configured.',
-    remedy: 'Use the existing self-service recovery process or your organization’s approved support channel. No reset token was created or returned.',
-  };
+  try {
+    // The outcome carries the token for server-internal use. Only the masked
+    // address and the expiry reach the browser.
+    const outcome = await initiatePasswordReset({
+      client: session.user.client,
+      userId: text(formData, 'userId'),
+      changedBy: session.user.username,
+    }, session.user.capabilities);
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      message: `A reset link has been queued for delivery to ${outcome.maskedEmail}. It expires in 60 minutes.`,
+    };
+  } catch (error) {
+    return refuse(error);
+  }
 }
 
 export async function requestPasswordResetAction(
@@ -172,7 +181,7 @@ export async function requestPasswordResetAction(
     return {
       ok: true,
       message:
-        'If this account is eligible, the recovery request was recorded. Email delivery is not configured; contact support through your organization’s approved recovery channel.'
+        'If this account can receive mail, a reset link is on its way. The response is the same either way, to protect account privacy.'
     };
   } catch (error) {
     return refuse(error);

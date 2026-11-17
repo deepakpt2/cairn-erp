@@ -12,9 +12,10 @@
  * - Reset tokens are single-use, short-lived, tenant-scoped, stored as a hash.
  * - The same message is returned whether the named user exists or not,
  *   so an attacker cannot enumerate usernames through the reset screen.
- * - No approved email transport exists yet (D-033): the administrative reset
- *   action is paused instead of minting an undeliverable token, and no browser
- *   action returns a reset token. Self-service requests remain non-enumerating.
+ * - Reset links travel by the mail queue (MAIL-02). The link is enqueued as an
+ *   encrypted secret in the caller's own transaction; no browser action returns
+ *   a reset token. Self-service requests remain non-enumerating, and are
+ *   permitted only while the tenant's PASSWORD_SELF_SERVICE flag is on.
  */
 import { eq, and, sql, gt, isNull, inArray, or } from 'drizzle-orm';
 import { z } from 'zod';
@@ -33,6 +34,8 @@ import {
 import { employee } from '../people/schema';
 
 import { recordChange } from '../../platform/change';
+import { enqueueMail, MailError } from '../../platform/mail/service';
+import { clientSettings } from '../../platform/tables/tenancy';
 import { hashPassword, checkPasswordPolicy } from '../../platform/auth/password';
 import {
   hasCapability,
@@ -179,6 +182,18 @@ const REFUSALS: Record<string, [string, string]> = {
     `Too many reset requests for this user.`,
     `Wait an hour and try again.`,
   ],
+  USER_EMAIL_MISSING: [
+    `The password was not reset. This user has no usable email address, so the link cannot be delivered.`,
+    `Maintain this user's email address, then reset again.`,
+  ],
+  MAIL_NOT_CONFIGURED: [
+    `The password was not reset. Mail is not configured, so the link cannot be delivered.`,
+    `Configure it at /platform/mail.`,
+  ],
+  APP_BASE_URL_MISSING: [
+    `The password was not reset. The application's public address (APP_BASE_URL) is not configured, so the link cannot be built.`,
+    `Ask the deployment owner to set APP_BASE_URL.`,
+  ],
   CAPABILITY_MISSING: [
     `This session does not hold the needed authority.`,
     `Ask an administrator to grant it.`,
@@ -193,6 +208,91 @@ function refuse(code: string): never {
 function emailOrNull(value: string | null | undefined): string | null {
   if (value == null || value === '') return null;
   return value;
+}
+
+/** `d•••@e•••.com` — first character of local part and domain, the TLD kept. Never the full address. */
+export function maskEmail(address: string): string {
+  const at = address.lastIndexOf('@');
+  if (at < 1) return '•••';
+  const local = address.slice(0, at);
+  const domain = address.slice(at + 1);
+  const dot = domain.lastIndexOf('.');
+  const head = domain.slice(0, 1) || '•';
+  const tld = dot > 0 ? domain.slice(dot) : '';
+  return `${local.slice(0, 1)}•••@${head}•••${tld}`;
+}
+
+function resetLink(token: string): string | null {
+  const base = (process.env.APP_BASE_URL ?? '').trim().replace(/\/+$/, '');
+  // base64url is URL-safe by construction — it is not encoded again.
+  return base ? `${base}/reset-password?token=${token}` : null;
+}
+
+function resetMail(client: string, toAddress: string, link: string, tokenId: string, changedBy: string) {
+  return {
+    client,
+    toAddress,
+    subject: 'Reset your password',
+    bodyText: `A password reset was requested for your account.\n\nOpen this link to choose a new password. It expires in ${TOKEN_TTL_MINUTES} minutes and can be used once:\n\n{link}\n\nIf you did not expect this message, you can ignore it.`,
+    secret: link,
+    objectClass: 'password_reset_token',
+    objectKey: tokenId,
+    changedBy,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Self-service switch
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SELF_SERVICE_RESET_FLAG = 'PASSWORD_SELF_SERVICE';
+
+/** Absent means off. */
+export async function isSelfServiceResetEnabled(tx: Tx, client: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ flags: clientSettings.flags })
+    .from(clientSettings)
+    .where(eq(clientSettings.client, client))
+    .limit(1);
+  return row?.flags?.[SELF_SERVICE_RESET_FLAG] === true;
+}
+
+/** An authentication policy, not a mail setting: needs CFG.PLT.USER.MAINTAIN. */
+export async function setSelfServiceReset(
+  input: { client: string; enabled: boolean; changedBy: string },
+  capabilities: string[],
+): Promise<{ enabled: boolean }> {
+  const client = input.client.trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,4}$/.test(client)) refuse('CLIENT_FORMAT');
+  const changedBy = input.changedBy.trim();
+  if (!changedBy || changedBy.length > 60) refuse('CHANGED_BY_REQUIRED');
+  if (!hasCapability(capabilities, 'CFG.PLT.USER.MAINTAIN')) refuse('CAPABILITY_MISSING');
+
+  return withTenant(client, async (tx) => {
+    const before = await isSelfServiceResetEnabled(tx, client);
+    await tx.execute(sql`
+      insert into client_settings (client, flags, created_by)
+      values (${client}, jsonb_build_object(${SELF_SERVICE_RESET_FLAG}::text, ${input.enabled}::bool), ${changedBy})
+      on conflict (client) do update
+        set flags = coalesce(client_settings.flags, '{}'::jsonb)
+                    || jsonb_build_object(${SELF_SERVICE_RESET_FLAG}::text, ${input.enabled}::bool),
+            changed_by = ${changedBy},
+            changed_at = now()
+    `);
+    const key = `flags.${SELF_SERVICE_RESET_FLAG}`;
+    await recordChange(tx, {
+      client,
+      objectClass: 'client_settings',
+      objectKey: client,
+      changeType: 'CHANGE',
+      changedBy,
+      transactionCode: 'CFG.PLT.USER.MAINTAIN',
+      before: { [key]: before },
+      after: { [key]: input.enabled },
+      securityRelevantFields: [key],
+    });
+    return { enabled: input.enabled };
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -747,6 +847,8 @@ export interface ResetTokenOutcome {
   token: string;
   /** Server-internal only; must never be included in a browser response. */
   expiresAt: string;
+  /** The address the link was queued for, masked. Safe to show. */
+  maskedEmail: string;
 }
 
 /**
@@ -758,9 +860,10 @@ export interface ResetTokenOutcome {
  * Does NOT activate a disabled account, does NOT assign roles, does NOT change
  * organisational access, does NOT touch HR-owned data.
  *
- * Server-internal service only. The server action intentionally refuses to
- * call this until an approved delivery channel exists; do not expose this
- * outcome through a page or client action.
+ * The link is queued by mail inside this transaction, so a committed reset
+ * always has its mail and a refused one leaves the account untouched. The
+ * outcome carries the token for server-internal use and tests only; do not
+ * expose it through a page or client action.
  */
 export async function initiatePasswordReset(
   input: InitiateResetInput,
@@ -781,6 +884,7 @@ export async function initiatePasswordReset(
       username: appUser.username,
       isActive: appUser.isActive,
       isLocked: appUser.isLocked,
+      email: appUser.email,
     }).from(appUser).where(and(eq(appUser.client, client), eq(appUser.id, userId))).for('update');
     if (!current) refuse('USER_NOT_FOUND');
 
@@ -788,6 +892,10 @@ export async function initiatePasswordReset(
     // unlocking and activation are separate administrator acts.
     if (!current.isActive) refuse('USER_INACTIVE');
     if (current.isLocked) refuse('USER_LOCKED');
+
+    // Every refusal below is raised before the first write to the account.
+    const email = emailOrNull(current.email);
+    if (!email) refuse('USER_EMAIL_MISSING');
 
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -800,6 +908,19 @@ export async function initiatePasswordReset(
       values (${tokenId}, ${client}, ${userId}, ${tokenHash},
         ${expiresAt.toISOString()}, ${changedBy}, ${ipAddress ?? null})
     `);
+
+    // Queue the link before touching the account: a refusal here throws, the
+    // transaction rolls back, and no token row, revocation or flag survives.
+    const link = resetLink(token);
+    if (!link) refuse('APP_BASE_URL_MISSING');
+    try {
+      await enqueueMail(tx, resetMail(client, email, link, tokenId, changedBy));
+    } catch (error) {
+      if (error instanceof MailError) {
+        refuse(error.code === 'MAIL_NOT_CONFIGURED' ? 'MAIL_NOT_CONFIGURED' : 'USER_EMAIL_MISSING');
+      }
+      throw error;
+    }
 
     // Revoke every live session — the old password must not remain usable.
     await tx.execute(sql`
@@ -842,6 +963,7 @@ export async function initiatePasswordReset(
       username: current.username,
       token,
       expiresAt: expiresAt.toISOString(),
+      maskedEmail: maskEmail(email),
     };
   });
 }
@@ -866,10 +988,10 @@ export interface RequestResetOutcome {
  * may be submitted. The same outcome is returned whether the user exists,
  * so no username enumeration is possible through this screen.
  *
- * When the user exists and is active and unlocked, a short-lived token hash is
- * recorded. D-033 leaves delivery unavailable: the plaintext token is never
- * written to the audit log or returned to this public caller, so the UI directs
- * the user to the organization's approved support path.
+ * When the tenant switch is on and the user exists, is active and unlocked and
+ * has an address, a short-lived token hash is recorded and the link is queued by
+ * mail. In every other case nothing is inserted at all. The plaintext token is
+ * never written to the audit log or returned to this public caller.
  */
 export async function requestPasswordReset(
   input: RequestResetInput,
@@ -907,7 +1029,7 @@ export async function requestPasswordReset(
     }
 
     const row = await tx
-      .select({ id: appUser.id, username: appUser.username, isActive: appUser.isActive, isLocked: appUser.isLocked })
+      .select({ id: appUser.id, username: appUser.username, isActive: appUser.isActive, isLocked: appUser.isLocked, email: appUser.email })
       .from(appUser)
       .where(and(eq(appUser.client, client), sql`app_user.username ILIKE ${username.toUpperCase()}`))
       .limit(1);
@@ -923,10 +1045,27 @@ export async function requestPasswordReset(
       return { accepted: true };
     }
 
+    // Tenant switch off, or no address: nothing happened, so nothing is recorded
+    // and the rate limit (which counts token rows) is not charged.
+    if (!(await isSelfServiceResetEnabled(tx, client))) return { accepted: true };
+    const email = emailOrNull(user.email);
+    if (!email) return { accepted: true };
+
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(Date.now() + TOKEN_TTL_MINUTES * 60_000);
     const tokenId = randomUUID();
+
+    // Enqueue first: when mail cannot be queued (not configured, bad address)
+    // no token row is left behind to charge the rate limit.
+    const link = resetLink(token);
+    if (!link) return { accepted: true };
+    try {
+      await enqueueMail(tx, resetMail(client, email, link, tokenId, 'SELF_SERVICE'));
+    } catch (error) {
+      if (error instanceof MailError) return { accepted: true };
+      throw error;
+    }
 
     await tx.execute(sql`
       insert into password_reset_token

@@ -2,7 +2,9 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { getMailConfig, listMailQueue, MAIL_DEFINE_CAPABILITY } from '@/platform/mail/service';
-import { NodeForm, TestPanel } from './MailForms';
+import { isSelfServiceResetEnabled } from '@/modules/platform/user-admin';
+import { withTenant } from '@/platform/db/client';
+import { NodeForm, PasswordResetPanel, TestPanel } from './MailForms';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +17,7 @@ export default async function MailPage() {
   const caps = session.user.capabilities;
   const config = allowed ? await getMailConfig(client, caps) : null;
   const queue = allowed ? await listMailQueue(client, caps, QUEUE_LIMIT) : [];
+  const selfService = allowed ? await withTenant(client, (tx) => isSelfServiceResetEnabled(tx, client)) : false;
 
   return (
     <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -35,6 +38,7 @@ export default async function MailPage() {
         <>
           <NodeForm config={config} />
           <TestPanel config={config} />
+          <PasswordResetPanel enabled={selfService} canMaintain={can(session, 'CFG.PLT.USER.MAINTAIN')} mailEnabled={config.isEnabled} />
           <section className="panel overflow-x-auto">
             <div className="panel-header">
               <h2 className="panel-title">Send queue</h2>

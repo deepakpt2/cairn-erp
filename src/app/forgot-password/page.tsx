@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
  * acceptance message whether the account exists or not — preventing username
  * enumeration.
  *
- * No approved delivery transport exists yet (D-033). This page never displays
- * the token; users are directed to their organization's approved support path.
+ * The link is delivered by the mail queue (MAIL-02) and only when the tenant has
+ * switched self-service reset on. This page never displays the token.
  */
 import { useActionState, useState } from 'react';
 
@@ -29,9 +29,9 @@ export default async function ForgotPasswordPage() {
         <div className="mb-6 text-center">
           <div className="text-lg font-semibold tracking-tight text-ink">Forgot password</div>
           <div className="text-xs text-ink-soft">
-            Enter your tenant and username. The response is generic to protect
-            account privacy; delivery is unavailable until an approved channel
-            is configured. Contact your organization's support team.
+            Enter your tenant and username. If this account can receive mail, a
+            reset link is on its way. The response is the same either way, to
+            protect account privacy.
           </div>
         </div>
 

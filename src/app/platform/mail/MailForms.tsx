@@ -5,6 +5,7 @@ import { useActionState } from 'react';
 import type { MailConfigView } from '@/platform/mail/service';
 import {
   saveMailConfigAction,
+  saveSelfServiceResetAction,
   sendTestMailAction,
   testConnectionAction,
   type MailActionState,
@@ -78,6 +79,32 @@ export function TestPanel({ config }: { config: MailConfigView }) {
         <div><dt className="field-label">Last test</dt><dd className="tabular">{config.lastTestAt ?? '—'}</dd></div>
         <div><dt className="field-label">Result</dt><dd>{config.lastTestResult ?? '—'}</dd></div>
       </dl>
+    </section>
+  );
+}
+
+export function PasswordResetPanel({ enabled, canMaintain, mailEnabled }: { enabled: boolean; canMaintain: boolean; mailEnabled: boolean }) {
+  const [state, action, pending] = useActionState<MailActionState, FormData>(saveSelfServiceResetAction, { ok: true });
+  return (
+    <section className="panel p-4">
+      <h2 className="panel-title">Password reset</h2>
+      {!mailEnabled && (
+        <p className="mt-2 text-xs text-ink-soft">This setting has no effect until the mail node is enabled.</p>
+      )}
+      <Notice state={state} />
+      <form action={action} className="mt-4 space-y-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input name="selfServiceReset" type="checkbox" value="1" defaultChecked={enabled} disabled={!canMaintain} />
+          Let users request their own password reset from the sign-in page.
+        </label>
+        {!canMaintain && (
+          <p className="text-xs text-signal-error">
+            Saving this needs CFG.PLT.USER.MAINTAIN, which this session does not hold. Ask an administrator to grant CFG.PLT.USER.MAINTAIN to one of your roles.
+          </p>
+        )}
+        <p className="text-xs text-ink-soft">Off by default. Whoever controls a user's mailbox controls that login, so turning this on is recorded in a change document.</p>
+        <button type="submit" className="btn btn-primary" disabled={pending || !canMaintain}>{pending ? 'Saving…' : 'Save'}</button>
+      </form>
     </section>
   );
 }

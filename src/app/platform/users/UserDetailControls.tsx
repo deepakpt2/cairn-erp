@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { changeUserAction, setUserLockAction, type UserActionState } from './actions';
+import { changeUserAction, initiatePasswordResetAction, setUserLockAction, type UserActionState } from './actions';
 
 const EMPTY: UserActionState = { ok: false };
 
@@ -29,6 +29,7 @@ export default function UserDetailControls({
 }) {
   const [changeState, changeAction, changing] = useActionState(changeUserAction, EMPTY);
   const [lockState, lockAction, locking] = useActionState(setUserLockAction, EMPTY);
+  const [resetState, resetAction, resetting] = useActionState(initiatePasswordResetAction, EMPTY);
 
   return (
     <div className="space-y-4">
@@ -71,7 +72,17 @@ export default function UserDetailControls({
         <Notice state={lockState} />
       </section>
 
-      {canReset && <aside className="rounded border border-line bg-row p-3 text-sm"><h2 className="font-medium">Password reset</h2><p className="mt-1 text-ink-soft">Administrator-issued password reset is unavailable until an approved outbound delivery channel is configured. The reset action is intentionally not minting or exposing a token.</p></aside>}
+      {canReset && (
+        <aside className="rounded border border-line bg-row p-3 text-sm">
+          <h2 className="font-medium">Password reset</h2>
+          <p className="mt-1 text-ink-soft">Mails a single-use reset link to the user's email address. The link is never shown here. All of the user's sessions are revoked and a password change is required at next sign-in.</p>
+          <form action={resetAction} className="mt-2">
+            <input type="hidden" name="userId" value={id} />
+            <button type="submit" className="btn btn-default" disabled={resetting}>{resetting ? 'Queuing…' : 'Send reset link'}</button>
+          </form>
+          <Notice state={resetState} />
+        </aside>
+      )}
     </div>
   );
 }

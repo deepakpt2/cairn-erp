@@ -20,8 +20,8 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 | DeleteLock.tsx | DeleteLock |  |
 | page.tsx | LockMonitorPage |  |
 | **app/platform/mail/** | | |
-| actions.ts | saveMailConfigAction, testConnectionAction, sendTestMailAction |  |
-| MailForms.tsx | NodeForm, TestPanel |  |
+| actions.ts | saveMailConfigAction, testConnectionAction, sendTestMailAction, saveSelfServiceResetAction |  |
+| MailForms.tsx | NodeForm, TestPanel, PasswordResetPanel |  |
 | page.tsx | MailPage |  |
 | **app/platform/notifications/** | | |
 | page.tsx | NotificationsPage |  |
@@ -48,7 +48,7 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 | organisation-scope-admin.ts | ORGANISATION_SCOPE_ADMIN_CAPABILITY, OrganisationScopeAdminError, provisionWalkthroughFirstAdminScopesInTransaction, getOrganisationScopeAdminOverview, getUserOrganisationScopes, grantCompanyCodeScope, grantPlantScope, revokeOrganisationScope | app_user, audit_access_log, auth_org_restriction, client, company_code, plant, role, role_capability, user_role, user_session |
 | platform-admin-bootstrap.ts | PLATFORM_ADMIN_USER_CREATE_CAPABILITY, PLATFORM_ADMIN_USER_MAINTAIN_CAPABILITY, PLATFORM_ADMIN_CAPABILITIES, PLATFORM_ADMIN_BOOTSTRAP_TRANSACTION_CODE, PLATFORM_ADMIN_BOOTSTRAP_OBJECT_CLASS, bootstrapPlatformAdminInTransaction, PLATFORM_ADMIN_ROLE_CODE | audit_access_log, role, role_capability, user_role |
 | role-admin.ts | PLATFORM_ADMIN_ROLE_CODE, ROLE_MAINTAIN_CAPABILITY, USER_ROLE_MAINTAIN_CAPABILITY, RoleAdminError, getRoleAdminOverview, createRole, updateRoleMetadata, setRoleActive, grantCapabilityToRole, revokeCapabilityFromRole, grantRoleToUser, revokeRoleFromUser | app_user, audit_access_log, auth_org_restriction, capability, role, role_capability, sod_rule, user_role, user_session |
-| user-admin.ts | USER_ADMIN_VIEW_CAPABILITIES, canViewUserAdministration, UserAdminError, createUser, listUsers, getUserAdminDetails, changeUser, setUserLocked, initiatePasswordReset, requestPasswordReset, completePasswordReset | app_user, audit_access_log, capability, employee, password_reset_token, role, user_role, user_session |
+| user-admin.ts | USER_ADMIN_VIEW_CAPABILITIES, canViewUserAdministration, UserAdminError, maskEmail, SELF_SERVICE_RESET_FLAG, isSelfServiceResetEnabled, setSelfServiceReset, createUser, listUsers, getUserAdminDetails, changeUser, setUserLocked, initiatePasswordReset, requestPasswordReset, completePasswordReset | app_user, audit_access_log, capability, client_settings, employee, password_reset_token, role, user_role, user_session |
 
 ## Routes (9)
 `/platform/jobs` · `/platform/locks` · `/platform/mail` · `/platform/notifications` · `/platform/notifications/[id]` · `/platform/roles` · `/platform/users` · `/platform/users/[username]` · `/platform/users/access`
@@ -62,5 +62,5 @@ foundation, people, platform/auth, platform/change, platform/db, platform/i18n, 
 ## Used by
 app/forgot-password, app/reset-password, platform/tenancy, ui/lock
 
-## Tests (3)
-change-lock-claim, purchasing-org-company-code-assignment-ui-contract, role-capability-select
+## Tests (4)
+change-lock-claim, password-reset-delivery, purchasing-org-company-code-assignment-ui-contract, role-capability-select
