@@ -289,6 +289,21 @@
       font-size: 0.75rem;
     }
 
+    /* Shell: command bar fills its own row under the logo, bars use readable type. */
+    .command-bar {
+      flex-basis: 100%;
+      order: 3;
+    }
+
+    .session-bar,
+    .status-bar {
+      font-size: 0.75rem;
+    }
+
+    .status-bar {
+      padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
+    }
+
     /* A table wider than the screen scrolls inside its own box, never the whole page. */
     .table-scroll {
       max-width: 100%;

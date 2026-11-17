@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { ChevronDown, LogOut, User } from 'lucide-react';
 
 /**
  * The signed-in user's menu — Phase 7.
@@ -37,66 +38,49 @@ export function SessionMenu({
   accountLabel,
   accountHref,
 }: SessionMenuProps) {
-  const [open, setOpen] = useState(false);
-  const container = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!container.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [open]);
-
   const shown = fullName ? `${fullName} (${username})` : username;
 
   return (
-    <div className="relative" ref={container}>
-      <button
-        type="button"
-        onClick={() => setOpen((was) => !was)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="inline-flex max-w-[16rem] items-center gap-1 truncate text-2xs text-ink hover:text-accent"
-      >
-        <span className="truncate">{shown}</span>
-        <span aria-hidden className="text-ink-faint">
-          {open ? '▴' : '▾'}
-        </span>
-      </button>
-
-      {open ? (
-        <div
-          role="menu"
-          className="absolute end-0 top-full z-40 mt-1 min-w-[9rem] border border-line bg-surface py-1 text-2xs shadow-sm"
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="inline-flex max-w-[16rem] items-center gap-1 rounded-sm px-1 text-2xs text-ink hover:text-accent max-md:min-h-11"
+        >
+          <User aria-hidden size={14} className="text-ink-faint" />
+          <span className="truncate">{shown}</span>
+          <ChevronDown aria-hidden size={12} className="text-ink-faint" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={4}
+          className="z-50 min-w-[10rem] rounded border border-line bg-surface py-1 text-sm shadow-sm"
         >
           {/* A plain link: the one screen a forced user is sent to must not need a script. */}
-          <a
-            href={accountHref}
-            role="menuitem"
-            className="block w-full px-3 py-1 text-start text-ink-soft hover:bg-sunken hover:text-accent"
-          >
-            {accountLabel}
-          </a>
-          <form method="post" action={signOutAction}>
-            <button
-              type="submit"
-              role="menuitem"
-              className="block w-full px-3 py-1 text-start text-ink-soft hover:bg-sunken hover:text-accent"
+          <DropdownMenu.Item asChild>
+            <a
+              href={accountHref}
+              className="flex items-center gap-2 px-3 py-1.5 text-ink-soft outline-none data-[highlighted]:bg-sunken data-[highlighted]:text-accent max-md:min-h-11"
             >
-              {signOutLabel}
-            </button>
+              <User aria-hidden size={14} />
+              {accountLabel}
+            </a>
+          </DropdownMenu.Item>
+          <form method="post" action={signOutAction}>
+            <DropdownMenu.Item asChild>
+              <button
+                type="submit"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-start text-ink-soft outline-none data-[highlighted]:bg-sunken data-[highlighted]:text-accent max-md:min-h-11"
+              >
+                <LogOut aria-hidden size={14} />
+                {signOutLabel}
+              </button>
+            </DropdownMenu.Item>
           </form>
-        </div>
-      ) : null}
-    </div>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

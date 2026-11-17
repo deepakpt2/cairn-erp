@@ -15,6 +15,7 @@
  * cannot quietly turn the bell into a box.
  */
 import Link from 'next/link';
+import { Bell } from 'lucide-react';
 
 import { getSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -40,33 +41,11 @@ export async function NotificationBell() {
   return (
     <Link
       href={INBOX}
-      className="relative inline-flex items-center gap-1 text-2xs text-ink-soft hover:text-accent"
+      className="relative inline-flex items-center gap-1 text-2xs max-md:min-h-11 max-md:min-w-11 max-md:justify-center text-ink-soft hover:text-accent"
       aria-label={label}
       title={label}
     >
-      <svg
-        viewBox="0 0 16 16"
-        width="13"
-        height="13"
-        aria-hidden
-        focusable="false"
-        className={count > 0 ? 'text-ink' : 'text-ink-faint'}
-      >
-        <path
-          d="M4 6.5a4 4 0 1 1 8 0v2.2l1.2 1.8H2.8L4 8.7V6.5Z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M6.4 12.3a1.7 1.7 0 0 0 3.2 0"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-        />
-      </svg>
+      <Bell aria-hidden size={14} className={count > 0 ? 'text-ink' : 'text-ink-faint'} />
       {count > 0 ? (
         <span className="code font-medium text-ink">{count}</span>
       ) : null}

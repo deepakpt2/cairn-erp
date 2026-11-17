@@ -38,7 +38,7 @@ export async function SessionBar() {
     : `${session.user.capabilities.length} ${t('auth.authorities')}`;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-sunken px-4 py-1 text-2xs text-ink-soft">
+    <div className="session-bar flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-sunken px-4 py-1 text-2xs text-ink-soft">
       <span className="text-ink-faint">{t('auth.tenant')}</span>
       <span className="code font-medium text-ink">{session.user.client}</span>
       <span className="text-line-strong" aria-hidden>
