@@ -59,6 +59,14 @@ export const unitOfMeasure = pgTable(
     /** Decimal places recommended for the unit, for quantity display. */
     decimalPlaces: integer('decimal_places').notNull().default(3),
     isBaseUnit: boolean('is_base_unit').notNull().default(false),
+    /**
+     * Factor to the dimension's base unit:
+     * base = value × numerator × 10^exponent / denominator. Seeded constants, never edited.
+     * A non-base unit left at 1/1/0 is "not seeded" and refuses to convert.
+     */
+    numerator: integer('numerator').notNull().default(1),
+    denominator: integer('denominator').notNull().default(1),
+    exponent: integer('exponent').notNull().default(0),
   },
   (t) => [index('uom_dimension_idx').on(t.dimension)],
 );

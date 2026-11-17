@@ -43,6 +43,9 @@ export const UNITS: Array<[string, string, string, number, boolean]> = [
   ['M2', 'Square metre', 'AREA', 3, true], ['KWH', 'Kilowatt hour', 'ENERGY', 3, true],
 ];
 
+/** FOUND-02: TIME factors to the base unit HR (numerator, denominator). Same values as migration 9301. */
+const UNIT_FACTORS: Record<string, [number, number]> = { MIN: [1, 60], DAY: [24, 1] };
+
 /**
  * Insert only missing standard rows. Existing customer-maintained values are
  * deliberately left untouched. The caller owns the transaction so tests and
@@ -69,10 +72,10 @@ export async function insertStandardReferenceData(client: ReferenceDataExecutor)
 
   for (const [code, name, dimension, decimals, isBase] of UNITS) {
     await client.unsafe(
-      `insert into unit_of_measure (code, name, dimension, decimal_places, is_base_unit)
-       values ($1,$2,$3,$4,$5)
+      `insert into unit_of_measure (code, name, dimension, decimal_places, is_base_unit, numerator, denominator)
+       values ($1,$2,$3,$4,$5,$6,$7)
        on conflict (code) do nothing`,
-      [code, name, dimension, decimals, isBase],
+      [code, name, dimension, decimals, isBase, ...(UNIT_FACTORS[code] ?? [1, 1])],
     );
   }
 

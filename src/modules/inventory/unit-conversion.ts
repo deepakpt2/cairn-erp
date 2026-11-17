@@ -5,7 +5,7 @@
  * decorative. A conversion is an exact ratio, not a float multiplier, so a CASE of 12 is
  * twelve base units on every machine and in every currency.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
@@ -288,4 +288,67 @@ export async function removeUomConversion(input: {
       before: { alternativeUnit },
     });
   });
+}
+
+/**
+ * Convert a quantity between two units of the same dimension, through the
+ * dimension's base unit.
+ *
+ * It is the global unit master. Material-specific alternative units are a different
+ * thing and live in uom_conversion (MARM / SCR-144); do not reach for them here, and
+ * do not make this material-aware.
+ *
+ * The factors are seeded constants. There is no service, action or screen that writes
+ * numerator / denominator / exponent after the migration, by design — one hour is sixty
+ * minutes in every tenant. Do not go looking for a maintenance screen.
+ *
+ * A non-base unit still at 1/1/0 has never been seeded; it refuses rather than being
+ * added to its dimension as if it were the base unit.
+ */
+export async function convertUnits(
+  tx: Tx,
+  input: { quantity: number; fromUnit: string; toUnit: string },
+): Promise<{ quantity: number; unit: string }> {
+  const fromCode = (input.fromUnit ?? '').trim();
+  const toCode = (input.toUnit ?? '').trim();
+  if (!fromCode || !toCode) {
+    throw new UnitConversionError('UNIT_NOT_FOUND: a conversion needs both a source and a target unit.', 'State both units.');
+  }
+  const rows = await tx.select().from(unitOfMeasure).where(inArray(unitOfMeasure.code, [fromCode, toCode]));
+  const from = rows.find((r) => r.code === fromCode);
+  const to = rows.find((r) => r.code === toCode);
+  for (const [code, row] of [[fromCode, from], [toCode, to]] as const) {
+    if (!row) {
+      throw new UnitConversionError(
+        `UNIT_NOT_FOUND: \`${code}\` is not a unit of measure.`,
+        'Maintain the unit, or convert it before it reaches here.',
+      );
+    }
+  }
+  if (fromCode === toCode) return { quantity: input.quantity, unit: toCode };
+  if (from!.dimension !== to!.dimension) {
+    throw new UnitConversionError(
+      `UNIT_DIMENSION_MISMATCH: \`${fromCode}\` (${from!.dimension}) and \`${toCode}\` (${to!.dimension}) do not convert.`,
+      'Use two units of the same dimension.',
+    );
+  }
+  const [base] = await tx.select({ code: unitOfMeasure.code }).from(unitOfMeasure)
+    .where(and(eq(unitOfMeasure.dimension, from!.dimension), eq(unitOfMeasure.isBaseUnit, true)));
+  if (!base) {
+    throw new UnitConversionError(
+      `UNIT_NO_BASE: \`${from!.dimension}\` has no base unit, so nothing in it can be converted.`,
+      'Mark one unit of the dimension as its base unit.',
+    );
+  }
+  for (const u of [from!, to!]) {
+    if (u.code !== base.code && u.numerator === 1 && u.denominator === 1 && u.exponent === 0) {
+      throw new UnitConversionError(
+        `UNIT_FACTOR_MISSING: \`${u.code}\` carries no conversion factor.`,
+        `Seed a factor from \`${u.code}\` to \`${base.code}\`, or convert it before it reaches here.`,
+      );
+    }
+  }
+  const baseValue = (input.quantity * from!.numerator * 10 ** from!.exponent) / from!.denominator;
+  const result = (baseValue * to!.denominator) / (to!.numerator * 10 ** to!.exponent);
+  return { quantity: roundTo(result, to!.decimalPlaces), unit: toCode };
 }
