@@ -1,5 +1,6 @@
 /** CSV / PDF export for the production order cost report (see finance/report-exports.ts for the contract). */
 import { type ReportAdapter, type ReportColumn, ReportExportError, fmt } from '../output/report-export';
+import { stockRequirementsList, STOCK_REQUIREMENTS_CAPABILITY, DEFAULT_MAX_HITS } from './stock-requirements';
 import { getProductionOrderCostReport, PRODUCTION_ORDER_COST_REPORT_CAPABILITY } from './order-cost-report';
 
 const C = (label: string): ReportColumn => ({ label });
@@ -33,4 +34,35 @@ export const productionOrderCostExport: ReportAdapter = {
   },
 };
 
-export const PRODUCTION_REPORT_EXPORTS: ReportAdapter[] = [productionOrderCostExport];
+export const stockRequirementsExport: ReportAdapter = {
+  code: 'stock-requirements', route: '/production/stock-requirements', capability: STOCK_REQUIREMENTS_CAPABILITY,
+  async build(client, q) {
+    const get = (name: string) => (q.get(name) ?? '').trim();
+    const r = await stockRequirementsList({
+      client, today: new Date().toISOString().slice(0, 10),
+      selection: {
+        material: get('material').toUpperCase(), plant: get('plant').toUpperCase(), mrpArea: get('mrpArea'),
+        specialStockIndicator: get('specialStockIndicator').toUpperCase(),
+        displayPastDue: get('pastDueOff') !== '1',
+        periodSplit: (get('periodSplit') || 'DAILY').toUpperCase(),
+        simulationVersion: get('simulationVersion'), horizonEnd: get('horizonEnd'),
+        maxHits: Number(get('maxHits')) || DEFAULT_MAX_HITS,
+      },
+    });
+    return {
+      title: 'Stock/requirements list',
+      subtitle: [
+        `Material ${r.material} ${r.materialDescription} · plant ${r.plant} · unit ${r.baseUnit} · ${r.periodSplit}`,
+        `Opening stock ${fmt(r.openingStock, 3)} · receipts ${fmt(r.totalReceipts, 3)} · requirements ${fmt(r.totalRequirements, 3)} · closing ${fmt(r.closingBalance, 3)} · safety stock ${fmt(r.safetyStock, 3)}`,
+        ...r.warnings,
+      ],
+      sections: [{
+        columns: [C('Date'), C('Period end'), C('Element'), C('Direction'), C('Document'), C('Item'), R('Quantity'), R('Projected'), C('Exceptions')],
+        rows: r.rows.map((x) => [x.date, x.periodEnd, x.elementLabel, x.direction, x.documentNumber, x.documentItem, fmt(x.quantity, 3), fmt(x.projectedBalance, 3), x.exceptions.join(' ')]),
+      }],
+      fileStem: `stock-requirements-${r.material}-${r.plant}`,
+    };
+  },
+};
+
+export const PRODUCTION_REPORT_EXPORTS: ReportAdapter[] = [productionOrderCostExport, stockRequirementsExport];

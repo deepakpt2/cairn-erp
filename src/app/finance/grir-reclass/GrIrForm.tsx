@@ -104,6 +104,9 @@ export default function GrIrForm({ canExecute, defaults, result, requestKey }: {
             <Link href={`/finance/grir-reclass/export?run=${encodeURIComponent(result.runId)}`} className="btn btn-default min-h-11 sm:min-h-8">
               {t('grir.export')}
             </Link>
+            <Link href={`/reports/export/grir-analysis?format=pdf&run=${encodeURIComponent(result.runId)}`} className="btn btn-default min-h-11 sm:min-h-8">
+              Export PDF
+            </Link>
           </div>
           {result.warnings.length > 0 && (
             <ul className="space-y-1 border-b border-line bg-signal-warn-soft px-3 py-2 text-sm text-signal-warn">

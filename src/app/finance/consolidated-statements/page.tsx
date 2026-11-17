@@ -7,6 +7,7 @@ import {
   calculateConsolidatedStatements,
   type ConsolidatedStatementsResult, type ConsolidatedStatementsSelection,
 } from '@/modules/finance/consolidated-statements';
+import { ReportExport } from '@/ui/output/ReportExport';
 import ConsolidatedStatementsShell, {
   type ConsolidatedStatementsOptions,
 } from './ConsolidatedStatementsShell';
@@ -73,6 +74,7 @@ export default async function ConsolidatedStatementsPage({
           Consolidated balance sheet and income statement over the UCWB consolidation chart, read from the reported journal data of the group units.
         </p>
       </header>
+      {result && <div><ReportExport report="consolidated-statements" params={params} /></div>}
       <ConsolidatedStatementsShell
         canUse={canUse}
         options={options}

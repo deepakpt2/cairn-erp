@@ -1,5 +1,9 @@
 /** CSV / PDF export for the cost centre report (see finance/report-exports.ts for the contract). */
-import { type ReportAdapter, type ReportColumn, fmt } from '../output/report-export';
+import { ReportExportError, type ReportAdapter, type ReportColumn, fmt } from '../output/report-export';
+import { csvToReport } from '../output/csv-report';
+import {
+  DEFAULT_MAX_HITS, LEADING_LEDGER, PROFIT_CENTER_REPORT_CAPABILITY, listProfitCenterLines, profitCenterLinesCsv,
+} from './profit-center-report';
 import { calculateCostCenterReport, COST_CENTER_REPORT_CAPABILITY, type CostCenterReportSelection } from './cost-center-report';
 
 const C = (label: string): ReportColumn => ({ label });
@@ -40,4 +44,32 @@ export const costCenterReportExport: ReportAdapter = {
   },
 };
 
-export const FOUNDATION_REPORT_EXPORTS: ReportAdapter[] = [costCenterReportExport];
+export const profitCenterReportExport: ReportAdapter = {
+  code: 'profit-center-report', route: '/controlling/profit-center-report', capability: `${PROFIT_CENTER_REPORT_CAPABILITY}.read`,
+  async build(client, q) {
+    const controllingArea = get(q, 'controllingArea').toUpperCase();
+    if (!controllingArea) throw new ReportExportError('Controlling area is required.', 'Run the report on screen first; the export uses the same selection.');
+    const fiscalYear = Number(get(q, 'fiscalYear')) || new Date().getFullYear();
+    const result = await listProfitCenterLines({
+      client,
+      selection: {
+        controllingArea,
+        profitCenterGroup: get(q, 'profitCenterGroup').toUpperCase(),
+        profitCenterFrom: get(q, 'profitCenterFrom').toUpperCase(), profitCenterTo: get(q, 'profitCenterTo').toUpperCase(),
+        glAccountFrom: get(q, 'glAccountFrom'), glAccountTo: get(q, 'glAccountTo'),
+        documentFrom: get(q, 'documentFrom'), documentTo: get(q, 'documentTo'),
+        fiscalYear,
+        periodFrom: Number(get(q, 'periodFrom')) || 1, periodTo: Number(get(q, 'periodTo')) || 12,
+        ledger: (get(q, 'ledger') || LEADING_LEDGER).toUpperCase(),
+        maxHits: Number(get(q, 'maxHits')) || DEFAULT_MAX_HITS,
+      },
+    });
+    return csvToReport(profitCenterLinesCsv(result), {
+      title: 'Profit centre line items',
+      subtitle: [`Controlling area ${controllingArea} · fiscal year ${fiscalYear}`],
+      fileStem: `profit-center-lines-${controllingArea}-${fiscalYear}`,
+    });
+  },
+};
+
+export const FOUNDATION_REPORT_EXPORTS: ReportAdapter[] = [costCenterReportExport, profitCenterReportExport];

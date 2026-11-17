@@ -6,6 +6,7 @@ import {
 } from '@/modules/finance/cash-flow-vocabulary';
 import { CashflowError, calculateCashflow } from '@/modules/finance/cash-flow';
 import CashflowShell from './CashflowShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,7 @@ export default async function CashflowPage({
           Operating, investing and financing cash flows from the posted journal, reconciled to the movement on the house-bank cash accounts.
         </p>
       </header>
+      {result && <div><ReportExport report="cash-flow" params={params} /></div>}
       <CashflowShell
         canUse={canUse}
         companies={companies}

@@ -77,6 +77,12 @@ export default function ProfitCenterReportShell({ canUse, areas, selection, resu
           >
             Export CSV
           </a>
+          <a
+            className="btn btn-default min-h-11 sm:min-h-8"
+            href={`/reports/export/profit-center-report?format=pdf&controllingArea=${encodeURIComponent(selection.controllingArea)}&fiscalYear=${selection.fiscalYear}&periodFrom=${selection.periodFrom}&periodTo=${selection.periodTo}&ledger=${encodeURIComponent(selection.ledger)}&profitCenterFrom=${encodeURIComponent(selection.profitCenterFrom ?? '')}&profitCenterTo=${encodeURIComponent(selection.profitCenterTo ?? '')}&profitCenterGroup=${encodeURIComponent(selection.profitCenterGroup ?? '')}&glAccountFrom=${encodeURIComponent(selection.glAccountFrom ?? '')}&glAccountTo=${encodeURIComponent(selection.glAccountTo ?? '')}&documentFrom=${encodeURIComponent(selection.documentFrom ?? '')}&documentTo=${encodeURIComponent(selection.documentTo ?? '')}&maxHits=${selection.maxHits}`}
+          >
+            Export PDF
+          </a>
         </div>
       </form>
 

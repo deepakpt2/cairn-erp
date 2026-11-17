@@ -70,6 +70,11 @@ export default function HistoryForm({ canReport, defaults, sheet, exportQuery }:
                 Export CSV
               </Link>
             )}
+            {sheet && (
+              <Link className="btn btn-default min-h-11 sm:min-h-8" href={`/reports/export/asset-history?format=pdf&${exportQuery}`}>
+                Export PDF
+              </Link>
+            )}
           </div>
           {!canReport && (
             <p className="mt-2 text-sm text-ink-soft">You do not hold the asset reporting capability.</p>

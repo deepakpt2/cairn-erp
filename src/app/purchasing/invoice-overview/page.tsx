@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { ReportExport } from '@/ui/output/ReportExport';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import {
   INVOICE_OVERVIEW_CAPABILITY,
@@ -209,6 +210,7 @@ export default async function InvoiceOverviewPage({ searchParams }: {
           <p className="mt-1 text-xs text-ink-soft" data-invoice-overview-year>{t('invoiceOverview.yearNote')}</p>
           <p className="mt-1 text-xs text-ink-soft" data-invoice-overview-amount>{t('invoiceOverview.amountNote')}</p>
           {result.warnings.map((warning) => <p key={warning} className="mt-2 text-sm">{warning}</p>)}
+          {result.rows.length > 0 && <div className="mt-3"><ReportExport report="invoice-overview" params={params} /></div>}
           {result.rows.length === 0 && <p className="mt-3 text-sm" data-invoice-overview-empty>{t('invoiceOverview.empty')}</p>}
           {result.rows.length > 0 && (
             <div className="mt-3 overflow-x-auto">

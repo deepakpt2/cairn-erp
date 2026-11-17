@@ -5,6 +5,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { reportToCsv, reportToPdf, safeStem, type ReportDoc } from '../src/modules/output/report-export';
+import { parseCsv, csvToReport } from '../src/modules/output/csv-report';
 import { reportAdapter, reportCodes, renderReport } from '../src/modules/output/report-registry';
 import { createTenant, destroyTenant } from './helpers';
 
@@ -70,15 +71,27 @@ describe('PDF', () => {
   });
 });
 
+describe('csv to report', () => {
+  it('parses quotes, doubled quotes and newlines inside a field', () => {
+    expect(parseCsv('a,b\n"x, y","he said ""hi""\nbye"\n')).toEqual([['a', 'b'], ['x, y', 'he said "hi"\nbye']]);
+  });
+  it('keeps the truncation marker as a note and right-aligns numeric columns', () => {
+    const d = csvToReport('# TRUNCATED at 5 hits\nName,Qty\nA,1.5\nB,20\n', { title: 'T', fileStem: 't' });
+    expect(d.subtitle).toContain('TRUNCATED at 5 hits');
+    expect(d.sections[0].columns.map((c) => c.align)).toEqual([undefined, 'right']);
+    expect(d.sections[0].rows).toEqual([['A', '1.5'], ['B', '20']]);
+  });
+});
+
 describe('registry', () => {
   it('has unique codes, each with a route and a capability', () => {
     const codes = reportCodes();
     expect(new Set(codes).size).toBe(codes.length);
-    expect(codes.length).toBeGreaterThanOrEqual(15);
+    expect(codes.length).toBeGreaterThanOrEqual(24);
     for (const code of codes) {
       const a = reportAdapter(code)!;
       expect(a.route.startsWith('/')).toBe(true);
-      expect(a.capability).toMatch(/^[A-Z0-9]+(\.[A-Z0-9]+)+$/);
+      expect(a.capability).toMatch(/^[A-Za-z0-9]+(\.[A-Za-z0-9]+)+$/);
     }
     expect(reportAdapter('nope')).toBeNull();
   });
@@ -93,6 +106,7 @@ describe('adapters on an empty tenant', () => {
     const selections: Record<string, URLSearchParams> = {
       'material-document-list': new URLSearchParams({ postingDateFrom: '2026-01-01', postingDateTo: '2026-12-31' }),
       'purchase-order-list': new URLSearchParams(),
+      'requisition-list': new URLSearchParams(),
     };
     for (const code of Object.keys(selections)) {
       const d = await reportAdapter(code)!.build(client, selections[code]);
@@ -100,6 +114,12 @@ describe('adapters on an empty tenant', () => {
       expect(reportToCsv(d)).toContain(d.title);
       expect((await reportToPdf(d, 'now')).pageCount).toBe(1);
     }
+  });
+  it('cash flow, consolidated statements and GR/IR refuse without a selection', async () => {
+    await expect(reportAdapter('cash-flow')!.build(client, new URLSearchParams())).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('consolidated-statements')!.build(client, new URLSearchParams())).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('grir-analysis')!.build(client, new URLSearchParams({ run: '00000000-0000-0000-0000-000000000000' }))).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('profit-center-report')!.build(client, new URLSearchParams())).rejects.toMatchObject({ remedy: expect.any(String) });
   });
   it('sales analysis produces headers and per-currency totals', async () => {
     const d = await reportAdapter('sales-analysis')!.build(client, new URLSearchParams({ kind: 'SALES', groupBy: 'MATERIAL' }));

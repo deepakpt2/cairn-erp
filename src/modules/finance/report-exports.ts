@@ -2,7 +2,7 @@
  * CSV / PDF exports for the finance reports. Each adapter reads the screen's own query string and calls
  * the service the screen calls, so the export is the figures on screen — never a second calculation.
  */
-import { type ReportAdapter, type ReportDoc, type ReportColumn, type ReportSection, fmt, need, num } from '../output/report-export';
+import { ReportExportError, type ReportAdapter, type ReportDoc, type ReportColumn, type ReportSection, fmt, need, num } from '../output/report-export';
 import { calculateTrialBalance, TRIAL_BALANCE_CAPABILITY, listStatementVersions, type TrialBalanceSelection } from './trial-balance';
 import { calculateBalanceSheet, BALANCE_SHEET_CAPABILITY, DEFAULT_SUMMARY_LEVEL, type BalanceSheetSelection } from './balance-sheet';
 import { calculateProfitLoss, PROFIT_LOSS_CAPABILITY } from './profit-loss';
@@ -11,6 +11,15 @@ import { getCustomerBalances, CUSTOMER_BALANCE_CAPABILITY } from './customer-bal
 import { getVendorAgeing, VENDOR_AGEING_CAPABILITY } from './vendor-ageing';
 import { getJournalItems, JOURNAL_ITEMS_CAPABILITY, JOURNAL_ITEMS_CAP } from './journal-items';
 import { getGlBalanceReport, GL_BALANCE_CAPABILITY } from './gl-balances';
+import { calculateCashflow, CASHFLOW_CAPABILITY, CASHFLOW_LEDGER, CASHFLOW_METHOD_LABELS, type CashflowSelection } from './cash-flow';
+import {
+  calculateConsolidatedStatements, CONSOLIDATED_STATEMENTS_CAPABILITY, SECTION_LABELS, STATEMENT_SECTIONS,
+  type ConsolidatedStatementsSelection,
+} from './consolidated-statements';
+import { getConsolidationWorkbench, listConsolidationAreas } from './consolidation-workbench';
+import { ASSET_REPORT_CAPABILITY, assetHistoryCsv, getAssetHistorySheet, type AssetHistoryRow } from './asset-history';
+import { GRIR_RECLASS_CAPABILITY, getGrIrRun, grIrCsv } from './grir-reclass';
+import { csvToReport } from '../output/csv-report';
 import { getCustomerAgeing, CUSTOMER_AGEING_CAPABILITY } from './customer-ageing';
 
 const L: ReportColumn = { label: '' };
@@ -319,7 +328,146 @@ export const glBalancesExport: ReportAdapter = {
   },
 };
 
+export const cashFlowExport: ReportAdapter = {
+  code: 'cash-flow', route: '/finance/cash-flow', capability: CASHFLOW_CAPABILITY,
+  async build(client, q) {
+    const companyCodes = (q.get('companies') ?? '').split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
+    if (companyCodes.length === 0) throw new ReportExportError('Company codes are required for this export.', 'Run the report on screen first; the export uses the same selection.');
+    const selection: CashflowSelection = {
+      companyCodes,
+      fiscalYear: Number(q.get('fiscalYear')) || new Date().getFullYear(),
+      periodFrom: Number(q.get('periodFrom')) || 1,
+      periodTo: Number(q.get('periodTo')) || 12,
+      method: (q.get('method') ?? '').toUpperCase() === 'DIRECT' ? 'DIRECT' : 'INDIRECT',
+      ledger: CASHFLOW_LEDGER,
+      comparative: q.get('comparative') === '1',
+    };
+    const r = await calculateCashflow({ client, selection });
+    const total = r.totalsComparable && r.companies.length > 1;
+    const columns = [C('Line'), ...r.companies.map((c) => R(`${c.companyCode} (${c.currency})`)), ...(total ? [R('Total')] : []), ...(selection.comparative ? [R('Previous year')] : [])];
+    const width = columns.length;
+    const pad = (cells: string[]) => [...cells, ...Array(Math.max(0, width - cells.length)).fill('')];
+    const rows: string[][] = [];
+    for (const section of r.sections) {
+      rows.push(pad([section.title.toUpperCase()]));
+      for (const line of section.lines) {
+        rows.push([
+          line.kind === 'DETAIL' ? `   ${line.label}` : line.label,
+          ...r.companies.map((c) => fmt(line.amountsByCompany[c.companyCode])),
+          ...(total ? [fmt(line.total)] : []),
+          ...(selection.comparative ? [fmt(line.comparativeTotal)] : []),
+        ]);
+      }
+    }
+    const sections: ReportSection[] = [{ columns, rows }];
+    sections.push({
+      heading: 'Cash reconciliation',
+      columns: [C('Item'), R('Amount')],
+      rows: [['Opening cash', fmt(r.openingCash)], ['Net change', fmt(r.netCashChange)], ['Closing cash', fmt(r.closingCash)], ['Reconciliation difference', fmt(r.reconciliationDifference)]],
+    });
+    if (r.unclassified.length > 0) {
+      sections.push({
+        heading: 'Unclassified accounts',
+        columns: [C('Company'), C('Account'), R('Amount'), R('Lines')],
+        rows: r.unclassified.map((u) => [u.companyCode, u.account, fmt(u.amount), String(u.lines)]),
+      });
+    }
+    return {
+      title: 'Cash flow statement',
+      subtitle: [`${CASHFLOW_METHOD_LABELS[selection.method]} · companies ${companyCodes.join(', ')}`, `Fiscal year ${selection.fiscalYear}, periods ${selection.periodFrom}-${selection.periodTo} · ledger ${selection.ledger}`, ...r.warnings],
+      sections,
+      fileStem: `cash-flow-${companyCodes.join('-')}-${selection.fiscalYear}-${selection.periodTo}`,
+    };
+  },
+};
+
+export const consolidatedStatementsExport: ReportAdapter = {
+  code: 'consolidated-statements', route: '/finance/consolidated-statements', capability: CONSOLIDATED_STATEMENTS_CAPABILITY,
+  async build(client, q) {
+    const get = (name: string) => (q.get(name) ?? '').trim();
+    const areas = await listConsolidationAreas(client);
+    const area = get('area').toUpperCase() || areas.find((a) => a.status === 'ACTIVE')?.area || areas[0]?.area || '';
+    const workbench = area ? await getConsolidationWorkbench(client, area) : null;
+    const selection: ConsolidatedStatementsSelection = {
+      area,
+      group: get('group').toUpperCase() || workbench?.groups[0]?.group || '',
+      version: get('version').toUpperCase() || workbench?.versions[0]?.version || '',
+      fiscalYear: Number(get('fiscalYear')) || new Date().getFullYear(),
+      period: Number(get('period')) || 12,
+      view: get('view').toUpperCase() === 'INCOME_STATEMENT' ? 'INCOME_STATEMENT' : 'BALANCE_SHEET',
+      unit: get('unit').toUpperCase(),
+      comparative: get('comparative') === '1',
+    };
+    if (!selection.area || !selection.group || !selection.version) {
+      throw new ReportExportError('A consolidation area, group and version are required.', 'Run the report on screen first; the export uses the same selection.');
+    }
+    const r = await calculateConsolidatedStatements({ client, selection });
+    const columns = [C('FS item'), C('Title'), C('Section'), ...r.units.map((u) => R(u.unit)), R('Group total'), R('Period movement'), ...(selection.comparative ? [R('Previous year')] : [])];
+    const width = columns.length;
+    const rows: string[][] = [];
+    for (const section of STATEMENT_SECTIONS) {
+      const own = r.rows.filter((x) => x.section === section);
+      if (own.length === 0) continue;
+      for (const x of own) {
+        rows.push([x.groupAccount, x.title, SECTION_LABELS[section], ...r.units.map((u) => fmt(x.unitAmounts[u.unit])), fmt(x.groupTotal), fmt(x.periodMovement), ...(selection.comparative ? [fmt(x.comparativeTotal)] : [])]);
+      }
+      const total = r.sectionTotals.find((t) => t.section === section);
+      const line = Array(width).fill('') as string[];
+      line[0] = `Total ${SECTION_LABELS[section]}`;
+      line[3 + r.units.length] = fmt(total?.total);
+      rows.push(line);
+    }
+    return {
+      title: selection.view === 'INCOME_STATEMENT' ? 'Consolidated income statement' : 'Consolidated balance sheet',
+      subtitle: [
+        `Area ${selection.area} (${r.areaTitle}) · group ${selection.group} · version ${selection.version}`,
+        `Chart ${r.consChart} · fiscal year ${selection.fiscalYear} · ${r.periodLabel}`,
+        `Balance check ${fmt(r.balanceCheck)} · unmapped journal lines ${r.unmapped.lines} (${fmt(r.unmapped.amount)})`,
+        ...r.warnings,
+      ],
+      sections: [{ columns, rows }],
+      fileStem: `consolidated-${selection.view === 'INCOME_STATEMENT' ? 'income' : 'balance'}-${selection.group}-${selection.fiscalYear}-${selection.period}`,
+    };
+  },
+};
+
+export const assetHistoryExport: ReportAdapter = {
+  code: 'asset-history', route: '/finance/assets/history', capability: ASSET_REPORT_CAPABILITY,
+  async build(client, q) {
+    const get = (name: string) => q.get(name)?.trim() || undefined;
+    const base = {
+      companyCodeFrom: get('companyCodeFrom') ?? '', companyCodeTo: get('companyCodeTo'),
+      assetClassFrom: get('assetClassFrom'), assetClassTo: get('assetClassTo'),
+      assetNumberFrom: get('assetNumberFrom'), assetNumberTo: get('assetNumberTo'),
+      fiscalYear: Number(get('fiscalYear')), depreciationArea: get('depreciationArea') ?? '01',
+      reportingDate: get('reportingDate'), pageSize: 500,
+    };
+    const rows: AssetHistoryRow[] = [];
+    for (let page = 1; ; page += 1) {
+      const sheet = await getAssetHistorySheet(client, { ...base, page });
+      rows.push(...sheet.rows);
+      if (rows.length >= sheet.totalRows || sheet.rows.length === 0 || rows.length > 50_000) break;
+    }
+    return csvToReport(assetHistoryCsv(rows), {
+      title: 'Asset history sheet',
+      subtitle: [`Company ${base.companyCodeFrom}${base.companyCodeTo ? `-${base.companyCodeTo}` : ''} · fiscal year ${base.fiscalYear} · depreciation area ${base.depreciationArea}${base.reportingDate ? ` · reporting date ${base.reportingDate}` : ''}`],
+      fileStem: `asset-history-${base.fiscalYear}`,
+    });
+  },
+};
+
+export const grIrExport: ReportAdapter = {
+  code: 'grir-analysis', route: '/finance/grir-reclass', capability: GRIR_RECLASS_CAPABILITY,
+  async build(client, q) {
+    const runId = (q.get('run') ?? '').trim();
+    const run = runId ? await getGrIrRun(client, runId) : null;
+    if (!run) throw new ReportExportError('GR/IR run not found.', 'Open a protocol on screen first; the export uses the same run.');
+    return csvToReport(grIrCsv(run), { title: 'GR/IR analysis', subtitle: [`Run ${runId}`], fileStem: `grir-analysis-${runId}` });
+  },
+};
+
 export const FINANCE_REPORT_EXPORTS: ReportAdapter[] = [
+  cashFlowExport, consolidatedStatementsExport, assetHistoryExport, grIrExport,
   trialBalanceExport, balanceSheetExport, profitLossExport, vendorBalancesExport, customerBalancesExport,
   vendorAgeingExport, customerAgeingExport, journalItemsExport, glBalancesExport,
 ];

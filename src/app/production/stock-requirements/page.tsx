@@ -9,6 +9,7 @@ import {
   type StockRequirementsSelection,
 } from '@/modules/production/stock-requirements';
 import StockRequirementsShell from './StockRequirementsShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,8 @@ export default async function StockRequirementsPage({
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('md04.subtitle')}</p>
       </header>
+
+      {result && result.rows.length > 0 && <div><ReportExport report="stock-requirements" params={params} /></div>}
 
       <StockRequirementsShell
         canUse={can(session, STOCK_REQUIREMENTS_CAPABILITY)}

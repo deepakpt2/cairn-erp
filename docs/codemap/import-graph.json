@@ -2238,7 +2238,8 @@
     "modules/finance/cash-flow-vocabulary.ts",
     "modules/finance/cash-flow.ts",
     "modules/foundation/services.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/clearing-reset/ResetForm.tsx": [
     "ui/lock/ChangeLock.tsx"
@@ -2277,7 +2278,8 @@
     "app/finance/consolidated-statements/ConsolidatedStatementsShell.tsx",
     "modules/finance/consolidated-statements.ts",
     "modules/finance/consolidation-workbench.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/consolidation-monitor/ConsolidationMonitorShell.tsx": [
     "app/finance/consolidation-monitor/actions.ts",
@@ -4092,7 +4094,8 @@
     "app/production/stock-requirements/StockRequirementsShell.tsx",
     "modules/production/stock-requirements.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/production/time-ticket/TimeTicketWorkbench.tsx": [
     "app/production/time-ticket/actions.ts",
@@ -4247,7 +4250,8 @@
     "modules/purchasing/invoice-overview.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/output/ReportExport.tsx"
   ],
   "app/purchasing/invoice-verification/InvoiceVerification.tsx": [
     "app/purchasing/invoice-verification/actions.ts",
@@ -4408,7 +4412,8 @@
     "app/purchasing/requisition-list/RequisitionListShell.tsx",
     "modules/purchasing/requisition-list.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/purchasing/requisitions/Requisitions.tsx": [
     "app/purchasing/requisitions/actions.ts",
@@ -5275,15 +5280,21 @@
     "modules/finance/trial-balance.ts"
   ],
   "modules/finance/report-exports.ts": [
+    "modules/finance/asset-history.ts",
     "modules/finance/balance-sheet.ts",
+    "modules/finance/cash-flow.ts",
+    "modules/finance/consolidated-statements.ts",
+    "modules/finance/consolidation-workbench.ts",
     "modules/finance/customer-ageing.ts",
     "modules/finance/customer-balances.ts",
     "modules/finance/gl-balances.ts",
+    "modules/finance/grir-reclass.ts",
     "modules/finance/journal-items.ts",
     "modules/finance/profit-loss.ts",
     "modules/finance/trial-balance.ts",
     "modules/finance/vendor-ageing.ts",
     "modules/finance/vendor-balances.ts",
+    "modules/output/csv-report.ts",
     "modules/output/report-export.ts"
   ],
   "modules/finance/schema.ts": [
@@ -5884,6 +5895,8 @@
   ],
   "modules/foundation/report-exports.ts": [
     "modules/foundation/cost-center-report.ts",
+    "modules/foundation/profit-center-report.ts",
+    "modules/output/csv-report.ts",
     "modules/output/report-export.ts"
   ],
   "modules/foundation/retained-earnings-vocabulary.ts": [],
@@ -6700,6 +6713,9 @@
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
+  "modules/output/csv-report.ts": [
+    "modules/output/report-export.ts"
+  ],
   "modules/output/dispatch-queue.ts": [
     "modules/foundation/output-notify.ts",
     "platform/db/client.ts",
@@ -7206,7 +7222,8 @@
   ],
   "modules/production/report-exports.ts": [
     "modules/output/report-export.ts",
-    "modules/production/order-cost-report.ts"
+    "modules/production/order-cost-report.ts",
+    "modules/production/stock-requirements.ts"
   ],
   "modules/production/routing-display.ts": [
     "modules/production/routing.ts"
@@ -7497,7 +7514,9 @@
   ],
   "modules/purchasing/report-exports.ts": [
     "modules/output/report-export.ts",
-    "modules/purchasing/purchase-order-list.ts"
+    "modules/purchasing/invoice-overview.ts",
+    "modules/purchasing/purchase-order-list.ts",
+    "modules/purchasing/requisition-list.ts"
   ],
   "modules/purchasing/requisition-list.ts": [
     "platform/db/client.ts",

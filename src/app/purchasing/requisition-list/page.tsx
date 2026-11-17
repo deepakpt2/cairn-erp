@@ -9,6 +9,7 @@ import {
   type RequisitionListSelection,
 } from '@/modules/purchasing/requisition-list';
 import RequisitionListShell from './RequisitionListShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,8 @@ export default async function RequisitionListPage({
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('reqList.subtitle')}</p>
       </header>
+
+      {result && result.rows.length > 0 && <div><ReportExport report="requisition-list" params={params} /></div>}
 
       <RequisitionListShell
         canUse={can(session, PR_LIST_CAPABILITY)}
