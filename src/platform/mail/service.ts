@@ -505,6 +505,7 @@ export async function sendOneMail(tx: Tx, client: string, messageId: string): Pr
     const attempts = msg.attempts + 1;
     const dead = attempts >= msg.maxAttempts;
     const text = safeErrorText(err);
+    console.error(`[mail] send failed (attempt ${attempts}/${msg.maxAttempts}): ${text}`);
     await tx
       .update(mailMessage)
       .set({
