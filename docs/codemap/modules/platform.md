@@ -61,7 +61,7 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 foundation, people, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/lock, platform/mail, platform/notification, platform/tables, platform/tenancy, ui/lock
 
 ## Used by
-app/account, app/forgot-password, app/reset-password, platform/attention, platform/auth, platform/tenancy, ui/lock
+app/account, app/forgot-password, app/reset-password, audit, platform/attention, platform/auth, platform/tenancy, ui/lock
 
 ## Tests (6)
 change-lock-claim, password-reset-delivery, personal-account, purchasing-org-company-code-assignment-ui-contract, role-capability-select, totp-mfa

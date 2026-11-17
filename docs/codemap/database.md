@@ -8,8 +8,8 @@
 - Invariants often live in triggers or advisory locks, not indexes (payroll 9281, confirmation cancellation 9172, company-code refs). Grep `drizzle/*.sql` (not `history/`) before assuming none.
 
 ## Tables by owning module (schema file: tables)
-### audit (3)
-- `modules/audit/schema.ts`: audit_finding, audit_grant, audit_grant_scope
+### audit (5)
+- `modules/audit/schema.ts`: access_review, access_review_item, audit_finding, audit_grant, audit_grant_scope
 
 ### finance (95)
 - `modules/finance/gl-account-group-schema.ts`: gl_account_group, gl_account_group_field_status, group_chart_accounts
@@ -226,7 +226,7 @@
 | reservation_header | inventory | production |
 | reservation_item | inventory | production |
 | reversal_reason | finance | foundation |
-| role | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
+| role | platform/tables | audit, finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
 | role_capability | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
 | routing | production | platform/tenancy |
 | routing_control_key | production | platform/tenancy |
@@ -252,7 +252,7 @@
 | settlement_document | foundation | production |
 | settlement_profile | foundation | platform/tenancy, production |
 | shipping_condition | sales | foundation |
-| sod_rule | platform/tables | platform |
+| sod_rule | platform/tables | audit, platform |
 | special_gl_config | foundation | finance, sales |
 | stock_quantity | inventory | dev/walkthrough-volume.ts, production, sales |
 | storage_location | foundation | inventory, platform/tenancy, production, purchasing |
@@ -266,12 +266,12 @@
 | term_registry | platform/tables | platform/registry |
 | time_type | people | platform/tenancy |
 | unit_of_measure | platform/tables | foundation, inventory, production, purchasing, quality, sales |
-| user_capability | platform/tables | people, platform/auth, platform/notification |
+| user_capability | platform/tables | audit, people, platform/auth, platform/notification |
 | user_capability_scope | platform/tables | platform/auth |
 | user_mfa | platform/tables | platform/auth |
 | user_mfa_recovery_code | platform/tables | platform/auth |
-| user_role | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
-| user_session | platform/tables | finance, inventory, platform, platform/auth, platform/job, platform/lock, production |
+| user_role | platform/tables | audit, finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
+| user_session | platform/tables | audit, finance, inventory, platform, platform/auth, platform/job, platform/lock, production |
 | valuation_class | inventory | foundation, platform/tenancy |
 | vendor_down_payment | finance | foundation, purchasing |
 | vendor_down_payment_clearing | finance | purchasing |

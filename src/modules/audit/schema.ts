@@ -15,10 +15,12 @@ import {
   date,
   foreignKey,
   index,
+  integer,
   pgTable,
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -124,5 +126,77 @@ export const auditFinding = pgTable(
     index('audit_finding_status_idx').on(t.client, t.status),
     check('audit_finding_kind_ck', sql`${t.kind} in ('FINDING','NOTE','BOOKMARK','REQUEST')`),
     check('audit_finding_status_ck', sql`${t.status} in ('OPEN','ANSWERED','ACCEPTED','WITHDRAWN')`),
+  ],
+);
+
+export const ACCESS_REVIEW_STATUSES = ['OPEN', 'COMPLETED', 'CANCELLED'] as const;
+export type AccessReviewStatus = (typeof ACCESS_REVIEW_STATUSES)[number];
+export const ACCESS_REVIEW_DECISIONS = ['PENDING', 'CERTIFIED', 'REVOKE'] as const;
+export type AccessReviewDecision = (typeof ACCESS_REVIEW_DECISIONS)[number];
+
+/** A recertification of the roles users hold. Evidence: never deleted. Migration: drizzle/9299_access_review.sql. */
+export const accessReview = pgTable(
+  'access_review',
+  {
+    client: tenant(),
+    reviewId: varchar('review_id', { length: 36 }).notNull(),
+    code: varchar('code', { length: 40 }).notNull(),
+    name: varchar('name', { length: 100 }).notNull(),
+    reviewDate: date('review_date', { mode: 'string' }).notNull(),
+    /** The filter that defined the population, stored so the evidence says what was in scope. */
+    roleFilter: varchar('role_filter', { length: 40 }),
+    capabilityFilter: varchar('capability_filter', { length: 64 }),
+    userFilter: varchar('user_filter', { length: 36 }),
+    status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+    reason: text('reason').notNull(),
+    completedByUserId: varchar('completed_by_user_id', { length: 36 }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    requestKey: varchar('request_key', { length: 64 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.reviewId] }),
+    uniqueIndex('access_review_request_key_uq').on(t.client, t.requestKey).where(sql`${t.requestKey} is not null`),
+    index('access_review_status_idx').on(t.client, t.status),
+    check('access_review_status_ck', sql`${t.status} in ('OPEN','COMPLETED','CANCELLED')`),
+  ],
+);
+
+export const accessReviewItem = pgTable(
+  'access_review_item',
+  {
+    client: tenant(),
+    reviewId: varchar('review_id', { length: 36 }).notNull(),
+    lineNumber: integer('line_number').notNull(),
+    subjectUserId: varchar('subject_user_id', { length: 36 }).notNull(),
+    roleCode: varchar('role_code', { length: 40 }).notNull(),
+    /** What the assignment looked like when the review was raised — evidence, not a live join. */
+    roleName: varchar('role_name', { length: 100 }),
+    validFrom: timestamp('valid_from', { withTimezone: true }),
+    validTo: timestamp('valid_to', { withTimezone: true }),
+    /** JSON arrays, frozen at generation. A role's content changes; the certificate must not. */
+    effectiveCapabilities: text('effective_capabilities'),
+    sodConflicts: text('sod_conflicts'),
+    decision: varchar('decision', { length: 16 }).notNull().default('PENDING'),
+    decidedByUserId: varchar('decided_by_user_id', { length: 36 }),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decisionReason: text('decision_reason'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    appliedByUserId: varchar('applied_by_user_id', { length: 36 }),
+    /** The refusal, where a revocation could not be carried out. Never silently skipped. */
+    applyError: text('apply_error'),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.reviewId, t.lineNumber] }),
+    index('access_review_item_subject_idx').on(t.client, t.reviewId, t.subjectUserId),
+    check('access_review_item_line_ck', sql`${t.lineNumber} > 0`),
+    check('access_review_item_decision_ck', sql`${t.decision} in ('PENDING','CERTIFIED','REVOKE')`),
+    check('access_review_item_decided_ck', sql`(${t.decision} = 'PENDING' and ${t.decisionReason} is null) or (${t.decision} <> 'PENDING' and ${t.decisionReason} is not null)`),
+    foreignKey({
+      name: 'access_review_item_review_fk',
+      columns: [t.client, t.reviewId],
+      foreignColumns: [accessReview.client, accessReview.reviewId],
+    }).onDelete('cascade'),
   ],
 );

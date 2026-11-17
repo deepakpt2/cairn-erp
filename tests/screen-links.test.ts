@@ -29,6 +29,7 @@ describe('screen links', () => {
 
     const excludedRoutes = [
       '/signin',
+      '/signin/mfa',
       '/forgot-password',
       '/reset-password',
       '/platform/users/[username]',

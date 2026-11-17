@@ -4673,6 +4673,21 @@ export const SCREENS: readonly ScreenLink[] = [
     },
   },
   {
+    id: "/audit/access-review",
+    path: "/audit/access-review",
+    query: {},
+    code: "AUDIT.ACCESS.REVIEW",
+    title: "Access review",
+    area: "audit",
+    family: "audit",
+    accepts: ["user"],
+    nav: {
+      module: "admin",
+      category: "Audit",
+      activity: "Access review",
+    },
+  },
+  {
     id: "/audit/findings",
     path: "/audit/findings",
     query: {},

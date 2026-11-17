@@ -43,6 +43,20 @@
     "platform/db/client.ts"
   ],
   "app/api/health/live/route.ts": [],
+  "app/audit/access-review/AccessReviewForm.tsx": [
+    "app/audit/access-review/actions.ts"
+  ],
+  "app/audit/access-review/actions.ts": [
+    "modules/audit/access-review.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/audit/access-review/page.tsx": [
+    "app/audit/access-review/AccessReviewForm.tsx",
+    "modules/audit/access-review.ts",
+    "modules/platform/role-admin.ts",
+    "platform/auth/current.ts",
+    "platform/i18n/index.ts"
+  ],
   "app/audit/findings/FindingForms.tsx": [
     "app/audit/findings/actions.ts"
   ],
@@ -4806,6 +4820,17 @@
     "modules/sales/delivery.ts",
     "modules/sales/sales-order.ts",
     "platform/db/client.ts"
+  ],
+  "modules/audit/access-review.ts": [
+    "modules/audit/schema.ts",
+    "modules/audit/workspace.ts",
+    "modules/platform/role-admin.ts",
+    "platform/auth/pattern.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/tables/security.ts"
   ],
   "modules/audit/read-only.ts": [
     "platform/auth/pattern.ts",
