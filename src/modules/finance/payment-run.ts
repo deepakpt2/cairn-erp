@@ -14,6 +14,10 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { bankAccount, houseBank, paymentMethod } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
+import { dropDocumentRelease } from '../purchasing/release';
+import {
+  PAYMENT_RUN_RELEASE_CATEGORY, assertPaymentRunReleased, paymentRunReleaseKey, syncPaymentRunRelease,
+} from './payment-run-release';
 import { activeBlockedInvoiceNumbers } from '../purchasing/blocked-invoice';
 import { supplierInvoice } from '../purchasing/schema';
 import {
@@ -347,7 +351,9 @@ export async function generateProposal(input: {
       changeType: 'CHANGE', changedBy: input.changedBy, transactionCode: PAYMENT_RUN_CAPABILITY,
       after: { status: 'PROPOSAL', items: number },
     });
-    return (await loadRun(tx, input.client, input.runDate, input.runId))!;
+    const proposed = (await loadRun(tx, input.client, input.runDate, input.runId))!;
+    await syncPaymentRunRelease(tx, input.client, proposed, input.changedBy);
+    return proposed;
   });
 }
 
@@ -364,6 +370,12 @@ export async function executePaymentRun(input: {
 
     const payable = run.proposal.filter((p) => !p.exceptionCode);
     if (payable.length === 0) throw new PaymentRunError('The proposal carries no payable items.', 'Resolve the exceptions or widen the selection.');
+    await assertPaymentRunReleased(tx, input.client, input.runDate, input.runId).catch((error: unknown) => {
+      if (error instanceof Error && error.name === 'ReleaseError') {
+        throw new PaymentRunError(error.message, (error as { remedy?: string }).remedy);
+      }
+      throw error;
+    });
 
     // Revalidate every item against its standing journal line.
     interface Entry { item: (typeof payable)[number]; glAccount: string }
@@ -519,6 +531,7 @@ export async function cancelPaymentRun(input: {
       changeType: 'CHANGE', changedBy: input.changedBy, transactionCode: PAYMENT_RUN_CAPABILITY,
       after: { status: 'CANCELLED' },
     });
+    await dropDocumentRelease(tx, input.client, PAYMENT_RUN_RELEASE_CATEGORY, paymentRunReleaseKey(input.runDate, input.runId));
     return (await loadRun(tx, input.client, input.runDate, input.runId))!;
   });
 }

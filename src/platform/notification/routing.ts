@@ -73,6 +73,9 @@ export const NOTIFICATION_ROUTES: Readonly<Record<string, RouteEntry>> = {
     path: '/purchasing/scheduling-agreement-display',
     param: 'agreement',
   },
+  parked_journal: { path: '/finance/journal/park', param: 'edit' },
+  // The run is keyed `<run date>/<run id>`; the screen reads it whole.
+  payment_run: { path: '/finance/payment-run', param: 'run' },
   sales_order: { path: '/sales/orders', param: 'order' },
   delivery: { path: '/sales/delivery', param: 'delivery' },
   // A failed output is routed to the document, because that is what the screen

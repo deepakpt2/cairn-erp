@@ -22,6 +22,8 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { costCenter, documentType, profitCenter, taxCode } from '../foundation/schema';
+import { dropDocumentRelease } from '../purchasing/release';
+import { JOURNAL_RELEASE_CATEGORY, assertParkedJournalReleased, syncParkedJournalRelease } from './parked-journal-release';
 import { glAccount, parkedJournalHeader, parkedJournalLine } from './schema';
 
 export const PARKED_JOURNAL_CAPABILITY = 'FIN.JOURNAL.PARK';
@@ -232,6 +234,7 @@ export async function parkJournal(input: HeaderInput & {
       requestKey: input.requestKey, createdBy: input.changedBy,
     });
     await insertLines(tx, input.client, parkedNumber, position.fiscalYear, input.changedBy, input.lines);
+    await syncParkedJournalRelease(tx, input.client, parkedNumber, input.changedBy);
     await recordChange(tx, {
       client: input.client, objectClass: PARKED_CLASS,
       objectKey: `${input.companyCode}/${parkedNumber}`,
@@ -280,6 +283,8 @@ export async function editParkedJournal(input: HeaderInput & {
       changeType: 'CHANGE', changedBy: input.changedBy, transactionCode: PARKED_JOURNAL_CAPABILITY,
       after: { status: 'PARKED', version: header.version + 1, lines: input.lines.length },
     });
+    // The edit changes what a release judged: any act given so far starts again.
+    await syncParkedJournalRelease(tx, input.client, input.parkedNumber, input.changedBy, true);
     return (await loadView(tx, input.client, input.parkedNumber))!;
   });
 }
@@ -345,6 +350,7 @@ export async function completeParkedJournal(input: {
       changeType: 'CHANGE', changedBy: input.changedBy, transactionCode: PARKED_JOURNAL_CAPABILITY,
       after: { status: 'COMPLETED', version: header.version + 1 },
     });
+    await syncParkedJournalRelease(tx, input.client, input.parkedNumber, input.changedBy);
     return (await loadView(tx, input.client, input.parkedNumber))!;
   });
 }
@@ -358,6 +364,12 @@ export async function postParkedJournal(input: {
     if (header.status !== 'PARKED' && header.status !== 'COMPLETED') {
       throw new ParkedJournalError(`Parked document ${input.parkedNumber} stands ${header.status.toLowerCase()} and cannot be posted.`);
     }
+    await assertParkedJournalReleased(tx, input.client, input.parkedNumber).catch((error: unknown) => {
+      if (error instanceof Error && error.name === 'ReleaseError') {
+        throw new ParkedJournalError(error.message, (error as { remedy?: string }).remedy);
+      }
+      throw error;
+    });
     const view = (await loadView(tx, input.client, input.parkedNumber))!;
     await judgeCompleteness(tx, input.client, view);
     const company = await getCompanyCode(tx, input.client, header.companyCode);
@@ -434,6 +446,7 @@ export async function deleteParkedJournal(input: {
       changeType: 'CHANGE', changedBy: input.changedBy, transactionCode: PARKED_JOURNAL_CAPABILITY,
       reason, after: { status: 'DELETED', version: header.version + 1 },
     });
+    await dropDocumentRelease(tx, input.client, JOURNAL_RELEASE_CATEGORY, input.parkedNumber);
     return (await loadView(tx, input.client, input.parkedNumber))!;
   });
 }

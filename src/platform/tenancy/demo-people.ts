@@ -222,7 +222,11 @@ const ROLES = [
     // pattern even though they read as though they might be.
     // The controller is also who grants an auditor access and answers the auditor's
     // requests (`/audit/grants`, `/audit/findings`): management's side of the audit.
-    capabilities: ['CO.*', 'COST.*', 'FIN.RPT.*', 'AUDIT.TRAIL.VIEW', 'AUDIT.ACCESS.GRANT', 'AUDIT.REQUEST.RESPOND'],
+    capabilities: [
+      'CO.*', 'COST.*', 'FIN.RPT.*', 'AUDIT.TRAIL.VIEW', 'AUDIT.ACCESS.GRANT', 'AUDIT.REQUEST.RESPOND',
+      // The controller releases what the accountant parks and what the payment run proposes.
+      'FIN.JOURNAL.RELEASE', 'FIN.AP.PAYMENTRUN.RELEASE',
+    ],
   },
   {
     code: 'DEMO_AUDITOR',

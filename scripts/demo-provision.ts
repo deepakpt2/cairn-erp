@@ -53,6 +53,7 @@ import { buildDemoBomStructure } from '../src/platform/tenancy/demo-bom-structur
 import { buildDemoCostEstimate } from '../src/platform/tenancy/demo-cost-estimate';
 import { buildDemoSalesAvailability } from '../src/platform/tenancy/demo-sales-availability';
 import { buildDemoSalesQuotation } from '../src/platform/tenancy/demo-sales-quotation';
+import { buildDemoRelease } from '../src/platform/tenancy/demo-release';
 import {
   buildDemoPeople,
   listDemoAccounts as readDemoAccounts,
@@ -438,6 +439,17 @@ async function runSalesQuotationPhase(ctx: PhaseContext): Promise<Record<string,
   return { ...result };
 }
 
+/**
+ * Phase D19_RELEASE: release strategies for purchase orders, requisitions, contracts, scheduling agreements, parked
+ * journals and payment runs, and documents standing in each release state. Journals and the payment run are prepared by
+ * demo.accountant and left for demo.controller. Config is skipped where it stands; documents are request-keyed or only
+ * created while their category is empty.
+ */
+async function runReleasePhase(ctx: PhaseContext): Promise<Record<string, unknown>> {
+  const result = await buildDemoRelease({ client: DEMO_IDENTITY.clientKey, timeline: ctx.timeline });
+  return { ...result };
+}
+
 const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unknown>>> = {
   A_FOUNDATION: runFoundationPhase,
   B_ORGANISATION: runOrganisationPhase,
@@ -461,6 +473,7 @@ const PHASES: Record<string, (ctx: PhaseContext) => Promise<Record<string, unkno
   D16_COST_ESTIMATE: runCostEstimatePhase,
   D17_SALES_AVAILABILITY: runSalesAvailabilityPhase,
   D18_SALES_QUOTATION: runSalesQuotationPhase,
+  D19_RELEASE: runReleasePhase,
 };
 
 async function main(): Promise<number> {

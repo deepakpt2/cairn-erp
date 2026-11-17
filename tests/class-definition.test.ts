@@ -73,7 +73,7 @@ describe('SCR-058 classes (CL02)', () => {
     const c = await standingClient();
     const choices = await listClasses(c);
     expect(choices.classTypes.map((t) => t.classType)).toContain('PURCHASE_ORDER');
-    expect(choices.classTypes).toHaveLength(6);
+    expect(choices.classTypes).toHaveLength(10);
 
     await expect(saveClass(create({ classType: 'NOPE' }))).rejects.toThrow('does not stand active');
     await expect(saveClass(create({

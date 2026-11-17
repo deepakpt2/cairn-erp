@@ -11,7 +11,11 @@ import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verificat
 import {
   cancelPaymentRun, createPaymentRun, executePaymentRun, generateProposal, getPaymentRun,
 } from '../src/modules/finance/payment-run';
+import {
+  cancelPaymentRunRelease, getPaymentRunRelease, releasePaymentRun,
+} from '../src/modules/finance/payment-run-release';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { defineReleaseStrategy } from './helpers/release-config';
 
 const ACTOR = 'SCR063_F110_TEST';
 
@@ -221,5 +225,66 @@ describe('SCR-063 payment run (F110)', () => {
     await expect(cancelPaymentRun({ client: c, changedBy: ACTOR, runDate: '2026-10-18', runId: 'RUNC' }))
       .rejects.toThrow('cannot be cancelled');
     expect((await getPaymentRun(c, '2026-10-18', 'RUNC'))?.status).toBe('EXECUTED');
+  });
+
+  it('holds a claimed run until another person releases it, and starts over on a new proposal', async () => {
+    const c = await standingClient();
+    // A second payable of 550, so the run has something to pay once the first one is cleared.
+    const order = await createOrder({
+      client: c, changedBy: ACTOR,
+      supplierNumber: 'V10000', purchasingOrg: '1000', purchasingGroup: '001', companyCode: '1000', currency: '',
+      items: [{
+        materialNumber: 'MAT-10001', shortText: 'Industrial steel plate', quantity: 5, unit: 'PC',
+        netPrice: 100, priceUnit: 1, taxCode: '', plant: '1000', storageLocation: '',
+        markedForDeletion: false,
+        scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 5 }],
+        assignments: [],
+      }],
+    });
+    await postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber,
+      documentDate: '2026-10-18', postingDate: '2026-10-18',
+      requestKey: 'gr-pay-2', lines: [{ itemNumber: 10, quantity: 5 }],
+    });
+    await postSupplierInvoice({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber,
+      supplierReference: 'INV-PAY-2', invoiceDate: '2026-10-16', postingDate: '2026-10-18',
+      grossAmount: 550, requestKey: 'iv-pay-2',
+      lines: [{ itemNumber: 10, quantity: 5, netAmount: 550 }],
+    });
+    await defineReleaseStrategy({
+      client: c, actor: ACTOR, category: 'PAYMENT_RUN', group: 'RN', codes: ['TRS'],
+      strategy: 'RUN_STD', from: '100', steps: ['TRS'],
+    });
+    const key = { client: c, runDate: '2026-10-18', runId: 'RUND' };
+    const execute = () => executePaymentRun({ ...key, changedBy: ACTOR, houseBankKey: 'HB01', bankAccountId: 'MAIN' });
+
+    await createPaymentRun(runParams({ runId: 'RUND' }));
+    await generateProposal({ ...key, changedBy: ACTOR });
+    expect(await getPaymentRunRelease(c, key.runDate, key.runId))
+      .toMatchObject({ status: 'PENDING', strategyCode: 'RUN_STD', steps: ['TRS'], currentStep: 0 });
+    await expect(execute()).rejects.toThrow('waiting for release');
+
+    // The person who generated the proposal cannot release it.
+    await expect(releasePaymentRun({ ...key, changedBy: ACTOR, releaseCode: 'TRS' })).rejects.toThrow('you cannot release it');
+    await releasePaymentRun({ ...key, changedBy: 'RUN-APPROVER', releaseCode: 'TRS' });
+    expect(await getPaymentRunRelease(c, key.runDate, key.runId)).toMatchObject({ status: 'RELEASED' });
+
+    // A new proposal is a different thing to approve.
+    await generateProposal({ ...key, changedBy: ACTOR });
+    expect(await getPaymentRunRelease(c, key.runDate, key.runId)).toMatchObject({ status: 'PENDING', currentStep: 0 });
+    await expect(execute()).rejects.toThrow('waiting for release');
+
+    await releasePaymentRun({ ...key, changedBy: 'RUN-APPROVER', releaseCode: 'TRS' });
+    await cancelPaymentRunRelease({ ...key, changedBy: 'RUN-APPROVER' });
+    expect(await getPaymentRunRelease(c, key.runDate, key.runId)).toMatchObject({ status: 'PENDING', currentStep: 0 });
+    await releasePaymentRun({ ...key, changedBy: 'RUN-APPROVER', releaseCode: 'TRS' });
+    expect((await execute()).status).toBe('EXECUTED');
+
+    // A cancelled run leaves no release waiting.
+    await createPaymentRun(runParams({ runId: 'RUNE' }));
+    await generateProposal({ ...key, runId: 'RUNE', changedBy: ACTOR });
+    await cancelPaymentRun({ ...key, runId: 'RUNE', changedBy: ACTOR });
+    expect(await getPaymentRunRelease(c, key.runDate, 'RUNE')).toMatchObject({ status: 'NOT_REQUIRED' });
   });
 });

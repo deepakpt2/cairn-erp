@@ -13,6 +13,7 @@
  */
 import { and, asc, eq } from 'drizzle-orm';
 
+export { RELEASE_CATEGORY_LABELS } from './release-categories';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
@@ -26,15 +27,28 @@ const OBJECT_CLASS = 'release_strategy';
 const PRODUCTION = process.env.NODE_ENV === 'production';
 
 /** The house communication structure: attributes a document carries. */
+const PURCHASING_DOCUMENT_ATTRIBUTES = ['TOTAL_VALUE', 'PLANT', 'PURCHASING_GROUP', 'COMPANY_CODE', 'SUPPLIER', 'PURCHASING_ORG'];
 export const RELEASE_ATTRIBUTES: Record<string, string[]> = {
   PURCHASE_REQUISITION: ['TOTAL_VALUE', 'PLANT', 'PURCHASING_GROUP', 'COMPANY_CODE'],
-  PURCHASE_ORDER: ['TOTAL_VALUE', 'PLANT', 'PURCHASING_GROUP', 'COMPANY_CODE', 'SUPPLIER', 'PURCHASING_ORG'],
+  PURCHASE_ORDER: PURCHASING_DOCUMENT_ATTRIBUTES,
+  PURCHASE_CONTRACT: PURCHASING_DOCUMENT_ATTRIBUTES,
+  SCHED_AGREEMENT: PURCHASING_DOCUMENT_ATTRIBUTES,
+  // A parked journal: TOTAL_VALUE is the sum of its debit lines, in the document currency.
+  JOURNAL_ENTRY: ['TOTAL_VALUE', 'COMPANY_CODE', 'DOCUMENT_TYPE', 'CURRENCY'],
+  // A payment run: TOTAL_VALUE is the sum of the proposed items that will pay (exceptions excluded).
+  // COMPANY_CODE and CURRENCY are present only when the proposal names exactly one.
+  PAYMENT_RUN: ['TOTAL_VALUE', 'COMPANY_CODE', 'CURRENCY'],
 };
+
 
 /** The class type a group's strategies must read, per category. */
 export const CATEGORY_CLASS_TYPE: Record<string, string> = {
   PURCHASE_REQUISITION: 'PURCHASE_REQUISITION',
   PURCHASE_ORDER: 'PURCHASE_ORDER',
+  PURCHASE_CONTRACT: 'PURCHASE_CONTRACT',
+  SCHED_AGREEMENT: 'SCHED_AGREEMENT',
+  JOURNAL_ENTRY: 'JOURNAL_ENTRY',
+  PAYMENT_RUN: 'PAYMENT_RUN',
 };
 
 const OPERATORS = ['EQ', 'GE', 'GT', 'LE', 'LT', 'BETWEEN'] as const;
@@ -183,7 +197,7 @@ export async function saveReleaseGroup(input: ReleaseGroupInput) {
     throw new ReleaseStrategyError('The group description is required and may be at most 60 characters.');
   }
   if (!RELEASE_ATTRIBUTES[input.documentCategory]) {
-    throw new ReleaseStrategyError('The document category is PURCHASE_REQUISITION or PURCHASE_ORDER.');
+    throw new ReleaseStrategyError(`The document category is one of ${Object.keys(RELEASE_ATTRIBUTES).join(', ')}.`);
   }
   const codes = input.codes
     .filter((row) => (row.code ?? '').trim())

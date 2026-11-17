@@ -2318,7 +2318,7 @@ export const SCREENS: readonly ScreenLink[] = [
     title: "Park a journal entry",
     area: "finance",
     family: "journal",
-    accepts: [],
+    accepts: ["edit"],
     nav: {
       module: "fico",
       category: "General ledger",
@@ -2348,7 +2348,7 @@ export const SCREENS: readonly ScreenLink[] = [
     title: "Payment run",
     area: "finance",
     family: "vendor-accounting",
-    accepts: [],
+    accepts: ["run"],
     nav: {
       module: "fico",
       category: "Accounts payable",

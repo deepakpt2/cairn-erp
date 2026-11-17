@@ -1575,6 +1575,7 @@
   ],
   "app/config/release-strategies/ReleaseStrategies.tsx": [
     "app/config/release-strategies/actions.ts",
+    "modules/foundation/release-categories.ts",
     "modules/foundation/release-strategy-definition.ts",
     "ui/lock/ChangeLock.tsx"
   ],
@@ -2581,15 +2582,20 @@
   "app/finance/journal/park/ParkedJournal.tsx": [
     "app/finance/journal/park/actions.ts",
     "modules/finance/parked-journal.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "modules/purchasing/release.ts",
+    "ui/fields/ConstrainedField.tsx",
+    "ui/release/ReleasePanel.tsx"
   ],
   "app/finance/journal/park/actions.ts": [
+    "modules/finance/parked-journal-release.ts",
     "modules/finance/parked-journal.ts",
+    "modules/purchasing/release.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts"
   ],
   "app/finance/journal/park/page.tsx": [
     "app/finance/journal/park/ParkedJournal.tsx",
+    "modules/finance/parked-journal-release.ts",
     "modules/finance/parked-journal.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
@@ -2615,15 +2621,20 @@
   "app/finance/payment-run/PaymentRun.tsx": [
     "app/finance/payment-run/actions.ts",
     "modules/finance/payment-run.ts",
-    "ui/lock/ChangeLock.tsx"
+    "modules/purchasing/release.ts",
+    "ui/lock/ChangeLock.tsx",
+    "ui/release/ReleasePanel.tsx"
   ],
   "app/finance/payment-run/actions.ts": [
+    "modules/finance/payment-run-release.ts",
     "modules/finance/payment-run.ts",
+    "modules/purchasing/release.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts"
   ],
   "app/finance/payment-run/page.tsx": [
     "app/finance/payment-run/PaymentRun.tsx",
+    "modules/finance/payment-run-release.ts",
     "modules/finance/payment-run.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts"
@@ -5255,20 +5266,37 @@
     "platform/periods/index.ts",
     "platform/posting/index.ts"
   ],
+  "modules/finance/parked-journal-release.ts": [
+    "modules/finance/schema.ts",
+    "modules/foundation/release-strategy-definition.ts",
+    "modules/purchasing/release.ts",
+    "platform/db/client.ts"
+  ],
   "modules/finance/parked-journal.ts": [
+    "modules/finance/parked-journal-release.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "modules/purchasing/release.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
     "platform/posting/index.ts"
   ],
+  "modules/finance/payment-run-release.ts": [
+    "modules/finance/payment-run.ts",
+    "modules/finance/schema.ts",
+    "modules/foundation/release-strategy-definition.ts",
+    "modules/purchasing/release.ts",
+    "platform/db/client.ts"
+  ],
   "modules/finance/payment-run.ts": [
+    "modules/finance/payment-run-release.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
     "modules/foundation/supplier-company-schema.ts",
     "modules/purchasing/blocked-invoice.ts",
+    "modules/purchasing/release.ts",
     "modules/purchasing/schema.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
@@ -5887,8 +5915,10 @@
     "modules/foundation/schema.ts",
     "platform/db/client.ts"
   ],
+  "modules/foundation/release-categories.ts": [],
   "modules/foundation/release-strategy-definition.ts": [
     "modules/foundation/characteristic-schema.ts",
+    "modules/foundation/release-categories.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/tenancy/index.ts"
@@ -8012,6 +8042,7 @@
     "platform/db/client.ts"
   ],
   "platform/attention/sources.ts": [
+    "modules/finance/schema.ts",
     "modules/foundation/characteristic-schema.ts",
     "modules/platform/personal-account.ts",
     "modules/purchasing/release.ts",
@@ -8498,8 +8529,7 @@
     "platform/tenancy/demo-masters.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
-    "platform/tenancy/demo-provisioning.ts",
-    "platform/tenancy/demo-release.ts"
+    "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-production.ts": [
     "modules/foundation/account-determination.ts",
@@ -8535,13 +8565,22 @@
     "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-release.ts": [
+    "modules/finance/parked-journal-release.ts",
+    "modules/finance/parked-journal.ts",
+    "modules/finance/payment-run.ts",
+    "modules/finance/schema.ts",
     "modules/foundation/characteristic-definition.ts",
     "modules/foundation/characteristic-schema.ts",
     "modules/foundation/class-definition.ts",
     "modules/foundation/release-strategy-definition.ts",
+    "modules/purchasing/contract.ts",
     "modules/purchasing/release.ts",
+    "modules/purchasing/requisitions.ts",
+    "modules/purchasing/scheduling-agreement.ts",
     "modules/purchasing/schema.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "platform/tenancy/demo-organisation.ts",
+    "platform/tenancy/demo-provisioning.ts"
   ],
   "platform/tenancy/demo-sales-availability.ts": [
     "modules/production/availability-check.ts",
@@ -8632,6 +8671,9 @@
     "modules/output/document-layout.ts"
   ],
   "ui/output/ReportExport.tsx": [],
+  "ui/release/ReleasePanel.tsx": [
+    "modules/purchasing/release.ts"
+  ],
   "ui/shell/CommandBar.tsx": [
     "app/command.ts",
     "platform/i18n/index.ts",

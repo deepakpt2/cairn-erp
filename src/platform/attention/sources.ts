@@ -27,6 +27,7 @@ import {
   schedulingAgreement,
 } from '@/modules/purchasing/schema';
 import { RELEASE_CAPABILITIES } from '@/modules/purchasing/release';
+import { parkedJournalHeader, paymentRunCompany } from '@/modules/finance/schema';
 import { pendingAccountActions } from '@/modules/platform/personal-account';
 import { appUser } from '@/platform/tables/security';
 import { mfaEnrolmentOutstanding } from '@/platform/auth/mfa';
@@ -67,7 +68,7 @@ export const ATTENTION_QUERY_LIMIT = 200;
 // Purchasing — the four release queues
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The four document categories that carry a release, and where each one lives. */
+/** The document categories that carry a release, and where each one lives. */
 const RELEASE_KINDS = [
   {
     category: 'PURCHASE_REQUISITION',
@@ -96,6 +97,20 @@ const RELEASE_KINDS = [
     label: 'attention.source.schedAgreeRelease',
     noun: 'attention.noun.agreement',
     route: '/purchasing/scheduling-agreements?agreement=',
+  },
+  {
+    category: 'JOURNAL_ENTRY',
+    capability: RELEASE_CAPABILITIES.JOURNAL_ENTRY,
+    label: 'attention.source.journalRelease',
+    noun: 'attention.noun.parkedJournal',
+    route: '/finance/journal/park?edit=',
+  },
+  {
+    category: 'PAYMENT_RUN',
+    capability: RELEASE_CAPABILITIES.PAYMENT_RUN,
+    label: 'attention.source.paymentRunRelease',
+    noun: 'attention.noun.paymentRun',
+    route: '/finance/payment-run?run=',
   },
 ] as const;
 
@@ -161,6 +176,25 @@ async function purchasingOrgsFor(
         companyCode: row.companyCode,
       }]);
     }
+  } else if (category === 'JOURNAL_ENTRY') {
+    const rows = await tx.select({
+      number: parkedJournalHeader.parkedNumber,
+      companyCode: parkedJournalHeader.companyCode,
+    }).from(parkedJournalHeader).where(and(
+      eq(parkedJournalHeader.client, client),
+      inArray(parkedJournalHeader.parkedNumber, numbers),
+    ));
+    for (const row of rows) entries.push([row.number, { companyCode: row.companyCode }]);
+  } else if (category === 'PAYMENT_RUN') {
+    const rows = await tx.select({
+      runDate: paymentRunCompany.runDate,
+      runId: paymentRunCompany.runId,
+      companyCode: paymentRunCompany.companyCode,
+    }).from(paymentRunCompany).where(and(
+      eq(paymentRunCompany.client, client),
+      inArray(sql<string>`${paymentRunCompany.runDate}::text || '/' || ${paymentRunCompany.runId}`, numbers),
+    ));
+    for (const row of rows) entries.push([`${row.runDate}/${row.runId}`, { companyCode: row.companyCode }]);
   } else {
     const rows = await tx.select({
       number: schedulingAgreement.agreementNumber,

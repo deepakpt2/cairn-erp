@@ -7,6 +7,7 @@ import { t } from '@/platform/i18n';
 import {
   PARKED_JOURNAL_CAPABILITY, getParkedJournal, listParkedJournals,
 } from '@/modules/finance/parked-journal';
+import { JOURNAL_RELEASE_CAPABILITY, getParkedJournalRelease } from '@/modules/finance/parked-journal-release';
 import ParkedJournal from './ParkedJournal';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
@@ -26,6 +27,7 @@ export default async function ParkedJournalPage({ searchParams }: {
   const loaded = params.edit ? await getParkedJournal(session.user.client, params.edit) : null;
   const editing = loaded && (loaded.status === 'PARKED' || loaded.status === 'COMPLETED') ? loaded : null;
   const canPark = can(session, PARKED_JOURNAL_CAPABILITY);
+  const release = editing ? await getParkedJournalRelease(session.user.client, editing.parkedNumber) : null;
   const changeLock = editing && canPark
     ? await openChangeForSession(session, {
         lockObject: 'PARKED_JOURNAL',
@@ -57,6 +59,8 @@ export default async function ParkedJournalPage({ searchParams }: {
         parked={parked}
         editing={editing}
         canPark={canPark && changeLock?.mode !== 'DISPLAY'}
+        release={release}
+        canRelease={can(session, JOURNAL_RELEASE_CAPABILITY)}
         today={today}
       />
     </div>

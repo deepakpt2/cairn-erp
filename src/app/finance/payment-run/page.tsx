@@ -5,6 +5,7 @@ import { t } from '@/platform/i18n';
 import {
   PAYMENT_RUN_CAPABILITY, getPaymentRun, listBankChoices, listPaymentRuns,
 } from '@/modules/finance/payment-run';
+import { PAYMENT_RUN_RELEASE_CAPABILITY, getPaymentRunRelease } from '@/modules/finance/payment-run-release';
 import PaymentRun from './PaymentRun';
 
 export const dynamic = 'force-dynamic';
@@ -15,15 +16,18 @@ const ROUTE = '/finance/payment-run';
  * Payment run (SCR-063 / F110 as a search alias only).
  */
 export default async function PaymentRunPage({ searchParams }: {
-  searchParams: Promise<{ runDate?: string; runId?: string }>;
+  searchParams: Promise<{ runDate?: string; runId?: string; run?: string }>;
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const client = session.user.client;
   const [runs, banks] = await Promise.all([listPaymentRuns(client), listBankChoices(client)]);
-  const run = params.runDate && params.runId
-    ? await getPaymentRun(client, params.runDate, params.runId)
-    : null;
+  // `run` is the notification form, `<run date>/<run id>`; the two parameters are the screen's own.
+  const [keyDate, keyId] = (params.run ?? '').split('/');
+  const runDate = params.runDate ?? keyDate;
+  const runId = params.runId ?? keyId;
+  const run = runDate && runId ? await getPaymentRun(client, runDate, runId) : null;
+  const release = run && run.status === 'PROPOSAL' ? await getPaymentRunRelease(client, run.runDate, run.runId) : null;
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -44,6 +48,8 @@ export default async function PaymentRunPage({ searchParams }: {
         runs={runs}
         banks={banks}
         canExecute={can(session, PAYMENT_RUN_CAPABILITY)}
+        release={release}
+        canRelease={can(session, PAYMENT_RUN_RELEASE_CAPABILITY)}
         today={today}
       />
     </div>

@@ -12,6 +12,10 @@ import {
   executePaymentRun,
   generateProposal,
 } from '@/modules/finance/payment-run';
+import {
+  PAYMENT_RUN_RELEASE_CAPABILITY, cancelPaymentRunRelease, releasePaymentRun,
+} from '@/modules/finance/payment-run-release';
+import { ReleaseError } from '@/modules/purchasing/release';
 
 export interface PaymentRunActionState {
   ok: boolean;
@@ -35,7 +39,7 @@ function guard(session: Awaited<ReturnType<typeof requireSession>>): PaymentRunA
 }
 
 function wrap(error: unknown): PaymentRunActionState {
-  if (error instanceof PaymentRunError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof PaymentRunError || error instanceof EnqueueError || error instanceof ReleaseError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
 }
 
@@ -143,6 +147,52 @@ export async function cancelRunAction(
     });
     revalidatePath(ROUTE);
     return { ok: true, message: `Payment run ${run.runDate}/${run.runId} cancelled.`, runDate: run.runDate, runId: run.runId };
+  } catch (error) {
+    return wrap(error);
+  }
+}
+
+export async function releaseRunAction(
+  _previous: PaymentRunActionState,
+  form: FormData,
+): Promise<PaymentRunActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, PAYMENT_RUN_RELEASE_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the payment run release capability.' };
+  }
+  try {
+    const runDate = text(form, 'runDate');
+    const runId = text(form, 'runId');
+    const state = await releasePaymentRun({
+      client: session.user.client, changedBy: session.user.username,
+      runDate, runId, releaseCode: text(form, 'releaseCode'),
+    });
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      message: state.status === 'RELEASED'
+        ? `Payment run ${runDate}/${runId} is fully released and can be executed.`
+        : `Payment run ${runDate}/${runId} released through step ${state.currentStep} of ${state.steps.length}.`,
+    };
+  } catch (error) {
+    return wrap(error);
+  }
+}
+
+export async function cancelRunReleaseAction(
+  _previous: PaymentRunActionState,
+  form: FormData,
+): Promise<PaymentRunActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, PAYMENT_RUN_RELEASE_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the payment run release capability.' };
+  }
+  try {
+    const runDate = text(form, 'runDate');
+    const runId = text(form, 'runId');
+    await cancelPaymentRunRelease({ client: session.user.client, changedBy: session.user.username, runDate, runId });
+    revalidatePath(ROUTE);
+    return { ok: true, message: `Release of payment run ${runDate}/${runId} cancelled; it stands at the first step again.` };
   } catch (error) {
     return wrap(error);
   }

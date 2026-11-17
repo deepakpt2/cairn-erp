@@ -9,6 +9,11 @@
  * document refuses change until cancelled. A release code is an
  * authority, not a person — named-user assignment to codes is
  * deferred (R-108).
+ *
+ * The same engine judges contracts, scheduling agreements, parked
+ * journal entries (JOURNAL_ENTRY) and payment runs (PAYMENT_RUN). The
+ * finance categories pass `preparedBy` so that the person who prepared
+ * a document cannot release it.
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 
@@ -33,6 +38,8 @@ export const RELEASE_CAPABILITIES: Record<string, string> = {
   PURCHASE_ORDER: 'PROC.PO.RELEASE',
   PURCHASE_CONTRACT: 'PROC.CONTRACT.RELEASE',
   SCHED_AGREEMENT: 'PROC.SCHEDAGREE.RELEASE',
+  JOURNAL_ENTRY: 'FIN.JOURNAL.RELEASE',
+  PAYMENT_RUN: 'FIN.AP.PAYMENTRUN.RELEASE',
 };
 
 /**
@@ -308,6 +315,7 @@ export async function syncDocumentRelease(
   number: string,
   attributes: ReleaseAttributes,
   changedBy: string,
+  options: { restart?: boolean } = {},
 ): Promise<void> {
   const determination = await determineInTx(tx, client, category, attributes);
   const [existing] = await tx.select().from(documentRelease).where(and(
@@ -337,7 +345,10 @@ export async function syncDocumentRelease(
     });
     return;
   }
-  if (existing.groupCode !== determination.groupCode || existing.strategyCode !== determination.strategyCode) {
+  // `restart`: the document changed after release acts were given, so those acts judged
+  // something else. A document that changes under a standing release starts again.
+  const changedUnderRelease = options.restart === true && (existing.currentStep > 0 || existing.status === 'RELEASED');
+  if (changedUnderRelease || existing.groupCode !== determination.groupCode || existing.strategyCode !== determination.strategyCode) {
     await tx.update(documentRelease).set({
       groupCode: determination.groupCode, strategyCode: determination.strategyCode,
       currentStep: 0, status: 'PENDING', changedBy, changedAt: new Date(),
@@ -356,6 +367,15 @@ export async function syncDocumentRelease(
   }
 }
 
+/** The document is gone for release purposes (deleted, cancelled): it must not stay in a queue. */
+export async function dropDocumentRelease(tx: Tx, client: string, category: string, number: string): Promise<void> {
+  await tx.delete(documentRelease).where(and(
+    eq(documentRelease.client, client),
+    eq(documentRelease.documentCategory, category),
+    eq(documentRelease.documentNumber, number),
+  ));
+}
+
 /** The change-path guard: a RELEASED document refuses change. */
 export async function assertDocumentNotReleased(
   tx: Tx, client: string, category: string, number: string, label: string,
@@ -369,12 +389,32 @@ export async function assertDocumentNotReleased(
   }
 }
 
+/**
+ * The gate in front of an act that needs the document released: a document some
+ * strategy claims must stand RELEASED first. A document no strategy claims passes.
+ */
+export async function assertDocumentReleased(
+  tx: Tx, client: string, category: string, number: string, label: string,
+): Promise<void> {
+  const state = await loadState(tx, client, category, number);
+  if (state.status === 'PENDING') {
+    throw new ReleaseError(
+      `${label} ${number} is waiting for release (step ${state.currentStep + 1} of ${state.steps.length}, release code ${state.steps[state.currentStep] ?? 'unknown'}).`,
+      'Have it released by someone who holds the release authority, then try again.',
+    );
+  }
+}
+
 export interface ReleaseActInput {
   client: string;
   changedBy: string;
   documentCategory: string;
   documentNumber: string;
   releaseCode: string;
+  /** The person who prepared the document. When named, that person cannot release it. */
+  preparedBy?: string | null;
+  /** The key the document's own change trail uses, when it is not the document number. */
+  objectKey?: string;
 }
 
 const OBJECT_CLASS_BY_CATEGORY: Record<string, string> = {
@@ -382,6 +422,8 @@ const OBJECT_CLASS_BY_CATEGORY: Record<string, string> = {
   PURCHASE_ORDER: 'purchase_order',
   PURCHASE_CONTRACT: 'purchase_contract',
   SCHED_AGREEMENT: 'scheduling_agreement',
+  JOURNAL_ENTRY: 'parked_journal',
+  PAYMENT_RUN: 'payment_run',
 };
 
 async function syncOrderHeader(tx: Tx, client: string, number: string, released: boolean, changedBy: string) {
@@ -404,6 +446,12 @@ export async function releaseDocument(input: ReleaseActInput): Promise<DocumentR
     }
     const expected = state.steps[state.currentStep];
     if (!expected) throw new ReleaseError(`Document ${input.documentNumber} has no further release step.`);
+    if (input.preparedBy && input.preparedBy.toUpperCase() === input.changedBy.toUpperCase()) {
+      throw new ReleaseError(
+        `Document ${input.documentNumber} was prepared by you; you cannot release it.`,
+        'Another person who holds the release authority must release it.',
+      );
+    }
     if (input.releaseCode !== expected) {
       throw new ReleaseError(
         `Step ${state.currentStep + 1} of ${state.steps.length} acts under release code ${expected}, not ${input.releaseCode}.`,
@@ -428,7 +476,7 @@ export async function releaseDocument(input: ReleaseActInput): Promise<DocumentR
     await recordChange(tx, {
       client: input.client,
       objectClass,
-      objectKey: input.documentNumber,
+      objectKey: input.objectKey ?? input.documentNumber,
       changeType: 'CHANGE',
       changedBy: input.changedBy,
       after: {
@@ -441,7 +489,7 @@ export async function releaseDocument(input: ReleaseActInput): Promise<DocumentR
     });
     // Tell whoever raised the document. Guessing a recipient is worse than
     // telling nobody, so with no change-document trail nothing is sent.
-    const author = await creatorOf(tx, input.client, objectClass, input.documentNumber);
+    const author = await creatorOf(tx, input.client, objectClass, input.objectKey ?? input.documentNumber);
     if (author) {
       await notifyOn(tx, {
         client: input.client,
@@ -458,7 +506,7 @@ export async function releaseDocument(input: ReleaseActInput): Promise<DocumentR
   });
 }
 
-export async function cancelDocumentRelease(input: Omit<ReleaseActInput, 'releaseCode'>): Promise<DocumentReleaseState> {
+export async function cancelDocumentRelease(input: Omit<ReleaseActInput, 'releaseCode' | 'preparedBy'>): Promise<DocumentReleaseState> {
   return withTenant(input.client, async (tx) => {
     const state = await loadState(tx, input.client, input.documentCategory, input.documentNumber);
     if (state.status === 'NOT_REQUIRED') {
@@ -480,13 +528,13 @@ export async function cancelDocumentRelease(input: Omit<ReleaseActInput, 'releas
     await recordChange(tx, {
       client: input.client,
       objectClass: OBJECT_CLASS_BY_CATEGORY[input.documentCategory],
-      objectKey: input.documentNumber,
+      objectKey: input.objectKey ?? input.documentNumber,
       changeType: 'CHANGE',
       changedBy: input.changedBy,
       after: { release: 'PENDING', step: 0, cancelled: true, strategy: state.strategyCode },
     });
     const cancelledClass = OBJECT_CLASS_BY_CATEGORY[input.documentCategory];
-    const author = await creatorOf(tx, input.client, cancelledClass, input.documentNumber);
+    const author = await creatorOf(tx, input.client, cancelledClass, input.objectKey ?? input.documentNumber);
     if (author) {
       await notifyOn(tx, {
         client: input.client,

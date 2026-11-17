@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
+import { RELEASE_CATEGORY_LABELS } from '@/modules/foundation/release-categories';
 
 import type { ReleaseConfiguration, ReleaseGroupRow, ReleaseStrategyRow } from '@/modules/foundation/release-strategy-definition';
 import {
@@ -146,7 +147,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
             {data.groups.map((group) => (
               <div key={group.groupCode}>
                 <p className="text-sm">
-                  <strong>{group.groupCode}</strong> · {group.documentCategory === 'PURCHASE_ORDER' ? 'Purchase orders' : 'Purchase requisitions'} · {group.description}
+                  <strong>{group.groupCode}</strong> · {RELEASE_CATEGORY_LABELS[group.documentCategory] ?? group.documentCategory} · {group.description}
                   {' — codes: '}{group.codes.map((c) => c.code).join(', ') || 'none'}
                   {canMaintain && (
                     <>
@@ -230,8 +231,9 @@ export default function ReleaseStrategies({ data, canMaintain }: {
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document category</span>
                   <select className="input w-full" value={groupEditor.documentCategory} disabled={groupEditor.mode === 'CHANGE'}
                     onChange={(event) => setGroupEditor({ ...groupEditor, documentCategory: event.target.value })}>
-                    <option value="PURCHASE_REQUISITION">Purchase requisition</option>
-                    <option value="PURCHASE_ORDER">Purchase order</option>
+                    {Object.entries(RELEASE_CATEGORY_LABELS).map(([code, label]) => (
+                      <option key={code} value={code}>{label}</option>
+                    ))}
                   </select>
                 </label>
                 <label className="block">

@@ -14,6 +14,10 @@ import {
   postParkedJournal,
   type ParkedLineInput,
 } from '@/modules/finance/parked-journal';
+import {
+  JOURNAL_RELEASE_CAPABILITY, cancelParkedJournalRelease, releaseParkedJournal,
+} from '@/modules/finance/parked-journal-release';
+import { ReleaseError } from '@/modules/purchasing/release';
 
 export interface ParkedJournalActionState {
   ok: boolean;
@@ -30,7 +34,7 @@ function text(form: FormData, name: string): string {
 }
 
 function wrap(error: unknown): ParkedJournalActionState {
-  if (error instanceof ParkedJournalError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof ParkedJournalError || error instanceof EnqueueError || error instanceof ReleaseError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
 }
 
@@ -164,6 +168,52 @@ export async function deleteAction(
     });
     revalidatePath(ROUTE);
     return { ok: true, message: `Parked document ${result.parkedNumber} stands DELETED on record.` };
+  } catch (error) {
+    return wrap(error);
+  }
+}
+
+export async function releaseJournalAction(
+  _previous: ParkedJournalActionState,
+  form: FormData,
+): Promise<ParkedJournalActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, JOURNAL_RELEASE_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the journal release capability.' };
+  }
+  try {
+    const parkedNumber = text(form, 'parkedNumber');
+    const state = await releaseParkedJournal({
+      client: session.user.client, changedBy: session.user.username,
+      parkedNumber, releaseCode: text(form, 'releaseCode'),
+    });
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      message: state.status === 'RELEASED'
+        ? `Parked document ${parkedNumber} is fully released and can be posted.`
+        : `Parked document ${parkedNumber} released through step ${state.currentStep} of ${state.steps.length}.`,
+    };
+  } catch (error) {
+    return wrap(error);
+  }
+}
+
+export async function cancelJournalReleaseAction(
+  _previous: ParkedJournalActionState,
+  form: FormData,
+): Promise<ParkedJournalActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, JOURNAL_RELEASE_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the journal release capability.' };
+  }
+  try {
+    const parkedNumber = text(form, 'parkedNumber');
+    await cancelParkedJournalRelease({
+      client: session.user.client, changedBy: session.user.username, parkedNumber,
+    });
+    revalidatePath(ROUTE);
+    return { ok: true, message: `Release of parked document ${parkedNumber} cancelled; it stands at the first step again.` };
   } catch (error) {
     return wrap(error);
   }

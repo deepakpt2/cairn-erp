@@ -37,10 +37,11 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/fields | finance, foundation, inventory, purchasing, sales |
 | ui/lock | finance, foundation, inventory, platform, production, purchasing, quality |
 | ui/output | finance, foundation, inventory, output, production, purchasing, sales |
+| ui/release | finance |
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (170)
+## Files (171)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -98,7 +99,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | schema.ts | *./tables, *../modules/audit/schema, *../modules/finance/schema, *../modules/foundation/schema, *../modules/foundation/output-schema, *../modules/inventory/schema, *../modules/people/schema, *../modules/production/schema, *../modules/quality/schema, *../modules/sales/schema |  |
 | **platform/attention/** | | |
 | panel.ts | ATTENTION_VISIBLE, attentionFor, mayAct |  |
-| sources.ts | ATTENTION_QUERY_LIMIT, ATTENTION_SOURCES | app_user, document_release, purchase_contract, purchase_order, purchase_requisition_item, release_strategy_step, scheduling_agreement |
+| sources.ts | ATTENTION_QUERY_LIMIT, ATTENTION_SOURCES | app_user, document_release, parked_journal_header, payment_run_company, purchase_contract, purchase_order, purchase_requisition_item, release_strategy_step, scheduling_agreement |
 | types.ts |  |  |
 | **platform/auth/** | | |
 | authority.ts | LEVEL_OF_KEY, ORG_LEVELS, SCOPE_KEYS, KEY_OF_LEVEL, patternsOf, withinScope, withinRestrictions, grantMatches, canWith, effectiveGrants, loadRestrictions, canUser, canTx, patternMatches | auth_org_restriction, delegation, delegation_approval, delegation_scope, employee, position_assignment, position_capability, role, role_capability, user_capability, user_capability_scope, user_role |
@@ -205,7 +206,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | demo-production.ts | buildDemoProduction | account_determination, production_order, production_order_type, production_order_type_parameter |
 | demo-provisioning.ts | DEMO_PROVISION_OPERATION, DEMO_ADVISORY_LOCK_KEY, DEMO_CLAIM_LOCK_KEY, DEMO_PHASE_PLAN, isDemoProvisioningEnabled, censusDemoEligibility, claimDemoInstallation, startDemoPhase, completeDemoPhase, completeDemoPhases, failDemoPhase, completeDemoInstallation, buildDemoTimeline, acquireDemoProvisioningLock, readDemoPasswordState, recordDemoPasswordIssued, readDemoInstallation |  |
 | demo-quality.ts | buildDemoQuality |  |
-| demo-release.ts | ensureDemoReleaseStrategies | characteristic, classification_class, document_release, purchase_order, release_group, release_strategy |
+| demo-release.ts | ensureDemoRelease, buildDemoRelease | characteristic, classification_class, company_code, document_release, payment_method, payment_run, purchase_contract, purchase_order, purchase_requisition_item, release_group, release_strategy, scheduling_agreement |
 | demo-sales-availability.ts | buildDemoSalesAvailability | availability_check_scope, availability_checking_group, availability_checking_rule, delivery, delivery_line, material_plant, sales_order |
 | demo-sales-quotation.ts | buildDemoSalesQuotation | sales_condition_record |
 | demo-sales.ts | buildDemoSales | account_determination, billing_document, customer_invoice, delivery |
@@ -227,6 +228,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | **ui/output/** | | |
 | DocumentPrint.tsx | DocumentLetterhead, DocumentFooter, PrintButton, PrintNote, DownloadPdfButton |  |
 | ReportExport.tsx | ReportExport |  |
+| **ui/release/** | | |
+| ReleasePanel.tsx | ReleasePanel |  |
 | **ui/shell/** | | |
 | CommandBar.tsx | CommandBar |  |
 | CommandBarLinks.tsx | CommandBarLinks |  |

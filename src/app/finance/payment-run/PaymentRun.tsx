@@ -4,8 +4,10 @@ import { useActionState } from 'react';
 import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { BankChoice, PaymentRunView } from '@/modules/finance/payment-run';
+import type { DocumentReleaseState } from '@/modules/purchasing/release';
+import { ReleasePanel } from '@/ui/release/ReleasePanel';
 import {
-  cancelRunAction, createRunAction, executeAction, proposalAction,
+  cancelRunAction, cancelRunReleaseAction, createRunAction, executeAction, proposalAction, releaseRunAction,
   type PaymentRunActionState,
 } from './actions';
 
@@ -20,12 +22,14 @@ function Message({ state }: { state: PaymentRunActionState }) {
   );
 }
 
-export default function PaymentRun({ run, runs, banks, canExecute, today }: {
+export default function PaymentRun({ run, runs, banks, canExecute, today, release, canRelease }: {
   run: PaymentRunView | null;
   runs: Array<{ runDate: string; runId: string; status: string; postingDate: string }>;
   banks: BankChoice[];
   canExecute: boolean;
   today: string;
+  release: DocumentReleaseState | null;
+  canRelease: boolean;
 }) {
   const [createState, createAction, creating] = useActionState(createRunAction, INITIAL);
   const [proposalState, proposalActionState, proposing] = useActionState(proposalAction, INITIAL);
@@ -137,6 +141,19 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
         )}
         <Message state={proposalState} />
       </section>
+
+      {run && run.status === 'PROPOSAL' && release && (
+        <ReleasePanel
+          id="pr-release"
+          label="payment run"
+          fields={{ runDate: run.runDate, runId: run.runId }}
+          state={release}
+          canRelease={canRelease}
+          releaseAction={releaseRunAction}
+          cancelAction={cancelRunReleaseAction}
+          hint="It cannot be executed until it is fully released, and you cannot release a proposal you generated. Generating the proposal again starts the release over."
+        />
+      )}
 
       {run && (run.status === 'PROPOSAL' || run.status === 'EXECUTED') && (
         <section aria-labelledby="pr-proposal" className="border border-line bg-surface p-4">

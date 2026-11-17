@@ -5,8 +5,10 @@ import { useActionState, useState } from 'react';
 
 import type { ParkedJournalView } from '@/modules/finance/parked-journal';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import { ReleasePanel } from '@/ui/release/ReleasePanel';
+import type { DocumentReleaseState } from '@/modules/purchasing/release';
 import {
-  completeAction, deleteAction, parkAction, postAction,
+  cancelJournalReleaseAction, completeAction, deleteAction, parkAction, postAction, releaseJournalAction,
   type ParkedJournalActionState,
 } from './actions';
 
@@ -36,11 +38,13 @@ const blankLine = (): LineRow => ({
   glAccount: '', debitCredit: 'S', amount: '', costCenter: '', profitCenter: '', taxCode: '', assignment: '', lineText: '',
 });
 
-export default function ParkedJournal({ parked, editing, canPark, today }: {
+export default function ParkedJournal({ parked, editing, canPark, today, release, canRelease }: {
   parked: ParkedJournalView[];
   editing: ParkedJournalView | null;
   canPark: boolean;
   today: string;
+  release: DocumentReleaseState | null;
+  canRelease: boolean;
 }) {
   const [parkState, park, parking] = useActionState(parkAction, INITIAL);
   const [completeState, complete, completing] = useActionState(completeAction, INITIAL);
@@ -181,6 +185,19 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
           </div>
         </form>
       </section>
+
+      {editing && release && (
+        <ReleasePanel
+          id="pj-release"
+          label="parked document"
+          fields={{ parkedNumber: editing.parkedNumber }}
+          state={release}
+          canRelease={canRelease}
+          releaseAction={releaseJournalAction}
+          cancelAction={cancelJournalReleaseAction}
+          hint="It cannot be posted until it is fully released, and you cannot release a document you parked."
+        />
+      )}
 
       <section aria-labelledby="pj-list" className="border border-line bg-surface p-4">
         <h2 id="pj-list" className="text-sm font-semibold">Parked documents</h2>

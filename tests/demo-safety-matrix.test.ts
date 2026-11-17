@@ -195,6 +195,12 @@ const RESTART_MATRIX: readonly RestartRow[] = [
     resumesBy: 'Every document is request-keyed (`DEMO-VA21-OPEN-1`, `DEMO-VA21-REJECTED-1`, `DEMO-VA21-EXPIRED-1`, `DEMO-VA21-ORDER-1`); the change and the rejection run only while the quotation still stands at its first version and open.',
     guaranteedBy: ['buildDemoSalesQuotation'],
   },
+  {
+    phase: 'D19_RELEASE',
+    writes: 'Release strategies for purchase orders, requisitions, contracts, scheduling agreements, parked journals and payment runs (one characteristic TOTAL_VALUE, a class, a group and one or two strategies each), then documents in every release state: requisitions, contracts and scheduling agreements, three parked journals, one payment run proposal, and release acts on some of them. Journals and the run are prepared by demo.accountant and released by demo.controller.',
+    resumesBy: 'Configuration is created only where missing; requisitions, contracts and agreements only while their category is empty; journals are request-keyed (`demo-release-j1..j3`); the run is found by its identification DEMO1; release acts are given only to a document that has not reached the step.',
+    guaranteedBy: ['buildDemoRelease'],
+  },
 ];
 
 describe('the demo installation, stopped part way through', () => {

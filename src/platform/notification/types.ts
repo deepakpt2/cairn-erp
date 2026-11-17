@@ -35,6 +35,8 @@ export type NotificationObjectClass =
   | 'purchase_order'
   | 'purchase_contract'
   | 'scheduling_agreement'
+  | 'parked_journal'
+  | 'payment_run'
   | 'sales_order'
   | 'delivery'
   | 'output_message'

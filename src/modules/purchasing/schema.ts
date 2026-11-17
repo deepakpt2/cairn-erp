@@ -577,7 +577,7 @@ export const documentRelease = pgTable('document_release', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.documentCategory, t.documentNumber] }),
-  check('document_release_category_ck', sql`${t.documentCategory} in ('PURCHASE_REQUISITION', 'PURCHASE_ORDER', 'PURCHASE_CONTRACT', 'SCHED_AGREEMENT')`),
+  check('document_release_category_ck', sql`${t.documentCategory} in ('PURCHASE_REQUISITION', 'PURCHASE_ORDER', 'PURCHASE_CONTRACT', 'SCHED_AGREEMENT', 'JOURNAL_ENTRY', 'PAYMENT_RUN')`),
   check('document_release_status_ck', sql`${t.status} in ('PENDING', 'RELEASED')`),
   check('document_release_step_ck', sql`${t.currentStep} >= 0`),
 ]);

@@ -183,6 +183,7 @@
 | output_condition_record | foundation | sales |
 | output_message | foundation | inventory, output, sales |
 | output_type | foundation | inventory, sales |
+| parked_journal_header | finance | platform/attention |
 | parked_supplier_invoice | purchasing | foundation |
 | password_reset_token | platform/tables | platform |
 | pay_component | people | platform/tenancy |
@@ -190,7 +191,8 @@
 | payment_document | finance | purchasing |
 | payment_method | foundation | finance, platform/tenancy |
 | payment_proposal_item | finance | purchasing |
-| payment_run | finance | purchasing |
+| payment_run | finance | platform/tenancy, purchasing |
+| payment_run_company | finance | platform/attention |
 | payment_terms | foundation | finance, platform/tenancy, purchasing |
 | payroll_run_exception | people | platform/tenancy |
 | planning_file | inventory | production |
@@ -206,11 +208,11 @@
 | production_version | production | platform/tenancy |
 | profit_center | foundation | finance, platform/tenancy |
 | profit_center_hierarchy | foundation | platform/tenancy |
-| purchase_contract | purchasing | platform/attention |
+| purchase_contract | purchasing | platform/attention, platform/tenancy |
 | purchase_order | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, platform/attention, platform/tenancy, production |
 | purchase_order_item | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, inventory, production |
 | purchase_order_schedule_line | purchasing | production |
-| purchase_requisition_item | purchasing | platform/attention, production |
+| purchase_requisition_item | purchasing | platform/attention, platform/tenancy, production |
 | purchasing_contract_type | purchasing | platform/tenancy |
 | purchasing_group | foundation | inventory, platform/tenancy, purchasing |
 | purchasing_org | foundation | platform/tenancy, purchasing |
@@ -247,7 +249,7 @@
 | sales_pricing_procedure_step | sales | foundation |
 | sales_procedure_determination | sales | foundation |
 | sales_returns_configuration | sales | foundation |
-| scheduling_agreement | purchasing | platform/attention |
+| scheduling_agreement | purchasing | platform/attention, platform/tenancy |
 | scheduling_agreement_type | purchasing | platform/tenancy |
 | settlement_document | foundation | production |
 | settlement_profile | foundation | platform/tenancy, production |

@@ -30,6 +30,10 @@ export const CLASS_TYPE_DEFAULTS = [
   { classType: 'VARIANT', description: 'Variant configuration classes', objectCategory: 'VARIANT' },
   { classType: 'PURCHASE_REQUISITION', description: 'Purchase requisition release classes', objectCategory: 'PURCHASING' },
   { classType: 'PURCHASE_ORDER', description: 'Purchase order release classes', objectCategory: 'PURCHASING' },
+  { classType: 'PURCHASE_CONTRACT', description: 'Purchase contract release classes', objectCategory: 'PURCHASING' },
+  { classType: 'SCHED_AGREEMENT', description: 'Scheduling agreement release classes', objectCategory: 'PURCHASING' },
+  { classType: 'JOURNAL_ENTRY', description: 'Parked journal release classes', objectCategory: 'GENERAL' },
+  { classType: 'PAYMENT_RUN', description: 'Payment run release classes', objectCategory: 'GENERAL' },
 ] as const;
 
 export class ClassError extends Error {
