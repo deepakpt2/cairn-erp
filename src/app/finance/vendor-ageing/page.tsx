@@ -4,6 +4,7 @@ import { requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { listBusinessPartners } from '@/modules/foundation/business-partners';
 import { listCompanyCodes } from '@/modules/foundation/services';
+import { ReportExport } from '@/ui/output/ReportExport';
 import {
   VendorAgeingError, getVendorAgeing, type AgeingItem, type VendorAgeingView,
 } from '@/modules/finance/vendor-ageing';
@@ -172,6 +173,7 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
           </Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('vendorAgeing.subtitle')}</p>
+        {views.length > 0 && <div className="mt-3"><ReportExport report="vendor-ageing" params={params} /></div>}
       </header>
 
       <section aria-labelledby="va-selection" className="border border-line bg-surface p-4">

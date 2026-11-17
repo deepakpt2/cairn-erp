@@ -9,6 +9,7 @@ import {
   listStatementVersions, type TrialBalanceResult, type TrialBalanceSelection,
 } from '@/modules/finance/trial-balance';
 import TrialBalanceShell from './TrialBalanceShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const metadata: Metadata = { title: 'Trial Balance / F.01' };
 
@@ -54,6 +55,7 @@ export default async function Page({ searchParams }: {
           {t('trial.openBalances')}
         </Link>
         {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
+        {result && <div className="mt-3"><ReportExport report="trial-balance" params={params} /></div>}
       </header>
       <TrialBalanceShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
     </main>

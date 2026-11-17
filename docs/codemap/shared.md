@@ -36,11 +36,11 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/attention | app/page.tsx |
 | ui/fields | finance, foundation, inventory, purchasing, sales |
 | ui/lock | finance, foundation, inventory, platform, production, purchasing, quality |
-| ui/output | inventory, output, sales |
+| ui/output | finance, foundation, inventory, output, production, purchasing, sales |
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (168)
+## Files (169)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -225,6 +225,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | remedy.ts | displayOnlyRemedy |  |
 | **ui/output/** | | |
 | DocumentPrint.tsx | DocumentLetterhead, DocumentFooter, PrintButton, PrintNote, DownloadPdfButton |  |
+| ReportExport.tsx | ReportExport |  |
 | **ui/shell/** | | |
 | CommandBar.tsx | CommandBar |  |
 | CommandBarLinks.tsx | CommandBarLinks |  |

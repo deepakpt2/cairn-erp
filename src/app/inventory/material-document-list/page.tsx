@@ -9,6 +9,7 @@ import {
   type MaterialDocListSelection,
 } from '@/modules/inventory/material-document-list';
 import MaterialDocumentListShell from './MaterialDocumentListShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,7 @@ export default async function MaterialDocumentListPage({
           <h1 className="text-xl font-semibold tracking-tight">{t('mdList.title')}</h1>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mdList.subtitle')}</p>
+        {result && <div className="mt-3"><ReportExport report="material-document-list" params={params} /></div>}
       </header>
 
       <MaterialDocumentListShell

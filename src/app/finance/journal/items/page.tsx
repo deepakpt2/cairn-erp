@@ -7,6 +7,7 @@ import {
   type JournalItemsResult,
 } from '@/modules/finance/journal-items';
 import ItemsForm from './ItemsForm';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,7 @@ export default async function JournalItemsPage({ searchParams }: {
           </Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('journalItems.subtitle')}</p>
+        {result && <div className="mt-3"><ReportExport report="gl-line-items" params={params} /></div>}
       </header>
 
       {params.accountFrom && (

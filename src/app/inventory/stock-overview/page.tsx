@@ -9,6 +9,7 @@ import {
   type StockOverviewSelection,
 } from '@/modules/inventory/stock-overview';
 import StockOverviewShell from './StockOverviewShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,7 @@ export default async function StockOverviewPage({
           <h1 className="text-xl font-semibold tracking-tight">{t('stockOvw.title')}</h1>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('stockOvw.subtitle')}</p>
+        {result && <div className="mt-3"><ReportExport report="stock-overview" params={params} /></div>}
       </header>
 
       <StockOverviewShell

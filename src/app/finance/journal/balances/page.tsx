@@ -9,6 +9,7 @@ import {
 import BalancesForm from './BalancesForm';
 import BalanceReportForm from './BalanceReportForm';
 import type { GlBalanceReportSelection, GlBalanceReportView } from '@/modules/finance/gl-balances';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +77,7 @@ export default async function GlBalancesPage({ searchParams }: {
           </Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('glBalance.subtitle')}</p>
+        {report && <div className="mt-3"><ReportExport report="gl-balances" params={params} /></div>}
       </header>
 
       <BalancesForm view={view} error={error} canDisplay={canDisplay} />

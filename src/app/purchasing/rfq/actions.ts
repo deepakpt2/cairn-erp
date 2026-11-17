@@ -13,6 +13,9 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { PdfDownloadError } from '@/modules/output/download-pdf';
+import { rfqPdf } from '@/modules/purchasing/document-print';
+import type { PdfDownloadState } from '@/ui/output/DocumentPrint';
 import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   RFQ_CAPABILITY,
@@ -324,5 +327,21 @@ export async function changeRfqAction(
     };
   } catch (caught) {
     return refused(caught) ?? (() => { throw caught; })();
+  }
+}
+
+/** Download one request for quotation (one supplier) as a PDF. */
+export async function downloadRfqPdfAction(form: FormData): Promise<PdfDownloadState> {
+  const session = await requireSession(RFQ_ROUTE);
+  try {
+    const pdf = await rfqPdf({
+      client: session.user.client,
+      rfqNumber: String(form.get('rfqNumber') ?? '').trim(),
+      capabilities: session.user.capabilities,
+    });
+    return { ok: true, fileName: pdf.fileName, base64: pdf.base64, warning: pdf.warning };
+  } catch (error) {
+    if (error instanceof PdfDownloadError) return { ok: false, message: error.message, remedy: error.remedy };
+    throw error;
   }
 }

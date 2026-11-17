@@ -3,6 +3,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { listControllingAreas } from '@/modules/foundation/controlling-area-maintenance';
 import { calculateCostCenterReport, CostCenterReportError, type CostCenterReportSelection } from '@/modules/foundation/cost-center-report';
 import CostCenterReportShell from './CostCenterReportShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,12 +54,19 @@ export default async function CostCenterReportPage({
   }
 
   return (
-    <CostCenterReportShell
-      canUse
-      areas={controllingAreas}
-      selection={initialSelection}
-      result={result}
-      reportError={reportError}
-    />
+    <>
+      {result && (
+        <div className="mx-auto w-full max-w-[1500px] px-4 pt-4 sm:px-6">
+          <ReportExport report="cost-center-report" params={params} />
+        </div>
+      )}
+      <CostCenterReportShell
+        canUse
+        areas={controllingAreas}
+        selection={initialSelection}
+        result={result}
+        reportError={reportError}
+      />
+    </>
   );
 }

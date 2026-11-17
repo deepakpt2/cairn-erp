@@ -10,7 +10,7 @@ Stock/warehouse: goods movements, batches, physical inventory, material master. 
 - Initial stock (561, 9275) has no reversal; offset is retained earnings. RETURNS stock is unvalued.
 - `serial_number` is a capture record, not reconciled to `stock_quantity`.
 
-## Files (242)
+## Files (243)
 | file | exports | tables |
 |---|---|---|
 | **app/config/batch-access-sequences/** | | |
@@ -294,6 +294,7 @@ Stock/warehouse: goods movements, batches, physical inventory, material master. 
 | production-document-quantity.ts | lineNotReversed, lineReversalDisagreement, OPEN_PRODUCTION_DOCUMENT, REVERSAL_QUANTITY_DISAGREEMENT | material, material_document_line |
 | production-orders.ts | PRODUCTION_ORDER_CAPABILITY, PRODUCTION_ORDER_RELEASE_CAPABILITY, PRODUCTION_ORDER_ROUTE, PRODUCTION_ORDER_ALIAS, ProductionOrderError, getProductionOrder, previewProductionOrderBom, createProductionOrder, releaseProductionOrder | controlling_area, controlling_area_company, material, material_plant, plant, production_order, production_order_component, production_order_type |
 | production-receipt.ts | PRODUCTION_RECEIPT_CAPABILITY, PRODUCTION_RECEIPT_SCENARIO, ProductionReceiptError, postProductionReceipt, receivedQuantityFor | account_determination, material, material_document, material_document_line, material_plant, material_valuation, movement_type, plant, production_order, stock_quantity |
+| report-exports.ts | stockOverviewExport, materialDocumentListExport, shelfLifeExport, INVENTORY_REPORT_EXPORTS |  |
 | reservations.ts | RESERVATION_CREATE_CAPABILITY, ReservationError, RESERVATION_SCENARIOS, DELIVERED_RESERVATION_MOVEMENTS, getReservation, createReservation, withdrawReservation, withdrawReservationInTx, completeReservationItem | cost_center, material, material_plant, movement_type, plant, reservation_header, reservation_item |
 | return-delivery.ts | RETURN_CAPABILITY, RETURN_ALIASES, RETURN_MOVEMENT_CODE, RETURN_REVERSAL_MOVEMENT_CODE, ReturnDeliveryError, DELIVERED_RETURN_MOVEMENTS, resolveReturnMovement, getReturnableDocument, getReturnDocument, postReturnDelivery | account_determination, material, material_document, material_document_line, material_plant, material_valuation, movement_type, plant, purchase_order_item, stock_quantity |
 | scheduling-profile.ts | ACTIVITY, ROUTE, ALIAS, LOCK_OBJECT, SchedulingProfileError, listSchedulingProfiles, saveSchedulingProfile, assignSchedulingProfile, readMaterialSchedulingProfile, ensureOrderBatch, NOT_EXECUTED | batch, material, material_plant, plant, production_scheduling_profile |

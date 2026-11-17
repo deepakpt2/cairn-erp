@@ -7,7 +7,8 @@ import { t } from '@/platform/i18n';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import type { StandingRfq, StandingRfqEvent } from '@/modules/purchasing/rfq';
 import type { RfqActionState } from './actions';
-import { changeRfqAction, checkChangeRfqAction, checkRfqAction, createRfqAction } from './actions';
+import { DownloadPdfButton } from '@/ui/output/DocumentPrint';
+import { downloadRfqPdfAction, changeRfqAction, checkChangeRfqAction, checkRfqAction, createRfqAction } from './actions';
 
 const ROUTE = '/purchasing/rfq';
 const INITIAL: RfqActionState = { ok: false, message: '' };
@@ -175,6 +176,7 @@ function ChangeRequest({
         <div className="flex flex-wrap gap-3 text-sm">
           <p><span className="text-ink-soft">{t('requestForQuotation.event')}</span> {opened.eventNumber}</p>
           <p data-rfq-selected={request.rfqNumber}><span className="text-ink-soft">{t('requestForQuotation.request')}</span> {request.rfqNumber}</p>
+          <DownloadPdfButton action={downloadRfqPdfAction} fields={{ rfqNumber: request.rfqNumber }} />
           <p><span className="text-ink-soft">{t('requestForQuotation.supplier')}</span> {request.partnerNumber}</p>
           <p><span className="text-ink-soft">{t('requestForQuotation.purchasingOrg')}</span> {opened.purchasingOrg}</p>
           <p><span className="text-ink-soft">{t('requestForQuotation.rfqDate')}</span> {opened.rfqDate}</p>

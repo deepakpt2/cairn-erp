@@ -3,6 +3,9 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { PdfDownloadError } from '@/modules/output/download-pdf';
+import { salesQuotationPdf } from '@/modules/sales/quotation-print';
+import type { PdfDownloadState } from '@/ui/output/DocumentPrint';
 import { SALES_ORDER_CAPABILITY } from '@/modules/sales/sales-order';
 import {
   SALES_QUOTATION_CAPABILITY,
@@ -202,5 +205,21 @@ export async function createOrderFromQuotationAction(_previous: QuotationActionS
     };
   } catch (error) {
     return refusal(error);
+  }
+}
+
+/** Download the quotation as a PDF. */
+export async function downloadQuotationPdfAction(form: FormData): Promise<PdfDownloadState> {
+  const session = await requireSession(ROUTE);
+  try {
+    const pdf = await salesQuotationPdf({
+      client: session.user.client,
+      quotationNumber: String(form.get('quotationNumber') ?? '').trim(),
+      capabilities: session.user.capabilities,
+    });
+    return { ok: true, fileName: pdf.fileName, base64: pdf.base64, warning: pdf.warning };
+  } catch (error) {
+    if (error instanceof PdfDownloadError) return { ok: false, message: error.message, remedy: error.remedy };
+    throw error;
   }
 }

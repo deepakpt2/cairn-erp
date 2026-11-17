@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { ReportExport } from '@/ui/output/ReportExport';
 import {
   CustomerAgeingError, getCustomerAgeing, type CustomerAgeingView,
 } from '@/modules/finance/customer-ageing';
@@ -74,6 +75,7 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
           </Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('customerAgeing.subtitle')}</p>
+        {view && <div className="mt-3"><ReportExport report="customer-ageing" params={params} /></div>}
       </header>
 
       <section aria-labelledby="ca-selection" className="border border-line bg-surface p-4">

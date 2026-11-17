@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { ReportExport } from '@/ui/output/ReportExport';
 import {
   getProductionOrderCostReport,
   PRODUCTION_ORDER_COST_REPORT_CAPABILITY,
@@ -67,6 +68,7 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
           Read-only posted journal actuals assigned to one production order. Debit, credit, and net are shown separately in document and local currency.
           Confirmation activity quantities are not monetarily valued here; plan rates are not actuals. This report does not settle, post, or calculate WIP or variance.
         </p>
+        {report && <div className="mt-3"><ReportExport report="production-order-cost" params={raw} /></div>}
       </header>
 
       <form className="grid gap-2 sm:grid-cols-5" method="get">

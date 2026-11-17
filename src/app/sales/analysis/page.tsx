@@ -7,6 +7,7 @@ import {
   PERIODS, listAnalysis,
 } from '@/modules/sales/analysis';
 import { listRegisterChoices } from '@/modules/sales/registers';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,6 +118,7 @@ export default async function SalesAnalysisPage({ searchParams }: {
           the ledger. Money is never added across currencies, and no margin is printed where the
           pricing carried no cost.
         </p>
+        {analysis && <div className="mt-3"><ReportExport report="sales-analysis" params={params} /></div>}
       </header>
 
       <nav aria-label="Analysis" className="flex flex-wrap gap-2">

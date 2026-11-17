@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useActionState, useId } from 'react';
 
 import type { QuotationListRow, QuotationView } from '@/modules/sales/quotation';
+import { DownloadPdfButton } from '@/ui/output/DocumentPrint';
 import { ItemGrid, type GridRow } from '../orders/Orders';
 import {
   changeQuotationAction,
+  downloadQuotationPdfAction,
   createOrderFromQuotationAction,
   createQuotationAction,
   rejectQuotationAction,
@@ -96,6 +98,7 @@ export default function Quotations({ documents, selected, canCreate, canRaiseOrd
         <section className="panel p-4" data-quotation={selected.quotationNumber} aria-label={`Quotation ${selected.quotationNumber}`}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-lg font-semibold">Quotation {selected.quotationNumber}</h2>
+            {open && <DownloadPdfButton action={downloadQuotationPdfAction} fields={{ quotationNumber: selected.quotationNumber }} />}
             <span className="code text-ink-faint">
               {selected.status}{selected.rejectionReason ? ` (${selected.rejectionReason})` : ''}{selected.isExpired ? ' · EXPIRED' : ''}
             </span>

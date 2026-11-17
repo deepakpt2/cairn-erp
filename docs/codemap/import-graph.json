@@ -1970,7 +1970,8 @@
     "app/controlling/cost-center-report/CostCenterReportShell.tsx",
     "modules/foundation/controlling-area-maintenance.ts",
     "modules/foundation/cost-center-report.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/controlling/internal-order-display/page.tsx": [
     "modules/foundation/internal-order-display.ts",
@@ -2209,7 +2210,8 @@
     "modules/foundation/company-code-assignments.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/carryforward/CarryforwardShell.tsx": [
     "app/finance/carryforward/actions.ts",
@@ -2339,12 +2341,14 @@
   "app/finance/customer-ageing/page.tsx": [
     "modules/finance/customer-ageing.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/customer-balances/page.tsx": [
     "modules/finance/customer-balances.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/customer-clearing/CustomerClearing.tsx": [
     "app/finance/customer-clearing/actions.ts",
@@ -2523,7 +2527,8 @@
     "app/finance/journal/balances/BalancesForm.tsx",
     "modules/finance/gl-balances.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/journal/document/DocumentDisplay.tsx": [
     "modules/finance/document-display.ts"
@@ -2541,7 +2546,8 @@
     "app/finance/journal/items/ItemsForm.tsx",
     "modules/finance/journal-items.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/journal/new/JournalForm.tsx": [
     "app/finance/journal/new/actions.ts",
@@ -2633,7 +2639,8 @@
     "modules/foundation/company-code-assignments.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/subledger-tie-out/SubledgerTieShell.tsx": [
     "modules/finance/subledger-tie-out.ts"
@@ -2664,7 +2671,8 @@
     "modules/foundation/company-code-assignments.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/vendor-ageing/export/route.ts": [
     "modules/finance/vendor-ageing.ts",
@@ -2675,12 +2683,14 @@
     "modules/foundation/business-partners.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/vendor-balances/page.tsx": [
     "modules/finance/vendor-balances.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/finance/vendor-clearing/VendorClearing.tsx": [
     "app/finance/vendor-clearing/actions.ts",
@@ -3070,7 +3080,8 @@
     "app/inventory/material-document-list/MaterialDocumentListShell.tsx",
     "modules/inventory/material-document-list.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/inventory/material-document-output/MaterialDocumentOutput.tsx": [
     "app/inventory/material-document-output/actions.ts",
@@ -3355,7 +3366,8 @@
     "app/inventory/shelf-life-list/ShelfLifeListShell.tsx",
     "modules/inventory/shelf-life-list.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/inventory/stock-ageing/StockAgeingShell.tsx": [
     "modules/inventory/stock-ageing.ts",
@@ -3376,7 +3388,8 @@
     "app/inventory/stock-overview/StockOverviewShell.tsx",
     "modules/inventory/stock-overview.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/inventory/stock-posting-date/StockOnPostingDateShell.tsx": [
     "modules/inventory/stock-posting-date.ts",
@@ -3854,7 +3867,8 @@
   ],
   "app/production/order-cost-report/page.tsx": [
     "modules/production/order-cost-report.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/production/order-information/OrderInformationResult.tsx": [
     "app/production/order-information/actions.ts",
@@ -4303,13 +4317,22 @@
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
+  "app/purchasing/purchase-order-display/actions.ts": [
+    "modules/output/download-pdf.ts",
+    "modules/purchasing/document-print.ts",
+    "modules/purchasing/purchase-order-display.ts",
+    "platform/auth/current.ts",
+    "ui/output/DocumentPrint.tsx"
+  ],
   "app/purchasing/purchase-order-display/page.tsx": [
+    "app/purchasing/purchase-order-display/actions.ts",
     "modules/purchasing/account-assignment.ts",
     "modules/purchasing/orders.ts",
     "modules/purchasing/purchase-order-display.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/purchasing/purchase-order-list/PurchaseOrderListShell.tsx": [
     "modules/purchasing/purchase-order-list.ts",
@@ -4319,7 +4342,8 @@
     "app/purchasing/purchase-order-list/PurchaseOrderListShell.tsx",
     "modules/purchasing/purchase-order-list.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/purchasing/quota-arrangement/QuotaArrangement.tsx": [
     "app/purchasing/quota-arrangement/actions.ts",
@@ -4411,12 +4435,16 @@
     "app/purchasing/rfq/actions.ts",
     "modules/purchasing/rfq.ts",
     "platform/i18n/index.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/purchasing/rfq/actions.ts": [
+    "modules/output/download-pdf.ts",
+    "modules/purchasing/document-print.ts",
     "modules/purchasing/rfq.ts",
     "platform/auth/current.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/purchasing/rfq/page.tsx": [
     "app/purchasing/rfq/RequestForQuotation.tsx",
@@ -4554,6 +4582,11 @@
     "platform/registry/index.ts",
     "ui/shell/screen-catalog.ts"
   ],
+  "app/reports/export/[report]/route.ts": [
+    "modules/output/report-export.ts",
+    "modules/output/report-registry.ts",
+    "platform/auth/current.ts"
+  ],
   "app/reset-password/ResetPasswordForm.tsx": [
     "app/platform/users/actions.ts"
   ],
@@ -4563,7 +4596,8 @@
   "app/sales/analysis/page.tsx": [
     "modules/sales/analysis.ts",
     "modules/sales/registers.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/output/ReportExport.tsx"
   ],
   "app/sales/billing-plans/BillingPlans.tsx": [
     "app/sales/billing-plans/actions.ts",
@@ -4733,12 +4767,16 @@
   "app/sales/quotations/Quotations.tsx": [
     "app/sales/orders/Orders.tsx",
     "app/sales/quotations/actions.ts",
-    "modules/sales/quotation.ts"
+    "modules/sales/quotation.ts",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/sales/quotations/actions.ts": [
+    "modules/output/download-pdf.ts",
+    "modules/sales/quotation-print.ts",
     "modules/sales/quotation.ts",
     "modules/sales/sales-order.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/output/DocumentPrint.tsx"
   ],
   "app/sales/quotations/page.tsx": [
     "app/sales/quotations/Quotations.tsx",
@@ -5235,6 +5273,18 @@
   "modules/finance/profit-loss.ts": [
     "modules/finance/balance-sheet.ts",
     "modules/finance/trial-balance.ts"
+  ],
+  "modules/finance/report-exports.ts": [
+    "modules/finance/balance-sheet.ts",
+    "modules/finance/customer-ageing.ts",
+    "modules/finance/customer-balances.ts",
+    "modules/finance/gl-balances.ts",
+    "modules/finance/journal-items.ts",
+    "modules/finance/profit-loss.ts",
+    "modules/finance/trial-balance.ts",
+    "modules/finance/vendor-ageing.ts",
+    "modules/finance/vendor-balances.ts",
+    "modules/output/report-export.ts"
   ],
   "modules/finance/schema.ts": [
     "modules/finance/gl-account-group-schema.ts",
@@ -5831,6 +5881,10 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/tenancy/index.ts"
+  ],
+  "modules/foundation/report-exports.ts": [
+    "modules/foundation/cost-center-report.ts",
+    "modules/output/report-export.ts"
   ],
   "modules/foundation/retained-earnings-vocabulary.ts": [],
   "modules/foundation/retained-earnings.ts": [
@@ -6504,6 +6558,12 @@
     "platform/periods/index.ts",
     "platform/posting/index.ts"
   ],
+  "modules/inventory/report-exports.ts": [
+    "modules/inventory/material-document-list.ts",
+    "modules/inventory/shelf-life-list.ts",
+    "modules/inventory/stock-overview.ts",
+    "modules/output/report-export.ts"
+  ],
   "modules/inventory/reservations.ts": [
     "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
@@ -6652,6 +6712,12 @@
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
+  "modules/output/document-text.ts": [
+    "modules/foundation/business-partner-schema.ts",
+    "modules/output/download-pdf.ts",
+    "modules/output/render-pdf.ts",
+    "platform/db/client.ts"
+  ],
   "modules/output/download-pdf.ts": [
     "modules/output/render-pdf.ts",
     "platform/db/client.ts"
@@ -6675,6 +6741,16 @@
   "modules/output/render-pdf.ts": [
     "modules/output/document-layout.ts",
     "platform/db/client.ts"
+  ],
+  "modules/output/report-export.ts": [],
+  "modules/output/report-registry.ts": [
+    "modules/finance/report-exports.ts",
+    "modules/foundation/report-exports.ts",
+    "modules/inventory/report-exports.ts",
+    "modules/output/report-export.ts",
+    "modules/production/report-exports.ts",
+    "modules/purchasing/report-exports.ts",
+    "modules/sales/report-exports.ts"
   ],
   "modules/people/assignment.ts": [
     "modules/people/schema.ts",
@@ -7128,6 +7204,10 @@
     "platform/tables/reference.ts",
     "platform/tenancy/index.ts"
   ],
+  "modules/production/report-exports.ts": [
+    "modules/output/report-export.ts",
+    "modules/production/order-cost-report.ts"
+  ],
   "modules/production/routing-display.ts": [
     "modules/production/routing.ts"
   ],
@@ -7232,6 +7312,15 @@
     "modules/purchasing/schema.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
+  ],
+  "modules/purchasing/document-print.ts": [
+    "modules/foundation/schema.ts",
+    "modules/output/document-text.ts",
+    "modules/output/download-pdf.ts",
+    "modules/purchasing/purchase-order-display.ts",
+    "modules/purchasing/rfq.ts",
+    "modules/purchasing/schema.ts",
+    "platform/auth/pattern.ts"
   ],
   "modules/purchasing/follow-on.ts": [
     "modules/foundation/schema.ts",
@@ -7405,6 +7494,10 @@
     "platform/notification/creator.ts",
     "platform/notification/jobs/fanout.ts",
     "platform/notification/notify.ts"
+  ],
+  "modules/purchasing/report-exports.ts": [
+    "modules/output/report-export.ts",
+    "modules/purchasing/purchase-order-list.ts"
   ],
   "modules/purchasing/requisition-list.ts": [
     "platform/db/client.ts",
@@ -7760,6 +7853,14 @@
     "modules/inventory/schema.ts",
     "platform/db/client.ts"
   ],
+  "modules/sales/quotation-print.ts": [
+    "modules/inventory/schema.ts",
+    "modules/output/document-text.ts",
+    "modules/output/download-pdf.ts",
+    "modules/sales/quotation.ts",
+    "modules/sales/schema.ts",
+    "platform/auth/pattern.ts"
+  ],
   "modules/sales/quotation.ts": [
     "modules/foundation/business-partner-schema.ts",
     "modules/foundation/schema.ts",
@@ -7801,6 +7902,10 @@
     "modules/sales/delivery.ts",
     "modules/sales/schema.ts",
     "platform/db/client.ts"
+  ],
+  "modules/sales/report-exports.ts": [
+    "modules/output/report-export.ts",
+    "modules/sales/analysis.ts"
   ],
   "modules/sales/returns-configuration.ts": [
     "modules/inventory/schema.ts",
@@ -8495,6 +8600,7 @@
   "ui/output/DocumentPrint.tsx": [
     "modules/output/document-layout.ts"
   ],
+  "ui/output/ReportExport.tsx": [],
   "ui/shell/CommandBar.tsx": [
     "app/command.ts",
     "platform/i18n/index.ts",
@@ -8605,6 +8711,7 @@
     "platform/db/client.ts",
     "platform/job/execute.ts",
     "platform/job/queue.ts",
+    "platform/job/scheduler.ts",
     "platform/job/types.ts",
     "worker/jobs.ts"
   ],

@@ -14,6 +14,8 @@ import {
   openPurchaseOrderDisplay,
   type DisplayedOrder,
 } from '@/modules/purchasing/purchase-order-display';
+import { DownloadPdfButton } from '@/ui/output/DocumentPrint';
+import { downloadPurchaseOrderPdfAction } from './actions';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 
 export const dynamic = 'force-dynamic';
@@ -54,7 +56,10 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
   return (
     <section aria-labelledby="po-display-document" className="space-y-4" data-po-display>
       <div className="border border-line bg-surface p-4">
-        <h2 id="po-display-document" className="text-sm font-semibold" data-po-number>{order.orderNumber}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="po-display-document" className="text-sm font-semibold" data-po-number>{order.orderNumber}</h2>
+          <DownloadPdfButton action={downloadPurchaseOrderPdfAction} fields={{ orderNumber: order.orderNumber }} />
+        </div>
         <p className="mt-1 text-sm" data-po-identity>
           <span data-po-supplier>{order.supplierNumber}{order.supplierName ? ` · ${order.supplierName}` : ''}</span>
           {' · '}

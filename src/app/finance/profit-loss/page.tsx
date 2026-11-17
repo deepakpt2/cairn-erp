@@ -13,6 +13,7 @@ import {
 } from '@/modules/finance/profit-loss';
 import { TrialBalanceError } from '@/modules/finance/trial-balance';
 import ProfitLossShell from './ProfitLossShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const metadata: Metadata = { title: 'Profit and Loss Statement' };
 
@@ -62,6 +63,7 @@ export default async function Page({ searchParams }: {
           {t('pl.openBalanceSheet')}
         </Link>
         {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
+        {result && <div className="mt-3"><ReportExport report="profit-loss" params={params} /></div>}
       </header>
       <ProfitLossShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
     </main>

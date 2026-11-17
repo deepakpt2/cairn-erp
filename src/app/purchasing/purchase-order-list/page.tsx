@@ -9,6 +9,7 @@ import {
   type PoListSelection,
 } from '@/modules/purchasing/purchase-order-list';
 import PurchaseOrderListShell from './PurchaseOrderListShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +70,7 @@ export default async function PurchaseOrderListPage({
           <h1 className="text-xl font-semibold tracking-tight">{t('poList.title')}</h1>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('poList.subtitle')}</p>
+        {result && <div className="mt-3"><ReportExport report="purchase-order-list" params={params} /></div>}
       </header>
 
       <PurchaseOrderListShell

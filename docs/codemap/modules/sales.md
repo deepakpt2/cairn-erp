@@ -15,7 +15,7 @@ Sales orders, pricing procedures, delivery & shipping points, billing (plans, co
 - Demo phase `D17_SALES_AVAILABILITY`: group D1 on TRAD-JUICE at plant 2000 only; no document type names a rule.
 - Quotation (`quotation.ts`, tables `sales_quotation*`): its own tables because `availableToPromise` counts promises through `sales_order_schedule`; it plans with `planOrderLines` but writes `sales_quotation_schedule` only. No credit, incompletion or output. Expiry is computed on read (`isExpired`), never written. Copy = `createSalesOrder` with reference `AG` + number; prices are re-determined on the order date. Conditions/partners category `QUOTATION`. Change documents use `CHANGE` (no `UPDATE` type). Demo phase `D18_SALES_QUOTATION`.
 
-## Files (103)
+## Files (105)
 | file | exports | tables |
 |---|---|---|
 | **app/config/batch-determination/** | | |
@@ -97,7 +97,7 @@ Sales orders, pricing procedures, delivery & shipping points, billing (plans, co
 | page.tsx | SalesOutputPage |  |
 | SalesOutput.tsx | SalesOutput |  |
 | **app/sales/quotations/** | | |
-| actions.ts | createQuotationAction, changeQuotationAction, rejectQuotationAction, createOrderFromQuotationAction |  |
+| actions.ts | createQuotationAction, changeQuotationAction, rejectQuotationAction, createOrderFromQuotationAction, downloadQuotationPdfAction |  |
 | page.tsx | SalesQuotationsPage |  |
 | Quotations.tsx | Quotations |  |
 | **app/sales/rebate-agreements/** | | |
@@ -136,9 +136,11 @@ Sales orders, pricing procedures, delivery & shipping points, billing (plans, co
 | pricing-procedure-maintenance.ts | PRICING_DEFINE_CAPABILITY, PRICING_PROCEDURE_OBJECT_CLASS, CONDITION_TYPE_OBJECT_CLASS, DETERMINATION_OBJECT_CLASS, CONDITION_CLASSES, CALCULATION_TYPES, CONDITION_LEVELS, PricingProcedureMaintenanceError, listPricingConfiguration, defineConditionType, changeConditionType, definePricingProcedure, changePricingProcedure, addPricingProcedureStep, changePricingProcedureStep, defineProcedureDetermination, changeProcedureDetermination, conditionRecordsStanding | sales_area, sales_condition_record, sales_condition_type, sales_document_condition, sales_order, sales_pricing_procedure, sales_pricing_procedure_step, sales_procedure_determination |
 | pricing-procedure.ts | PRICING_PROCEDURE_ROUTE, STANDARD_PRICING_PROCEDURE, DELIVERED_CONDITION_TYPES, DELIVERED_PRICING_STEPS, STANDARD_DOCUMENT_PRICING_PROCEDURE, PricingProcedureError, roundAmount, resolvePricingProcedure, priceDocument, taxStep, TAX_CONDITION_TYPE, TAX_ACCOUNT_KEY, TAX_STEP_NUMBER, taxConditionFor, writeDocumentConditions, documentConditionsOf, salesDocumentConditionsOf, scaleLineConditions, pricingProcedureDeterminationRows | company_code, material_valuation, sales_condition_record, sales_condition_type, sales_document_condition, sales_pricing_procedure_step, sales_procedure_determination, tax_code |
 | pricing.ts | PricingError, resolveCustomerSalesData, assertMaterialAtPlant | customer_sales_area, material_plant |
+| quotation-print.ts | salesQuotationPdf | material, sales_quotation, sales_quotation_line |
 | quotation.ts | SALES_QUOTATION_CAPABILITY, SALES_QUOTATION_CREATE_CAPABILITY, SALES_QUOTATION_ROUTE, SALES_QUOTATION_OBJECT_CLASS, QUOTATION_REFERENCE_TYPE, SalesQuotationError, quotationLineInput, quotationCreateInput, quotationChangeInput, getQuotation, createQuotation, changeQuotation, listQuotations, rejectQuotation, createOrderFromQuotation, quotationChoices, STANDARD_QUOTATION_TYPE | bp_role, business_partner, sales_area, sales_order, sales_quotation, sales_quotation_line, sales_quotation_schedule |
 | rebate.ts | REBATE_ROUTE, REBATE_CAPABILITY, REBATE_SETTLEMENT_CAPABILITY, REBATE_TRANSACTION, REBATE_AGREEMENT_OBJECT_CLASS, REBATE_ACCRUAL_OBJECT_CLASS, RebateError, saveRebateAgreement, releaseRebateAgreement, listRebateAgreements, rebateAccrualsForBilling, rebateRegister, rebateConditionTypes, accrueRebatesForBilling, reverseRebateAccrualsForBilling, settleRebateAgreement | billing_document, billing_document_line, bp_role, business_partner, company_code, customer_sales_area, material_sales, sales_condition_record, sales_condition_type, sales_order, sales_rebate_accrual, sales_rebate_agreement |
 | registers.ts | REGISTER_KINDS, REGISTER_KIND_MEANING, REGISTER_LIMIT, listDocumentRegister, listDueRegister, listRegisterChoices | billing_document, business_partner, delivery, material, plant, sales_area, sales_document_type, sales_order, sales_order_line, sales_returns_configuration |
+| report-exports.ts | salesAnalysisExport, SALES_REPORT_EXPORTS |  |
 | returns-configuration.ts | RETURNS_CONFIGURATION_ROUTE, RETURNS_DEFINE_CAPABILITY, ReturnsConfigurationError, returnsChain, getReturnsConfiguration, saveReturnsConfiguration | movement_type, sales_document_type, sales_order, sales_returns_configuration |
 | returns.ts | RETURNS_RECEIPT_TRANSACTION, RETURNS_ROUTE, RETURNS_ORDER_CAPABILITY, RETURNS_DELIVERY_CAPABILITY, RETURNS_RECEIPT_CAPABILITY, RETURNS_RECEIPT_CODE, RETURNS_RECEIPT_REVERSAL_CODE, ReturnsError, DELIVERED_RETURNS_RECEIPT_MOVEMENT, DELIVERED_RETURNS_MOVEMENTS, ensureReturnsMovements, resolveReturnsMovement, postReturnsReceipt, postReturnsReceiptInTx, RETURNS_DELIVERY_TRANSACTION, createReturnsDelivery, postReturnsDelivery, RETURNS_ORDER_TRANSACTION, createReturnsOrder, listReturnsOrders, listReturnsDeliveries | billing_document, billing_document_line, business_partner, delivery, delivery_line, material, material_document, material_document_line, movement_type, plant, sales_order, sales_order_line, stock_quantity |
 | sales-order.ts | SALES_ORDER_CAPABILITY, SALES_ORDER_RELEASE_CAPABILITY, SALES_ORDER_OBJECT_CLASS, SALES_ORDER_ROUTE, SalesOrderError, key, isoDate, optionalKey, orderLineInput, orderCreateInput, orderChangeInput, round2, creditAreaFor, priceLines, getSalesOrder, SALES_ORDER_CREATE_CAPABILITY, createSalesOrder, changeSalesOrder, cancelSalesOrder, listSalesOrderDocuments, salesOrderChoices, releaseSalesOrderCredit | bp_role, business_partner, company_code, credit_determination, customer_credit, material, plant, sales_area, sales_order, sales_order_line, sales_order_schedule, unit_of_measure |
@@ -158,5 +160,5 @@ finance, foundation, inventory, output, platform/auth, platform/change, platform
 ## Used by
 dev/walkthrough-volume.ts, finance, foundation, inventory, output, platform/attention, platform/tenancy
 
-## Tests (26)
-material-sales, sales-account-determination, sales-analysis, sales-availability, sales-batch-determination, sales-billing-plan, sales-collective-billing, sales-delivery-terms, sales-delivery, sales-document-type-maintenance, sales-document-type, sales-down-payment, sales-incompletion, sales-invoice-list, sales-order-progress, sales-order, sales-output, sales-partners, sales-pricing-chain, sales-pricing-procedure, sales-quotation, sales-rebate, sales-registers, sales-returns-configuration, sales-serial-numbers, sales-shipping-point
+## Tests (27)
+document-print, material-sales, sales-account-determination, sales-analysis, sales-availability, sales-batch-determination, sales-billing-plan, sales-collective-billing, sales-delivery-terms, sales-delivery, sales-document-type-maintenance, sales-document-type, sales-down-payment, sales-incompletion, sales-invoice-list, sales-order-progress, sales-order, sales-output, sales-partners, sales-pricing-chain, sales-pricing-procedure, sales-quotation, sales-rebate, sales-registers, sales-returns-configuration, sales-serial-numbers, sales-shipping-point

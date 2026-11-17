@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { ReportExport } from '@/ui/output/ReportExport';
 import {
   VendorBalanceError, getVendorBalances, type VendorBalanceView,
 } from '@/modules/finance/vendor-balances';
@@ -74,6 +75,7 @@ async function BalancesShell({ params }: {
           </Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('vendorBalances.subtitle')}</p>
+        {view && <div className="mt-3"><ReportExport report="vendor-balances" params={params} /></div>}
       </header>
 
       <section aria-labelledby="vb-selection" className="border border-line bg-surface p-4">

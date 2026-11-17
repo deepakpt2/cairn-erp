@@ -11,6 +11,7 @@ import {
   DEFAULT_SUMMARY_LEVEL, type BalanceSheetSelection,
 } from '@/modules/finance/balance-sheet';
 import BalanceSheetShell from './BalanceSheetShell';
+import { ReportExport } from '@/ui/output/ReportExport';
 
 export const metadata: Metadata = { title: 'Balance Sheet / P&L Statement' };
 
@@ -64,6 +65,7 @@ export default async function Page({ searchParams }: {
           {t('bs.openTrialBalance')}
         </Link>
         {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
+        {result && <div className="mt-3"><ReportExport report="balance-sheet" params={params} /></div>}
       </header>
       <BalanceSheetShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
     </main>

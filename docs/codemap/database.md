@@ -85,7 +85,7 @@
 | batch_status_management | inventory | platform/tenancy |
 | billing_document | sales | finance, platform/tenancy |
 | bp_role | foundation | inventory, purchasing, sales |
-| business_partner | foundation | finance, inventory, purchasing, sales |
+| business_partner | foundation | finance, inventory, output, purchasing, sales |
 | capability | platform/tables | audit, inventory, platform, platform/auth, platform/tenancy, production |
 | change_document | platform/tables | finance, foundation, inventory, platform/change, platform/notification, production, purchasing |
 | change_document_item | platform/tables | finance, foundation, platform/change, purchasing |
