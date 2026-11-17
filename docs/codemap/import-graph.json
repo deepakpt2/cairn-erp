@@ -2084,6 +2084,9 @@
     "modules/foundation/settlement-configuration.ts",
     "platform/auth/current.ts"
   ],
+  "app/dev/kit/page.tsx": [
+    "ui/kit/index.ts"
+  ],
   "app/finance/accruals/AccrualShell.tsx": [
     "app/finance/accruals/actions.ts",
     "modules/finance/accrual.ts",
@@ -4308,6 +4311,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/purchasing/parked-invoice/ParkedInvoice.tsx": [
@@ -4760,7 +4764,8 @@
     "app/sales/orders/Orders.tsx",
     "modules/sales/availability-check.ts",
     "modules/sales/sales-order.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/output/SalesOutput.tsx": [
     "app/sales/output/actions.ts",
@@ -8653,6 +8658,43 @@
     "ui/fields/SearchIcon.tsx"
   ],
   "ui/fields/SearchIcon.tsx": [],
+  "ui/kit/Button.tsx": [
+    "ui/kit/cn.ts"
+  ],
+  "ui/kit/Card.tsx": [
+    "ui/kit/cn.ts"
+  ],
+  "ui/kit/Chip.tsx": [
+    "ui/kit/cn.ts"
+  ],
+  "ui/kit/Field.tsx": [
+    "ui/kit/cn.ts"
+  ],
+  "ui/kit/KeyValue.tsx": [
+    "ui/kit/cn.ts"
+  ],
+  "ui/kit/Notice.tsx": [
+    "ui/kit/cn.ts"
+  ],
+  "ui/kit/Page.tsx": [
+    "ui/kit/Button.tsx",
+    "ui/kit/cn.ts"
+  ],
+  "ui/kit/Table.tsx": [
+    "ui/kit/cn.ts"
+  ],
+  "ui/kit/cn.ts": [],
+  "ui/kit/index.ts": [
+    "ui/kit/Button.tsx",
+    "ui/kit/Card.tsx",
+    "ui/kit/Chip.tsx",
+    "ui/kit/Field.tsx",
+    "ui/kit/KeyValue.tsx",
+    "ui/kit/Notice.tsx",
+    "ui/kit/Page.tsx",
+    "ui/kit/Table.tsx",
+    "ui/kit/cn.ts"
+  ],
   "ui/lock/ChangeLock.tsx": [
     "app/platform/locks/actions.ts",
     "ui/lock/claim-lifecycle.ts",

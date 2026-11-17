@@ -35,13 +35,14 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | platform/tenancy | app/clients, app/config, app/page.tsx, finance, foundation, inventory, platform, production, purchasing |
 | ui/attention | app/page.tsx |
 | ui/fields | finance, foundation, inventory, purchasing, sales |
+| ui/kit | app/dev, purchasing, sales |
 | ui/lock | finance, foundation, inventory, platform, production, purchasing, quality |
 | ui/output | finance, foundation, inventory, output, production, purchasing, sales |
 | ui/release | finance |
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (171)
+## Files (182)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -74,6 +75,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | actions.ts | recheckConfigurationStatusAction |  |
 | page.tsx | WorkbenchPage |  |
 | WorkbenchTree.tsx | WorkbenchTree |  |
+| **app/dev/kit/** | | |
+| page.tsx | KitPage |  |
 | **app/forgot-password/** | | |
 | page.tsx | ForgotPasswordPage |  |
 | **app/menu/** | | |
@@ -220,6 +223,17 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | **ui/fields/** | | |
 | ConstrainedField.tsx | ConstrainedField |  |
 | SearchIcon.tsx | SearchIcon |  |
+| **ui/kit/** | | |
+| Button.tsx | buttonVariants, Button, LinkButton |  |
+| Card.tsx | Card |  |
+| Chip.tsx | Chip |  |
+| cn.ts | cn |  |
+| Field.tsx | Field, FormGrid, ActionRow |  |
+| index.ts | cn, Button, LinkButton, buttonVariants, Chip, Notice, Card, Page, Field, FormGrid, ActionRow, Table, Th, Td, EmptyRow, KeyValue |  |
+| KeyValue.tsx | KeyValue |  |
+| Notice.tsx | Notice |  |
+| Page.tsx | Page |  |
+| Table.tsx | Table, Th, Td, EmptyRow |  |
 | **ui/lock/** | | |
 | ChangeLock.tsx | ChangeLock, useChangeLockClaim, useChangeLock, LockNotice, ClaimFailureNotice |  |
 | claim-lifecycle.ts | observeChangeLockClaim |  |
@@ -261,8 +275,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | index.ts | runWorker, stopWorker, main |  |
 | jobs.ts |  |  |
 
-## Routes (16)
-`/` · `/account` · `/api/auth/mfa` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/search` · `/signin` · `/signin/mfa`
+## Routes (17)
+`/` · `/account` · `/api/auth/mfa` · `/api/auth/signin` · `/api/auth/signout` · `/api/health/live` · `/clients` · `/clients/new` · `/config` · `/dev/kit` · `/forgot-password` · `/menu` · `/registry` · `/reset-password` · `/search` · `/signin` · `/signin/mfa`
 
 ## Tables owned (44)
 app_user, audit_access_log, auth_org_restriction, bank_master, capability, change_document, change_document_item, client, client_settings, config_activity, config_activity_status, country, currency, document_flow_link, document_index, document_status_history, enqueue_entry, job_definition, job_log, job_run, lock_object, lock_wait_log, mail_message, mail_server_config, message_catalog, mfa_challenge, notification, number_range, number_range_allocation, number_range_object, password_reset_token, position_capability, role, role_capability, sod_rule, term_alias, term_registry, unit_of_measure, user_capability, user_capability_scope, user_mfa, user_mfa_recovery_code, user_role, user_session

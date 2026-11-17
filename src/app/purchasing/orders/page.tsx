@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
@@ -9,6 +7,7 @@ import {
   RELEASE_CAPABILITIES,
   getDocumentRelease,
 } from '@/modules/purchasing/release';
+import { LinkButton, Page } from '@/ui/kit';
 import Orders from './Orders';
 import { ChangeLock } from '@/ui/lock/ChangeLock';
 
@@ -48,23 +47,13 @@ export default async function PurchaseOrdersPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.PO.CREATE · ME21N</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('purchaseOrder.title')}</h1>
-          <div className="flex gap-2">
-            <Link href="/purchasing/purchase-order-list" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('purchaseOrder.list')}
-            </Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.launchpad')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchaseOrder.subtitle')}</p>
-      </header>
-
+    <Page
+      title={t('purchaseOrder.title')}
+      code="PROC.PO.CREATE · ME21N"
+      description={t('purchaseOrder.subtitle')}
+      actions={<LinkButton href="/purchasing/purchase-order-list">{t('purchaseOrder.list')}</LinkButton>}
+      back={{ href: '/', label: t('nav.launchpad') }}
+    >
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="PURCHASE_ORDER" argument={selected.orderNumber} />
       )}
@@ -79,6 +68,6 @@ export default async function PurchaseOrdersPage({ searchParams }: {
         draft={draft}
         callOff={params.contract ? { contractNumber: params.contract, contractItem: params.contractItem ?? '' } : null}
       />
-    </div>
+    </Page>
   );
 }

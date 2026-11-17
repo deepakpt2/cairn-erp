@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 import { can, requireSession } from '@/platform/auth/current';
 import {
   SALES_ORDER_CAPABILITY,
@@ -10,6 +8,7 @@ import {
   salesOrderChoices,
 } from '@/modules/sales/sales-order';
 import { AVAILABILITY_CHECK_CAPABILITY } from '@/modules/sales/availability-check';
+import { Page } from '@/ui/kit';
 import Orders from './Orders';
 
 export const dynamic = 'force-dynamic';
@@ -34,19 +33,11 @@ export default async function SalesOrdersPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{SALES_ORDER_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Sales orders</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          An order states what the customer asked for and at what price, and it posts nothing. The price
-          of every item is read from the standing condition record, and the save runs the credit check for
-          the order value.
-        </p>
-      </header>
+    <Page
+      title="Sales orders"
+      code={SALES_ORDER_CAPABILITY}
+      description="An order states what the customer asked for and at what price, and it posts nothing. The price of every item is read from the standing condition record, and the save runs the credit check for the order value."
+    >
       <Orders
         documents={documents}
         choices={choices}
@@ -55,6 +46,6 @@ export default async function SalesOrdersPage({ searchParams }: {
         canRelease={can(session, SALES_ORDER_RELEASE_CAPABILITY)}
         canCheckAvailability={can(session, AVAILABILITY_CHECK_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }
