@@ -614,6 +614,21 @@ export const SCREENS: readonly ScreenLink[] = [
     },
   },
   {
+    id: "/config/factory-calendars",
+    path: "/config/factory-calendars",
+    query: {},
+    code: "CFG.FND.CALENDAR.DEFINE",
+    title: "Factory calendars",
+    area: "configuration",
+    family: "foundation",
+    accepts: ["calendarId"],
+    nav: {
+      module: "admin",
+      category: "Platform operations",
+      activity: "Calendars & working days",
+    },
+  },
+  {
     id: "/config/document-layout",
     path: "/config/document-layout",
     query: {},

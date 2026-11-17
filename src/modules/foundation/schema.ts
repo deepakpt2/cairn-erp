@@ -453,6 +453,83 @@ export const factoryCalendar = pgTable(
   ],
 );
 
+/**
+ * Holiday calendar (THOCI). Dated holidays live in `holidayCalendarDay` (THOC, with THOCD / THOL folded in:
+ * a holiday here is just a dated row). Movable holidays are not modelled — the year range is the guardrail.
+ */
+export const holidayCalendar = pgTable(
+  'holiday_calendar',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    holidayCalendarId: char('holiday_calendar_id', { length: 2 }).notNull(),
+    name: varchar('name', { length: 80 }).notNull(),
+    validFromYear: integer('valid_from_year').notNull(),
+    validToYear: integer('valid_to_year').notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.holidayCalendarId] }),
+    check('holiday_calendar_key_format_ck', sql`${t.holidayCalendarId} ~ '^[A-Z0-9]{2}$'`),
+    check('holiday_calendar_years_ck', sql`${t.validToYear} >= ${t.validFromYear}
+      and ${t.validFromYear} between 1900 and 9999 and ${t.validToYear} between 1900 and 9999`),
+  ],
+);
+
+export const holidayCalendarDay = pgTable(
+  'holiday_calendar_day',
+  {
+    client: varchar('client', { length: 4 }).notNull(),
+    holidayCalendarId: char('holiday_calendar_id', { length: 2 }).notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    description: varchar('description', { length: 80 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.holidayCalendarId, t.date] }),
+    foreignKey({
+      columns: [t.client, t.holidayCalendarId],
+      foreignColumns: [holidayCalendar.client, holidayCalendar.holidayCalendarId],
+      name: 'holiday_calendar_day_calendar_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+/** Factory calendar rules (TFACD): which weekdays work over a dated period. true = a working day. */
+export const factoryCalendarPeriod = pgTable(
+  'factory_calendar_period',
+  {
+    client: varchar('client', { length: 4 }).notNull(),
+    calendarId: char('calendar_id', { length: 2 }).notNull(),
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    validTo: date('valid_to', { mode: 'string' }).notNull(),
+    monday: boolean('monday').notNull(),
+    tuesday: boolean('tuesday').notNull(),
+    wednesday: boolean('wednesday').notNull(),
+    thursday: boolean('thursday').notNull(),
+    friday: boolean('friday').notNull(),
+    saturday: boolean('saturday').notNull(),
+    sunday: boolean('sunday').notNull(),
+    holidayCalendarId: char('holiday_calendar_id', { length: 2 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.calendarId, t.validFrom] }),
+    foreignKey({
+      columns: [t.client, t.calendarId],
+      foreignColumns: [factoryCalendar.client, factoryCalendar.calendarId],
+      name: 'factory_calendar_period_calendar_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.client, t.holidayCalendarId],
+      foreignColumns: [holidayCalendar.client, holidayCalendar.holidayCalendarId],
+      name: 'factory_calendar_period_holiday_fk',
+    }).onDelete('restrict'),
+    check('factory_calendar_period_range_ck', sql`${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
 /** Sales organisation — legally responsible for sales (§6.1). */
 export const salesOrg = pgTable(
   'sales_org',

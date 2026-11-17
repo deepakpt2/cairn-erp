@@ -118,7 +118,7 @@ const FIELD_LABELS: Record<string, string> = {
   postalCode: 'Postal code',
   city: 'City',
   region: 'Region',
-  factoryCalendar: 'Factory Calendar key (optional, non-operational)',
+  factoryCalendar: 'Factory Calendar key (optional)',
   language: 'Language',
   isProductionSite: 'Cairn production-site flag (descriptive)',
   isStorageSite: 'Cairn storage-site flag (descriptive)',
