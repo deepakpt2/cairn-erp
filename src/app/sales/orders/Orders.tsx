@@ -108,27 +108,33 @@ export function ItemGrid({ initialRows, numbered }: { initialRows?: GridRow[]; n
 
   return (
     <div className="mt-3 space-y-2">
-      <div className="grid grid-cols-2 gap-2 text-xs font-medium text-ink-soft sm:grid-cols-6">
+      <div className="hidden grid-cols-6 gap-2 text-xs font-medium text-ink-soft sm:grid">
         <span>Material</span><span>Plant</span><span>Quantity</span><span>Unit</span><span>Tax code</span><span>Needed by</span>
       </div>
       {rows.map((row, index) => {
         const slot = index + 1;
         const name = (field: string) => `line-${slot}-${field}`;
+        const cell = (field: keyof Omit<GridRow, 'id' | 'lineNumber'>, label: string, placeholder: string, extra?: string) => (
+          <div className="min-w-0">
+            <label htmlFor={`row-${row.id}-${field}`} className="mb-0.5 block text-2xs font-semibold uppercase text-ink-soft sm:hidden">{label}</label>
+            <input id={`row-${row.id}-${field}`} className={`input${extra ? ` ${extra}` : ''}`} name={name(field === 'materialNumber' ? 'material' : field)}
+              placeholder={placeholder} autoComplete="off" inputMode={field === 'quantity' ? 'decimal' : undefined}
+              value={row[field]} onChange={(e) => set(row.id, field, e.target.value)} />
+          </div>
+        );
         return (
-          <div key={row.id} className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-            <input className="input" name={name('material')} placeholder="Material" autoComplete="off"
-              value={row.materialNumber} onChange={(e) => set(row.id, 'materialNumber', e.target.value)} />
-            <input className="input" name={name('plant')} placeholder="Plant" autoComplete="off"
-              value={row.plant} onChange={(e) => set(row.id, 'plant', e.target.value)} />
-            <input className="input" name={name('quantity')} placeholder="Quantity" inputMode="decimal" autoComplete="off"
-              value={row.quantity} onChange={(e) => set(row.id, 'quantity', e.target.value)} />
-            <input className="input" name={name('unit')} placeholder="Unit" autoComplete="off"
-              value={row.unit} onChange={(e) => set(row.id, 'unit', e.target.value)} />
-            <input className="input" name={name('tax')} placeholder="Tax" autoComplete="off"
-              value={row.tax} onChange={(e) => set(row.id, 'tax', e.target.value)} />
-            <div className="flex gap-2">
-              <input className="input min-w-0 flex-1" name={name('needed')} placeholder="YYYY-MM-DD" autoComplete="off"
-                value={row.needed} onChange={(e) => set(row.id, 'needed', e.target.value)} />
+          <div key={row.id} className="grid grid-cols-2 gap-x-2 gap-y-1 border-b border-line pb-2 sm:grid-cols-6 sm:gap-2 sm:border-0 sm:pb-0">
+            {cell('materialNumber', 'Material', 'Material')}
+            {cell('plant', 'Plant', 'Plant')}
+            {cell('quantity', 'Quantity', 'Quantity')}
+            {cell('unit', 'Unit', 'Unit')}
+            {cell('tax', 'Tax code', 'Tax')}
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <label htmlFor={`row-${row.id}-needed`} className="mb-0.5 block text-2xs font-semibold uppercase text-ink-soft sm:hidden">Needed by</label>
+                <input id={`row-${row.id}-needed`} className="input" name={name('needed')} placeholder="YYYY-MM-DD" autoComplete="off"
+                  value={row.needed} onChange={(e) => set(row.id, 'needed', e.target.value)} />
+              </div>
               <Button size="icon" className="shrink-0"
                 onClick={() => remove(row.id)} disabled={rows.length === 1}
                 aria-label={`Remove item row ${slot}`} title="Remove this row">×</Button>
