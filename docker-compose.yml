@@ -114,7 +114,10 @@ services:
       # a bypassrls login by mistake.
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
       CAIRN_WORKER_ID: ${CAIRN_WORKER_ID:-worker-1}
-      CAIRN_JOB_QUEUES: ${CAIRN_JOB_QUEUES:-DEFAULT}
+      # Empty = claim every queue (MAIL.SEND runs on the MAIL queue, not DEFAULT).
+      CAIRN_JOB_QUEUES: ${CAIRN_JOB_QUEUES:-}
+      # The worker decrypts the SMTP password when it sends, so it needs the same keyring as the app.
+      CAIRN_BANK_DATA_KEYRING_JSON: ${CAIRN_BANK_DATA_KEYRING_JSON:-}
       CAIRN_JOB_POLL_MS: ${CAIRN_JOB_POLL_MS:-2000}
     depends_on:
       migrate:

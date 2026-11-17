@@ -104,8 +104,8 @@ openssl rand -hex 32     # run once per secret below
 | `CAIRN_DEMO_CREDENTIALS_UID` / `_GID` | Optional | Your `uid:gid` from §3, so the credential file is readable without `sudo`. |
 | `CAIRN_DEMO_LOGIN_URL` | Optional | The sign-in address printed at the top of the credential file. |
 | `CAIRN_DEMO_TENANT_NAME` | Optional | The tenant name printed in the credential file. |
-| `CAIRN_BANK_DATA_KEYRING_JSON` | Optional | Deployment secret, supplied to the app only — never to the migration job. |
-| `CAIRN_WORKER_ID`, `CAIRN_JOB_QUEUES`, `CAIRN_JOB_POLL_MS` | Optional | Worker identity and polling. Defaults are `worker-1`, `DEFAULT`, `2000`. |
+| `CAIRN_BANK_DATA_KEYRING_JSON` | Optional (required for mail) | Deployment secret, supplied to the app and the worker — never to the migration job. |
+| `CAIRN_WORKER_ID`, `CAIRN_JOB_QUEUES`, `CAIRN_JOB_POLL_MS` | Optional | Worker identity and polling. Defaults are `worker-1`, every queue, `2000`. |
 
 Two traps worth stating plainly:
 

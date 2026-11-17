@@ -27,6 +27,7 @@ import './jobs';
 
 import { claimNext, runClaimed } from '../platform/job/execute';
 import { reapOrphans } from '../platform/job/queue';
+import { tickScheduler } from '../platform/job/scheduler';
 import { HEARTBEAT_TIMEOUT_MS, POLL_INTERVAL_MS } from '../platform/job/types';
 import { db, withTenant } from '../platform/db/client';
 import { sql } from 'drizzle-orm';
@@ -57,6 +58,8 @@ export interface RunOutcome {
   status: string;
 }
 
+const SCHEDULER_INTERVAL_MS = 30_000;
+
 const workerId = `worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
 /**
@@ -80,9 +83,22 @@ export async function runWorker(options: WorkerOptions = {}): Promise<{ runs: nu
 
   let runs = 0;
   let reapedAt = 0;
+  let scheduledAt = 0;
 
   while (!stopping) {
     if (options.maxRuns !== undefined && runs >= options.maxRuns) break;
+
+    // Scheduled jobs (MAIL.SEND, notification fan-out, …) only exist as runs once something enqueues
+    // them. Nothing else calls the scheduler, so the worker does, twice a minute; the idempotency key
+    // inside the tick makes repeats harmless.
+    if (Date.now() - scheduledAt > SCHEDULER_INTERVAL_MS) {
+      scheduledAt = Date.now();
+      try {
+        await tickScheduler();
+      } catch (error) {
+        console.error(`[${me}] scheduler tick failed:`, error);
+      }
+    }
 
     const claimed = await claimNext(me, queues);
 
