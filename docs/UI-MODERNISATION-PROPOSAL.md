@@ -126,11 +126,11 @@ Total about 13–17 weeks for one developer, about 8–10 with two. The visible 
 | Tests assert on markup | Triage in Phase 0; fix with each page |
 | Scope creep into features | Look and feel only; ideas go to `docs/OPEN-GAPS.md` |
 
-## 9. Decisions needed
+## 9. Decisions (approved 2026-11-17, all as recommended)
 
-1. Approved: Radix UI and Lucide, with owned components in `src/ui/kit/`.
-2. Confirm the conservative look: current palette and system fonts, 3–4px radii, no dark theme.
-3. Pilot modules for Phase 3: sales and purchasing?
-4. Include the optional Classic/Refreshed switch? (Dark theme is out of scope.)
-5. Roll out day-to-day modules first and configuration and admin last (recommended)?
-6. Should Phase 0 start now on the demo tenant?
+1. Radix UI and Lucide, with owned components in `src/ui/kit/`.
+2. Conservative look: current palette, system fonts, 3-4px radii, no dark theme.
+3. Pilot modules: sales and purchasing.
+4. No Classic/Refreshed switch: the `development` branch keeps the current look, work happens on branch `ui-change`.
+5. Roll out day-to-day modules first, configuration and admin last.
+6. Phase 0 (audit) starts now on the demo tenant. Each step is committed and pushed to `ui-change`.
