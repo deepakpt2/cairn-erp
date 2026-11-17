@@ -148,8 +148,8 @@ export default function Users({ client, users, query, status, canCreate, canMain
 
       {canReset && (
         <aside className="rounded border border-line bg-row p-3 text-sm">
-          <h2 className="font-medium">Password recovery</h2>
-          <p className="mt-1 text-ink-soft">Administrator-issued reset is paused because no approved outbound delivery transport is configured. Reset tokens are not shown in this interface. Use the <Link href="/forgot-password" className="link">public recovery flow</Link> or your organization’s approved support channel.</p>
+          <h2 className="font-medium">Password reset</h2>
+          <p className="mt-1 text-ink-soft">To reset a user's password, open the user from the list above and use "Send reset link" on the user's details page. The link is mailed to the user and is never shown here.</p>
         </aside>
       )}
     </div>
