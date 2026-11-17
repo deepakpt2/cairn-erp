@@ -188,7 +188,8 @@ describe('SCR-124 purchase order list (ME2L suite)', () => {
     // 5 received less a reversal of 1.
     expect(byOrder.get('4500000002')).toMatchObject({
       deliveredQuantity: 4, invoicedQuantity: 0, openDeliveryQuantity: 6, status: 'PARTIALLY_DELIVERED',
-      releaseStatus: 'UNRELEASED',
+      // No strategy claims it, so no release row stands: the flag reads as not required.
+      releaseStatus: 'NOT_REQUIRED',
     });
     // The reversed goods-receipt document contributes nothing.
     expect(byOrder.get('4500000003')).toMatchObject({

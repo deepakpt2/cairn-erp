@@ -111,7 +111,7 @@ describe('SCR-056 purchase orders (ME21N)', () => {
     const created = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [{ ...stockItem }] });
     expect(created.orderNumber).toMatch(/^POF-\d{7}$/);
     const doc = await getOrder(c, created.orderNumber);
-    expect(doc).toMatchObject({ currency: 'KWD', releaseStatus: 'UNRELEASED', supplierNumber: 'V10000' });
+    expect(doc).toMatchObject({ currency: 'KWD', releaseStatus: 'NOT_REQUIRED', supplierNumber: 'V10000' });
     expect(doc?.items[0]).toMatchObject({
       itemNumber: 10, netPrice: '150.00', netValue: '1500.00', quantity: '10.000',
     });

@@ -720,6 +720,12 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
   const assignments = await tx.select().from(purchaseOrderAssignment)
     .where(and(eq(purchaseOrderAssignment.client, client), eq(purchaseOrderAssignment.orderNumber, orderNumber)))
     .orderBy(asc(purchaseOrderAssignment.itemNumber), asc(purchaseOrderAssignment.lineNumber));
+  // No release row means no strategy claims the order: it needs no release.
+  const [poRelease] = await tx.select({ status: documentRelease.status }).from(documentRelease).where(and(
+    eq(documentRelease.client, client),
+    eq(documentRelease.documentCategory, 'PURCHASE_ORDER'),
+    eq(documentRelease.documentNumber, orderNumber),
+  ));
   return {
     orderNumber,
     documentType: header.documentType,
@@ -733,7 +739,7 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
     paymentTermsCode: header.paymentTermsCode,
     incotermsCode: header.incotermsCode,
     incotermsLocation: header.incotermsLocation,
-    releaseStatus: header.releaseStatus,
+    releaseStatus: poRelease ? header.releaseStatus : 'NOT_REQUIRED',
     createdBy: header.createdBy,
     items: items.map((item) => ({
       itemNumber: item.itemNumber,

@@ -21,6 +21,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { PO_RELEASE_STATUS_SQL } from './release';
+
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { purchaseItemState, type PurchaseItemState } from './item-state';
@@ -329,7 +331,7 @@ export async function listPurchaseOrders(input: {
         group by order_number, item_number
       ), rows as (
         select po.order_number, i.item_number, po.supplier_number, po.purchasing_org, po.purchasing_group,
-               po.company_code, po.document_date::text as document_date, po.currency, po.release_status,
+               po.company_code, po.document_date::text as document_date, po.currency, ${PO_RELEASE_STATUS_SQL} as release_status,
                coalesce(i.material_number, '') as material_number, i.short_text,
                coalesce(i.material_group, '') as material_group, coalesce(i.plant, '') as plant,
                i.quantity, i.unit, i.net_price, i.price_unit, i.net_value, i.marked_for_deletion,

@@ -40,7 +40,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (169)
+## Files (170)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -205,6 +205,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | demo-production.ts | buildDemoProduction | account_determination, production_order, production_order_type, production_order_type_parameter |
 | demo-provisioning.ts | DEMO_PROVISION_OPERATION, DEMO_ADVISORY_LOCK_KEY, DEMO_CLAIM_LOCK_KEY, DEMO_PHASE_PLAN, isDemoProvisioningEnabled, censusDemoEligibility, claimDemoInstallation, startDemoPhase, completeDemoPhase, completeDemoPhases, failDemoPhase, completeDemoInstallation, buildDemoTimeline, acquireDemoProvisioningLock, readDemoPasswordState, recordDemoPasswordIssued, readDemoInstallation |  |
 | demo-quality.ts | buildDemoQuality |  |
+| demo-release.ts | ensureDemoReleaseStrategies | characteristic, classification_class, document_release, purchase_order, release_group, release_strategy |
 | demo-sales-availability.ts | buildDemoSalesAvailability | availability_check_scope, availability_checking_group, availability_checking_rule, delivery, delivery_line, material_plant, sales_order |
 | demo-sales-quotation.ts | buildDemoSalesQuotation | sales_condition_record |
 | demo-sales.ts | buildDemoSales | account_determination, billing_document, customer_invoice, delivery |

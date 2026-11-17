@@ -57,6 +57,14 @@ describe('SCR-129 purchase orders by account assignment (ME2K)', () => {
           (${client}, '4700000002', 'STANDARD', 'V91000', 'O910', 'G91', '1000', 'KWD', '2026-03-15', 'RELEASED', ${ACTOR})
         on conflict do nothing
       `);
+      // A RELEASED flag is only read as released where a release row stands.
+      await tx.execute(sql`
+        insert into document_release (client, document_category, document_number, group_code, strategy_code,
+                                      current_step, status, created_by)
+        values (${client}, 'PURCHASE_ORDER', '4700000001', 'PO', 'FIXTURE', 1, 'RELEASED', ${ACTOR}),
+               (${client}, 'PURCHASE_ORDER', '4700000002', 'PO', 'FIXTURE', 1, 'RELEASED', ${ACTOR})
+        on conflict do nothing
+      `);
       // Order 1: item 10 of 100 split 60/40 across two cost centres.
       // Order 2: item 20 of 50 wholly on CC2000.
       await tx.execute(sql`

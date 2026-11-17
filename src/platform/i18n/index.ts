@@ -2653,6 +2653,7 @@ const en: Catalogue = {
   'poDisplay.state.COMPLETED': 'Received and invoiced',
   'poDisplay.state.MARKED': 'Marked for deletion',
   'poDisplay.state.MIXED': 'Mixed',
+  'poDisplay.state.NOT_REQUIRED': 'No release needed',
   'poDisplay.state.UNRELEASED': 'Unreleased',
   'poDisplay.state.RELEASED': 'Released',
   'goodsReceipt.title': 'Post Goods Receipt',

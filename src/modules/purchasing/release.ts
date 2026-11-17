@@ -35,6 +35,19 @@ export const RELEASE_CAPABILITIES: Record<string, string> = {
   SCHED_AGREEMENT: 'PROC.SCHEDAGREE.RELEASE',
 };
 
+/**
+ * A purchase order's release flag as readers see it. The `release_status`
+ * column defaults to UNRELEASED and only a release act moves it, so a PO that
+ * no strategy claims would read as unreleased forever. It has no
+ * `document_release` row, so it reads NOT_REQUIRED, as contracts and
+ * scheduling agreements do. Expects the order table aliased `po`.
+ */
+export const PO_RELEASE_STATUS_SQL = sql.raw(
+  `case when exists (select 1 from document_release dr where dr.client = po.client`
+  + ` and dr.document_category = 'PURCHASE_ORDER' and dr.document_number = po.order_number)`
+  + ` then po.release_status else 'NOT_REQUIRED' end`,
+);
+
 export class ReleaseError extends Error {
   remedy?: string;
 

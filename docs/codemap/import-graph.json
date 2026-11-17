@@ -7432,6 +7432,7 @@
   ],
   "modules/purchasing/po-account-assignment.ts": [
     "modules/purchasing/receipt-unit-basis.ts",
+    "modules/purchasing/release.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -7446,6 +7447,7 @@
   "modules/purchasing/purchase-order-list.ts": [
     "modules/purchasing/item-state.ts",
     "modules/purchasing/receipt-unit-basis.ts",
+    "modules/purchasing/release.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -8496,7 +8498,8 @@
     "platform/tenancy/demo-masters.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
-    "platform/tenancy/demo-provisioning.ts"
+    "platform/tenancy/demo-provisioning.ts",
+    "platform/tenancy/demo-release.ts"
   ],
   "platform/tenancy/demo-production.ts": [
     "modules/foundation/account-determination.ts",
@@ -8530,6 +8533,15 @@
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
     "platform/tenancy/demo-provisioning.ts"
+  ],
+  "platform/tenancy/demo-release.ts": [
+    "modules/foundation/characteristic-definition.ts",
+    "modules/foundation/characteristic-schema.ts",
+    "modules/foundation/class-definition.ts",
+    "modules/foundation/release-strategy-definition.ts",
+    "modules/purchasing/release.ts",
+    "modules/purchasing/schema.ts",
+    "platform/db/client.ts"
   ],
   "platform/tenancy/demo-sales-availability.ts": [
     "modules/production/availability-check.ts",

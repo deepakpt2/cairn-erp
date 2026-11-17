@@ -399,6 +399,7 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
             <Field label={t('poDisplay.releaseFlag')}>
               <select name="releaseStatus" className="input w-full" defaultValue={params.releaseStatus ?? ''}>
                 <option value="">{t('poDisplay.any')}</option>
+                <option value="NOT_REQUIRED">{t('poDisplay.state.NOT_REQUIRED')}</option>
                 <option value="UNRELEASED">{t('poDisplay.state.UNRELEASED')}</option>
                 <option value="RELEASED">{t('poDisplay.state.RELEASED')}</option>
               </select>

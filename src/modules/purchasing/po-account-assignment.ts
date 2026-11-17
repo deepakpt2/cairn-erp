@@ -19,6 +19,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { PO_RELEASE_STATUS_SQL } from './release';
+
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { receiptMovementSign, receiptQuantityInOrderUnit, receiptUnitJoins } from './receipt-unit-basis';
@@ -329,7 +331,7 @@ export async function purchaseOrdersByAccountAssignment(input: {
              coalesce(mat.description, i.short_text) as material_description, i.plant,
              i.quantity::text as quantity, i.unit, i.net_value::text as net_value,
              a.distribution_percentage::text as distribution_percentage,
-             po.supplier_number, po.currency, po.release_status,
+             po.supplier_number, po.currency, ${PO_RELEASE_STATUS_SQL} as release_status,
              coalesce(sc.delivery_date, '') as delivery_date
       from purchase_order po
       join purchase_order_item i on i.client = po.client and i.order_number = po.order_number

@@ -16,7 +16,7 @@ import {
   type PurchaseHeaderState, type PurchaseItemState,
 } from './item-state';
 import { assignmentObject, type AssignmentObject } from './account-assignment';
-import { getDocumentRelease, type DocumentReleaseState } from './release';
+import { getDocumentRelease, PO_RELEASE_STATUS_SQL, type DocumentReleaseState } from './release';
 import { receiptMovementSign, receiptQuantityInOrderUnit, receiptUnitJoins } from './receipt-unit-basis';
 
 export const PO_DISPLAY_CAPABILITY = 'PROC.PO.DISPLAY';
@@ -52,7 +52,7 @@ const KNOWN = new Set([
   'order', 'supplier', 'purchasingOrg', 'documentDateFrom', 'documentDateTo', 'plant', 'releaseStatus', 'itemState',
 ]);
 
-const RELEASE = new Set(['UNRELEASED', 'RELEASED']);
+const RELEASE = new Set(['NOT_REQUIRED', 'UNRELEASED', 'RELEASED']);
 const ITEM_STATE = new Set(['OPEN', 'PARTIALLY_DELIVERED', 'DELIVERED', 'COMPLETED', 'MARKED', 'MIXED']);
 
 export class PurchaseOrderDisplayError extends Error {
@@ -348,7 +348,7 @@ function selection(params: Record<string, string>) {
   if (purchasingOrg.length > 10) fail('The purchasing organisation is too long.');
   if (plant.length > 10) fail('The plant is too long.');
   if (releaseStatus && !RELEASE.has(releaseStatus)) {
-    fail(`The release status ${releaseStatus} does not stand.`, 'Use UNRELEASED or RELEASED. A derived delivery state is not that flag.');
+    fail(`The release status ${releaseStatus} does not stand.`, 'Use NOT_REQUIRED, UNRELEASED or RELEASED. A derived delivery state is not that flag.');
   }
   if (itemStateFilter && !ITEM_STATE.has(itemStateFilter)) {
     fail(`The item state ${itemStateFilter} does not stand.`, `Use one of ${[...ITEM_STATE].join(', ')}.`);
@@ -368,7 +368,7 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
     const [header] = await tx.execute(sql`
       select po.order_number, po.document_type, po.supplier_number, coalesce(bp.name, '') as supplier_name,
              po.company_code, po.purchasing_org, po.purchasing_group, po.document_date::text as document_date,
-             po.currency, po.release_status, po.created_by, po.created_at
+             po.currency, ${PO_RELEASE_STATUS_SQL} as release_status, po.created_by, po.created_at
         from purchase_order po
         left join business_partner bp
           on bp.client = po.client and bp.partner_number = po.supplier_number
@@ -720,7 +720,7 @@ export async function searchPurchaseOrders(
       )
       select po.order_number, po.supplier_number, coalesce(bp.name, '') as supplier_name,
              po.purchasing_org, po.company_code, po.document_date::text as document_date,
-             po.currency, po.release_status, coalesce(hs.header_state, 'OPEN') as header_state
+             po.currency, ${PO_RELEASE_STATUS_SQL} as release_status, coalesce(hs.header_state, 'OPEN') as header_state
         from purchase_order po
         left join business_partner bp
           on bp.client = po.client and bp.partner_number = po.supplier_number
@@ -728,7 +728,7 @@ export async function searchPurchaseOrders(
        where po.client = ${client}
          and (${chosen.supplier || null}::varchar is null or po.supplier_number = ${chosen.supplier || null})
          and (${chosen.purchasingOrg || null}::varchar is null or po.purchasing_org = ${chosen.purchasingOrg || null})
-         and (${chosen.releaseStatus || null}::varchar is null or po.release_status = ${chosen.releaseStatus || null})
+         and (${chosen.releaseStatus || null}::varchar is null or ${PO_RELEASE_STATUS_SQL} = ${chosen.releaseStatus || null})
          and (${chosen.documentDateFrom || null}::date is null or po.document_date >= ${chosen.documentDateFrom || null})
          and (${chosen.documentDateTo || null}::date is null or po.document_date <= ${chosen.documentDateTo || null})
          and (${chosen.plant || null}::varchar is null or exists (

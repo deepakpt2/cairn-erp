@@ -127,7 +127,7 @@
 | document_flow_link | platform/tables | platform/document |
 | document_index | platform/tables | foundation, platform/document |
 | document_layout | foundation | output |
-| document_release | purchasing | inventory, platform/attention, production |
+| document_release | purchasing | inventory, platform/attention, platform/tenancy, production |
 | document_status_history | platform/tables | platform/document |
 | document_type | foundation | finance, platform/posting, platform/tenancy |
 | down_payment_request_fulfillment | finance | sales |
@@ -207,7 +207,7 @@
 | profit_center | foundation | finance, platform/tenancy |
 | profit_center_hierarchy | foundation | platform/tenancy |
 | purchase_contract | purchasing | platform/attention |
-| purchase_order | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, platform/attention, production |
+| purchase_order | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, platform/attention, platform/tenancy, production |
 | purchase_order_item | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, inventory, production |
 | purchase_order_schedule_line | purchasing | production |
 | purchase_requisition_item | purchasing | platform/attention, production |
@@ -219,7 +219,7 @@
 | purchasing_rfq | purchasing | foundation |
 | purchasing_rfq_event | purchasing | foundation |
 | record_type | people | platform/tenancy |
-| release_group | foundation | purchasing |
+| release_group | foundation | platform/tenancy, purchasing |
 | release_strategy | foundation | platform/tenancy, purchasing |
 | release_strategy_criterion | foundation | purchasing |
 | release_strategy_step | foundation | platform/attention, purchasing |

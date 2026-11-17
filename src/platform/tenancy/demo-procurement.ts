@@ -34,6 +34,7 @@ import {
 import { postGlDocument } from '../../modules/finance/gl-document';
 import { getPayables, postOutgoingPayment } from '../../modules/finance/outgoing-payment';
 import { createOrder } from '../../modules/purchasing/orders';
+import { ensureDemoReleaseStrategies } from './demo-release';
 import { listPurchaseOrders } from '../../modules/purchasing/purchase-order-list';
 import { postSupplierInvoice } from '../../modules/purchasing/invoice-verification';
 import { postGoodsReceipt } from '../../modules/inventory/goods-receipt';
@@ -383,6 +384,9 @@ export async function buildDemoProcurement(
     payments += paid;
     goodsIssues += issues;
   }
+
+  // Orders are all raised now; give the release flow something to show.
+  await ensureDemoReleaseStrategies(client, DEMO_ACTOR);
 
   return {
     client,
