@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Star, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { t } from '@/platform/i18n';
 import type { NavModuleNode } from './nav-tree';
@@ -75,11 +76,11 @@ export function PersonalMenu({ tree, storageKey, activeScreenId }: {
       {active && (
         <button
           type="button"
-          className="flex min-h-9 w-full items-center gap-2 px-2 text-start text-xs text-ink-soft hover:bg-paper"
+          className="flex min-h-11 w-full items-center gap-2 md:min-h-9 px-2 text-start text-xs text-ink-soft hover:bg-paper"
           aria-pressed={activeIsFavourite}
           onClick={() => flip(active.id)}
         >
-          <span aria-hidden>{activeIsFavourite ? '★' : '☆'}</span>
+          <Star aria-hidden size={14} fill={activeIsFavourite ? 'currentColor' : 'none'} />
           <span className="truncate">{activeIsFavourite ? t('nav.favouriteRemove') : t('nav.favouriteAdd')}</span>
         </button>
       )}
@@ -89,9 +90,9 @@ export function PersonalMenu({ tree, storageKey, activeScreenId }: {
           <ul>
             {favourites.map((e) => (
               <li key={e.id} className="flex items-stretch">
-                <Link href={e.href} aria-current={e.id === activeScreenId ? 'page' : undefined} className={`min-h-8 min-w-0 flex-1 truncate py-1.5 ps-3 pe-1 hover:bg-paper ${e.id === activeScreenId ? 'font-medium text-ink' : 'text-ink-soft'}`}>{e.title}</Link>
-                <button type="button" className="w-8 text-ink-faint hover:bg-paper" aria-label={t('nav.favouriteRemoveNamed', { name: e.title })} onClick={() => flip(e.id)}>
-                  <span aria-hidden>×</span>
+                <Link href={e.href} aria-current={e.id === activeScreenId ? 'page' : undefined} className={`min-h-11 min-w-0 flex-1 truncate py-2.5 md:min-h-8 md:py-1.5 ps-3 pe-1 hover:bg-paper ${e.id === activeScreenId ? 'font-medium text-ink' : 'text-ink-soft'}`}>{e.title}</Link>
+                <button type="button" className="w-11 text-ink-faint md:w-8 hover:bg-paper" aria-label={t('nav.favouriteRemoveNamed', { name: e.title })} onClick={() => flip(e.id)}>
+                  <X aria-hidden size={14} className="mx-auto" />
                 </button>
               </li>
             ))}
@@ -104,7 +105,7 @@ export function PersonalMenu({ tree, storageKey, activeScreenId }: {
           <ul>
             {recents.map((e) => (
               <li key={e.id}>
-                <Link href={e.href} aria-current={e.id === activeScreenId ? 'page' : undefined} className={`block min-h-8 truncate py-1.5 ps-3 pe-2 hover:bg-paper ${e.id === activeScreenId ? 'font-medium text-ink' : 'text-ink-soft'}`}>{e.title}</Link>
+                <Link href={e.href} aria-current={e.id === activeScreenId ? 'page' : undefined} className={`block min-h-11 truncate py-2.5 md:min-h-8 md:py-1.5 ps-3 pe-2 hover:bg-paper ${e.id === activeScreenId ? 'font-medium text-ink' : 'text-ink-soft'}`}>{e.title}</Link>
               </li>
             ))}
           </ul>

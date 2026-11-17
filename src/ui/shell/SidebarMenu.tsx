@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { ChevronDown, ChevronRight, Menu, X } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@/platform/i18n';
@@ -92,6 +93,7 @@ export function SidebarMenu({ tree, storageKey }: { tree: NavModuleNode[]; stora
         aria-controls="sidebar-menu"
         onClick={() => setMobileOpen((open) => !open)}
       >
+        <Menu aria-hidden size={16} />
         {t('nav.sidebarToggle')}
       </button>
       {mobileOpen && (
@@ -106,7 +108,7 @@ export function SidebarMenu({ tree, storageKey }: { tree: NavModuleNode[]; stora
       >
         <div className="flex items-center justify-between px-2 py-1 md:hidden">
           <span className="text-sm font-semibold text-ink">{t('nav.sidebar')}</span>
-          <button type="button" className="btn btn-default min-h-11" onClick={closeDrawer}>{t('nav.sidebarClose')}</button>
+          <button type="button" className="btn btn-default min-h-11" onClick={closeDrawer}><X aria-hidden size={16} />{t('nav.sidebarClose')}</button>
         </div>
         <form action="/search" method="get" role="search" className="px-2 pb-2 pt-1">
           <label htmlFor="sidebar-search" className="sr-only">{t('search.label')}</label>
@@ -123,19 +125,19 @@ export function SidebarMenu({ tree, storageKey }: { tree: NavModuleNode[]; stora
                   <Link
                     href={module.href}
                     aria-current={onModulePage && moduleActive || (module.id === 'dashboard' && pathname === '/') ? 'page' : undefined}
-                    className={`flex min-h-10 min-w-0 flex-1 items-center px-2 hover:bg-paper ${moduleActive ? 'font-semibold text-ink' : 'text-ink-soft'}`}
+                    className={`flex min-h-11 min-w-0 flex-1 md:min-h-10 items-center px-2 hover:bg-paper ${moduleActive ? 'font-semibold text-ink' : 'text-ink-soft'}`}
                   >
                     <span className="truncate">{module.label}</span>
                   </Link>
                   {module.categories.length > 0 && (
                     <button
                       type="button"
-                      className="flex min-h-10 w-10 items-center justify-center text-ink-soft hover:bg-paper"
+                      className="flex min-h-11 w-11 items-center justify-center md:min-h-10 md:w-10 text-ink-soft hover:bg-paper"
                       aria-expanded={moduleOpen}
                       aria-label={t('nav.sidebarExpand', { name: module.label })}
                       onClick={() => setOpenModules((prev) => flip(prev, module.id))}
                     >
-                      <span aria-hidden>{moduleOpen ? '−' : '+'}</span>
+                      {moduleOpen ? <ChevronDown aria-hidden size={16} /> : <ChevronRight aria-hidden size={16} />}
                     </button>
                   )}
                 </div>
@@ -148,7 +150,7 @@ export function SidebarMenu({ tree, storageKey }: { tree: NavModuleNode[]; stora
                         <li key={key}>
                           <button
                             type="button"
-                            className={`flex min-h-9 w-full items-center justify-between gap-2 ps-5 pe-2 text-start hover:bg-paper ${moduleActive && category.name === activeCategory ? 'font-medium text-ink' : 'text-ink-soft'}`}
+                            className={`flex min-h-11 w-full items-center justify-between md:min-h-9 gap-2 ps-5 pe-2 text-start hover:bg-paper ${moduleActive && category.name === activeCategory ? 'font-medium text-ink' : 'text-ink-soft'}`}
                             aria-expanded={categoryOpen}
                             onClick={() => setOpenCategories((prev) => flip(prev, key))}
                           >
@@ -162,7 +164,7 @@ export function SidebarMenu({ tree, storageKey }: { tree: NavModuleNode[]; stora
                                   <Link
                                     href={leaf.href}
                                     aria-current={activeScreen?.id === leaf.id ? 'page' : undefined}
-                                    className={`block min-h-8 truncate py-1.5 ps-9 pe-2 hover:bg-paper ${activeScreen?.id === leaf.id ? 'border-s-2 border-accent bg-accent-soft/40 font-medium text-ink' : 'text-ink-soft'}`}
+                                    className={`block min-h-11 truncate py-2.5 ps-9 md:min-h-8 md:py-1.5 pe-2 hover:bg-paper ${activeScreen?.id === leaf.id ? 'border-s-2 border-accent bg-accent-soft/40 font-medium text-ink' : 'text-ink-soft'}`}
                                   >
                                     {leaf.title}
                                   </Link>

@@ -30,7 +30,7 @@ export function CommandBar() {
           <span className="text-sm font-semibold tracking-tight">{t('app.name')}</span>
         </Link>
 
-        <form action={executeCommand} className="command-bar min-w-0 flex-1 border-0">
+        <form action={executeCommand} className="command-bar min-w-0 flex-1 border-0 max-md:!basis-full max-md:border-t max-md:border-line">
           <label htmlFor="command-input" className="sr-only">
             {t('command.label')}
           </label>

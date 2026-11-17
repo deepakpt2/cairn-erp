@@ -130,7 +130,7 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
         <span className="code text-ink-faint">{t('mi20.code')}</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('mi20.title')}</h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link href="/inventory/physical-inventory-posting" className="btn btn-default min-h-11 sm:min-h-8" data-difference-posting-link>{t('mi20.toPosting')}</Link>
             <Link href="/inventory/physical-inventory-recount" className="btn btn-default min-h-11 sm:min-h-8" data-difference-recount-link>{t('mi20.toRecount')}</Link>
             <Link href="/inventory/physical-inventory-count" className="btn btn-default min-h-11 sm:min-h-8">{t('mi20.toCounts')}</Link>

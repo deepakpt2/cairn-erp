@@ -289,12 +289,7 @@
       font-size: 0.75rem;
     }
 
-    /* Shell: command bar fills its own row under the logo, bars use readable type. */
-    .command-bar {
-      flex-basis: 100%;
-      order: 3;
-    }
-
+    /* Shell: bars use readable type (the command bar takes its own row in CommandBar.tsx). */
     .session-bar,
     .status-bar {
       font-size: 0.75rem;
@@ -302,6 +297,23 @@
 
     .status-bar {
       padding-bottom: calc(0.25rem + env(safe-area-inset-bottom));
+    }
+
+    /* Primary actions of a screen stay reachable: a bottom row that sticks above the status bar. */
+    .action-row {
+      position: sticky;
+      bottom: 0;
+      z-index: 15;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
+      background: theme('colors.surface');
+      border-top: 1px solid theme('colors.line-strong');
+    }
+
+    .action-row > * {
+      flex: 1 1 8rem;
     }
 
     /* A table wider than the screen scrolls inside its own box, never the whole page. */
