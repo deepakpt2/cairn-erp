@@ -2,7 +2,7 @@
 
 Status: proposal, for approval. Scope: **one consistent design across the whole app, on desktop and on mobile, with mobile getting the most work.** No change to business rules, service functions in `src/modules/*`, `actions.ts`, routes, permissions, the database, or what each screen shows.
 
-Revision note: earlier drafts were a library rebuild, then a desktop-only refresh, then mobile-only. This is the final scope: a single design system applied everywhere, responsive from phone to wide desktop.
+Revision note: earlier drafts were a library rebuild, then a desktop-only refresh, then mobile-only. This is the final scope: a single design system applied everywhere, responsive from phone to wide desktop, with a **conservative, standard enterprise look** (no trend-driven styling) built on **Radix UI primitives and Lucide icons**.
 
 ## 1. Principles
 
@@ -12,6 +12,7 @@ Revision note: earlier drafts were a library rebuild, then a desktop-only refres
 4. **Easy to navigate.** Same header, menu, breadcrumb and action positions on every page, on every screen size.
 5. **Responsive by design.** Built mobile-first: phone, tablet and desktop use the same markup and adapt through shared layout components, not per-page tweaks.
 6. **Same business, same screens.** Same fields, columns, routes and permissions.
+7. **Standard enterprise look.** Neutral, familiar and restrained: flat surfaces, thin borders, no gradients, glassy effects, large radii, heavy shadows, animation or novelty. Evolution of today's look, not a redesign.
 
 ## 2. Where we are today (measured from the code)
 
@@ -31,9 +32,20 @@ The foundation is more uniform than it looks, which makes a central fix practica
 
 ## 3. The design system (one source, used everywhere)
 
-All of it lives in `tailwind.config.ts`, `globals.css` and a small `src/ui/kit/` of shared components. No new third-party UI library is required. (Lucide icons are optional and small; Radix is only added if a specific popup needs it.)
+All of it lives in `tailwind.config.ts`, `globals.css` and a small `src/ui/kit/` of shared components.
 
-**Tokens (CSS variables):** colours, radii, spacing scale, shadow, type scale. Warm teal identity kept, softened: lighter borders, calmer status colours, readable contrast (4.5:1 minimum). Inter font, tabular numbers. Body 14px, tables 13px on desktop; 15px body and 16px inputs on mobile. Radius 4–6px.
+**Libraries (decided):**
+- **Radix UI primitives** (unstyled; we add the Tailwind classes) for the interactive parts that must behave correctly: dialog, dropdown menu, popover, select, tooltip, tabs-as-navigation where one already exists, checkbox/switch. Each is a separate small package, installed only when used. Replaces the hand-built focus trap, Escape and click-outside code in `SidebarMenu`, `SessionMenu`, `PersonalMenu` and `ReleasePanel`. Works with server components; only the interactive parts are client components.
+- **Lucide** (`lucide-react`) for icons, imported by name (tree-shaken) in a standard size (16px, 20px on touch) and `currentColor`. Used for: menu and module markers, status chips, search, notifications, sort arrows, row actions, buttons with a clear standard symbol (add, edit, delete, save, print, export). Text labels stay on buttons and navigation; icons support the text and never replace it.
+- Helpers: `class-variance-authority`, `clsx`, `tailwind-merge` for button and chip variants.
+- Components are owned in the repo (`src/ui/kit/`), not a themed library, so the look stays Cairn's.
+
+**Tokens (CSS variables):** colours, radii, spacing scale, shadow, type scale. **Conservative changes only:**
+- Palette: keep the current warm neutral and teal. Only tidy it: slightly lighter borders, consistent status colours, 4.5:1 contrast checked.
+- Font: keep the system font stack (Segoe UI, Roboto, system-ui) as users expect on their OS; tabular numbers stay.
+- Type: body 14px (from 13.5px), tables 13px on desktop; 15px body and 16px inputs on mobile.
+- Shape: radius 3–4px (from 2px), thin 1px borders, no shadows except on menus and dialogs.
+- No dark theme, gradients or animation beyond hover and focus states.
 
 **The shared building blocks** (each defined once, then used by every page):
 
@@ -44,7 +56,8 @@ All of it lives in `tailwind.config.ts`, `globals.css` and a small `src/ui/kit/`
 | **Table** | One look: sticky header, right-aligned tabular numbers, totals row, row hover, selected row, empty state, consistent row actions. Same on desktop and mobile | The `grid-table` variants and ad-hoc margins |
 | **Form** | One layout: label above field, hint and error under it; responsive grid of 1 / 2 / 3 columns by width; read-only fields look different from editable ones; required marker; same field widths for same data types (date, amount, code, text) | Raw `grid-cols-*` and ad-hoc fields |
 | **Buttons** | Primary, default, danger. One height, one text style, one position for each group; icon optional | `btn-secondary`, `btn-success` and raw `<button>`s folded into the three |
-| **Chips/status** | One palette and wording scale for draft, open, released, posted, blocked, error | Per-page chip colours |
+| **Chips/status** | One palette and wording scale for draft, open, released, posted, blocked, error, each with a Lucide icon plus text | Per-page chip colours |
+| **Menu, Dialog, Popover, Select** | Radix-based, same look and keyboard behaviour everywhere | Hand-built menus and drawers |
 | **Key-value block** | Label/value pairs for document headers | Repeated hand-written markup |
 | **Messages** | Success, warning, error, info banner. Renders the existing `{ ok, message, remedy }` result | Inline message markup |
 | **Typography** | Page title, card title, label, value, hint, caption: six styles, no others | Mixed sizes |
@@ -80,9 +93,9 @@ Foundation first; every later page change is a swap onto shared components. Old 
 | Phase | Scope | Effort |
 |---|---|---|
 | 0. Audit and design | Playwright screenshots of all 308 pages at 390, 768 and 1280px; overflow and tap-target checks; classify pages into archetypes (list, document, form, report, config). Agree tokens, type and the building blocks on 4–5 sample pages | 1 wk |
-| 1. Tokens and base | CSS-variable tokens, Inter, new `.btn`, `.chip`, field, table and card classes in `globals.css`. Every page changes look at once with no page edits. Mobile base: 16px inputs, 44px targets, tables scroll in their card, safe areas | 1.5 wks |
+| 1. Tokens and base | Install the libraries; CSS-variable tokens; new `.btn`, `.chip`, field, table and card classes in `globals.css`. Every page changes look at once with no page edits. Mobile base: 16px inputs, 44px targets, tables scroll in their card, safe areas | 1.5 wks |
 | 2. Shell | Command bar, session bar, sidebar/menu, breadcrumb, status bar, notifications on all sizes | 1.5 wks |
-| 3. Page and layout components | `Page`, `Card`, `Form`, `KeyValue`, `Messages`; apply to 4–5 pilot modules (suggest sales and purchasing) | 2–3 wks |
+| 3. Page and layout components | `Page`, `Card`, `Form`, `KeyValue`, `Messages`, Radix-based menus and dialogs; apply to 4–5 pilot modules (suggest sales and purchasing) | 2–3 wks |
 | 4. Roll-out | Remaining modules, mostly mechanical. Convert variant tables and raw buttons and inputs to the shared blocks; normalise page widths and grids; fix per-page issues from the audit. Day-to-day screens first, configuration and admin last | 6–8 wks |
 | 5. Verify and clean up | Re-run the audit; accessibility pass (contrast, focus, targets); desktop and mobile regression screenshots; delete unused classes; lint rule against new ad-hoc styles | 1–2 wks |
 
@@ -97,7 +110,7 @@ Total about 13–17 weeks for one developer, about 8–10 with two. The visible 
 - Existing tests must keep passing; tests that assert on markup are updated with their page.
 - Print, PDF and exports keep their own styling, checked for no regressions.
 - Browser runs follow the workbench rules: native server on :3100, one Chromium at a time, stopped afterwards.
-- Dependency additions (Lucide, optionally Radix) need `docker compose restart app`.
+- Dependencies added in Phase 1 in one batch (Radix packages, `lucide-react`, `class-variance-authority`, `clsx`, `tailwind-merge`); that needs one `docker compose restart app`. Client bundle growth is expected to stay under about 40 KB gzip.
 - Seed data is extended only where a mobile or consistency check needs more rows or states to be seen.
 
 ## 8. Risks
@@ -107,16 +120,17 @@ Total about 13–17 weeks for one developer, about 8–10 with two. The visible 
 | Roll-out is large (308 pages) | Central tokens and classes give a global change first; page conversion is mechanical and by module |
 | Consistency drifts again | Shared components, `/dev/kit`, lint rule |
 | Wide tables remain awkward on a phone | Scroll inside the card, sticky key column and header; nothing hidden |
-| Users resist a changed look | Same layout, same fields, same positions; optional Classic/Refreshed token switch (3–4 days) if wanted |
+| Users resist a changed look | Standard, restrained styling; same layout, fields and positions; optional Classic/Refreshed token switch (3–4 days) if wanted |
+| Rewriting hand-built menus onto Radix introduces behaviour regressions | Migrate one menu at a time, keep the existing tests, check keyboard and focus on each |
 | Type size changes push content around | Tune on the densest screens in Phase 0 |
 | Tests assert on markup | Triage in Phase 0; fix with each page |
 | Scope creep into features | Look and feel only; ideas go to `docs/OPEN-GAPS.md` |
 
 ## 9. Decisions needed
 
-1. Approve softening the existing teal/warm identity (rather than a new palette) and Inter as the font.
-2. Approve building the shared blocks (Page, Card, Table, Form, Buttons) with no heavy UI library.
+1. Approved: Radix UI and Lucide, with owned components in `src/ui/kit/`.
+2. Confirm the conservative look: current palette and system fonts, 3–4px radii, no dark theme.
 3. Pilot modules for Phase 3: sales and purchasing?
-4. Include the Classic/Refreshed switch and optional dark theme, or neither?
+4. Include the optional Classic/Refreshed switch? (Dark theme is out of scope.)
 5. Roll out day-to-day modules first and configuration and admin last (recommended)?
 6. Should Phase 0 start now on the demo tenant?
