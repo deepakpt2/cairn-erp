@@ -550,7 +550,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
           )}
 
           <div className="mt-3 overflow-x-auto">
-            <table className="grid-table text-sm">
+            <div className="table-scroll"><table className="grid-table">
               <thead>
                 <tr className="text-left">
                   <th>Item</th>
@@ -613,7 +613,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           </div>
 
           <button
@@ -650,7 +650,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                 const scheduled = item.scheduleLines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
                 return (
                   <div className="space-y-2">
-                    <table className="grid-table text-sm">
+                    <div className="table-scroll"><table className="grid-table">
                       <thead>
                         <tr className="text-left">
                           <th>Delivery date</th>
@@ -712,7 +712,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                           {item.scheduleLines.length > 1 && <td />}
                         </tr>
                       </tfoot>
-                    </table>
+                    </table></div>
                     <button
                       type="button"
                       className="btn btn-default min-h-11 sm:min-h-8"
@@ -901,7 +901,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                   {items[active].assignment !== 'STOCK' && (
                     <div className="space-y-2">
                       <p className="text-xs text-ink-soft">{ASSIGNMENT_NOTE[items[active].assignment]}</p>
-                      <table className="grid-table text-sm">
+                      <div className="table-scroll"><table className="grid-table">
                         <thead>
                           <tr className="text-left">
                             {items[active].assignment === 'ASSET'
@@ -1003,7 +1003,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </table></div>
                       <button
                         type="button"
                         className="btn btn-default min-h-11 sm:min-h-8"

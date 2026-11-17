@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState, useId, useRef, useState } from 'react';
 
 import type { SalesOrderView } from '@/modules/sales/sales-order';
+import { ActionRow, Button, Field, FormGrid, KeyValue, Notice as Message, Table, EmptyRow } from '@/ui/kit';
 import { AvailabilityPanel } from './AvailabilityPanel';
 import {
   cancelOrderAction,
@@ -38,17 +39,13 @@ function money(value: string, currency: string): string {
 function Notice({ state }: { state: OrderActionState }) {
   if (!state.message) return null;
   return (
-    <div className={state.ok ? 'panel panel-success p-3 text-sm' : 'panel panel-danger p-3 text-sm'} role="status">
-      <p className="font-medium">{state.message}</p>
-      {state.remedy ? <p className="mt-1 text-ink-soft">{state.remedy}</p> : null}
+    <Message tone={state.ok ? 'ok' : 'error'} title={state.message} remedy={state.remedy}>
       {state.ok && state.orderNumber ? (
-        <p className="mt-2">
-          <Link className="link" href={`/sales/orders?order=${state.orderNumber}`}>
-            Open sales order {state.orderNumber}
-          </Link>
-        </p>
+        <Link className="link" href={`/sales/orders?order=${state.orderNumber}`}>
+          Open sales order {state.orderNumber}
+        </Link>
       ) : null}
-    </div>
+    </Message>
   );
 }
 
@@ -132,9 +129,9 @@ export function ItemGrid({ initialRows, numbered }: { initialRows?: GridRow[]; n
             <div className="flex gap-2">
               <input className="input min-w-0 flex-1" name={name('needed')} placeholder="YYYY-MM-DD" autoComplete="off"
                 value={row.needed} onChange={(e) => set(row.id, 'needed', e.target.value)} />
-              <button type="button" className="btn btn-default min-h-11 shrink-0 px-3 sm:min-h-8"
+              <Button size="icon" className="shrink-0"
                 onClick={() => remove(row.id)} disabled={rows.length === 1}
-                aria-label={`Remove item row ${slot}`} title="Remove this row">×</button>
+                aria-label={`Remove item row ${slot}`} title="Remove this row">×</Button>
             </div>
             {numbered && row.lineNumber !== null
               ? <input type="hidden" name={name('lineNumber')} value={row.lineNumber} />
@@ -144,9 +141,7 @@ export function ItemGrid({ initialRows, numbered }: { initialRows?: GridRow[]; n
       })}
       <input type="hidden" name="lineCount" value={String(rows.length)} />
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={add}>
-          Add another item
-        </button>
+        <Button onClick={add}>Add another item</Button>
         <span className="text-xs text-ink-faint">
           {rows.length} row{rows.length === 1 ? '' : 's'}. A row that names no material is not an item.
         </span>
@@ -179,20 +174,19 @@ function HeaderFields({ choices, selected }: { choices: Props['choices']; select
   const id = useId();
   const today = new Date().toISOString().slice(0, 10);
   const field = (name: string, label: string, value: string, placeholder: string) => (
-    <label className="block text-xs text-ink-soft" htmlFor={`${id}-${name}`}>
-      {label}
+    <Field label={label} htmlFor={`${id}-${name}`}>
       <input
-        className="input mt-1"
+        className="field-input"
         id={`${id}-${name}`}
         name={name}
         defaultValue={value}
         placeholder={placeholder}
         autoComplete="off"
       />
-    </label>
+    </Field>
   );
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <FormGrid cols={4}>
       {field('customerNumber', 'Customer', selected?.customerNumber ?? '', 'Customer number')}
       {field('salesOrg', 'Sales organization', selected?.salesOrg ?? '', '1000')}
       {field('distributionChannel', 'Distribution channel', selected?.distributionChannel ?? '', '10')}
@@ -204,7 +198,7 @@ function HeaderFields({ choices, selected }: { choices: Props['choices']; select
       {field('purchaseOrderReference', 'Customer reference', selected?.purchaseOrderReference ?? '', 'Purchase order number')}
       {field('headerText', 'Order note', selected?.headerText ?? '', 'Note on the order')}
       {field('creditControlArea', 'Credit control area', selected?.credit?.creditControlArea ?? '', 'Only if the customer has several')}
-    </div>
+    </FormGrid>
   );
 }
 
@@ -225,26 +219,25 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
               {selected.status}{selected.credit?.status === 'BLOCKED' ? ' · CREDIT BLOCK' : ''}
             </span>
           </div>
-          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-            <div><dt className="text-ink-faint">Customer</dt><dd>{selected.customerNumber}</dd></div>
-            <div><dt className="text-ink-faint">Sales area</dt>
-              <dd>{selected.salesOrg}/{selected.distributionChannel}/{selected.division}</dd></div>
-            <div><dt className="text-ink-faint">Company code</dt><dd>{selected.companyCode}</dd></div>
-            <div><dt className="text-ink-faint">Order date</dt><dd>{selected.orderDate}</dd></div>
-            <div><dt className="text-ink-faint">Net value</dt><dd>{money(selected.netValue, selected.currency)}</dd></div>
-            <div><dt className="text-ink-faint">Tax</dt><dd>{money(selected.taxValue, selected.currency)}</dd></div>
-            <div><dt className="text-ink-faint">Gross value</dt><dd>{money(selected.grossValue, selected.currency)}</dd></div>
-            <div><dt className="text-ink-faint">Customer reference</dt><dd>{selected.purchaseOrderReference ?? '—'}</dd></div>
-          </dl>
+          <KeyValue className="mt-3" items={[
+            { label: 'Customer', value: selected.customerNumber },
+            { label: 'Sales area', value: `${selected.salesOrg}/${selected.distributionChannel}/${selected.division}` },
+            { label: 'Company code', value: selected.companyCode },
+            { label: 'Order date', value: selected.orderDate },
+            { label: 'Net value', value: money(selected.netValue, selected.currency) },
+            { label: 'Tax', value: money(selected.taxValue, selected.currency) },
+            { label: 'Gross value', value: money(selected.grossValue, selected.currency) },
+            { label: 'Customer reference', value: selected.purchaseOrderReference },
+          ]} />
 
-          <table className="grid-table mt-3 text-sm">
+          <div className="mt-3"><Table caption="Order items">
             <thead>
-              <tr className="text-left text-xs text-ink-faint">
-                <th>Item</th><th>Material</th><th>Plant</th><th className="text-right">Quantity</th>
-                <th className="text-right">Confirmed</th><th className="text-right">Delivered</th>
-                <th className="text-right">Billed</th><th className="text-right">Open</th>
-                <th>Unit</th><th className="text-right">Price</th><th className="text-right">Net</th>
-                <th className="text-right">Tax</th><th>Priced from</th><th>Status</th>
+              <tr>
+                <th>Item</th><th>Material</th><th>Plant</th><th className="num">Quantity</th>
+                <th className="num">Confirmed</th><th className="num">Delivered</th>
+                <th className="num">Billed</th><th className="num">Open</th>
+                <th>Unit</th><th className="num">Price</th><th className="num">Net</th>
+                <th className="num">Tax</th><th>Priced from</th><th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -253,24 +246,24 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
                   <td>{line.lineNumber}</td>
                   <td>{line.materialNumber}</td>
                   <td>{line.plant}</td>
-                  <td className="text-right num">{Number(line.orderQuantity).toFixed(3)}</td>
-                  <td className="text-right num">{line.confirmedQuantity === null ? '—' : Number(line.confirmedQuantity).toFixed(3)}</td>
-                  <td className="text-right num">{Number(line.deliveredQuantity).toFixed(3)}</td>
-                  <td className="text-right num">{Number(line.billedQuantity).toFixed(3)}</td>
-                  <td className="text-right num">{Number(line.openQuantity).toFixed(3)}</td>
+                  <td className="num">{Number(line.orderQuantity).toFixed(3)}</td>
+                  <td className="num">{line.confirmedQuantity === null ? '—' : Number(line.confirmedQuantity).toFixed(3)}</td>
+                  <td className="num">{Number(line.deliveredQuantity).toFixed(3)}</td>
+                  <td className="num">{Number(line.billedQuantity).toFixed(3)}</td>
+                  <td className="num">{Number(line.openQuantity).toFixed(3)}</td>
                   <td>{line.quantityUnit.trim()}</td>
-                  <td className="text-right num">{Number(line.netPrice).toFixed(4)} / {line.priceUnit}</td>
-                  <td className="text-right num">{Number(line.netAmount).toFixed(2)}</td>
-                  <td className="text-right num">{Number(line.taxAmount).toFixed(2)}</td>
+                  <td className="num">{Number(line.netPrice).toFixed(4)} / {line.priceUnit}</td>
+                  <td className="num">{Number(line.netAmount).toFixed(2)}</td>
+                  <td className="num">{Number(line.taxAmount).toFixed(2)}</td>
                   <td className="code">{line.conditionNumber}</td>
                   <td>{line.status}{line.rejectionReason ? ` (${line.rejectionReason})` : ''}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table></div>
 
           {selected.credit ? (
-            <div className={selected.credit.status === 'BLOCKED' ? 'panel panel-danger mt-3 p-3 text-sm' : 'panel mt-3 p-3 text-sm'}>
+            <div className={selected.credit.status === 'BLOCKED' ? 'panel mt-3 border-signal-error/40 bg-signal-error-soft p-3 text-sm' : 'panel mt-3 p-3 text-sm'}>
               <p className="font-medium">
                 Credit determination: {selected.credit.status} — {selected.credit.reason}
               </p>
@@ -285,7 +278,7 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
                   <input type="hidden" name="expectedVersion" value={String(selected.version)} />
                   <input className="input" name="releaseJustification" placeholder="Why the block is released" />
                   <input className="input" name="releaseApprovalRef" placeholder="Approval reference" />
-                  <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">Release for credit</button>
+                  <Button type="submit">Release for credit</Button>
                 </form>
               ) : null}
               {selected.credit.status === 'BLOCKED' && !canRelease ? (
@@ -309,7 +302,7 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
                 <input type="hidden" name="expectedVersion" value={String(selected.version)} />
                 <HeaderFields choices={choices} selected={selected} />
                 <ItemGrid numbered initialRows={rowsOf(selected)} />
-                <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Save changes</button>
+                <ActionRow><Button type="submit" variant="primary">Save changes</Button></ActionRow>
               </form>
               <form action={cancelAction} className="space-y-2">
                 <h3 className="text-sm font-semibold">Cancel the order</h3>
@@ -321,7 +314,7 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
                 <input type="hidden" name="orderNumber" value={selected.orderNumber} />
                 <input type="hidden" name="expectedVersion" value={String(selected.version)} />
                 <input className="input" name="cancelReason" placeholder="Reason for the cancellation" />
-                <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">Cancel order</button>
+                <Button type="submit" variant="danger">Cancel order</Button>
               </form>
             </div>
           ) : null}
@@ -335,22 +328,22 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
           <HeaderFields choices={choices} selected={null} />
           <ItemGrid numbered={false} />
           <input type="hidden" name="requestKey" value={`SO-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`} />
-          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Create order</button>
+          <ActionRow><Button type="submit" variant="primary">Create order</Button></ActionRow>
         </form>
       ) : null}
 
       <section className="panel p-4" aria-label="Sales orders">
         <h2 className="text-lg font-semibold">Sales orders</h2>
-        <table className="grid-table mt-2 text-sm">
+        <div className="mt-2"><Table caption="Sales orders">
           <thead>
-            <tr className="text-left text-xs text-ink-faint">
+            <tr>
               <th>Order</th><th>Customer</th><th>Date</th><th>Status</th>
-              <th className="text-right">Gross value</th><th>Credit</th>
+              <th className="num">Gross value</th><th>Credit</th>
             </tr>
           </thead>
           <tbody>
             {documents.length === 0 ? (
-              <tr><td colSpan={6} className="text-ink-soft">No sales order stands in this tenant yet.</td></tr>
+              <EmptyRow cols={6}>No sales order stands in this tenant yet.</EmptyRow>
             ) : documents.map((row) => (
               <tr key={row.orderNumber}>
                 <td>
@@ -359,12 +352,12 @@ export default function Orders({ documents, choices, selected, canCreate, canRel
                 <td>{row.customerNumber}</td>
                 <td>{row.orderDate}</td>
                 <td>{row.status}</td>
-                <td className="text-right">{money(row.grossValue, row.currency)}</td>
+                <td className="num">{money(row.grossValue, row.currency)}</td>
                 <td>{row.blockedForCredit ? 'blocked' : 'clear'}</td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table></div>
       </section>
     </div>
   );
