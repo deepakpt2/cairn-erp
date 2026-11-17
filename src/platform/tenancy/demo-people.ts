@@ -578,6 +578,7 @@ export async function setEveryPassword(client: string, password: string): Promis
       const { token } = await initiatePasswordReset(
         { client, userId, changedBy: DEMO_ACTOR, ipAddress: '127.0.0.1' },
         [...ADMINISTRATOR_PATTERNS],
+        { deliverByMail: false },
       );
       await completePasswordReset({ client, token, password, ipAddress: '127.0.0.1' });
     }

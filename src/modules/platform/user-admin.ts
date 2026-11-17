@@ -868,7 +868,11 @@ export interface ResetTokenOutcome {
 export async function initiatePasswordReset(
   input: InitiateResetInput,
   sessionCapabilities: string[],
+  options: { deliverByMail?: boolean } = {},
 ): Promise<ResetTokenOutcome> {
+  // Only demo provisioning passes `deliverByMail: false`: it completes the reset in the same breath with a
+  // password it already holds, on a tenant that has no mail node yet. Every screen takes the default.
+  const deliverByMail = options.deliverByMail ?? true;
   const parsed = initiateResetInput.safeParse(input);
   if (!parsed.success) refuse('USER_ID_REQUIRED');
   const { client, userId, changedBy, ipAddress } = parsed.data;
@@ -895,7 +899,7 @@ export async function initiatePasswordReset(
 
     // Every refusal below is raised before the first write to the account.
     const email = emailOrNull(current.email);
-    if (!email) refuse('USER_EMAIL_MISSING');
+    if (!email && deliverByMail) refuse('USER_EMAIL_MISSING');
 
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -911,15 +915,17 @@ export async function initiatePasswordReset(
 
     // Queue the link before touching the account: a refusal here throws, the
     // transaction rolls back, and no token row, revocation or flag survives.
-    const link = resetLink(token);
-    if (!link) refuse('APP_BASE_URL_MISSING');
-    try {
-      await enqueueMail(tx, resetMail(client, email, link, tokenId, changedBy));
-    } catch (error) {
-      if (error instanceof MailError) {
-        refuse(error.code === 'MAIL_NOT_CONFIGURED' ? 'MAIL_NOT_CONFIGURED' : 'USER_EMAIL_MISSING');
+    if (deliverByMail && email) {
+      const link = resetLink(token);
+      if (!link) refuse('APP_BASE_URL_MISSING');
+      try {
+        await enqueueMail(tx, resetMail(client, email, link, tokenId, changedBy));
+      } catch (error) {
+        if (error instanceof MailError) {
+          refuse(error.code === 'MAIL_NOT_CONFIGURED' ? 'MAIL_NOT_CONFIGURED' : 'USER_EMAIL_MISSING');
+        }
+        throw error;
       }
-      throw error;
     }
 
     // Revoke every live session — the old password must not remain usable.
@@ -963,7 +969,7 @@ export async function initiatePasswordReset(
       username: current.username,
       token,
       expiresAt: expiresAt.toISOString(),
-      maskedEmail: maskEmail(email),
+      maskedEmail: email ? maskEmail(email) : '',
     };
   });
 }
