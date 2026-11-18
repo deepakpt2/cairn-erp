@@ -199,27 +199,27 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
-      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm">
-        <header className="flex min-h-16 items-center gap-2 border-b border-[#9eb6c8] bg-[#c9dce9] px-3 py-2 text-[#28445b] sm:gap-3 sm:px-4">
-          <Link href="/config" aria-label={t('nav.workbench')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#b5cddd] text-xl hover:bg-[#a9c3d5] sm:h-9 sm:w-9">‹</Link>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#2d708b] font-bold tracking-tight text-white shadow-sm sm:h-8 sm:w-8" aria-label={t('app.name')}>C</span>
+      <section className="overflow-hidden border border-line-strong bg-white shadow-sm">
+        <header className="flex min-h-16 items-center gap-2 border-b border-line-strong bg-sunken px-3 py-2 text-ink sm:gap-3 sm:px-4">
+          <Link href="/config" aria-label={t('nav.workbench')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-line text-xl hover:bg-line-strong sm:h-9 sm:w-9">‹</Link>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent font-bold tracking-tight text-white shadow-sm sm:h-8 sm:w-8" aria-label={t('app.name')}>C</span>
           <h1 className="min-w-0 flex-1 text-center text-sm font-semibold leading-tight sm:text-base">{t('salesOrg.screenTitle')}</h1>
-          <Link href="/config" className="hidden shrink-0 text-xs text-[#28445b] underline sm:inline">{t('nav.workbench')}</Link>
+          <Link href="/config" className="hidden shrink-0 text-xs text-ink underline sm:inline">{t('nav.workbench')}</Link>
         </header>
-        <div className="flex flex-wrap items-center gap-2 border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:py-2">
-          {canMaintain && <Link href="/config/sales-orgs?new=1" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesOrg.newEntries')}</Link>}
-          {canAssignCompany && <Link href="/config/sales-orgs/assign-company" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesOrg.assignCompanyCode')}</Link>}
-          {canAssignDistributionChannel && <Link href="/config/sales-orgs/assign-distribution-channel" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesOrgChannel.navLink')}</Link>}
-          {canAssignDivision && <Link href="/config/sales-orgs/assign-division" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesOrgDivision.navLink')}</Link>}
-          {canDefineSalesArea && <Link href="/config/sales-areas" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesArea.navLink')}</Link>}
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-sunken px-3 py-3 sm:py-2">
+          {canMaintain && <Link href="/config/sales-orgs?new=1" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">{t('salesOrg.newEntries')}</Link>}
+          {canAssignCompany && <Link href="/config/sales-orgs/assign-company" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">{t('salesOrg.assignCompanyCode')}</Link>}
+          {canAssignDistributionChannel && <Link href="/config/sales-orgs/assign-distribution-channel" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">{t('salesOrgChannel.navLink')}</Link>}
+          {canAssignDivision && <Link href="/config/sales-orgs/assign-division" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">{t('salesOrgDivision.navLink')}</Link>}
+          {canDefineSalesArea && <Link href="/config/sales-areas" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">{t('salesArea.navLink')}</Link>}
           <form action="/config/sales-orgs" className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
             <input className="field-input h-11 min-w-0 flex-1 sm:h-8 sm:w-52 sm:flex-none" name="q" defaultValue={params.q ?? ''} placeholder={t('salesOrg.findPlaceholder')} aria-label={t('salesOrg.findPlaceholder')} />
             <button type="submit" className="btn btn-default h-11 shrink-0 sm:h-8">{t('salesOrg.find')}</button>
           </form>
         </div>
-        <div className="border-b border-[#cbd5de] px-4 py-3 text-sm font-semibold text-[#334f65]">{t('salesOrg.tableHeading')}</div>
-        {!canMaintain && <p role="status" className="border-b border-[#cbd5de] px-4 py-2 text-sm text-ink-soft">{t('auth.readOnly', { authority: SALES_ORG_DEFINE })}</p>}
-        <div className="divide-y divide-[#d6dce1] sm:hidden" role="list" aria-label={t('salesOrg.tableHeading')}>
+        <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{t('salesOrg.tableHeading')}</div>
+        {!canMaintain && <p role="status" className="border-b border-line px-4 py-2 text-sm text-ink-soft">{t('auth.readOnly', { authority: SALES_ORG_DEFINE })}</p>}
+        <div className="divide-y divide-line sm:hidden" role="list" aria-label={t('salesOrg.tableHeading')}>
           {visibleOrganisations.map((item) => (
             <article key={item.salesOrg} role="listitem" className="p-3">
               <div className="flex items-start justify-between gap-3">
@@ -228,11 +228,11 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
                     <Link className="font-mono font-semibold text-accent underline" href={detailHref(item.salesOrg.trim())}>{item.salesOrg.trim()}</Link>
                     <span className={`chip ${item.isActive ? 'chip-ok' : 'chip-neutral'}`}>{t(item.isActive ? 'salesOrg.active' : 'salesOrg.inactive')}</span>
                   </div>
-                  <p className="mt-1 break-words text-sm font-medium text-[#263b4d]">{item.displayName}</p>
+                  <p className="mt-1 break-words text-sm font-medium text-ink">{item.displayName}</p>
                 </div>
                 <div className="flex shrink-0 flex-col gap-2">
-                  <Link className="inline-flex min-h-11 items-center justify-center rounded border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd]" href={detailHref(item.salesOrg.trim())}>{t('salesOrg.open')}</Link>
-                  {canMaintain && item.isActive && <Link className="inline-flex min-h-11 items-center justify-center rounded border border-[#8faabd] bg-white px-3 text-sm text-[#264e6b] hover:bg-[#f8fbfd]" href={copyHref(item.salesOrg.trim())}>{t('salesOrg.copy')}</Link>}
+                  <Link className="inline-flex min-h-11 items-center justify-center rounded border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken" href={detailHref(item.salesOrg.trim())}>{t('salesOrg.open')}</Link>
+                  {canMaintain && item.isActive && <Link className="inline-flex min-h-11 items-center justify-center rounded border border-line-strong bg-white px-3 text-sm text-accent hover:bg-sunken" href={copyHref(item.salesOrg.trim())}>{t('salesOrg.copy')}</Link>}
                 </div>
               </div>
             </article>
@@ -241,15 +241,15 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
         </div>
         <div className="hidden overflow-x-auto sm:block">
           <table className="grid-table border-collapse text-sm" aria-label={t('salesOrg.tableHeading')}>
-            <thead className="bg-[#eef1f4] text-[#33414c]"><tr className="border-y border-[#c4ccd2]">
-              <th className="w-36 border-r border-[#cbd1d6] text-left">{t('salesOrg.codeShort')}</th>
+            <thead className="bg-sunken text-ink"><tr className="border-y border-line-strong">
+              <th className="w-36 border-r border-line-strong text-left">{t('salesOrg.codeShort')}</th>
               <th className="text-left">{t('salesOrg.name')}</th>
               <th className="w-32 text-end">{t('common.actions')}</th>
             </tr></thead>
             <tbody>
               {visibleOrganisations.map((item) => (
-                <tr key={item.salesOrg} className="border-[#d6dce1] hover:bg-[#f8fbfd]">
-                  <td className="border-r border-[#e1e5e8] font-mono"><Link className="text-accent underline" href={detailHref(item.salesOrg.trim())}>{item.salesOrg.trim()}</Link>{!item.isActive && <span className="ms-2 text-xs text-ink-faint">{t('salesOrg.inactive')}</span>}</td>
+                <tr key={item.salesOrg} className="border-line hover:bg-sunken">
+                  <td className="border-r border-line font-mono"><Link className="text-accent underline" href={detailHref(item.salesOrg.trim())}>{item.salesOrg.trim()}</Link>{!item.isActive && <span className="ms-2 text-xs text-ink-faint">{t('salesOrg.inactive')}</span>}</td>
                   <td>{item.displayName}</td>
                   <td className="whitespace-nowrap text-end"><Link className="text-accent underline" href={detailHref(item.salesOrg.trim())}>{t('salesOrg.open')}</Link>{canMaintain && item.isActive && <Link className="ms-3 text-accent underline" href={copyHref(item.salesOrg.trim())}>{t('salesOrg.copy')}</Link>}</td>
                 </tr>
@@ -258,7 +258,7 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
             </tbody>
           </table>
         </div>
-        <div className="flex flex-col gap-1 border-t border-[#cbd5de] bg-[#f7f9fb] px-3 py-3 text-xs text-ink-soft sm:flex-row sm:items-center sm:justify-between sm:px-4">
+        <div className="flex flex-col gap-1 border-t border-line bg-sunken px-3 py-3 text-xs text-ink-soft sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <span>{t('salesOrg.retentionNote')}</span><span className="tabular">{visibleOrganisations.length}</span>
         </div>
       </section>

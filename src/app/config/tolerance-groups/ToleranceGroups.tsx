@@ -182,7 +182,7 @@ function ChangeDialog({ row }: { row: EmployeeToleranceGroupRow }) {
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {t('tolGroup.change')}
       </summary>
-      <div role="dialog" aria-modal="true" aria-label={`${t('tolGroup.change')} ${label}`} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+      <div role="dialog" aria-modal="true" aria-label={`${t('tolGroup.change')} ${label}`} className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
         <div className="mx-auto max-w-2xl">
           <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
             <div>

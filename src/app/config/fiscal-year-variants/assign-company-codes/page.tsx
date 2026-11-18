@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { and, asc, count, eq, inArray, max, min } from 'drizzle-orm';
 import { can, requireSession } from '@/platform/auth/current';
 import { withTenant } from '@/platform/db/client';
@@ -7,6 +6,7 @@ import { companyCode, controllingArea, controllingAreaCompany } from '@/modules/
 import { journalEntry } from '@/modules/finance/schema';
 import { listFiscalYearVariants } from '@/modules/foundation/fiscal-year-variant-maintenance';
 import { AssignCompanyCodesUI, type AssignableCompanyCode } from '../AssignCompanyCodesUI';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -127,35 +127,16 @@ export default async function AssignFiscalYearVariantPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
-      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm">
-        <header className="flex min-h-16 items-center gap-2 border-b border-[#9eb6c8] bg-[#c9dce9] px-3 py-2 text-[#28445b] sm:gap-3 sm:px-4">
-          <Link href="/config" aria-label={t('nav.workbench')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#b5cddd] text-xl font-bold text-[#28445b] sm:h-9 sm:w-9">
-            ⌂
-          </Link>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#2d708b] font-bold tracking-tight text-white shadow-sm sm:h-8 sm:w-8">
-            FY
-          </span>
-          <div className="min-w-0 flex-1 text-center">
-            <span className="code text-2xs text-[#3e6078]">{ACTIVITY} · OB37</span>
-            <h1 className="text-sm font-semibold leading-tight sm:text-base">{t('fyvAssignment.pageTitle')}</h1>
-          </div>
-        </header>
-        <nav aria-label={t('nav.workbench')} className="flex flex-wrap items-center gap-2 border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:px-4 sm:py-2">
-          <Link href="/config" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#e4edf3] sm:min-h-9">
-            {t('nav.workbench')}
-          </Link>
-          <Link href="/config/fiscal-year-variants" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#e4edf3] sm:min-h-9">
-            {t('fyvAssignment.backToVariants')}
-          </Link>
-          <Link href="/config/company-codes" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#e4edf3] sm:min-h-9">
-            {t('fyvAssignment.companyCodesLink')}
-          </Link>
-        </nav>
-        <p className="border-b border-[#cbd5de] px-3 py-3 text-sm text-[#435b6d] sm:px-4">
-          {t('fyvAssignment.pageSubtitle')}
-        </p>
-      </section>
+    <Page
+      title={t('fyvAssignment.pageTitle')} code={<>{ACTIVITY} · OB37</>} back={{ href: '/config', label: t('nav.workbench') }}
+      description={t('fyvAssignment.pageSubtitle')}
+      actions={
+        <>
+          <LinkButton href="/config/fiscal-year-variants">{t('fyvAssignment.backToVariants')}</LinkButton>
+          <LinkButton href="/config/company-codes">{t('fyvAssignment.companyCodesLink')}</LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm text-ink-soft">
@@ -164,6 +145,6 @@ export default async function AssignFiscalYearVariantPage() {
       )}
 
       <AssignCompanyCodesUI companyCodes={companyCodes} variants={variants} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

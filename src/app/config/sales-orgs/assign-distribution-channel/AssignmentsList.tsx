@@ -37,9 +37,9 @@ export function SalesOrgDistributionChannelAssignmentsList({
   );
 
   return (
-    <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="ovxk-assignment-list-title">
-      <div className="flex items-center gap-2 border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:px-4">
-        <h2 id="ovxk-assignment-list-title" className="min-w-0 flex-1 text-sm font-semibold text-[#334f65]">
+    <section className="overflow-hidden border border-line-strong bg-white shadow-sm" aria-labelledby="ovxk-assignment-list-title">
+      <div className="flex items-center gap-2 border-b border-line bg-sunken px-3 py-3 sm:px-4">
+        <h2 id="ovxk-assignment-list-title" className="min-w-0 flex-1 text-sm font-semibold text-ink">
           {t('salesOrgChannel.assignmentListTitle')}
         </h2>
         <span className="code text-xs text-ink-faint tabular">{assignments.length}</span>
@@ -49,7 +49,7 @@ export function SalesOrgDistributionChannelAssignmentsList({
         <div
           role={state.ok ? 'status' : 'alert'}
           className={`border-b px-3 py-3 text-sm sm:px-4 ${state.ok
-            ? 'border-[#a8c9b1] bg-[#f3faf4] text-[#285d37]'
+            ? 'border-signal-ok/40 bg-signal-ok-soft text-signal-ok'
             : 'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}
         >
           <p>{state.message}</p>
@@ -61,12 +61,12 @@ export function SalesOrgDistributionChannelAssignmentsList({
         <p className="p-4 text-sm text-ink-soft">{t('salesOrgChannel.assignmentListEmpty')}</p>
       ) : (
         <>
-          <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b border-[#cbd5de] bg-[#f7f9fa] px-4 py-2 text-xs font-semibold text-[#52697a] sm:grid">
+          <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b border-line bg-sunken px-4 py-2 text-xs font-semibold text-ink-soft sm:grid">
             <span>{t('salesOrgChannel.salesOrgField')}</span>
             <span>{t('salesOrgChannel.distributionChannelField')}</span>
             <span>{t('common.actions')}</span>
           </div>
-          <ul className="divide-y divide-[#d6dce1]" aria-label={t('salesOrgChannel.assignmentListTitle')}>
+          <ul className="divide-y divide-line" aria-label={t('salesOrgChannel.assignmentListTitle')}>
             {assignments.map((item) => {
               const pair = `${item.salesOrg}/${item.distributionChannel}`;
               const confirming = confirmationFor === pair;
@@ -80,7 +80,7 @@ export function SalesOrgDistributionChannelAssignmentsList({
                         {t(item.salesOrgActive ? 'salesOrg.active' : 'salesOrg.inactive')}
                       </span>
                     </div>
-                    <p className="mt-1 break-words text-sm text-[#263b4d]">{item.salesOrgName}</p>
+                    <p className="mt-1 break-words text-sm text-ink">{item.salesOrgName}</p>
                   </div>
 
                   <div className="min-w-0">
@@ -91,7 +91,7 @@ export function SalesOrgDistributionChannelAssignmentsList({
                         {t(item.distributionChannelActive ? 'salesOrg.active' : 'salesOrg.inactive')}
                       </span>
                     </div>
-                    <p className="mt-1 break-words text-sm text-[#263b4d]">{item.distributionChannelName}</p>
+                    <p className="mt-1 break-words text-sm text-ink">{item.distributionChannelName}</p>
                   </div>
 
                   <div className="sm:text-end">
@@ -129,7 +129,7 @@ export function SalesOrgDistributionChannelAssignmentsList({
                         ) : (
                           <button
                             type="button"
-                            className="inline-flex min-h-11 items-center justify-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f4f8fa] disabled:opacity-50 sm:min-h-9"
+                            className="inline-flex min-h-11 items-center justify-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken disabled:opacity-50 sm:min-h-9"
                             onClick={() => setConfirmationFor(pair)}
                             disabled={pending}
                           >
@@ -146,7 +146,7 @@ export function SalesOrgDistributionChannelAssignmentsList({
         </>
       )}
 
-      <div className="border-t border-[#cbd5de] bg-[#f7f9fa] px-3 py-3 text-xs text-ink-soft sm:px-4">
+      <div className="border-t border-line bg-sunken px-3 py-3 text-xs text-ink-soft sm:px-4">
         {t('salesOrgChannel.listRule')}
       </div>
     </section>

@@ -296,7 +296,7 @@ function GroupChangeDialog({
         role="dialog"
         aria-modal="true"
         aria-label={`${t('chartOfAccounts.groupChangeTitle')} ${entry.groupChartOfAccounts}`}
-        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
+        className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6"
       >
         <div className="mx-auto max-w-3xl">
           <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">

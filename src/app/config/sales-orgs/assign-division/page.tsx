@@ -72,36 +72,36 @@ export default async function AssignDivisionPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
-      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm">
-        <header className="flex min-h-16 items-center gap-2 border-b border-[#9eb6c8] bg-[#c9dce9] px-3 py-2 text-[#28445b] sm:gap-3 sm:px-4">
-          <Link href="/config" aria-label={t('nav.workbench')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#b5cddd] text-xl hover:bg-[#a9c3d5] sm:h-9 sm:w-9">‹</Link>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#2d708b] font-bold tracking-tight text-white shadow-sm sm:h-8 sm:w-8" aria-label={t('app.name')}>C</span>
+      <section className="overflow-hidden border border-line-strong bg-white shadow-sm">
+        <header className="flex min-h-16 items-center gap-2 border-b border-line-strong bg-sunken px-3 py-2 text-ink sm:gap-3 sm:px-4">
+          <Link href="/config" aria-label={t('nav.workbench')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-line text-xl hover:bg-line-strong sm:h-9 sm:w-9">‹</Link>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent font-bold tracking-tight text-white shadow-sm sm:h-8 sm:w-8" aria-label={t('app.name')}>C</span>
           <div className="min-w-0 flex-1 text-center">
-            <span className="code text-2xs text-[#3e6078]">{ACTIVITY} · OVXA</span>
+            <span className="code text-2xs text-ink-soft">{ACTIVITY} · OVXA</span>
             <h1 className="text-sm font-semibold leading-tight sm:text-base">{t('salesOrgDivision.title')}</h1>
           </div>
-          <Link href="/config/sales-orgs" className="hidden shrink-0 text-xs text-[#28445b] underline sm:inline">
+          <Link href="/config/sales-orgs" className="hidden shrink-0 text-xs text-ink underline sm:inline">
             {t('salesOrg.backToDefinitions')}
           </Link>
         </header>
-        <div className="flex flex-wrap items-center gap-2 border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:py-2">
-          <Link href="/config" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-sunken px-3 py-3 sm:py-2">
+          <Link href="/config" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">
             {t('nav.workbench')}
           </Link>
-          <Link href="/config/sales-orgs" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">
+          <Link href="/config/sales-orgs" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">
             {t('salesOrg.backToDefinitions')}
           </Link>
-          <Link href="/config/divisions" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">
+          <Link href="/config/divisions" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">
             {t('division.title')}
           </Link>
-          {canDefineSalesArea && <Link href="/config/sales-areas" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesArea.navLink')}</Link>}
+          {canDefineSalesArea && <Link href="/config/sales-areas" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">{t('salesArea.navLink')}</Link>}
         </div>
-        <p className="border-b border-[#cbd5de] px-3 py-3 text-sm text-[#435b6d] sm:px-4">{t('salesOrgDivision.subtitle')}</p>
-        <p className="border-b border-[#cbd5de] bg-[#f7f9fa] px-3 py-2 text-xs text-ink-soft sm:px-4">{t('salesOrgDivision.assignmentRule')}</p>
+        <p className="border-b border-line px-3 py-3 text-sm text-ink-soft sm:px-4">{t('salesOrgDivision.subtitle')}</p>
+        <p className="border-b border-line bg-sunken px-3 py-2 text-xs text-ink-soft sm:px-4">{t('salesOrgDivision.assignmentRule')}</p>
       </section>
 
       {!canMaintain && (
-        <p role="status" className="border border-[#d6dce1] bg-white p-3 text-sm text-ink-soft">
+        <p role="status" className="border border-line bg-white p-3 text-sm text-ink-soft">
           {t('auth.readOnly', { authority: ACTIVITY })}
         </p>
       )}

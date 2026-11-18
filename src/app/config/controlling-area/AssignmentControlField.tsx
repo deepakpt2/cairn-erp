@@ -39,7 +39,7 @@ export function AssignmentControlField({
       {singleDisabled && (
         <p role="status" className="mt-2 text-xs text-signal-warn">{t('controllingArea.singleScopeBlocked')}</p>
       )}
-      <div id={`${id}-control-copy`} className="mt-3 space-y-3 border border-line bg-[#f7f9fa] p-3 text-sm text-ink-soft sm:p-4">
+      <div id={`${id}-control-copy`} className="mt-3 space-y-3 border border-line bg-sunken p-3 text-sm text-ink-soft sm:p-4">
         <h3 className="font-semibold text-ink">{t('controllingArea.scopeHeading')}</h3>
         <p>{t('controllingArea.scopeDescription')}</p>
         <ul className="list-disc space-y-2 ps-5">

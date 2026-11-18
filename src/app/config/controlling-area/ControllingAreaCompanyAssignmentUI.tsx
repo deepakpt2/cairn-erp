@@ -66,16 +66,16 @@ export function ControllingAreaCompanyAssignmentUI({
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="assign-company-code-form-title">
-        <header className="border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:px-4">
-          <h2 id="assign-company-code-form-title" className="text-base font-semibold text-[#334f65]">
+      <section className="overflow-hidden border border-line-strong bg-white shadow-sm" aria-labelledby="assign-company-code-form-title">
+        <header className="border-b border-line bg-sunken px-3 py-3 sm:px-4">
+          <h2 id="assign-company-code-form-title" className="text-base font-semibold text-ink">
             {t('controllingArea.assignmentFormTitle')}
           </h2>
           <p className="mt-1 text-sm text-ink-soft">{t('controllingArea.assignmentFormHint')}</p>
         </header>
 
         {!canMaintain && (
-          <p role="status" className="border-b border-[#d6dce1] bg-[#f7f9fa] px-3 py-3 text-sm text-ink-soft sm:px-4">
+          <p role="status" className="border-b border-line bg-sunken px-3 py-3 text-sm text-ink-soft sm:px-4">
             {t('controllingArea.assignmentPermissionRequired')}
           </p>
         )}
@@ -84,7 +84,7 @@ export function ControllingAreaCompanyAssignmentUI({
           <div
             role={assignmentState.ok ? 'status' : 'alert'}
             className={`mx-3 mt-3 border p-3 text-sm ${assignmentState.ok
-              ? 'border-[#a8c9b1] bg-[#f3faf4] text-[#285d37]'
+              ? 'border-signal-ok/40 bg-signal-ok-soft text-signal-ok'
               : 'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}
           >
             <p>{assignmentState.message}</p>
@@ -127,11 +127,11 @@ export function ControllingAreaCompanyAssignmentUI({
             />
           </div>
 
-          <p className="border-s-2 border-[#8faabd] bg-[#f7f9fa] px-3 py-2 text-xs text-[#435b6d]">
+          <p className="border-s-2 border-line-strong bg-sunken px-3 py-2 text-xs text-ink-soft">
             {t('controllingArea.assignmentCompatibilityRule')}
           </p>
 
-          <div className="flex flex-col gap-3 border-t border-[#d6dce1] pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-ink-soft">{t('controllingArea.assignmentActionsPending')}</p>
             <button
               type="submit"
@@ -148,9 +148,9 @@ export function ControllingAreaCompanyAssignmentUI({
         </form>
       </section>
 
-      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="assign-company-code-current-assignments-title">
-        <div className="flex items-center gap-2 border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:px-4">
-          <h2 id="assign-company-code-current-assignments-title" className="min-w-0 flex-1 text-sm font-semibold text-[#334f65]">
+      <section className="overflow-hidden border border-line-strong bg-white shadow-sm" aria-labelledby="assign-company-code-current-assignments-title">
+        <div className="flex items-center gap-2 border-b border-line bg-sunken px-3 py-3 sm:px-4">
+          <h2 id="assign-company-code-current-assignments-title" className="min-w-0 flex-1 text-sm font-semibold text-ink">
             {t('controllingArea.assignmentListTitle')}
           </h2>
           <span className="code text-xs tabular text-ink-faint">{assignments.length}</span>
@@ -160,7 +160,7 @@ export function ControllingAreaCompanyAssignmentUI({
           <div
             role={unassignmentState.ok ? 'status' : 'alert'}
             className={`border-b px-3 py-3 text-sm sm:px-4 ${unassignmentState.ok
-              ? 'border-[#a8c9b1] bg-[#f3faf4] text-[#285d37]'
+              ? 'border-signal-ok/40 bg-signal-ok-soft text-signal-ok'
               : 'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}
           >
             <p>{unassignmentState.message}</p>
@@ -172,7 +172,7 @@ export function ControllingAreaCompanyAssignmentUI({
           <p role="status" className="p-4 text-sm text-ink-soft">{t('controllingArea.assignmentListEmpty')}</p>
         ) : (
           <>
-            <div className="divide-y divide-[#d6dce1] sm:hidden" role="list" aria-label={t('controllingArea.assignmentListTitle')}>
+            <div className="divide-y divide-line sm:hidden" role="list" aria-label={t('controllingArea.assignmentListTitle')}>
               {assignments.map((item) => (
                 <article key={`${item.controllingArea}/${item.companyCode}`} role="listitem" className="space-y-3 p-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -186,8 +186,8 @@ export function ControllingAreaCompanyAssignmentUI({
                       {t(item.companyCodeScope === 'MULTIPLE' ? 'controllingArea.assignmentScopeMultiple' : 'controllingArea.assignmentScopeSingle')}
                     </span>
                   </div>
-                  <p className="break-words text-sm text-[#263b4d]">{item.controllingAreaName || t('controllingArea.assignmentUnknownArea')}</p>
-                  <div className="border-s-2 border-[#d6dce1] ps-3">
+                  <p className="break-words text-sm text-ink">{item.controllingAreaName || t('controllingArea.assignmentUnknownArea')}</p>
+                  <div className="border-s-2 border-line ps-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="code font-semibold">{item.companyCode}</span>
                       {item.companyCodeIsActive !== null && (
@@ -196,7 +196,7 @@ export function ControllingAreaCompanyAssignmentUI({
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 break-words text-sm text-[#263b4d]">{item.companyCodeName || t('controllingArea.assignmentUnknownCompanyCode')}</p>
+                    <p className="mt-1 break-words text-sm text-ink">{item.companyCodeName || t('controllingArea.assignmentUnknownCompanyCode')}</p>
                     <dl className="mt-2 grid grid-cols-1 gap-y-1 text-xs text-ink-soft">
                       <div className="flex flex-wrap gap-x-2">
                         <dt>{t('controllingArea.assignmentOperationalChart')}:</dt>
@@ -212,7 +212,7 @@ export function ControllingAreaCompanyAssignmentUI({
                       </div>
                     </dl>
                   </div>
-                  <div className="flex justify-end border-t border-[#e1e5e8] pt-2">
+                  <div className="flex justify-end border-t border-line pt-2">
                     <UnassignPair
                       controllingArea={item.controllingArea}
                       companyCode={item.companyCode}
@@ -228,11 +228,11 @@ export function ControllingAreaCompanyAssignmentUI({
 
             <div className="hidden overflow-x-auto sm:block">
               <table className="grid-table min-w-[57.5rem] border-collapse text-sm" aria-label={t('controllingArea.assignmentListTitle')}>
-                <thead className="bg-[#eef1f4] text-[#33414c]">
-                  <tr className="border-y border-[#c4ccd2]">
-                    <th className="w-36 border-r border-[#cbd1d6] text-left">{t('controllingArea.code')}</th>
+                <thead className="bg-sunken text-ink">
+                  <tr className="border-y border-line-strong">
+                    <th className="w-36 border-r border-line-strong text-left">{t('controllingArea.code')}</th>
                     <th className="w-44 text-left">{t('controllingArea.assignmentControl')}</th>
-                    <th className="w-36 border-r border-[#cbd1d6] text-left">{t('cc.code')}</th>
+                    <th className="w-36 border-r border-line-strong text-left">{t('cc.code')}</th>
                     <th className="min-w-48 text-left">{t('controllingArea.assignmentOperationalChart')}</th>
                     <th className="w-40 text-left">{t('controllingArea.fiscalYearVariant')}</th>
                     <th className="w-36 text-left">{t('controllingArea.assignmentCurrency')}</th>
@@ -241,13 +241,13 @@ export function ControllingAreaCompanyAssignmentUI({
                 </thead>
                 <tbody>
                   {assignments.map((item) => (
-                    <tr key={`${item.controllingArea}/${item.companyCode}`} className="border-[#d6dce1] hover:bg-[#f8fbfd]">
-                      <td className="border-r border-[#e1e5e8]">
+                    <tr key={`${item.controllingArea}/${item.companyCode}`} className="border-line hover:bg-sunken">
+                      <td className="border-r border-line">
                         <span className="code font-semibold">{item.controllingArea}</span>
                         <span className="mt-0.5 block text-xs text-ink-soft">{item.controllingAreaName || t('controllingArea.assignmentUnknownArea')}</span>
                       </td>
                       <td>{t(item.companyCodeScope === 'MULTIPLE' ? 'controllingArea.assignmentScopeMultiple' : 'controllingArea.assignmentScopeSingle')}</td>
-                      <td className="border-r border-[#e1e5e8]">
+                      <td className="border-r border-line">
                         <span className="code font-semibold">{item.companyCode}</span>
                         <span className="mt-0.5 block text-xs text-ink-soft">{item.companyCodeName || t('controllingArea.assignmentUnknownCompanyCode')}</span>
                       </td>

@@ -218,7 +218,7 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('exRate.change')}
         </summary>
-        <div role="dialog" aria-modal="true" aria-label={changeLabel} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+        <div role="dialog" aria-modal="true" aria-label={changeLabel} className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={changeLabel} sub={keyText} />
             <section className="panel overflow-hidden p-4">
@@ -279,7 +279,7 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('exRate.delete')}
         </summary>
-        <div role="dialog" aria-modal="true" aria-label={`${t('exRate.delete')} ${row.fromCurrency} → ${row.toCurrency}`} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+        <div role="dialog" aria-modal="true" aria-label={`${t('exRate.delete')} ${row.fromCurrency} → ${row.toCurrency}`} className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={t('exRate.delete')} sub={keyText} />
             <section className="panel overflow-hidden p-4">

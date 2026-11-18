@@ -55,9 +55,9 @@ export function SalesOrgDivisionAssignmentForm({
 
   return (
     <>
-      <section className="border border-[#cbd5de] bg-white p-3 sm:p-5" aria-labelledby="ovxa-form-title">
-        <div className="mb-4 border-b border-[#d6dce1] pb-3">
-          <h2 id="ovxa-form-title" className="text-base font-semibold text-[#334f65]">
+      <section className="border border-line bg-white p-3 sm:p-5" aria-labelledby="ovxa-form-title">
+        <div className="mb-4 border-b border-line pb-3">
+          <h2 id="ovxa-form-title" className="text-base font-semibold text-ink">
             {t('salesOrgDivision.formTitle')}
           </h2>
           <p className="mt-1 text-sm text-ink-soft">{t('salesOrgDivision.formHint')}</p>
@@ -67,7 +67,7 @@ export function SalesOrgDivisionAssignmentForm({
           <div
             role={state.ok ? 'status' : 'alert'}
             className={`mb-4 border p-3 text-sm ${state.ok
-              ? 'border-[#a8c9b1] bg-[#f3faf4] text-[#285d37]'
+              ? 'border-signal-ok/40 bg-signal-ok-soft text-signal-ok'
               : 'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}
           >
             <p>{state.message}</p>
@@ -106,7 +106,7 @@ export function SalesOrgDivisionAssignmentForm({
                 />
                 <button
                   type="button"
-                  className="inline-flex min-h-11 min-w-12 items-center justify-center border border-[#8faabd] bg-[#eef3f7] px-3 font-mono text-sm font-semibold text-[#264e6b] hover:bg-[#e3edf4] disabled:opacity-50 sm:min-h-9"
+                  className="inline-flex min-h-11 min-w-12 items-center justify-center border border-line-strong bg-sunken px-3 font-mono text-sm font-semibold text-accent hover:bg-sunken disabled:opacity-50 sm:min-h-9"
                   aria-label={t('salesOrgDivision.openSalesOrgHelp')}
                   title={t('salesOrgDivision.openSalesOrgHelp')}
                   onClick={() => openHelp('salesOrg')}
@@ -147,7 +147,7 @@ export function SalesOrgDivisionAssignmentForm({
                 />
                 <button
                   type="button"
-                  className="inline-flex min-h-11 min-w-12 items-center justify-center border border-[#8faabd] bg-[#eef3f7] px-3 font-mono text-sm font-semibold text-[#264e6b] hover:bg-[#e3edf4] disabled:opacity-50 sm:min-h-9"
+                  className="inline-flex min-h-11 min-w-12 items-center justify-center border border-line-strong bg-sunken px-3 font-mono text-sm font-semibold text-accent hover:bg-sunken disabled:opacity-50 sm:min-h-9"
                   aria-label={t('salesOrgDivision.openDivisionHelp')}
                   title={t('salesOrgDivision.openDivisionHelp')}
                   onClick={() => openHelp('division')}
@@ -160,7 +160,7 @@ export function SalesOrgDivisionAssignmentForm({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-[#d6dce1] pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="max-w-2xl text-xs text-ink-soft">{t('salesOrgDivision.assignmentRule')}</p>
             <button
               type="submit"
@@ -182,24 +182,24 @@ export function SalesOrgDivisionAssignmentForm({
             role="dialog"
             aria-modal="true"
             aria-labelledby="ovxa-value-help-title"
-            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto border border-[#8faabd] bg-white shadow-xl"
+            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto border border-line-strong bg-white shadow-xl"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
               if (event.key === 'Escape') setHelpField(null);
             }}
           >
-            <header className="flex items-center gap-3 border-b border-[#9eb6c8] bg-[#c9dce9] px-4 py-3 text-[#28445b]">
+            <header className="flex items-center gap-3 border-b border-line-strong bg-sunken px-4 py-3 text-ink">
               <h2 id="ovxa-value-help-title" className="min-w-0 flex-1 font-semibold">{helpTitle}</h2>
               <button
                 type="button"
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center border border-[#8faabd] bg-white text-lg hover:bg-[#eef3f7] sm:h-9 sm:w-9"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center border border-line-strong bg-white text-lg hover:bg-sunken sm:h-9 sm:w-9"
                 aria-label={t('common.close')}
                 onClick={() => setHelpField(null)}
               >
                 ×
               </button>
             </header>
-            <div className="border-b border-[#d6dce1] bg-[#eef3f7] p-3">
+            <div className="border-b border-line bg-sunken p-3">
               <label htmlFor="ovxa-value-help-search" className="field-label">{t('salesOrgDivision.valueHelpSearch')}</label>
               <input
                 id="ovxa-value-help-search"
@@ -212,12 +212,12 @@ export function SalesOrgDivisionAssignmentForm({
             </div>
             {helpField === 'salesOrg' ? (
               visibleSalesOrganizations.length ? (
-                <ul className="divide-y divide-[#d6dce1]">
+                <ul className="divide-y divide-line">
                   {visibleSalesOrganizations.map((item) => (
                     <li key={item.code}>
                       <button
                         type="button"
-                        className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-[#f4f8fa]"
+                        className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-sunken"
                         onClick={() => chooseValue(item.code)}
                       >
                         <span className="code w-20 shrink-0 font-semibold">{item.code}</span>
@@ -231,12 +231,12 @@ export function SalesOrgDivisionAssignmentForm({
               )
             ) : (
               visibleDivisions.length ? (
-                <ul className="divide-y divide-[#d6dce1]">
+                <ul className="divide-y divide-line">
                   {visibleDivisions.map((item) => (
                     <li key={item.code}>
                       <button
                         type="button"
-                        className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-[#f4f8fa]"
+                        className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-sunken"
                         onClick={() => chooseValue(item.code)}
                       >
                         <span className="code w-20 shrink-0 font-semibold">{item.code}</span>
@@ -249,7 +249,7 @@ export function SalesOrgDivisionAssignmentForm({
                 <p role="status" className="p-5 text-center text-sm text-ink-soft">{t('salesOrgDivision.divisionLookupEmpty')}</p>
               )
             )}
-            <footer className="flex justify-end border-t border-[#d6dce1] p-3">
+            <footer className="flex justify-end border-t border-line p-3">
               <button type="button" className="btn btn-default min-h-11 sm:min-h-9" onClick={() => setHelpField(null)}>
                 {t('common.cancel')}
               </button>

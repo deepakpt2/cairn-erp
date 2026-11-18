@@ -108,7 +108,7 @@ function ChartChangeDialog({
   return (
     <details className="min-w-44" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">{t('chartOfAccounts.changeSettings')}</summary>
-      <div role="dialog" aria-modal="true" aria-label={`${t('chartOfAccounts.changeTitle')} ${chart.chartOfAccounts}`} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+      <div role="dialog" aria-modal="true" aria-label={`${t('chartOfAccounts.changeTitle')} ${chart.chartOfAccounts}`} className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
         <div className="mx-auto max-w-5xl">
           <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
             <div><span className="code text-xs text-ink-faint">OB13 · {chart.chartOfAccounts}</span><p className="font-semibold">{t('chartOfAccounts.changeTitle')}</p></div>

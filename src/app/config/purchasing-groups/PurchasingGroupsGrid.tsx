@@ -246,64 +246,64 @@ export function PurchasingGroupsGrid({
   }
 
   return (
-    <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm">
-      <div className="flex min-h-16 items-center gap-3 border-b border-[#9eb6c8] bg-[#c9dce9] px-4 py-2 text-[#28445b]">
-        <Link href="/config" aria-label={t('nav.workbench')} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#b5cddd] text-xl hover:bg-[#a9c3d5]">
+    <section className="overflow-hidden border border-line-strong bg-white shadow-sm">
+      <div className="flex min-h-16 items-center gap-3 border-b border-line-strong bg-sunken px-4 py-2 text-ink">
+        <Link href="/config" aria-label={t('nav.workbench')} className="flex h-9 w-9 items-center justify-center rounded-full bg-line text-xl hover:bg-line-strong">
           ‹
         </Link>
-        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#2d708b] font-bold tracking-tight text-white shadow-sm" aria-label={t('app.name')}>
+        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent font-bold tracking-tight text-white shadow-sm" aria-label={t('app.name')}>
           C
         </span>
         <h1 className="flex-1 text-center text-base font-semibold">{t('purchasingGroup.screenTitle')}</h1>
-        <Link href="/config" className="hidden text-xs text-[#28445b] underline sm:inline">{t('nav.workbench')}</Link>
+        <Link href="/config" className="hidden text-xs text-ink underline sm:inline">{t('nav.workbench')}</Link>
       </div>
 
       <form action={action}>
         <input type="hidden" name="changes" value={JSON.stringify(pendingChanges)} />
         <input type="hidden" name="reason" value="" />
         {lockedCodes.map((code) => <GroupLock key={code} code={code} onMode={reportLock} />)}
-        <div className="flex flex-wrap items-center gap-1 border-b border-[#cbd5de] bg-[#eef3f7] px-2 py-2 text-sm">
-          <select aria-label={t('purchasingGroup.view')} className="h-8 w-56 border border-[#aabac6] bg-white px-2 text-xs" value="overview" disabled>
+        <div className="flex flex-wrap items-center gap-1 border-b border-line bg-sunken px-2 py-2 text-sm">
+          <select aria-label={t('purchasingGroup.view')} className="h-8 w-56 border border-line-strong bg-white px-2 text-xs" value="overview" disabled>
             <option value="overview"></option>
           </select>
           {canMaintain && (
             <>
-              <button type="button" className="h-8 border border-transparent px-3 font-medium text-[#264e6b] hover:border-[#aabac6] hover:bg-white" onClick={addEntry}>
+              <button type="button" className="h-8 border border-transparent px-3 font-medium text-accent hover:border-line-strong hover:bg-white" onClick={addEntry}>
                 {t('purchasingGroup.newEntries')}
               </button>
-              <button type="button" className="h-8 w-9 border border-transparent text-lg text-[#31566f] hover:border-[#aabac6] hover:bg-white disabled:opacity-40" title={t('purchasingGroup.copy')} aria-label={t('purchasingGroup.copy')} onClick={copySelected} disabled={!canCopy}>
+              <button type="button" className="h-8 w-9 border border-transparent text-lg text-accent hover:border-line-strong hover:bg-white disabled:opacity-40" title={t('purchasingGroup.copy')} aria-label={t('purchasingGroup.copy')} onClick={copySelected} disabled={!canCopy}>
                 ▣
               </button>
-              <button type="button" className="h-8 w-9 border border-transparent text-lg text-[#31566f] hover:border-[#aabac6] hover:bg-white disabled:opacity-40" title={t('purchasingGroup.delete')} aria-label={t('purchasingGroup.delete')} onClick={deleteSelected} disabled={!canDelete}>
+              <button type="button" className="h-8 w-9 border border-transparent text-lg text-accent hover:border-line-strong hover:bg-white disabled:opacity-40" title={t('purchasingGroup.delete')} aria-label={t('purchasingGroup.delete')} onClick={deleteSelected} disabled={!canDelete}>
                 ⊖
               </button>
-              <button type="button" className="h-8 w-9 border border-transparent text-lg text-[#31566f] hover:border-[#aabac6] hover:bg-white disabled:opacity-40" title={t('purchasingGroup.undo')} aria-label={t('purchasingGroup.undo')} onClick={undoChanges} disabled={!hasUnsavedChanges}>
+              <button type="button" className="h-8 w-9 border border-transparent text-lg text-accent hover:border-line-strong hover:bg-white disabled:opacity-40" title={t('purchasingGroup.undo')} aria-label={t('purchasingGroup.undo')} onClick={undoChanges} disabled={!hasUnsavedChanges}>
                 ↶
               </button>
-              <button type="button" className="h-8 w-9 border border-transparent text-sm text-[#31566f] hover:border-[#aabac6] hover:bg-white disabled:opacity-40" title={t('purchasingGroup.selectAll')} aria-label={t('purchasingGroup.selectAll')} onClick={selectAllVisible} disabled={!visibleRows.some((row) => !row.deleted)}>
+              <button type="button" className="h-8 w-9 border border-transparent text-sm text-accent hover:border-line-strong hover:bg-white disabled:opacity-40" title={t('purchasingGroup.selectAll')} aria-label={t('purchasingGroup.selectAll')} onClick={selectAllVisible} disabled={!visibleRows.some((row) => !row.deleted)}>
                 ▦
               </button>
-              <button type="button" className="h-8 w-9 border border-transparent text-sm text-[#31566f] hover:border-[#aabac6] hover:bg-white disabled:opacity-40" title={t('purchasingGroup.clearSelection')} aria-label={t('purchasingGroup.clearSelection')} onClick={clearSelection} disabled={!selectedRows.length}>
+              <button type="button" className="h-8 w-9 border border-transparent text-sm text-accent hover:border-line-strong hover:bg-white disabled:opacity-40" title={t('purchasingGroup.clearSelection')} aria-label={t('purchasingGroup.clearSelection')} onClick={clearSelection} disabled={!selectedRows.length}>
                 ▧
               </button>
-              <button type="button" className="h-8 w-9 border border-transparent text-lg text-[#31566f] hover:border-[#aabac6] hover:bg-white" title={t('purchasingGroup.find')} aria-label={t('purchasingGroup.find')} onClick={() => setSearchOpen((open) => !open)}>
+              <button type="button" className="h-8 w-9 border border-transparent text-lg text-accent hover:border-line-strong hover:bg-white" title={t('purchasingGroup.find')} aria-label={t('purchasingGroup.find')} onClick={() => setSearchOpen((open) => !open)}>
                 ⌕
               </button>
               {searchOpen && (
-                <input autoFocus className="h-8 w-52 border border-[#aabac6] bg-white px-2 text-xs outline-none focus:border-[#5388a8]" aria-label={t('purchasingGroup.searchPlaceholder')} placeholder={t('purchasingGroup.searchPlaceholder')} value={searchTerm} onChange={(event) => setSearchTerm(event.currentTarget.value)} />
+                <input autoFocus className="h-8 w-52 border border-line-strong bg-white px-2 text-xs outline-none focus:border-accent" aria-label={t('purchasingGroup.searchPlaceholder')} placeholder={t('purchasingGroup.searchPlaceholder')} value={searchTerm} onChange={(event) => setSearchTerm(event.currentTarget.value)} />
               )}
-              <button type="submit" className="h-8 border border-[#8faabd] bg-white px-3 font-medium text-[#264e6b] hover:bg-[#f8fbfd] disabled:opacity-50" disabled={pending || !hasUnsavedChanges || !locksHeld}>
+              <button type="submit" className="h-8 border border-line-strong bg-white px-3 font-medium text-accent hover:bg-sunken disabled:opacity-50" disabled={pending || !hasUnsavedChanges || !locksHeld}>
                 {pending ? t('common.saving') : t('purchasingGroup.save')}
               </button>
               <details className="relative ml-auto">
-                <summary className="flex h-8 cursor-pointer list-none items-center gap-1 border border-transparent px-3 text-[#264e6b] hover:border-[#aabac6] hover:bg-white">
+                <summary className="flex h-8 cursor-pointer list-none items-center gap-1 border border-transparent px-3 text-accent hover:border-line-strong hover:bg-white">
                   {t('purchasingGroup.more')} <span aria-hidden="true">⌄</span>
                 </summary>
-                <div className="absolute right-0 z-10 mt-1 min-w-48 border border-[#aabac6] bg-white p-1 shadow-lg">
-                  <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#eef3f7]" onClick={undoChanges} disabled={!hasUnsavedChanges}>
+                <div className="absolute right-0 z-10 mt-1 min-w-48 border border-line-strong bg-white p-1 shadow-lg">
+                  <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-sunken" onClick={undoChanges} disabled={!hasUnsavedChanges}>
                     {t('purchasingGroup.undo')}
                   </button>
-                  <button type="submit" className="w-full px-3 py-2 text-left text-sm hover:bg-[#eef3f7] disabled:opacity-50" disabled={pending || !hasUnsavedChanges || !locksHeld}>
+                  <button type="submit" className="w-full px-3 py-2 text-left text-sm hover:bg-sunken disabled:opacity-50" disabled={pending || !hasUnsavedChanges || !locksHeld}>
                     {t('purchasingGroup.save')}
                   </button>
                 </div>
@@ -319,32 +319,32 @@ export function PurchasingGroupsGrid({
           </div>
         )}
         {!canMaintain && (
-          <p role="status" className="border-b border-[#cbd5de] px-4 py-2 text-sm text-ink-soft">
+          <p role="status" className="border-b border-line px-4 py-2 text-sm text-ink-soft">
             {t('auth.readOnly', { authority: 'CFG.PROC.PURGROUP.DEFINE' })}
           </p>
         )}
 
-        <div className="border-b border-[#cbd5de] px-4 py-3 text-sm font-semibold text-[#334f65]">
+        <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
           {t('purchasingGroup.tableHeading')}
         </div>
         <div className="overflow-x-auto">
           <table className="grid-table min-w-[75rem] border-collapse text-sm" aria-label={t('purchasingGroup.tableHeading')}>
-            <thead className="bg-[#eef1f4] text-[#33414c]">
-              <tr className="border-y border-[#c4ccd2]">
+            <thead className="bg-sunken text-ink">
+              <tr className="border-y border-line-strong">
                 <th className="w-9" aria-label={t('purchasingGroup.select')} />
-                <th className="w-[3.25rem] min-w-[3.25rem] border-r border-[#cbd1d6] text-left"><span className="block w-[2rem] truncate" title={t('purchasingGroup.code')}>{t('purchasingGroup.code')}</span></th>
-                <th className="w-[10.5rem] min-w-[10.5rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.description')}</th>
-                <th className="w-[11.0625rem] min-w-[11.0625rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.telNoPurchGroup')}</th>
-                <th className="w-[12.1875rem] min-w-[12.1875rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.faxNumber')}</th>
-                <th className="w-[12.8125rem] min-w-[12.8125rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.telephone')}</th>
-                <th className="w-[9.25rem] min-w-[9.25rem] border-r border-[#cbd1d6] text-left">{t('purchasingGroup.extension')}</th>
+                <th className="w-[3.25rem] min-w-[3.25rem] border-r border-line-strong text-left"><span className="block w-[2rem] truncate" title={t('purchasingGroup.code')}>{t('purchasingGroup.code')}</span></th>
+                <th className="w-[10.5rem] min-w-[10.5rem] border-r border-line-strong text-left">{t('purchasingGroup.description')}</th>
+                <th className="w-[11.0625rem] min-w-[11.0625rem] border-r border-line-strong text-left">{t('purchasingGroup.telNoPurchGroup')}</th>
+                <th className="w-[12.1875rem] min-w-[12.1875rem] border-r border-line-strong text-left">{t('purchasingGroup.faxNumber')}</th>
+                <th className="w-[12.8125rem] min-w-[12.8125rem] border-r border-line-strong text-left">{t('purchasingGroup.telephone')}</th>
+                <th className="w-[9.25rem] min-w-[9.25rem] border-r border-line-strong text-left">{t('purchasingGroup.extension')}</th>
                 <th className="min-w-[13.75rem] text-left">{t('purchasingGroup.emailAddress')}</th>
               </tr>
             </thead>
             <tbody>
               {visibleRows.map((row) => (
-                <tr key={row.id} className={`border-b border-[#d6dce1] ${row.deleted ? 'bg-signal-error-soft text-slate-500 line-through' : 'hover:bg-[#f8fbfd]'}`}>
-                  <td className="border-r border-[#e1e5e8] text-center">
+                <tr key={row.id} className={`border-b border-line ${row.deleted ? 'bg-signal-error-soft text-slate-500 line-through' : 'hover:bg-sunken'}`}>
+                  <td className="border-r border-line text-center">
                     <input
                       type="checkbox"
                       aria-label={t('purchasingGroup.selectRow', { code: row.purchasingGroup || t('purchasingGroup.newRow') })}
@@ -353,9 +353,9 @@ export function PurchasingGroupsGrid({
                       onChange={(event) => updateRow(row.id, { selected: event.currentTarget.checked })}
                     />
                   </td>
-                  <td className="border-r border-[#e1e5e8]">
+                  <td className="border-r border-line">
                     <input
-                      className="w-full border-0 bg-transparent px-1 py-1 font-mono text-sm focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500"
+                      className="w-full border-0 bg-transparent px-1 py-1 font-mono text-sm focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500"
                       aria-label={t('purchasingGroup.code')}
                       value={row.purchasingGroup}
                       maxLength={3}
@@ -365,23 +365,23 @@ export function PurchasingGroupsGrid({
                       onChange={(event) => updateRow(row.id, { purchasingGroup: event.currentTarget.value.toUpperCase() })}
                     />
                   </td>
-                  <td className="border-r border-[#e1e5e8]">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.descriptionFull')} value={row.name} maxLength={120} required={!row.deleted} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { name: event.currentTarget.value })} />
+                  <td className="border-r border-line">
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.descriptionFull')} value={row.name} maxLength={120} required={!row.deleted} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { name: event.currentTarget.value })} />
                   </td>
-                  <td className="border-r border-[#e1e5e8]">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.telNoPurchGroup')} value={row.telNoPurchGroup} maxLength={12} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telNoPurchGroup: event.currentTarget.value })} />
+                  <td className="border-r border-line">
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.telNoPurchGroup')} value={row.telNoPurchGroup} maxLength={12} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telNoPurchGroup: event.currentTarget.value })} />
                   </td>
-                  <td className="border-r border-[#e1e5e8]">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.faxNumber')} value={row.faxNumber} maxLength={31} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { faxNumber: event.currentTarget.value })} />
+                  <td className="border-r border-line">
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.faxNumber')} value={row.faxNumber} maxLength={31} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { faxNumber: event.currentTarget.value })} />
                   </td>
-                  <td className="border-r border-[#e1e5e8]">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.telephone')} value={row.telephone} maxLength={30} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telephone: event.currentTarget.value })} />
+                  <td className="border-r border-line">
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.telephone')} value={row.telephone} maxLength={30} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telephone: event.currentTarget.value })} />
                   </td>
-                  <td className="border-r border-[#e1e5e8]">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.extension')} value={row.extension} maxLength={10} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { extension: event.currentTarget.value })} />
+                  <td className="border-r border-line">
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.extension')} value={row.extension} maxLength={10} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { extension: event.currentTarget.value })} />
                   </td>
                   <td>
-                    <input type="text" inputMode="email" className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7] disabled:text-slate-500" aria-label={t('purchasingGroup.emailAddress')} value={row.emailAddress} maxLength={241} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { emailAddress: event.currentTarget.value })} />
+                    <input type="text" inputMode="email" className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.emailAddress')} value={row.emailAddress} maxLength={241} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { emailAddress: event.currentTarget.value })} />
                   </td>
                 </tr>
               ))}
@@ -391,7 +391,7 @@ export function PurchasingGroupsGrid({
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#cbd5de] bg-[#f7f9fb] px-4 py-3 text-xs text-ink-soft">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line bg-sunken px-4 py-3 text-xs text-ink-soft">
           <span>{t('purchasingGroup.retentionNote')}</span>
           <span className="tabular">{rows.filter((row) => !row.deleted).length}</span>
         </div>

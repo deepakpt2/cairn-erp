@@ -273,7 +273,7 @@ function RowDialogs({
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('docType.change')}
         </summary>
-        <div role="dialog" aria-modal="true" aria-label={`${t('docType.change')} ${row.documentType}`} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+        <div role="dialog" aria-modal="true" aria-label={`${t('docType.change')} ${row.documentType}`} className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={`${t('docType.change')} ${row.documentType}`} sub={row.name} />
             <section className="panel overflow-hidden p-4">
@@ -303,7 +303,7 @@ function RowDialogs({
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {toggleLabel}
         </summary>
-        <div role="dialog" aria-modal="true" aria-label={`${toggleLabel} ${row.documentType}`} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+        <div role="dialog" aria-modal="true" aria-label={`${toggleLabel} ${row.documentType}`} className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={toggleLabel} sub={`${row.documentType} · ${row.name}`} />
             <section className="panel overflow-hidden p-4">
@@ -329,7 +329,7 @@ function RowDialogs({
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('docType.delete')}
         </summary>
-        <div role="dialog" aria-modal="true" aria-label={`${t('docType.delete')} ${row.documentType}`} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+        <div role="dialog" aria-modal="true" aria-label={`${t('docType.delete')} ${row.documentType}`} className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={t('docType.delete')} sub={`${row.documentType} · ${row.name}`} />
             <section className="panel overflow-hidden p-4">

@@ -384,7 +384,7 @@ function VariantLifecycleControl({ row }: { row: FiscalYearVariantRow }) {
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {row.isActive ? t('fiscalYearVariant.deactivate') : t('fiscalYearVariant.reactivate')}
       </summary>
-      <div role="dialog" aria-modal="true" aria-label={label} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+      <div role="dialog" aria-modal="true" aria-label={label} className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
         <div className="mx-auto max-w-2xl">
           <DialogHeader code={row.variant} label={label} />
           <section className="panel overflow-hidden">
@@ -710,7 +710,7 @@ function FiscalYearChangeDialog({
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {t('fiscalYearVariant.change')}
       </summary>
-      <div className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+      <div className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6">
         <div className="mx-auto max-w-3xl">
           <DialogHeader code={row.variant} label={`${t('fiscalYearVariant.change')} ${row.variant}`} />
           <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
@@ -745,7 +745,7 @@ function FiscalYearPeriodDialog({ row, canMaintain }: { row: FiscalYearVariantRo
         role="dialog"
         aria-modal="true"
         aria-label={`${t('fiscalYearVariant.periods')} ${row.variant}`}
-        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
+        className="fixed inset-0 z-40 overflow-y-auto bg-sunken p-3 sm:p-6"
       >
         <div className="mx-auto max-w-3xl">
           <DialogHeader code={row.variant} label={`${t('fiscalYearVariant.periods')} · ${row.variant}`} />

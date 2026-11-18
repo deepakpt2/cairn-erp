@@ -263,23 +263,23 @@ export function SalesAreaForm({ salesOrganizations }: { salesOrganizations: Choi
             role="dialog"
             aria-modal="true"
             aria-labelledby="ovxg-value-help-title"
-            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto border border-[#8faabd] bg-white shadow-xl"
+            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto border border-line-strong bg-white shadow-xl"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => { if (event.key === 'Escape') setHelpField(null); }}
           >
-            <header className="flex items-center gap-3 border-b border-[#9eb6c8] bg-[#c9dce9] px-4 py-3 text-[#28445b]">
+            <header className="flex items-center gap-3 border-b border-line-strong bg-sunken px-4 py-3 text-ink">
               <h2 id="ovxg-value-help-title" className="min-w-0 flex-1 font-semibold">{helpTitle}</h2>
-              <button type="button" className="inline-flex h-11 w-11 shrink-0 items-center justify-center border border-[#8faabd] bg-white text-lg hover:bg-[#eef3f7] sm:h-9 sm:w-9" aria-label={t('common.close')} onClick={() => setHelpField(null)}>×</button>
+              <button type="button" className="inline-flex h-11 w-11 shrink-0 items-center justify-center border border-line-strong bg-white text-lg hover:bg-sunken sm:h-9 sm:w-9" aria-label={t('common.close')} onClick={() => setHelpField(null)}>×</button>
             </header>
-            <div className="border-b border-[#d6dce1] bg-[#eef3f7] p-3">
+            <div className="border-b border-line bg-sunken p-3">
               <label htmlFor="ovxg-value-help-search" className="field-label">{helpSearchLabel}</label>
               <input id="ovxg-value-help-search" type="search" className="field-input mt-1 min-h-11 w-full sm:min-h-9" value={helpSearch} autoFocus onChange={(event) => setHelpSearch(event.target.value)} />
             </div>
             {helpChoices.length ? (
-              <ul className="divide-y divide-[#d6dce1]">
+              <ul className="divide-y divide-line">
                 {helpChoices.map((item) => (
                   <li key={item.code}>
-                    <button type="button" className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-[#f4f8fa]" onClick={() => chooseValue(item.code)}>
+                    <button type="button" className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-sunken" onClick={() => chooseValue(item.code)}>
                       <span className="code w-20 shrink-0 font-semibold">{item.code}</span>
                       <span className="min-w-0 flex-1 break-words text-sm">{item.name}</span>
                       <span className={`chip ${item.isActive ? 'chip-ok' : 'chip-neutral'}`}>{t(item.isActive ? 'salesArea.active' : 'salesArea.inactive')}</span>
@@ -290,7 +290,7 @@ export function SalesAreaForm({ salesOrganizations }: { salesOrganizations: Choi
             ) : (
               <p role="status" className="p-5 text-center text-sm text-ink-soft">{helpEmpty}</p>
             )}
-            <footer className="flex justify-end border-t border-[#d6dce1] p-3">
+            <footer className="flex justify-end border-t border-line p-3">
               <button type="button" className="btn btn-default min-h-11 sm:min-h-9" onClick={() => setHelpField(null)}>{t('common.cancel')}</button>
             </footer>
           </section>

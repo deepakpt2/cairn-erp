@@ -221,15 +221,15 @@ function SuggestField({
             role="dialog"
             aria-modal="true"
             aria-label={t('constrained.search')}
-            className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden border border-[#8faabd] bg-white shadow-xl"
+            className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden border border-line-strong bg-white shadow-xl"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => { if (event.key === 'Escape') setModal(false); }}
           >
-            <header className="flex items-center gap-3 border-b border-[#9eb6c8] bg-[#c9dce9] px-4 py-3 text-[#28445b]">
+            <header className="flex items-center gap-3 border-b border-line-strong bg-sunken px-4 py-3 text-ink">
               <h2 className="min-w-0 flex-1 font-semibold">{t('constrained.search')}</h2>
-              <button type="button" className="inline-flex h-11 w-11 items-center justify-center border border-[#8faabd] bg-white text-lg hover:bg-[#eef3f7] sm:h-9 sm:w-9" aria-label={t('common.close')} onClick={() => setModal(false)}>×</button>
+              <button type="button" className="inline-flex h-11 w-11 items-center justify-center border border-line-strong bg-white text-lg hover:bg-sunken sm:h-9 sm:w-9" aria-label={t('common.close')} onClick={() => setModal(false)}>×</button>
             </header>
-            <div className="border-b border-[#d6dce1] bg-[#eef3f7] p-3">
+            <div className="border-b border-line bg-sunken p-3">
               <input
                 type="search"
                 autoFocus
@@ -244,10 +244,10 @@ function SuggestField({
             ) : modalSearch.rows.length === 0 ? (
               <p role="status" className="p-5 text-center text-sm text-ink-soft">{modalSearch.pending ? t('constrained.searching') : t('constrained.none')}</p>
             ) : (
-              <ul className="min-h-0 flex-1 divide-y divide-[#d6dce1] overflow-y-auto">
+              <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
                 {modalSearch.rows.map((row) => (
                   <li key={`${row.code}-${row.meta ?? ''}`}>
-                    <button type="button" className="flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left hover:bg-[#f4f8fa]" onClick={() => choose(row.code)}>
+                    <button type="button" className="flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left hover:bg-sunken" onClick={() => choose(row.code)}>
                       <span className="code w-28 shrink-0 font-semibold">{row.code}</span>
                       <span className="min-w-0 flex-1 text-sm">{row.label}</span>
                     </button>
