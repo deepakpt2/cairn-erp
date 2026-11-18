@@ -8,6 +8,7 @@ import { ReportExport } from '@/ui/output/ReportExport';
 import {
   VendorAgeingError, getVendorAgeing, type AgeingItem, type VendorAgeingView,
 } from '@/modules/finance/vendor-ageing';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -163,18 +164,15 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
   );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.AP.AGEING · S_ALR_87012085</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('vendorAgeing.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('vendorAgeing.subtitle')}</p>
-        {views.length > 0 && <div className="mt-3"><ReportExport report="vendor-ageing" params={params} /></div>}
-      </header>
+    <Page
+      title={t('vendorAgeing.title')} code="FIN.AP.AGEING · S_ALR_87012085" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('vendorAgeing.subtitle')}</p>
+          {views.length > 0 && <div className="mt-3"><ReportExport report="vendor-ageing" params={params} /></div>}
+        </>
+      }
+    >
 
       <section aria-labelledby="va-selection" className="border border-line bg-surface p-4">
         <h2 id="va-selection" className="text-sm font-semibold">Selection</h2>
@@ -363,6 +361,6 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
           </section>
         );
       })}
-    </div>
+    </Page>
   );
 }

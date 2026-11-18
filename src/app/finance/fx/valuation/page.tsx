@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -7,6 +6,7 @@ import {
   type FxRateType, type FxValuationResult,
 } from '@/modules/finance/fx-valuation';
 import ValuationForm from './ValuationForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,15 +65,10 @@ export default async function FxValuationPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.FX.VALUATE · FAGL_FC_VAL</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('fxValuation.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('fxValuation.subtitle')}</p>
-      </header>
+    <Page
+      title={t('fxValuation.title')} code="FIN.FX.VALUATE · FAGL_FC_VAL" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('fxValuation.subtitle')}
+    >
       {error && (
         <p role="alert" className="rounded border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error">{error}</p>
       )}
@@ -83,6 +78,6 @@ export default async function FxValuationPage({ searchParams }: {
         result={result}
         requestKey={requestKey}
       />
-    </div>
+    </Page>
   );
 }

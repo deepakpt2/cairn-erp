@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -10,6 +9,7 @@ import BalancesForm from './BalancesForm';
 import BalanceReportForm from './BalanceReportForm';
 import type { GlBalanceReportSelection, GlBalanceReportView } from '@/modules/finance/gl-balances';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,18 +67,15 @@ export default async function GlBalancesPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.GL.BALANCE · FS10N</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('glBalance.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('glBalance.subtitle')}</p>
-        {report && <div className="mt-3"><ReportExport report="gl-balances" params={params} /></div>}
-      </header>
+    <Page
+      title={t('glBalance.title')} code="FIN.GL.BALANCE · FS10N" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('glBalance.subtitle')}</p>
+          {report && <div className="mt-3"><ReportExport report="gl-balances" params={params} /></div>}
+        </>
+      }
+    >
 
       <BalancesForm view={view} error={error} canDisplay={canDisplay} />
       <BalanceReportForm
@@ -87,6 +84,6 @@ export default async function GlBalancesPage({ searchParams }: {
         reportError={reportError}
         canDisplay={canDisplay}
       />
-    </div>
+    </Page>
   );
 }

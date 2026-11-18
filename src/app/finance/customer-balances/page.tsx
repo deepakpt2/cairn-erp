@@ -6,6 +6,7 @@ import { ReportExport } from '@/ui/output/ReportExport';
 import {
   CustomerBalanceError, getCustomerBalances, type CustomerBalanceView,
 } from '@/modules/finance/customer-balances';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,18 +66,15 @@ async function BalancesShell({ params }: {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.AR.BALANCE · FD10N</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('customerBalances.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('customerBalances.subtitle')}</p>
-        {view && <div className="mt-3"><ReportExport report="customer-balances" params={params} /></div>}
-      </header>
+    <Page
+      title={t('customerBalances.title')} code="FIN.AR.BALANCE · FD10N" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('customerBalances.subtitle')}</p>
+          {view && <div className="mt-3"><ReportExport report="customer-balances" params={params} /></div>}
+        </>
+      }
+    >
 
       <section aria-labelledby="cb-selection" className="border border-line bg-surface p-4">
         <h2 id="cb-selection" className="text-sm font-semibold">Selection</h2>
@@ -196,6 +194,6 @@ async function BalancesShell({ params }: {
           </div>
         )}
       </section>
-    </div>
+    </Page>
   );
 }

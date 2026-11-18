@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -7,6 +6,7 @@ import {
   type VendorClearingView,
 } from '@/modules/finance/vendor-clearing';
 import VendorClearing from './VendorClearing';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,17 +34,10 @@ export default async function VendorClearingPage({ searchParams }: {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.AP.CLEAR · F-44</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('vendorClearing.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('vendorClearing.subtitle')}</p>
-      </header>
+    <Page
+      title={t('vendorClearing.title')} code="FIN.AP.CLEAR · F-44" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('vendorClearing.subtitle')}
+    >
 
       <VendorClearing
         view={view}
@@ -52,6 +45,6 @@ export default async function VendorClearingPage({ searchParams }: {
         canClear={can(session, VENDOR_CLEARING_CAPABILITY)}
         today={today}
       />
-    </div>
+    </Page>
   );
 }

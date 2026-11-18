@@ -7,6 +7,7 @@ import {
 import { CashflowError, calculateCashflow } from '@/modules/finance/cash-flow';
 import CashflowShell from './CashflowShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,14 +52,10 @@ export default async function CashflowPage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.RPT.CASHFLOW · S_ALR_87012271/72/73</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">Cash Flow Statement</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Operating, investing and financing cash flows from the posted journal, reconciled to the movement on the house-bank cash accounts.
-        </p>
-      </header>
+    <Page
+      title="Cash Flow Statement" code="FIN.RPT.CASHFLOW · S_ALR_87012271/72/73" width="7xl" back={null}
+      description="Operating, investing and financing cash flows from the posted journal, reconciled to the movement on the house-bank cash accounts."
+    >
       {result && <div><ReportExport report="cash-flow" params={params} /></div>}
       <CashflowShell
         canUse={canUse}
@@ -67,6 +64,6 @@ export default async function CashflowPage({
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

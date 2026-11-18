@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -13,6 +12,7 @@ import {
 import { listPositions } from '@/modules/people/org-structure';
 import { dateParam, endedAssignmentMessage } from './copy';
 import Assignments from './Assignments';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,24 +89,16 @@ export default async function PeopleAssignmentsPage({ searchParams }: {
       : undefined;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ASSIGNMENT_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Assignments</h1>
-          <div className="flex gap-2">
-            <Link href="/people/organization" className="btn btn-default min-h-11 sm:min-h-8">Organisation</Link>
-            <Link href="/people/employees" className="btn btn-default min-h-11 sm:min-h-8">Employees</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          An assignment says which position a person held and which cost centre carried them, for a span of
-          dates. A change ends the open assignment the day before and starts a new one; nothing here is
-          overwritten, and nothing is posted to the cost centre named. A person in two positions at once is not
-          modelled — write two spans instead, and see the screen notes for why the split is left open.
-        </p>
-      </header>
+    <Page
+      title="Assignments" code={ASSIGNMENT_CAPABILITY}
+      description="An assignment says which position a person held and which cost centre carried them, for a span of dates. A change ends the open assignment the day before and starts a new one; nothing here is overwritten, and nothing is posted to the cost centre named. A person in two positions at once is not modelled — write two spans instead, and see the screen notes for why the split is left open."
+      actions={
+        <>
+          <LinkButton href="/people/organization">Organisation</LinkButton>
+          <LinkButton href="/people/employees">Employees</LinkButton>
+        </>
+      }
+    >
       <Assignments
         assignments={rows}
         history={history}
@@ -121,6 +113,6 @@ export default async function PeopleAssignmentsPage({ searchParams }: {
         confirmed={confirmed}
         canWrite={can(session, ASSIGNMENT_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

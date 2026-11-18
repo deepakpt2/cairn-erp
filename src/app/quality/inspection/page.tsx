@@ -8,6 +8,7 @@ import { USAGE_DECISION_CAPABILITY } from '@/modules/quality/usage-decision';
 import { LOT_CAPABILITY } from '@/modules/quality/lot';
 import { loadInspectionWorkbench } from './actions';
 import InspectionWorkbench from './InspectionWorkbench';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,28 +35,17 @@ export default async function InspectionPage({ searchParams }: { searchParams: P
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">
-          {canDecide ? USAGE_DECISION_CAPABILITY : canRecord ? INSPECTION_RESULT_CAPABILITY : LOT_CAPABILITY}
-        </span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Inspection workbench</h1>
-          <div className="flex gap-2">
-            <Link href="/quality/lots" className="btn btn-default min-h-11 sm:min-h-8">
-              Inspection lots
-            </Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-              Launchpad
-            </Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          Record measured results against configured characteristics, then make the usage
-          decision that accepts or rejects the goods. Stock follows the decision: accepted
-          quality stock moves to unrestricted use; rejected quality stock moves to blocked.
-        </p>
-      </header>
+    <Page
+      title="Inspection workbench" code={canDecide ? USAGE_DECISION_CAPABILITY : canRecord ? INSPECTION_RESULT_CAPABILITY : LOT_CAPABILITY}
+      description="Record measured results against configured characteristics, then make the usage decision that accepts or rejects the goods. Stock follows the decision: accepted quality stock moves to unrestricted use; rejected quality stock moves to blocked."
+      actions={
+        <>
+          <LinkButton href="/quality/lots">
+                        Inspection lots
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!lotNumber && (
         <section className="panel p-4">
@@ -92,7 +82,7 @@ export default async function InspectionPage({ searchParams }: { searchParams: P
           lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
         />
       )}
-    </div>
+    </Page>
   );
 }
 

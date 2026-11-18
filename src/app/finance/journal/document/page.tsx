@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -7,6 +6,7 @@ import {
   getJournalDocument, resolveDocumentNumber, type JournalDocumentView,
 } from '@/modules/finance/document-display';
 import DocumentDisplay from './DocumentDisplay';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,17 +60,10 @@ export default async function JournalDocumentPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.JOURNAL.DISPLAY · FB03</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('documentDisplay.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('documentDisplay.subtitle')}</p>
-      </header>
+    <Page
+      title={t('documentDisplay.title')} code="FIN.JOURNAL.DISPLAY · FB03" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('documentDisplay.subtitle')}
+    >
 
       {error && (
         <p role="alert" className="border border-line bg-surface p-4 text-sm text-signal-error">{error}</p>
@@ -83,6 +76,6 @@ export default async function JournalDocumentPage({ searchParams }: {
         canDisplay={canDisplay}
         canFlow={canFlow}
       />
-    </div>
+    </Page>
   );
 }

@@ -11,6 +11,7 @@ import { ReportExport } from '@/ui/output/ReportExport';
 import ConsolidatedStatementsShell, {
   type ConsolidatedStatementsOptions,
 } from './ConsolidatedStatementsShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,14 +67,10 @@ export default async function ConsolidatedStatementsPage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.RPT.CONSOLIDATE.STMT</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">Consolidated Statements</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Consolidated balance sheet and income statement over the UCWB consolidation chart, read from the reported journal data of the group units.
-        </p>
-      </header>
+    <Page
+      title="Consolidated Statements" code="FIN.RPT.CONSOLIDATE.STMT" width="7xl" back={null}
+      description="Consolidated balance sheet and income statement over the UCWB consolidation chart, read from the reported journal data of the group units."
+    >
       {result && <div><ReportExport report="consolidated-statements" params={params} /></div>}
       <ConsolidatedStatementsShell
         canUse={canUse}
@@ -82,6 +79,6 @@ export default async function ConsolidatedStatementsPage({
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

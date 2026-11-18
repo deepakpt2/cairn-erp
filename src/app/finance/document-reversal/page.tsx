@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
@@ -13,6 +12,7 @@ import { EnqueueError, assertChangeForSession, displayOnlyMessage, openChangeFor
 import { t } from '@/platform/i18n';
 import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,17 +134,10 @@ export default async function DocumentReversalPage({
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.DOCUMENT.REVERSE · FB08</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('documentReversal.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('documentReversal.subtitle')}</p>
-      </header>
+    <Page
+      title={t('documentReversal.title')} code="FIN.DOCUMENT.REVERSE · FB08" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('documentReversal.subtitle')}
+    >
 
       {view && changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="ACCOUNTING_DOCUMENT" argument={reversalKey} />
@@ -317,6 +310,6 @@ export default async function DocumentReversalPage({
           </p>
         )}
       </section>
-    </div>
+    </Page>
   );
 }

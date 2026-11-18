@@ -11,6 +11,7 @@ import {
   listInternalOrders,
 } from '@/modules/foundation/internal-order';
 import OrderForm from './OrderForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,10 +26,11 @@ export default async function InternalOrdersPage({ searchParams }: {
   const session = await requireSession(INTERNAL_ORDER_ROUTE);
   if (!can(session, INTERNAL_ORDER_MAINTAIN_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Internal order</h1>
+      <Page
+      title="Internal order" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the internal-order maintain capability (CO.ORDER.MAINTAIN).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;
@@ -48,17 +50,10 @@ export default async function InternalOrdersPage({ searchParams }: {
     : null;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">CO.ORDER.MAINTAIN · KO01 / KO02</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Internal order</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          KO01 creates an internal order. KO02 changes one. Neither posts, budgets, plans, nor settles. KO03 displays and does not save. No status profile is configured.
-        </p>
-      </header>
+    <Page
+      title="Internal order" code="CO.ORDER.MAINTAIN · KO01 / KO02" width="5xl"
+      description="KO01 creates an internal order. KO02 changes one. Neither posts, budgets, plans, nor settles. KO03 displays and does not save. No status profile is configured."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Order</span>
@@ -93,6 +88,6 @@ export default async function InternalOrdersPage({ searchParams }: {
           ))}
         </ul>
       )}
-    </main>
+    </Page>
   );
 }

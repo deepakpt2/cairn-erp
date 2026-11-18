@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -13,6 +12,7 @@ import {
   listPositions,
 } from '@/modules/people/org-structure';
 import Organization from './Organization';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,24 +61,16 @@ export default async function PeopleOrganizationPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ORG_UNIT_CAPABILITY} · {POSITION_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Organisation</h1>
-          <div className="flex gap-2">
-            <Link href="/people/assignments" className="btn btn-default min-h-11 sm:min-h-8">Assignments</Link>
-            <Link href="/people/employees" className="btn btn-default min-h-11 sm:min-h-8">Employees</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          Units and positions, and the two relations that place them: what hangs below what, and which position
-          a position reports to. Nothing here is dated — moving a unit is a change to the structure as it
-          stands, and the people in it are counted from their assignments. Writing a position or a unit posts
-          nothing, and no cost centre is charged for the cost centre an assignment names.
-        </p>
-      </header>
+    <Page
+      title="Organisation" code={<>{ORG_UNIT_CAPABILITY} · {POSITION_CAPABILITY}</>}
+      description="Units and positions, and the two relations that place them: what hangs below what, and which position a position reports to. Nothing here is dated — moving a unit is a change to the structure as it stands, and the people in it are counted from their assignments. Writing a position or a unit posts nothing, and no cost centre is charged for the cost centre an assignment names."
+      actions={
+        <>
+          <LinkButton href="/people/assignments">Assignments</LinkButton>
+          <LinkButton href="/people/employees">Employees</LinkButton>
+        </>
+      }
+    >
       <Organization
         units={units}
         positions={positions}
@@ -91,6 +83,6 @@ export default async function PeopleOrganizationPage({ searchParams }: {
         canMaintainUnits={can(session, ORG_UNIT_CAPABILITY)}
         canMaintainPositions={can(session, POSITION_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

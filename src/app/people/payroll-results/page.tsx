@@ -20,6 +20,7 @@ import {
   listResults,
 } from '@/modules/people/payroll-run';
 import { getPayrollPosting } from '@/modules/people/payroll-posting';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,21 +58,15 @@ export default async function PayrollResultPage({
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPABILITY} · PC00_M99_DISPLAY</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Payroll results</h1>
-          <div className="flex gap-2">
-            <Link href={PAYROLL_RUN_ROUTE} className="btn btn-default min-h-11 sm:min-h-8">Payroll runs</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          One slip per employee and run. Each line shows the account it posts to and the cost receiver, fixed when
-          the run was calculated. Read-only.
-        </p>
-      </header>
+    <Page
+      title="Payroll results" code={<>{CAPABILITY} · PC00_M99_DISPLAY</>} back={{ href: '/', label: t('nav.launchpad') }}
+      description="One slip per employee and run. Each line shows the account it posts to and the cost receiver, fixed when the run was calculated. Read-only."
+      actions={
+        <>
+          <LinkButton href={PAYROLL_RUN_ROUTE}>Payroll runs</LinkButton>
+        </>
+      }
+    >
 
       {!allowed && (
         <p role="status" className="text-sm text-ink-soft">You do not hold the payroll result capability. Ask for {CAPABILITY}.</p>
@@ -180,6 +175,6 @@ export default async function PayrollResultPage({
           </section>
         </>
       )}
-    </div>
+    </Page>
   );
 }

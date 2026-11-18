@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -9,6 +8,7 @@ import {
   listLots,
 } from '@/modules/quality/lot';
 import Lots from './Lots';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,24 +42,25 @@ export default async function QualityLotsPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{LOT_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Inspection lots</h1>
-          <div className="flex gap-2">
-            <Link href="/inventory/goods-receipt" className="btn btn-default min-h-11 sm:min-h-8">Goods receipt</Link>
-            <Link href="/inventory/material-documents" className="btn btn-default min-h-11 sm:min-h-8">Material documents</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A lot names the line a quantity arrived on and asks that it be examined. Opening one posts nothing:
-          no stock movement, no valuation, no journal, no change to the batch. Whether the goods may move is
-          still the stock segment and the batch&apos;s restricted-use indicator, enforced where they are
-          consumed — a lot records the request for an inspection, it is not yet the decision.
-        </p>
-      </header>
+    <Page
+      title="Inspection lots" code={LOT_CAPABILITY}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              A lot names the line a quantity arrived on and asks that it be examined. Opening one posts nothing:
+              no stock movement, no valuation, no journal, no change to the batch. Whether the goods may move is
+              still the stock segment and the batch&apos;s restricted-use indicator, enforced where they are
+              consumed — a lot records the request for an inspection, it is not yet the decision.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/inventory/goods-receipt">Goods receipt</LinkButton>
+          <LinkButton href="/inventory/material-documents">Material documents</LinkButton>
+        </>
+      }
+    >
       <Lots
         lots={lots}
         candidates={candidates}
@@ -67,6 +68,6 @@ export default async function QualityLotsPage({ searchParams }: {
         documentNumber={documentNumber}
         canCreate={can(session, LOT_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

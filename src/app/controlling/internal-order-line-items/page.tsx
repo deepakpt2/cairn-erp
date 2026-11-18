@@ -9,6 +9,7 @@ import {
   type InternalOrderCostLine,
   type InternalOrderCostReport,
 } from '@/modules/foundation/internal-order-cost-report';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,10 +34,11 @@ export default async function InternalOrderLineItemsPage({ searchParams }: {
   const session = await requireSession(INTERNAL_ORDER_COST_REPORT_ROUTE);
   if (!can(session, INTERNAL_ORDER_COST_REPORT_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Internal order line items</h1>
+      <Page
+      title="Internal order line items" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold {INTERNAL_ORDER_COST_REPORT_CAPABILITY}.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -72,19 +74,10 @@ export default async function InternalOrderLineItemsPage({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6" data-internal-order-line-items>
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{INTERNAL_ORDER_COST_REPORT_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Internal order line items</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-4xl text-sm text-ink-soft">
-          Read-only actual journal lines posted to one internal order: posted and reversed documents, never parked ones.
-          Debit, credit, and net are shown separately in document and local currency. Plan, budget and commitments are not shown.
-          This report does not settle or post anything.
-        </p>
-      </header>
+    <Page
+      title="Internal order line items" code={INTERNAL_ORDER_COST_REPORT_CAPABILITY}
+      description="Read-only actual journal lines posted to one internal order: posted and reversed documents, never parked ones. Debit, credit, and net are shown separately in document and local currency. Plan, budget and commitments are not shown. This report does not settle or post anything."
+    >
 
       <form className="grid gap-2 sm:grid-cols-6" method="get">
         <label className="grid gap-1 text-sm sm:col-span-2">
@@ -209,6 +202,6 @@ export default async function InternalOrderLineItemsPage({ searchParams }: {
           )}
         </section>
       )}
-    </main>
+    </Page>
   );
 }

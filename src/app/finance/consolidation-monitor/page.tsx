@@ -9,6 +9,7 @@ import {
   type ConsolidationMonitorView,
 } from '@/modules/finance/consolidation-monitor';
 import ConsolidationMonitorShell from './ConsolidationMonitorShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,14 +72,10 @@ export default async function ConsolidationMonitorPage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.CONSOLIDATE · CX20 / UCMON</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">Consolidation Monitor</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Execute and review configured consolidation tasks. UCWB owns the definitions; this monitor owns attempts, status and logs.
-        </p>
-      </header>
+    <Page
+      title="Consolidation Monitor" code="FIN.CONSOLIDATE · CX20 / UCMON" width="7xl" back={null}
+      description="Execute and review configured consolidation tasks. UCWB owns the definitions; this monitor owns attempts, status and logs."
+    >
       <ConsolidationMonitorShell
         canUse={canUse}
         canTest={can(session, CONSOLIDATION_MONITOR_AUTHORITIES.test)}
@@ -91,6 +88,6 @@ export default async function ConsolidationMonitorPage({
         view={view}
         monitorError={monitorError}
       />
-    </div>
+    </Page>
   );
 }

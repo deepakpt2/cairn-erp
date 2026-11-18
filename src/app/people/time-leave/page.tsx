@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -24,6 +23,7 @@ import {
   type TimeTypeView,
 } from '@/modules/people/time-leave';
 import TimeLeave from './TimeLeave';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,32 +72,22 @@ export default async function TimeLeavePage({
   const canView = can(session, LEAVE_VIEW_CAPABILITY);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">
+    <Page
+      title="Time &amp; leave" code={<>
           {TIME_ENTER_CAPABILITY} · {LEAVE_VIEW_CAPABILITY}
-        </span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Time &amp; leave</h1>
-          <div className="flex gap-2">
-            <Link href="/people/employees" className="btn btn-default min-h-11 sm:min-h-8">
-              Employees
-            </Link>
-            <Link href="/people/assignments" className="btn btn-default min-h-11 sm:min-h-8">
-              Assignments
-            </Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-              Launchpad
-            </Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          Time types, absence requests and leave balances, read back on the
-          tenant's own connection. Nothing here posts to the general ledger —
-          payroll reads the result later. Country-specific leave law is not
-          built (DV-001, §15.3); entitlement is what the tenant configures.
-        </p>
-      </header>
+        </>}
+      description="Time types, absence requests and leave balances, read back on the tenant's own connection. Nothing here posts to the general ledger — payroll reads the result later. Country-specific leave law is not built (DV-001, §15.3); entitlement is what the tenant configures."
+      actions={
+        <>
+          <LinkButton href="/people/employees">
+                        Employees
+                      </LinkButton>
+          <LinkButton href="/people/assignments">
+                        Assignments
+                      </LinkButton>
+        </>
+      }
+    >
 
       <TimeLeave
         timeTypes={timeTypes}
@@ -109,6 +99,6 @@ export default async function TimeLeavePage({
         canWrite={canWrite}
         canView={canView}
       />
-    </div>
+    </Page>
   );
 }

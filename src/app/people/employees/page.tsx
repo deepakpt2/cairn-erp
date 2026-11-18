@@ -16,6 +16,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import Employees from './Employees';
 import { AssignStructureForm, EndAssignmentForm } from './PayStructure';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,23 +55,16 @@ export default async function PeopleEmployeesPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{EMPLOYEE_CAPABILITY} · {RECORD_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Employees</h1>
-          <div className="flex gap-2">
-            <Link href="/config/people-record-types" className="btn btn-default min-h-11 sm:min-h-8">Record types</Link>
-            <Link href="/config/number-ranges" className="btn btn-default min-h-11 sm:min-h-8">Number ranges</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A person is a personnel number and a name; what is true about them stands in dated records. Writing a
-          change creates a new record and leaves the one it replaces readable, so the history a payroll result
-          was built from can still be shown a year later. Nothing here calculates or posts pay.
-        </p>
-      </header>
+    <Page
+      title="Employees" code={<>{EMPLOYEE_CAPABILITY} · {RECORD_CAPABILITY}</>}
+      description="A person is a personnel number and a name; what is true about them stands in dated records. Writing a change creates a new record and leaves the one it replaces readable, so the history a payroll result was built from can still be shown a year later. Nothing here calculates or posts pay."
+      actions={
+        <>
+          <LinkButton href="/config/people-record-types">Record types</LinkButton>
+          <LinkButton href="/config/number-ranges">Number ranges</LinkButton>
+        </>
+      }
+    >
       <Employees
         employees={employees}
         types={types}
@@ -88,7 +82,7 @@ export default async function PeopleEmployeesPage({ searchParams }: {
           access={access}
         />
       )}
-    </div>
+    </Page>
   );
 }
 

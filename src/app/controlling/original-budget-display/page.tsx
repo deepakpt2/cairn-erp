@@ -7,6 +7,7 @@ import {
   ORIGINAL_BUDGET_DISPLAY_CAPABILITY,
   type OriginalBudgetView,
 } from '@/modules/foundation/internal-order-budget';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +22,11 @@ export default async function OriginalBudgetDisplayPage({ searchParams }: {
   const session = await requireSession('/controlling/original-budget-display');
   if (!can(session, ORIGINAL_BUDGET_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display original budget</h1>
+      <Page
+      title="Display original budget" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the original-budget display capability (CO.BUDGET.ORIGINAL.DISPLAY).</p>
-      </main>
+      </Page>
     );
   }
   const requested = last((await searchParams).order);
@@ -39,12 +41,10 @@ export default async function OriginalBudgetDisplayPage({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">CO.BUDGET.ORIGINAL.DISPLAY · KO23</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">Display original budget</h1>
-        <p className="mt-1 text-sm text-ink-soft">KO23 shows the original budget. It does not save, post, supplement, or settle. Availability control is not executed.</p>
-      </header>
+    <Page
+      title="Display original budget" code="CO.BUDGET.ORIGINAL.DISPLAY · KO23" width="3xl" back={null}
+      description="KO23 shows the original budget. It does not save, post, supplement, or settle. Availability control is not executed."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Internal order</span>
@@ -82,6 +82,6 @@ export default async function OriginalBudgetDisplayPage({ searchParams }: {
           <Link className="underline" href={`/controlling/original-budget?order=${encodeURIComponent(budget.orderNumber)}`}>KO22 change</Link>
         </p>
       )}
-    </main>
+    </Page>
   );
 }

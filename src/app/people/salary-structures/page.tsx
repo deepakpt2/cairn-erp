@@ -21,6 +21,7 @@ import {
 } from '@/modules/people/payroll-structure';
 
 import { ChangeStructureForm, ComponentForm, DefineStructureForm, RemoveComponentForm } from './StructureForms';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,22 +44,23 @@ export default async function SalaryStructurePage({ searchParams }: { searchPara
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPABILITY} · T510</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Salary structures</h1>
-          <div className="flex gap-2">
-            <Link href={PAY_COMPONENT_ROUTE} className="btn btn-default min-h-11 sm:min-h-8">Pay components</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          A structure is a named set of pay components, each with its amount rule — a fixed amount or a percentage of
-          the employee&apos;s base. Employees are assigned a structure and a base on the employee screen. Nothing here
-          calculates or posts.
-        </p>
-      </header>
+    <Page
+      title="Salary structures" code={<>{CAPABILITY} · T510</>} back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              A structure is a named set of pay components, each with its amount rule — a fixed amount or a percentage of
+              the employee&apos;s base. Employees are assigned a structure and a base on the employee screen. Nothing here
+              calculates or posts.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href={PAY_COMPONENT_ROUTE}>Pay components</LinkButton>
+        </>
+      }
+    >
 
       {!allowed && (
         <p role="status" className="text-sm text-ink-soft">
@@ -131,6 +133,6 @@ export default async function SalaryStructurePage({ searchParams }: { searchPara
           <DefineStructureForm defaultCurrency={currency ?? ''} today={today} />
         </>
       )}
-    </div>
+    </Page>
   );
 }

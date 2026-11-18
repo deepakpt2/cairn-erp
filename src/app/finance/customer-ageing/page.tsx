@@ -6,6 +6,7 @@ import { ReportExport } from '@/ui/output/ReportExport';
 import {
   CustomerAgeingError, getCustomerAgeing, type CustomerAgeingView,
 } from '@/modules/finance/customer-ageing';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,18 +66,15 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.AR.AGEING · S_ALR_87012178</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('customerAgeing.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('customerAgeing.subtitle')}</p>
-        {view && <div className="mt-3"><ReportExport report="customer-ageing" params={params} /></div>}
-      </header>
+    <Page
+      title={t('customerAgeing.title')} code="FIN.AR.AGEING · S_ALR_87012178" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('customerAgeing.subtitle')}</p>
+          {view && <div className="mt-3"><ReportExport report="customer-ageing" params={params} /></div>}
+        </>
+      }
+    >
 
       <section aria-labelledby="ca-selection" className="border border-line bg-surface p-4">
         <h2 id="ca-selection" className="text-sm font-semibold">Selection</h2>
@@ -197,6 +195,6 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
           </>
         )}
       </section>
-    </div>
+    </Page>
   );
 }

@@ -4,6 +4,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { AUTHORITY_ROUTE, AUTHORITY_VIEW_CAPABILITY } from '@/modules/people/schema';
 import { authorityChartFor } from '@/modules/people/authority-chart';
 import Authority from './Authority';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,41 +39,31 @@ export default async function PeopleAuthorityPage({
   );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{AUTHORITY_VIEW_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Authority</h1>
-          <div className="flex gap-2">
-            <Link
-              href="/people/organization"
-              className="btn btn-default min-h-11 sm:min-h-8"
-            >
-              Organization
-            </Link>
-            <Link
-              href="/people/assignments"
-              className="btn btn-default min-h-11 sm:min-h-8"
-            >
-              Assignments
-            </Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-              Launchpad
-            </Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          Who holds what, at which level, and where they stand. This shows your own reporting line
-          and nobody else’s — the people you can see are the people in the positions beneath
-          yours. Delegation does not exist yet; the panels for it are here, empty, so that what
-          gets built next has a place to land.
-        </p>
-      </header>
+    <Page
+      title="Authority" code={AUTHORITY_VIEW_CAPABILITY}
+      description="Who holds what, at which level, and where they stand. This shows your own reporting line and nobody else’s — the people you can see are the people in the positions beneath yours. Delegation does not exist yet; the panels for it are here, empty, so that what gets built next has a place to land."
+      actions={
+        <>
+          <Link
+                        href="/people/organization"
+                        className="btn btn-default min-h-11 sm:min-h-8"
+                      >
+                        Organization
+                      </Link>
+          <Link
+                        href="/people/assignments"
+                        className="btn btn-default min-h-11 sm:min-h-8"
+                      >
+                        Assignments
+                      </Link>
+        </>
+      }
+    >
       <Authority
         chart={chart}
         selectedUserId={wanted}
         canMaintain={can(session, 'PEOPLE.POSITION.CREATE')}
       />
-    </div>
+    </Page>
   );
 }

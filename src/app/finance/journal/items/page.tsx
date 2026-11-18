@@ -8,6 +8,7 @@ import {
 } from '@/modules/finance/journal-items';
 import ItemsForm from './ItemsForm';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,18 +53,15 @@ export default async function JournalItemsPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.JOURNAL.LIST · FAGLL03</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('journalItems.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('journalItems.subtitle')}</p>
-        {result && <div className="mt-3"><ReportExport report="gl-line-items" params={params} /></div>}
-      </header>
+    <Page
+      title={t('journalItems.title')} code="FIN.JOURNAL.LIST · FAGLL03" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('journalItems.subtitle')}</p>
+          {result && <div className="mt-3"><ReportExport report="gl-line-items" params={params} /></div>}
+        </>
+      }
+    >
 
       {params.accountFrom && (
         <p className="text-sm">
@@ -76,6 +74,6 @@ export default async function JournalItemsPage({ searchParams }: {
         </p>
       )}
       <ItemsForm result={result} error={error} canList={canList} />
-    </div>
+    </Page>
   );
 }

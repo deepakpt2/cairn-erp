@@ -9,6 +9,7 @@ import {
   ORIGINAL_BUDGET_ROUTE,
 } from '@/modules/foundation/internal-order-budget';
 import BudgetForm from './BudgetForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +24,11 @@ export default async function OriginalBudgetPage({ searchParams }: {
   const session = await requireSession(ORIGINAL_BUDGET_ROUTE);
   if (!can(session, ORIGINAL_BUDGET_CHANGE_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Original budget</h1>
+      <Page
+      title="Original budget" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the original-budget change capability (CO.BUDGET.ORIGINAL.CHANGE).</p>
-      </main>
+      </Page>
     );
   }
   const orderNumber = last((await searchParams).order);
@@ -40,17 +42,10 @@ export default async function OriginalBudgetPage({ searchParams }: {
     : null;
 
   return (
-    <main className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">CO.BUDGET.ORIGINAL.CHANGE · KO22</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Change original budget</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          KO22 changes the original budget. It does not enter a supplement or a return, post a journal, or settle the order. KO23 displays the budget and does not save. Availability control is not executed.
-        </p>
-      </header>
+    <Page
+      title="Change original budget" code="CO.BUDGET.ORIGINAL.CHANGE · KO22" width="4xl"
+      description="KO22 changes the original budget. It does not enter a supplement or a return, post a journal, or settle the order. KO23 displays the budget and does not save. Availability control is not executed."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Internal order</span>
@@ -82,6 +77,6 @@ export default async function OriginalBudgetPage({ searchParams }: {
           ))}
         </ul>
       )}
-    </main>
+    </Page>
   );
 }

@@ -1,10 +1,10 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
   GL_CLEARING_CAPABILITY, GlClearingError, getGlClearing, type GlClearingView,
 } from '@/modules/finance/gl-clearing';
 import GlClearing from './GlClearing';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,19 +39,10 @@ export default async function GlClearingPage({ searchParams }: {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.GL.CLEAR · F-03</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Clear G/L Account</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            Launchpad
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Clear open items of an open-item-managed G/L account against each other — in full, partially (the item stays open for its balance), or residually (the item closes and its remainder re-stands as a new open item). The difference must stand at zero, or within the tolerance of the default group, before posting; cross-currency clearing translates at the clearing date and posts the realized exchange difference.
-        </p>
-      </header>
+    <Page
+      title="Clear G/L Account" code="FIN.GL.CLEAR · F-03"
+      description="Clear open items of an open-item-managed G/L account against each other — in full, partially (the item stays open for its balance), or residually (the item closes and its remainder re-stands as a new open item). The difference must stand at zero, or within the tolerance of the default group, before posting; cross-currency clearing translates at the clearing date and posts the realized exchange difference."
+    >
 
       <GlClearing
         view={view}
@@ -59,6 +50,6 @@ export default async function GlClearingPage({ searchParams }: {
         canClear={can(session, GL_CLEARING_CAPABILITY)}
         today={today}
       />
-    </div>
+    </Page>
   );
 }

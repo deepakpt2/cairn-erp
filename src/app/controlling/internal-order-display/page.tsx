@@ -7,6 +7,7 @@ import {
   InternalOrderError,
   type InternalOrderDocument,
 } from '@/modules/foundation/internal-order';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +22,11 @@ export default async function InternalOrderDisplayPage({ searchParams }: {
   const session = await requireSession('/controlling/internal-order-display');
   if (!can(session, INTERNAL_ORDER_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display internal order</h1>
+      <Page
+      title="Display internal order" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the internal-order display capability (CO.ORDER.DISPLAY).</p>
-      </main>
+      </Page>
     );
   }
   const requested = last((await searchParams).order);
@@ -39,12 +41,10 @@ export default async function InternalOrderDisplayPage({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">CO.ORDER.DISPLAY · KO03</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">Display internal order</h1>
-        <p className="mt-1 text-sm text-ink-soft">KO03 shows the order. It does not save, post, budget, or settle. No status profile is configured.</p>
-      </header>
+    <Page
+      title="Display internal order" code="CO.ORDER.DISPLAY · KO03" width="3xl" back={null}
+      description="KO03 shows the order. It does not save, post, budget, or settle. No status profile is configured."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Order</span>
@@ -75,6 +75,6 @@ export default async function InternalOrderDisplayPage({ searchParams }: {
           <Link className="underline" href={`/controlling/internal-orders?order=${encodeURIComponent(document.orderNumber)}`}>KO02 change</Link>
         </p>
       )}
-    </main>
+    </Page>
   );
 }

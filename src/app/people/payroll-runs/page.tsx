@@ -25,6 +25,7 @@ import { SALARY_PAYMENT_CAPABILITY, getSalaryPayment } from '@/modules/people/sa
 import { listBankChoices } from '@/modules/finance/payment-run';
 
 import { PaySalaryForm, ProposeRunForm, RunActions } from './RunForms';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,23 +65,16 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
     : today;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPABILITY} · PC00_M99_CALC</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Payroll runs</h1>
-          <div className="flex gap-2">
-            {mayReadResults && <Link href={PAYROLL_RESULT_ROUTE} className="btn btn-default min-h-11 sm:min-h-8">Payroll results</Link>}
-            <Link href="/people/salary-structures" className="btn btn-default min-h-11 sm:min-h-8">Salary structures</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          A run pays one company for one fiscal period. Joiners and leavers are paid for the days they hold a position;
-          approved unpaid leave is deducted. A released run is frozen — a correction is a new run in a later period.
-          Posting a released run books one PR document: personnel cost by cost centre, the payables flat.
-        </p>
-      </header>
+    <Page
+      title="Payroll runs" code={<>{CAPABILITY} · PC00_M99_CALC</>} back={{ href: '/', label: t('nav.launchpad') }}
+      description="A run pays one company for one fiscal period. Joiners and leavers are paid for the days they hold a position; approved unpaid leave is deducted. A released run is frozen — a correction is a new run in a later period. Posting a released run books one PR document: personnel cost by cost centre, the payables flat."
+      actions={
+        <>
+          {mayReadResults && <LinkButton href={PAYROLL_RESULT_ROUTE}>Payroll results</LinkButton>}
+          <LinkButton href="/people/salary-structures">Salary structures</LinkButton>
+        </>
+      }
+    >
 
       {!allowed && (
         <p role="status" className="text-sm text-ink-soft">You do not hold the payroll run capability. Ask for {CAPABILITY}.</p>
@@ -224,6 +218,6 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
           )}
         </>
       )}
-    </div>
+    </Page>
   );
 }
