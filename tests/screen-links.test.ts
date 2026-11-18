@@ -40,6 +40,8 @@ describe('screen links', () => {
       // navigation flag is on, and never a destination of its own in the catalogue.
       '/menu',
       '/search',
+      // Component reference for developers; 404 in production, never a catalogue screen.
+      '/dev/kit',
     ];
     for (const route of excludedRoutes) pages.delete(route);
 

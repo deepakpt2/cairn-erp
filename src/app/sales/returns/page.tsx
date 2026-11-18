@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { listBillings } from '@/modules/sales/billing';
@@ -13,6 +12,7 @@ import {
 } from '@/modules/sales/returns';
 import { getSalesOrder } from '@/modules/sales/sales-order';
 import Returns from './Returns';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,26 +48,27 @@ export default async function SalesReturnsPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">
+    <Page
+      title="Returns from customers" code={<>
           {RETURNS_ORDER_CAPABILITY} · {RETURNS_DELIVERY_CAPABILITY} · {RETURNS_RECEIPT_CAPABILITY}
-        </span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Returns from customers</h1>
-          <div className="flex gap-2">
-            <Link href="/sales/billing" className="btn btn-default min-h-11 sm:min-h-8">Billing</Link>
-            <Link href="/sales/credit-memo" className="btn btn-default min-h-11 sm:min-h-8">Credit memo</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A return begins as a complaint against an invoice, is given a document goods can come back on, and
-          ends with a receipt that puts those goods into returns stock. Returns stock is not valuated, so the
-          receipt posts no accounting document: the goods are still the customer&apos;s until they are inspected
-          and transferred into valuated stock.
-        </p>
-      </header>
+        </>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              A return begins as a complaint against an invoice, is given a document goods can come back on, and
+              ends with a receipt that puts those goods into returns stock. Returns stock is not valuated, so the
+              receipt posts no accounting document: the goods are still the customer&apos;s until they are inspected
+              and transferred into valuated stock.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/sales/billing">Billing</LinkButton>
+          <LinkButton href="/sales/credit-memo">Credit memo</LinkButton>
+        </>
+      }
+    >
       <Returns
         orders={orders}
         deliveries={deliveries}
@@ -78,6 +79,6 @@ export default async function SalesReturnsPage({ searchParams }: {
         canRaiseDelivery={can(session, RETURNS_DELIVERY_CAPABILITY)}
         canReceive={can(session, RETURNS_RECEIPT_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

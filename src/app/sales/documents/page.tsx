@@ -5,6 +5,7 @@ import {
   type RegisterFilter, type RegisterKind, REGISTER_KINDS, REGISTER_KIND_MEANING,
   REGISTER_LIMIT, listDocumentRegister, listDueRegister, listRegisterChoices,
 } from '@/modules/sales/registers';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,21 +72,10 @@ export default async function SalesDocumentsPage({ searchParams }: {
   };
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Sales documents</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          What stands, and what is still to do. Choose a register, narrow it by what the business
-          asks about, and read the totals at the foot — they are the totals of what the register
-          answered, not of the whole of the table. The delivery and billing due lists are read
-          through the same services the delivery and the billing screens use, under the same filter,
-          so what is listed here is what the act will do.
-        </p>
-      </header>
+    <Page
+      title="Sales documents" code={<>{CAPABILITY} · SD</>} width="7xl"
+      description="What stands, and what is still to do. Choose a register, narrow it by what the business asks about, and read the totals at the foot — they are the totals of what the register answered, not of the whole of the table. The delivery and billing due lists are read through the same services the delivery and the billing screens use, under the same filter, so what is listed here is what the act will do."
+    >
 
       <nav aria-label="Register" className="flex flex-wrap gap-2">
         {REGISTER_KINDS.map((candidate) => (
@@ -309,7 +299,7 @@ export default async function SalesDocumentsPage({ searchParams }: {
           </div>
         ) : null}
       </section>
-    </main>
+    </Page>
   );
 }
 

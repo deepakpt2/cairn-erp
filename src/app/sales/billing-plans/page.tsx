@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -9,6 +8,7 @@ import {
   planTypeChoices,
 } from '@/modules/sales/billing-plan';
 import BillingPlans from './BillingPlans';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,24 +45,16 @@ export default async function SalesBillingPlansPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{BILLING_PLAN_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Billing plans</h1>
-          <div className="flex gap-2">
-            <Link href="/sales/billing" className="btn btn-default min-h-11 sm:min-h-8">Billing</Link>
-            <Link href="/sales/orders" className="btn btn-default min-h-11 sm:min-h-8">Orders</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A billing plan says when an order item is billed, for the sales that are never delivered: dates
-          hanging off the item, each carrying a share of its value. The shares total a hundred, a date is
-          billed once and never before its day, and a withdrawn date stays on the record rather than being
-          erased.
-        </p>
-      </header>
+    <Page
+      title="Billing plans" code={BILLING_PLAN_CAPABILITY}
+      description="A billing plan says when an order item is billed, for the sales that are never delivered: dates hanging off the item, each carrying a share of its value. The shares total a hundred, a date is billed once and never before its day, and a withdrawn date stays on the record rather than being erased."
+      actions={
+        <>
+          <LinkButton href="/sales/billing">Billing</LinkButton>
+          <LinkButton href="/sales/orders">Orders</LinkButton>
+        </>
+      }
+    >
       <BillingPlans
         plans={plans}
         types={types}
@@ -71,6 +63,6 @@ export default async function SalesBillingPlansPage({ searchParams }: {
         orderLineNumber={orderLineNumber}
         canMaintain={can(session, BILLING_PLAN_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

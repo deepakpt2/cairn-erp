@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -10,6 +9,7 @@ import {
   rebateRegister,
 } from '@/modules/sales/rebate';
 import RebateAgreements from './RebateAgreements';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,24 +44,16 @@ export default async function SalesRebateAgreementsPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{REBATE_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Rebate agreements</h1>
-          <div className="flex gap-2">
-            <Link href="/sales/billing" className="btn btn-default min-h-11 sm:min-h-8">Billing</Link>
-            <Link href="/sales/credit-memo" className="btn btn-default min-h-11 sm:min-h-8">Credit memos</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A rebate agreement is a promise to give a customer part of what they spend back. It accrues only once
-          it is released, only inside its dates, and only for the payer and sales area it names — the provision
-          is posted with the invoice and released by the settlement, which credits the customer on a credit memo
-          of its own.
-        </p>
-      </header>
+    <Page
+      title="Rebate agreements" code={REBATE_CAPABILITY}
+      description="A rebate agreement is a promise to give a customer part of what they spend back. It accrues only once it is released, only inside its dates, and only for the payer and sales area it names — the provision is posted with the invoice and released by the settlement, which credits the customer on a credit memo of its own."
+      actions={
+        <>
+          <LinkButton href="/sales/billing">Billing</LinkButton>
+          <LinkButton href="/sales/credit-memo">Credit memos</LinkButton>
+        </>
+      }
+    >
       <RebateAgreements
         agreements={agreements}
         types={types}
@@ -70,6 +62,6 @@ export default async function SalesRebateAgreementsPage({ searchParams }: {
         canSettle={can(session, REBATE_SETTLEMENT_CAPABILITY)}
         today={new Date().toISOString().slice(0, 10)}
       />
-    </div>
+    </Page>
   );
 }

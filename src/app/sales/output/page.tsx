@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -13,6 +12,7 @@ import {
 } from '@/modules/sales/output';
 import { letterheadViews } from '@/modules/output/document-layout';
 import SalesOutput from './SalesOutput';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,25 +64,17 @@ export default async function SalesOutputPage({ searchParams }: {
   const letterheads = await letterheadViews(client, queue.rows.map((row) => row.companyCode ?? ''));
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{SALES_OUTPUT_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Output: what the customer receives</h1>
-          <div className="flex gap-2">
-            <Link href="/sales/billing" className="btn btn-default min-h-11 sm:min-h-8">Billing</Link>
-            <Link href="/sales/delivery" className="btn btn-default min-h-11 sm:min-h-8">Deliveries</Link>
-            <Link href="/sales/orders" className="btn btn-default min-h-11 sm:min-h-8">Orders</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          An order confirmation, a delivery note and an invoice: each is an output type, and which of them a
-          document earns, by which medium, when and addressed to which of its partners is answered by a
-          condition record read most specific first. No record, no output. What is sent is rendered from the
-          document as it stands and kept with the message, so a copy read later is the one that went out.
-        </p>
-      </header>
+    <Page
+      title="Output: what the customer receives" code={SALES_OUTPUT_CAPABILITY} width="7xl"
+      description="An order confirmation, a delivery note and an invoice: each is an output type, and which of them a document earns, by which medium, when and addressed to which of its partners is answered by a condition record read most specific first. No record, no output. What is sent is rendered from the document as it stands and kept with the message, so a copy read later is the one that went out."
+      actions={
+        <>
+          <LinkButton href="/sales/billing">Billing</LinkButton>
+          <LinkButton href="/sales/delivery">Deliveries</LinkButton>
+          <LinkButton href="/sales/orders">Orders</LinkButton>
+        </>
+      }
+    >
       <SalesOutput
         rows={queue.rows}
         counts={{
@@ -96,6 +88,6 @@ export default async function SalesOutputPage({ searchParams }: {
         today={new Date().toISOString().slice(0, 10)}
         letterheads={letterheads}
       />
-    </div>
+    </Page>
   );
 }

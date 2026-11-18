@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { listBillings } from '@/modules/sales/billing';
@@ -11,6 +10,7 @@ import {
 } from '@/modules/sales/credit-memo';
 import { getSalesOrder } from '@/modules/sales/sales-order';
 import CreditMemoRequest from './CreditMemoRequest';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,26 +43,27 @@ export default async function SalesCreditMemoRequestPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">
+    <Page
+      title="Credit memo requests" code={<>
           {CREDIT_MEMO_REQUEST_CAPABILITY} · {CREDIT_MEMO_RELEASE_CAPABILITY} · {CREDIT_MEMO_POST_CAPABILITY}
-        </span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Credit memo requests</h1>
-          <div className="flex gap-2">
-            <Link href="/sales/billing" className="btn btn-default min-h-11 sm:min-h-8">Billing</Link>
-            <Link href="/sales/returns" className="btn btn-default min-h-11 sm:min-h-8">Returns</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A customer asks for money back, and the request is recorded held. Somebody with the authority to
-          give it releases the block, and only then is the credit raised — bounded by what the request
-          asked for, and priced from the line the goods were invoiced at rather than from today&apos;s price
-          list.
-        </p>
-      </header>
+        </>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              A customer asks for money back, and the request is recorded held. Somebody with the authority to
+              give it releases the block, and only then is the credit raised — bounded by what the request
+              asked for, and priced from the line the goods were invoiced at rather than from today&apos;s price
+              list.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/sales/billing">Billing</LinkButton>
+          <LinkButton href="/sales/returns">Returns</LinkButton>
+        </>
+      }
+    >
       <CreditMemoRequest
         requests={requests}
         invoices={invoices}
@@ -71,6 +72,6 @@ export default async function SalesCreditMemoRequestPage({ searchParams }: {
         canRelease={can(session, CREDIT_MEMO_RELEASE_CAPABILITY)}
         canCredit={can(session, CREDIT_MEMO_POST_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

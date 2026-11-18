@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -12,6 +11,7 @@ import {
 } from '@/modules/sales/delivery';
 import { SALES_ORDER_RELEASE_CAPABILITY, salesOrderChoices } from '@/modules/sales/sales-order';
 import Delivery from './Delivery';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,22 +41,15 @@ export default async function SalesDeliveryPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{DELIVERY_CAPABILITY} · {DELIVERY_PICK_CAPABILITY} · {DELIVERY_GOODS_ISSUE_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Outbound deliveries</h1>
-          <div className="flex gap-2">
-            <Link href="/sales/orders" className="btn btn-default min-h-11 sm:min-h-8">Sales orders</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A delivery is created from the quantity an order line still has open, picked in the store, and closed
-          by a goods issue that posts stock, valuation and the journal together. A delivery on its own moves
-          nothing, and an order that is credit-blocked does not get one.
-        </p>
-      </header>
+    <Page
+      title="Outbound deliveries" code={<>{DELIVERY_CAPABILITY} · {DELIVERY_PICK_CAPABILITY} · {DELIVERY_GOODS_ISSUE_CAPABILITY}</>}
+      description="A delivery is created from the quantity an order line still has open, picked in the store, and closed by a goods issue that posts stock, valuation and the journal together. A delivery on its own moves nothing, and an order that is credit-blocked does not get one."
+      actions={
+        <>
+          <LinkButton href="/sales/orders">Sales orders</LinkButton>
+        </>
+      }
+    >
       <Delivery
         documents={documents}
         openLines={openLines}
@@ -68,6 +61,6 @@ export default async function SalesDeliveryPage({ searchParams }: {
         canPost={can(session, DELIVERY_GOODS_ISSUE_CAPABILITY)}
         canRelease={can(session, SALES_ORDER_RELEASE_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

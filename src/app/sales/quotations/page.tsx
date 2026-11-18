@@ -10,6 +10,7 @@ import {
   quotationChoices,
 } from '@/modules/sales/quotation';
 import Quotations from './Quotations';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,20 +31,19 @@ export default async function SalesQuotationsPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{SALES_QUOTATION_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Sales quotations</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A quotation is an answer given before the customer commits. It consumes no availability, it
-          creates no receivable, and it is not judged for credit. It holds until its valid-to date, and an
-          order is raised from it at <Link className="link" href="/sales/orders">/sales/orders</Link> —
-          priced and credit-checked on the day that order is raised.
-        </p>
-      </header>
+    <Page
+      title="Sales quotations" code={SALES_QUOTATION_CAPABILITY}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              A quotation is an answer given before the customer commits. It consumes no availability, it
+              creates no receivable, and it is not judged for credit. It holds until its valid-to date, and an
+              order is raised from it at <Link className="link" href="/sales/orders">/sales/orders</Link> —
+              priced and credit-checked on the day that order is raised.
+            </p>
+        </>
+      }
+    >
       <Quotations
         documents={documents}
         choices={choices}
@@ -51,6 +51,6 @@ export default async function SalesQuotationsPage({ searchParams }: {
         canCreate={can(session, SALES_QUOTATION_CAPABILITY)}
         canRaiseOrder={can(session, SALES_ORDER_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

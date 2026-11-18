@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { listSalesOutput } from '@/modules/sales/output';
@@ -18,6 +17,7 @@ import { listBillablePlanDates } from '@/modules/sales/billing-plan';
 import { orderDownPayments } from '@/modules/sales/down-payment';
 import { rebateAccrualsForBilling } from '@/modules/sales/rebate';
 import Billing from './Billing';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,23 +92,15 @@ export default async function SalesBillingPage({ searchParams }: {
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{BILLING_CAPABILITY} · {BILLING_CANCEL_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Billing documents</h1>
-          <div className="flex gap-2">
-            <Link href="/sales/delivery" className="btn btn-default min-h-11 sm:min-h-8">Deliveries</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A billing document is created from the quantity a goods issue actually moved, or from the date of a
-          billing plan whose day has come. Either way it quotes the price the order line was priced at, from
-          the condition record named on it, and posts the receivable through the accounting-invoice service. A
-          delivery is billed once, and so is a plan date.
-        </p>
-      </header>
+    <Page
+      title="Billing documents" code={<>{BILLING_CAPABILITY} · {BILLING_CANCEL_CAPABILITY}</>}
+      description="A billing document is created from the quantity a goods issue actually moved, or from the date of a billing plan whose day has come. Either way it quotes the price the order line was priced at, from the condition record named on it, and posts the receivable through the accounting-invoice service. A delivery is billed once, and so is a plan date."
+      actions={
+        <>
+          <LinkButton href="/sales/delivery">Deliveries</LinkButton>
+        </>
+      }
+    >
       <Billing
         groups={groups}
         criteria={criteria}
@@ -125,7 +117,7 @@ export default async function SalesBillingPage({ searchParams }: {
         canCreate={can(session, BILLING_CAPABILITY)}
         canCancel={can(session, BILLING_CANCEL_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }
 
