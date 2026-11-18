@@ -5,6 +5,7 @@ import { savePeriodRule } from './actions';
 import { PeriodRules } from './PeriodRules';
 import { can, requireSession } from '@/platform/auth/current';
 import { hasCompanyCodeAssignments } from '@/modules/foundation/company-code-assignments';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,17 +52,15 @@ export default async function PostingPeriodsPage({
   }
   if (!hasCompanyCodeAssignments(selectedCompany)) {
     return (
-      <div className="mx-auto max-w-5xl p-6">
-        <header className="mb-4 border-b border-line pb-4">
-          <span className="code text-ink-faint">FIN.CLOSE.PERIOD</span>
-          <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('pp.title')}</h1>
-          <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('pp.subtitle')}</p>
-        </header>
+      <Page
+      title={t('pp.title')} code="FIN.CLOSE.PERIOD" width="5xl" back={null}
+      description={t('pp.subtitle')}
+    >
         <div className="panel p-5 text-sm text-ink-soft">
           <p className="code font-semibold">{selectedCompany.companyCode} · {selectedCompany.name}</p>
           <p className="mt-2">{t('cc.assignmentsPending')}</p>
         </div>
-      </div>
+      </Page>
     );
   }
 
@@ -69,32 +68,31 @@ export default async function PostingPeriodsPage({
   const status = await listPeriodRules(client, companyCodeKey, fiscalYear);
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <header className="mb-4 border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.CLOSE.PERIOD</span>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('pp.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('pp.subtitle')}</p>
-        <p className="mt-2 text-sm">
-          <Link href="/config/posting-period-variants" className="text-accent hover:underline">
-            {t('pp.defineVariantsLink')}
-          </Link>
-        </p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+    <Page
+      title={t('pp.title')} code="FIN.CLOSE.PERIOD" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('pp.subtitle')}</p>
+          <p className="mt-2 text-sm">
+              <Link href="/config/posting-period-variants" className="text-accent hover:underline">
+                {t('pp.defineVariantsLink')}
+              </Link>
+            </p>
           <span className="text-2xs uppercase tracking-wide text-ink-faint">
-            {t('cc.code')}
-          </span>
+                {t('cc.code')}
+              </span>
           {companies.map((company) => (
-            <Link
-              key={company.companyCode}
-              href={`/config/posting-periods?company=${company.companyCode}`}
-              className={`chip ${company.companyCode === companyCodeKey ? 'chip-info' : 'chip-neutral'}`}
-            >
-              {company.companyCode} · {company.name}
-            </Link>
-          ))}
-        </div>
-      </header>
+                <Link
+                  key={company.companyCode}
+                  href={`/config/posting-periods?company=${company.companyCode}`}
+                  className={`chip ${company.companyCode === companyCodeKey ? 'chip-info' : 'chip-neutral'}`}
+                >
+                  {company.companyCode} · {company.name}
+                </Link>
+              ))}
+        </>
+      }
+    >
 
       <div className="mb-4 grid gap-3 sm:grid-cols-4">
         <Summary label={t('journal.period')} value={`${fiscalYear}`} />
@@ -114,7 +112,7 @@ export default async function PostingPeriodsPage({
         specialPeriods={status.specialPeriods}
         onSave={savePeriodRule}
       />
-    </div>
+    </Page>
   );
 }
 

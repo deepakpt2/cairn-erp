@@ -8,6 +8,7 @@ import { withTenant } from '@/platform/db/client';
 import { country as countryReference, currency as currencyReference } from '@/platform/tables/reference';
 import { CompanyCodeCoaAssignmentForm, type ChartOfAccountsChoice } from './CompanyCodeCoaAssignmentForm';
 import { CompanyCodeDefinitionForm } from './CompanyCodeDefinitionForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,24 +54,25 @@ export default async function CompanyCodesPage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-6">
-      <header className="border-b border-line pb-4">
-        <div className="flex flex-wrap gap-x-3">
+    <Page
+      title={t('cc.title')} width="5xl" back={null}
+      description={
+        <>
           {canDefine && <span className="code text-ink-faint">{COMPANY_CODE_DEFINE}</span>}
           {canAssign && <span className="code text-ink-faint">{COMPANY_CODE_ASSIGN_COA}</span>}
           {!canDefine && !canAssign && (
-            <span className="code text-ink-faint">{COMPANY_CODE_DEFINE}</span>
-          )}
-        </div>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('cc.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('cc.subtitle')}</p>
-        <Link href="/config/fiscal-year-variants/assign-company-codes" className="mt-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
-          {t('cc.assignFiscalYearVariant')}
-        </Link>
-        <Link href="/config/company-codes/assign-chart-of-accounts" className="mt-2 ml-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
-          {t('cc.assignCoaScreen')}
-        </Link>
-      </header>
+                <span className="code text-ink-faint">{COMPANY_CODE_DEFINE}</span>
+              )}
+          <p className="max-w-3xl text-sm text-ink-soft">{t('cc.subtitle')}</p>
+          <Link href="/config/fiscal-year-variants/assign-company-codes" className="mt-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
+              {t('cc.assignFiscalYearVariant')}
+            </Link>
+          <Link href="/config/company-codes/assign-chart-of-accounts" className="mt-2 ml-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
+              {t('cc.assignCoaScreen')}
+            </Link>
+        </>
+      }
+    >
 
       {canDefine && references && (
         <CompanyCodeDefinitionForm
@@ -157,6 +159,6 @@ export default async function CompanyCodesPage() {
       )}
 
       <p className="text-2xs text-ink-faint">{t('cc.inheritNote')}</p>
-    </div>
+    </Page>
   );
 }

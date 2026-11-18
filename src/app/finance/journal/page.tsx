@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import { t } from '@/platform/i18n';
 import { withTenant } from '@/platform/db/client';
 import { requireSession } from '@/platform/auth/current';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,53 +85,27 @@ export default async function JournalPage({
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <header className="mb-4 border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.JOURNAL.DISPLAY</span>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('journal.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('journal.subtitle')}</p>
-        <div className="mt-2 flex flex-wrap gap-3">
-          <Link href="/finance/tax/report" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.taxReport')}
-          </Link>
-          <Link href="/finance/fx/valuation" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.fxValuation')}
-          </Link>
-          <Link href="/finance/grir-reclass" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.grir')}
-          </Link>
-          <Link href="/finance/accruals" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.accruals')}
-          </Link>
-          <Link href="/finance/close-cockpit" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.closeCockpit')}
-          </Link>
-          <Link href="/finance/carryforward" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.carryforward')}
-          </Link>
-          <Link href="/finance/credit" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.credit')}
-          </Link>
-          <Link href="/finance/trial-balance" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.trialBalance')}
-          </Link>
-          <Link href="/finance/balance-sheet" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.balanceSheet')}
-          </Link>
-          <Link href="/finance/profit-loss" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.profitLoss')}
-          </Link>
-          <Link href="/controlling/cost-center-report" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.costCenterReport')}
-          </Link>
-          <Link href="/controlling/profit-center-report" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.profitCenterReport')}
-          </Link>
-          <Link href="/finance/subledger-tie-out" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('journal.subledgerTie')}
-          </Link>
-        </div>
-      </header>
+    <Page
+      title={t('journal.title')} code="FIN.JOURNAL.DISPLAY" back={null}
+      description={t('journal.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/finance/tax/report">{t('journal.taxReport')}</LinkButton>
+          <LinkButton href="/finance/fx/valuation">{t('journal.fxValuation')}</LinkButton>
+          <LinkButton href="/finance/grir-reclass">{t('journal.grir')}</LinkButton>
+          <LinkButton href="/finance/accruals">{t('journal.accruals')}</LinkButton>
+          <LinkButton href="/finance/close-cockpit">{t('journal.closeCockpit')}</LinkButton>
+          <LinkButton href="/finance/carryforward">{t('journal.carryforward')}</LinkButton>
+          <LinkButton href="/finance/credit">{t('journal.credit')}</LinkButton>
+          <LinkButton href="/finance/trial-balance">{t('journal.trialBalance')}</LinkButton>
+          <LinkButton href="/finance/balance-sheet">{t('journal.balanceSheet')}</LinkButton>
+          <LinkButton href="/finance/profit-loss">{t('journal.profitLoss')}</LinkButton>
+          <LinkButton href="/controlling/cost-center-report">{t('journal.costCenterReport')}</LinkButton>
+          <LinkButton href="/controlling/profit-center-report">{t('journal.profitCenterReport')}</LinkButton>
+          <LinkButton href="/finance/subledger-tie-out">{t('journal.subledgerTie')}</LinkButton>
+        </>
+      }
+    >
 
       {detail && (
         <section className="panel mb-4 overflow-hidden">
@@ -237,7 +212,7 @@ export default async function JournalPage({
           </table>
         </div>
       )}
-    </div>
+    </Page>
   );
 }
 

@@ -10,6 +10,7 @@ import {
 } from '@/modules/foundation/sales-org-distribution-channel-assignment';
 import { SalesOrgDistributionChannelAssignmentsList } from './AssignmentsList';
 import { SalesOrgDistributionChannelAssignmentForm } from './AssignmentForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,19 +72,8 @@ export default async function AssignDistributionChannelPage() {
   const hasActiveDistributionChannels = valueHelp.distributionChannels.length > 0;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
-      <section className="overflow-hidden border border-line-strong bg-white shadow-sm">
-        <header className="flex min-h-16 items-center gap-2 border-b border-line-strong bg-sunken px-3 py-2 text-ink sm:gap-3 sm:px-4">
-          <Link href="/config" aria-label={t('nav.workbench')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-line text-xl hover:bg-line-strong sm:h-9 sm:w-9">‹</Link>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent font-bold tracking-tight text-white shadow-sm sm:h-8 sm:w-8" aria-label={t('app.name')}>C</span>
-          <div className="min-w-0 flex-1 text-center">
-            <span className="code text-2xs text-ink-soft">{ACTIVITY} · OVXK</span>
-            <h1 className="text-sm font-semibold leading-tight sm:text-base">{t('salesOrgChannel.title')}</h1>
-          </div>
-          <Link href="/config/sales-orgs" className="hidden shrink-0 text-xs text-ink underline sm:inline">
-            {t('salesOrg.backToDefinitions')}
-          </Link>
-        </header>
+    <Page title={t('salesOrgChannel.title')} code={<>{ACTIVITY} · OVXK</>} back={{ href: '/config', label: t('nav.workbench') }}>
+      <section className="panel overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-line bg-sunken px-3 py-3 sm:py-2">
           <Link href="/config" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">
             {t('nav.workbench')}
@@ -124,6 +114,6 @@ export default async function AssignDistributionChannelPage() {
       )}
 
       <SalesOrgDistributionChannelAssignmentsList assignments={assignmentRows} canRemove={canMaintain} />
-    </div>
+    </Page>
   );
 }

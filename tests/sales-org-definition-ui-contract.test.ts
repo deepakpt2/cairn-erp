@@ -103,7 +103,7 @@ describe('SCR-020 Sales Organization definition UI and action contract', () => {
   });
 
   it('uses touch-friendly mobile controls and switches the overview from stacked cards to a desktop table', () => {
-    expect(page).toContain('px-3 py-4 sm:p-6');
+    expect(page).toContain('<Page');
     expect(page).toContain('sm:hidden" role="list"');
     expect(page).toContain('hidden overflow-x-auto sm:block');
     expect(page).toContain('min-h-11 items-center');

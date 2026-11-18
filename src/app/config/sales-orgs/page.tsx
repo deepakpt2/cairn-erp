@@ -13,6 +13,7 @@ import { t } from '@/platform/i18n';
 import { SalesOrgDefinitionForm, type SalesOrgDefinitionDraft } from './SalesOrgDefinitionForm';
 import { DeactivateSalesOrgForm } from './DeactivateSalesOrgForm';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 const SALES_ORG_DEFINE = 'CFG.ORG.SALESORG.DEFINE';
@@ -198,14 +199,8 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
   const visibleOrganisations = organisations.filter((item) => !search || `${item.salesOrg} ${item.displayName}`.toLocaleLowerCase().includes(search));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
-      <section className="overflow-hidden border border-line-strong bg-white shadow-sm">
-        <header className="flex min-h-16 items-center gap-2 border-b border-line-strong bg-sunken px-3 py-2 text-ink sm:gap-3 sm:px-4">
-          <Link href="/config" aria-label={t('nav.workbench')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-line text-xl hover:bg-line-strong sm:h-9 sm:w-9">‹</Link>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent font-bold tracking-tight text-white shadow-sm sm:h-8 sm:w-8" aria-label={t('app.name')}>C</span>
-          <h1 className="min-w-0 flex-1 text-center text-sm font-semibold leading-tight sm:text-base">{t('salesOrg.screenTitle')}</h1>
-          <Link href="/config" className="hidden shrink-0 text-xs text-ink underline sm:inline">{t('nav.workbench')}</Link>
-        </header>
+    <Page title={t('salesOrg.screenTitle')} back={{ href: '/config', label: t('nav.workbench') }}>
+      <section className="panel overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-line bg-sunken px-3 py-3 sm:py-2">
           {canMaintain && <Link href="/config/sales-orgs?new=1" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">{t('salesOrg.newEntries')}</Link>}
           {canAssignCompany && <Link href="/config/sales-orgs/assign-company" className="inline-flex min-h-11 items-center border border-line-strong bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-8 sm:py-1">{t('salesOrg.assignCompanyCode')}</Link>}
@@ -332,6 +327,6 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
           {!history.length && <p className="p-3 text-sm text-ink-soft">{t('salesOrg.noHistory')}</p>}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

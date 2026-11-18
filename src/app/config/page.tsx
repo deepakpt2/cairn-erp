@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
 import { t } from '@/platform/i18n';
@@ -6,6 +5,7 @@ import { listTenants, configReadiness } from '@/platform/tenancy';
 import { requireSession } from '@/platform/auth/current';
 import { WorkbenchTree } from './WorkbenchTree';
 import { recheckConfigurationStatusAction } from './actions';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -182,19 +182,19 @@ export default async function WorkbenchPage({
       : Math.round((readiness.completedActivities / readiness.totalActivities) * 100);
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <header className="mb-4 border-b border-line pb-4">
-        <span className="code text-ink-faint">CFG.WORKBENCH</span>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('workbench.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('workbench.subtitle')}</p>
-
-
-        {params.created === '1' && (
-          <p className="mt-3 border border-signal-ok/30 bg-signal-ok-soft px-3 py-2 text-sm text-signal-ok">
-            Tenant created. Its roles and workbench checklist are ready. Maintain accounting number ranges before the first posting.
-          </p>
-        )}
-      </header>
+    <Page
+      title={t('workbench.title')} code="CFG.WORKBENCH" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('workbench.subtitle')}</p>
+          {params.created === '1' && (
+              <p className="mt-3 border border-signal-ok/30 bg-signal-ok-soft px-3 py-2 text-sm text-signal-ok">
+                Tenant created. Its roles and workbench checklist are ready. Maintain accounting number ranges before the first posting.
+              </p>
+            )}
+        </>
+      }
+    >
 
       <section className="panel mb-4 p-4">
         <div className="flex items-center justify-between gap-4">
@@ -230,6 +230,6 @@ export default async function WorkbenchPage({
       </section>
 
       <WorkbenchTree rows={rows} completed={[...completed]} builtRoutes={[...BUILT_ROUTES]} />
-    </div>
+    </Page>
   );
 }

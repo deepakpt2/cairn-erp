@@ -3,6 +3,7 @@ import { t } from '@/platform/i18n';
 import { searchRegistry, coverageLabel, type RegistryHit } from '@/platform/registry';
 import { RegistrySearch } from './RegistrySearch';
 import { screenTerms } from './screen-terms';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,12 +31,10 @@ export default async function RegistryPage({
   const hits = [...terms, ...screenTerms(query)];
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <header className="mb-4 border-b border-line pb-4">
-        <span className="code text-ink-faint">PLT.REGISTRY.SEARCH</span>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('registry.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('registry.subtitle')}</p>
-      </header>
+    <Page
+      title={t('registry.title')} code="PLT.REGISTRY.SEARCH" width="4xl" back={null}
+      description={t('registry.subtitle')}
+    >
 
       <RegistrySearch key={query} initialQuery={query} />
 
@@ -128,7 +127,7 @@ export default async function RegistryPage({
           </p>
         </div>
       )}
-    </div>
+    </Page>
   );
 }
 

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { listTenants } from '@/platform/tenancy';
 import { requireSession } from '@/platform/auth/current';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,17 +13,15 @@ export default async function TenantsPage() {
   const tenants = session ? allTenants.filter((tenant) => tenant.client === session.user.client) : allTenants;
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <header className="mb-4 flex items-start justify-between gap-4 border-b border-line pb-4">
-        <div>
-          <span className="code text-ink-faint">CFG.PLT.CLIENT.DEFINE</span>
-          <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('tenants.title')}</h1>
-          <p className="mt-1 max-w-2xl text-sm text-ink-soft">{t('tenants.subtitle')}</p>
-        </div>
-        <Link href="/clients/new" className="btn btn-primary shrink-0">
-          {t('tenants.create')}
-        </Link>
-      </header>
+    <Page
+      title={t('tenants.title')} code="CFG.PLT.CLIENT.DEFINE" width="5xl" back={null}
+      description={t('tenants.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/clients/new" variant="primary">{t('tenants.create')}</LinkButton>
+        </>
+      }
+    >
 
       {tenants.length === 0 ? (
         <div className="panel p-8 text-center">
@@ -89,6 +88,6 @@ export default async function TenantsPage() {
           </table>
         </div>
       )}
-    </div>
+    </Page>
   );
 }

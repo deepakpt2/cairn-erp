@@ -7,6 +7,7 @@ import { ROLE_MAINTAIN_CAPABILITY } from '@/modules/platform/role-admin';
 import { MAINTAIN, PASSWORD_RESET } from '../constants';
 import { mfaStatus, MFA_ADMIN_CAPABILITY } from '@/platform/auth/mfa';
 import UserDetailControls from '../UserDetailControls';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,15 +35,17 @@ export default async function UserDetailPage({
   const status = detail.isActive ? (detail.isLocked ? 'Active · locked' : 'Active · unlocked') : (detail.isLocked ? 'Inactive · locked' : 'Inactive · unlocked');
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <nav className="mb-2 flex flex-wrap gap-3 text-sm"><Link className="link" href="/platform/users">User directory</Link>{caps.includes(ROLE_MAINTAIN_CAPABILITY) && <Link className="link" href="/platform/roles">Role administration</Link>}</nav>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><p className="code text-ink-faint">Application account · tenant {detail.client}</p><h1 className="mt-1 text-2xl font-semibold">{detail.username}</h1><p className="text-ink-soft">{detail.fullName}</p></div>
+    <Page
+      title={detail.username} code={<>Application account · tenant {detail.client}</>} width="7xl" back={null}
+      description={
+        <>
+          <nav className="mb-2 flex flex-wrap gap-3 text-sm"><Link className="link" href="/platform/users">User directory</Link>{caps.includes(ROLE_MAINTAIN_CAPABILITY) && <Link className="link" href="/platform/roles">Role administration</Link>}</nav>
+          <p className="max-w-3xl text-sm text-ink-soft">{detail.fullName}</p>
           <span className="rounded border border-line px-3 py-1 text-sm">{status}</span>
-        </div>
-        <p className="mt-3 max-w-4xl text-sm text-ink-soft">This is an application account, separate from the employee master record. Account edits here do not change HR data, role assignments or organizational restrictions.</p>
-      </header>
+          <p className="max-w-3xl text-sm text-ink-soft">This is an application account, separate from the employee master record. Account edits here do not change HR data, role assignments or organizational restrictions.</p>
+        </>
+      }
+    >
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="panel p-3"><div className="text-xs uppercase text-ink-faint">Email</div><div className="mt-1 break-all text-sm">{detail.email ?? 'Not recorded'}</div></div>
@@ -87,6 +90,6 @@ export default async function UserDetailPage({
         <div><h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Organization restrictions</h2><p className="mt-1 text-xs text-ink-faint">Capability authorizes an action; these scopes constrain where it may apply. No rows means unrestricted by this restriction table, not a capability grant.</p></div>
         {detail.organizationRestrictions.length ? <div className="flex flex-wrap gap-2">{detail.organizationRestrictions.map((scope) => <span key={`${scope.scopeType}:${scope.scopeValue}`} className="rounded border border-line px-2 py-1 text-xs"><strong>{scope.scopeType}</strong> · {scope.scopeValue}</span>)}</div> : <p className="text-sm">No organization restrictions are recorded; this account is unrestricted by the scope table.</p>}
       </section>
-    </main>
+    </Page>
   );
 }

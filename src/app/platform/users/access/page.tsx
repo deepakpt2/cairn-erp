@@ -1,5 +1,4 @@
 /** Central, tenant-scoped company and plant business-access maintenance. */
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -9,6 +8,7 @@ import {
   OrganisationScopeAdminError,
 } from '@/modules/platform/organisation-scope-admin';
 import ScopeManager from './ScopeManager';
+import { LinkButton, Page } from '@/ui/kit';
 
 const ROUTE = '/platform/users/access';
 
@@ -47,22 +47,15 @@ export default async function OrganisationScopeAdminPage({
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <span className="code text-ink-faint">{ORGANISATION_SCOPE_ADMIN_CAPABILITY}</span>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight">Company and plant business access</h1>
-          </div>
-          <div className="flex gap-2">
-            <Link href="/platform/users" className="btn btn-default">Users</Link>
-            <Link href="/" className="btn btn-default">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 max-w-4xl text-sm text-ink-soft">
-          Assign or revoke the companies and plants a user may work in. These scopes govern business access only; they do not grant roles, capabilities, or user-administration authority, and are independent of employee records.
-        </p>
-      </header>
+    <Page
+      title="Company and plant business access" code={ORGANISATION_SCOPE_ADMIN_CAPABILITY}
+      description="Assign or revoke the companies and plants a user may work in. These scopes govern business access only; they do not grant roles, capabilities, or user-administration authority, and are independent of employee records."
+      actions={
+        <>
+          <LinkButton href="/platform/users">Users</LinkButton>
+        </>
+      }
+    >
 
       {!allowed ? (
         <section className="panel panel-danger p-4 text-sm" role="status">
@@ -80,6 +73,6 @@ export default async function OrganisationScopeAdminPage({
           actorUserId={session.user.userId}
         />
       ) : null}
-    </main>
+    </Page>
   );
 }

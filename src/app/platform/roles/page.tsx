@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { getRoleAdminOverview, RoleAdminError, USER_ROLE_MAINTAIN_CAPABILITY } from '@/modules/platform/role-admin';
 import RoleManager from './RoleManager';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,18 +18,16 @@ export default async function RolesPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <span className="code text-ink-faint">CFG.PLT.ROLE.MAINTAIN · CFG.PLT.USER.ROLE.MAINTAIN</span>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight">Roles and capabilities</h1>
-          </div>
-          <div className="flex gap-2"><Link href="/platform/users" className="btn btn-default">Users</Link><Link href="/" className="btn btn-default">Launchpad</Link></div>
-        </div>
-        <p className="mt-2 max-w-4xl text-sm text-ink-soft">Tenant-local role maintenance. Only registered capabilities may be assigned; custom roles cannot contain wildcards. Company and plant business scopes remain separate under user access.</p>
-      </header>
+    <Page
+      title="Roles and capabilities" code="CFG.PLT.ROLE.MAINTAIN · CFG.PLT.USER.ROLE.MAINTAIN" width="7xl"
+      description="Tenant-local role maintenance. Only registered capabilities may be assigned; custom roles cannot contain wildcards. Company and plant business scopes remain separate under user access."
+      actions={
+        <>
+          <LinkButton href="/platform/users">Users</LinkButton>
+        </>
+      }
+    >
       {error ? <section className="panel panel-danger p-4 text-sm" role="alert">{error}<p className="mt-2 text-ink-soft">Tenant wildcard ADMINISTRATOR and CFG.PLT.USER.MAINTAIN alone do not authorize this page. Ask the deployment owner to bootstrap a designated active account.</p></section> : overview ? <RoleManager overview={overview} actorUserId={session.user.userId} canAssignUsers={can(session, USER_ROLE_MAINTAIN_CAPABILITY)} /> : null}
-    </main>
+    </Page>
   );
 }

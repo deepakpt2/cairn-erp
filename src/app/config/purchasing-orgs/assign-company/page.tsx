@@ -5,6 +5,7 @@ import { withTenant } from '@/platform/db/client';
 import { t } from '@/platform/i18n';
 import { companyCode, purchasingOrg } from '@/modules/foundation/schema';
 import { PurchasingOrgCompanyCodeAssignmentForm } from './PurchasingOrgCompanyCodeAssignmentForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,29 +43,24 @@ export default async function AssignPurchasingOrgCompanyCodePage() {
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <span className="code text-ink-faint">{ASSIGNMENT}</span>
-            <h1 className="mt-0.5 text-xl font-semibold tracking-tight">
-              {t('purchasingOrg.companyAssignmentTitle')}
-            </h1>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link>
-            <Link href="/config/purchasing-orgs" className="btn btn-default">
-              {t('purchasingOrg.backToDefinitions')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          {t('purchasingOrg.companyAssignmentSubtitle')}
-        </p>
-        <p className="mt-2 max-w-3xl text-xs text-ink-soft">
-          {t('purchasingOrg.companyAssignmentInitialOnly')}
-        </p>
-      </header>
+    <Page
+      title={t('purchasingOrg.companyAssignmentTitle')} code={ASSIGNMENT} back={{ href: '/config', label: t('nav.workbench') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              {t('purchasingOrg.companyAssignmentSubtitle')}
+            </p>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              {t('purchasingOrg.companyAssignmentInitialOnly')}
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/config/purchasing-orgs">{t('purchasingOrg.backToDefinitions')}</LinkButton>
+        </>
+      }
+    >
 
       {!canAssign && (
         <p role="status" className="text-sm text-ink-soft">
@@ -136,6 +132,6 @@ export default async function AssignPurchasingOrgCompanyCodePage() {
           {t('purchasingOrg.companyAssignmentRetentionNote')}
         </p>
       </section>
-    </div>
+    </Page>
   );
 }

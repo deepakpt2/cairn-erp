@@ -14,11 +14,11 @@ export default async function PurchasingGroupsPage() {
   const canMaintain = can(session, PURCHASING_GROUP_DEFINE);
 
   return (
-    <main className="mx-auto max-w-[100rem] p-4 sm:p-6">
+    <div className="mx-auto max-w-[100rem] p-3 sm:p-4 lg:p-6">
       <p className="sr-only">
         {t('purchasingGroup.accessibleContext')}
       </p>
       <PurchasingGroupsGrid records={records} canMaintain={canMaintain} />
-    </main>
+    </div>
   );
 }
