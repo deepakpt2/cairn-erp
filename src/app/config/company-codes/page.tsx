@@ -60,8 +60,8 @@ export default async function CompanyCodesPage() {
       back={null}
       code={
         <>
-          {canDefine && <span className="mr-3">{COMPANY_CODE_DEFINE}</span>}
-          {canAssign && <span className="mr-3">{COMPANY_CODE_ASSIGN_COA}</span>}
+          {canDefine && <><span>{COMPANY_CODE_DEFINE}</span>{" "}</>}
+          {canAssign && <><span>{COMPANY_CODE_ASSIGN_COA}</span>{" "}</>}
           {!canDefine && !canAssign && <span>{COMPANY_CODE_DEFINE}</span>}
         </>
       }
