@@ -335,14 +335,20 @@
      sideways scroll, and padding tightens. Wide screens keep the
      scrollable minimum width, where sideways panning is cheap. */
   @media (max-width: 47.99rem) {
+    /* A table that does not fit scrolls inside itself. Cells wrap at spaces only, so a document
+       number or an amount is never split mid-word. */
     .grid-table {
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       font-size: 0.78125rem;
     }
 
     .grid-table thead th,
     .grid-table tbody td {
       padding-inline: 0.375rem;
-      overflow-wrap: anywhere;
+      overflow-wrap: normal;
     }
   }
 }
