@@ -46,6 +46,14 @@ import { isAuditorReadableCapability, liveAuditGrantId } from '../../modules/aud
 export interface ServiceAuthorityContext {
   userId: string;
   sessionId: string;
+  /**
+   * Set only by a background job acting for the user who submitted it. There is no session to check:
+   * instead the job's own lease is verified in the service's transaction (the run must be RUNNING, at
+   * this epoch, triggered by this user), and the user's account and every grant are re-read from the
+   * database as they stand now. A web request cannot obtain a running job lease, so this is not a way
+   * around signing in; and a worker that lost its lease fails here, before it can write anything.
+   */
+  jobLease?: { runId: string; epoch: number };
 }
 
 /** A refusal, in the caller's voice: what is wrong, and what the actor does next. */
@@ -84,31 +92,51 @@ export async function verifyServiceAuthorityInTx(
   capability: string,
   options: { requirePlantScope?: boolean } = {},
 ): Promise<ServiceAuthorityVerdict> {
-  if (!authorization?.userId || !authorization.sessionId) {
+  if (!authorization?.userId || !(authorization.sessionId || authorization.jobLease)) {
     return refusal(
       'This action needs a signed-in user. Nothing was saved.',
       'Sign in again with an active account.',
     );
   }
 
-  const sessions = await tx.execute(sql`
-    select u.username
-      from user_session s
-      join app_user u on u.client = s.client and u.id = s.user_id
-     where s.client = ${client}
-       and s.id = ${authorization.sessionId}
-       and s.user_id = ${authorization.userId}
-       and s.revoked_at is null
-       and s.expires_at > now()
-       and u.is_active = true
-       and u.is_locked = false
-     for share of s, u
-  `) as unknown as Array<{ username: string }>;
+  const lease = authorization.jobLease;
+  // A lease held on the job row (KEY SHARE) keeps the reaper off a run with a live write, and a stale
+  // owner matches no row here, so it refuses before any write.
+  const sessions = lease
+    ? await tx.execute(sql`
+        select u.username
+          from job_run j
+          join app_user u on u.client = j.client and u.id = j.triggered_by
+         where j.client = ${client}
+           and j.id = ${lease.runId}
+           and j.claim_epoch = ${lease.epoch}
+           and j.status = 'RUNNING'
+           and j.triggered_by = ${authorization.userId}
+           and u.is_active = true
+           and u.is_locked = false
+         for key share of j
+         for share of u
+      `) as unknown as Array<{ username: string }>
+    : await tx.execute(sql`
+        select u.username
+          from user_session s
+          join app_user u on u.client = s.client and u.id = s.user_id
+         where s.client = ${client}
+           and s.id = ${authorization.sessionId}
+           and s.user_id = ${authorization.userId}
+           and s.revoked_at is null
+           and s.expires_at > now()
+           and u.is_active = true
+           and u.is_locked = false
+         for share of s, u
+      `) as unknown as Array<{ username: string }>;
   const actor = sessions[0];
   if (!actor) {
     return refusal(
-      'Your session or account is no longer active. Nothing was saved.',
-      'Sign in again with an active account.',
+      lease
+        ? 'The submitting user is no longer active, or the background job lost its lease. Nothing was saved.'
+        : 'Your session or account is no longer active. Nothing was saved.',
+      lease ? 'Ask an administrator, then submit the action again.' : 'Sign in again with an active account.',
     );
   }
 

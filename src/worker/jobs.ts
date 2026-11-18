@@ -22,6 +22,7 @@ import '../platform/mail/jobs/send';
 import '../modules/output/jobs/dispatch';
 // Long business runs, queue INTENSIVE (served by the intensive worker only).
 import '../modules/production/jobs/plant-run';
+import '../modules/people/jobs/payroll-run';
 //
 // Adding a job means adding its import here. A job that is not imported is not
 // a job — it is a run that will fail the moment a worker claims it.

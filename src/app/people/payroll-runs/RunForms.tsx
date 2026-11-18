@@ -1,9 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useActionState, useEffect, useState } from 'react';
 
+import type { PayrollOperationView } from '@/modules/people/payroll-background';
 import {
+  cancelOperationAction,
+  payrollOperationStatusAction,
   cancelRunAction,
   paySalaryRunAction,
   postPayrollRunAction,
@@ -22,6 +26,67 @@ function Status({ state }: { state: PayrollRunActionState }) {
         <> <Link href={`/people/payroll-runs?run=${state.runId}`} className="underline">Open the run</Link></>
       ) : null}
     </p>
+  );
+}
+
+const ACTIVE = ['QUEUED', 'RUNNING'];
+
+/**
+ * The latest background operation of the run: status, real progress (the employee count is frozen when
+ * the calculation starts), the reason it failed, and a cancel. Polling reads one small row every few
+ * seconds and refreshes the page when the operation ends, so a reload recovers the same view.
+ */
+export function OperationPanel({ operation }: { operation: PayrollOperationView | null }) {
+  const router = useRouter();
+  const [op, setOp] = useState(operation);
+  const [cancel, cancelAction, cancelling] = useActionState(cancelOperationAction, { ok: false });
+  useEffect(() => setOp(operation), [operation]);
+  const active = op ? ACTIVE.includes(op.status) : false;
+  useEffect(() => {
+    if (!active || !op) return;
+    const id = op.operationId;
+    const timer = setInterval(async () => {
+      try {
+        const next = await payrollOperationStatusAction(id);
+        if (!next) return;
+        setOp(next);
+        if (!ACTIVE.includes(next.status)) {
+          clearInterval(timer);
+          router.refresh();
+        }
+      } catch {
+        // A failed poll is not a failed operation; the next tick tries again.
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [active, op?.operationId, router]);
+  if (!op) return null;
+  const label = op.kind === 'POST' ? 'Posting' : op.kind === 'PROPOSE' ? 'Proposal' : 'Recalculation';
+  return (
+    <section className="panel space-y-2 p-4" aria-label="Background operation" data-payroll-operation={op.operationId}>
+      <h2 className="panel-title">{label} <span className="chip ml-1" data-payroll-operation-status>{op.status.toLowerCase()}</span></h2>
+      {active && op.kind !== 'POST' && (
+        <p className="text-sm" data-payroll-operation-progress>
+          {op.employeesTotal > 0 ? `Calculated ${op.employeesDone} of ${op.employeesTotal} employees.` : 'Waiting for the worker to select the employees.'}
+        </p>
+      )}
+      {active && op.kind === 'POST' && <p className="text-sm">Waiting for the worker. Nothing is posted until it finishes, and then it is one document or none.</p>}
+      {op.status === 'SUCCEEDED' && <p className="text-sm">Finished.</p>}
+      {(op.status === 'FAILED' || op.status === 'CANCELLED') && (
+        <p role="alert" className={`text-sm ${op.status === 'FAILED' ? 'text-signal-error' : ''}`} data-payroll-operation-error>
+          {op.errorText ?? `The ${label.toLowerCase()} ${op.status.toLowerCase()}.`}{' '}
+          {op.kind === 'POST' ? 'The run is not posted.' : 'The run keeps the proposal it had before.'}
+        </p>
+      )}
+      {active && (
+        <form action={cancelAction} className="flex flex-wrap items-center gap-3">
+          <input type="hidden" name="operationId" value={op.operationId} />
+          <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={cancelling}>Cancel {label.toLowerCase()}</button>
+          <span className="text-xs text-ink-soft">A calculation stops at its next chunk. A posting already inside its transaction finishes or rolls back whole.</span>
+        </form>
+      )}
+      <Status state={cancel} />
+    </section>
   );
 }
 
@@ -73,7 +138,7 @@ export function ProposeRunForm({
   );
 }
 
-export function RunActions({ runId, status, exceptionCount, mayPost }: { runId: string; status: string; exceptionCount: number; mayPost: boolean }) {
+export function RunActions({ runId, status, exceptionCount, mayPost, busy = false }: { runId: string; status: string; exceptionCount: number; mayPost: boolean; busy?: boolean }) {
   const [recalc, recalcAction, recalcPending] = useActionState(recalculateRunAction, { ok: false });
   const [post, postAction, postPending] = useActionState(postPayrollRunAction, { ok: false });
   const [release, releaseAction, releasePending] = useActionState(releaseRunAction, { ok: false });
@@ -87,11 +152,11 @@ export function RunActions({ runId, status, exceptionCount, mayPost }: { runId: 
         <div className="flex flex-wrap gap-3">
           <form action={recalcAction}>
             <input type="hidden" name="runId" value={runId} />
-            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={recalcPending}>Recalculate</button>
+            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={recalcPending || busy}>Recalculate</button>
           </form>
           <form action={releaseAction}>
             <input type="hidden" name="runId" value={runId} />
-            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={releasePending}>Release</button>
+            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={releasePending || busy}>Release</button>
           </form>
           {exceptionCount > 0 && (
             <p className="self-center text-xs text-ink-soft">Release is refused while {exceptionCount} employee{exceptionCount === 1 ? '' : 's'} stand{exceptionCount === 1 ? 's' : ''} as exceptions.</p>
@@ -103,7 +168,7 @@ export function RunActions({ runId, status, exceptionCount, mayPost }: { runId: 
       {status === 'RELEASED' && mayPost && (
         <form action={postAction} className="flex flex-wrap items-center gap-3">
           <input type="hidden" name="runId" value={runId} />
-          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={postPending}>Post to G/L</button>
+          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={postPending || busy}>Post to G/L</button>
           <span className="text-xs text-ink-soft">One PR document, dated the last day of the period. A posted run cannot be cancelled or posted again.</span>
         </form>
       )}
@@ -118,7 +183,7 @@ export function RunActions({ runId, status, exceptionCount, mayPost }: { runId: 
             <span className="field-label">Reason for cancelling</span>
             <input name="reason" className="field-input w-full" required maxLength={200} />
           </label>
-          <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={cancelPending}>Cancel run</button>
+          <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={cancelPending || busy}>Cancel run</button>
         </form>
       )}
       <Status state={cancel} />

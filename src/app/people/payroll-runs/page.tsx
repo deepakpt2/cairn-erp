@@ -24,7 +24,8 @@ import { PAYROLL_POST_CAPABILITY, getPayrollPosting } from '@/modules/people/pay
 import { SALARY_PAYMENT_CAPABILITY, getSalaryPayment } from '@/modules/people/salary-payment';
 import { listBankChoices } from '@/modules/finance/payment-run';
 
-import { PaySalaryForm, ProposeRunForm, RunActions } from './RunForms';
+import { listPayrollOperations } from '@/modules/people/payroll-background';
+import { OperationPanel, PaySalaryForm, ProposeRunForm, RunActions } from './RunForms';
 import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +53,9 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
   const defaultCompany = companies[0]?.companyCode ?? '';
   const position = allowed && defaultCompany ? await currentPayrollPeriod(client, defaultCompany, today) : null;
   const selected = allowed && params.run && runs.some((r) => r.runId === params.run) ? await getPayrollRun(client, params.run, access) : null;
+  const operations = selected ? await listPayrollOperations(client, selected.runId, access, 1) : [];
+  const operation = operations[0] ?? null;
+  const busy = operation ? ['QUEUED', 'RUNNING'].includes(operation.status) : false;
   const posting = selected && selected.status === 'POSTED' ? await getPayrollPosting(client, selected.runId, access) : null;
   const mayPost = can(session, PAYROLL_POST_CAPABILITY);
   const mayDisplayJournal = can(session, 'FIN.JOURNAL.DISPLAY');
@@ -167,7 +171,8 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
                 )}
               </section>
 
-              <RunActions runId={selected.runId} status={selected.status} exceptionCount={selected.exceptionCount} mayPost={mayPost} />
+              <OperationPanel operation={operation} />
+              <RunActions runId={selected.runId} status={selected.status} exceptionCount={selected.exceptionCount} mayPost={mayPost} busy={busy} />
               {selected.status === 'POSTED' && !payment && mayPay && (
                 <PaySalaryForm runId={selected.runId} defaultDate={nextPeriodStart} banks={banks} />
               )}

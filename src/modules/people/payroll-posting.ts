@@ -33,7 +33,7 @@ import { PostingError, computeTotals } from '../../platform/posting';
 import { GlDocumentError, postGlDocument, type GlDocumentLineInput } from '../finance/gl-document';
 import { accountingReversalLink, glAccount, journalEntry } from '../finance/schema';
 import { accountDetermination } from '../foundation/schema';
-import { PAYROLL_RUN_ROUTE } from './payroll-run';
+import { PAYROLL_RUN_ROUTE, activeOperation } from './payroll-run';
 import { type PayrollAccess, assertCompanyScope, judgePayrollAccess } from './payroll-access';
 import { payComponent, payrollResult, payrollResultLine, payrollRun } from './schema';
 
@@ -63,6 +63,8 @@ function refuse(code: string, message: string, remedy?: string): never {
 export interface PostPayrollRunInput {
   client: string;
   changedBy: string;
+  /** The background posting operation that is itself the active one, so it does not block itself. */
+  exceptOperationId?: string;
   /** Who is posting. Passed to the G/L posting, which judges `FIN.JOURNAL.POST` itself. */
   authorization?: ServiceAuthorityContext;
   runId: string;
@@ -204,6 +206,10 @@ export async function postPayrollRun(input: PostPayrollRunInput): Promise<Payrol
       const locked = (await loadRun(tx, input.client, runId))!;
       if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', locked.companyCode)) {
         refuse('COMPANY_SCOPE', `Your Company Code scope does not cover company code ${locked.companyCode}.`, 'Ask an administrator to extend your Company Code scope, then post again.');
+      }
+      const active = await activeOperation(tx, input.client, runId);
+      if (active && active.operationId !== input.exceptOperationId) {
+        refuse('OPERATION_ACTIVE', `Run ${runId} cannot be posted while a background ${active.kind.toLowerCase()} is ${active.status.toLowerCase()}.`, `Wait for it to finish, or cancel it at ${PAYROLL_RUN_ROUTE}?run=${runId}.`);
       }
       if (locked.documentNumber || locked.status === 'POSTED') {
         refuse('RUN_POSTED', `Payroll run ${runId} is already posted as document ${locked.documentNumber} (fiscal year ${locked.documentFiscalYear}).`, 'A run is posted once. A correction is a reversal of that document and a new run in a later period.');
