@@ -1,8 +1,8 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { PROD_ORDER_SETTLEMENT_CAPABILITY, PROD_ORDER_SETTLEMENT_ROUTE } from '@/modules/production/order-settlement';
 import SettlementForm from './SettlementForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,20 +26,11 @@ export default async function ProductionOrderSettlementPage({ searchParams }: {
   const orderNumber = last((await searchParams).order);
 
   return (
-    <main className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.ORDER.SETTLE · KO88</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Production order settlement</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          KO88 checks one production order. It does not select a range. An update posts only when a settlement rule is stored,
-          and only through the journal. No receiver or percentage is entered here. The rule screen is /production/settlement-rules.
-          WIP calculation (DV-003) and variance categorization (DV-004) are deferred.
-        </p>
-      </header>
+    <Page
+      title="Production order settlement" code="PROD.ORDER.SETTLE · KO88" width="4xl"
+      description="KO88 checks one production order. It does not select a range. An update posts only when a settlement rule is stored, and only through the journal. No receiver or percentage is entered here. The rule screen is /production/settlement-rules. WIP calculation (DV-003) and variance categorization (DV-004) are deferred."
+    >
       <SettlementForm orderNumber={orderNumber} />
-    </main>
+    </Page>
   );
 }

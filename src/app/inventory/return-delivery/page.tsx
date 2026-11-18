@@ -2,6 +2,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { RETURN_CAPABILITY } from '@/modules/inventory/return-delivery';
 import ReturnDeliveryShell from './ReturnDeliveryShell';
+import { Page } from '@/ui/kit';
 
 const RETURN_ROUTE = '/inventory/return-delivery';
 
@@ -19,14 +20,16 @@ export default async function ReturnDeliveryPage() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.RETURN.POST · MBRL</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">{t('mbrl.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mbrl.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mbrl.title')} code="INV.RETURN.POST · MBRL" width="100rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('mbrl.subtitle')}</p>
+        </>
+      }
+    >
 
       <ReturnDeliveryShell canPost={can(session, RETURN_CAPABILITY)} today={today} />
-    </div>
+    </Page>
   );
 }

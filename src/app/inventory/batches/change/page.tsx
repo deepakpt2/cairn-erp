@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { getBatchLevel } from '@/modules/inventory/batch-level';
@@ -11,6 +10,7 @@ import BatchRelations from '../BatchRelations';
 import DocumentTab from '../DocumentTab';
 import ChangeBatchForm from './ChangeBatchForm';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,22 +54,24 @@ export default async function ChangeBatchPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · MSC2N</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Change batch</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/inventory/batches/display" className="btn btn-default min-h-11 sm:min-h-8">Display batch</Link>
-            <Link href="/inventory/batches/new" className="btn btn-default min-h-11 sm:min-h-8">Create batch</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Open a batch that already stands. The batch level is {level ? `${level.batchLevel} — ${level.name}` : 'not set'}.
-          The material, plant, and batch number cannot be changed. This screen does not post stock and does not post movements 341 or 342.
-          MSC1N and MSC3N are not this screen.
-        </p>
-      </header>
+    <Page
+      title="Change batch" code={<>{ACTIVITY} · MSC2N</>} width="3xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Open a batch that already stands. The batch level is {level ? `${level.batchLevel} — ${level.name}` : 'not set'}.
+              The material, plant, and batch number cannot be changed. This screen does not post stock and does not post movements 341 or 342.
+              MSC1N and MSC3N are not this screen.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/inventory/batches/display">Display batch</LinkButton>
+          <LinkButton href="/inventory/batches/new">Create batch</LinkButton>
+        </>
+      }
+    >
       {!canChange && (
         <p role="status" className="border border-line bg-white p-3 text-sm">Display only. Ask an administrator for {ACTIVITY}.</p>
       )}
@@ -115,6 +117,6 @@ export default async function ChangeBatchPage({ searchParams }: {
       )}
       {opened && <BatchRelations client={session.user.client} />}
       {opened && <DocumentTab client={session.user.client} />}
-    </div>
+    </Page>
   );
 }

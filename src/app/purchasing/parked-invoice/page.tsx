@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -14,6 +13,7 @@ import {
 } from '@/modules/purchasing/parked-invoice';
 import ParkedInvoice from './ParkedInvoice';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,19 +52,21 @@ export default async function ParkedInvoicePage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('parkedInvoice.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('parkedInvoice.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/invoice-verification" className="btn btn-default min-h-11 sm:min-h-8">{t('parkedInvoice.toPost')}</Link>
-            <Link href="/purchasing/invoice-overview" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.title')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('parkedInvoice.subtitle')}</p>
-      </header>
+    <Page
+      title={t('parkedInvoice.title')} code={t('parkedInvoice.code')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('parkedInvoice.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/invoice-verification">{t('parkedInvoice.toPost')}</LinkButton>
+          <LinkButton href="/purchasing/invoice-overview">{t('invoiceOverview.title')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {changeLock?.mode === 'CHANGE' && standing && (
         <ChangeLock lockObject="PARKED_INVOICE" argument={standing.parkedNumber} />
@@ -81,6 +83,6 @@ export default async function ParkedInvoicePage({ searchParams }: {
         today={today}
         canPark={canPark && changeLock?.mode !== 'DISPLAY'}
       />
-    </div>
+    </Page>
   );
 }

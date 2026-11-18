@@ -5,7 +5,6 @@
  * and for the explosion `quantity`, `usage`, `alternative`, `productionVersion`; for where-used
  * `allPlants` (every plant the user's Plant scope reaches). Diagnostics are shown on their rows.
  */
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -20,6 +19,7 @@ import {
 } from '@/modules/production/bom-explosion';
 import { withTenant } from '@/platform/db/client';
 import { sql } from 'drizzle-orm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,21 +78,15 @@ export default async function BomExplosionPage({ searchParams }: { searchParams:
   }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{BOM_EXPLOSION_CAPABILITY} · CS11 / CS12 / CS15</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">BOM explosion and where-used</h1>
-          <div className="flex gap-2">
-            <Link href="/production/bom-display" className="btn btn-default min-h-11 sm:min-h-8">Display BOM</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          The explosion shows what a material is made of, with the quantities MRP would plan for the quantity entered (the BOM
-          base quantity when none is). Where-used lists every BOM a material is used in, with BOM quantities — never a requirement.
-        </p>
-      </header>
+    <Page
+      title="BOM explosion and where-used" code={<>{BOM_EXPLOSION_CAPABILITY} · CS11 / CS12 / CS15</>} width="7xl"
+      description="The explosion shows what a material is made of, with the quantities MRP would plan for the quantity entered (the BOM base quantity when none is). Where-used lists every BOM a material is used in, with BOM quantities — never a requirement."
+      actions={
+        <>
+          <LinkButton href="/production/bom-display">Display BOM</LinkButton>
+        </>
+      }
+    >
 
       {!allowed ? (
         <p role="status" className="text-sm text-ink-soft">You do not hold {BOM_EXPLOSION_CAPABILITY}. Ask for it to read bills of material.</p>
@@ -230,6 +224,6 @@ export default async function BomExplosionPage({ searchParams }: { searchParams:
           )}
         </section>
       )}
-    </main>
+    </Page>
   );
 }

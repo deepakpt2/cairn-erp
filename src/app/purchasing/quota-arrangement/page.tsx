@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -13,6 +12,7 @@ import {
 } from '@/modules/purchasing/quota-arrangement';
 import QuotaWorkbench from './QuotaArrangement';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,20 +55,22 @@ export default async function PurchasingQuotaPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('quotaArrangement.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('quotaArrangement.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/rfq" className="btn btn-default min-h-11 sm:min-h-8">{t('requestForQuotation.title')}</Link>
-            <Link href="/purchasing/source-list" className="btn btn-default min-h-11 sm:min-h-8">{t('quotaArrangement.toSourceList')}</Link>
-            <Link href="/purchasing/orders" className="btn btn-default min-h-11 sm:min-h-8">{t('quotaArrangement.toOrders')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('quotaArrangement.subtitle')}</p>
-      </header>
+    <Page
+      title={t('quotaArrangement.title')} code={t('quotaArrangement.code')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('quotaArrangement.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/rfq">{t('requestForQuotation.title')}</LinkButton>
+          <LinkButton href="/purchasing/source-list">{t('quotaArrangement.toSourceList')}</LinkButton>
+          <LinkButton href="/purchasing/orders">{t('quotaArrangement.toOrders')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {changeLock?.mode === 'CHANGE' && opened && (
         <ChangeLock lockObject="QUOTA_ARRANGEMENT" argument={opened.quotaNumber} />
@@ -84,6 +86,6 @@ export default async function PurchasingQuotaPage({ searchParams }: {
         recent={recent}
         canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
       />
-    </div>
+    </Page>
   );
 }

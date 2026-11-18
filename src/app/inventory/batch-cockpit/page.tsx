@@ -12,6 +12,7 @@ import {
   type CockpitDetail,
   type CockpitResult,
 } from '@/modules/inventory/batch-cockpit';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,15 +76,10 @@ export default async function BatchCockpitPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIAS}</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">Batch information cockpit</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Read a batch that already stands. Stock is the stock master. A material document is a direct movement, not a genealogy explosion.
-          Opening this screen writes nothing. A closed posting period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Batch information cockpit" code={<>{ACTIVITY} · {ALIAS}</>} back={null}
+      description="Read a batch that already stands. Stock is the stock master. A material document is a direct movement, not a genealogy explosion. Opening this screen writes nothing. A closed posting period does not block it."
+    >
       {!canRead && (
         <p role="status" className="border border-line bg-white p-3 text-sm">Display is not granted. Ask an administrator for {ACTIVITY}.</p>
       )}
@@ -222,6 +218,6 @@ export default async function BatchCockpitPage({
           {detail.documentsTruncated && <p>Further document lines may stand. The list stopped at 40.</p>}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

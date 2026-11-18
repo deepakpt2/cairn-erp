@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -14,6 +13,7 @@ import {
   getDocumentRelease,
 } from '@/modules/purchasing/release';
 import Requisitions from './Requisitions';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,22 +44,24 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.PR.CREATE · ME51N</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('purchaseRequisition.title')}</h1>
-          <div className="flex gap-2">
-            <Link href="/purchasing/requisition-list" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('purchaseRequisition.list')}
-            </Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.launchpad')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchaseRequisition.subtitle')}</p>
-      </header>
+    <Page
+      title={t('purchaseRequisition.title')} code="PROC.PR.CREATE · ME51N" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('purchaseRequisition.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/requisition-list">
+                        {t('purchaseRequisition.list')}
+                      </LinkButton>
+          <LinkButton href="/">
+                        {t('nav.launchpad')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="PURCHASE_REQUISITION" argument={selected.requisitionNumber} />
@@ -73,6 +75,6 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
         selectedRelease={selectedRelease}
         canRelease={can(session, RELEASE_CAPABILITIES.PURCHASE_REQUISITION)}
       />
-    </div>
+    </Page>
   );
 }

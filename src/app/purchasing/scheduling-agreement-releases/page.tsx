@@ -7,6 +7,7 @@ import {
   RELEASE_ROUTE,
 } from '@/modules/purchasing/scheduling-agreement-release';
 import ReleaseForm from './ReleaseForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,17 +32,10 @@ export default async function SchedulingAgreementReleasesPage({ searchParams }: 
   const history = agreement ? await listSchedulingAgreementReleases(session.user.client, agreement) : [];
 
   return (
-    <main className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.SARELEASE.CREATE · ME84</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Create scheduling agreement releases</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          ME84 creates a forecast or JIT release from the delivery schedule. It does not change the schedule lines, create a purchase order, post stock, or send a supplier message. ME38 maintains the schedule. ME39 displays it. ME83 and ME88 are not this screen.
-        </p>
-      </header>
+    <Page
+      title="Create scheduling agreement releases" code="PROC.SARELEASE.CREATE · ME84" width="5xl"
+      description="ME84 creates a forecast or JIT release from the delivery schedule. It does not change the schedule lines, create a purchase order, post stock, or send a supplier message. ME38 maintains the schedule. ME39 displays it. ME83 and ME88 are not this screen."
+    >
       <ReleaseForm agreement={agreement} />
       {agreement && (
         <section className="space-y-2 text-sm">
@@ -69,6 +63,6 @@ export default async function SchedulingAgreementReleasesPage({ searchParams }: 
           ))}
         </section>
       )}
-    </main>
+    </Page>
   );
 }

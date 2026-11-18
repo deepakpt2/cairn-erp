@@ -15,6 +15,7 @@ import {
 import { searchCountDocuments } from '@/modules/inventory/physical-inventory-count';
 import CountWorkbench from './CountWorkbench';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,38 +74,40 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('mi04.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('mi04.title')}</h1>
-          <div className="flex gap-2">
-            <Link href="/inventory/physical-inventory" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('mi04.toDocuments')}
-            </Link>
-            {document && (
-              <>
-                <Link
-                  href={`/inventory/physical-inventory-differences?executed=1&plantFrom=${encodeURIComponent(document.plant)}&fiscalYear=${document.fiscalYear}&documentFrom=${encodeURIComponent(document.documentNumber)}&documentTo=${encodeURIComponent(document.documentNumber)}&differenceExists=1`}
-                  className="btn btn-default min-h-11 sm:min-h-8"
-                  data-count-differences-link
-                >
-                  {t('mi04.toDifferences')}
-                </Link>
-                <Link
-                  href={`/inventory/physical-inventory-recount?doc=${encodeURIComponent(document.documentNumber)}&year=${document.fiscalYear}`}
-                  className="btn btn-default min-h-11 sm:min-h-8"
-                  data-count-recount-link
-                >
-                  {t('mi20.toRecount')}
-                </Link>
-              </>
-            )}
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mi04.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mi04.title')} code={t('mi04.code')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('mi04.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/inventory/physical-inventory">
+                        {t('mi04.toDocuments')}
+                      </LinkButton>
+          {document && (
+                        <>
+                          <Link
+                            href={`/inventory/physical-inventory-differences?executed=1&plantFrom=${encodeURIComponent(document.plant)}&fiscalYear=${document.fiscalYear}&documentFrom=${encodeURIComponent(document.documentNumber)}&documentTo=${encodeURIComponent(document.documentNumber)}&differenceExists=1`}
+                            className="btn btn-default min-h-11 sm:min-h-8"
+                            data-count-differences-link
+                          >
+                            {t('mi04.toDifferences')}
+                          </Link>
+                          <Link
+                            href={`/inventory/physical-inventory-recount?doc=${encodeURIComponent(document.documentNumber)}&year=${document.fiscalYear}`}
+                            className="btn btn-default min-h-11 sm:min-h-8"
+                            data-count-recount-link
+                          >
+                            {t('mi20.toRecount')}
+                          </Link>
+                        </>
+                      )}
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       <section aria-labelledby="count-lookup" className="border border-line bg-surface p-4">
         <h2 id="count-lookup" className="text-sm font-semibold">{t('mi04.lookupTitle')}</h2>
@@ -175,6 +178,6 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
           today={today}
         />
       )}
-    </div>
+    </Page>
   );
 }

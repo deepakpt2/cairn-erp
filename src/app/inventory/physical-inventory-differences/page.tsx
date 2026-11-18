@@ -17,6 +17,7 @@ import {
 } from '@/modules/inventory/physical-inventory-differences';
 import { getRecountComparison, type RecountComparison } from '@/modules/inventory/physical-inventory-recount';
 import DifferenceList from './DifferenceList';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,21 +126,23 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
     : [];
 
   return (
-    <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('mi20.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('mi20.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/inventory/physical-inventory-posting" className="btn btn-default min-h-11 sm:min-h-8" data-difference-posting-link>{t('mi20.toPosting')}</Link>
-            <Link href="/inventory/physical-inventory-recount" className="btn btn-default min-h-11 sm:min-h-8" data-difference-recount-link>{t('mi20.toRecount')}</Link>
-            <Link href="/inventory/physical-inventory-count" className="btn btn-default min-h-11 sm:min-h-8">{t('mi20.toCounts')}</Link>
-            <Link href="/inventory/physical-inventory" className="btn btn-default min-h-11 sm:min-h-8">{t('mi20.toDocuments')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mi20.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mi20.title')} code={t('mi20.code')} width="120rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('mi20.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <Link href="/inventory/physical-inventory-posting" className="btn btn-default min-h-11 sm:min-h-8" data-difference-posting-link>{t('mi20.toPosting')}</Link>
+          <Link href="/inventory/physical-inventory-recount" className="btn btn-default min-h-11 sm:min-h-8" data-difference-recount-link>{t('mi20.toRecount')}</Link>
+          <LinkButton href="/inventory/physical-inventory-count">{t('mi20.toCounts')}</LinkButton>
+          <LinkButton href="/inventory/physical-inventory">{t('mi20.toDocuments')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {!allowed && <p className="text-sm text-ink-soft">{t('mi20.capabilityMissing')}</p>}
       {allowed && !executed && <p className="text-sm text-ink-soft">{t('mi20.needSelection')}</p>}
@@ -156,6 +159,6 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
           workflowMessage={workflowMessage}
         />
       )}
-    </div>
+    </Page>
   );
 }

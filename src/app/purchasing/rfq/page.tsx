@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -12,6 +11,7 @@ import {
   resolveRequestForQuotation,
 } from '@/modules/purchasing/rfq';
 import RequestForQuotation from './RequestForQuotation';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,21 +52,23 @@ export default async function PurchasingRfqPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('requestForQuotation.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('requestForQuotation.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/quota-arrangement" className="btn btn-default min-h-11 sm:min-h-8">{t('requestForQuotation.toQuota')}</Link>
-            <Link href="/purchasing/source-list" className="btn btn-default min-h-11 sm:min-h-8">{t('requestForQuotation.toSourceList')}</Link>
-            <Link href="/purchasing/orders" className="btn btn-default min-h-11 sm:min-h-8">{t('requestForQuotation.toOrders')}</Link>
-            <Link href="/purchasing/quotation" className="btn btn-default min-h-11 sm:min-h-8">{t('quotation.title')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('requestForQuotation.subtitle')}</p>
-      </header>
+    <Page
+      title={t('requestForQuotation.title')} code={t('requestForQuotation.code')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('requestForQuotation.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/quota-arrangement">{t('requestForQuotation.toQuota')}</LinkButton>
+          <LinkButton href="/purchasing/source-list">{t('requestForQuotation.toSourceList')}</LinkButton>
+          <LinkButton href="/purchasing/orders">{t('requestForQuotation.toOrders')}</LinkButton>
+          <LinkButton href="/purchasing/quotation">{t('quotation.title')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {/* The loaded time is not part of this key. A header save changes it, and
           remounting here would discard the result the user is waiting to read.
@@ -83,6 +85,6 @@ export default async function PurchasingRfqPage({ searchParams }: {
         canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
         lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
       />
-    </div>
+    </Page>
   );
 }

@@ -21,6 +21,7 @@ import {
 } from '@/modules/production/material-bom';
 import BomForm from './BomForm';
 import { ItemCategoryForm, StatusForm, UsageForm } from './ConfigForms';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,18 +91,10 @@ export default async function MaterialBomsPage({ searchParams }: {
   const showChange = Boolean(document) && canChange && changeLock?.mode !== 'DISPLAY';
 
   return (
-    <main className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.BOM.CREATE · CS01 / CS02</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Material BOM</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          CS01 creates a plant-specific material BOM. CS02 changes one. Usage, status, and item category are defined here.
-          A change number is refused. Saving does not explode the BOM and does not rewrite a production order. CS03 displays and does not save.
-        </p>
-      </header>
+    <Page
+      title="Material BOM" code="PROD.BOM.CREATE · CS01 / CS02" width="5xl"
+      description="CS01 creates a plant-specific material BOM. CS02 changes one. Usage, status, and item category are defined here. A change number is refused. Saving does not explode the BOM and does not rewrite a production order. CS03 displays and does not save."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">Material
           <input className="input mt-1" name="material" defaultValue={materialNumber} maxLength={40} />
@@ -167,6 +160,6 @@ export default async function MaterialBomsPage({ searchParams }: {
           <ItemCategoryForm />
         </>
       )}
-    </main>
+    </Page>
   );
 }

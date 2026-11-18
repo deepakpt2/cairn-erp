@@ -7,6 +7,7 @@ import {
   type UomConversionRow,
 } from '@/modules/inventory/unit-conversion';
 import UomShell from './UomShell';
+import { Page } from '@/ui/kit';
 
 const UOM_ROUTE = '/inventory/uom-conversion';
 
@@ -42,18 +43,20 @@ export default async function UomConversionPage({
   }
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.STOCK.UOM · CUNI</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">{t('uom.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('uom.subtitle')}</p>
-      </header>
+    <Page
+      title={t('uom.title')} code="INV.STOCK.UOM · CUNI" width="100rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('uom.subtitle')}</p>
+        </>
+      }
+    >
 
       {listError && (
         <p role="alert" className="border border-signal-error/40 bg-signal-error-soft p-3 text-sm text-signal-error">{listError}</p>
       )}
 
       <UomShell canMaintain={can(session, UOM_CAPABILITY)} rows={rows} units={units} />
-    </div>
+    </Page>
   );
 }

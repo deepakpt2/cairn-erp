@@ -15,6 +15,7 @@ import {
   type StockAgeingSelection,
 } from '@/modules/inventory/stock-ageing';
 import StockAgeingShell from './StockAgeingShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,12 +72,14 @@ export default async function StockAgeingPage({
   }
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.STOCK.AGEING.DISPLAY · MC46 · MC50</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">{t('stockAgeing.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('stockAgeing.subtitle')}</p>
-      </header>
+    <Page
+      title={t('stockAgeing.title')} code="INV.STOCK.AGEING.DISPLAY · MC46 · MC50" width="100rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('stockAgeing.subtitle')}</p>
+        </>
+      }
+    >
 
       <StockAgeingShell
         canUse={canUse}
@@ -85,6 +88,6 @@ export default async function StockAgeingPage({
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

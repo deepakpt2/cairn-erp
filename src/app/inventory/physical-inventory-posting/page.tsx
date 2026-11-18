@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -13,6 +12,7 @@ import {
 } from '@/modules/inventory/physical-inventory-posting';
 import PostingWorkbench from './PostingWorkbench';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,26 +55,28 @@ export default async function PhysicalInventoryPostingPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('diffpost.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('diffpost.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/inventory/physical-inventory-differences" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('diffpost.toList')}
-            </Link>
-            <Link href="/inventory/physical-inventory-count" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('diffpost.toCounts')}
-            </Link>
-            <Link href="/inventory/physical-inventory" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('diffpost.toDocuments')}
-            </Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('diffpost.subtitle')}</p>
-      </header>
+    <Page
+      title={t('diffpost.title')} code={t('diffpost.code')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('diffpost.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/inventory/physical-inventory-differences">
+                        {t('diffpost.toList')}
+                      </LinkButton>
+          <LinkButton href="/inventory/physical-inventory-count">
+                        {t('diffpost.toCounts')}
+                      </LinkButton>
+          <LinkButton href="/inventory/physical-inventory">
+                        {t('diffpost.toDocuments')}
+                      </LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {document && changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="PHYSICAL_INVENTORY" argument={postingKey} />
@@ -90,6 +92,6 @@ export default async function PhysicalInventoryPostingPage({ searchParams }: {
         canReverse={can(session, REVERSE_CAPABILITY)}
         today={today}
       />
-    </div>
+    </Page>
   );
 }

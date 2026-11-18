@@ -12,6 +12,7 @@ import {
   type WarehouseStockSelection,
 } from '@/modules/inventory/warehouse-stocks';
 import WarehouseStocksShell from './WarehouseStocksShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,14 +69,14 @@ export default async function WarehouseStocksPage({
   }
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.STOCK.WAREHOUSE · MB52</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('whStock.title')}</h1>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('whStock.subtitle')}</p>
-      </header>
+    <Page
+      title={t('whStock.title')} code="INV.STOCK.WAREHOUSE · MB52" width="100rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('whStock.subtitle')}</p>
+        </>
+      }
+    >
 
       <WarehouseStocksShell
         canUse={can(session, WAREHOUSE_STOCK_CAPABILITY)}
@@ -83,6 +84,6 @@ export default async function WarehouseStocksPage({
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

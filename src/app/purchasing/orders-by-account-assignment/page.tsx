@@ -9,6 +9,7 @@ import {
   type PoAccountAssignSelection,
 } from '@/modules/purchasing/po-account-assignment';
 import PoAccountAssignmentShell from './PoAccountAssignmentShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,14 +59,14 @@ export default async function OrdersByAccountAssignmentPage({
   }
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.PO.ACCOUNTASSIGN · ME2K</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('poAa.title')}</h1>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('poAa.subtitle')}</p>
-      </header>
+    <Page
+      title={t('poAa.title')} code="PROC.PO.ACCOUNTASSIGN · ME2K" width="100rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('poAa.subtitle')}</p>
+        </>
+      }
+    >
 
       <PoAccountAssignmentShell
         canUse={can(session, PO_ACCOUNT_ASSIGN_CAPABILITY)}
@@ -73,6 +74,6 @@ export default async function OrdersByAccountAssignmentPage({
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

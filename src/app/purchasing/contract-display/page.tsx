@@ -7,6 +7,7 @@ import {
   CONTRACT_DISPLAY_ROUTE,
   openPurchaseContractDisplay,
 } from '@/modules/purchasing/contract-display';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,17 +54,10 @@ export default async function PurchaseContractDisplayPage({ searchParams }: {
   const canChange = can(session, CONTRACT_MAINTAIN_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.CONTRACT.DISPLAY · ME33K</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Display purchase contract</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          ME33K reads the contract. It does not save, release, reprice, receive goods, or post accounting. Called-off, remaining, goods receipt, and invoice are separate figures.
-        </p>
-      </header>
+    <Page
+      title="Display purchase contract" code="PROC.CONTRACT.DISPLAY · ME33K"
+      description="ME33K reads the contract. It does not save, release, reprice, receive goods, or post accounting. Called-off, remaining, goods receipt, and invoice are separate figures."
+    >
 
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
@@ -167,6 +161,6 @@ export default async function PurchaseContractDisplayPage({ searchParams }: {
           </tbody>
         </table>
       )}
-    </main>
+    </Page>
   );
 }

@@ -7,6 +7,7 @@ import {
   WORK_CENTER_ROUTE,
 } from '@/modules/production/work-center';
 import { displayWorkCenter } from '@/modules/production/work-center-display';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,17 +43,10 @@ export default async function WorkCenterDisplayPage({ searchParams }: {
   const document = plant && center ? await displayWorkCenter(session.user.client, plant, center) : null;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.WORKCENTER.DISPLAY · CR03</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Display work center</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          CR03 shows the stored work center. It does not save, lock for change, or create a routing.
-        </p>
-      </header>
+    <Page
+      title="Display work center" code="PROD.WORKCENTER.DISPLAY · CR03" width="5xl"
+      description="CR03 shows the stored work center. It does not save, lock for change, or create a routing."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Plant</span>
@@ -127,6 +121,6 @@ export default async function WorkCenterDisplayPage({ searchParams }: {
           <p className="text-sm text-ink-soft">This screen does not create a routing and does not list one. No production order is changed here.</p>
         </>
       )}
-    </main>
+    </Page>
   );
 }

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -13,6 +12,7 @@ import {
 import { RELEASE_CAPABILITIES, getDocumentRelease } from '@/modules/purchasing/release';
 import { ChangeLock } from '@/ui/lock/ChangeLock';
 import Contracts from './Contracts';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,17 +59,10 @@ export default async function PurchaseContractsPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{contractNumber ? 'PROC.CONTRACT.MAINTAIN · ME32K' : 'PROC.CONTRACT.MAINTAIN · ME31K'}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Purchase contract</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          ME31K creates a quantity or value contract. ME32K changes the open contract. ME33K is the display screen and does not save. ME35K releases only when a strategy claims the contract. This is not ME31L, and saving it does not receive goods or post accounting.
-        </p>
-      </header>
+    <Page
+      title="Purchase contract" code={contractNumber ? 'PROC.CONTRACT.MAINTAIN · ME32K' : 'PROC.CONTRACT.MAINTAIN · ME31K'}
+      description="ME31K creates a quantity or value contract. ME32K changes the open contract. ME33K is the display screen and does not save. ME35K releases only when a strategy claims the contract. This is not ME31L, and saving it does not receive goods or post accounting."
+    >
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="PURCHASE_CONTRACT" argument={selected.contractNumber} />
       )}
@@ -83,6 +76,6 @@ export default async function PurchaseContractsPage({ searchParams }: {
         viewOnly={changeLock?.mode === 'DISPLAY'}
         lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
       />
-    </div>
+    </Page>
   );
 }

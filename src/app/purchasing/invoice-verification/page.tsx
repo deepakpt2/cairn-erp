@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -6,6 +5,7 @@ import {
   INVOICE_CAPABILITY, getInvoiceOrder, getSupplierInvoice, listInvoiceTaxCodes,
 } from '@/modules/purchasing/invoice-verification';
 import InvoiceVerification from './InvoiceVerification';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,22 +26,24 @@ export default async function InvoiceVerificationPage({ searchParams }: {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.INV.RECORD · MIRO</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('invoiceVerification.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/parked-invoice" className="btn btn-default min-h-11 sm:min-h-8">{t('parkedInvoice.title')}</Link>
-            <Link href="/purchasing/blocked-invoice" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.toBlocked')}</Link>
-            <Link href="/purchasing/invoice-overview" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.title')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.launchpad')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('invoiceVerification.subtitle')}</p>
-      </header>
+    <Page
+      title={t('invoiceVerification.title')} code="PROC.INV.RECORD · MIRO" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('invoiceVerification.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/parked-invoice">{t('parkedInvoice.title')}</LinkButton>
+          <LinkButton href="/purchasing/blocked-invoice">{t('invoiceOverview.toBlocked')}</LinkButton>
+          <LinkButton href="/purchasing/invoice-overview">{t('invoiceOverview.title')}</LinkButton>
+          <LinkButton href="/">
+                        {t('nav.launchpad')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       <InvoiceVerification
         order={order}
@@ -50,6 +52,6 @@ export default async function InvoiceVerificationPage({ searchParams }: {
         canPost={can(session, INVOICE_CAPABILITY)}
         today={today}
       />
-    </div>
+    </Page>
   );
 }

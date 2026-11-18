@@ -19,6 +19,7 @@ import {
 import { saveCategoryAction } from './actions';
 import WorkCenterForm from './WorkCenterForm';
 import { CategoryForm } from './CategoryForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,19 +67,10 @@ export default async function WorkCentersPage({ searchParams }: {
   const showChange = Boolean(document) && canChange && changeLock?.mode !== 'DISPLAY';
 
   return (
-    <main className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.WORKCENTER.CREATE · CR01 / CR02</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Work center</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          CR01 creates a work center in a plant. CR02 changes one. The category cannot be changed.
-          A formula key is stored and not calculated. No routing is created. CR03 displays and does not save.
-          The chart-of-accounts key CA01 is not this screen.
-        </p>
-      </header>
+    <Page
+      title="Work center" code="PROD.WORKCENTER.CREATE · CR01 / CR02" width="5xl"
+      description="CR01 creates a work center in a plant. CR02 changes one. The category cannot be changed. A formula key is stored and not calculated. No routing is created. CR03 displays and does not save. The chart-of-accounts key CA01 is not this screen."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Plant</span>
@@ -123,6 +115,6 @@ export default async function WorkCentersPage({ searchParams }: {
           ))}
         </ul>
       )}
-    </main>
+    </Page>
   );
 }

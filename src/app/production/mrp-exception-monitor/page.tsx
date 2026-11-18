@@ -22,6 +22,7 @@ import {
   type MrpExceptionResult,
 } from '@/modules/production/mrp-exception-monitor';
 import type { ExceptionCode } from '@/modules/production/stock-requirements';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,22 +69,23 @@ export default async function MrpExceptionMonitorPage({ searchParams }: { search
   }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{MRP_EXCEPTION_CAPABILITY} · MD06</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">MRP exception monitor</h1>
-          <div className="flex gap-2">
-            <Link href="/production/stock-requirements" className="btn btn-default min-h-11 sm:min-h-8">Stock/requirements list</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Every material of a plant that MRP plans (type REQUIREMENTS or REORDER) and that carries a shortage, a safety stock
-          breach or a past-due element, most urgent first. The counts are the stock/requirements list&apos;s own, recomputed on every
-          execution; open any row to see the material&apos;s list. Nothing is planned, proposed or written here.
-        </p>
-      </header>
+    <Page
+      title="MRP exception monitor" code={<>{MRP_EXCEPTION_CAPABILITY} · MD06</>} width="7xl"
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Every material of a plant that MRP plans (type REQUIREMENTS or REORDER) and that carries a shortage, a safety stock
+              breach or a past-due element, most urgent first. The counts are the stock/requirements list&apos;s own, recomputed on every
+              execution; open any row to see the material&apos;s list. Nothing is planned, proposed or written here.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/stock-requirements">Stock/requirements list</LinkButton>
+        </>
+      }
+    >
 
       {!allowed ? (
         <p role="status" className="text-sm text-ink-soft">You do not hold {MRP_EXCEPTION_CAPABILITY}. Ask for it to read the exception monitor.</p>
@@ -206,6 +208,6 @@ export default async function MrpExceptionMonitorPage({ searchParams }: { search
           </section>
         </>
       )}
-    </main>
+    </Page>
   );
 }

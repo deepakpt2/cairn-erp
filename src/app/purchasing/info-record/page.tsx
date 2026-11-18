@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -13,6 +12,7 @@ import {
 } from '@/modules/purchasing/info-record';
 import InfoRecordWorkbench from './InfoRecord';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,19 +54,21 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('infoRecord.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('infoRecord.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/source-list" className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.title')}</Link>
-            <Link href="/purchasing/orders" className="btn btn-default min-h-11 sm:min-h-8">{t('infoRecord.toOrders')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('infoRecord.subtitle')}</p>
-      </header>
+    <Page
+      title={t('infoRecord.title')} code={t('infoRecord.code')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('infoRecord.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/source-list">{t('sourceList.title')}</LinkButton>
+          <LinkButton href="/purchasing/orders">{t('infoRecord.toOrders')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {changeLock?.mode === 'CHANGE' && record && (
         <ChangeLock lockObject="INFO_RECORD" argument={record.infoRecordNumber} />
@@ -84,6 +86,6 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
         choices={choices}
         canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
       />
-    </div>
+    </Page>
   );
 }

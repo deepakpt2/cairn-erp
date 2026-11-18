@@ -9,6 +9,7 @@ import {
   readDeliverySchedule,
 } from '@/modules/purchasing/scheduling-agreement-schedule';
 import ScheduleForm from './ScheduleForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,17 +47,10 @@ export default async function DeliverySchedulePage({ searchParams }: {
     : null;
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.SCHEDLINE.MAINTAIN · ME38</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Maintain delivery schedule</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          ME38 maintains delivery schedule lines for an existing scheduling agreement. It does not change the agreement header, create a purchase order, post a goods receipt, or send a supplier release. ME39 displays the lines and does not save.
-        </p>
-      </header>
+    <Page
+      title="Maintain delivery schedule" code="PROC.SCHEDLINE.MAINTAIN · ME38"
+      description="ME38 maintains delivery schedule lines for an existing scheduling agreement. It does not change the agreement header, create a purchase order, post a goods receipt, or send a supplier release. ME39 displays the lines and does not save."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Agreement</span>
@@ -99,6 +93,6 @@ export default async function DeliverySchedulePage({ searchParams }: {
       {document && selectedItem && changeLock?.mode !== 'DISPLAY' && (
         <ScheduleForm document={document} itemNumber={selectedItem} />
       )}
-    </main>
+    </Page>
   );
 }

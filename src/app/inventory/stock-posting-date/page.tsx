@@ -10,6 +10,7 @@ import {
   type StockPostingDateSelection,
 } from '@/modules/inventory/stock-posting-date';
 import StockOnPostingDateShell from './StockOnPostingDateShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,14 +58,14 @@ export default async function StockPostingDatePage({
   }
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.STOCK.POSTINGDATE · MB5B</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('stockDate.title')}</h1>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('stockDate.subtitle')}</p>
-      </header>
+    <Page
+      title={t('stockDate.title')} code="INV.STOCK.POSTINGDATE · MB5B" width="100rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('stockDate.subtitle')}</p>
+        </>
+      }
+    >
 
       <StockOnPostingDateShell
         canUse={can(session, STOCK_POSTINGDATE_CAPABILITY)}
@@ -72,6 +73,6 @@ export default async function StockPostingDatePage({
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

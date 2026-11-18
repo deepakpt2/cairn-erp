@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -14,6 +13,7 @@ import {
 } from '@/modules/purchasing/scheduling-agreement';
 import { ChangeLock } from '@/ui/lock/ChangeLock';
 import Agreements from './Agreements';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,17 +58,10 @@ export default async function SchedulingAgreementsPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{agreementNumber ? 'PROC.SCHEDAGREE.MAINTAIN · ME32L' : 'PROC.SCHEDAGREE.MAINTAIN · ME31L'}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Scheduling agreement</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          ME31L creates a scheduling agreement. ME32L changes the open agreement. ME33L displays it and does not save. Saving does not create a delivery schedule line, a purchase order, a goods receipt, or accounting. ME38 and ME39 are not this screen. This is not ME31K.
-        </p>
-      </header>
+    <Page
+      title="Scheduling agreement" code={agreementNumber ? 'PROC.SCHEDAGREE.MAINTAIN · ME32L' : 'PROC.SCHEDAGREE.MAINTAIN · ME31L'}
+      description="ME31L creates a scheduling agreement. ME32L changes the open agreement. ME33L displays it and does not save. Saving does not create a delivery schedule line, a purchase order, a goods receipt, or accounting. ME38 and ME39 are not this screen. This is not ME31K."
+    >
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="SCHEDULING_AGREEMENT" argument={selected.agreementNumber} />
       )}
@@ -82,6 +75,6 @@ export default async function SchedulingAgreementsPage({ searchParams }: {
         viewOnly={changeLock?.mode === 'DISPLAY'}
         lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
       />
-    </div>
+    </Page>
   );
 }

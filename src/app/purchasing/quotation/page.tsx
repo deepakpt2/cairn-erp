@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -12,6 +11,7 @@ import {
 } from '@/modules/purchasing/quotation';
 import Quotation from './Quotation';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,18 +46,20 @@ export default async function PurchasingQuotationPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('quotation.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('quotation.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/rfq" className="btn btn-default min-h-11 sm:min-h-8">{t('quotation.toRequest')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('quotation.subtitle')}</p>
-      </header>
+    <Page
+      title={t('quotation.title')} code={t('quotation.code')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('quotation.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/rfq">{t('quotation.toRequest')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="SUPPLIER_QUOTATION" argument={requested} />
@@ -70,6 +72,6 @@ export default async function PurchasingQuotationPage({ searchParams }: {
         recent={recent}
         canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
       />
-    </div>
+    </Page>
   );
 }

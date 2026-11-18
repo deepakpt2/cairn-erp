@@ -7,6 +7,7 @@ import {
   SCHEDULING_AGREEMENT_DISPLAY_ROUTE,
   openSchedulingAgreementDisplay,
 } from '@/modules/purchasing/scheduling-agreement-display';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,17 +55,10 @@ export default async function SchedulingAgreementDisplayPage({ searchParams }: {
   const canChange = can(session, SCHEDULING_AGREEMENT_MAINTAIN_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.SCHEDAGREE.DISPLAY · ME33L</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Display scheduling agreement</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          ME33L reads the scheduling agreement. It does not save, release, reprice, create a schedule line, receive goods, or post accounting. A scheduled quantity is not a goods receipt.
-        </p>
-      </header>
+    <Page
+      title="Display scheduling agreement" code="PROC.SCHEDAGREE.DISPLAY · ME33L"
+      description="ME33L reads the scheduling agreement. It does not save, release, reprice, create a schedule line, receive goods, or post accounting. A scheduled quantity is not a goods receipt."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Agreement</span>
@@ -161,6 +155,6 @@ export default async function SchedulingAgreementDisplayPage({ searchParams }: {
           </tbody>
         </table>
       )}
-    </main>
+    </Page>
   );
 }

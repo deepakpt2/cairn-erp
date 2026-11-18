@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -13,6 +12,7 @@ import {
 } from '@/modules/purchasing/source-list';
 import SourceListWorkbench from './SourceList';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,20 +56,22 @@ export default async function PurchasingSourceListPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('sourceList.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('sourceList.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/info-record" className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.toInfoRecord')}</Link>
-            <Link href="/purchasing/quota-arrangement" className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.toQuota')}</Link>
-            <Link href="/purchasing/orders" className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.toOrders')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('sourceList.subtitle')}</p>
-      </header>
+    <Page
+      title={t('sourceList.title')} code={t('sourceList.code')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('sourceList.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/info-record">{t('sourceList.toInfoRecord')}</LinkButton>
+          <LinkButton href="/purchasing/quota-arrangement">{t('sourceList.toQuota')}</LinkButton>
+          <LinkButton href="/purchasing/orders">{t('sourceList.toOrders')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {changeLock?.mode === 'CHANGE' && opened && (
         <ChangeLock lockObject="SOURCE_LIST" argument={opened.sourceNumber} />
@@ -86,6 +88,6 @@ export default async function PurchasingSourceListPage({ searchParams }: {
         recent={recent}
         canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
       />
-    </div>
+    </Page>
   );
 }

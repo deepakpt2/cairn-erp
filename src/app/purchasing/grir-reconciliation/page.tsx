@@ -15,6 +15,7 @@ import {
   type GrIrExceptionCategory,
   type GrIrExceptionRow,
 } from '@/modules/purchasing/grir-reconciliation';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,19 +91,21 @@ export default async function GrIrReconciliationPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('grirReconciliation.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('grirReconciliation.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href={`${GRIR_CLEARING_ROUTE}?companyFrom=${encodeURIComponent(companyFrom)}&keyDate=${encodeURIComponent(keyDate)}`} className="btn btn-default min-h-11 sm:min-h-8">{t('grirClearing.title')}</Link>
-            <Link href="/purchasing/invoice-overview" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.title')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('grirReconciliation.subtitle')}</p>
-      </header>
+    <Page
+      title={t('grirReconciliation.title')} code={t('grirReconciliation.code')} width="120rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('grirReconciliation.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <Link href={`${GRIR_CLEARING_ROUTE}?companyFrom=${encodeURIComponent(companyFrom)}&keyDate=${encodeURIComponent(keyDate)}`} className="btn btn-default min-h-11 sm:min-h-8">{t('grirClearing.title')}</Link>
+          <LinkButton href="/purchasing/invoice-overview">{t('invoiceOverview.title')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {!canView && <p className="text-sm text-signal-error" role="alert">{t('grirReconciliation.capabilityMissing')}</p>}
 
@@ -242,6 +245,6 @@ export default async function GrIrReconciliationPage({ searchParams }: {
           </div>
         )}
       </section>
-    </div>
+    </Page>
   );
 }

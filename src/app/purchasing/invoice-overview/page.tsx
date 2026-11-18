@@ -15,6 +15,7 @@ import {
   type InvoiceOverviewResult,
   type InvoiceOverviewSelection,
 } from '@/modules/purchasing/invoice-overview';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,20 +102,22 @@ export default async function InvoiceOverviewPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('invoiceOverview.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('invoiceOverview.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/parked-invoice" className="btn btn-default min-h-11 sm:min-h-8">{t('parkedInvoice.title')}</Link>
-            <Link href="/purchasing/blocked-invoice" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.toBlocked')}</Link>
-            <Link href="/purchasing/invoice-verification" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.toPost')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('invoiceOverview.subtitle')}</p>
-      </header>
+    <Page
+      title={t('invoiceOverview.title')} code={t('invoiceOverview.code')} width="120rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('invoiceOverview.subtitle')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/parked-invoice">{t('parkedInvoice.title')}</LinkButton>
+          <LinkButton href="/purchasing/blocked-invoice">{t('invoiceOverview.toBlocked')}</LinkButton>
+          <LinkButton href="/purchasing/invoice-verification">{t('invoiceOverview.toPost')}</LinkButton>
+          <LinkButton href="/">{t('nav.launchpad')}</LinkButton>
+        </>
+      }
+    >
 
       {!canList && <p className="text-sm text-signal-error" role="alert">{t('invoiceOverview.capabilityMissing')}</p>}
 
@@ -313,6 +316,6 @@ export default async function InvoiceOverviewPage({ searchParams }: {
           </table>
         </section>
       )}
-    </div>
+    </Page>
   );
 }

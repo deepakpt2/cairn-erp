@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -11,6 +10,7 @@ import {
   singleLevelRefusal,
 } from '@/modules/production/mrp-run';
 import SingleLevelWorkbench from './SingleLevelWorkbench';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,19 +44,21 @@ export default async function SingleLevelPlanningPage({
   const run = !refusal && runNumber ? await getMrpRun(session.user.client, runNumber) : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('md03.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('md03.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/production/single-item-planning" className="btn btn-default min-h-11 sm:min-h-8">MD02</Link>
-            <Link href="/production/stock-requirements" className="btn btn-default min-h-11 sm:min-h-8">{t('md01.toList')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('md03.subtitle')}</p>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-md03-gaps>{t('md03.gaps')}</p>
-      </header>
+    <Page
+      title={t('md03.title')} code={t('md03.code')} width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('md03.subtitle')}</p>
+          <p className="max-w-3xl text-sm text-ink-soft" data-md03-gaps>{t('md03.gaps')}</p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/single-item-planning">MD02</LinkButton>
+          <LinkButton href="/production/stock-requirements">{t('md01.toList')}</LinkButton>
+        </>
+      }
+    >
       {refusal && <p role="status" data-md03-refused className="text-sm text-signal-error">{refusal}</p>}
       <SingleLevelWorkbench
         canPlan={can(session, MRP_SINGLE_LEVEL_CAPABILITY) && can(session, MRP_RUN_CAPABILITY)}
@@ -65,6 +67,6 @@ export default async function SingleLevelPlanningPage({
         material={one(params.material)}
         plant={one(params.plant)}
       />
-    </div>
+    </Page>
   );
 }

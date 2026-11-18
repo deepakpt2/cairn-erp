@@ -8,6 +8,7 @@ import {
   MaterialBomError,
 } from '@/modules/production/material-bom';
 import { displayMaterialBom, listMaterialBomsForDisplay } from '@/modules/production/material-bom-display';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,17 +64,10 @@ export default async function MaterialBomDisplayPage({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.BOM.DISPLAY · CS03</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Display material BOM</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          CS03 shows the stored BOM. It does not save, lock for change, explode, or rewrite a production order.
-        </p>
-      </header>
+    <Page
+      title="Display material BOM" code="PROD.BOM.DISPLAY · CS03" width="5xl"
+      description="CS03 shows the stored BOM. It does not save, lock for change, explode, or rewrite a production order."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">Material
           <input className="input mt-1" name="material" defaultValue={materialNumber} maxLength={40} />
@@ -152,6 +146,6 @@ export default async function MaterialBomDisplayPage({ searchParams }: {
           {document.warnings.map((warning) => <p key={warning} className="text-sm text-ink-soft">{warning}</p>)}
         </>
       )}
-    </main>
+    </Page>
   );
 }

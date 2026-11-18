@@ -9,6 +9,7 @@ import {
   type BatchPickupSelection,
 } from '@/modules/inventory/batch-pickup';
 import BatchPickupShell from './BatchPickupShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,18 +53,20 @@ export default async function BatchPickupPage({
   }
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{BATCH_PICKUP_CAPABILITY} · {BATCH_PICKUP_ALIAS}</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">{t('mb5c.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mb5c.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mb5c.title')} code={<>{BATCH_PICKUP_CAPABILITY} · {BATCH_PICKUP_ALIAS}</>} width="100rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('mb5c.subtitle')}</p>
+        </>
+      }
+    >
       <BatchPickupShell
         canUse={can(session, BATCH_PICKUP_CAPABILITY)}
         selection={selection}
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

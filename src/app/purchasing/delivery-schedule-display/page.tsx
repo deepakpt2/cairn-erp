@@ -9,6 +9,7 @@ import {
   SCHEDULE_DISPLAY_ROUTE,
   openDeliveryScheduleDisplay,
 } from '@/modules/purchasing/scheduling-agreement-schedule-display';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,17 +50,10 @@ export default async function DeliveryScheduleDisplayPage({ searchParams }: {
   const canChange = can(session, SCHEDULE_MAINTAIN_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.SCHEDLINE.DISPLAY · ME39</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Display delivery schedule</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          ME39 reads delivery schedule lines. It does not save, fix a line, run MRP, post a goods receipt, or send a supplier release.
-        </p>
-      </header>
+    <Page
+      title="Display delivery schedule" code="PROC.SCHEDLINE.DISPLAY · ME39"
+      description="ME39 reads delivery schedule lines. It does not save, fix a line, run MRP, post a goods receipt, or send a supplier release."
+    >
       <form className="flex flex-wrap items-end gap-3" method="get">
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Agreement</span>
@@ -106,6 +100,6 @@ export default async function DeliveryScheduleDisplayPage({ searchParams }: {
           )}
         </section>
       )}
-    </main>
+    </Page>
   );
 }
