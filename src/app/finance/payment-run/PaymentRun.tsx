@@ -1,12 +1,15 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useActionState, useEffect, useState } from 'react';
 import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { BankChoice, PaymentRunView } from '@/modules/finance/payment-run';
+import type { PaymentOperationView } from '@/modules/finance/payment-run-background';
 import type { DocumentReleaseState } from '@/modules/purchasing/release';
 import { ReleasePanel } from '@/ui/release/ReleasePanel';
 import {
+  cancelOperationAction, paymentOperationStatusAction,
   cancelRunAction, cancelRunReleaseAction, createRunAction, executeAction, proposalAction, releaseRunAction,
   type PaymentRunActionState,
 } from './actions';
@@ -22,7 +25,70 @@ function Message({ state }: { state: PaymentRunActionState }) {
   );
 }
 
-export default function PaymentRun({ run, runs, banks, canExecute, today, release, canRelease }: {
+const ACTIVE = ['QUEUED', 'RUNNING'];
+
+/**
+ * The latest background operation of the run: status, real progress (the item count is frozen when a
+ * proposal starts), the reason it failed, and a cancel. It polls one small row and refreshes the page when
+ * the operation ends, so a reload recovers the same view.
+ */
+function OperationPanel({ operation, canExecute }: { operation: PaymentOperationView | null; canExecute: boolean }) {
+  const router = useRouter();
+  const [op, setOp] = useState(operation);
+  const [cancel, cancelAction, cancelling] = useActionState(cancelOperationAction, INITIAL);
+  useEffect(() => setOp(operation), [operation]);
+  const active = op ? ACTIVE.includes(op.status) : false;
+  useEffect(() => {
+    if (!active || !op) return;
+    const id = op.operationId;
+    const timer = setInterval(async () => {
+      try {
+        const next = await paymentOperationStatusAction(id);
+        if (!next) return;
+        setOp(next);
+        if (!ACTIVE.includes(next.status)) {
+          clearInterval(timer);
+          router.refresh();
+        }
+      } catch {
+        // A failed poll is not a failed operation; the next tick tries again.
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [active, op?.operationId, router]);
+  if (!op) return null;
+  const label = op.kind === 'EXECUTE' ? 'Execution' : 'Proposal';
+  return (
+    <section aria-label="Background operation" className="border border-line bg-surface p-4" data-payment-operation={op.operationId}>
+      <h2 className="text-sm font-semibold">{label} <span data-payment-operation-status>{op.status.toLowerCase()}</span></h2>
+      {active && op.kind === 'PROPOSAL' && (
+        <p className="mt-2 text-sm" data-payment-operation-progress>
+          {op.itemsTotal > 0 ? `Prepared ${op.itemsDone} of ${op.itemsTotal} items.` : 'Waiting for the worker to select the open items.'}
+        </p>
+      )}
+      {active && op.kind === 'EXECUTE' && (
+        <p className="mt-2 text-sm">Waiting for the worker. Nothing is posted until it finishes, and then it is all of it or none.</p>
+      )}
+      {op.status === 'SUCCEEDED' && <p className="mt-2 text-sm">Finished.</p>}
+      {(op.status === 'FAILED' || op.status === 'CANCELLED') && (
+        <p role="alert" className={`mt-2 text-sm ${op.status === 'FAILED' ? 'text-signal-error' : ''}`} data-payment-operation-error>
+          {op.errorText ?? `The ${label.toLowerCase()} ${op.status.toLowerCase()}.`}{' '}
+          {op.kind === 'EXECUTE' ? 'No payment was posted.' : 'The run keeps the proposal and release it had before.'}
+        </p>
+      )}
+      {active && (
+        <form action={cancelAction} className="mt-2 flex flex-wrap items-center gap-3">
+          <input type="hidden" name="operationId" value={op.operationId} />
+          <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || cancelling}>Cancel {label.toLowerCase()}</button>
+          <span className="text-xs text-ink-soft">A proposal stops at its next chunk. An execution already inside its transaction finishes or rolls back whole.</span>
+        </form>
+      )}
+      <Message state={cancel} />
+    </section>
+  );
+}
+
+export default function PaymentRun({ run, runs, banks, canExecute, today, release, canRelease, operation = null }: {
   run: PaymentRunView | null;
   runs: Array<{ runDate: string; runId: string; status: string; postingDate: string }>;
   banks: BankChoice[];
@@ -30,11 +96,13 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
   today: string;
   release: DocumentReleaseState | null;
   canRelease: boolean;
+  operation?: PaymentOperationView | null;
 }) {
   const [createState, createAction, creating] = useActionState(createRunAction, INITIAL);
   const [proposalState, proposalActionState, proposing] = useActionState(proposalAction, INITIAL);
   const [executeState, executeActionState, executing] = useActionState(executeAction, INITIAL);
   const [cancelState, cancelActionState, cancelling] = useActionState(cancelRunAction, INITIAL);
+  const busy = operation ? ACTIVE.includes(operation.status) : false;
   const editable = run && run.status !== 'EXECUTED' && run.status !== 'CANCELLED';
   const runLock = useChangeLock(
     'PAYMENT_RUN',
@@ -79,12 +147,14 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
           <form action={cancelActionState} className="mt-2">
             <input type="hidden" name="runDate" value={run.runDate} />
             <input type="hidden" name="runId" value={run.runId} />
-            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || cancelling || !runHeld}>
+            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || cancelling || !runHeld || busy}>
               Cancel run
             </button>
           </form>
         )}
       </section>
+
+      <OperationPanel operation={operation} canExecute={canExecute} />
 
       <section aria-labelledby="pr-parameters" className="border border-line bg-surface p-4">
         <h2 id="pr-parameters" className="text-sm font-semibold">Parameters</h2>
@@ -134,7 +204,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
           <form action={proposalActionState} className="mt-2">
             <input type="hidden" name="runDate" value={run.runDate} />
             <input type="hidden" name="runId" value={run.runId} />
-            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || proposing || !runHeld}>
+            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || proposing || !runHeld || busy}>
               Create proposal
             </button>
           </form>
@@ -211,7 +281,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Account ID</span>
                 <input name="bankAccountId" className="input w-24" placeholder="MAIN" required />
               </label>
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canExecute || executing || !runHeld}>
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canExecute || executing || !runHeld || busy}>
                 Execute payments
               </button>
             </form>

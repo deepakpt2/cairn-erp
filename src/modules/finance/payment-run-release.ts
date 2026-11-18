@@ -15,7 +15,7 @@ import {
   releaseDocument, syncDocumentRelease, ReleaseError, type DocumentReleaseState,
 } from '../purchasing/release';
 import { paymentRun } from './schema';
-import type { PaymentRunView } from './payment-run';
+import { assertNoActivePaymentOperation, type PaymentRunView } from './payment-run';
 
 export const PAYMENT_RUN_RELEASE_CATEGORY = 'PAYMENT_RUN';
 export const PAYMENT_RUN_RELEASE_CAPABILITY = RELEASE_CAPABILITIES.PAYMENT_RUN;
@@ -62,6 +62,12 @@ async function proposedRun(client: string, runDate: string, runId: string) {
   if (run.status !== 'PROPOSAL') {
     throw new ReleaseError(`Payment run ${paymentRunReleaseKey(runDate, runId)} stands ${run.status.toLowerCase()}; only a proposal takes a release act.`);
   }
+  // A release act on a proposal that is being replaced, or paid, would judge the wrong thing. (The
+  // execution re-checks the release itself at its posting boundary, so this is the early, kind refusal.)
+  await withTenant(client, (tx) => assertNoActivePaymentOperation(tx, client, runDate, runId, 'released or un-released')).catch((error: unknown) => {
+    if (error instanceof Error && error.name === 'PaymentRunError') throw new ReleaseError(error.message, (error as { remedy?: string }).remedy);
+    throw error;
+  });
   return run;
 }
 
