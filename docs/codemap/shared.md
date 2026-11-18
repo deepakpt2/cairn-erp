@@ -44,7 +44,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (185)
+## Files (186)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -129,6 +129,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | **platform/i18n/** | | |
 | index.ts | LOCALES, DEFAULT_LOCALE, LOCALE_DIRECTION, t | Currency, currency |
 | **platform/job/** | | |
+| actor.ts | JobActorError, loadJobActor, assertActorCan | app_user |
 | cron.ts | parseCron, cronMatches, nextDueAfter |  |
 | execute.ts | claimNext, runClaimed | app_user, enqueue_entry, job_definition, job_run, user_session |
 | index.ts | enqueue, requestCancel, retryRun, logLine, reapOrphans, purgeFinished, ensureDefinition, claimNext, runClaimed, registerJob, handlerFor, registeredJobs, clearJobRegistry, ENQUEUE_THRESHOLD_MS, DEFAULT_CHUNK_SIZE, DEFAULT_GRACE_SECONDS, DEFAULT_RETENTION_DAYS, HEARTBEAT_MS, HEARTBEAT_TIMEOUT_MS, BACKOFF_BASE_MS, BACKOFF_CAP_MS, LOCK_RETRY_DELAY_MS, POLL_INTERVAL_MS, JobBlockedError, backoffMs, shouldEnqueue |  |

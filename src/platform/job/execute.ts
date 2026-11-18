@@ -733,17 +733,21 @@ async function beat(claimed: Leased): Promise<boolean> {
 /**
  * Fence a business write: call inside the transaction that does the work.
  *
- * Updates the run row only if this worker still holds the lease, which takes the
- * row lock until the business transaction ends. A stale owner therefore fails here
- * and rolls back, and the reaper cannot reap (it skips locked rows) while the
- * fenced transaction is open.
+ * Takes a KEY SHARE lock on the run row, but only if this worker still holds the lease. That does
+ * three things at once, without writing to the row:
+ *   - a stale owner (reaped, or reclaimed) matches no row, throws, and its transaction rolls back;
+ *   - the reaper selects stale rows FOR UPDATE SKIP LOCKED, which conflicts with KEY SHARE, so a run
+ *     with a live fenced transaction is never reaped, however long that transaction lasts;
+ *   - the heartbeat (an ordinary UPDATE, FOR NO KEY UPDATE) does not conflict with KEY SHARE, so the
+ *     worker keeps beating on its own connection while the transaction runs.
+ * If the reaper wins the race for the row, this waits for it and then fails the epoch check.
  */
 async function fenceLease(tx: Tx, claimed: Leased): Promise<void> {
   const rows = await tx
-    .update(jobRun)
-    .set({ heartbeatAt: sql`now()` })
+    .select({ id: jobRun.id })
+    .from(jobRun)
     .where(and(owns(claimed), eq(jobRun.status, 'RUNNING')))
-    .returning({ id: jobRun.id });
+    .for('key share');
   mustOwn(rows);
 }
 

@@ -155,7 +155,7 @@
 | internal_order_type_budget_profile | foundation | platform/tenancy |
 | job_definition | platform/tables | platform/job |
 | job_log | platform/tables | platform/job |
-| job_run | platform/tables | platform/job |
+| job_run | platform/tables | platform/job, production |
 | journal_entry | finance | foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing |
 | journal_entry_line | finance | dev/walkthrough-asset.ts, foundation, people, platform/posting, platform/tenancy, production, purchasing |
 | lock_wait_log | platform/tables | platform/lock |

@@ -5,7 +5,8 @@ import Link from 'next/link';
 
 import { t } from '@/platform/i18n';
 import type { MrpRunView } from '@/modules/production/mrp-run';
-import { cancelMrpRunAction, planMaterialsAction, type MrpActionState } from './actions';
+import type { MrpRunProgress } from '@/modules/production/mrp-background';
+import { cancelMrpRunAction, mrpRunProgressAction, mrpRunViewAction, planMaterialsAction, type MrpActionState } from './actions';
 
 const INITIAL: MrpActionState = { ok: false, message: '' };
 
@@ -25,7 +26,43 @@ export default function MrpRunWorkbench({
   const [state, action, pending] = useActionState(planMaterialsAction, INITIAL);
   const [cancelState, cancelAction, cancelling] = useActionState(cancelMrpRunAction, INITIAL);
   const [requestKey, setRequestKey] = useState(newRequestKey);
-  const shown = state.run ?? cancelState.run ?? run;
+  const [refreshed, setRefreshed] = useState<MrpRunView | null>(null);
+  const [progress, setProgress] = useState<MrpRunProgress | null>(null);
+  const initial = state.run ?? cancelState.run ?? run;
+  const shown = refreshed && initial && refreshed.runNumber === initial.runNumber ? refreshed : initial;
+  const watched = initial?.executionMode === 'BACKGROUND' ? initial.runNumber : null;
+  const active = progress
+    ? ['QUEUED', 'RUNNING', 'CANCELLING'].includes(progress.status)
+    : initial ? ['QUEUED', 'RUNNING', 'CANCELLING'].includes(initial.status) : false;
+
+  // A background run is recovered on reload (the page reads it) and followed by polling. The poll
+  // is a light read: counts and states, never the material list. The full run is read once, at the end.
+  useEffect(() => {
+    if (!watched) return;
+    let stopped = false;
+    setRefreshed(null);
+    const tick = async () => {
+      try {
+        const next = await mrpRunProgressAction(watched);
+        if (stopped || !next) return;
+        setProgress(next);
+        if (!['QUEUED', 'RUNNING', 'CANCELLING'].includes(next.status)) {
+          const full = await mrpRunViewAction(watched);
+          if (!stopped && full) setRefreshed(full);
+          stopped = true;
+          clearInterval(timer);
+        }
+      } catch {
+        // A failed poll is not a failed run; the next tick tries again.
+      }
+    };
+    const timer = setInterval(tick, 3000);
+    void tick();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [watched, initial?.status]);
 
   useEffect(() => {
     if (state.ok) setRequestKey(newRequestKey());
@@ -72,12 +109,20 @@ export default function MrpRunWorkbench({
             <span className="mb-1 block text-ink-soft">{t('md01.materialTo')}</span>
             <input name="materialTo" maxLength={40} className="input w-full" />
           </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-ink-soft">{t('md01.executionMode')}</span>
+            <select name="executionMode" className="input w-full" defaultValue="FOREGROUND" data-mrp-execution>
+              <option value="FOREGROUND">{t('md01.foreground')}</option>
+              <option value="BACKGROUND">{t('md01.background')}</option>
+            </select>
+          </label>
           <label className="flex items-end gap-2 text-sm">
             <input type="checkbox" name="confirmRegenerative" disabled={!canRegenerate} />
             <span>{t('md01.confirm')}</span>
           </label>
         </div>
         <p className="mt-3 text-sm text-ink-soft">{t('md01.nothingPosted')}</p>
+        <p className="text-sm text-ink-soft" data-mrp-background-note>{t('md01.backgroundNote')}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="submit" name="intent" value="check" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canPlan || pending}>
             {pending ? t('md01.checking') : t('md01.check')}
@@ -97,11 +142,26 @@ export default function MrpRunWorkbench({
         <section aria-labelledby="mrp-result" className="border border-line bg-surface p-4" data-mrp-run={shown.runNumber}>
           <h2 id="mrp-result" className="text-sm font-semibold">{t('md01.run')} {shown.runNumber}</h2>
           <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-4">
-            <div><dt className="text-ink-soft">{t('md01.status')}</dt><dd data-mrp-status>{shown.status}</dd></div>
-            <div><dt className="text-ink-soft">{t('md01.selected')}</dt><dd data-mrp-selected>{shown.materialsSelected}</dd></div>
+            <div><dt className="text-ink-soft">{t('md01.status')}</dt><dd data-mrp-status>{progress && progress.runNumber === shown.runNumber ? progress.status : shown.status}</dd></div>
+            <div><dt className="text-ink-soft">{t('md01.selected')}</dt><dd data-mrp-selected>{progress && progress.runNumber === shown.runNumber ? progress.selected : shown.materialsSelected}</dd></div>
             <div><dt className="text-ink-soft">{t('md01.created')}</dt><dd data-mrp-created>{shown.proposalsCreated}</dd></div>
             <div><dt className="text-ink-soft">{t('md01.retained')}</dt><dd data-mrp-retained>{shown.proposalsRetained}</dd></div>
           </dl>
+          {shown.executionMode === 'BACKGROUND' && (
+            <div className="mt-2 text-sm" data-mrp-job>
+              <span className="text-ink-soft">{t('md01.job')}: </span>
+              {(progress && progress.runNumber === shown.runNumber ? progress.job : shown.job)?.status ?? '—'}
+              {' '}
+              {(progress && progress.runNumber === shown.runNumber ? progress.job?.progressText : shown.job?.progressText) ?? ''}
+              {progress && progress.runNumber === shown.runNumber && active ? ` ${t('md01.pending')}: ${progress.pending}` : ''}
+              {(shown.errorSummary ?? progress?.errorSummary) ? (
+                <p role="alert" className="text-signal-error" data-mrp-error>{shown.errorSummary ?? progress?.errorSummary}</p>
+              ) : null}
+              {(shown.status === 'FAILED' || shown.status === 'CANCELLED') && shown.materialsPlanned > 0 ? (
+                <p className="text-ink-soft">{shown.materialsPlanned} materials were planned and their proposals stand.</p>
+              ) : null}
+            </div>
+          )}
           {shown.materials[0] && (
             <p className="mt-2 text-sm" data-mrp-company>{t('md01.companyCode')} {shown.materials[0].companyCode}</p>
           )}
@@ -177,7 +237,7 @@ export default function MrpRunWorkbench({
               </tbody>
             </table>
           )}
-          {(shown.status === 'RUNNING' || shown.status === 'QUEUED' || shown.status === 'CANCELLING') ? (
+          {(active || shown.status === 'RUNNING' || shown.status === 'QUEUED' || shown.status === 'CANCELLING') && !(refreshed && refreshed.runNumber === shown.runNumber && !['QUEUED','RUNNING','CANCELLING'].includes(refreshed.status)) ? (
             <form action={cancelAction} className="mt-3">
               <input type="hidden" name="runNumber" value={shown.runNumber} />
               <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canPlan || cancelling}>{t('md01.cancel')}</button>
