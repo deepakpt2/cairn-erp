@@ -78,6 +78,10 @@ export default async function PostingPeriodsPage({
                 {t('pp.defineVariantsLink')}
               </Link>
             </p>
+        </>
+      }
+    >
+      <div className="flex flex-wrap items-center gap-2">
           <span className="text-2xs uppercase tracking-wide text-ink-faint">
                 {t('cc.code')}
               </span>
@@ -90,9 +94,7 @@ export default async function PostingPeriodsPage({
                   {company.companyCode} · {company.name}
                 </Link>
               ))}
-        </>
-      }
-    >
+      </div>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-4">
         <Summary label={t('journal.period')} value={`${fiscalYear}`} />

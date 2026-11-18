@@ -8,7 +8,7 @@ import { withTenant } from '@/platform/db/client';
 import { country as countryReference, currency as currencyReference } from '@/platform/tables/reference';
 import { CompanyCodeCoaAssignmentForm, type ChartOfAccountsChoice } from './CompanyCodeCoaAssignmentForm';
 import { CompanyCodeDefinitionForm } from './CompanyCodeDefinitionForm';
-import { Page } from '@/ui/kit';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,21 +55,21 @@ export default async function CompanyCodesPage() {
 
   return (
     <Page
-      title={t('cc.title')} width="5xl" back={null}
-      description={
+      title={t('cc.title')}
+      width="5xl"
+      back={null}
+      code={
         <>
-          {canDefine && <span className="code text-ink-faint">{COMPANY_CODE_DEFINE}</span>}
-          {canAssign && <span className="code text-ink-faint">{COMPANY_CODE_ASSIGN_COA}</span>}
-          {!canDefine && !canAssign && (
-                <span className="code text-ink-faint">{COMPANY_CODE_DEFINE}</span>
-              )}
-          <p className="max-w-3xl text-sm text-ink-soft">{t('cc.subtitle')}</p>
-          <Link href="/config/fiscal-year-variants/assign-company-codes" className="mt-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
-              {t('cc.assignFiscalYearVariant')}
-            </Link>
-          <Link href="/config/company-codes/assign-chart-of-accounts" className="mt-2 ml-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
-              {t('cc.assignCoaScreen')}
-            </Link>
+          {canDefine && <span className="mr-3">{COMPANY_CODE_DEFINE}</span>}
+          {canAssign && <span className="mr-3">{COMPANY_CODE_ASSIGN_COA}</span>}
+          {!canDefine && !canAssign && <span>{COMPANY_CODE_DEFINE}</span>}
+        </>
+      }
+      description={t('cc.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config/fiscal-year-variants/assign-company-codes">{t('cc.assignFiscalYearVariant')}</LinkButton>
+          <LinkButton href="/config/company-codes/assign-chart-of-accounts">{t('cc.assignCoaScreen')}</LinkButton>
         </>
       }
     >

@@ -7,7 +7,7 @@ import { ROLE_MAINTAIN_CAPABILITY } from '@/modules/platform/role-admin';
 import { MAINTAIN, PASSWORD_RESET } from '../constants';
 import { mfaStatus, MFA_ADMIN_CAPABILITY } from '@/platform/auth/mfa';
 import UserDetailControls from '../UserDetailControls';
-import { Page } from '@/ui/kit';
+import { Chip, LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,12 +36,19 @@ export default async function UserDetailPage({
 
   return (
     <Page
-      title={detail.username} code={<>Application account · tenant {detail.client}</>} width="7xl" back={null}
+      title={detail.username}
+      code={<>Application account · tenant {detail.client}</>}
+      width="7xl"
+      back={{ href: '/platform/users', label: 'User directory' }}
+      actions={
+        <>
+          <Chip tone="neutral">{status}</Chip>
+          {caps.includes(ROLE_MAINTAIN_CAPABILITY) && <LinkButton href="/platform/roles">Role administration</LinkButton>}
+        </>
+      }
       description={
         <>
-          <nav className="mb-2 flex flex-wrap gap-3 text-sm"><Link className="link" href="/platform/users">User directory</Link>{caps.includes(ROLE_MAINTAIN_CAPABILITY) && <Link className="link" href="/platform/roles">Role administration</Link>}</nav>
           <p className="max-w-3xl text-sm text-ink-soft">{detail.fullName}</p>
-          <span className="rounded border border-line px-3 py-1 text-sm">{status}</span>
           <p className="max-w-3xl text-sm text-ink-soft">This is an application account, separate from the employee master record. Account edits here do not change HR data, role assignments or organizational restrictions.</p>
         </>
       }
