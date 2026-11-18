@@ -159,7 +159,7 @@ describe('the consumers that read a failed claim as an answer', () => {
     expect(movement).not.toContain('!changeLock');
     expect(movement).not.toContain('useChangeLock(');
     // The refusal keeps this screen's own words and styling: only the source of the text moved.
-    expect(movement).toContain('border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800');
+    expect(movement).toContain('border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn');
     expect(movement).toContain('{lockedOut && notice.message && (');
     // A refusal carries its recovery sentence, not only its headline: these two screens used to show the
     // message and drop the remedy, while `LockNotice` — which the document form and OX19 use — shows both.
