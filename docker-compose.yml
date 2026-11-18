@@ -101,6 +101,11 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Two worker processes from the same image, so a long business run (MRP, payroll,
+  # payment) never occupies the only slot that sends mail. They share the database,
+  # its CPU and its memory: this isolates worker slots, it does not guarantee latency.
+  # Queue lists are fixed here and disjoint. An unset list would mean "every queue",
+  # so the worker refuses to start without one (see src/worker/config.ts).
   worker:
     image: cairn-app:local
     build:
@@ -113,12 +118,37 @@ services:
       # security and be refused by assertApplicationRole if it is ever handed
       # a bypassrls login by mistake.
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
-      CAIRN_WORKER_ID: ${CAIRN_WORKER_ID:-worker-1}
-      # Empty = claim every queue (MAIL.SEND runs on the MAIL queue, not DEFAULT).
+      CAIRN_WORKER_ID: ${CAIRN_WORKER_ID:-worker-regular}
+      CAIRN_WORKER_QUEUES: DEFAULT,MAIL,OUTPUT
+      # Legacy name, passed through only so an old override is validated, never ignored:
+      # a value that contradicts CAIRN_WORKER_QUEUES stops this worker from starting.
       CAIRN_JOB_QUEUES: ${CAIRN_JOB_QUEUES:-}
+      # Scheduler owner: this worker ticks the scheduler; the intensive one does not.
+      CAIRN_WORKER_SCHEDULER: "true"
       # The worker decrypts the SMTP password when it sends, so it needs the same keyring as the app.
       CAIRN_BANK_DATA_KEYRING_JSON: ${CAIRN_BANK_DATA_KEYRING_JSON:-}
       CAIRN_JOB_POLL_MS: ${CAIRN_JOB_POLL_MS:-2000}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - cairn_internal
+
+  worker-intensive:
+    image: cairn-app:local
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    environment:
+      CAIRN_ENV: production
+      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
+      CAIRN_WORKER_ID: ${CAIRN_INTENSIVE_WORKER_ID:-worker-intensive}
+      CAIRN_WORKER_QUEUES: INTENSIVE
+      CAIRN_JOB_QUEUES: ${CAIRN_JOB_QUEUES:-}
+      CAIRN_WORKER_SCHEDULER: "false"
+      CAIRN_JOB_POLL_MS: ${CAIRN_JOB_POLL_MS:-2000}
+      # No SMTP keyring: MRP, payroll and payment jobs send no mail themselves.
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -9,9 +9,14 @@ import {
   PaymentRunError,
   cancelPaymentRun,
   createPaymentRun,
-  executePaymentRun,
-  generateProposal,
 } from '@/modules/finance/payment-run';
+import {
+  cancelPaymentOperation,
+  getPaymentOperation,
+  submitPaymentExecution,
+  submitPaymentProposal,
+  type PaymentOperationView,
+} from '@/modules/finance/payment-run-background';
 import {
   PAYMENT_RUN_RELEASE_CAPABILITY, cancelPaymentRunRelease, releasePaymentRun,
 } from '@/modules/finance/payment-run-release';
@@ -23,6 +28,7 @@ export interface PaymentRunActionState {
   remedy?: string;
   runDate?: string;
   runId?: string;
+  operationId?: string;
 }
 
 const ROUTE = '/finance/payment-run';
@@ -81,6 +87,7 @@ export async function createRunAction(
   }
 }
 
+/** Queue the proposal. The answer is QUEUED, never a result: the intensive worker prepares it and publishes it whole. */
 export async function proposalAction(
   _previous: PaymentRunActionState,
   form: FormData,
@@ -90,23 +97,22 @@ export async function proposalAction(
   if (denied) return denied;
   try {
     await assertRun(session, form);
-    const run = await generateProposal({
-      client: session.user.client, changedBy: session.user.username,
+    const op = await submitPaymentProposal({
+      client: session.user.client, changedBy: session.user.username, actorUserId: session.user.userId,
       runDate: text(form, 'runDate'), runId: text(form, 'runId'),
     });
     revalidatePath(ROUTE);
     return {
       ok: true,
-      message: run.proposal.length === 0
-        ? 'The proposal is empty: no open items match the selection.'
-        : `Proposal created: ${run.proposal.length - run.exceptionCount} payable, ${run.exceptionCount} exceptions.`,
-      runDate: run.runDate, runId: run.runId,
+      message: `Proposal queued (${op.status}). The current proposal and its release stay until the new proposal is published; then the release starts over.`,
+      runDate: op.runDate, runId: op.runId, operationId: op.operationId,
     };
   } catch (error) {
     return wrap(error);
   }
 }
 
+/** Queue the execution of a released proposal. Nothing is posted until the worker commits, and then it is all of it or none. */
 export async function executeAction(
   _previous: PaymentRunActionState,
   form: FormData,
@@ -116,20 +122,53 @@ export async function executeAction(
   if (denied) return denied;
   try {
     await assertRun(session, form);
-    const run = await executePaymentRun({
-      client: session.user.client, changedBy: session.user.username,
+    const op = await submitPaymentExecution({
+      client: session.user.client, changedBy: session.user.username, actorUserId: session.user.userId,
       runDate: text(form, 'runDate'), runId: text(form, 'runId'),
       houseBankKey: text(form, 'houseBankKey'), bankAccountId: text(form, 'bankAccountId'),
     });
     revalidatePath(ROUTE);
     return {
       ok: true,
-      message: `Run executed: ${run.payments.length} payments posted.`,
-      runDate: run.runDate, runId: run.runId,
+      message: `Execution queued (${op.status}). The release, supplier, bank, open items and period are checked again when the worker runs it.`,
+      runDate: op.runDate, runId: op.runId, operationId: op.operationId,
     };
   } catch (error) {
     return wrap(error);
   }
+}
+
+/** Cancel a queued or running operation: `operationId` (hidden). */
+export async function cancelOperationAction(
+  _previous: PaymentRunActionState,
+  form: FormData,
+): Promise<PaymentRunActionState> {
+  const session = await requireSession(ROUTE);
+  const denied = guard(session);
+  if (denied) return denied;
+  try {
+    const op = await cancelPaymentOperation({
+      client: session.user.client, operationId: text(form, 'operationId'),
+      changedBy: session.user.username, actorUserId: session.user.userId,
+    });
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      message: op.status === 'CANCELLED'
+        ? 'Cancelled. Nothing was changed on the run.'
+        : 'Cancel requested. A proposal stops at its next chunk and the previous proposal stays; an execution already inside its transaction finishes or rolls back whole.',
+      runDate: op.runDate, runId: op.runId, operationId: op.operationId,
+    };
+  } catch (error) {
+    return wrap(error);
+  }
+}
+
+/** Light status read for the screen's polling. */
+export async function paymentOperationStatusAction(operationId: string): Promise<PaymentOperationView | null> {
+  const session = await requireSession(ROUTE);
+  if (guard(session)) return null;
+  return getPaymentOperation(session.user.client, operationId);
 }
 
 export async function cancelRunAction(

@@ -10,12 +10,17 @@ import {
   PAYROLL_RUN_ROUTE,
   PayrollRunError,
   cancelPayrollRun,
-  proposePayrollRun,
-  recalculatePayrollRun,
   releasePayrollRun,
-  type PayrollRunView,
 } from '@/modules/people/payroll-run';
-import { PAYROLL_POST_CAPABILITY, PayrollPostingError, postPayrollRun } from '@/modules/people/payroll-posting';
+import { PAYROLL_POST_CAPABILITY, PayrollPostingError } from '@/modules/people/payroll-posting';
+import {
+  cancelPayrollOperation,
+  getPayrollOperation,
+  submitPayrollPosting,
+  submitPayrollProposal,
+  submitPayrollRecalculation,
+  type PayrollOperationView,
+} from '@/modules/people/payroll-background';
 import { SALARY_PAYMENT_CAPABILITY, SalaryPaymentError, paySalaryRun } from '@/modules/people/salary-payment';
 
 const ROUTE = PAYROLL_RUN_ROUTE;
@@ -30,6 +35,8 @@ export interface PayrollRunActionState {
   requestKey?: string;
   /** The accounting document a posting produced. */
   documentNumber?: string;
+  /** The queued background operation, when the action queued one. */
+  operationId?: string;
 }
 
 function text(form: FormData, name: string): string {
@@ -55,23 +62,23 @@ function refusal(error: unknown, extra: Partial<PayrollRunActionState> = {}): Pa
   throw error;
 }
 
-function summary(view: PayrollRunView): string {
-  return `${view.employeeCount} employee${view.employeeCount === 1 ? '' : 's'} calculated, ${view.exceptionCount} exception${view.exceptionCount === 1 ? '' : 's'}; net pay ${view.netPay} ${view.currency}.`;
-}
-
 function refresh(): void {
   revalidatePath(ROUTE);
   revalidatePath(PAYROLL_RESULT_ROUTE);
 }
 
-/** Propose a run: `companyCode`, `fiscalYear`, `period`, `requestKey` (hidden). */
+/**
+ * Propose a run: `companyCode`, `fiscalYear`, `period`, `requestKey` (hidden). The answer is the run and
+ * QUEUED, never a result: the employees are selected and calculated by the intensive worker.
+ */
 export async function proposeRunAction(_prev: PayrollRunActionState, form: FormData): Promise<PayrollRunActionState> {
   const access = await guard();
   if (!('actor' in access)) return access;
   const next = randomUUID();
   try {
-    const view = await proposePayrollRun({
+    const op = await submitPayrollProposal({
       client: access.client,
+      actorUserId: access.access.authorization.userId,
       companyCode: text(form, 'companyCode'),
       fiscalYear: text(form, 'fiscalYear'),
       period: text(form, 'period'),
@@ -81,23 +88,26 @@ export async function proposeRunAction(_prev: PayrollRunActionState, form: FormD
     refresh();
     return {
       ok: true,
-      runId: view.runId,
+      runId: op.runId,
       requestKey: next,
-      message: `Run proposed for company ${view.companyCode}, period ${view.period}/${view.fiscalYear} (${view.periodFrom} to ${view.periodTo}): ${summary(view)}`,
+      operationId: op.operationId,
+      message: `Proposal queued (${op.status}). The run is calculated in the background; open it to follow the progress.`,
     };
   } catch (error) {
     return refusal(error, { requestKey: next });
   }
 }
 
-/** Recalculate a proposed run: `runId` (hidden). */
+/** Recalculate a proposed run: `runId` (hidden). Queued; the previous proposal stays until the new one is published. */
 export async function recalculateRunAction(_prev: PayrollRunActionState, form: FormData): Promise<PayrollRunActionState> {
   const access = await guard();
   if (!('actor' in access)) return access;
   try {
-    const view = await recalculatePayrollRun({ client: access.client, runId: text(form, 'runId'), changedBy: access.actor }, access.access);
+    const op = await submitPayrollRecalculation({
+      client: access.client, runId: text(form, 'runId'), changedBy: access.actor, actorUserId: access.access.authorization.userId,
+    }, access.access);
     refresh();
-    return { ok: true, runId: view.runId, message: `Run recalculated: ${summary(view)}` };
+    return { ok: true, runId: op.runId, operationId: op.operationId, message: `Recalculation queued (${op.status}). The current proposal stays until the new one is published.` };
   } catch (error) {
     return refusal(error);
   }
@@ -130,8 +140,8 @@ export async function cancelRunAction(_prev: PayrollRunActionState, form: FormDa
 }
 
 /**
- * Post a released run to the G/L: `runId` (hidden) and nothing else. The request key is derived from
- * the run (`PAYROLL-POST-<runId>`) by the service; a client-supplied key could replay another run.
+ * Post a released run to the G/L: `runId` (hidden) and nothing else. Queued: the intensive worker posts
+ * it as one all-or-nothing journal as the user who asked, after re-checking their authority.
  */
 export async function postPayrollRunAction(_prev: PayrollRunActionState, form: FormData): Promise<PayrollRunActionState> {
   const session = await requireSession(ROUTE);
@@ -143,26 +153,45 @@ export async function postPayrollRunAction(_prev: PayrollRunActionState, form: F
         `Ask an administrator for the Post payroll authority (${PAYROLL_POST_CAPABILITY}).`,
       );
     }
-    const result = await postPayrollRun({
+    const op = await submitPayrollPosting({
       client: session.user.client,
       changedBy: session.user.username,
+      actorUserId: session.user.userId,
       runId,
       authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     refresh();
-    revalidatePath('/finance/journal');
+    return { ok: true, runId, operationId: op.operationId, message: `Posting queued (${op.status}). The run is posted in the background as one document; nothing is posted until it finishes.` };
+  } catch (error) {
+    if (error instanceof PayrollPostingError || error instanceof PayrollRunError) return { ok: false, message: error.message, remedy: error.remedy };
+    console.error('Payroll posting could not be queued', error);
+    return { ok: false, message: 'Posting could not be queued. Nothing was saved.', remedy: 'Contact an administrator if the problem persists.' };
+  }
+}
+
+/** Cancel a queued or running background operation: `operationId` (hidden). */
+export async function cancelOperationAction(_prev: PayrollRunActionState, form: FormData): Promise<PayrollRunActionState> {
+  const access = await guard();
+  if (!('actor' in access)) return access;
+  try {
+    const op = await cancelPayrollOperation({ client: access.client, operationId: text(form, 'operationId'), changedBy: access.actor }, access.access);
+    refresh();
     return {
-      ok: true,
-      runId,
-      documentNumber: result.documentNumber,
-      message: `Payroll posted as document ${result.displayNumber} in fiscal year ${result.fiscalYear}, dated ${result.postingDate}. `
-        + `Debits ${result.debitTotal}, credits ${result.creditTotal}, ${result.lineCount} lines.`,
+      ok: true, runId: op.runId, operationId: op.operationId,
+      message: op.status === 'CANCELLED'
+        ? 'Cancelled. Nothing was changed on the run.'
+        : 'Cancel requested. A calculation stops at its next chunk and the previous proposal stays; a posting already in its transaction finishes or rolls back whole.',
     };
   } catch (error) {
-    if (error instanceof PayrollPostingError) return { ok: false, message: error.message, remedy: error.remedy };
-    console.error('Payroll posting failed', error);
-    return { ok: false, message: 'Posting failed. Nothing was saved.', remedy: 'Check the configuration and contact an administrator if the problem persists.' };
+    return refusal(error);
   }
+}
+
+/** Light status read for the run page's polling. */
+export async function payrollOperationStatusAction(operationId: string): Promise<PayrollOperationView | null> {
+  const access = await guard();
+  if (!('actor' in access)) return null;
+  return getPayrollOperation(access.client, operationId, access.access);
 }
 
 /**

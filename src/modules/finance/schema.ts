@@ -13,6 +13,7 @@ import {
   text,
   integer,
   boolean,
+  jsonb,
   timestamp,
   date,
   numeric,
@@ -703,6 +704,55 @@ export const paymentRun = pgTable('payment_run', {
 }, (t) => [
   primaryKey({ columns: [t.client, t.runDate, t.runId] }),
   check('payment_run_status_ck', sql`${t.status} in ('PARAMETERS', 'PROPOSAL', 'EXECUTED', 'CANCELLED')`),
+]);
+
+/**
+ * 9308: a requested background payment-run proposal or execution. payment_run.status is unchanged; the
+ * in-flight work is this row, one active (QUEUED/RUNNING) per run. The chosen house bank and account of
+ * an execution live here, not in the job queue.
+ */
+export const paymentRunOperation = pgTable('payment_run_operation', {
+  client: tenantClient(),
+  operationId: varchar('operation_id', { length: 36 }).notNull(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 5 }).notNull(),
+  kind: varchar('kind', { length: 10 }).notNull(),
+  status: varchar('status', { length: 12 }).notNull().default('QUEUED'),
+  requestKey: varchar('request_key', { length: 80 }).notNull(),
+  requestedBy: varchar('requested_by', { length: 60 }).notNull(),
+  requestedByUser: varchar('requested_by_user', { length: 36 }).notNull(),
+  houseBankKey: varchar('house_bank_key', { length: 5 }),
+  bankAccountId: varchar('bank_account_id', { length: 5 }),
+  jobRunId: varchar('job_run_id', { length: 36 }),
+  itemsTotal: integer('items_total').notNull().default(0),
+  itemsDone: integer('items_done').notNull().default(0),
+  errorCode: varchar('error_code', { length: 40 }),
+  errorText: varchar('error_text', { length: 400 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  changedAt: timestamp('changed_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.operationId] }),
+  foreignKey({ columns: [t.client, t.runDate, t.runId], foreignColumns: [paymentRun.client, paymentRun.runDate, paymentRun.runId] }).onDelete('cascade'),
+  uniqueIndex('payment_run_operation_request_uq').on(t.client, t.requestKey),
+  uniqueIndex('payment_run_operation_active_uq').on(t.client, t.runDate, t.runId).where(sql`${t.status} in ('QUEUED', 'RUNNING')`),
+  index('payment_run_operation_run_idx').on(t.client, t.runDate, t.runId, t.createdAt),
+  check('payment_run_operation_kind_ck', sql`${t.kind} in ('PROPOSAL', 'EXECUTE')`),
+  check('payment_run_operation_status_ck', sql`${t.status} in ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')`),
+]);
+
+/** 9308: staged proposal items of a running proposal operation. Deleted when the operation ends. */
+export const paymentProposalStage = pgTable('payment_proposal_stage', {
+  client: tenantClient(),
+  operationId: varchar('operation_id', { length: 36 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  state: varchar('state', { length: 8 }).notNull().default('PENDING'),
+  payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.operationId, t.itemNumber] }),
+  foreignKey({ columns: [t.client, t.operationId], foreignColumns: [paymentRunOperation.client, paymentRunOperation.operationId] }).onDelete('cascade'),
+  check('payment_proposal_stage_state_ck', sql`${t.state} in ('PENDING', 'READY')`),
 ]);
 
 export const paymentRunCompany = pgTable('payment_run_company', {

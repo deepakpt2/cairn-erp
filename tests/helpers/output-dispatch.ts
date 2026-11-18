@@ -19,6 +19,9 @@ export async function runOutputDispatch(client: string, chunkSize = 25): Promise
       cursor,
       chunkSize,
       isCancelRequested: () => false,
+      epoch: 0,
+      isLeaseLost: () => false,
+      fence: async () => {},
       log: async () => {},
     });
     chunks += 1;

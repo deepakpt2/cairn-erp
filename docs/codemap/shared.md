@@ -2,6 +2,8 @@
 Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, app shell (`app/` root, `/config` workbench, auth, clients, registry). Paths relative to `src/`.
 
 ## Gotchas
+
+- Jobs hold a lease epoch (`job_run.claim_epoch`, bumped by `job_claim_next` and the reaper). Business writes call `ctx.fence(tx)`; a stale owner gets `LeaseLostError`/`LEASE_LOST`. Two workers: `worker` (DEFAULT,MAIL,OUTPUT, owns scheduler) and `worker-intensive` (INTENSIVE); an empty queue list means ALL, so `src/worker/config.ts` refuses it.
 - **RLS:** tenant tables are FORCE RLS (313 in the baseline) on `cairn.client`; only `withTenant`/`withTenantAs` (`SET LOCAL cairn.client` / `cairn.user`) see rows. `client.ts` refuses a superuser runtime role. Never call `withTenant` inside a `tx` (it opens a new transaction).
 - **SECURITY DEFINER:** `job_claim_next`, `job_orphan_clients`, `job_all_clients`, `notification_deliver` and the payroll triggers run as their owner. Every object must be owned by `cairn_integration_migrator`; migrating as `erp_user` breaks them.
 - **Jobs:** requests only `enqueue` in their own tx; the worker claims cross-tenant via `job_claim_next`, then works in `withTenant`. A handler exists only if `src/worker/jobs.ts` imports it. `tickScheduler` has no caller yet.
@@ -42,7 +44,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (183)
+## Files (186)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -112,7 +114,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | mfa.ts | MFA_SECTION, MFA_CHALLENGE_ROUTE, MFA_ADMIN_CAPABILITY, MFA_POLICY_CAPABILITY, MFA_REQUIRED_FLAG, RECOVERY_CODE_COUNT, MfaError, normaliseRecoveryCode, beginEnrolment, pendingEnrolment, confirmEnrolment, disableMfa, regenerateRecoveryCodes, mfaStatus, adminResetMfa, isMfaRequired, setMfaRequired, mfaEnrolmentOutstanding, challengeView, verifyChallenge, createChallenge | app_user, audit_access_log, client, client_settings, mfa_challenge, user_mfa, user_mfa_recovery_code |
 | password.ts | hashPassword, verifyPassword, checkPasswordPolicy |  |
 | pattern.ts | patternGrants, hasCapability, patternMatches |  |
-| service-authority.ts | verifyServiceAuthorityInTx, scopeRefusal, refusePlantOutsideScopeInTx | app_user, auth_org_restriction, capability, plant, role, role_capability, user_role, user_session |
+| service-authority.ts | verifyServiceAuthorityInTx, scopeRefusal, refusePlantOutsideScopeInTx | app_user, auth_org_restriction, capability, job_run, plant, role, role_capability, user_role, user_session |
 | session.ts | SESSION_COOKIE, SESSION_TTL_MINUTES, MAX_FAILED_ATTEMPTS, AuthError, encodeSessionCookie, parseSessionCookie, attemptSignIn, signIn, createSession, logonLanguageKeyFromPreferences, resolveSession, revokeSession, revokeAllSessions, revokeSessionById, loadCapabilities, loadOrgRestrictions, hasOrgAccess, tokenHashFor, constantTimeEquals, hasCapability, patternGrants, patternMatches | app_user, audit_access_log, auth_org_restriction, enqueue_entry, user_mfa, user_session |
 | totp.ts | TOTP_PERIOD_SECONDS, TOTP_DIGITS, TOTP_SKEW_STEPS, TOTP_SECRET_BYTES, base32Encode, base32Decode, generateSecret, stepAt, totpForStep, acceptTotp, otpauthUri |  |
 | **platform/change/** | | |
@@ -127,14 +129,16 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | **platform/i18n/** | | |
 | index.ts | LOCALES, DEFAULT_LOCALE, LOCALE_DIRECTION, t | Currency, currency |
 | **platform/job/** | | |
+| actor.ts | JobActorError, loadJobActor, assertActorCan | app_user |
 | cron.ts | parseCron, cronMatches, nextDueAfter |  |
 | execute.ts | claimNext, runClaimed | app_user, enqueue_entry, job_definition, job_run, user_session |
 | index.ts | enqueue, requestCancel, retryRun, logLine, reapOrphans, purgeFinished, ensureDefinition, claimNext, runClaimed, registerJob, handlerFor, registeredJobs, clearJobRegistry, ENQUEUE_THRESHOLD_MS, DEFAULT_CHUNK_SIZE, DEFAULT_GRACE_SECONDS, DEFAULT_RETENTION_DAYS, HEARTBEAT_MS, HEARTBEAT_TIMEOUT_MS, BACKOFF_BASE_MS, BACKOFF_CAP_MS, LOCK_RETRY_DELAY_MS, POLL_INTERVAL_MS, JobBlockedError, backoffMs, shouldEnqueue |  |
 | monitor.ts | isTerminal, listRuns, listLogs, reapFor | job_definition, job_log, job_run |
 | queue.ts | enqueue, requestCancel, retryRun, logLine, reapOrphans, purgeFinished, ensureDefinition | job_definition, job_log, job_run |
+| queues.ts | REGULAR_QUEUES, INTENSIVE_QUEUES, INTENSIVE_QUEUE |  |
 | registry.ts | registerJob, handlerFor, registeredJobs, clearJobRegistry |  |
 | scheduler.ts | tickScheduler | job_definition, job_run |
-| types.ts | ENQUEUE_THRESHOLD_MS, DEFAULT_CHUNK_SIZE, HEARTBEAT_MS, HEARTBEAT_TIMEOUT_MS, BACKOFF_BASE_MS, BACKOFF_CAP_MS, LOCK_RETRY_DELAY_MS, DEFAULT_GRACE_SECONDS, DEFAULT_RETENTION_DAYS, POLL_INTERVAL_MS, JobBlockedError, backoffMs, shouldEnqueue |  |
+| types.ts | ENQUEUE_THRESHOLD_MS, DEFAULT_CHUNK_SIZE, HEARTBEAT_MS, HEARTBEAT_TIMEOUT_MS, BACKOFF_BASE_MS, BACKOFF_CAP_MS, LOCK_RETRY_DELAY_MS, DEFAULT_GRACE_SECONDS, DEFAULT_RETENTION_DAYS, POLL_INTERVAL_MS, JobBlockedError, backoffMs, shouldEnqueue, LeaseLostError |  |
 | **platform/lock/** | | |
 | enqueue.ts | ENQUEUE_STALE_MS, EnqueueError, openForChange, heartbeatChangeLock, releaseChangeLock, assertChangeLock, listEnqueue, deleteEnqueueEntry, openChangeForSession, assertChangeForSession, displayOnlyMessage | enqueue_entry, user_session |
 | index.ts | acquireLock, acquireLocks, currentLocks, LockTimeoutError | lock_wait_log |
@@ -273,6 +277,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | SubmitButton.tsx | SubmitButton |  |
 | WorkIndicator.tsx | WorkIndicator |  |
 | **worker/** | | |
+| config.ts | WorkerConfigError, resolveWorkerConfig |  |
 | index.ts | runWorker, stopWorker, main |  |
 | jobs.ts |  |  |
 

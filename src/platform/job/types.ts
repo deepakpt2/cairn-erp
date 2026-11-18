@@ -31,6 +31,8 @@
  */
 
 /** Anything you cannot swear finishes within two seconds belongs in a job. */
+import type { Tx } from '../db/client';
+
 export const ENQUEUE_THRESHOLD_MS = 2_000;
 
 /** Documents per lock-commit cycle when a definition does not say otherwise. */
@@ -105,6 +107,17 @@ export interface JobContext {
   chunkSize: number;
   /** True once a user has asked to cancel. Check it between documents, not once per chunk. */
   isCancelRequested(): boolean;
+  /** The lease epoch this worker holds for the run. */
+  epoch: number;
+  /** True once a heartbeat found the lease gone (reaped or reclaimed). Stop starting work. */
+  isLeaseLost(): boolean;
+  /**
+   * Fence a business write. Call inside the transaction that does the work: it
+   * throws LeaseLostError, rolling that transaction back, if this worker no longer
+   * owns the run, and holds the run row until the transaction ends so the reaper
+   * cannot reap a live write.
+   */
+  fence(tx: Tx): Promise<void>;
   log(level: LogLevel, message: string, context?: Record<string, unknown>): Promise<void>;
 }
 
@@ -174,4 +187,12 @@ export function backoffMs(retryCount: number): number {
 /** Whether work of this size belongs in a job rather than in the request. */
 export function shouldEnqueue(estimateMs: number, documentCount: number): boolean {
   return estimateMs > ENQUEUE_THRESHOLD_MS || documentCount > DEFAULT_CHUNK_SIZE;
+}
+
+/** The worker no longer owns the run: it was reaped or reclaimed. Never a job failure. */
+export class LeaseLostError extends Error {
+  constructor() {
+    super('The job lease was lost; another worker owns this run.');
+    this.name = 'LeaseLostError';
+  }
 }

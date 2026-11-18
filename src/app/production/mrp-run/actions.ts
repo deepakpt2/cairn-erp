@@ -7,10 +7,12 @@ import {
   MRP_RUN_ROUTE,
   MrpRunError,
   cancelMrpRun,
+  getMrpRun,
   mrpNamedRefusal,
   planMaterials,
   type MrpRunView,
 } from '@/modules/production/mrp-run';
+import { getMrpRunProgress, submitMrpBackgroundRun, type MrpRunProgress } from '@/modules/production/mrp-background';
 
 export interface MrpActionState {
   ok: boolean;
@@ -60,7 +62,35 @@ export async function planMaterialsAction(
     return { ok: false, message: `You do not hold the regenerative planning capability (${MRP_REGENERATE_CAPABILITY}).` };
   }
   const check = text(form, 'intent') === 'check';
+  const background = text(form, 'executionMode').toUpperCase() === 'BACKGROUND';
   try {
+    if (background) {
+      // Queued, not planned: the answer is the run number and QUEUED, never a result.
+      const queued = await submitMrpBackgroundRun({
+        client: session.user.client,
+        requestedBy: session.user.username,
+        actorUserId: session.user.userId,
+        requestKey: text(form, 'requestKey'),
+        processingKey,
+        plantFrom: text(form, 'plantFrom'),
+        plantTo: text(form, 'plantTo') || undefined,
+        materialFrom: text(form, 'materialFrom') || undefined,
+        materialTo: text(form, 'materialTo') || undefined,
+        mrpController: text(form, 'mrpController') || undefined,
+        horizonStart: text(form, 'horizonStart') || undefined,
+        horizonEnd: text(form, 'horizonEnd') || undefined,
+        simulationOnly: check || text(form, 'simulationOnly') === 'on',
+        confirmRegenerative: text(form, 'confirmRegenerative') === 'on',
+        named,
+      });
+      return {
+        ok: true,
+        message: check
+          ? `Check ${queued.runNumber} is queued (${queued.status}). It writes nothing when it runs.`
+          : `Run ${queued.runNumber} is queued (${queued.status}). It plans in the background.`,
+        run: queued,
+      };
+    }
     const run = await planMaterials({
       client: session.user.client,
       requestedBy: session.user.username,
@@ -109,4 +139,18 @@ export async function cancelMrpRunAction(
     if (caught instanceof MrpRunError) return { ok: false, message: caught.message, remedy: caught.remedy };
     throw caught;
   }
+}
+
+/** Light status read for the page's polling. Needs the same capability as running MD01. */
+export async function mrpRunProgressAction(runNumber: string): Promise<MrpRunProgress | null> {
+  const session = await requireSession(MRP_RUN_ROUTE);
+  if (!can(session, MRP_RUN_CAPABILITY)) return null;
+  return getMrpRunProgress(session.user.client, runNumber);
+}
+
+/** The full run, read once when polling sees it end. */
+export async function mrpRunViewAction(runNumber: string): Promise<MrpRunView | null> {
+  const session = await requireSession(MRP_RUN_ROUTE);
+  if (!can(session, MRP_RUN_CAPABILITY)) return null;
+  return getMrpRun(session.user.client, runNumber);
 }

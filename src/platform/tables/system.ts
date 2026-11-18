@@ -146,6 +146,8 @@ export const jobRun = pgTable(
     blockedOn: jsonb('blocked_on').$type<BlockedOn | null>().default(null),
     warnedAt: timestamp('warned_at', { withTimezone: true }),
     deadLetteredAt: timestamp('dead_lettered_at', { withTimezone: true }),
+    /** Lease epoch: bumped by every claim and every reap; writes by a worker are conditional on its epoch. */
+    claimEpoch: integer('claim_epoch').notNull().default(0),
   },
   (t) => [
     index('job_run_client_status_idx').on(t.client, t.status),

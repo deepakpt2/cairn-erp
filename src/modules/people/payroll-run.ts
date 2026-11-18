@@ -72,22 +72,22 @@ export class PayrollRunError extends Error {
   }
 }
 
-function refuse(code: string, message: string, remedy?: string): never {
+export function refuse(code: string, message: string, remedy?: string): never {
   throw new PayrollRunError(message, remedy, code);
 }
 
 /** Proposing, recalculating, releasing and cancelling a run. */
-const EXECUTE = [PAYROLL_RUN_CAPABILITY] as const;
+export const EXECUTE = [PAYROLL_RUN_CAPABILITY] as const;
 /** Reading runs and results: whoever runs payroll, or whoever may read a payroll result. */
 const READ = [PAYROLL_RUN_CAPABILITY, PAYROLL_RESULT_CAPABILITY] as const;
-const judge = (tx: Tx, client: string, access: PayrollAccess | undefined, capabilities: readonly string[]) =>
+export const judge = (tx: Tx, client: string, access: PayrollAccess | undefined, capabilities: readonly string[]) =>
   judgePayrollAccess(tx, client, access, capabilities, refuse);
 
 /** Exception codes that inform rather than block: the employee is already paid by another run. */
 export const INFORMATIONAL_EXCEPTIONS: ReadonlySet<string> = new Set(['ALREADY_COVERED']);
 
 /** A database refusal from the coverage or immutability trigger (9281), in payroll's words. */
-function translateTrigger(error: unknown): never {
+export function translateTrigger(error: unknown): never {
   const code = (error as { code?: string } | null)?.code;
   if (code === '23505' && /already covered by payroll run/.test(String((error as Error).message))) {
     refuse('RUN_RACE', 'Another run has just covered one or more of these employees. Propose the run again.', 'Reload the runs; the employees are paid by the run that covered them.');
@@ -105,7 +105,7 @@ const companyField = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,4}$/, 'A
 const runIdField = z.string().trim().min(1).max(36);
 const actor = z.string().trim().min(1).max(60);
 
-const proposeInput = z.object({
+export const proposeInput = z.object({
   client: clientField,
   companyCode: companyField,
   fiscalYear: z.coerce.number().int('A fiscal year is a whole number.').min(1900).max(9999),
@@ -113,12 +113,12 @@ const proposeInput = z.object({
   requestKey: z.string().trim().max(64).optional(),
   changedBy: actor,
 });
-const runActionInput = z.object({ client: clientField, runId: runIdField, changedBy: actor });
+export const runActionInput = z.object({ client: clientField, runId: runIdField, changedBy: actor });
 const cancelInput = runActionInput.extend({
   reason: z.string().trim().min(1, 'Say why the run is cancelled.').max(200),
 });
 
-function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infer<T> {
+export function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infer<T> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -418,7 +418,7 @@ function runRowOf(r: RunSqlRow): PayrollRunRow {
   };
 }
 
-async function runView(tx: Tx, client: string, runId: string): Promise<PayrollRunView | null> {
+export async function runView(tx: Tx, client: string, runId: string): Promise<PayrollRunView | null> {
   const rows = (await tx.execute(sql`${RUN_SELECT} where r.client = ${client} and r.run_id = ${runId}`)) as unknown as RunSqlRow[];
   if (!rows[0]) return null;
   const exceptions = await tx
@@ -563,13 +563,13 @@ async function currencyDecimals(tx: Tx, currency: string): Promise<number> {
   return Number(rows[0].decimal_places);
 }
 
-async function loadRun(tx: Tx, client: string, runId: string) {
+export async function loadRun(tx: Tx, client: string, runId: string) {
   const [row] = await tx.select().from(payrollRun).where(and(eq(payrollRun.client, client), eq(payrollRun.runId, runId))).limit(1);
   if (!row) refuse('RUN_UNKNOWN', `Payroll run ${runId} does not exist.`, `Choose a run at ${PAYROLL_RUN_ROUTE}.`);
   return row;
 }
 
-function runRowFrom(row: typeof payrollRun.$inferSelect): RunRow {
+export function runRowFrom(row: typeof payrollRun.$inferSelect): RunRow {
   return {
     runId: row.runId,
     companyCode: row.companyCode,
@@ -602,7 +602,7 @@ const POSITIONS_IN_PERIOD = (client: string, personnelNumber: string | null, fro
 type PositionSqlRow = { personnel_number: string; valid_from: string; valid_to: string | null; controlling_area: string; cost_center: string; company_code: string | null };
 
 /** The employees a run for this company and period selects: a position overlapping it, in the company. */
-async function selectEmployees(tx: Tx, client: string, run: RunRow): Promise<string[]> {
+export async function selectEmployees(tx: Tx, client: string, run: RunRow): Promise<string[]> {
   const rows = (await tx.execute(POSITIONS_IN_PERIOD(client, null, run.periodFrom, run.periodTo))) as unknown as PositionSqlRow[];
   return [...new Set(rows.filter((r) => r.company_code === run.companyCode).map((r) => r.personnel_number))].sort();
 }
@@ -621,7 +621,25 @@ interface Segment {
  * an exception. Readiness is assumed to have been checked by `validateEmployeeForRun`; what is
  * refused here is what the calculation itself depends on.
  */
+export interface ResultDraft {
+  result: typeof payrollResult.$inferInsert;
+  lines: Array<typeof payrollResultLine.$inferInsert>;
+}
+
 export async function calculateResult(tx: Tx, client: string, run: RunRow, person: EmployeeRunInput, changedBy = 'SYSTEM'): Promise<ResultRow> {
+  const draft = await computeResultDraft(tx, client, run, person, changedBy);
+  await tx.insert(payrollResult).values(draft.result);
+  if (draft.lines.length) await tx.insert(payrollResultLine).values(draft.lines);
+  const [row] = await resultRows(tx, client, and(eq(payrollResult.client, client), eq(payrollResult.resultId, draft.result.resultId!)));
+  return row!;
+}
+
+/**
+ * Everything `calculateResult` decides, without writing: the result row and its lines as they would be
+ * stored. Reads only, so a background run can stage it and publish it later in one transaction. Throws
+ * a named `PayrollRunError` for anything that stops the employee being paid.
+ */
+export async function computeResultDraft(tx: Tx, client: string, run: RunRow, person: EmployeeRunInput, changedBy = 'SYSTEM'): Promise<ResultDraft> {
   const pn = person.personnelNumber;
   const positions = ((await tx.execute(POSITIONS_IN_PERIOD(client, pn, run.periodFrom, run.periodTo))) as unknown as PositionSqlRow[])
     .filter((p) => p.company_code === run.companyCode)
@@ -777,17 +795,17 @@ export async function calculateResult(tx: Tx, client: string, run: RunRow, perso
   const gross = totals.EARNING ?? 0n;
   const deductions = totals.DEDUCTION ?? 0n;
   const last = segments.at(-1)!;
-  await tx.insert(payrollResult).values({
-    client, resultId, runId: run.runId, personnelNumber: pn, origin: 'CALCULATED', currency: run.currency,
-    payableDays: String(payableDays), totalDays: String(run.totalDays), coveredDays: String(coveredDays),
-    unpaidLeaveDays: String(unpaidDays),
-    grossPay: unscaled(gross, decimals), totalDeductions: unscaled(deductions, decimals),
-    netPay: unscaled(gross - deductions, decimals), employerCost: unscaled(totals.EMPLOYER_CONTRIBUTION ?? 0n, decimals),
-    costCenter: last.costCenter, controllingArea: last.controllingArea, createdBy: changedBy,
-  });
-  if (lines.length) await tx.insert(payrollResultLine).values(lines);
-  const [row] = await resultRows(tx, client, and(eq(payrollResult.client, client), eq(payrollResult.resultId, resultId)));
-  return row!;
+  return {
+    result: {
+      client, resultId, runId: run.runId, personnelNumber: pn, origin: 'CALCULATED', currency: run.currency,
+      payableDays: String(payableDays), totalDays: String(run.totalDays), coveredDays: String(coveredDays),
+      unpaidLeaveDays: String(unpaidDays),
+      grossPay: unscaled(gross, decimals), totalDeductions: unscaled(deductions, decimals),
+      netPay: unscaled(gross - deductions, decimals), employerCost: unscaled(totals.EMPLOYER_CONTRIBUTION ?? 0n, decimals),
+      costCenter: last.costCenter, controllingArea: last.controllingArea, createdBy: changedBy,
+    },
+    lines,
+  };
 }
 
 /**
@@ -847,7 +865,7 @@ async function calculateRun(tx: Tx, client: string, run: RunRow, changedBy: stri
 }
 
 /** Personnel number → the other live run of this company and period whose result covers them. */
-async function coverageOf(tx: Tx, client: string, run: RunRow, exceptRunId: string): Promise<Map<string, string>> {
+export async function coverageOf(tx: Tx, client: string, run: RunRow, exceptRunId: string): Promise<Map<string, string>> {
   const rows = (await tx.execute(sql`
     select r.personnel_number, r.run_id
       from payroll_result r
@@ -860,12 +878,12 @@ async function coverageOf(tx: Tx, client: string, run: RunRow, exceptRunId: stri
   return new Map(rows.map((r) => [r.personnel_number, r.run_id]));
 }
 
-async function lockPeriod(tx: Tx, client: string, companyCode: string, fiscalYear: number, period: number): Promise<void> {
+export async function lockPeriod(tx: Tx, client: string, companyCode: string, fiscalYear: number, period: number): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payroll-run:${client}:${companyCode}:${fiscalYear}:${period}`}, 0))`);
 }
 
 /** The period must still be open for G/L posting: a run is paid into it. */
-async function assertPeriodOpen(tx: Tx, client: string, companyCode: string, fiscalYear: number, period: number) {
+export async function assertPeriodOpen(tx: Tx, client: string, companyCode: string, fiscalYear: number, period: number) {
   const company = await getCompanyCode(tx, client, companyCode);
   if (!company) refuse('COMPANY_UNKNOWN', `Company code ${companyCode} does not exist.`, 'Choose a company code from Company Codes.');
   if (!company.fiscalYearVariant || !company.postingPeriodVariant) {
@@ -967,6 +985,7 @@ export async function recalculatePayrollRun(input: RecalculateRunInput, access?:
     await lockPeriod(tx, parsed.client, standing.companyCode, standing.fiscalYear, standing.period);
     const row = await loadRun(tx, parsed.client, parsed.runId);
     assertProposed(row, 'recalculated');
+    await assertNoActiveOperation(tx, parsed.client, row.runId, 'recalculated');
     await assertPeriodOpen(tx, parsed.client, row.companyCode, row.fiscalYear, row.period);
     const before = (await runView(tx, parsed.client, row.runId))!;
     try {
@@ -992,7 +1011,50 @@ export async function recalculatePayrollRun(input: RecalculateRunInput, access?:
   });
 }
 
-function assertProposed(row: typeof payrollRun.$inferSelect, verb: string): void {
+/** The operation currently queued or running for a run, if any. At most one can exist (unique index). */
+export async function activeOperation(tx: Tx, client: string, runId: string): Promise<{ operationId: string; kind: string; status: string } | null> {
+  const rows = (await tx.execute(sql`
+    select operation_id, kind, status from payroll_run_operation
+     where client = ${client} and run_id = ${runId} and status in ('QUEUED', 'RUNNING')
+     limit 1
+  `)) as unknown as Array<{ operation_id: string; kind: string; status: string }>;
+  return rows[0] ? { operationId: rows[0].operation_id, kind: rows[0].kind, status: rows[0].status } : null;
+}
+
+/** Refuse while a background operation is queued or running for this run. */
+export async function assertNoActiveOperation(tx: Tx, client: string, runId: string, verb: string, exceptOperationId?: string): Promise<void> {
+  const active = await activeOperation(tx, client, runId);
+  if (active && active.operationId !== exceptOperationId) {
+    refuse(
+      'OPERATION_ACTIVE',
+      `Payroll run ${runId} cannot be ${verb} while a background ${active.kind.toLowerCase()} is ${active.status.toLowerCase()}.`,
+      `Wait for it to finish, or cancel it at ${PAYROLL_RUN_ROUTE}?run=${runId}.`,
+    );
+  }
+}
+
+/**
+ * A run is releasable only when its latest calculation finished and published. A background
+ * calculation that failed or was cancelled leaves the previous proposal in place for review, but that
+ * proposal is not offered for release until a calculation has completed after the failure.
+ */
+export async function assertCalculationSettled(tx: Tx, client: string, runId: string): Promise<void> {
+  const rows = (await tx.execute(sql`
+    select kind, status from payroll_run_operation
+     where client = ${client} and run_id = ${runId} and kind in ('PROPOSE', 'RECALCULATE')
+     order by created_at desc limit 1
+  `)) as unknown as Array<{ kind: string; status: string }>;
+  const latest = rows[0];
+  if (latest && latest.status !== 'SUCCEEDED') {
+    refuse(
+      'CALCULATION_INCOMPLETE',
+      `The latest background ${latest.kind.toLowerCase()} of run ${runId} is ${latest.status.toLowerCase()}; its results are ${latest.status === 'FAILED' || latest.status === 'CANCELLED' ? 'not a finished calculation' : 'not complete yet'}.`,
+      `Recalculate the run at ${PAYROLL_RUN_ROUTE}?run=${runId}, then release it.`,
+    );
+  }
+}
+
+export function assertProposed(row: typeof payrollRun.$inferSelect, verb: string): void {
   if (row.status === 'PROPOSED') return;
   if (row.status === 'CANCELLED') {
     refuse('RUN_CANCELLED', `Payroll run ${row.runId} is cancelled and cannot be ${verb}.`, `Propose a new run at ${PAYROLL_RUN_ROUTE}.`);
@@ -1018,6 +1080,8 @@ export async function releasePayrollRun(input: ReleaseRunInput, access?: Payroll
     await lockPeriod(tx, parsed.client, standing.companyCode, standing.fiscalYear, standing.period);
     const row = await loadRun(tx, parsed.client, parsed.runId);
     assertProposed(row, 'released');
+    await assertNoActiveOperation(tx, parsed.client, row.runId, 'released');
+    await assertCalculationSettled(tx, parsed.client, row.runId);
     await assertPeriodOpen(tx, parsed.client, row.companyCode, row.fiscalYear, row.period);
 
     const view = (await runView(tx, parsed.client, row.runId))!;
@@ -1089,6 +1153,7 @@ export async function cancelPayrollRun(input: CancelRunInput, access?: PayrollAc
     if (row.status === 'POSTED') {
       refuse('RUN_POSTED', `Payroll run ${row.runId} is posted and cannot be cancelled.`, 'Reverse the payroll posting first.');
     }
+    await assertNoActiveOperation(tx, parsed.client, row.runId, 'cancelled');
     if (row.status === 'CANCELLED') {
       refuse('RUN_CANCELLED', `Payroll run ${row.runId} is already cancelled (${row.cancelReason ?? 'no reason'}).`);
     }

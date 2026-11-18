@@ -27,7 +27,7 @@ import {
 
 export const PAYMENT_RUN_CAPABILITY = 'FIN.AP.PAYMENTRUN.EXECUTE';
 const JOURNAL_DOCUMENT_TYPE = 'KZ';
-const RUN_CLASS = 'payment_run';
+export const RUN_CLASS = 'payment_run';
 
 export class PaymentRunError extends Error {
   remedy?: string;
@@ -39,8 +39,30 @@ export class PaymentRunError extends Error {
   }
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-const runKey = (runDate: string, runId: string) => `${runDate}/${runId}`;
+export const round2 = (n: number) => Math.round(n * 100) / 100;
+export const runKey = (runDate: string, runId: string) => `${runDate}/${runId}`;
+
+/** The proposal or execution currently queued or running for a run. At most one can exist (unique index). */
+export async function activePaymentOperation(tx: Tx, client: string, runDate: string, runId: string): Promise<{ operationId: string; kind: string; status: string } | null> {
+  const rows = (await tx.execute(sql`
+    select operation_id, kind, status from payment_run_operation
+     where client = ${client} and run_date = ${runDate} and run_id = ${runId} and status in ('QUEUED', 'RUNNING')
+     limit 1
+  `)) as unknown as Array<{ operation_id: string; kind: string; status: string }>;
+  return rows[0] ? { operationId: rows[0].operation_id, kind: rows[0].kind, status: rows[0].status } : null;
+}
+
+/** Refuse while a background proposal or execution is queued or running for this run. */
+export async function assertNoActivePaymentOperation(tx: Tx, client: string, runDate: string, runId: string, verb: string, exceptOperationId?: string): Promise<void> {
+  const active = await activePaymentOperation(tx, client, runDate, runId);
+  if (active && active.operationId !== exceptOperationId) {
+    throw new PaymentRunError(
+      `Payment run ${runKey(runDate, runId)} cannot be ${verb} while a background ${active.kind.toLowerCase()} is ${active.status.toLowerCase()}.`,
+      'Wait for it to finish, or cancel it first.',
+    );
+  }
+}
+
 
 export interface PaymentRunView {
   runDate: string;
@@ -68,7 +90,7 @@ export interface PaymentRunView {
   exceptionCount: number;
 }
 
-async function loadRun(tx: Tx, client: string, runDate: string, runId: string): Promise<PaymentRunView | null> {
+export async function loadRun(tx: Tx, client: string, runDate: string, runId: string): Promise<PaymentRunView | null> {
   const [run] = await tx.select().from(paymentRun).where(and(
     eq(paymentRun.client, client), eq(paymentRun.runDate, runDate), eq(paymentRun.runId, runId),
   ));
@@ -212,7 +234,7 @@ export async function createPaymentRun(input: CreateRunInput): Promise<PaymentRu
   });
 }
 
-interface OpenItem {
+export interface OpenItem {
   journalDocumentNumber: string;
   journalFiscalYear: number;
   journalLineNumber: number;
@@ -226,7 +248,7 @@ interface OpenItem {
   dueDate: string | null;
 }
 
-async function openItems(tx: Tx, client: string, run: PaymentRunView): Promise<OpenItem[]> {
+export async function openItems(tx: Tx, client: string, run: PaymentRunView): Promise<OpenItem[]> {
   const companySet = new Set(run.companies.map((c) => c.companyCode));
   const lines = await tx.select({
     documentNumber: journalEntryLine.documentNumber,
@@ -285,7 +307,7 @@ async function openItems(tx: Tx, client: string, run: PaymentRunView): Promise<O
   return items;
 }
 
-function supplierMethods(raw: string | null): string[] {
+export function supplierMethods(raw: string | null): string[] {
   if (!raw) return [];
   return raw.split(/[,\s]+/).map((s) => s.trim().toUpperCase()).filter(Boolean);
 }
@@ -299,6 +321,7 @@ export async function generateProposal(input: {
     if (!run) throw new PaymentRunError(`Payment run ${runKey(input.runDate, input.runId)} does not exist.`);
     if (run.status === 'EXECUTED') throw new PaymentRunError('An executed run is history; its proposal cannot be regenerated.');
     if (run.status === 'CANCELLED') throw new PaymentRunError('A cancelled run cannot propose payments.');
+    await assertNoActivePaymentOperation(tx, input.client, input.runDate, input.runId, 'regenerated');
 
     const items = await openItems(tx, input.client, run);
     await tx.delete(paymentProposalItem).where(and(
@@ -360,11 +383,26 @@ export async function generateProposal(input: {
 export async function executePaymentRun(input: {
   client: string; changedBy: string; runDate: string; runId: string;
   houseBankKey: string; bankAccountId: string;
+  /** The background execution operation that is itself the active one, so it does not block itself. */
+  exceptOperationId?: string;
+  /**
+   * Called first in the execution's own transaction, after the run lock. The background job uses it to
+   * fence itself against a lost lease and to re-judge the submitting user against current grants.
+   */
+  beforeExecute?: (tx: Tx) => Promise<void>;
+  /**
+   * Called last, in the same transaction, once everything is posted and cleared. The background job
+   * records the operation as SUCCEEDED here, so the payments and the record that they were made commit
+   * together or not at all.
+   */
+  afterExecute?: (tx: Tx) => Promise<void>;
 }): Promise<PaymentRunView> {
   return withTenant(input.client, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/payrun/${input.runDate}/${input.runId}`}, 0))`);
+    await input.beforeExecute?.(tx);
     const run = await loadRun(tx, input.client, input.runDate, input.runId);
     if (!run) throw new PaymentRunError(`Payment run ${runKey(input.runDate, input.runId)} does not exist.`);
+    await assertNoActivePaymentOperation(tx, input.client, input.runDate, input.runId, 'executed', input.exceptOperationId);
     if (run.status === 'EXECUTED') throw new PaymentRunError('This run has already been executed; payments cannot be posted twice.');
     if (run.status !== 'PROPOSAL') throw new PaymentRunError('Create the proposal before executing.', 'Generate the proposal, review it, then execute.');
 
@@ -509,6 +547,7 @@ export async function executePaymentRun(input: {
       changeType: 'CHANGE', changedBy: input.changedBy, transactionCode: PAYMENT_RUN_CAPABILITY,
       after: { status: 'EXECUTED', payments: paymentNumber },
     });
+    await input.afterExecute?.(tx);
     return (await loadRun(tx, input.client, input.runDate, input.runId))!;
   });
 }
@@ -520,6 +559,7 @@ export async function cancelPaymentRun(input: {
     const run = await loadRun(tx, input.client, input.runDate, input.runId);
     if (!run) throw new PaymentRunError(`Payment run ${runKey(input.runDate, input.runId)} does not exist.`);
     if (run.status === 'EXECUTED') throw new PaymentRunError('An executed run is history; it cannot be cancelled or deleted.');
+    await assertNoActivePaymentOperation(tx, input.client, input.runDate, input.runId, 'cancelled');
     await tx.update(paymentRun).set({
       status: 'CANCELLED', changedBy: input.changedBy, changedAt: new Date(),
     }).where(and(

@@ -44,6 +44,7 @@ import { enqueueEntry } from '../tables/lock';
 import { listEnqueue, type EnqueueRow } from '../lock/enqueue';
 import { revokeSessionById } from '../auth/session';
 import { logLine } from './queue';
+import { LeaseLostError } from './types';
 import { handlerFor } from './registry';
 import {
   DEFAULT_CHUNK_SIZE,
@@ -63,7 +64,21 @@ export interface ClaimedRun {
   runId: string;
   client: string;
   jobCode: string;
+  /**
+   * The lease epoch `job_claim_next` handed out. Omitted only by callers that run
+   * a queued run directly without claiming it (tests); the run's current epoch is
+   * adopted then, so the run is still fenced against a later reap.
+   */
+  epoch?: number;
 }
+
+export interface RunOptions {
+  /** Heartbeat period. Defaults to HEARTBEAT_MS; tests shorten it. */
+  heartbeatMs?: number;
+}
+
+/** A claimed run whose epoch is known. */
+type Leased = ClaimedRun & { epoch: number };
 
 /**
  * Claim the next runnable job, across all tenants.
@@ -88,12 +103,12 @@ export async function claimNext(
     ? sql`array[${sql.join(queues.map((queue) => sql`${queue}`), sql`, `)}]::text[]`
     : sql`null::text[]`;
   const rows = (await db().execute(
-    sql`select run_id, run_client, run_job_code from job_claim_next(${workerId}, ${queueArg})`,
-  )) as unknown as Array<{ run_id: string; run_client: string; run_job_code: string }>;
+    sql`select run_id, run_client, run_job_code, run_epoch from job_claim_next(${workerId}, ${queueArg})`,
+  )) as unknown as Array<{ run_id: string; run_client: string; run_job_code: string; run_epoch: number }>;
 
   const row = rows[0];
   if (!row) return null;
-  return { runId: row.run_id, client: row.run_client, jobCode: row.run_job_code };
+  return { runId: row.run_id, client: row.run_client, jobCode: row.run_job_code, epoch: Number(row.run_epoch) };
 }
 
 interface RunShape {
@@ -107,6 +122,7 @@ interface RunShape {
   triggeredBy: string;
   cancelRequestedAt: Date | null;
   warnedAt: Date | null;
+  claimEpoch: number;
 }
 
 interface DefinitionShape {
@@ -126,13 +142,49 @@ interface DefinitionShape {
  * outcome throws, because at that point the worker cannot know what happened
  * and should stop taking work.
  */
-export async function runClaimed(workerId: string, claimed: ClaimedRun): Promise<JobStatus> {
-  const handler = handlerFor(claimed.jobCode);
+export async function runClaimed(
+  workerId: string,
+  claimedIn: ClaimedRun,
+  options: RunOptions = {},
+): Promise<JobStatus | 'LEASE_LOST'> {
+  const handler = handlerFor(claimedIn.jobCode);
 
-  const setup = await withTenant(claimed.client, async (tx) => loadRun(tx, claimed.runId));
+  const setup = await withTenant(claimedIn.client, async (tx) => loadRun(tx, claimedIn.runId));
   if (!setup) return 'FAILED';
 
   const { run, definition } = setup;
+  const claimed: Leased = { ...claimedIn, epoch: claimedIn.epoch ?? run.claimEpoch };
+  let leaseLost = false;
+  const heartbeat = setInterval(() => {
+    // Beats on its own connection, so a chunk that holds one transaction for minutes
+    // still shows as alive. It cannot help CPU-bound work that starves the event loop.
+    void beat(claimed).then(
+      (alive) => {
+        if (!alive) leaseLost = true;
+      },
+      () => undefined,
+    );
+  }, options.heartbeatMs ?? HEARTBEAT_MS);
+  heartbeat.unref?.();
+  try {
+    return await runLeased(workerId, claimed, handler, run, definition, () => leaseLost, options);
+  } catch (error) {
+    if (error instanceof LeaseLostError) return 'LEASE_LOST';
+    throw error;
+  } finally {
+    clearInterval(heartbeat);
+  }
+}
+
+async function runLeased(
+  workerId: string,
+  claimed: Leased,
+  handler: ReturnType<typeof handlerFor>,
+  run: RunShape,
+  definition: DefinitionShape,
+  isLeaseLost: () => boolean,
+  options: RunOptions,
+): Promise<JobStatus | 'LEASE_LOST'> {
 
   if (!handler) {
     await finish(claimed, 'FAILED', {
@@ -151,7 +203,6 @@ export async function runClaimed(workerId: string, claimed: ClaimedRun): Promise
   let cursor = run.cursor;
   let chunksDone = run.chunksDone;
   let processedTotal = 0;
-  let heartbeatAt = 0;
 
   const ctx: JobContext = {
     client: claimed.client,
@@ -161,6 +212,9 @@ export async function runClaimed(workerId: string, claimed: ClaimedRun): Promise
     cursor,
     chunkSize: definition.chunkSize ?? DEFAULT_CHUNK_SIZE,
     isCancelRequested: () => cancelFlag,
+    epoch: claimed.epoch,
+    isLeaseLost,
+    fence: (tx) => fenceLease(tx, claimed),
     log: (level, message, context) =>
       withTenant(claimed.client, (tx) => logLine(tx, claimed.client, claimed.runId, level, message, context)),
   };
@@ -178,7 +232,7 @@ export async function runClaimed(workerId: string, claimed: ClaimedRun): Promise
     // looking would walk straight into it.
     if (handler.scope) {
       const scope = await handler.scope(ctx);
-      const blocked = await preflight(workerId, claimed, scope, definition, run);
+      const blocked = await preflight(workerId, claimed, scope, definition, run, options);
       if (blocked) return blocked;
     }
 
@@ -202,17 +256,15 @@ export async function runClaimed(workerId: string, claimed: ClaimedRun): Promise
         return 'CANCELLED';
       }
 
-      if (Date.now() - heartbeatAt >= HEARTBEAT_MS) {
-        await beat(claimed);
-        heartbeatAt = Date.now();
-      }
+      if (isLeaseLost()) return 'LEASE_LOST';
 
       let result: ChunkResult;
       try {
         result = await handler.chunk({ ...ctx, cursor });
       } catch (error) {
+        if (error instanceof LeaseLostError) throw error;
         if (isJobBlocked(error)) {
-          return await block(workerId, claimed, run, definition, error.documents);
+          return await block(workerId, claimed, run, definition, error.documents, options);
         }
         return await fail(claimed, run, definition, describeError(error));
       }
@@ -226,7 +278,7 @@ export async function runClaimed(workerId: string, claimed: ClaimedRun): Promise
       await withTenant(claimed.client, (tx) =>
         saveProgress(
           tx,
-          claimed.runId,
+          claimed,
           cursor,
           chunksDone,
           result.total ?? null,
@@ -244,6 +296,9 @@ export async function runClaimed(workerId: string, claimed: ClaimedRun): Promise
       }
     }
   } catch (error) {
+    // A lost lease is not a failure of the job: somebody else owns the run now, and
+    // recording an outcome here would overwrite theirs.
+    if (error instanceof LeaseLostError) throw error;
     // Reaching here means the harness itself could not proceed — not that the
     // job failed. Record it as a failure and let the normal retry path apply.
     return await fail(claimed, run, definition, `Harness error: ${describeError(error)}`);
@@ -276,15 +331,16 @@ function isJobBlocked(error: unknown): error is { documents: HeldDocument[] } {
  */
 async function preflight(
   workerId: string,
-  claimed: ClaimedRun,
+  claimed: Leased,
   scope: LockRef[],
   definition: DefinitionShape,
   run: RunShape,
-): Promise<JobStatus | null> {
+  options: RunOptions,
+): Promise<JobStatus | 'LEASE_LOST' | null> {
   if (scope.length === 0) return null;
   const held = await heldDocuments(claimed.client, scope);
   if (held.length === 0) return null;
-  return await block(workerId, claimed, run, definition, held);
+  return await block(workerId, claimed, run, definition, held, options);
 }
 
 /**
@@ -318,11 +374,12 @@ async function heldDocuments(client: string, scope: LockRef[]): Promise<HeldDocu
  */
 async function block(
   workerId: string,
-  claimed: ClaimedRun,
+  claimed: Leased,
   run: RunShape,
   definition: DefinitionShape,
   documents: HeldDocument[],
-): Promise<JobStatus> {
+  options: RunOptions,
+): Promise<JobStatus | 'LEASE_LOST'> {
   const canTerminate =
     definition.mayTerminateSessions && run.triggerType === 'SCHEDULED' && documents.length > 0;
 
@@ -351,7 +408,9 @@ async function block(
           claimedAt: null,
           heartbeatAt: null,
         })
-        .where(eq(jobRun.id, claimed.runId));
+        .where(owns(claimed))
+        .returning({ id: jobRun.id })
+        .then(mustOwn);
 
         await notifyRunOutcome(tx, claimed, 'JOB.BLOCKED');
     });
@@ -381,9 +440,11 @@ async function block(
             blockedOn: null,
             nextAttemptAt: sql`now()`,
           })
-          .where(eq(jobRun.id, claimed.runId));
+          .where(owns(claimed))
+        .returning({ id: jobRun.id })
+        .then(mustOwn);
       });
-      return await runClaimed(workerId, claimed);
+      return await runClaimed(workerId, claimed, options);
     }
   }
 
@@ -409,7 +470,9 @@ async function block(
         claimedAt: null,
         heartbeatAt: null,
       })
-      .where(eq(jobRun.id, claimed.runId));
+      .where(owns(claimed))
+        .returning({ id: jobRun.id })
+        .then(mustOwn);
 
     await notifyRunOutcome(tx, claimed, 'JOB.BLOCKED');
   });
@@ -417,7 +480,7 @@ async function block(
 }
 
 /** Revoke the sessions holding these documents. Returns how many were closed. */
-async function terminateHolders(claimed: ClaimedRun, documents: HeldDocument[]): Promise<number> {
+async function terminateHolders(claimed: Leased, documents: HeldDocument[]): Promise<number> {
   return withTenant(claimed.client, async (tx) => {
     const sessionIds = await sessionIdsFor(tx, claimed.client, documents);
     let closed = 0;
@@ -485,7 +548,7 @@ async function sessionIdsFor(tx: Tx, client: string, documents: HeldDocument[]):
 }
 
 async function fail(
-  claimed: ClaimedRun,
+  claimed: Leased,
   run: RunShape,
   definition: DefinitionShape,
   message: string,
@@ -517,7 +580,9 @@ async function fail(
         claimedAt: null,
         heartbeatAt: null,
       })
-      .where(eq(jobRun.id, claimed.runId));
+      .where(owns(claimed))
+        .returning({ id: jobRun.id })
+        .then(mustOwn);
 
     // A run that still has retries left has not ended: it is going back on the
     // queue to be tried again. Calling that a failure would be a lie, and would
@@ -530,13 +595,15 @@ async function fail(
   return status;
 }
 
-async function markCancelled(claimed: ClaimedRun): Promise<void> {
+async function markCancelled(claimed: Leased): Promise<void> {
   await withTenant(claimed.client, async (tx) => {
     await logLine(tx, claimed.client, claimed.runId, 'INFO', 'Cancelled at a chunk boundary.');
     await tx
       .update(jobRun)
       .set({ status: 'CANCELLED', finishedAt: sql`now()`, workerId: null, claimedAt: null, heartbeatAt: null })
-      .where(eq(jobRun.id, claimed.runId));
+      .where(owns(claimed))
+        .returning({ id: jobRun.id })
+        .then(mustOwn);
   });
 }
 
@@ -562,7 +629,7 @@ const JOB_MONITOR_CAPABILITY = 'PLT.JOB.DISPLAY';
  */
 async function notifyRunOutcome(
   tx: Tx,
-  claimed: ClaimedRun,
+  claimed: Leased,
   kind: 'JOB.COMPLETED' | 'JOB.FAILED' | 'JOB.BLOCKED',
 ): Promise<void> {
   const [row] = await tx
@@ -603,7 +670,7 @@ async function notifyRunOutcome(
 }
 
 async function finish(
-  claimed: ClaimedRun,
+  claimed: Leased,
   status: JobStatus,
   patch: { resultSummary?: string; errorText?: string; chunksDone?: number },
 ): Promise<void> {
@@ -621,7 +688,9 @@ async function finish(
         claimedAt: null,
         heartbeatAt: null,
       })
-      .where(eq(jobRun.id, claimed.runId));
+      .where(owns(claimed))
+        .returning({ id: jobRun.id })
+        .then(mustOwn);
 
     // Cancelled tells nobody: they asked for it. Everything else names the
     // ending, because a run that finished while you were on another screen is
@@ -636,18 +705,55 @@ async function finish(
   });
 }
 
-async function beat(claimed: ClaimedRun): Promise<void> {
-  await withTenant(claimed.client, async (tx) => {
-    await tx
+/** Rows of a run that this worker still owns, i.e. whose lease epoch it still holds. */
+function owns(claimed: Leased) {
+  return and(eq(jobRun.id, claimed.runId), eq(jobRun.claimEpoch, claimed.epoch));
+}
+
+/** An update that touched no row means the lease was lost: stop, and write nothing more. */
+function mustOwn(rows: unknown[]): void {
+  if (rows.length === 0) throw new LeaseLostError();
+}
+
+/**
+ * Advance the heartbeat. False when the lease is gone (reaped or reclaimed), which
+ * is how a worker that was paused past the timeout finds out it is no longer the owner.
+ */
+async function beat(claimed: Leased): Promise<boolean> {
+  return withTenant(claimed.client, async (tx) => {
+    const rows = await tx
       .update(jobRun)
       .set({ heartbeatAt: sql`now()` })
-      .where(and(eq(jobRun.id, claimed.runId), eq(jobRun.status, 'RUNNING')));
+      .where(and(owns(claimed), eq(jobRun.status, 'RUNNING')))
+      .returning({ id: jobRun.id });
+    return rows.length > 0;
   });
+}
+
+/**
+ * Fence a business write: call inside the transaction that does the work.
+ *
+ * Takes a KEY SHARE lock on the run row, but only if this worker still holds the lease. That does
+ * three things at once, without writing to the row:
+ *   - a stale owner (reaped, or reclaimed) matches no row, throws, and its transaction rolls back;
+ *   - the reaper selects stale rows FOR UPDATE SKIP LOCKED, which conflicts with KEY SHARE, so a run
+ *     with a live fenced transaction is never reaped, however long that transaction lasts;
+ *   - the heartbeat (an ordinary UPDATE, FOR NO KEY UPDATE) does not conflict with KEY SHARE, so the
+ *     worker keeps beating on its own connection while the transaction runs.
+ * If the reaper wins the race for the row, this waits for it and then fails the epoch check.
+ */
+async function fenceLease(tx: Tx, claimed: Leased): Promise<void> {
+  const rows = await tx
+    .select({ id: jobRun.id })
+    .from(jobRun)
+    .where(and(owns(claimed), eq(jobRun.status, 'RUNNING')))
+    .for('key share');
+  mustOwn(rows);
 }
 
 async function saveProgress(
   tx: Tx,
-  runId: string,
+  claimed: Leased,
   cursor: Cursor | null,
   chunksDone: number,
   total: number | null,
@@ -662,7 +768,7 @@ async function saveProgress(
   }
   if (progressText !== null) patch.progressText = progressText;
 
-  await tx.update(jobRun).set(patch).where(eq(jobRun.id, runId));
+  mustOwn(await tx.update(jobRun).set(patch).where(owns(claimed)).returning({ id: jobRun.id }));
 }
 
 async function loadRun(
@@ -681,6 +787,7 @@ async function loadRun(
       triggeredBy: jobRun.triggeredBy,
       cancelRequestedAt: jobRun.cancelRequestedAt,
       warnedAt: jobRun.warnedAt,
+      claimEpoch: jobRun.claimEpoch,
       defCode: jobDefinition.code,
       defMaxRetries: jobDefinition.maxRetries,
       defTimeout: jobDefinition.timeoutSeconds,
@@ -707,6 +814,7 @@ async function loadRun(
       triggeredBy: row.triggeredBy,
       cancelRequestedAt: row.cancelRequestedAt,
       warnedAt: row.warnedAt,
+      claimEpoch: row.claimEpoch,
     },
     definition: {
       code: row.defCode,

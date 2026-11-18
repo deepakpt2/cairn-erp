@@ -64,11 +64,14 @@ export const mrpRun = pgTable('mrp_run', {
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   errorSummary: varchar('error_summary', { length: 200 }),
+  /** The job_run that executes a BACKGROUND run. */
+  jobRunId: varchar('job_run_id', { length: 36 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.runNumber] }),
   unique('mrp_run_request_uq').on(t.client, t.requestKey),
   check('mrp_run_key_ck', sql`${t.processingKey} in ('NETCH', 'NETPL', 'NEUPL')`),
+  check('mrp_run_execution_ck', sql`${t.executionMode} in ('FOREGROUND', 'BACKGROUND')`),
   check('mrp_run_status_ck', sql`${t.status} in ('QUEUED', 'RUNNING', 'COMPLETED', 'COMPLETED_WITH_WARNINGS', 'FAILED', 'CANCELLING', 'CANCELLED')`),
   index('mrp_run_status_idx').on(t.client, t.status, t.createdAt),
 ]);

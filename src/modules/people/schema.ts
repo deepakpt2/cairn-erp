@@ -36,6 +36,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -845,6 +846,68 @@ export const payrollRun = pgTable(
        or (${t.documentNumber} is not null and ${t.documentFiscalYear} is not null)`,
     ),
     check('payroll_run_posted_document_ck', sql`(${t.status} = 'POSTED') = (${t.documentNumber} is not null)`),
+  ],
+);
+
+/**
+ * 9307: a requested background calculation or posting of one run. payroll_run.status is unchanged;
+ * the in-flight work is this row, one active (QUEUED/RUNNING) per run. The job carries only its id.
+ */
+export const payrollRunOperation = pgTable(
+  'payroll_run_operation',
+  {
+    client: tenant(),
+    operationId: varchar('operation_id', { length: 36 }).notNull(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    kind: varchar('kind', { length: 12 }).notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('QUEUED'),
+    requestKey: varchar('request_key', { length: 80 }).notNull(),
+    requestedBy: varchar('requested_by', { length: 60 }).notNull(),
+    requestedByUser: varchar('requested_by_user', { length: 36 }).notNull(),
+    jobRunId: varchar('job_run_id', { length: 36 }),
+    employeesTotal: integer('employees_total').notNull().default(0),
+    employeesDone: integer('employees_done').notNull().default(0),
+    errorCode: varchar('error_code', { length: 32 }),
+    errorText: varchar('error_text', { length: 400 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    changedAt: timestamp('changed_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.operationId] }),
+    foreignKey({
+      name: 'payroll_run_operation_run_fk',
+      columns: [t.client, t.runId],
+      foreignColumns: [payrollRun.client, payrollRun.runId],
+    }).onDelete('cascade'),
+    uniqueIndex('payroll_run_operation_request_uq').on(t.client, t.requestKey),
+    uniqueIndex('payroll_run_operation_active_uq').on(t.client, t.runId).where(sql`${t.status} in ('QUEUED', 'RUNNING')`),
+    index('payroll_run_operation_run_idx').on(t.client, t.runId, t.createdAt),
+    check('payroll_run_operation_kind_ck', sql`${t.kind} in ('PROPOSE', 'RECALCULATE', 'POST')`),
+    check('payroll_run_operation_status_ck', sql`${t.status} in ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELLED')`),
+  ],
+);
+
+/** 9307: staged outcome per employee, frozen at operation start. Holds pay amounts; deleted when the operation ends. */
+export const payrollCalcStage = pgTable(
+  'payroll_calc_stage',
+  {
+    client: tenant(),
+    operationId: varchar('operation_id', { length: 36 }).notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    outcome: varchar('outcome', { length: 10 }).notNull().default('PENDING'),
+    coveredBy: varchar('covered_by', { length: 36 }),
+    payload: jsonb('payload').$type<Record<string, unknown> | null>(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.operationId, t.personnelNumber] }),
+    foreignKey({
+      name: 'payroll_calc_stage_op_fk',
+      columns: [t.client, t.operationId],
+      foreignColumns: [payrollRunOperation.client, payrollRunOperation.operationId],
+    }).onDelete('cascade'),
+    check('payroll_calc_stage_outcome_ck', sql`${t.outcome} in ('PENDING', 'RESULT', 'EXCEPTION', 'COVERED')`),
   ],
 );
 

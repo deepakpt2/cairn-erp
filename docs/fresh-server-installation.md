@@ -105,7 +105,10 @@ openssl rand -hex 32     # run once per secret below
 | `CAIRN_DEMO_LOGIN_URL` | Optional | The sign-in address printed at the top of the credential file. |
 | `CAIRN_DEMO_TENANT_NAME` | Optional | The tenant name printed in the credential file. |
 | `CAIRN_BANK_DATA_KEYRING_JSON` | Optional (required for mail) | Deployment secret, supplied to the app and the worker — never to the migration job. |
-| `CAIRN_WORKER_ID`, `CAIRN_JOB_QUEUES`, `CAIRN_JOB_POLL_MS` | Optional | Worker identity and polling. Defaults are `worker-1`, every queue, `2000`. |
+| `CAIRN_WORKER_ID` | Optional | Regular worker identity. Default `worker-regular`. |
+| `CAIRN_INTENSIVE_WORKER_ID` | Optional | Intensive worker identity. Default `worker-intensive`. Must differ from `CAIRN_WORKER_ID`. |
+| `CAIRN_JOB_POLL_MS` | Optional | Idle poll interval for both workers. Default `2000`. |
+| `CAIRN_JOB_QUEUES` | **Remove** | Legacy. Compose now fixes the queue lists (`worker`: `DEFAULT,MAIL,OUTPUT`; `worker-intensive`: `INTENSIVE`). A leftover value that contradicts them stops the worker from starting; see §9b. |
 
 Two traps worth stating plainly:
 
@@ -227,10 +230,10 @@ without one can never be given one afterwards.
 | You want to | Do this |
 |---|---|
 | Restart the web app | `docker compose restart app` — migrations are **not** re-run. |
-| Deploy a code change | `docker compose up -d --build app worker` |
+| Deploy a code change | `docker compose up -d --build app worker worker-intensive` |
 | Re-run migrations deliberately | `docker compose up -d --build --force-recreate migrate app` |
 | Stop without losing data | `docker compose down` — the volume survives. |
-| Read the logs | `docker compose logs -f app` (or `worker`, `db`, `migrate`) |
+| Read the logs | `docker compose logs -f app` (or `worker`, `worker-intensive`, `db`, `migrate`) |
 | Back up the database | `docker compose exec db pg_dump -U cairn -d "$CAIRN_DATABASE_NAME" > backup.sql` |
 
 **Never type `docker compose down -v` while troubleshooting.** The `-v` deletes the
@@ -241,6 +244,32 @@ There is no scheduled backup in this Compose file. If the data matters, back it 
 yourself.
 
 ---
+
+## 9b. Two workers: queues, scheduler, upgrade and rollback
+
+| Service | `CAIRN_WORKER_QUEUES` | Jobs | Scheduler |
+|---|---|---|---|
+| `worker` | `DEFAULT,MAIL,OUTPUT` | grant-expiry warning, notification fan-out, mail send, output dispatch | **owner**: ticks every 30 s on its own timer, also while a run is busy |
+| `worker-intensive` | `INTENSIVE` | long on-demand business runs (MRP, payroll, payment) | off (`CAIRN_WORKER_SCHEDULER=false`) |
+
+Two processes isolate worker slots only. They share the database, CPU and memory, so a heavy run can still slow the
+other worker; no latency is guaranteed. Scheduler ticks are idempotent (one run per job, tenant and due instant), so a
+second ticking process would be harmless, but only the regular worker is configured to tick.
+
+- **An empty queue list means "every queue".** A worker therefore refuses to start with no `CAIRN_WORKER_QUEUES`,
+  unless `CAIRN_WORKER_ALLOW_ALL_QUEUES=true` is set for a deliberate single-process setup.
+- **Legacy `CAIRN_JOB_QUEUES`.** If it is set in `.env` it is passed to both workers and checked: a value equal to the
+  worker's own list only logs a deprecation warning; any other value stops that worker (exit 2) rather than letting two
+  workers overlap or a queue go unserved. Remove it from `.env` when upgrading.
+- **Every enabled job queue needs a consumer.** A job definition on a queue outside `DEFAULT,MAIL,OUTPUT,INTENSIVE`
+  will never run. `tests/worker-split.test.ts` checks the shipped definitions against the Compose queue lists.
+- **Upgrade:** pull, remove `CAIRN_JOB_QUEUES` from `.env`, `docker compose up -d --build migrate app worker worker-intensive`
+  (migration 9305 adds the lease epoch used for fencing). Check `docker compose logs worker worker-intensive`: each logs
+  `started; queues=… scheduler=on|off`.
+- **Health:** both containers should stay up; a worker exiting with code 2 is a configuration error and says why in its log.
+  Runs claimed per worker are visible in the job monitor (`claimed_by` worker id).
+- **Rollback:** `docker compose stop worker-intensive`, redeploy the previous image for `worker` (the old worker claimed every queue
+  when its list was empty). Queued `INTENSIVE` runs stay queued until a worker serves that queue again; migration 9305 is additive.
 
 ## 10. Removing the deployment
 
