@@ -5,6 +5,7 @@ import {
   type SubledgerTieResult, type SubledgerTieSelection,
 } from '@/modules/finance/subledger-tie-out';
 import SubledgerTieShell from './SubledgerTieShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,12 +43,14 @@ export default async function SubledgerTiePage({
   }
 
   return (
-    <SubledgerTieShell
-      canUse={can(session, `${SUBLEDGER_TIE_CAPABILITY}.read`)}
-      companies={companies}
-      selection={initialSelection}
-      result={result}
-      reportError={reportError}
-    />
+    <Page title="Subledger tie-out" code={SUBLEDGER_TIE_CAPABILITY} width="7xl">
+      <SubledgerTieShell
+        canUse={can(session, `${SUBLEDGER_TIE_CAPABILITY}.read`)}
+        companies={companies}
+        selection={initialSelection}
+        result={result}
+        reportError={reportError}
+      />
+    </Page>
   );
 }

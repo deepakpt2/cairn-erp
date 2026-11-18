@@ -6,6 +6,7 @@ import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import { t } from '@/platform/i18n';
 import { toScaled, fromScaled } from '@/platform/posting/decimal';
 import { postJournalAction, type PostState } from './actions';
+import { Page } from '@/ui/kit';
 
 const INITIAL: PostState = { ok: true };
 
@@ -121,12 +122,10 @@ export function JournalForm({ companies, types, accounts }: {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <header className="mb-4 border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.JOURNAL.POST · FB50</span>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('journal.postTitle')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('journal.postSubtitle')}</p>
-      </header>
+    <Page
+      title={t('journal.postTitle')} code="FIN.JOURNAL.POST · FB50" back={null}
+      description={t('journal.postSubtitle')}
+    >
 
       {state.message && (
         <div className={`mb-4 border p-3 ${state.ok ? 'border-signal-ok/30 bg-signal-ok-soft' : 'border-signal-error/30 bg-signal-error-soft'}`}>
@@ -263,7 +262,7 @@ export function JournalForm({ companies, types, accounts }: {
           <span className="text-2xs text-ink-faint">{t('journal.postHint')}</span>
         </div>
       </form>
-    </div>
+    </Page>
   );
 }
 

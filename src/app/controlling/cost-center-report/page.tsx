@@ -4,6 +4,7 @@ import { listControllingAreas } from '@/modules/foundation/controlling-area-main
 import { calculateCostCenterReport, CostCenterReportError, type CostCenterReportSelection } from '@/modules/foundation/cost-center-report';
 import CostCenterReportShell from './CostCenterReportShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,11 +18,11 @@ export default async function CostCenterReportPage({
   const session = await requireSession();
   if (!can(session, READ_PERMISSION)) {
     return (
-      <main className="mx-auto w-full max-w-[1500px] px-4 py-10 sm:px-6">
+      <Page title="Cost centre actual/plan report" code={READ_PERMISSION} width="7xl">
         <p className="text-sm text-ink-soft">
           You are signed in, but report access is required before the cost center report can be displayed.
         </p>
-      </main>
+      </Page>
     );
   }
   const params = await searchParams;
@@ -54,11 +55,9 @@ export default async function CostCenterReportPage({
   }
 
   return (
-    <>
+    <Page title="Cost centre actual/plan report" code={READ_PERMISSION} width="7xl">
       {result && (
-        <div className="mx-auto w-full max-w-[1500px] px-4 pt-4 sm:px-6">
-          <ReportExport report="cost-center-report" params={params} />
-        </div>
+        <ReportExport report="cost-center-report" params={params} />
       )}
       <CostCenterReportShell
         canUse
@@ -67,6 +66,6 @@ export default async function CostCenterReportPage({
         result={result}
         reportError={reportError}
       />
-    </>
+    </Page>
   );
 }

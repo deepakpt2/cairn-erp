@@ -22,6 +22,7 @@ import {
   type GlAccountType,
   type ReconciliationType,
 } from './fieldStatus';
+import { Page } from '@/ui/kit';
 
 const ROUTE = '/config/gl-accounts';
 
@@ -135,31 +136,12 @@ export async function GlAccountModeScreen({
 
 
   const shell = (body: ReactNode) => (
-    <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
-      <section className="overflow-hidden border border-line-strong bg-white shadow-sm">
-        <header className="flex min-h-16 items-center gap-2 border-b border-line-strong bg-sunken px-3 py-2 text-ink sm:gap-3 sm:px-4">
-          <Link
-            href={ROUTE}
-            aria-label={t('glAccount.backToList')}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-line text-xl hover:bg-line-strong sm:h-9 sm:w-9"
-          >
-            ‹
-          </Link>
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent font-bold tracking-tight text-white shadow-sm sm:h-8 sm:w-8"
-            aria-label={t('app.name')}
-          >
-            C
-          </span>
-          <div className="min-w-0 flex-1 text-center">
-            <span className="code text-2xs text-ink-soft">{activity} · {alias}</span>
-            <h1 className="text-sm font-semibold leading-tight sm:text-base">{t('glAccount.title')}</h1>
-          </div>
-        </header>
+    <Page title={t('glAccount.title')} code={<>{activity} · {alias}</>} back={{ href: ROUTE, label: t('glAccount.backToList') }}>
+      <section className="panel overflow-hidden">
         <p className="border-b border-line px-3 py-3 text-sm text-ink-soft sm:px-4">{t('glAccount.subtitle')}</p>
       </section>
       {body}
-    </div>
+    </Page>
   );
 
   const notice = (text: string) =>

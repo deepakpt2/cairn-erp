@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { listInbox } from '@/platform/notification/notify';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,10 +38,9 @@ export default async function NotificationsPage() {
   const mayRead = can(session, DISPLAY);
   if (!mayRead) {
     return (
-      <main className="p-6">
-        <h1 className="text-lg font-semibold text-ink">{t('notification.inbox.title')}</h1>
-        <p className="mt-2 text-sm text-ink-soft">{t('notification.inbox.empty')}</p>
-      </main>
+      <Page title={t('notification.inbox.title')} width="5xl">
+        <p className="text-sm text-ink-soft">{t('notification.inbox.empty')}</p>
+      </Page>
     );
   }
 
@@ -50,16 +50,12 @@ export default async function NotificationsPage() {
   const unseen = rows.filter((row) => row.isUnseen).length;
 
   return (
-    <main className="p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold text-ink">{t('notification.inbox.title')}</h1>
-          <p className="mt-1 text-xs text-ink-soft">{t('notification.inbox.subtitle')}</p>
-        </div>
-        {unseen > 0 ? (
-          <span className="chip chip-info">{t('notification.unseen', { count: unseen })}</span>
-        ) : null}
-      </div>
+    <Page
+      title={t('notification.inbox.title')}
+      width="5xl"
+      description={t('notification.inbox.subtitle')}
+      actions={unseen > 0 ? <span className="chip chip-info">{t('notification.unseen', { count: unseen })}</span> : null}
+    >
 
       {rows.length === 0 ? (
         <div className="panel mt-4 p-4">
@@ -93,6 +89,6 @@ export default async function NotificationsPage() {
           </tbody>
         </table>
       )}
-    </main>
+    </Page>
   );
 }

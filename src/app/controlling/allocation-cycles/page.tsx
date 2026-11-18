@@ -22,6 +22,8 @@ import {
 } from '@/modules/foundation/cost-allocation-cycle';
 
 import { CancelRunForm, CycleForm, DeleteForm, ExecutePanel, NodeForm, SegmentForm } from './CycleForms';
+import type { ReactNode } from 'react';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,29 +39,28 @@ export default async function AllocationCyclesPage({ searchParams }: {
   const canAssess = can(session, ALLOCATION_EXECUTE_CAPABILITY);
   const canDistribute = can(session, DISTRIBUTION_EXECUTE_CAPABILITY);
   const canExecute = canAssess || canDistribute;
-  const header = (
-    <header className="border-b border-line pb-4">
-      <span className="code text-ink-faint">{ALLOCATION_DEFINE_CAPABILITY} · KSU1 / KSU2 / KSU3 · KSV1 / KSV2 / KSV3 · {ALLOCATION_EXECUTE_CAPABILITY} · KSU5 · {DISTRIBUTION_EXECUTE_CAPABILITY} · KSV5</span>
-      <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">Cost allocation cycles</h1>
-        <div className="flex gap-2">
-          <Link href="/controlling/cost-center-report" className="btn btn-default min-h-11 sm:min-h-8">Actual/plan report</Link>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-      </div>
-      <p className="mt-1 max-w-3xl text-sm text-ink-soft">
+  const Frame = ({ children, width }: { children: ReactNode; width?: '6xl' | '7xl' }) => (
+    <Page
+      title="Cost allocation cycles"
+      code={<>{ALLOCATION_DEFINE_CAPABILITY} · KSU1 / KSU2 / KSU3 · KSV1 / KSV2 / KSV3 · {ALLOCATION_EXECUTE_CAPABILITY} · KSU5 · {DISTRIBUTION_EXECUTE_CAPABILITY} · KSV5</>}
+      width={width}
+      actions={<LinkButton href="/controlling/cost-center-report">Actual/plan report</LinkButton>}
+      description={
+        <p className="max-w-3xl text-sm text-ink-soft">
         Assessment moves the actual cost of service cost centres to the centres that consumed their services, bundled through one
         assessment account; distribution does the same but keeps each cost on the account it was posted to. Receivers are cost centres or
         cost centre groups; a group&apos;s weight applies to each of its centres.
-      </p>
-    </header>
+        </p>
+      }
+    >
+      {children}
+    </Page>
   );
   if (!canDefine && !canExecute) {
     return (
-      <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-        {header}
+      <Frame>
         <p role="status" className="text-sm text-ink-soft">You do not hold the cycle capabilities. Ask for {ALLOCATION_DEFINE_CAPABILITY}, {ALLOCATION_EXECUTE_CAPABILITY} or {DISTRIBUTION_EXECUTE_CAPABILITY}.</p>
-      </main>
+      </Frame>
     );
   }
 
@@ -78,8 +79,7 @@ export default async function AllocationCyclesPage({ searchParams }: {
   const current = regular.find((p) => p.start <= today && today <= p.end)?.period ?? regular[0]?.period ?? 1;
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      {header}
+    <Frame width="7xl">
 
       <form method="get" className="panel flex flex-wrap items-end gap-3 p-3" aria-label="Controlling area">
         <label>
@@ -198,6 +198,6 @@ export default async function AllocationCyclesPage({ searchParams }: {
           </table>
         )}
       </section>
-    </main>
+    </Frame>
   );
 }

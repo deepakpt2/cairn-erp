@@ -2,6 +2,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { listPurchasingGroupDefinitions } from '@/modules/foundation/purchasing-group-maintenance';
 import { t } from '@/platform/i18n';
 import { PurchasingGroupsGrid } from './PurchasingGroupsGrid';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,11 +15,11 @@ export default async function PurchasingGroupsPage() {
   const canMaintain = can(session, PURCHASING_GROUP_DEFINE);
 
   return (
-    <div className="mx-auto max-w-[100rem] p-3 sm:p-4 lg:p-6">
+    <Page title={t('purchasingGroup.screenTitle')} code={PURCHASING_GROUP_DEFINE} width="100rem" back={{ href: '/config', label: t('nav.workbench') }}>
       <p className="sr-only">
         {t('purchasingGroup.accessibleContext')}
       </p>
       <PurchasingGroupsGrid records={records} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

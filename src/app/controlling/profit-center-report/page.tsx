@@ -6,6 +6,7 @@ import {
   type ProfitCenterReportResult, type ProfitCenterReportSelection,
 } from '@/modules/foundation/profit-center-report';
 import ProfitCenterReportShell from './ProfitCenterReportShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,12 +49,14 @@ export default async function ProfitCenterReportPage({
   }
 
   return (
-    <ProfitCenterReportShell
-      canUse={can(session, `${PROFIT_CENTER_REPORT_CAPABILITY}.read`)}
-      areas={controllingAreas}
-      selection={initialSelection}
-      result={result}
-      reportError={reportError}
-    />
+    <Page title="Profit centre report" code={PROFIT_CENTER_REPORT_CAPABILITY} width="7xl">
+      <ProfitCenterReportShell
+        canUse={can(session, `${PROFIT_CENTER_REPORT_CAPABILITY}.read`)}
+        areas={controllingAreas}
+        selection={initialSelection}
+        result={result}
+        reportError={reportError}
+      />
+    </Page>
   );
 }

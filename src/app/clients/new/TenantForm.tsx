@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
 import { createTenantAction, type OnboardState } from '../actions';
+import { Page } from '@/ui/kit';
 
 const INITIAL: OnboardState = { ok: true };
 
@@ -32,12 +33,10 @@ export default function TenantForm({ requiresOwnerToken = false }: { requiresOwn
   const copyRefused = creationType === 'copy';
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <header className="mb-4 border-b border-line pb-4">
-        <span className="code text-ink-faint">CFG.PLT.CLIENT.ONBOARD</span>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('onboard.title')}</h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-soft">{t('onboard.subtitle')}</p>
-      </header>
+    <Page
+      title={t('onboard.title')} code="CFG.PLT.CLIENT.ONBOARD" width="3xl" back={null}
+      description={t('onboard.subtitle')}
+    >
 
       {!state.ok && state.message && (
         <div className="mb-4 border border-signal-error/30 bg-signal-error-soft p-3">
@@ -169,7 +168,7 @@ export default function TenantForm({ requiresOwnerToken = false }: { requiresOwn
           </button>
         </div>
       </form>
-    </div>
+    </Page>
   );
 }
 

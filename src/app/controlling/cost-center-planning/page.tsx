@@ -21,6 +21,8 @@ import {
 } from '@/modules/foundation/cost-center-planning';
 
 import { PlanGrid, type GridRow } from './PlanGrid';
+import type { ReactNode } from 'react';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,28 +36,27 @@ export default async function CostCenterPlanningPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession(COST_CENTER_PLANNING_ROUTE);
-  const header = (
-    <header className="border-b border-line pb-4">
-      <span className="code text-ink-faint">{COST_CENTER_PLANNING_CAPABILITY} · KP06 / KP07</span>
-      <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">Cost centre planning</h1>
-        <div className="flex gap-2">
-          <Link href="/controlling/cost-center-report" className="btn btn-default min-h-11 sm:min-h-8">Actual/plan report</Link>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-      </div>
-      <p className="mt-1 max-w-3xl text-sm text-ink-soft">
+  const Frame = ({ children, width }: { children: ReactNode; width?: '6xl' | '7xl' }) => (
+    <Page
+      title="Cost centre planning"
+      code={<>{COST_CENTER_PLANNING_CAPABILITY} · KP06 / KP07</>}
+      width={width}
+      actions={<LinkButton href="/controlling/cost-center-report">Actual/plan report</LinkButton>}
+      description={
+        <p className="max-w-3xl text-sm text-ink-soft">
         Planned primary costs per cost centre, cost element and period. Plan is plan, actual is actual: nothing here posts.
         Activity quantities and prices are planned at <Link href="/config/activity-rates" className="underline">/config/activity-rates</Link>.
-      </p>
-    </header>
+        </p>
+      }
+    >
+      {children}
+    </Page>
   );
   if (!can(session, COST_CENTER_PLANNING_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-        {header}
+      <Frame>
         <p role="status" className="text-sm text-ink-soft">You do not hold the cost centre planning capability. Ask for {COST_CENTER_PLANNING_CAPABILITY}.</p>
-      </main>
+      </Frame>
     );
   }
 
@@ -91,8 +92,7 @@ export default async function CostCenterPlanningPage({ searchParams }: {
     : [];
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      {header}
+    <Frame width="7xl">
 
       <form method="get" className="panel flex flex-wrap items-end gap-3 p-3" aria-label="Selection">
         <label>
@@ -153,6 +153,6 @@ export default async function CostCenterPlanningPage({ searchParams }: {
           />
         </>
       )}
-    </main>
+    </Frame>
   );
 }

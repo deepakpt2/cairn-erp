@@ -12,7 +12,7 @@ describe('SCR-019 Purchasing Groups screen contract', () => {
     expect(page).toContain('listPurchasingGroupDefinitions(session.user.client)');
     expect(page).toContain("can(session, PURCHASING_GROUP_DEFINE)");
     expect(workbench).toContain("'/config/purchasing-groups'");
-    expect(grid).toContain("t('purchasingGroup.screenTitle')");
+    expect(page).toContain("t('purchasingGroup.screenTitle')");
   });
 
   it('renders all overview columns and the table-maintenance toolbar actions', () => {

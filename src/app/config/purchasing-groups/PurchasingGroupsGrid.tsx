@@ -246,18 +246,7 @@ export function PurchasingGroupsGrid({
   }
 
   return (
-    <section className="overflow-hidden border border-line-strong bg-white shadow-sm">
-      <div className="flex min-h-16 items-center gap-3 border-b border-line-strong bg-sunken px-4 py-2 text-ink">
-        <Link href="/config" aria-label={t('nav.workbench')} className="flex h-9 w-9 items-center justify-center rounded-full bg-line text-xl hover:bg-line-strong">
-          ‹
-        </Link>
-        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent font-bold tracking-tight text-white shadow-sm" aria-label={t('app.name')}>
-          C
-        </span>
-        <h1 className="flex-1 text-center text-base font-semibold">{t('purchasingGroup.screenTitle')}</h1>
-        <Link href="/config" className="hidden text-xs text-ink underline sm:inline">{t('nav.workbench')}</Link>
-      </div>
-
+    <section className="panel overflow-hidden">
       <form action={action}>
         <input type="hidden" name="changes" value={JSON.stringify(pendingChanges)} />
         <input type="hidden" name="reason" value="" />
