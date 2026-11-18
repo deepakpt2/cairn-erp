@@ -343,7 +343,7 @@ export function PurchasingGroupsGrid({
             </thead>
             <tbody>
               {visibleRows.map((row) => (
-                <tr key={row.id} className={`border-b border-line ${row.deleted ? 'bg-signal-error-soft text-slate-500 line-through' : 'hover:bg-sunken'}`}>
+                <tr key={row.id} className={`border-b border-line ${row.deleted ? 'bg-signal-error-soft text-ink-soft line-through' : 'hover:bg-sunken'}`}>
                   <td className="border-r border-line text-center">
                     <input
                       type="checkbox"
@@ -355,7 +355,7 @@ export function PurchasingGroupsGrid({
                   </td>
                   <td className="border-r border-line">
                     <input
-                      className="w-full border-0 bg-transparent px-1 py-1 font-mono text-sm focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500"
+                      className="w-full border-0 bg-transparent px-1 py-1 font-mono text-sm focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-ink-soft"
                       aria-label={t('purchasingGroup.code')}
                       value={row.purchasingGroup}
                       maxLength={3}
@@ -366,22 +366,22 @@ export function PurchasingGroupsGrid({
                     />
                   </td>
                   <td className="border-r border-line">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.descriptionFull')} value={row.name} maxLength={120} required={!row.deleted} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { name: event.currentTarget.value })} />
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-ink-soft" aria-label={t('purchasingGroup.descriptionFull')} value={row.name} maxLength={120} required={!row.deleted} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { name: event.currentTarget.value })} />
                   </td>
                   <td className="border-r border-line">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.telNoPurchGroup')} value={row.telNoPurchGroup} maxLength={12} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telNoPurchGroup: event.currentTarget.value })} />
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-ink-soft" aria-label={t('purchasingGroup.telNoPurchGroup')} value={row.telNoPurchGroup} maxLength={12} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telNoPurchGroup: event.currentTarget.value })} />
                   </td>
                   <td className="border-r border-line">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.faxNumber')} value={row.faxNumber} maxLength={31} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { faxNumber: event.currentTarget.value })} />
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-ink-soft" aria-label={t('purchasingGroup.faxNumber')} value={row.faxNumber} maxLength={31} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { faxNumber: event.currentTarget.value })} />
                   </td>
                   <td className="border-r border-line">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.telephone')} value={row.telephone} maxLength={30} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telephone: event.currentTarget.value })} />
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-ink-soft" aria-label={t('purchasingGroup.telephone')} value={row.telephone} maxLength={30} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { telephone: event.currentTarget.value })} />
                   </td>
                   <td className="border-r border-line">
-                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.extension')} value={row.extension} maxLength={10} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { extension: event.currentTarget.value })} />
+                    <input className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-ink-soft" aria-label={t('purchasingGroup.extension')} value={row.extension} maxLength={10} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { extension: event.currentTarget.value })} />
                   </td>
                   <td>
-                    <input type="text" inputMode="email" className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-slate-500" aria-label={t('purchasingGroup.emailAddress')} value={row.emailAddress} maxLength={241} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { emailAddress: event.currentTarget.value })} />
+                    <input type="text" inputMode="email" className="w-full border-0 bg-transparent px-1 py-1 focus:bg-white focus:outline focus:outline-1 focus:outline-accent disabled:text-ink-soft" aria-label={t('purchasingGroup.emailAddress')} value={row.emailAddress} maxLength={241} readOnly={!canMaintain || row.deleted} onChange={(event) => updateRow(row.id, { emailAddress: event.currentTarget.value })} />
                   </td>
                 </tr>
               ))}

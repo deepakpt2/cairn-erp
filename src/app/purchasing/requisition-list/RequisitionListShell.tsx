@@ -93,13 +93,13 @@ export default function RequisitionListShell({ canUse, selection, result, listEr
       </form>
 
       {listError ? (
-        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" role="alert">
+        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error" role="alert">
           {listError}
         </div>
       ) : null}
 
       {result?.truncated ? (
-        <div className="border border-signal-warn/40 bg-signal-warn-soft px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" role="status">
+        <div className="border border-signal-warn/40 bg-signal-warn-soft px-3 py-2 text-sm text-amber-900" role="status">
           {t('reqList.truncated', { max: result.maxHits })}
         </div>
       ) : null}

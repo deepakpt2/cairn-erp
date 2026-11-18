@@ -18,7 +18,7 @@ export default async function CostCenterReportPage({
   if (!can(session, READ_PERMISSION)) {
     return (
       <main className="mx-auto w-full max-w-[1500px] px-4 py-10 sm:px-6">
-        <p className="text-sm text-slate-600 dark:text-slate-300">
+        <p className="text-sm text-ink-soft">
           You are signed in, but report access is required before the cost center report can be displayed.
         </p>
       </main>

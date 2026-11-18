@@ -39,7 +39,7 @@ export default function BatchPickupShell({ canUse, selection, result, reportErro
       </form>
 
       {reportError ? (
-        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" role="alert">
+        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error" role="alert">
           {reportError}
         </div>
       ) : null}

@@ -128,7 +128,7 @@ export default function OrderAvailabilityWorkbench({
       ) : null}
 
       {serviceError ? (
-        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error"
           role="alert" data-co09-state={serviceErrorKind === 'unsupported' ? 'unsupported' : 'service-error'}>
           {serviceError}
         </div>
@@ -136,8 +136,8 @@ export default function OrderAvailabilityWorkbench({
 
       {actionMessage ? (
         <p className={actionMessageKind === 'success'
-          ? 'border border-signal-ok/40 bg-signal-ok-soft px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
-          : 'border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'}
+          ? 'border border-signal-ok/40 bg-signal-ok-soft px-3 py-2 text-sm text-emerald-900'
+          : 'border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error'}
           role={actionMessageKind === 'error' ? 'alert' : 'status'} data-co09-action-state={actionMessageKind}>
           {actionMessage}
         </p>
@@ -162,7 +162,7 @@ export default function OrderAvailabilityWorkbench({
             {t('co09.quantity')} {result.orderQuantity.toFixed(3)} {result.unitOfMeasure}. {t('co09.componentCount', { count: result.components.length })} · {t('co09.checkedCount', { count: result.checkedCount })} · {t('co09.refusedCount', { count: result.refusedCount })} · {t('co09.excludedCount', { count: result.excludedCount })}
           </p>
           {result.message ? (
-            <p className="border border-signal-warn/40 bg-signal-warn-soft px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+            <p className="border border-signal-warn/40 bg-signal-warn-soft px-3 py-2 text-sm text-amber-900"
               role="status" data-co09-state={result.configurationGap ? 'incomplete-config' : 'not-checked'}>
               <span className="font-semibold">{result.message}</span>
               {result.remedy ? <span className="ms-2">{result.remedy}</span> : null}
@@ -240,9 +240,9 @@ function ComponentRow({ row, plant, orderNumber, horizonEnd, today, canCommit, c
 }) {
   const answeredNumber = row.outcome === 'AVAILABLE' || row.outcome === 'SHORT' || row.outcome === 'NO_ELEMENTS';
   const stateClass = row.outcome === 'AVAILABLE'
-    ? 'text-signal-ok dark:text-emerald-200'
+    ? 'text-signal-ok'
     : row.outcome === 'SHORT' || !answeredNumber
-      ? 'text-signal-error dark:text-red-300'
+      ? 'text-signal-error'
       : 'text-ink-soft';
   return (
     <>
@@ -310,7 +310,7 @@ function ComponentRow({ row, plant, orderNumber, horizonEnd, today, canCommit, c
       {row.warnings.length > 0 ? (
         <tr data-co09-component-warnings={row.itemNumber}>
           <td colSpan={15}>
-            <ul className="list-disc space-y-0.5 ps-5 text-xs text-amber-900 dark:text-amber-200">
+            <ul className="list-disc space-y-0.5 ps-5 text-xs text-amber-900">
               {row.warnings.map((warning) => <li key={warning}>{warning}</li>)}
             </ul>
           </td>

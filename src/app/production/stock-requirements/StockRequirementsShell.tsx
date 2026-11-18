@@ -79,13 +79,13 @@ export default function StockRequirementsShell({ canUse, selection, result, repo
       </form>
 
       {reportError ? (
-        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" role="alert">
+        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error" role="alert">
           {reportError}
         </div>
       ) : null}
 
       {result?.truncated ? (
-        <div className="border border-signal-warn/40 bg-signal-warn-soft px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" role="status">
+        <div className="border border-signal-warn/40 bg-signal-warn-soft px-3 py-2 text-sm text-amber-900" role="status">
           {t('md04.truncated', { max: result.maxHits })}
         </div>
       ) : null}
@@ -102,10 +102,10 @@ export default function StockRequirementsShell({ canUse, selection, result, repo
           {result.exceptionCounts.SHORTAGE + result.exceptionCounts.SAFETY_BREACH + result.exceptionCounts.PAST_DUE > 0 ? (
             <p className="mt-3 flex flex-wrap gap-3 text-xs">
               {result.exceptionCounts.SHORTAGE > 0
-                ? <span className="border border-signal-error/40 px-2 py-1 text-signal-error dark:border-red-800 dark:text-red-200" data-exception="SHORTAGE">{t('md04.shortage')}: {result.exceptionCounts.SHORTAGE}</span>
+                ? <span className="border border-signal-error/40 px-2 py-1 text-signal-error" data-exception="SHORTAGE">{t('md04.shortage')}: {result.exceptionCounts.SHORTAGE}</span>
                 : null}
               {result.exceptionCounts.SAFETY_BREACH > 0
-                ? <span className="border border-signal-warn/40 px-2 py-1 text-amber-900 dark:border-amber-800 dark:text-amber-200" data-exception="SAFETY_BREACH">{t('md04.safetyBreach')}: {result.exceptionCounts.SAFETY_BREACH}</span>
+                ? <span className="border border-signal-warn/40 px-2 py-1 text-amber-900" data-exception="SAFETY_BREACH">{t('md04.safetyBreach')}: {result.exceptionCounts.SAFETY_BREACH}</span>
                 : null}
               {result.exceptionCounts.PAST_DUE > 0
                 ? <span className="border border-line px-2 py-1 text-ink-soft" data-exception="PAST_DUE">{t('md04.pastDue')}: {result.exceptionCounts.PAST_DUE}</span>
@@ -150,7 +150,7 @@ export default function StockRequirementsShell({ canUse, selection, result, repo
               <tr key={`${row.date}|${row.elementType}|${row.documentNumber}|${index}`}
                 data-element={row.elementType} data-date={row.date}
                 data-balance={row.projectedBalance.toFixed(3)}
-                className={row.projectedBalance < 0 ? 'text-signal-error dark:text-red-300' : undefined}>
+                className={row.projectedBalance < 0 ? 'text-signal-error' : undefined}>
                 <td className="code">{row.date}</td>
                 <td className="code text-ink-faint">{row.periodEnd}</td>
                 <td title={row.elementLabel} data-demand={row.elementType === 'DEPENDENT_REQUIREMENT' ? 'active' : row.elementType === 'PRODUCTION_COMPONENT' ? 'replaced' : ''}>{elementLabel(row.elementType)}</td>
