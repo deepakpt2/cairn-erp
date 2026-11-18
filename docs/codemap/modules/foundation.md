@@ -252,15 +252,15 @@ Enterprise structure & master data (partners, company codes, plants, orgs) + con
 | **app/finance/accruals/** | | |
 | page.tsx | AccrualsPage |  |
 | **app/finance/carryforward/** | | |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | **app/finance/close-cockpit/** | | |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | **app/finance/journal/new/** | | |
 | page.tsx | PostJournalPage |  |
 | **app/finance/subledger-tie-out/** | | |
 | page.tsx | SubledgerTiePage |  |
 | **app/finance/trial-balance/** | | |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | **app/finance/vendor-ageing/** | | |
 | page.tsx | VendorAgeingPage |  |
 | **app/foundation/partners/** | | |

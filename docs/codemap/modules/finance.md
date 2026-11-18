@@ -59,7 +59,7 @@ GL, AP/AR, period close, fixed assets, consolidation, tax. Routes: `/finance/*`,
 | **app/config/gl-accounts/new/** | | |
 | page.tsx | NewGlAccountPage |  |
 | **app/config/gl-accounts/transfer/** | | |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | TransferShell.tsx | TransferShell |  |
 | **app/config/gl-accounts/view/** | | |
 | page.tsx | ViewGlAccountPage |  |
@@ -99,7 +99,7 @@ GL, AP/AR, period close, fixed assets, consolidation, tax. Routes: `/finance/*`,
 | RetireForm.tsx | RetireForm |  |
 | **app/finance/balance-sheet/** | | |
 | BalanceSheetShell.tsx | BalanceSheetShell |  |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | **app/finance/carryforward/** | | |
 | actions.ts | executeCarryforwardAction |  |
 | CarryforwardShell.tsx | CarryforwardShell |  |
@@ -121,15 +121,15 @@ GL, AP/AR, period close, fixed assets, consolidation, tax. Routes: `/finance/*`,
 | page.tsx | ConsolidationMonitorPage |  |
 | **app/finance/credit-monitor/** | | |
 | CreditMonitorShell.tsx | CreditMonitorShell |  |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | **app/finance/credit-release/** | | |
 | actions.ts | recheckAction, releaseAction, bulkReleaseAction, rejectAction, reblockAction |  |
 | CreditReleaseShell.tsx | CreditReleaseShell |  |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | **app/finance/credit/** | | |
 | actions.ts | loadCreditAction, saveCreditAction |  |
 | CreditShell.tsx | CreditShell |  |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | **app/finance/customer-ageing/** | | |
 | page.tsx | CustomerAgeingPage |  |
 | **app/finance/customer-balances/** | | |
@@ -208,7 +208,7 @@ GL, AP/AR, period close, fixed assets, consolidation, tax. Routes: `/finance/*`,
 | page.tsx | PaymentRunPage |  |
 | PaymentRun.tsx | PaymentRun |  |
 | **app/finance/profit-loss/** | | |
-| page.tsx | Page |  |
+| page.tsx | ScreenPage |  |
 | ProfitLossShell.tsx | ProfitLossShell |  |
 | **app/finance/subledger-tie-out/** | | |
 | SubledgerTieShell.tsx | SubledgerTieShell |  |

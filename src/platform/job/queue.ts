@@ -192,9 +192,11 @@ export async function reapOrphans(tx: Tx, client: string, timeoutMs: number): Pr
       and(
         eq(jobRun.client, client),
         eq(jobRun.status, 'RUNNING'),
-        lt(jobRun.heartbeatAt, sql`now() - ${Math.floor(timeoutMs / 1000)} * interval '1 second'`),
+        lt(jobRun.heartbeatAt, sql`now() - ${timeoutMs / 1000} * interval '1 second'`),
       ),
-    );
+    )
+    // A run whose row is locked is mid fenced business write: alive by definition.
+    .for('update', { skipLocked: true });
 
   if (stale.length === 0) return [];
 
@@ -207,6 +209,8 @@ export async function reapOrphans(tx: Tx, client: string, timeoutMs: number): Pr
       workerId: null,
       claimedAt: null,
       heartbeatAt: null,
+      // Fences the previous owner: its heartbeat, progress and fenced writes now fail.
+      claimEpoch: sql`${jobRun.claimEpoch} + 1`,
     })
     .where(inArray(jobRun.id, ids));
 

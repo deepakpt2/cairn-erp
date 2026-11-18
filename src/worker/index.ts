@@ -32,6 +32,8 @@ import { HEARTBEAT_TIMEOUT_MS, POLL_INTERVAL_MS } from '../platform/job/types';
 import { db, withTenant } from '../platform/db/client';
 import { sql } from 'drizzle-orm';
 
+import { resolveWorkerConfig } from './config';
+
 export interface WorkerOptions {
   /** Only claim jobs on these queues. Null means every queue. */
   queues?: string[] | null;
@@ -49,6 +51,10 @@ export interface WorkerOptions {
    * than two processes both answering to the same name.
    */
   workerId?: string;
+  /** Tick the scheduler from this process. Default true; the intensive worker turns it off. */
+  scheduler?: boolean;
+  /** Scheduler tick period. Default 30 s; tests shorten it. */
+  schedulerIntervalMs?: number;
 }
 
 export interface RunOutcome {
@@ -79,26 +85,48 @@ export async function runWorker(options: WorkerOptions = {}): Promise<{ runs: nu
   // A fresh run of the loop starts fresh. Without this, a worker that had been
   // asked to stop stays stopped for good — invisible in production, where the
   // process then exits, but fatal to a test and to any host that reuses it.
-  stopping = false;
+  const instance = { stopping: false };
+  active.add(instance);
 
   let runs = 0;
   let reapedAt = 0;
-  let scheduledAt = 0;
+  const schedulerOn = options.scheduler !== false;
 
-  while (!stopping) {
-    if (options.maxRuns !== undefined && runs >= options.maxRuns) break;
-
-    // Scheduled jobs (MAIL.SEND, notification fan-out, …) only exist as runs once something enqueues
-    // them. Nothing else calls the scheduler, so the worker does, twice a minute; the idempotency key
-    // inside the tick makes repeats harmless.
-    if (Date.now() - scheduledAt > SCHEDULER_INTERVAL_MS) {
-      scheduledAt = Date.now();
+  // The scheduler ticks on its own timer, not only between runs, so a long run on
+  // this worker cannot stall scheduling. Ticks are idempotent (unique key per due
+  // instant), so another worker ticking at the same time cannot duplicate a run.
+  let inflight: Promise<void> | null = null;
+  const tick = (): Promise<void> => {
+    if (inflight) return inflight;
+    inflight = (async () => {
       try {
         await tickScheduler();
       } catch (error) {
         console.error(`[${me}] scheduler tick failed:`, error);
+      } finally {
+        inflight = null;
       }
-    }
+    })();
+    return inflight;
+  };
+  let schedulerTimer: ReturnType<typeof setInterval> | null = null;
+  if (schedulerOn) {
+    await tick();
+    schedulerTimer = setInterval(() => void tick(), options.schedulerIntervalMs ?? SCHEDULER_INTERVAL_MS);
+    schedulerTimer.unref?.();
+  }
+  try {
+    return await loop();
+  } finally {
+    if (schedulerTimer) clearInterval(schedulerTimer);
+    if (inflight) await inflight;
+    active.delete(instance);
+  }
+
+  async function loop(): Promise<{ runs: number; stopped: boolean }> {
+
+  while (!instance.stopping) {
+    if (options.maxRuns !== undefined && runs >= options.maxRuns) break;
 
     const claimed = await claimNext(me, queues);
 
@@ -129,7 +157,8 @@ export async function runWorker(options: WorkerOptions = {}): Promise<{ runs: nu
     options.onResult?.({ runId: claimed.runId, client: claimed.client, jobCode: claimed.jobCode, status });
   }
 
-  return { runs, stopped: stopping };
+  return { runs, stopped: instance.stopping };
+  }
 }
 
 /**
@@ -156,11 +185,12 @@ async function reapOrphanedRuns(id: string): Promise<void> {
   }
 }
 
-let stopping = false;
+/** Every loop currently running in this process; `stopWorker` stops them all. */
+const active = new Set<{ stopping: boolean }>();
 
 /** Ask the loop to stop after the current chunk. Safe to call more than once. */
 export function stopWorker(): void {
-  stopping = true;
+  for (const instance of active) instance.stopping = true;
 }
 
 function defaultSleep(ms: number): Promise<void> {
@@ -173,24 +203,17 @@ function defaultSleep(ms: number): Promise<void> {
  * SIGTERM and SIGINT are handled rather than left to the default, so a
  * container stop finishes the chunk in flight instead of killing it mid-write.
  */
-function envWorkerId(): string {
-  const id = process.env.CAIRN_WORKER_ID?.trim();
-  return id && id.length > 0 ? id : workerId;
-}
-
-function envPollMs(): number {
-  const raw = process.env.CAIRN_WORKER_POLL_MS ?? process.env.CAIRN_JOB_POLL_MS;
-  const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
-  return Number.isFinite(n) && n > 0 ? n : POLL_INTERVAL_MS;
-}
-
 export async function main(): Promise<void> {
-  const me = envWorkerId();
-  const pollMs = envPollMs();
-  const queues = (process.env.CAIRN_WORKER_QUEUES ?? process.env.CAIRN_JOB_QUEUES)
-    ?.split(',')
-    .map((q) => q.trim())
-    .filter(Boolean);
+  let config;
+  try {
+    config = resolveWorkerConfig(process.env);
+  } catch (error) {
+    console.error(`[worker] refusing to start: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(2);
+  }
+  const me = config.workerId ?? workerId;
+  const pollMs = config.pollMs ?? POLL_INTERVAL_MS;
+  for (const warning of config.warnings) console.warn(`[${me}] ${warning}`);
 
   process.on('SIGTERM', () => {
     console.log(`[${me}] SIGTERM received; finishing the current chunk.`);
@@ -201,9 +224,16 @@ export async function main(): Promise<void> {
     stopWorker();
   });
 
-  console.log(`[${me}] started; queues=${queues?.join(',') ?? 'all'} poll=${pollMs}ms`);
+  console.log(
+    `[${me}] started; queues=${config.queues?.join(',') ?? 'ALL (explicit single-process mode)'} poll=${pollMs}ms scheduler=${config.scheduler ? 'on' : 'off'}`,
+  );
 
-  const { runs } = await runWorker({ workerId: me, queues: queues ?? null, pollIntervalMs: pollMs });
+  const { runs } = await runWorker({
+    workerId: me,
+    queues: config.queues,
+    pollIntervalMs: pollMs,
+    scheduler: config.scheduler,
+  });
   console.log(`[${me}] stopped after ${runs} run(s).`);
 }
 
