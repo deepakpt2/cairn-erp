@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -8,6 +7,7 @@ import {
   listIntervalChoices,
 } from '@/modules/foundation/document-type-definition';
 import { DocumentTypes } from './DocumentTypes';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,22 +33,20 @@ export default async function DocumentTypesPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OBA7</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('docType.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-            <Link href="/config/number-ranges" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('docType.numberRangesLink')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('docType.subtitle')}</p>
-      </header>
+    <Page
+      title={t('docType.title')} code={<>{ACTIVITY} · OBA7</>} back={null}
+      description={t('docType.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+          <LinkButton href="/config/number-ranges">
+                        {t('docType.numberRangesLink')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -57,6 +55,6 @@ export default async function DocumentTypesPage() {
       )}
 
       <DocumentTypes rows={rows} intervals={intervals} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

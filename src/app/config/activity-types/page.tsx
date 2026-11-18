@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -12,6 +11,7 @@ import {
   listCostCenterAreas,
 } from '@/modules/foundation/activity-type-definition';
 import ActivityTypes from './ActivityTypes';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,19 +46,17 @@ export default async function ActivityTypesPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · KL01</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('actType.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('actType.subtitle')}</p>
-      </header>
+    <Page
+      title={t('actType.title')} code={<>{ACTIVITY} · KL01</>} back={null}
+      description={t('actType.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -76,6 +74,6 @@ export default async function ActivityTypesPage({
         ccCategories={COST_CENTER_CATEGORIES}
         canMaintain={canMaintain}
       />
-    </div>
+    </Page>
   );
 }

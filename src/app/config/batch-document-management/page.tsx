@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -10,6 +9,7 @@ import {
 } from '@/modules/inventory/batch-document-management';
 
 import DocumentForm from './DocumentForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,18 +20,15 @@ export default async function BatchDocumentManagementPage() {
   const current = await getBatchDocumentManagement(session.user.client);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIAS}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Activate document management for batches</h1>
-          <Link href="/config/batch-level" className="btn btn-default min-h-11 sm:min-h-8">Batch level</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          ODOC is the client indicator. It is not a document store and not a genealogy report.
-          Opening this screen writes nothing. A closed posting period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Activate document management for batches" code={<>{ACTIVITY} · {ALIAS}</>} width="3xl" back={null}
+      description="ODOC is the client indicator. It is not a document store and not a genealogy report. Opening this screen writes nothing. A closed posting period does not block it."
+      actions={
+        <>
+          <LinkButton href="/config/batch-level">Batch level</LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm text-ink">
@@ -54,6 +51,6 @@ export default async function BatchDocumentManagementPage() {
         Current indicator: <span className="code">{current.code ?? 'blank'}</span>. Version <span className="code">{current.version}</span>.
       </p>
       <DocumentForm client={session.user.client} current={current} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

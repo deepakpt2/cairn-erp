@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -6,6 +5,7 @@ import {
   listSalesDocumentTypes,
 } from '@/modules/sales/document-type-maintenance';
 import { SalesDocumentTypeSetup } from './SalesDocumentTypeSetup';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,26 +17,25 @@ export default async function SalesDocumentTypesPage() {
   const canMaintain = can(session, DOCUMENT_TYPE_DEFINE_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{DOCUMENT_TYPE_DEFINE_CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Sales document types</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          What a sales document <em>is</em>: the code it carries, the name a screen shows, the number range
-          its number is drawn from, what the type cancels into, and whether documents of that type may still
-          be created. Every document service reads this configuration before it creates anything, which is
-          what makes a new commercial process a configuration rather than a deployment.
-        </p>
-        {!canMaintain && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. Maintenance requires an explicit exact-code role grant for {DOCUMENT_TYPE_DEFINE_CAPABILITY};
-            broad wildcard role patterns do not grant it.
-          </p>
-        )}
-      </header>
+    <Page
+      title="Sales document types" code={<>{DOCUMENT_TYPE_DEFINE_CAPABILITY} · SD</>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              What a sales document <em>is</em>: the code it carries, the name a screen shows, the number range
+              its number is drawn from, what the type cancels into, and whether documents of that type may still
+              be created. Every document service reads this configuration before it creates anything, which is
+              what makes a new commercial process a configuration rather than a deployment.
+            </p>
+          {!canMaintain && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. Maintenance requires an explicit exact-code role grant for {DOCUMENT_TYPE_DEFINE_CAPABILITY};
+                broad wildcard role patterns do not grant it.
+              </p>
+            )}
+        </>
+      }
+    >
 
       <section aria-labelledby="doctype-list" className="border border-line bg-surface p-4">
         <h2 id="doctype-list" className="text-sm font-semibold">Document types as configured</h2>
@@ -109,6 +108,6 @@ export default async function SalesDocumentTypesPage() {
           }))}
         />
       )}
-    </main>
+    </Page>
   );
 }

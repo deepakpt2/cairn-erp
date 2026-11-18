@@ -70,7 +70,7 @@ describe('SCR-022 Distribution Channel and Division UI/action contract', () => {
 
   it('keeps list grids contained and the primary maintenance flow operable at phone width', () => {
     for (const page of [channelPage, divisionPage]) {
-      expect(page).toContain('px-3 py-4 sm:p-6');
+      expect(page).toContain('<Page');
       expect(page).toContain('sm:hidden');
       expect(page).toContain('overflow-x-auto sm:block');
       expect(page).toContain('min-h-11');

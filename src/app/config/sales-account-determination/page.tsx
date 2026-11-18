@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -6,6 +5,7 @@ import {
   listAccountDetermination,
 } from '@/modules/sales/account-determination-maintenance';
 import { SalesAccountDeterminationSetup } from './SalesAccountDeterminationSetup';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,27 +20,26 @@ export default async function SalesAccountDeterminationPage() {
   );
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACCOUNT_DETERMINATION_CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Revenue account determination</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Where each part of a sale lands in the ledger. A pricing step says what kind of figure it produced —
-          the price, a discount, freight, output tax — and that key, with the chart of accounts, the sales
-          organisation and the account assignment groups of the customer and the material, is what names the
-          account. Where no row stands for a key, the document is refused rather than posted somewhere
-          plausible: revenue nobody chose is not revenue.
-        </p>
-        {!canMaintain && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. Maintenance requires an explicit exact-code role grant for{' '}
-            {ACCOUNT_DETERMINATION_CAPABILITY}; broad wildcard role patterns do not grant it.
-          </p>
-        )}
-      </header>
+    <Page
+      title="Revenue account determination" code={<>{ACCOUNT_DETERMINATION_CAPABILITY} · SD</>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Where each part of a sale lands in the ledger. A pricing step says what kind of figure it produced —
+              the price, a discount, freight, output tax — and that key, with the chart of accounts, the sales
+              organisation and the account assignment groups of the customer and the material, is what names the
+              account. Where no row stands for a key, the document is refused rather than posted somewhere
+              plausible: revenue nobody chose is not revenue.
+            </p>
+          {!canMaintain && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. Maintenance requires an explicit exact-code role grant for{' '}
+                {ACCOUNT_DETERMINATION_CAPABILITY}; broad wildcard role patterns do not grant it.
+              </p>
+            )}
+        </>
+      }
+    >
 
       <section aria-labelledby="account-keys" className="border border-line bg-surface p-4">
         <h2 id="account-keys" className="text-sm font-semibold">The keys a pricing step can carry</h2>
@@ -137,6 +136,6 @@ export default async function SalesAccountDeterminationPage() {
           accounts={configuration.accounts}
         />
       )}
-    </main>
+    </Page>
   );
 }

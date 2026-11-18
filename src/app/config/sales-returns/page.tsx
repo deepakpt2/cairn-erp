@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -8,6 +7,7 @@ import {
   type ReturnsConfigurationPart,
 } from '@/modules/sales/returns-configuration';
 import { ReturnsChainSetup } from './ReturnsChainSetup';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,32 +44,31 @@ export default async function SalesReturnsConfigurationPage() {
   const canMaintain = can(session, RETURNS_DEFINE_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{RETURNS_DEFINE_CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">The returns chain</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Which documents a return is: the order that records the complaint, the delivery the goods come back
-          on, the request a credit is raised from, the credit memo itself, and the movement that receives the
-          goods into returns stock. Every service in the chain reads this row before it creates anything —
-          which is what makes a returns process that numbers apart a configuration rather than a deployment.
-        </p>
-        {!canMaintain && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. Maintenance requires an explicit exact-code role grant for {RETURNS_DEFINE_CAPABILITY};
-            broad wildcard role patterns do not grant it.
-          </p>
-        )}
-        {!view.configured && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            The returns chain is not configured for this tenant, so no returns document can be created and no
-            goods can be received back. Name the five parts below.
-          </p>
-        )}
-      </header>
+    <Page
+      title="The returns chain" code={<>{RETURNS_DEFINE_CAPABILITY} · SD</>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Which documents a return is: the order that records the complaint, the delivery the goods come back
+              on, the request a credit is raised from, the credit memo itself, and the movement that receives the
+              goods into returns stock. Every service in the chain reads this row before it creates anything —
+              which is what makes a returns process that numbers apart a configuration rather than a deployment.
+            </p>
+          {!canMaintain && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. Maintenance requires an explicit exact-code role grant for {RETURNS_DEFINE_CAPABILITY};
+                broad wildcard role patterns do not grant it.
+              </p>
+            )}
+          {!view.configured && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                The returns chain is not configured for this tenant, so no returns document can be created and no
+                goods can be received back. Name the five parts below.
+              </p>
+            )}
+        </>
+      }
+    >
 
       <section aria-labelledby="returns-chain-list" className="border border-line bg-surface p-4">
         <h2 id="returns-chain-list" className="text-sm font-semibold">The chain as it stands</h2>
@@ -115,6 +114,6 @@ export default async function SalesReturnsConfigurationPage() {
           }}
         />
       )}
-    </main>
+    </Page>
   );
 }

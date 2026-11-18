@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { loadOrgRestrictions } from '@/platform/auth/session';
@@ -10,6 +9,7 @@ import {
   listCreditControlAreaSetup,
 } from '@/modules/finance/credit-control-area-maintenance';
 import { CreditControlAreaSetup } from './CreditControlAreaSetup';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,30 +28,29 @@ export default async function CreditControlAreasPage() {
   const canMaintain = can(session, CREDIT_CONTROL_AREA_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CREDIT_CONTROL_AREA_CAPABILITY} · FIN</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Credit control area setup</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Create a credit control area and make its first assignment to an active, unassigned Company Code.
-          Currency follows the Company Code. Existing CCA settings and assignments are read-only here; this
-          workflow does not replace, deactivate or repair financial configuration.
-        </p>
-        {!canMaintain && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. Maintenance requires an explicit exact-code role grant for {CREDIT_CONTROL_AREA_CAPABILITY};
-            broad wildcard role patterns do not grant it.
-          </p>
-        )}
-        {canMaintain && !hasCompanyScope && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. CCA maintenance also requires an explicit Company Code scope assigned through user access.
-          </p>
-        )}
-      </header>
+    <Page
+      title="Credit control area setup" code={<>{CREDIT_CONTROL_AREA_CAPABILITY} · FIN</>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Create a credit control area and make its first assignment to an active, unassigned Company Code.
+              Currency follows the Company Code. Existing CCA settings and assignments are read-only here; this
+              workflow does not replace, deactivate or repair financial configuration.
+            </p>
+          {!canMaintain && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. Maintenance requires an explicit exact-code role grant for {CREDIT_CONTROL_AREA_CAPABILITY};
+                broad wildcard role patterns do not grant it.
+              </p>
+            )}
+          {canMaintain && !hasCompanyScope && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. CCA maintenance also requires an explicit Company Code scope assigned through user access.
+              </p>
+            )}
+        </>
+      }
+    >
 
       <section aria-labelledby="cca-records" className="border border-line bg-surface p-4">
         <h2 id="cca-records" className="text-sm font-semibold">Credit control areas</h2>
@@ -96,6 +95,6 @@ export default async function CreditControlAreasPage() {
           defaults={CREDIT_CONTROL_AREA_DEFAULTS}
         />
       )}
-    </main>
+    </Page>
   );
 }

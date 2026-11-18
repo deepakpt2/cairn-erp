@@ -1,8 +1,8 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { RECORD_TYPE_CAPABILITY, RECORD_TYPE_ROUTE, getRecordType, listRecordTypes } from '@/modules/people/record-types';
 import RecordTypes from './RecordTypes';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,29 +39,30 @@ export default async function PeopleRecordTypesPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{RECORD_TYPE_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Employee record types</h1>
-          <div className="flex gap-2">
-            <Link href="/people/employees" className="btn btn-default min-h-11 sm:min-h-8">Employees</Link>
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Configuration</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          A record type says what is kept about a person, and a field says what kind of answer fits it. Every
-          employee&apos;s knowledge is a dated record of one of these types, so a change is a new record rather
-          than a rewritten history.
-        </p>
-      </header>
+    <Page
+      title="Employee record types" code={RECORD_TYPE_CAPABILITY} width="5xl"
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              A record type says what is kept about a person, and a field says what kind of answer fits it. Every
+              employee&apos;s knowledge is a dated record of one of these types, so a change is a new record rather
+              than a rewritten history.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/people/employees">Employees</LinkButton>
+          <LinkButton href="/config">Configuration</LinkButton>
+        </>
+      }
+    >
       <RecordTypes
         types={types}
         selected={selected}
         wanted={wanted}
         allowed={can(session, RECORD_TYPE_CAPABILITY)}
       />
-    </div>
+    </Page>
   );
 }

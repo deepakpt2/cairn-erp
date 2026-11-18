@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -7,6 +6,7 @@ import {
 } from '@/modules/inventory/material-group-definition';
 import { t } from '@/platform/i18n';
 import MaterialGroups from './MaterialGroups';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,19 +27,17 @@ export default async function MaterialGroupsPage() {
   const groups = await listMaterialGroups(session.user.client);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMSF</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('materialGroup.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('materialGroup.subtitle')}</p>
-      </header>
+    <Page
+      title={t('materialGroup.title')} code={<>{ACTIVITY} · OMSF</>} back={null}
+      description={t('materialGroup.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -48,6 +46,6 @@ export default async function MaterialGroupsPage() {
       )}
 
       <MaterialGroups groups={groups} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

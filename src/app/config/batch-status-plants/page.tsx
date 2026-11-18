@@ -10,6 +10,7 @@ import {
 } from '@/modules/inventory/batch-status-plant';
 
 import PlantBatchStatusForm from './PlantBatchStatusForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,19 +46,23 @@ export default async function PlantBatchStatusPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMCU</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Batch status management in plant</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          {current.context.explanation} Selected is the character X. Not selected is blank. The plant name comes from the plant master.
-          This screen does not create a plant, change OMCS, set an initial status, or post movement 341 or 342.
-          Restricted use is not blocked stock. OMCE, OMCS, OMAB, and MSC1N are not this screen.
-        </p>
-      </header>
+    <Page
+      title="Batch status management in plant" code={<>{ACTIVITY} · OMCU</>} width="4xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              {current.context.explanation} Selected is the character X. Not selected is blank. The plant name comes from the plant master.
+              This screen does not create a plant, change OMCS, set an initial status, or post movement 341 or 342.
+              Restricted use is not blocked stock. OMCE, OMCS, OMAB, and MSC1N are not this screen.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       <dl className="grid gap-3 border border-line bg-white p-3 text-sm sm:grid-cols-3">
         <div>
@@ -163,6 +168,6 @@ export default async function PlantBatchStatusPage({
           ))}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

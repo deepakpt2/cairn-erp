@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -7,6 +6,7 @@ import {
 } from '@/modules/inventory/material-number-range-groups';
 import { t } from '@/platform/i18n';
 import MaterialNumberRanges from './MaterialNumberRanges';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,25 +26,23 @@ export default async function MaterialNumberRangesPage() {
   const { groups, ungrouped } = await listMaterialNumberRangeGroups(session.user.client);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · MMNR</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('materialRange.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config/number-ranges" className="btn btn-default min-h-11 sm:min-h-8">
-              Number range intervals
-            </Link>
-            <Link href="/config/material-types" className="btn btn-default min-h-11 sm:min-h-8">
-              Material types
-            </Link>
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('materialRange.subtitle')}</p>
-      </header>
+    <Page
+      title={t('materialRange.title')} code={<>{ACTIVITY} · MMNR</>} back={null}
+      description={t('materialRange.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config/number-ranges">
+                        Number range intervals
+                      </LinkButton>
+          <LinkButton href="/config/material-types">
+                        Material types
+                      </LinkButton>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -53,6 +51,6 @@ export default async function MaterialNumberRangesPage() {
       )}
 
       <MaterialNumberRanges groups={groups} ungrouped={ungrouped} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

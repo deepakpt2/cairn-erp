@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -8,6 +7,7 @@ import {
 } from '@/modules/foundation/posting-period-variant-assignment';
 import { listPostingPeriodVariants } from '@/modules/foundation/posting-period-variant-definition';
 import { PostingPeriodVariantAssignments } from './PostingPeriodVariantAssignments';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,28 +33,26 @@ export default async function AssignPostingPeriodVariantPage() {
   const choices = variants.map((row) => ({ variant: row.variant, name: row.name }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OBBP</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('ppvAssign.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-            <Link href="/config/posting-period-variants" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('ppvAssign.defineLink')}
-            </Link>
-            <Link href="/config/company-codes" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('ppvAssign.companyCodesLink')}
-            </Link>
-            <Link href="/config/posting-periods" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('ppvAssign.postingPeriodsLink')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('ppvAssign.subtitle')}</p>
-      </header>
+    <Page
+      title={t('ppvAssign.title')} code={<>{ACTIVITY} · OBBP</>} back={null}
+      description={t('ppvAssign.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+          <LinkButton href="/config/posting-period-variants">
+                        {t('ppvAssign.defineLink')}
+                      </LinkButton>
+          <LinkButton href="/config/company-codes">
+                        {t('ppvAssign.companyCodesLink')}
+                      </LinkButton>
+          <LinkButton href="/config/posting-periods">
+                        {t('ppvAssign.postingPeriodsLink')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -63,6 +61,6 @@ export default async function AssignPostingPeriodVariantPage() {
       )}
 
       <PostingPeriodVariantAssignments rows={rows} choices={choices} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

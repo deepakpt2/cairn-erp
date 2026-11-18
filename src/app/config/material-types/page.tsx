@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -10,6 +9,7 @@ import {
 import { listMaterialRangeGroupOptions } from '@/modules/inventory/material-number-range-groups';
 import { t } from '@/platform/i18n';
 import MaterialTypes from './MaterialTypes';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,22 +37,20 @@ export default async function MaterialTypesPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMS2</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('materialType.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config/valuation-classes" className="btn btn-default min-h-11 sm:min-h-8">
-              Valuation classes
-            </Link>
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('materialType.subtitle')}</p>
-      </header>
+    <Page
+      title={t('materialType.title')} code={<>{ACTIVITY} · OMS2</>} back={null}
+      description={t('materialType.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config/valuation-classes">
+                        Valuation classes
+                      </LinkButton>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -67,6 +65,6 @@ export default async function MaterialTypesPage() {
         rangeGroups={rangeGroups}
         canMaintain={canMaintain}
       />
-    </div>
+    </Page>
   );
 }

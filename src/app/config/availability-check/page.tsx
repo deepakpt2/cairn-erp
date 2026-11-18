@@ -1,8 +1,8 @@
-import Link from 'next/link';
 
 import AvailabilityCheckForm from './AvailabilityCheckForm';
 import { can, requireSession } from '@/platform/auth/current';
 import { ACTIVITY, ALIASES, listAvailabilityCheck, ROUTE } from '@/modules/production/availability-check';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,19 +13,15 @@ export default async function AvailabilityCheckPage() {
   const current = await listAvailabilityCheck(session.user.client);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIASES.join(' · ')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Availability check configuration</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          A checking group is assigned on the material plant view. A missing assignment stays unassigned.
-          A checking rule is a separate key. It is not a checking group, and it does not decide whether a check runs.
-          A scope of check is that pair. Checking control is not stored. Saving this screen does not calculate ATP, does not read the stock/requirements list, and does not post.
-        </p>
-      </header>
+    <Page
+      title="Availability check configuration" code={<>{ACTIVITY} · {ALIASES.join(' · ')}</>} width="5xl" back={null}
+      description="A checking group is assigned on the material plant view. A missing assignment stays unassigned. A checking rule is a separate key. It is not a checking group, and it does not decide whether a check runs. A scope of check is that pair. Checking control is not stored. Saving this screen does not calculate ATP, does not read the stock/requirements list, and does not post."
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm">
           Display only. Ask an administrator for {ACTIVITY}.
@@ -38,6 +34,6 @@ export default async function AvailabilityCheckPage() {
         </ul>
       </section>
       <AvailabilityCheckForm current={current} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

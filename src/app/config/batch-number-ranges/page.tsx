@@ -4,6 +4,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { ACTIVITY, getBatchNumberRanges } from '@/modules/inventory/batch-number-range';
 
 import BatchNumberRangeForms from './BatchNumberRangeForms';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,21 +24,25 @@ export default async function BatchNumberRangesPage({
   const adjusting = current.intervals.find((row) => row.interval === params.adjust) ?? null;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMAD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Number ranges for batch numbers</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Object {current.objectCode}. {current.description}. This screen maintains intervals only.
-          It does not create an interval by being opened, and it does not create a batch.
-          Interval 01 is internal. Interval 02, when it stands, checks a typed number and does not allocate.
-          The next number is not reserved by being shown. A gap is left as it stands, and an exhausted interval does not wrap.
-          OMCZ, OMCE, and MSC1N are not this screen.
-        </p>
-      </header>
+    <Page
+      title="Number ranges for batch numbers" code={<>{ACTIVITY} · OMAD</>} width="4xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Object {current.objectCode}. {current.description}. This screen maintains intervals only.
+              It does not create an interval by being opened, and it does not create a batch.
+              Interval 01 is internal. Interval 02, when it stands, checks a typed number and does not allocate.
+              The next number is not reserved by being shown. A gap is left as it stands, and an exhausted interval does not wrap.
+              OMCZ, OMCE, and MSC1N are not this screen.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm">Display only. Ask an administrator for {ACTIVITY}.</p>
@@ -85,6 +90,6 @@ export default async function BatchNumberRangesPage({
       </section>
 
       <BatchNumberRangeForms client={session.user.client} canMaintain={canMaintain} editing={editing} adjusting={adjusting} />
-    </div>
+    </Page>
   );
 }

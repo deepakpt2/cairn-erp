@@ -1,10 +1,10 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { listRuns, type JobRunView } from '@/platform/job/monitor';
 
 import { JobControls } from './JobControls';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,15 +53,10 @@ export default async function JobMonitorPage() {
   const done = runs.filter((r) => ['SUCCEEDED', 'FAILED', 'CANCELLED', 'DEAD_LETTER'].includes(r.status));
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PLT.JOB.DISPLAY · SM37</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('jobs.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('jobs.subtitle')}</p>
-      </header>
+    <Page
+      title={t('jobs.title')} code="PLT.JOB.DISPLAY · SM37" width="7xl" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('jobs.subtitle')}
+    >
 
       {!allowed && (
         <p role="status" className="text-sm text-ink-soft">{t('auth.readOnly', { authority: DISPLAY })}</p>
@@ -165,6 +160,6 @@ export default async function JobMonitorPage() {
           </section>
         </>
       )}
-    </div>
+    </Page>
   );
 }

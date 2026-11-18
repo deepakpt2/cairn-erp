@@ -9,6 +9,7 @@ import { listBatchSearchProcedures } from '@/modules/inventory/batch-search-proc
 import { movementType } from '@/modules/inventory/schema';
 
 import AllocationForm from './AllocationForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,20 +45,15 @@ export default async function BatchSearchAllocationPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMCG</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Allocate IM search procedure</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OMCG allocates a search procedure to a movement type for own stock. The procedure must already stand on OMCY.
-          Blank special stock is own stock. It is not a plant and not a wildcard. A check indicator of X records the request and does not check a batch.
-          Opening this screen does not create an allocation, select a batch, or post. A closed period does not block it.
-          Production and sales allocations are not this screen.
-        </p>
-      </header>
+    <Page
+      title="Allocate IM search procedure" code={<>{ACTIVITY} · OMCG</>} width="4xl" back={null}
+      description="OMCG allocates a search procedure to a movement type for own stock. The procedure must already stand on OMCY. Blank special stock is own stock. It is not a plant and not a wildcard. A check indicator of X records the request and does not check a batch. Opening this screen does not create an allocation, select a batch, or post. A closed period does not block it. Production and sales allocations are not this screen."
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       <section className="border border-line bg-white p-3 text-sm">
         <h2 className="font-semibold">Not executed</h2>
@@ -131,6 +127,6 @@ export default async function BatchSearchAllocationPage({
           </ul>
         </section>
       )}
-    </div>
+    </Page>
   );
 }

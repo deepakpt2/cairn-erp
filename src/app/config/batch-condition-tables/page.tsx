@@ -6,6 +6,7 @@ import { withTenant } from '@/platform/db/client';
 import { ACTIVITY, ALLOWED_FIELDS, APPLICATION, listBatchConditionTables, NOT_EXECUTED, ROUTE, USAGE } from '@/modules/inventory/batch-condition-table';
 
 import ConditionTableForm from './ConditionTableForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,20 +37,24 @@ export default async function BatchConditionTablePage({
     : [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMA1</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Inventory Management condition tables</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OMA1 defines a condition table for Inventory Management. Usage is {USAGE}. Application is {APPLICATION}.
-          The number is 501 to 999. The SAP key area is not created here.
-          Opening this screen does not create a table, generate a physical table, or post.
-          Production and sales condition tables are not this screen. A closed period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Inventory Management condition tables" code={<>{ACTIVITY} · OMA1</>} width="4xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              OMA1 defines a condition table for Inventory Management. Usage is {USAGE}. Application is {APPLICATION}.
+              The number is 501 to 999. The SAP key area is not created here.
+              Opening this screen does not create a table, generate a physical table, or post.
+              Production and sales condition tables are not this screen. A closed period does not block it.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       <section className="border border-line bg-white p-3 text-sm">
         <h2 className="font-semibold">Allowed key fields</h2>
@@ -133,6 +138,6 @@ export default async function BatchConditionTablePage({
           </ul>
         </section>
       )}
-    </div>
+    </Page>
   );
 }

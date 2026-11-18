@@ -1,9 +1,9 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { ACTIVITY, listCharacteristics } from '@/modules/foundation/characteristic-definition';
 import Characteristics from './Characteristics';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,24 +18,28 @@ export default async function CharacteristicsPage() {
   const rows = await listCharacteristics(session.user.client);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">CFG.PROC.CHARACTERISTIC.DEFINE · CT04</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('characteristic.title')}</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.workbench')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('characteristic.subtitle')}</p>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OCHA is not this screen. OCHA is the batch management IMG. The description stands in the
-          tenant language. Where-used is the class that names this characteristic. A batch value is
-          not stored here. Class type 023 is not active.
-        </p>
-      </header>
+    <Page
+      title={t('characteristic.title')} code="CFG.PROC.CHARACTERISTIC.DEFINE · CT04" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('characteristic.subtitle')}</p>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              OCHA is not this screen. OCHA is the batch management IMG. The description stands in the
+              tenant language. Where-used is the class that names this characteristic. A batch value is
+              not stored here. Class type 023 is not active.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/config">
+                      {t('nav.workbench')}
+                    </LinkButton>
+        </>
+      }
+    >
 
       <Characteristics rows={rows} canMaintain={can(session, ACTIVITY)} />
-    </div>
+    </Page>
   );
 }

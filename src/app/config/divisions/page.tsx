@@ -11,6 +11,7 @@ import { getDivisionDefinitionVersion } from '@/modules/foundation/distribution-
 import { DeactivateDivisionForm } from './DeactivateDivisionForm';
 import { DivisionDefinitionForm, type DivisionDraft } from './DivisionDefinitionForm';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 const ACTIVITY = 'CFG.ORG.DIVISION.DEFINE';
@@ -61,20 +62,18 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
   const visibleEntries = entries.filter((entry) => !search || `${entry.division} ${entry.name}`.toLocaleLowerCase().includes(search));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('division.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            {canAssignSalesOrg && <Link href="/config/sales-orgs/assign-division" className="btn btn-default min-h-11 sm:min-h-8">{t('salesOrgDivision.navLink')}</Link>}
-            {canDefineSalesArea && <Link href="/config/sales-areas" className="btn btn-default min-h-11 sm:min-h-8">{t('salesArea.navLink')}</Link>}
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.workbench')}</Link>
-            {canMaintain && <Link href="/config/divisions?new=1" className="btn btn-primary min-h-11 sm:min-h-8">{t('orgDefinition.create')} · {t('division.singular')}</Link>}
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('division.subtitle')}</p>
-      </header>
+    <Page
+      title={t('division.title')} code={ACTIVITY} back={null}
+      description={t('division.subtitle')}
+      actions={
+        <>
+          {canAssignSalesOrg && <LinkButton href="/config/sales-orgs/assign-division">{t('salesOrgDivision.navLink')}</LinkButton>}
+          {canDefineSalesArea && <LinkButton href="/config/sales-areas">{t('salesArea.navLink')}</LinkButton>}
+          <LinkButton href="/config">{t('nav.workbench')}</LinkButton>
+          {canMaintain && <LinkButton href="/config/divisions?new=1" variant="primary">{t('orgDefinition.create')} · {t('division.singular')}</LinkButton>}
+        </>
+      }
+    >
 
       {!canMaintain && <p role="status" className="text-sm text-ink-soft">{t('auth.readOnly', { authority: ACTIVITY })}</p>}
 
@@ -182,6 +181,6 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
           {!history.length && <p className="p-3 text-sm text-ink-soft">{t('orgDefinition.noChanges')}</p>}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

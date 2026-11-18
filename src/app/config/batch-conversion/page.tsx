@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -10,6 +9,7 @@ import {
 } from '@/modules/inventory/batch-conversion';
 
 import ConversionForm from './ConversionForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,18 +26,15 @@ export default async function BatchConversionPage() {
   const snapshot = await listConversionChecks(session.user.client);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIAS}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Batch level and status conversion</h1>
-          <Link href="/config/batch-level" className="btn btn-default min-h-11 sm:min-h-8">Batch level</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OMCT checks a proposed level or status change. It is not OMCE and not OMCS.
-          Opening this screen writes nothing. A closed period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Batch level and status conversion" code={<>{ACTIVITY} · {ALIAS}</>} width="4xl" back={null}
+      description="OMCT checks a proposed level or status change. It is not OMCE and not OMCS. Opening this screen writes nothing. A closed period does not block it."
+      actions={
+        <>
+          <LinkButton href="/config/batch-level">Batch level</LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm text-ink">
@@ -81,6 +78,6 @@ export default async function BatchConversionPage() {
           )}
         </tbody>
       </table>
-    </div>
+    </Page>
   );
 }

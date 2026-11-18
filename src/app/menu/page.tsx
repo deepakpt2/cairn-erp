@@ -4,6 +4,7 @@ import { requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { buildNavTree } from '@/ui/shell/nav-tree';
 import { menuScreenIds } from '@/ui/shell/menu-access';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,11 +24,10 @@ export default async function ModulePage({ searchParams }: { searchParams: Promi
   if (!node && !['mm', 'pp', 'qm', 'fico', 'sd', 'hr', 'admin'].includes(id ?? '')) notFound();
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <h1 className="text-xl font-semibold tracking-tight">{node?.label ?? id}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('menuPage.subtitle')}</p>
-      </header>
+    <Page
+      title={node?.label ?? id} width="5xl" back={null}
+      description={t('menuPage.subtitle')}
+    >
       {!node && <p role="status" className="text-sm text-ink-soft">{t('menuPage.empty')}</p>}
       {node?.categories.map((category) => (
         <section key={category.slug} id={category.slug} className="scroll-mt-24">
@@ -53,6 +53,6 @@ export default async function ModulePage({ searchParams }: { searchParams: Promi
           </div>
         </section>
       ))}
-    </div>
+    </Page>
   );
 }

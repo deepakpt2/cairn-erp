@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -10,6 +9,7 @@ import {
   listCostCenters,
 } from '@/modules/foundation/cost-center-definition';
 import CostCenters from './CostCenters';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,19 +44,17 @@ export default async function CostCentersPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · KS01</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('costCenter.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('costCenter.subtitle')}</p>
-      </header>
+    <Page
+      title={t('costCenter.title')} code={<>{ACTIVITY} · KS01</>} back={null}
+      description={t('costCenter.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -72,6 +70,6 @@ export default async function CostCentersPage({
         categories={COST_CENTER_CATEGORIES}
         canMaintain={canMaintain}
       />
-    </div>
+    </Page>
   );
 }

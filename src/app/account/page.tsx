@@ -12,6 +12,7 @@ import { can } from '@/platform/auth/current';
 import { ConfirmPanel, DisablePanel, RegeneratePanel } from './MfaPanels';
 import { beginEnrolmentAction, setMfaRequiredAction } from './mfa-actions';
 import { changePasswordAction, revokeSessionAction, savePreferencesAction } from './actions';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,11 +38,14 @@ export default async function AccountPage({ searchParams }: { searchParams: Para
   const { ok, error, remedy } = { ok: one(q.ok), error: one(q.error), remedy: one(q.remedy) };
 
   return (
-    <main className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <h1 className="text-xl font-semibold tracking-tight">My account</h1>
-        <p className="mt-1 text-sm text-ink-soft">{session.user.fullName ? `${session.user.fullName} (${session.user.username})` : session.user.username} · tenant {session.user.client}</p>
-      </header>
+    <Page
+      title="My account" width="4xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{session.user.fullName ? `${session.user.fullName} (${session.user.username})` : session.user.username} · tenant {session.user.client}</p>
+        </>
+      }
+    >
 
       {pending.length > 0 && (
         <section role="alert" className="panel border-signal-warn/40 p-3">
@@ -89,7 +93,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Para
       {section === 'security' && <SecuritySection session={session} setup={one(q.setup) === '1'} />}
       {section === 'sessions' && <SessionsSection session={session} />}
       {section === 'preferences' && <PreferencesSection session={session} />}
-    </main>
+    </Page>
   );
 }
 

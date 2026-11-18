@@ -14,6 +14,7 @@ import {
   parseMrpControllerKey,
 } from '@/modules/inventory/mrp-controller-maintenance';
 import MrpControllers from './MrpControllers';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,15 +51,15 @@ export default async function MrpControllersPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMD0</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('mrpController.title')}</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.workbench')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mrpController.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mrpController.title')} code={<>{ACTIVITY} · OMD0</>} back={null}
+      description={t('mrpController.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">{t('nav.workbench')}</LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">{t('auth.readOnly', { authority: ACTIVITY })}</p>
@@ -96,6 +97,6 @@ export default async function MrpControllersPage({
         canMaintain={canMaintain}
         defaultPlant={params.plant?.trim() ?? ''}
       />
-    </div>
+    </Page>
   );
 }

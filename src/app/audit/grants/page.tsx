@@ -6,7 +6,6 @@
  * and logged.
  */
 import { randomUUID } from 'node:crypto';
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -19,6 +18,7 @@ import {
 } from '@/modules/audit/workspace';
 
 import { CreateGrantForm, RevokeGrantForm } from './GrantForms';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,21 +34,15 @@ export default async function AuditGrantsPage() {
   const candidates = auditors.filter((a) => a.userId !== session.user.userId);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPABILITY} · GRC</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Auditor access grants</h1>
-          <div className="flex gap-2">
-            <Link href={AUDIT_WORKSPACE_ROUTE} className="btn btn-default min-h-11 sm:min-h-8">Auditor workspace</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Give a person acting as auditor time-boxed, read-only access limited to company codes, periods and modules.
-          One standing grant per auditor. Only users who hold AUDIT.WORKSPACE can be chosen.
-        </p>
-      </header>
+    <Page
+      title="Auditor access grants" code={<>{CAPABILITY} · GRC</>} back={{ href: '/', label: t('nav.launchpad') }}
+      description="Give a person acting as auditor time-boxed, read-only access limited to company codes, periods and modules. One standing grant per auditor. Only users who hold AUDIT.WORKSPACE can be chosen."
+      actions={
+        <>
+          <LinkButton href={AUDIT_WORKSPACE_ROUTE}>Auditor workspace</LinkButton>
+        </>
+      }
+    >
 
       {!allowed && (
         <p role="status" className="text-sm text-ink-soft">
@@ -103,6 +97,6 @@ export default async function AuditGrantsPage() {
           </section>
         </>
       )}
-    </div>
+    </Page>
   );
 }

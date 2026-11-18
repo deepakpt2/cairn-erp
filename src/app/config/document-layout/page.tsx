@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -7,6 +6,7 @@ import {
   listDocumentLayouts,
 } from '@/modules/output/document-layout';
 import { DocumentLayoutForm } from './DocumentLayoutForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,19 +27,18 @@ export default async function DocumentLayoutPage({ searchParams }: {
   const chosen = layouts.find((layout) => layout.companyCode === (params.company ?? '').trim()) ?? layouts[0] ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{DOCUMENT_LAYOUT_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Document layout</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-          The letterhead printed and sent with output documents, one per company code. The name and address are the
-          company code&apos;s own; what is entered here overrides them, and empty falls back to them. The body of a
-          document is the fixed-width text the output engine stored with the message, and is never changed here.
-        </p>
-      </header>
+    <Page
+      title="Document layout" code={DOCUMENT_LAYOUT_CAPABILITY} width="5xl"
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              The letterhead printed and sent with output documents, one per company code. The name and address are the
+              company code&apos;s own; what is entered here overrides them, and empty falls back to them. The body of a
+              document is the fixed-width text the output engine stored with the message, and is never changed here.
+            </p>
+        </>
+      }
+    >
 
       {!allowed ? (
         <p role="alert" className="text-sm text-signal-error">
@@ -65,6 +64,6 @@ export default async function DocumentLayoutPage({ searchParams }: {
           <DocumentLayoutForm key={chosen.companyCode} layout={chosen} />
         </>
       )}
-    </div>
+    </Page>
   );
 }

@@ -1,10 +1,10 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { listEnqueue } from '@/platform/lock/enqueue';
 
 import { DeleteLock } from './DeleteLock';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,15 +30,10 @@ export default async function LockMonitorPage() {
   const rows = allowed ? await listEnqueue(session.user.client) : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PLT.LOCK.DISPLAY · SM12</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('enqueue.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('enqueue.subtitle')}</p>
-      </header>
+    <Page
+      title={t('enqueue.title')} code="PLT.LOCK.DISPLAY · SM12" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('enqueue.subtitle')}
+    >
 
       {!allowed && (
         <p role="status" className="text-sm text-ink-soft">{t('auth.readOnly', { authority: DISPLAY })}</p>
@@ -84,6 +79,6 @@ export default async function LockMonitorPage() {
       )}
 
       {allowed && can(session, DELETE) && <DeleteLock />}
-    </div>
+    </Page>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from '@/modules/audit/workspace';
 
 import { ChangeHistorySearch, LogWorkspaceView } from './WorkspaceClient';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,21 +42,15 @@ export default async function AuditorWorkspacePage() {
   const grant = view?.grant ?? null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPABILITY} · AIS</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Auditor workspace</h1>
-          <div className="flex gap-2">
-            <Link href={AUDIT_FINDING_ROUTE} className="btn btn-default min-h-11 sm:min-h-8">Findings and requests</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Time-boxed, scoped, read-only access. Nothing you hold can post, change or delete while your grant is live,
-          and what you look at and export is logged.
-        </p>
-      </header>
+    <Page
+      title="Auditor workspace" code={<>{CAPABILITY} · AIS</>} back={{ href: '/', label: t('nav.launchpad') }}
+      description="Time-boxed, scoped, read-only access. Nothing you hold can post, change or delete while your grant is live, and what you look at and export is logged."
+      actions={
+        <>
+          <LinkButton href={AUDIT_FINDING_ROUTE}>Findings and requests</LinkButton>
+        </>
+      }
+    >
 
       {!allowed && (
         <p role="status" className="text-sm text-ink-soft">
@@ -149,6 +144,6 @@ export default async function AuditorWorkspacePage() {
           </section>
         </>
       )}
-    </div>
+    </Page>
   );
 }

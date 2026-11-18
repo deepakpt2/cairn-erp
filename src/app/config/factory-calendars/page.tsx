@@ -1,10 +1,10 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
   FACTORY_CALENDAR_CAPABILITY, FACTORY_CALENDAR_ROUTE, loadFactoryCalendars, sampleMonth,
 } from '@/modules/foundation/factory-calendar';
 import { HolidayCalendarPanel, PeriodForm } from './FactoryCalendarForms';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,19 +26,18 @@ export default async function FactoryCalendarsPage({ searchParams }: {
   const holiday = bench?.holidayCalendars.find((h) => h.holidayCalendarId === (params.holiday ?? '').trim().toUpperCase()) ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{FACTORY_CALENDAR_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Factory calendars</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-          The working weekdays of a factory calendar over dated periods, less the holidays of the holiday calendar a
-          period names. A date no period covers has no answer; nothing assumes a five-day week. Movable holidays are
-          entered as explicit dates, inside the holiday calendar&apos;s years.
-        </p>
-      </header>
+    <Page
+      title="Factory calendars" code={FACTORY_CALENDAR_CAPABILITY} width="5xl"
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              The working weekdays of a factory calendar over dated periods, less the holidays of the holiday calendar a
+              period names. A date no period covers has no answer; nothing assumes a five-day week. Movable holidays are
+              entered as explicit dates, inside the holiday calendar&apos;s years.
+            </p>
+        </>
+      }
+    >
 
       {!bench ? (
         <p role="alert" className="text-sm text-signal-error">
@@ -95,6 +94,6 @@ export default async function FactoryCalendarsPage({ searchParams }: {
           </section>
         </>
       )}
-    </div>
+    </Page>
   );
 }

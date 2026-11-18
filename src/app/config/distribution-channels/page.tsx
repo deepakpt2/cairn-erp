@@ -11,6 +11,7 @@ import { getDistributionChannelDefinitionVersion } from '@/modules/foundation/di
 import { DeactivateDistributionChannelForm } from './DeactivateDistributionChannelForm';
 import { DistributionChannelDefinitionForm, type DistributionChannelDraft } from './DistributionChannelDefinitionForm';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 const ACTIVITY = 'CFG.ORG.DISTCHANNEL.DEFINE';
@@ -59,19 +60,17 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
   const visibleEntries = entries.filter((entry) => !search || `${entry.distributionChannel} ${entry.name}`.toLocaleLowerCase().includes(search));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('distributionChannel.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.workbench')}</Link>
-            {canDefineSalesArea && <Link href="/config/sales-areas" className="btn btn-default min-h-11 sm:min-h-8">{t('salesArea.navLink')}</Link>}
-            {canMaintain && <Link href="/config/distribution-channels?new=1" className="btn btn-primary min-h-11 sm:min-h-8">{t('orgDefinition.create')} · {t('distributionChannel.singular')}</Link>}
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('distributionChannel.subtitle')}</p>
-      </header>
+    <Page
+      title={t('distributionChannel.title')} code={ACTIVITY} back={null}
+      description={t('distributionChannel.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">{t('nav.workbench')}</LinkButton>
+          {canDefineSalesArea && <LinkButton href="/config/sales-areas">{t('salesArea.navLink')}</LinkButton>}
+          {canMaintain && <LinkButton href="/config/distribution-channels?new=1" variant="primary">{t('orgDefinition.create')} · {t('distributionChannel.singular')}</LinkButton>}
+        </>
+      }
+    >
 
       {!canMaintain && <p role="status" className="text-sm text-ink-soft">{t('auth.readOnly', { authority: ACTIVITY })}</p>}
 
@@ -179,6 +178,6 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
           {!history.length && <p className="p-3 text-sm text-ink-soft">{t('orgDefinition.noChanges')}</p>}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

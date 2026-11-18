@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -6,6 +5,7 @@ import {
   listIncompletionConfiguration,
 } from '@/modules/sales/incompletion';
 import { IncompletionSetup } from './IncompletionSetup';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,35 +17,39 @@ export default async function IncompletionPage() {
   const canMaintain = can(session, INCOMPLETION_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{INCOMPLETION_CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Incompletion</h1>
-          <Link href="/sales/incomplete" className="btn btn-default min-h-11 sm:min-h-8">
-            The worklist
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          What a document has to carry before it counts as complete. A sales order is refused today
-          when it is wrong and saved when it is not, and there is no third state; the log of
-          incomplete items is that third state. The document stands, it is simply not complete, and
-          what it is missing is recorded against it field by field — which is what lets a clerk save
-          an order with the customer&apos;s purchase-order number still to come, and what stops the
-          warehouse raising a delivery for an order with no date on it.
-        </p>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-          Nothing is delivered but the six groups. No procedure, no field, no status group and no
-          assignment, so a document written in a tenant that has configured nothing is not judged at
-          all — and stays that way until a tenant assigns a procedure to its document type by name.
-        </p>
-        {!canMaintain && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. Maintenance requires an explicit exact-code role grant for{' '}
-            {INCOMPLETION_CAPABILITY}; broad wildcard role patterns do not grant it.
-          </p>
-        )}
-      </header>
+    <Page
+      title="Incompletion" code={<>{INCOMPLETION_CAPABILITY} · SD</>} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              What a document has to carry before it counts as complete. A sales order is refused today
+              when it is wrong and saved when it is not, and there is no third state; the log of
+              incomplete items is that third state. The document stands, it is simply not complete, and
+              what it is missing is recorded against it field by field — which is what lets a clerk save
+              an order with the customer&apos;s purchase-order number still to come, and what stops the
+              warehouse raising a delivery for an order with no date on it.
+            </p>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Nothing is delivered but the six groups. No procedure, no field, no status group and no
+              assignment, so a document written in a tenant that has configured nothing is not judged at
+              all — and stays that way until a tenant assigns a procedure to its document type by name.
+            </p>
+          {!canMaintain && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. Maintenance requires an explicit exact-code role grant for{' '}
+                {INCOMPLETION_CAPABILITY}; broad wildcard role patterns do not grant it.
+              </p>
+            )}
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/sales/incomplete">
+                      The worklist
+                    </LinkButton>
+        </>
+      }
+    >
 
       <section aria-labelledby="groups" className="border border-line bg-surface p-4">
         <h2 id="groups" className="text-sm font-semibold">The six places a document can be incomplete</h2>
@@ -205,6 +209,6 @@ export default async function IncompletionPage() {
           documentTypes={configuration.documentTypes}
         />
       )}
-    </main>
+    </Page>
   );
 }

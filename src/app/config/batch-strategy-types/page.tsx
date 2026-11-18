@@ -6,6 +6,7 @@ import { withTenant } from '@/platform/db/client';
 import { ACTIVITY, APPLICATION, listBatchStrategyTypes, NOT_EXECUTED, ROUTE, USAGE } from '@/modules/inventory/batch-strategy-type';
 
 import StrategyTypeForm from './StrategyTypeForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,21 +37,25 @@ export default async function BatchStrategyTypePage({
     : [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMCW</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Inventory Management strategy types</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OMCW defines a strategy type for Inventory Management. Usage is {USAGE}. Application is {APPLICATION}.
-          The key is the condition type, one to four uppercase letters or digits. The description is at most 20 characters.
-          An access sequence is optional and is maintained on OMCX. Naming one does not select a batch.
-          Opening this screen does not create a strategy type, select a batch, or post.
-          Production and sales strategy types are not this screen. A closed period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Inventory Management strategy types" code={<>{ACTIVITY} · OMCW</>} width="4xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              OMCW defines a strategy type for Inventory Management. Usage is {USAGE}. Application is {APPLICATION}.
+              The key is the condition type, one to four uppercase letters or digits. The description is at most 20 characters.
+              An access sequence is optional and is maintained on OMCX. Naming one does not select a batch.
+              Opening this screen does not create a strategy type, select a batch, or post.
+              Production and sales strategy types are not this screen. A closed period does not block it.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       <section className="border border-line bg-white p-3 text-sm">
         <h2 className="font-semibold">Not executed</h2>
@@ -131,6 +136,6 @@ export default async function BatchStrategyTypePage({
           ))}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

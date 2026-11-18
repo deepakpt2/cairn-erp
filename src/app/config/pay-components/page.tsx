@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -12,6 +11,7 @@ import {
   listPayComponents,
 } from '@/modules/people/pay-components';
 import PayComponents from './PayComponents';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,24 +86,17 @@ export default async function PayComponentsPage({ searchParams }: {
   const canWrite = can(session, PAY_COMPONENT_CAPABILITY);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{PAY_COMPONENT_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Pay components</h1>
-          <div className="flex gap-2">
-            <Link href="/people/assignments" className="btn btn-default min-h-11 sm:min-h-8">Assignments</Link>
-            <Link href="/people/employees" className="btn btn-default min-h-11 sm:min-h-8">Employees</Link>
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Configuration</Link>
-          </div>
-        </div>
-        <p className="mt-2 text-sm text-ink-soft">
-          What the tenant calls a kind of pay, which account of which chart it moves, and whether a cost
-          centre carries it. The screen defines and corrects; it calculates nothing and posts nothing — payroll
-          runs, results and their postings are unbuilt by design (R-11, DV-001), and this is the structure they
-          would read.
-        </p>
-      </header>
+    <Page
+      title="Pay components" code={PAY_COMPONENT_CAPABILITY} back={null}
+      description="What the tenant calls a kind of pay, which account of which chart it moves, and whether a cost centre carries it. The screen defines and corrects; it calculates nothing and posts nothing — payroll runs, results and their postings are unbuilt by design (R-11, DV-001), and this is the structure they would read."
+      actions={
+        <>
+          <LinkButton href="/people/assignments">Assignments</LinkButton>
+          <LinkButton href="/people/employees">Employees</LinkButton>
+          <LinkButton href="/config">Configuration</LinkButton>
+        </>
+      }
+    >
       <PayComponents
         components={components}
         selected={selected}
@@ -115,6 +108,6 @@ export default async function PayComponentsPage({ searchParams }: {
         query={query}
         canWrite={canWrite}
       />
-    </div>
+    </Page>
   );
 }

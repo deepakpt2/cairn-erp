@@ -6,7 +6,6 @@
  * their status and response. Management answers — never the raiser.
  * `?objectClass=&objectKey=` pre-fills a bookmark.
  */
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -22,6 +21,7 @@ import {
 } from '@/modules/audit/workspace';
 
 import { ExportEvidenceForm, LogFindingsView, RaiseFindingForm, RespondForm } from './FindingForms';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,21 +74,15 @@ export default async function AuditFindingsPage({
   const all = responder ? await listFindings(session.user.client) : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{AUDIT_WORKSPACE_CAPABILITY} · Audit Management</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Audit findings and requests</h1>
-          <div className="flex gap-2">
-            <Link href={AUDIT_WORKSPACE_ROUTE} className="btn btn-default min-h-11 sm:min-h-8">Auditor workspace</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Findings, notes, bookmarks and requests to management, with status and response. A request is answered by
-          management, never by the person who raised it.
-        </p>
-      </header>
+    <Page
+      title="Audit findings and requests" code={<>{AUDIT_WORKSPACE_CAPABILITY} · Audit Management</>} back={{ href: '/', label: t('nav.launchpad') }}
+      description="Findings, notes, bookmarks and requests to management, with status and response. A request is answered by management, never by the person who raised it."
+      actions={
+        <>
+          <LinkButton href={AUDIT_WORKSPACE_ROUTE}>Auditor workspace</LinkButton>
+        </>
+      }
+    >
 
       {!auditor && !responder && (
         <p role="status" className="text-sm text-ink-soft">
@@ -115,6 +109,6 @@ export default async function AuditFindingsPage({
           <FindingsTable rows={all} respondFor={session.user.userId} />
         </section>
       )}
-    </div>
+    </Page>
   );
 }

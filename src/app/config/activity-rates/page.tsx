@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -16,6 +15,7 @@ import { ACTIVITY_PRICE_CAPABILITY, ActivityPriceError, listCalculableActivities
 import ActivityRates from './ActivityRates';
 import { PricePanel } from './PricePanel';
 import { randomUUID } from 'node:crypto';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,19 +89,17 @@ export default async function ActivityRatesPage({
       : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · KP26</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('actRate.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('actRate.subtitle')}</p>
-      </header>
+    <Page
+      title={t('actRate.title')} code={<>{ACTIVITY} · KP26</>} back={null}
+      description={t('actRate.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -131,6 +129,6 @@ export default async function ActivityRatesPage({
           requestKey={randomUUID()}
         />
       ))}
-    </div>
+    </Page>
   );
 }

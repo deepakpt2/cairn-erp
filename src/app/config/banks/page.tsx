@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -8,6 +7,7 @@ import {
   listBanks,
 } from '@/modules/foundation/bank-master';
 import { Banks } from './Banks';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,22 +33,20 @@ export default async function BanksPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPABILITY} · FI01</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('bank.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-            <Link href="/config/house-banks" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('bank.houseBanksLink')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('bank.subtitle')}</p>
-      </header>
+    <Page
+      title={t('bank.title')} code={<>{CAPABILITY} · FI01</>} back={null}
+      description={t('bank.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+          <LinkButton href="/config/house-banks">
+                        {t('bank.houseBanksLink')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -57,6 +55,6 @@ export default async function BanksPage() {
       )}
 
       <Banks banks={banks} countries={countries} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

@@ -5,6 +5,7 @@ import {
   type ConsolidationFolder,
 } from '@/modules/finance/consolidation-workbench';
 import ConsolidationWorkbenchShell from './ConsolidationWorkbenchShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,14 +30,10 @@ export default async function ConsolidationWorkbenchPage({
   const view = areaKey ? await getConsolidationWorkbench(session.user.client, areaKey) : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.RPT.CONSOLIDATE · UCWB</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">Consolidation Workbench</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Configure consolidation areas, data basis, units, mappings, methods and task hierarchies. Configuration only — execution stands apart.
-        </p>
-      </header>
+    <Page
+      title="Consolidation Workbench" code="FIN.RPT.CONSOLIDATE · UCWB" back={null}
+      description="Configure consolidation areas, data basis, units, mappings, methods and task hierarchies. Configuration only — execution stands apart."
+    >
       <ConsolidationWorkbenchShell
         canUse={can(session, `${CONSOLIDATION_CAPABILITY}.read`) || can(session, CONSOLIDATION_CAPABILITY)}
         canConfigure={can(session, CONSOLIDATION_CAPABILITY)}
@@ -45,6 +42,6 @@ export default async function ConsolidationWorkbenchPage({
         folder={folder}
         view={view}
       />
-    </div>
+    </Page>
   );
 }

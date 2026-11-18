@@ -5,6 +5,7 @@ import { ACTIVITY, BATCH_LEVELS, getBatchLevel, latestConversion } from '@/modul
 import { listConversionChecks } from '@/modules/inventory/batch-conversion';
 
 import BatchLevelForm from './BatchLevelForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,19 +26,15 @@ export default async function BatchLevelPage() {
   const finding = omct.checks[0] ?? null;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMCE</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Define batch level</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          One batch level for this client. The stored code is 0, 1, or 2. This screen does not create a batch,
-          turn on batch status, or turn on internal numbering. Goods movements still do not carry a batch.
-          OMCS, OMCZ, OMAD, MSC1N, MSC2N, and MSC3N are not this screen. A closed posting period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Define batch level" code={<>{ACTIVITY} · OMCE</>} width="3xl" back={null}
+      description="One batch level for this client. The stored code is 0, 1, or 2. This screen does not create a batch, turn on batch status, or turn on internal numbering. Goods movements still do not carry a batch. OMCS, OMCZ, OMAD, MSC1N, MSC2N, and MSC3N are not this screen. A closed posting period does not block it."
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm text-ink">
@@ -62,6 +59,6 @@ export default async function BatchLevelPage() {
           <Link href="/config/batch-conversion" className="underline">Open OMCT</Link>
         </p>
       </section>
-    </div>
+    </Page>
   );
 }

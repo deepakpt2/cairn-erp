@@ -6,6 +6,7 @@ import { withTenant } from '@/platform/db/client';
 import { ACTIVITY, listInitialBatchStatus, ROUTE } from '@/modules/inventory/initial-batch-status';
 
 import InitialStatusForm from './InitialStatusForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,20 +36,15 @@ export default async function InitialBatchStatusPage({
     : [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · OMAB</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Initial status of a new batch</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OMAB sets the initial status by material type. Checked is the character X, stored for a new batch as restricted.
-          Blank is unrestricted. Opening this screen does not change a type and does not rewrite a batch.
-          It does not create a material type, select a plant, change OMCS, or post. Restricted use is not blocked stock
-          and not inspection stock. The description is read from the material type. A closed period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Initial status of a new batch" code={<>{ACTIVITY} · OMAB</>} width="4xl" back={null}
+      description="OMAB sets the initial status by material type. Checked is the character X, stored for a new batch as restricted. Blank is unrestricted. Opening this screen does not change a type and does not rewrite a batch. It does not create a material type, select a plant, change OMCS, or post. Restricted use is not blocked stock and not inspection stock. The description is read from the material type. A closed period does not block it."
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       <dl className="grid gap-3 border border-line bg-white p-3 text-sm sm:grid-cols-2">
         <div>
@@ -127,6 +123,6 @@ export default async function InitialBatchStatusPage({
           ))}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

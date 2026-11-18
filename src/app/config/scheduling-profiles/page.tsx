@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { plant as plantTable } from '@/modules/foundation/schema';
@@ -7,6 +6,7 @@ import { withTenant } from '@/platform/db/client';
 import { eq } from 'drizzle-orm';
 
 import SchedulingProfileForm from './SchedulingProfileForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,21 +30,15 @@ export default async function SchedulingProfilesPage({
   }).from(plantTable).where(eq(plantTable.client, session.user.client)));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIAS}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Production scheduling profile</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OPKP maintains the profile for a plant. The key is stored as typed, at most six characters.
-          Release at creation is the character X or blank. Batch creation in the order is blank, 1, or 2.
-          Opening this screen does not select a plant and does not create a profile. It does not print,
-          schedule, check availability or capacity, post a goods receipt, or classify a batch.
-          CO01, OMCZ, and OMAD are not this screen. A closed posting period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Production scheduling profile" code={<>{ACTIVITY} · {ALIAS}</>} width="4xl" back={null}
+      description="OPKP maintains the profile for a plant. The key is stored as typed, at most six characters. Release at creation is the character X or blank. Batch creation in the order is blank, 1, or 2. Opening this screen does not select a plant and does not create a profile. It does not print, schedule, check availability or capacity, post a goods receipt, or classify a batch. CO01, OMCZ, and OMAD are not this screen. A closed posting period does not block it."
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm">
@@ -67,6 +61,6 @@ export default async function SchedulingProfilesPage({
         canMaintain={canMaintain}
         selectedPlant={selectedPlant}
       />
-    </div>
+    </Page>
   );
 }

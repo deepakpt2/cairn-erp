@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
 
 import { can, requireSession } from '@/platform/auth/current';
@@ -6,6 +5,7 @@ import { withTenant } from '@/platform/db/client';
 import { t } from '@/platform/i18n';
 import { chartOfAccounts as chartOfAccountsTable, companyCode } from '@/modules/foundation/schema';
 import { CoaAssignmentForm } from './CoaAssignmentForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,22 +61,20 @@ export default async function AssignChartOfAccountsPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('coaAssign.title')}</h1>
-          <div className="flex gap-2">
-            <Link href="/config/company-codes" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('coaAssign.backToCompanyCodes')}
-            </Link>
-            <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('nav.workbench')}
-            </Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('coaAssign.subtitle')}</p>
-      </header>
+    <Page
+      title={t('coaAssign.title')} code={ACTIVITY} back={null}
+      description={t('coaAssign.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config/company-codes">
+                        {t('coaAssign.backToCompanyCodes')}
+                      </LinkButton>
+          <LinkButton href="/config">
+                        {t('nav.workbench')}
+                      </LinkButton>
+        </>
+      }
+    >
 
       {!canAssign && (
         <p role="status" className="border border-line bg-surface p-4 text-sm text-ink-soft">
@@ -123,6 +121,6 @@ export default async function AssignChartOfAccountsPage() {
         </table>
         <p className="mt-2 text-sm text-ink-soft">{t('cc.initialCoaNote')}</p>
       </section>
-    </div>
+    </Page>
   );
 }

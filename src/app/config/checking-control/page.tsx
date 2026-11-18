@@ -1,8 +1,8 @@
-import Link from 'next/link';
 
 import CheckingControlForm from './CheckingControlForm';
 import { can, requireSession } from '@/platform/auth/current';
 import { ACTIVITY, ALIAS, listCheckingControls, ROUTE } from '@/modules/production/checking-control';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,19 +13,15 @@ export default async function CheckingControlPage() {
   const current = await listCheckingControls(session.user.client);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIAS}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Checking control</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          The key is a standing plant, a standing production order type, and business function 1 or 2.
-          A missing combination is not configured. Saving does not run an availability check, create an order, or release one.
-          CO09 remains blocked.
-        </p>
-      </header>
+    <Page
+      title="Checking control" code={<>{ACTIVITY} · {ALIAS}</>} width="4xl" back={null}
+      description="The key is a standing plant, a standing production order type, and business function 1 or 2. A missing combination is not configured. Saving does not run an availability check, create an order, or release one. CO09 remains blocked."
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm">
           Display only. Ask an administrator for {ACTIVITY}.
@@ -38,6 +34,6 @@ export default async function CheckingControlPage() {
         </ul>
       </section>
       <CheckingControlForm controls={current.controls} canMaintain={canMaintain} />
-    </div>
+    </Page>
   );
 }

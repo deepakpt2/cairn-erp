@@ -1,10 +1,10 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { getMailConfig, listMailQueue, MAIL_DEFINE_CAPABILITY } from '@/platform/mail/service';
 import { isSelfServiceResetEnabled } from '@/modules/platform/user-admin';
 import { withTenant } from '@/platform/db/client';
 import { DeleteMessageButton, FlushButton, NodeForm, PasswordResetPanel, TestPanel } from './MailForms';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,17 +20,15 @@ export default async function MailPage() {
   const selfService = allowed ? await withTenant(client, (tx) => isSelfServiceResetEnabled(tx, client)) : false;
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{MAIL_DEFINE_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Mail server configuration</h1>
-          <Link href="/" className="btn btn-default">Launchpad</Link>
-        </div>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-          One outbound mail node per tenant. Messages are queued and sent by the MAIL.SEND job every five minutes, or at once with Flush queue.
-        </p>
-      </header>
+    <Page
+      title="Mail server configuration" code={MAIL_DEFINE_CAPABILITY} back={null}
+      description="One outbound mail node per tenant. Messages are queued and sent by the MAIL.SEND job every five minutes, or at once with Flush queue."
+      actions={
+        <>
+          <LinkButton href="/">Launchpad</LinkButton>
+        </>
+      }
+    >
 
       {!config ? (
         <p role="alert" className="text-sm text-signal-error">This screen needs {MAIL_DEFINE_CAPABILITY}, which this session does not hold.</p>
@@ -70,6 +68,6 @@ export default async function MailPage() {
           </section>
         </>
       )}
-    </main>
+    </Page>
   );
 }

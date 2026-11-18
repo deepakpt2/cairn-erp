@@ -17,6 +17,7 @@ import {
 import { USER_ROLE_MAINTAIN_CAPABILITY } from '@/modules/platform/role-admin';
 
 import { ApplyButton, CancelButton, CompleteButton, CreateReviewForm, DecideForm } from './AccessReviewForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,22 +45,23 @@ export default async function AccessReviewPage({ searchParams }: { searchParams:
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{AUDIT_ACCESS_REVIEW_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Access review</h1>
-          <div className="flex gap-2">
-            {allowed && <Link href={`${AUDIT_ACCESS_REVIEW_ROUTE}?new=1`} className="btn btn-primary min-h-11 sm:min-h-8">New review</Link>}
-            <Link href="/platform/users" className="btn btn-default min-h-11 sm:min-h-8">Users</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-          <strong>A review certifies what users hold; it does not grant or remove anything. Removal is a separate act, by a separate authority.</strong>{' '}
-          <strong>You cannot decide on your own access.</strong>
-        </p>
-      </header>
+    <Page
+      title="Access review" code={AUDIT_ACCESS_REVIEW_CAPABILITY} width="7xl" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              <strong>A review certifies what users hold; it does not grant or remove anything. Removal is a separate act, by a separate authority.</strong>{' '}
+              <strong>You cannot decide on your own access.</strong>
+            </p>
+        </>
+      }
+      actions={
+        <>
+          {allowed && <Link href={`${AUDIT_ACCESS_REVIEW_ROUTE}?new=1`} className="btn btn-primary min-h-11 sm:min-h-8">New review</Link>}
+          <LinkButton href="/platform/users">Users</LinkButton>
+        </>
+      }
+    >
 
       {!allowed && <p role="status" className="text-sm text-ink-soft">You do not hold the access review capability. Ask for {AUDIT_ACCESS_REVIEW_CAPABILITY}.</p>}
 
@@ -169,6 +171,6 @@ export default async function AccessReviewPage({ searchParams }: { searchParams:
           })}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

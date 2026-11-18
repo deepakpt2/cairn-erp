@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -8,6 +7,7 @@ import {
 import { ShippingConditionSetup } from './ShippingConditionSetup';
 import { ShippingPointSetup } from './ShippingPointSetup';
 import { ShippingPointAssignmentSetup } from './ShippingPointAssignmentSetup';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,28 +22,27 @@ export default async function ShippingPointsPage() {
       .some((row) => row.deliveringPlant === site.plant && row.isActive && row.shippingCondition === '' && row.loadingGroup === ''));
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{SHIPPING_POINT_CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Shipping points</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Where the goods leave from. A delivery names the plant its stock stands in, and the plant is not
-          the answer a warehouse needs: what it needs is the dock. That is derived, from three things the
-          documents and the masters already carry — the shipping condition of the customer the goods are
-          going to, the loading group of the material being sent, and the delivering plant. Those three
-          name a shipping point through the table maintained here, and where no row fits, the delivery is
-          refused rather than raised with no dock to load from.
-        </p>
-        {!canMaintain && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. Maintenance requires an explicit exact-code role grant for{' '}
-            {SHIPPING_POINT_CAPABILITY}; broad wildcard role patterns do not grant it.
-          </p>
-        )}
-      </header>
+    <Page
+      title="Shipping points" code={<>{SHIPPING_POINT_CAPABILITY} · SD</>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Where the goods leave from. A delivery names the plant its stock stands in, and the plant is not
+              the answer a warehouse needs: what it needs is the dock. That is derived, from three things the
+              documents and the masters already carry — the shipping condition of the customer the goods are
+              going to, the loading group of the material being sent, and the delivering plant. Those three
+              name a shipping point through the table maintained here, and where no row fits, the delivery is
+              refused rather than raised with no dock to load from.
+            </p>
+          {!canMaintain && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. Maintenance requires an explicit exact-code role grant for{' '}
+                {SHIPPING_POINT_CAPABILITY}; broad wildcard role patterns do not grant it.
+              </p>
+            )}
+        </>
+      }
+    >
 
       <section aria-labelledby="docks" className="border border-line bg-surface p-4">
         <h2 id="docks" className="text-sm font-semibold">The docks that stand</h2>
@@ -193,6 +192,6 @@ export default async function ShippingPointsPage() {
           />
         </>
       )}
-    </main>
+    </Page>
   );
 }

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { listCompanyCodes } from '@/modules/foundation/services';
@@ -7,6 +6,7 @@ import {
 } from '@/modules/foundation/retained-earnings-vocabulary';
 import { listRetainedEarnings } from '@/modules/foundation/retained-earnings';
 import { RetainedEarnings } from './RetainedEarnings';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,20 +26,24 @@ export default async function RetainedEarningsPage() {
   ).values()];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{RETAINED_EARNINGS_ACTIVITY} · OB53</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Retained Earnings Account</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Configuration workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Per chart of accounts, the retained earnings account each indicator closes to: the P&amp;L accounts carrying an
-          indicator transfer their balance to its retained earnings account at balance carryforward.
-        </p>
-      </header>
+    <Page
+      title="Retained Earnings Account" code={<>{RETAINED_EARNINGS_ACTIVITY} · OB53</>} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Per chart of accounts, the retained earnings account each indicator closes to: the P&amp;L accounts carrying an
+              indicator transfer their balance to its retained earnings account at balance carryforward.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/config">Configuration workbench</LinkButton>
+        </>
+      }
+    >
 
       <RetainedEarnings rows={rows} charts={charts} canMaintain={can(session, RETAINED_EARNINGS_ACTIVITY)} />
-    </div>
+    </Page>
   );
 }

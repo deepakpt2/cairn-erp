@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -6,6 +5,7 @@ import {
   listPricingConfiguration,
 } from '@/modules/sales/pricing-procedure-maintenance';
 import { PricingProcedureSetup } from './PricingProcedureSetup';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,27 +17,26 @@ export default async function PricingProcedurePage() {
   const canMaintain = can(session, PRICING_DEFINE_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{PRICING_DEFINE_CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Pricing procedures</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          How a sales document is priced: the condition types a figure can carry, the ordered steps of the
-          procedure that calculates them, and the determination that decides which procedure answers for a
-          sales area, a document type and a customer. Every order and every invoice is priced by this
-          configuration and by nothing else — a document is never priced by a procedure it found lying
-          around, and where no determination stands it is not priced at all.
-        </p>
-        {!canMaintain && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. Maintenance requires an explicit exact-code role grant for {PRICING_DEFINE_CAPABILITY};
-            broad wildcard role patterns do not grant it.
-          </p>
-        )}
-      </header>
+    <Page
+      title="Pricing procedures" code={<>{PRICING_DEFINE_CAPABILITY} · SD</>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              How a sales document is priced: the condition types a figure can carry, the ordered steps of the
+              procedure that calculates them, and the determination that decides which procedure answers for a
+              sales area, a document type and a customer. Every order and every invoice is priced by this
+              configuration and by nothing else — a document is never priced by a procedure it found lying
+              around, and where no determination stands it is not priced at all.
+            </p>
+          {!canMaintain && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. Maintenance requires an explicit exact-code role grant for {PRICING_DEFINE_CAPABILITY};
+                broad wildcard role patterns do not grant it.
+              </p>
+            )}
+        </>
+      }
+    >
 
       <section aria-labelledby="pricing-types" className="border border-line bg-surface p-4">
         <h2 id="pricing-types" className="text-sm font-semibold">Condition types as configured</h2>
@@ -194,6 +193,6 @@ export default async function PricingProcedurePage() {
           determinations={configuration.determinations}
         />
       )}
-    </main>
+    </Page>
   );
 }

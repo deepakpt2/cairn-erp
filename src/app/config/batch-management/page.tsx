@@ -10,6 +10,7 @@ import {
   RELATED_BATCH_NODES,
   ROUTE,
 } from '@/modules/inventory/batch-management-img';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,19 +23,15 @@ export default async function BatchManagementImgPage() {
   await requireSession(ROUTE);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIAS}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">IMG Batch Management</h1>
-          <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">Workbench</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OCHA opens this index. It is not CT04. It does not define a characteristic, assign a class,
-          store a batch value, create a batch, or post. Opening it writes nothing. A closed posting
-          period does not block it.
-        </p>
-      </header>
+    <Page
+      title="IMG Batch Management" code={<>{ACTIVITY} · {ALIAS}</>} width="3xl" back={null}
+      description="OCHA opens this index. It is not CT04. It does not define a characteristic, assign a class, store a batch value, create a batch, or post. Opening it writes nothing. A closed posting period does not block it."
+      actions={
+        <>
+          <LinkButton href="/config">Workbench</LinkButton>
+        </>
+      }
+    >
 
       <section className="border border-line bg-white p-4">
         <h2 className="text-sm font-semibold">Batch management</h2>
@@ -97,6 +94,6 @@ export default async function BatchManagementImgPage() {
           Not opened from here: {NOT_OPENED.join(', ')}. No route is invented for them.
         </p>
       </section>
-    </div>
+    </Page>
   );
 }
