@@ -9,6 +9,7 @@ import { changeHistory } from '@/platform/change';
 import { formatNumber } from '@/platform/numbering';
 import { AdjustCurrentForm, RangeForm } from './RangeForm';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,15 +33,16 @@ export default async function NumberRangesPage({ searchParams }: {
     : null;
   const held = !selected || changeLock?.mode === 'CHANGE';
 
-  return <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-    <header className="border-b border-line pb-4">
-      <span className="code text-ink-faint">{NUMBER_RANGE_ACTIVITY}</span>
-      <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">{t('nr.title')}</h1>
-        <div className="flex gap-2"><Link href="/config/number-range-objects" className="btn btn-default">Number range objects</Link><Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link>{editable && <Link href="/config/number-ranges?new=1" className="btn btn-primary">{t('nr.create')}</Link>}</div>
-      </div>
-      <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('nr.subtitle')}</p>
-    </header>
+  return <Page
+      title={t('nr.title')} code={NUMBER_RANGE_ACTIVITY} back={{ href: '/config', label: t('nav.workbench') }}
+      description={t('nr.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/config/number-range-objects">undefined</LinkButton>
+          {editable && <LinkButton href="/config/number-ranges?new=1" variant="primary">undefined</LinkButton>}
+        </>
+      }
+    >
 
     <section className={`border p-3 ${readiness.ready ? 'border-signal-ok/30 bg-signal-ok-soft' : 'border-signal-warn/30 bg-signal-warn-soft'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className={`text-sm font-semibold ${readiness.ready ? 'text-signal-ok' : 'text-signal-warn'}`}>{t(readiness.ready ? 'nr.ready' : 'nr.setupRequired')}</h2><span className="code text-ink-soft">{readiness.fiscalYear}</span></div>
@@ -86,5 +88,5 @@ export default async function NumberRangesPage({ searchParams }: {
       <table className="grid-table"><thead><tr>{['nr.number', 'nr.year', 'nr.document', 'nr.by', 'nr.at'].map((k) => <th key={k}>{t(k)}</th>)}</tr></thead><tbody>{allocations.map((a) => <tr key={a.id}><td className="code">{a.displayedNumber}</td><td className="tabular">{a.fiscalYear || '—'}</td><td className="code">{a.documentId && a.objectCode === 'RF_BELEG' ? <Link className="text-accent underline" href={`/finance/journal?document=${encodeURIComponent(a.documentId)}`}>{a.documentId}</Link> : a.documentId ?? '—'}</td><td>{a.allocatedBy}</td><td className="tabular">{a.allocatedAt.toISOString()}</td></tr>)}</tbody></table>
       {!allocations.length && <p className="p-3 text-sm text-ink-soft">{t('nr.noAllocations')}</p>}
     </section>}
-  </div>;
+  </Page>;
 }

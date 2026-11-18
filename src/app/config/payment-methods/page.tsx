@@ -11,6 +11,7 @@ import { changeHistory } from '@/platform/change';
 import { PaymentMethodForm } from './PaymentMethodForm';
 import { RetirePaymentMethodForm } from './RetirePaymentMethodForm';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,15 +55,10 @@ export default async function PaymentMethodsPage({ searchParams }: {
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{PAYMENT_METHOD_ACTIVITY}</span>
-        <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('pm.title')}</h1>
-          <Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('pm.subtitle')}</p>
-      </header>
+    <Page
+      title={t('pm.title')} code={PAYMENT_METHOD_ACTIVITY} back={{ href: '/config', label: t('nav.workbench') }}
+      description={t('pm.subtitle')}
+    >
 
       <form method="get" className="flex flex-wrap items-end gap-2">
         <label>
@@ -187,6 +183,6 @@ export default async function PaymentMethodsPage({ searchParams }: {
           {!history.length && <p className="p-3 text-sm text-ink-soft">{t('pm.noChanges')}</p>}
         </section>}
       </>}
-    </div>
+    </Page>
   );
 }

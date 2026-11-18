@@ -11,6 +11,7 @@ import { plant as plantTable, storageLocation as storageLocationTable } from '@/
 import { StorageLocationForm, type StorageLocationDraft } from './StorageLocationForm';
 import { DeactivateStorageLocationForm } from './DeactivateStorageLocationForm';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,23 +94,22 @@ export default async function StorageLocationsPage({
     : undefined;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{STORAGE_LOCATION_DEFINE}</span>
-        <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('storageLocation.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link>
-            {canMaintain && (
-              <Link href="/config/storage-locations?new=1" className="btn btn-primary">
-                {t('storageLocation.create')}
-              </Link>
-            )}
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('storageLocation.subtitle')}</p>
-        <p className="mt-2 text-xs text-ink-soft">{t('storageLocation.negativeStockNote')}</p>
-      </header>
+    <Page
+      title={t('storageLocation.title')} code={STORAGE_LOCATION_DEFINE} back={{ href: '/config', label: t('nav.workbench') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('storageLocation.subtitle')}</p>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('storageLocation.negativeStockNote')}</p>
+        </>
+      }
+      actions={
+        <>
+          {canMaintain && (
+                        <LinkButton href="/config/storage-locations?new=1" variant="primary">undefined</LinkButton>
+                      )}
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -270,6 +270,6 @@ export default async function StorageLocationsPage({
         <p className="border-t border-line px-4 py-3 text-xs text-ink-soft">{t('storageLocation.retentionNote')}</p>
       </section>
 
-    </div>
+    </Page>
   );
 }

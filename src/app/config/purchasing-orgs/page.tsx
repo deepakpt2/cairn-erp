@@ -10,6 +10,7 @@ import { getPurchasingOrgDefinitionVersion } from '@/modules/foundation/purchasi
 import { purchasingOrg as purchasingOrgTable, purchasingOrgPlant as purchasingOrgPlantTable } from '@/modules/foundation/schema';
 import { DeactivatePurchasingOrgForm } from './DeactivatePurchasingOrgForm';
 import { PurchasingOrgDefinitionForm, type PurchasingOrgDefinitionDraft } from './PurchasingOrgDefinitionForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,33 +98,28 @@ export default async function PurchasingOrgsPage({
     : undefined;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{PURCHASING_ORG_DEFINE}</span>
-        <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('purchasingOrg.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link>
-            {canAssignCompany && (
-              <Link href="/config/purchasing-orgs/assign-company" className="btn btn-default">
-                {t('purchasingOrg.assignCompanyCode')}
-              </Link>
-            )}
-            {canAssignPlant && (
-              <Link href="/config/purchasing-orgs/assign-plant" className="btn btn-default">
-                {t('purchasingOrg.assignPlant')}
-              </Link>
-            )}
-            {canMaintain && (
-              <Link href="/config/purchasing-orgs?new=1" className="btn btn-primary">
-                {t('purchasingOrg.create')}
-              </Link>
-            )}
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchasingOrg.subtitle')}</p>
-        <p className="mt-2 max-w-3xl text-xs text-ink-soft">{t('purchasingOrg.assignmentSeparationNote')}</p>
-      </header>
+    <Page
+      title={t('purchasingOrg.title')} code={PURCHASING_ORG_DEFINE} back={{ href: '/config', label: t('nav.workbench') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('purchasingOrg.subtitle')}</p>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('purchasingOrg.assignmentSeparationNote')}</p>
+        </>
+      }
+      actions={
+        <>
+          {canAssignCompany && (
+                        <LinkButton href="/config/purchasing-orgs/assign-company">undefined</LinkButton>
+                      )}
+          {canAssignPlant && (
+                        <LinkButton href="/config/purchasing-orgs/assign-plant">undefined</LinkButton>
+                      )}
+          {canMaintain && (
+                        <LinkButton href="/config/purchasing-orgs?new=1" variant="primary">undefined</LinkButton>
+                      )}
+        </>
+      }
+    >
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
@@ -297,6 +293,6 @@ export default async function PurchasingOrgsPage({
         )}
         <p className="border-t border-line px-4 py-3 text-xs text-ink-soft">{t('purchasingOrg.retentionNote')}</p>
       </section>
-    </div>
+    </Page>
   );
 }

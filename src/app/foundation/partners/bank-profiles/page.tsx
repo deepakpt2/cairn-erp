@@ -4,6 +4,7 @@ import { listPartnerBankProfileActivationRows } from '@/modules/foundation/partn
 import { PARTNER_BANK_PROFILE_ACTIVATE_CAPABILITY } from '@/platform/security/partner-bank-profile-activation';
 import { t } from '@/platform/i18n';
 import { PartnerBankProfileActivationPanel } from '../PartnerBankProfileActivationPanel';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,19 +22,16 @@ export default async function PartnerBankProfilesPage() {
 
   const rows = await listPartnerBankProfileActivationRows();
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{PARTNER_BANK_PROFILE_ACTIVATE_CAPABILITY}</span>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">{t('bp.profile.pageTitle')}</h1>
-          <div className="flex gap-2">
-            <Link className="btn btn-default" href="/foundation/partners">{t('bp.profile.backToPartners')}</Link>
-            <Link className="btn btn-default" href="/config">{t('nav.workbench')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 text-sm text-ink-soft">{t('bp.profile.pageSubtitle')}</p>
-      </header>
+    <Page
+      title={t('bp.profile.pageTitle')} code={PARTNER_BANK_PROFILE_ACTIVATE_CAPABILITY} back={{ href: '/config', label: t('nav.workbench') }}
+      description={t('bp.profile.pageSubtitle')}
+      actions={
+        <>
+          <Link className="btn btn-default" href="/foundation/partners">{t('bp.profile.backToPartners')}</Link>
+        </>
+      }
+    >
       <PartnerBankProfileActivationPanel rows={rows} />
-    </main>
+    </Page>
   );
 }

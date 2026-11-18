@@ -12,6 +12,7 @@ import { changeHistory } from '@/platform/change';
 import { MaterialForm } from './MaterialForm';
 import DeletionFlags from './DeletionFlags';
 import ShelfLifePanel from './ShelfLifePanel';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,12 +76,16 @@ export default async function MaterialsPage({ searchParams }: {
       ? await changeHistory(tx, client, 'material_sales', `${detail.base.materialNumber}/${area.salesOrg}/${channel.distributionChannel}`) : []),
   ]) : [];
 
-  return <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-    <header className="border-b border-line pb-4"><span className="code text-ink-faint">INV.MATERIAL.MAINTAIN</span>
-      <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3"><h1 className="text-xl font-semibold tracking-tight">{t(creating ? 'material.create' : 'material.title')}</h1>
-        <div className="flex gap-2"><Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link><Link href="/inventory/materials" className="btn btn-default">{t('material.list')}</Link>{can(session, MATERIAL_VIEW_CAPABILITY.BASIC) && !creating && <Link href="/inventory/materials?new=1" className="btn btn-primary">{t('material.create')}</Link>}</div>
-      </div><p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('material.subtitle')}</p>
-    </header>
+  return <Page
+      title={t(creating ? 'material.create' : 'material.title')} code="INV.MATERIAL.MAINTAIN" back={{ href: '/config', label: t('nav.workbench') }}
+      description={t('material.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/inventory/materials">undefined</LinkButton>
+          {can(session, MATERIAL_VIEW_CAPABILITY.BASIC) && !creating && <LinkButton href="/inventory/materials?new=1" variant="primary">undefined</LinkButton>}
+        </>
+      }
+    >
     {changeLock?.mode === 'CHANGE' && detail && <ChangeLock lockObject="MATERIAL" argument={detail.base.materialNumber} />}
     {changeLock?.mode === 'DISPLAY' && <p role="status" className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn">{displayOnlyMessage(changeLock)}</p>}
     {params.material && !detail && <div className="border border-signal-error/30 bg-signal-error-soft p-3 text-sm text-signal-error">{t('material.notFound', { number: params.material })}</div>}
@@ -104,6 +109,6 @@ export default async function MaterialsPage({ searchParams }: {
       <section className="panel overflow-x-auto"><table className="grid-table"><thead><tr>{['material.number', 'material.description', 'material.type', 'material.group', 'material.baseUnit', 'material.status', 'common.actions'].map((key) => <th key={key}>{t(key)}</th>)}</tr></thead><tbody>{rows.map((m) => <tr key={m.materialNumber}><td><Link className="code text-accent underline" href={`/inventory/materials?material=${encodeURIComponent(m.materialNumber)}&view=${view}`}>{m.materialNumber}</Link></td><td>{m.description || '—'}</td><td className="code">{m.materialType}</td><td className="code">{m.materialGroup ?? '—'}</td><td className="code">{m.baseUnit ?? '—'}</td><td><span className={`chip ${m.isBlocked ? 'chip-error' : m.basicStatus === 'INCOMPLETE' ? 'chip-warn' : 'chip-ok'}`}>{t(`material.state.${m.isBlocked ? 'BLOCKED' : m.basicStatus}`)}</span></td><td>{can(session, MATERIAL_VIEW_CAPABILITY.BASIC) && <Link className="text-accent underline" href={`/inventory/materials?new=1&copy=${encodeURIComponent(m.materialNumber)}`}>{t('material.copy')}</Link>}</td></tr>)}</tbody></table>{!rows.length && <p className="p-5 text-sm text-ink-soft">{t('material.empty')}</p>}<p className="border-t border-line p-2 text-2xs text-ink-faint">{t('material.listLimit')}</p></section>
     </>}
     {params.history === '1' && detail && <section className="panel"><div className="panel-header"><h2 className="panel-title">{t('material.history')}</h2></div>{history.sort((a,b) => b.changedAt.getTime()-a.changedAt.getTime()).map((d) => <article key={d.id} className="border-b border-line p-3 text-sm"><p className="font-medium">{d.changedAt.toISOString()} · {d.changedBy} · <span className="code">{d.objectClass}</span> · {d.changeType}</p>{d.reason && <p className="text-ink-soft">{d.reason}</p>}<ul className="mt-1 text-2xs text-ink-soft">{d.items.map((i) => <li key={i.id}>{i.fieldLabel}: {i.oldValue ?? '—'} → {i.newValue ?? '—'}{i.isSecurityRelevant === 'true' ? ` · ${t('nr.controlChange')}` : ''}</li>)}</ul></article>)}</section>}
-  </div>;
+  </Page>;
 }
 function Summary({ label, value }: { label: string; value: string }) { return <div><p className="text-2xs uppercase tracking-wide text-ink-faint">{label}</p><p className="mt-1 font-medium">{value}</p></div>; }
