@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { ReportExport } from '@/ui/output/ReportExport';
@@ -9,6 +8,7 @@ import {
   ProductionOrderCostReportError,
   type ProductionOrderCostReport,
 } from '@/modules/production/order-cost-report';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,10 +26,11 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
   const session = await requireSession(PRODUCTION_ORDER_COST_REPORT_ROUTE);
   if (!can(session, PRODUCTION_ORDER_COST_REPORT_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Production order cost report</h1>
+      <Page
+      title="Production order cost report" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold {PRODUCTION_ORDER_COST_REPORT_CAPABILITY}.</p>
-      </main>
+      </Page>
     );
   }
 
@@ -57,19 +58,18 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6" data-production-order-cost-report>
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{PRODUCTION_ORDER_COST_REPORT_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Production order cost report</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-4xl text-sm text-ink-soft">
-          Read-only posted journal actuals assigned to one production order. Debit, credit, and net are shown separately in document and local currency.
-          Confirmation activity quantities are not monetarily valued here; plan rates are not actuals. This report does not settle, post, or calculate WIP or variance.
-        </p>
-        {report && <div className="mt-3"><ReportExport report="production-order-cost" params={raw} /></div>}
-      </header>
+    <Page
+      title="Production order cost report" code={PRODUCTION_ORDER_COST_REPORT_CAPABILITY}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Read-only posted journal actuals assigned to one production order. Debit, credit, and net are shown separately in document and local currency.
+              Confirmation activity quantities are not monetarily valued here; plan rates are not actuals. This report does not settle, post, or calculate WIP or variance.
+            </p>
+          {report && <div className="mt-3"><ReportExport report="production-order-cost" params={raw} /></div>}
+        </>
+      }
+    >
 
       <form className="grid gap-2 sm:grid-cols-5" method="get">
         <label className="grid gap-1 text-sm sm:col-span-2">
@@ -161,6 +161,6 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
           </aside>
         </section>
       )}
-    </main>
+    </Page>
   );
 }

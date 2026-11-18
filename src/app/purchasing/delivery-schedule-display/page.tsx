@@ -25,10 +25,11 @@ export default async function DeliveryScheduleDisplayPage({ searchParams }: {
   const allowed = can(session, SCHEDULE_DISPLAY_CAPABILITY) || can(session, SCHEDULE_MAINTAIN_CAPABILITY);
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display delivery schedule</h1>
+      <Page
+      title="Display delivery schedule" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the delivery-schedule display capability (PROC.SCHEDLINE.DISPLAY).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

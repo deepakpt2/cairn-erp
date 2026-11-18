@@ -10,7 +10,11 @@ const WIDTHS = {
   '5xl': 'max-w-5xl',
   '6xl': 'max-w-6xl',
   '7xl': 'max-w-7xl',
+  '80rem': 'max-w-[80rem]',
+  '90rem': 'max-w-[90rem]',
+  '96rem': 'max-w-[96rem]',
   '100rem': 'max-w-[100rem]',
+  '110rem': 'max-w-[110rem]',
   '120rem': 'max-w-[120rem]',
 } as const;
 

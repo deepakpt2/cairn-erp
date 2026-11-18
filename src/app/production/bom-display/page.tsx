@@ -32,10 +32,11 @@ export default async function MaterialBomDisplayPage({ searchParams }: {
   const session = await requireSession(BOM_DISPLAY_ROUTE);
   if (!can(session, BOM_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display material BOM</h1>
+      <Page
+      title="Display material BOM" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the BOM display capability (PROD.BOM.DISPLAY).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

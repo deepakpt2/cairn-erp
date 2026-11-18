@@ -9,6 +9,7 @@ import {
   listProductionOrders,
   productionOrderDisplayRefusal,
 } from '@/modules/production/production-order-display';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,10 +26,11 @@ export default async function ProductionOrderDisplayPage({
   const session = await requireSession(PRODUCTION_ORDER_DISPLAY_ROUTE);
   if (!can(session, PRODUCTION_ORDER_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display production order</h1>
+      <Page
+      title="Display production order" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold production-order display ({PRODUCTION_ORDER_DISPLAY_CAPABILITY}).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;
@@ -71,13 +73,17 @@ export default async function ProductionOrderDisplayPage({
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <p className="text-sm text-ink-faint">PROD.ORDER.DISPLAY · CO03</p>
-      <h1 className="mt-1 text-xl font-semibold">Display production order</h1>
-      <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-        Display reads the order. It does not change, release, or post.
-        <Link className="ml-2" href="/production/production-order-change">Change is a different screen.</Link>
-      </p>
+    <Page
+      title="Display production order" code="PROD.ORDER.DISPLAY · CO03" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            Display reads the order. It does not change, release, or post.
+            <Link className="ml-2" href="/production/production-order-change">Change is a different screen.</Link>
+          </p>
+        </>
+      }
+    >
       {document && (
         <p className="mt-2 text-sm">
           <Link href={`/production/order-cost-report?order=${encodeURIComponent(document.orderNumber)}`}>Read posted production-order costs</Link>
@@ -223,6 +229,6 @@ export default async function ProductionOrderDisplayPage({
           )}
         </section>
       )}
-    </main>
+    </Page>
   );
 }

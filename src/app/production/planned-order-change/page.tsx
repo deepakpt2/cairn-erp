@@ -15,6 +15,7 @@ import {
   listPlannedOrders,
 } from '@/modules/production/planned-order-display';
 import PlannedOrderForm from './PlannedOrderForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,10 +32,11 @@ export default async function PlannedOrderChangePage({
   const session = await requireSession(PLANNED_ORDER_CHANGE_ROUTE);
   if (!can(session, PLANNED_ORDER_CHANGE_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Change planned order</h1>
+      <Page
+      title="Change planned order" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the planned-order change capability ({PLANNED_ORDER_CHANGE_CAPABILITY}).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;
@@ -68,15 +70,19 @@ export default async function PlannedOrderChangePage({
   const locked = lock?.mode === 'DISPLAY';
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <p className="text-sm text-ink-faint">PROD.PLANNEDORDER.CHANGE · MD12</p>
-      <h1 className="mt-1 text-xl font-semibold">Change planned order</h1>
-      <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-        Change the quantity, the dates, or the firming indicator. The number, material, and plant stay fixed.
-        This screen does not convert the order, explode a bill of material, or post.
-        <Link className="ml-2" href={PLANNED_ORDER_DISPLAY_ROUTE}>Display writes nothing.</Link>
-        <Link className="ml-2" href="/production/planned-order-create">Create is a different screen.</Link>
-      </p>
+    <Page
+      title="Change planned order" code="PROD.PLANNEDORDER.CHANGE · MD12" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            Change the quantity, the dates, or the firming indicator. The number, material, and plant stay fixed.
+            This screen does not convert the order, explode a bill of material, or post.
+            <Link className="ml-2" href={PLANNED_ORDER_DISPLAY_ROUTE}>Display writes nothing.</Link>
+            <Link className="ml-2" href="/production/planned-order-create">Create is a different screen.</Link>
+          </p>
+        </>
+      }
+    >
       {openError && <p role="status" className="mt-3 text-sm text-danger">{openError}</p>}
       {lock && displayOnlyMessage(lock) && <p className="mt-3 text-sm">{displayOnlyMessage(lock)}</p>}
       <form className="mt-4 grid gap-2 sm:grid-cols-4" method="get">
@@ -128,6 +134,6 @@ export default async function PlannedOrderChangePage({
             : <PlannedOrderForm document={document} />}
         </section>
       )}
-    </main>
+    </Page>
   );
 }

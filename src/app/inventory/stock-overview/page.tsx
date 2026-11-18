@@ -10,6 +10,7 @@ import {
 } from '@/modules/inventory/stock-overview';
 import StockOverviewShell from './StockOverviewShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,15 +54,15 @@ export default async function StockOverviewPage({
   }
 
   return (
-    <div className="mx-auto max-w-[80rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.STOCK.VIEW · MMBE</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('stockOvw.title')}</h1>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('stockOvw.subtitle')}</p>
-        {result && <div className="mt-3"><ReportExport report="stock-overview" params={params} /></div>}
-      </header>
+    <Page
+      title={t('stockOvw.title')} code="INV.STOCK.VIEW · MMBE" width="80rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('stockOvw.subtitle')}</p>
+          {result && <div className="mt-3"><ReportExport report="stock-overview" params={params} /></div>}
+        </>
+      }
+    >
 
       <StockOverviewShell
         canUse={can(session, STOCK_OVERVIEW_CAPABILITY)}
@@ -69,6 +70,6 @@ export default async function StockOverviewPage({
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

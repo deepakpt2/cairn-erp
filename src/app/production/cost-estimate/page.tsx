@@ -28,6 +28,7 @@ import {
 } from '@/modules/production/cost-estimate';
 
 import { CostEstimateForm } from './CostEstimateForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,29 +71,30 @@ export default async function CostEstimatePage({ searchParams }: { searchParams:
   }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{COST_ESTIMATE_CAPABILITY} · CK11N / CK13N</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Standard cost estimate</h1>
-          <div className="flex gap-2">
-            <Link href="/production/bom-explosion" className="btn btn-default min-h-11 sm:min-h-8">BOM explosion</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Costs one made material in one plant on a costing date: the multi-level BOM costed bottom-up (a made component from its own
-          components and operations, never from its standard price), plus the routing operations at plan activity prices. The estimate is
-          saved with its itemization; a newer one for the same date supersedes it and the old one stays on record. Nothing is released:
-          no price is changed.
-        </p>
-        <ul className="mt-2 max-w-3xl list-disc space-y-0.5 pl-5 text-xs text-ink-soft">
-          <li>Bought component: standard or moving average price (by its price control) divided by its price unit; a zero price is refused.</li>
-          <li>Operation: its quantity against its base quantity, at the plan activity price (fixed + variable per price unit) of its work centre&apos;s cost centre and activity type, plan version {DEFAULT_PLAN_VERSION} unless another is entered.</li>
-          <li>Overhead is zero: no costing sheet or overhead rate exists, so none is applied or approximated.</li>
-          <li>Not costed: co-products, special procurement, external processing, subcontracting. These are refused by name, not estimated.</li>
-        </ul>
-      </header>
+    <Page
+      title="Standard cost estimate" code={<>{COST_ESTIMATE_CAPABILITY} · CK11N / CK13N</>} width="7xl"
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Costs one made material in one plant on a costing date: the multi-level BOM costed bottom-up (a made component from its own
+              components and operations, never from its standard price), plus the routing operations at plan activity prices. The estimate is
+              saved with its itemization; a newer one for the same date supersedes it and the old one stays on record. Nothing is released:
+              no price is changed.
+            </p>
+          <ul className="mt-2 max-w-3xl list-disc space-y-0.5 pl-5 text-xs text-ink-soft">
+              <li>Bought component: standard or moving average price (by its price control) divided by its price unit; a zero price is refused.</li>
+              <li>Operation: its quantity against its base quantity, at the plan activity price (fixed + variable per price unit) of its work centre&apos;s cost centre and activity type, plan version {DEFAULT_PLAN_VERSION} unless another is entered.</li>
+              <li>Overhead is zero: no costing sheet or overhead rate exists, so none is applied or approximated.</li>
+              <li>Not costed: co-products, special procurement, external processing, subcontracting. These are refused by name, not estimated.</li>
+            </ul>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/bom-explosion">BOM explosion</LinkButton>
+        </>
+      }
+    >
 
       {!allowed ? (
         <p role="status" className="text-sm text-ink-soft">You do not hold {COST_ESTIMATE_CAPABILITY}. Ask for it to create or display cost estimates.</p>
@@ -213,6 +215,6 @@ export default async function CostEstimatePage({ searchParams }: { searchParams:
           </p>
         </section>
       )}
-    </main>
+    </Page>
   );
 }

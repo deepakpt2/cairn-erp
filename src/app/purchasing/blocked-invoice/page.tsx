@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { can, requireSession } from '@/platform/auth/current';
@@ -16,6 +15,7 @@ import {
 } from '@/modules/purchasing/blocked-invoice';
 
 import { PlaceHoldForm, ReleaseHoldForm } from './BlockedInvoiceForms';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,20 +86,21 @@ export default async function BlockedInvoicePage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('blockedInvoice.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('blockedInvoice.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/invoice-overview" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.title')}</Link>
-            <Link href="/finance/payment-run" className="btn btn-default min-h-11 sm:min-h-8">{t('blockedInvoice.paymentRun')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('blockedInvoice.subtitle')}</p>
-        {notice && <p className="mt-3 text-sm" role="status" data-blocked-invoice-notice>{notice}</p>}
-      </header>
+    <Page
+      title={t('blockedInvoice.title')} code={t('blockedInvoice.code')} width="120rem" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('blockedInvoice.subtitle')}</p>
+          {notice && <p className="mt-3 text-sm" role="status" data-blocked-invoice-notice>{notice}</p>}
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/invoice-overview">{t('invoiceOverview.title')}</LinkButton>
+          <LinkButton href="/finance/payment-run">{t('blockedInvoice.paymentRun')}</LinkButton>
+        </>
+      }
+    >
 
       {!canRelease && <p className="text-sm text-signal-error" role="alert">{t('blockedInvoice.capabilityMissing')}</p>}
 
@@ -229,6 +230,6 @@ export default async function BlockedInvoicePage({ searchParams }: {
           </ul>
         </section>
       )}
-    </div>
+    </Page>
   );
 }

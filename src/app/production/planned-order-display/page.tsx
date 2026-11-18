@@ -9,6 +9,7 @@ import {
   listPlannedOrders,
   plannedOrderDisplayRefusal,
 } from '@/modules/production/planned-order-display';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,10 +26,11 @@ export default async function PlannedOrderDisplayPage({
   const session = await requireSession(PLANNED_ORDER_DISPLAY_ROUTE);
   if (!can(session, PLANNED_ORDER_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display planned order</h1>
+      <Page
+      title="Display planned order" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the planned-order display capability ({PLANNED_ORDER_DISPLAY_CAPABILITY}).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;
@@ -72,12 +74,10 @@ export default async function PlannedOrderDisplayPage({
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <p className="text-sm text-ink-faint">PROD.PLANNEDORDER.DISPLAY · MD13</p>
-      <h1 className="mt-1 text-xl font-semibold">Display planned order</h1>
-      <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-        Display writes nothing. It does not firm, change, convert, or delete the order, and it does not take a change lock.
-      </p>
+    <Page
+      title="Display planned order" code="PROD.PLANNEDORDER.DISPLAY · MD13" width="5xl" back={null}
+      description="Display writes nothing. It does not firm, change, convert, or delete the order, and it does not take a change lock."
+    >
       {openError && <p role="status" data-md13-refused className="mt-3 text-sm text-danger">{openError}</p>}
       <form className="mt-4 grid gap-2 sm:grid-cols-4" method="get">
         <input className="input" name="order" defaultValue={orderNumber} maxLength={12} placeholder="Planned order" />
@@ -163,6 +163,6 @@ export default async function PlannedOrderDisplayPage({
           </p>
         </section>
       )}
-    </main>
+    </Page>
   );
 }

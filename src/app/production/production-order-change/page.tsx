@@ -16,6 +16,7 @@ import {
   productionOrderDisplayRefusal,
 } from '@/modules/production/production-order-display';
 import OrderChangeForm from './OrderChangeForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,10 +33,11 @@ export default async function ProductionOrderChangePage({
   const session = await requireSession(PRODUCTION_ORDER_CHANGE_ROUTE);
   if (!can(session, PRODUCTION_ORDER_CHANGE_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Change production order</h1>
+      <Page
+      title="Change production order" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold production-order change ({PRODUCTION_ORDER_CHANGE_CAPABILITY}).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;
@@ -78,14 +80,18 @@ export default async function ProductionOrderChangePage({
   const locked = lock?.mode === 'DISPLAY';
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <p className="text-sm text-ink-faint">PROD.ORDER.CHANGE · CO02</p>
-      <h1 className="mt-1 text-xl font-semibold">Change production order</h1>
-      <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-        Change the quantity, the dates, or the component snapshot, or technically complete the order and revoke that completion.
-        Technical completion is not a field on the quantity save. A goods movement freezes ordinary edits. This screen does not release the order or post.
-        <Link className="ml-2" href={PRODUCTION_ORDER_DISPLAY_ROUTE}>Display writes nothing.</Link>
-      </p>
+    <Page
+      title="Change production order" code="PROD.ORDER.CHANGE · CO02" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            Change the quantity, the dates, or the component snapshot, or technically complete the order and revoke that completion.
+            Technical completion is not a field on the quantity save. A goods movement freezes ordinary edits. This screen does not release the order or post.
+            <Link className="ml-2" href={PRODUCTION_ORDER_DISPLAY_ROUTE}>Display writes nothing.</Link>
+          </p>
+        </>
+      }
+    >
       {openError && <p role="status" className="mt-3 text-sm text-danger">{openError}</p>}
       {lock && displayOnlyMessage(lock) && <p className="mt-3 text-sm">{displayOnlyMessage(lock)}</p>}
       <form className="mt-4 grid gap-2 sm:grid-cols-4" method="get">
@@ -111,6 +117,6 @@ export default async function ProductionOrderChangePage({
       {document && locked && (
         <p className="mt-4 text-sm" data-order-type={document.orderType ?? ''}>Order type {document.orderType ?? 'not assigned'}. {document.orderNumber} is open for display only. Nothing was saved.</p>
       )}
-    </main>
+    </Page>
   );
 }

@@ -8,6 +8,7 @@ import {
   displayMaterialDocument,
   type DisplayedDocument,
 } from '@/modules/inventory/material-document-display';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,19 +67,19 @@ export default async function MaterialDocumentPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.DISPLAY · MB03</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">
+    <Page
+      title={<>
             {t('mdDoc.title')}{document ? ` ${document.materialDocumentNumber}` : ''}
-          </h1>
-          <Link href="/inventory/material-document-list" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('mdDoc.back')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mdDoc.subtitle')}</p>
-      </header>
+          </>} code="INV.DISPLAY · MB03" back={null}
+      description={t('mdDoc.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/inventory/material-document-list">
+                      {t('mdDoc.back')}
+                    </LinkButton>
+        </>
+      }
+    >
 
       {!canDisplay && (
         <div className="panel p-4 text-sm text-ink-soft" role="alert">{t('mdDoc.capabilityMissing')}</div>
@@ -285,6 +286,6 @@ export default async function MaterialDocumentPage({ searchParams }: {
           </section>
         </>
       )}
-    </div>
+    </Page>
   );
 }

@@ -31,10 +31,11 @@ export default async function SchedulingAgreementsPage({ searchParams }: {
     || can(session, RELEASE_CAPABILITIES.SCHED_AGREEMENT);
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Scheduling agreement</h1>
+      <Page
+      title="Scheduling agreement" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold a scheduling-agreement capability.</p>
-      </main>
+      </Page>
     );
   }
   const params = await searchParams;

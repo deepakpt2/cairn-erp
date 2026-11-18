@@ -12,6 +12,7 @@ import {
 } from '@/modules/inventory/shelf-life-list';
 import ShelfLifeListShell from './ShelfLifeListShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,14 +57,16 @@ export default async function ShelfLifeListPage({
     }
   }
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{SLED_LIST_CAPABILITY} · {SLED_LIST_ALIAS}</span>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">{t('mb5m.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mb5m.subtitle')}</p>
-        {result && <div className="mt-3"><ReportExport report="shelf-life-list" params={params} /></div>}
-      </header>
+    <Page
+      title={t('mb5m.title')} code={<>{SLED_LIST_CAPABILITY} · {SLED_LIST_ALIAS}</>} width="100rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('mb5m.subtitle')}</p>
+          {result && <div className="mt-3"><ReportExport report="shelf-life-list" params={params} /></div>}
+        </>
+      }
+    >
       <ShelfLifeListShell canUse={canUse} selection={selection} result={result} reportError={reportError} />
-    </div>
+    </Page>
   );
 }

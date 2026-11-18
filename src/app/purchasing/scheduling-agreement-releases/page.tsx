@@ -22,10 +22,11 @@ export default async function SchedulingAgreementReleasesPage({ searchParams }: 
   const session = await requireSession(RELEASE_ROUTE);
   if (!can(session, RELEASE_CREATE_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Scheduling agreement releases</h1>
+      <Page
+      title="Scheduling agreement releases" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the scheduling-agreement release capability (PROC.SARELEASE.CREATE).</p>
-      </main>
+      </Page>
     );
   }
   const agreement = last((await searchParams).agreement);

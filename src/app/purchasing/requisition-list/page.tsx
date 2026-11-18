@@ -10,6 +10,7 @@ import {
 } from '@/modules/purchasing/requisition-list';
 import RequisitionListShell from './RequisitionListShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,14 +60,10 @@ export default async function RequisitionListPage({
   }
 
   return (
-    <div className="mx-auto max-w-[110rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.REQ.LIST · ME5A</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('reqList.title')}</h1>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('reqList.subtitle')}</p>
-      </header>
+    <Page
+      title={t('reqList.title')} code="PROC.REQ.LIST · ME5A" width="110rem" back={null}
+      description={t('reqList.subtitle')}
+    >
 
       {result && result.rows.length > 0 && <div><ReportExport report="requisition-list" params={params} /></div>}
 
@@ -76,6 +73,6 @@ export default async function RequisitionListPage({
         result={result}
         listError={listError}
       />
-    </div>
+    </Page>
   );
 }

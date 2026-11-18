@@ -11,6 +11,7 @@ import {
   mrpNamedRefusal,
 } from '@/modules/production/mrp-run';
 import MrpRunWorkbench from './MrpRunWorkbench';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,15 +38,15 @@ export default async function MrpRunPage({
   const runs = await listMrpRuns(session.user.client);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('md01.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('md01.title')}</h1>
-          <Link href="/production/stock-requirements" className="btn btn-default min-h-11 sm:min-h-8">{t('md01.toList')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('md01.subtitle')}</p>
-      </header>
+    <Page
+      title={t('md01.title')} code={t('md01.code')} width="5xl" back={null}
+      description={t('md01.subtitle')}
+      actions={
+        <>
+          <LinkButton href="/production/stock-requirements">{t('md01.toList')}</LinkButton>
+        </>
+      }
+    >
       {refusal && <p role="status" data-mrp-refused className="text-sm text-signal-error">{refusal}</p>}
       <MrpRunWorkbench
         canPlan={can(session, MRP_RUN_CAPABILITY)}
@@ -63,6 +64,6 @@ export default async function MrpRunPage({
           ))}
         </ul>
       )}
-    </div>
+    </Page>
   );
 }

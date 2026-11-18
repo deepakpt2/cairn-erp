@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -14,6 +13,7 @@ import {
 } from '@/modules/inventory/material-document-output';
 import { letterheadViews } from '@/modules/output/document-layout';
 import MaterialDocumentOutput from './MaterialDocumentOutput';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,15 +85,10 @@ export default async function MaterialDocumentOutputPage({ searchParams }: {
   ]);
 
   return (
-    <div className="mx-auto max-w-[100rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.MATERIALDOC.RECEIVEPRINT · MB90</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('mb90.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mb90.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mb90.title')} code="INV.MATERIALDOC.RECEIVEPRINT · MB90" width="100rem" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('mb90.subtitle')}
+    >
 
       {!canRun && (
         <div className="panel p-4 text-sm text-ink-soft" role="alert">{t('mb90.capabilityMissing')}</div>
@@ -110,6 +105,6 @@ export default async function MaterialDocumentOutputPage({ searchParams }: {
           route={MATERIAL_DOC_OUTPUT_ROUTE}
         />
       )}
-    </div>
+    </Page>
   );
 }

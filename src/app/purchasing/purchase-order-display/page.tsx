@@ -17,6 +17,7 @@ import {
 import { DownloadPdfButton } from '@/ui/output/DocumentPrint';
 import { downloadPurchaseOrderPdfAction } from './actions';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -361,15 +362,10 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('poDisplay.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('poDisplay.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('poDisplay.subtitle')}</p>
-      </header>
+    <Page
+      title={t('poDisplay.title')} code={t('poDisplay.code')} width="120rem" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('poDisplay.subtitle')}
+    >
 
       {!canDisplay && <p className="text-sm text-signal-error" role="alert">{t('poDisplay.capabilityMissing')}</p>}
 
@@ -453,6 +449,6 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
           )}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

@@ -8,6 +8,7 @@ import {
 } from '@/modules/sales/analysis';
 import { listRegisterChoices } from '@/modules/sales/registers';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,22 +105,21 @@ export default async function SalesAnalysisPage({ searchParams }: {
   };
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Sales analysis</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          What the documents add up to, grouped the way the business asks about it. Read from the
-          documents that stand rather than from a copy of them, so every figure here ties to the{' '}
-          <Link href="/sales/documents" className="underline">billing register</Link> and through it to
-          the ledger. Money is never added across currencies, and no margin is printed where the
-          pricing carried no cost.
-        </p>
-        {analysis && <div className="mt-3"><ReportExport report="sales-analysis" params={params} /></div>}
-      </header>
+    <Page
+      title="Sales analysis" code={<>{CAPABILITY} · SD</>} width="7xl"
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              What the documents add up to, grouped the way the business asks about it. Read from the
+              documents that stand rather than from a copy of them, so every figure here ties to the{' '}
+              <Link href="/sales/documents" className="underline">billing register</Link> and through it to
+              the ledger. Money is never added across currencies, and no margin is printed where the
+              pricing carried no cost.
+            </p>
+          {analysis && <div className="mt-3"><ReportExport report="sales-analysis" params={params} /></div>}
+        </>
+      }
+    >
 
       <nav aria-label="Analysis" className="flex flex-wrap gap-2">
         {ANALYSIS_KINDS.map((candidate) => (
@@ -326,7 +326,7 @@ export default async function SalesAnalysisPage({ searchParams }: {
           </div>
         )}
       </section>
-    </main>
+    </Page>
   );
 }
 

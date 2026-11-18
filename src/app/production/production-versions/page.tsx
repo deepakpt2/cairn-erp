@@ -23,6 +23,7 @@ import {
 } from '@/modules/production/production-version';
 import VersionForm from './VersionForm';
 import { checkVersionAction, deleteVersionAction, lockVersionAction, saveRuleAction } from './actions';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,10 +42,11 @@ export default async function ProductionVersionsPage({ searchParams }: {
   const canChange = can(session, PRODUCTION_VERSION_CHANGE_CAPABILITY);
   if (!canCreate && !canChange) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Production version</h1>
+      <Page
+      title="Production version" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the production-version create or change capability.</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

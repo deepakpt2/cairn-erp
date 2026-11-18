@@ -16,6 +16,7 @@ import {
 import { listSortSequences } from '@/modules/inventory/batch-sort-sequence';
 
 import StrategyForm from './StrategyForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,24 +52,28 @@ export default async function BatchSearchStrategyPage({
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIAS} / {CHANGE_ALIAS} / {DISPLAY_ALIAS}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Batch search strategy</h1>
-          <Link href="/inventory/goods-issue" className="btn btn-default min-h-11 sm:min-h-8">Goods issue</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          MBC1 creates a search strategy, MBC2 changes its validity, and MBC3 displays it. The strategy type must already stand, and the key combination is a condition table named by its access sequence.
-          A field is required only when that combination names it. Opening this screen does not create a record, select a batch, or post. A closed period does not block it.
-          {' '}
-          {releasedSorts.length > 0
-            ? `Released sort sequences stand: ${releasedSorts.join(', ')}. They are not applied to this strategy.`
-            : 'No released sort sequence stands. A sort is not applied to this strategy.'}
-          {' '}
-          <Link href="/inventory/batch-sort-sequences" className="underline">CU70</Link>
-        </p>
-      </header>
+    <Page
+      title="Batch search strategy" code={<>{ACTIVITY} · {ALIAS} / {CHANGE_ALIAS} / {DISPLAY_ALIAS}</>} width="4xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              MBC1 creates a search strategy, MBC2 changes its validity, and MBC3 displays it. The strategy type must already stand, and the key combination is a condition table named by its access sequence.
+              A field is required only when that combination names it. Opening this screen does not create a record, select a batch, or post. A closed period does not block it.
+              {' '}
+              {releasedSorts.length > 0
+                ? `Released sort sequences stand: ${releasedSorts.join(', ')}. They are not applied to this strategy.`
+                : 'No released sort sequence stands. A sort is not applied to this strategy.'}
+              {' '}
+              <Link href="/inventory/batch-sort-sequences" className="underline">CU70</Link>
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/inventory/goods-issue">Goods issue</LinkButton>
+        </>
+      }
+    >
 
       <section className="border border-line bg-white p-3 text-sm">
         <h2 className="font-semibold">Not executed</h2>
@@ -166,6 +171,6 @@ export default async function BatchSearchStrategyPage({
           </ul>
         </section>
       )}
-    </div>
+    </Page>
   );
 }

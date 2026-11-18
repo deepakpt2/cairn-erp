@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { MATERIAL_DOC_DISPLAY_CAPABILITY } from '@/modules/inventory/material-document-display';
@@ -17,6 +16,7 @@ import { PRODUCTION_ORDER_CHANGE_CAPABILITY } from '@/modules/production/product
 import { ORDER_CONFIRMATION_CAPABILITY } from '@/modules/production/order-confirmation';
 import { TIME_TICKET_CAPABILITY } from '@/modules/production/time-ticket';
 import OrderInformationResultView from './OrderInformationResult';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,20 +104,24 @@ export default async function OrderInformationPage({
   const fields = listType ? orderInformationFields(object === 'PLANNED_ORDER' ? 'PLANNED_ORDER' : 'PRODUCTION_ORDER', listType) : [];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.ORDER.INFO · COOIS</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Production order information</h1>
-          <Link href="/production/production-order-display" className="btn btn-default min-h-11 sm:min-h-8">CO03</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          List production orders or planned orders. Execute reads. It does not change an order, confirm one, or post.
-        </p>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-coois-gaps>
-          The operations list reads the snapshot stored on the order. An order with no snapshot is omitted. Sequences other than the copied standard sequence, capacities, automatic goods movements, purchase documents, and cost are not this list. Confirmation display is CO14; cancellation is CO13.
-        </p>
-      </header>
+    <Page
+      title="Production order information" code="PROD.ORDER.INFO · COOIS" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              List production orders or planned orders. Execute reads. It does not change an order, confirm one, or post.
+            </p>
+          <p className="max-w-3xl text-sm text-ink-soft" data-coois-gaps>
+              The operations list reads the snapshot stored on the order. An order with no snapshot is omitted. Sequences other than the copied standard sequence, capacities, automatic goods movements, purchase documents, and cost are not this list. Confirmation display is CO14; cancellation is CO13.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/production-order-display">CO03</LinkButton>
+        </>
+      }
+    >
       {openError && <p role="status" data-coois-refused className="text-sm text-signal-error">{openError}</p>}
       {!can(session, ORDER_INFORMATION_CAPABILITY) && (
         <p className="text-sm">You do not hold the list capability ({ORDER_INFORMATION_CAPABILITY}).</p>
@@ -197,6 +201,6 @@ export default async function OrderInformationPage({
           canDisplayDocument={can(session, MATERIAL_DOC_DISPLAY_CAPABILITY)}
         />
       )}
-    </div>
+    </Page>
   );
 }

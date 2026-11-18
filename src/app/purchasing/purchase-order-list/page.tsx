@@ -10,6 +10,7 @@ import {
 } from '@/modules/purchasing/purchase-order-list';
 import PurchaseOrderListShell from './PurchaseOrderListShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,15 +64,15 @@ export default async function PurchaseOrderListPage({
   }
 
   return (
-    <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROC.PO.LIST · ME2L / ME2M / ME2N / ME2C</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('poList.title')}</h1>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('poList.subtitle')}</p>
-        {result && <div className="mt-3"><ReportExport report="purchase-order-list" params={params} /></div>}
-      </header>
+    <Page
+      title={t('poList.title')} code="PROC.PO.LIST · ME2L / ME2M / ME2N / ME2C" width="120rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('poList.subtitle')}</p>
+          {result && <div className="mt-3"><ReportExport report="purchase-order-list" params={params} /></div>}
+        </>
+      }
+    >
 
       <PurchaseOrderListShell
         canUse={can(session, PO_LIST_CAPABILITY)}
@@ -79,6 +80,6 @@ export default async function PurchaseOrderListPage({
         result={result}
         listError={listError}
       />
-    </div>
+    </Page>
   );
 }

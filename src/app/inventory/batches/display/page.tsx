@@ -5,6 +5,7 @@ import { getBatchLevel } from '@/modules/inventory/batch-level';
 import { ACTIVITY, BatchChangeError, BatchDisplayError, displayBatch } from '@/modules/inventory/batch-display';
 import BatchRelations from '../BatchRelations';
 import DocumentTab from '../DocumentTab';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,19 +43,23 @@ export default async function DisplayBatchPage({ searchParams }: {
     : '/inventory/batches/change';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · MSC3N</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Display batch</h1>
-          <Link href={changeHref} className="btn btn-default min-h-11 sm:min-h-8">Change batch</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Read a batch that already stands. The batch level is {level ? `${level.batchLevel} — ${level.name}` : 'not set'}.
-          This screen does not change the batch, post stock, or post a journal. The date of manufacture is HSDAT, not HERDT.
-          MSC1N and MSC2N are not this screen.
-        </p>
-      </header>
+    <Page
+      title="Display batch" code={<>{ACTIVITY} · MSC3N</>} width="3xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Read a batch that already stands. The batch level is {level ? `${level.batchLevel} — ${level.name}` : 'not set'}.
+              This screen does not change the batch, post stock, or post a journal. The date of manufacture is HSDAT, not HERDT.
+              MSC1N and MSC2N are not this screen.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href={changeHref}>Change batch</LinkButton>
+        </>
+      }
+    >
       {!canDisplay && (
         <p role="status" className="border border-line bg-white p-3 text-sm">Display only is not granted. Ask an administrator for {ACTIVITY}.</p>
       )}
@@ -133,6 +138,6 @@ export default async function DisplayBatchPage({ searchParams }: {
           )}
         </section>
       )}
-    </div>
+    </Page>
   );
 }

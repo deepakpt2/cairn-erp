@@ -24,10 +24,11 @@ export default async function DeliverySchedulePage({ searchParams }: {
   const session = await requireSession(SCHEDULE_ROUTE);
   if (!can(session, SCHEDULE_MAINTAIN_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Delivery schedule</h1>
+      <Page
+      title="Delivery schedule" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the delivery-schedule maintain capability (PROC.SCHEDLINE.MAINTAIN).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

@@ -10,6 +10,7 @@ import {
   plannedOrderConversionRefusal,
 } from '@/modules/production/planned-order-conversion';
 import CollectiveForm from './CollectiveForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,10 +27,11 @@ export default async function CollectiveConversionPage({
   const session = await requireSession(PLANNED_ORDER_CONVERT_COLLECTIVE_ROUTE);
   if (!can(session, PLANNED_ORDER_CONVERT_COLLECTIVE_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Collective conversion</h1>
+      <Page
+      title="Collective conversion" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold collective planned-order conversion ({PLANNED_ORDER_CONVERT_COLLECTIVE_CAPABILITY}).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;
@@ -61,14 +63,18 @@ export default async function CollectiveConversionPage({
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <p className="text-sm text-ink-faint">PROD.PLANNEDORDER.CONVERT.COLLECTIVE · CO41</p>
-      <h1 className="mt-1 text-xl font-semibold">Collective conversion</h1>
-      <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-        Search does not convert. Select the orders, then confirm. Each order is converted in its own transaction.
-        A failure on one order does not roll back another. The number range is textual.
-        <Link className="ml-2" href={PLANNED_ORDER_CONVERT_ROUTE}>One order is a different screen.</Link>
-      </p>
+    <Page
+      title="Collective conversion" code="PROD.PLANNEDORDER.CONVERT.COLLECTIVE · CO41" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            Search does not convert. Select the orders, then confirm. Each order is converted in its own transaction.
+            A failure on one order does not roll back another. The number range is textual.
+            <Link className="ml-2" href={PLANNED_ORDER_CONVERT_ROUTE}>One order is a different screen.</Link>
+          </p>
+        </>
+      }
+    >
       {openError && <p role="status" data-co41-refused className="mt-3 text-sm text-danger">{openError}</p>}
       <form className="mt-4 grid gap-2 sm:grid-cols-3" method="get">
         <input className="input" name="plant" defaultValue={plant} maxLength={10} placeholder="Plant" required />
@@ -84,6 +90,6 @@ export default async function CollectiveConversionPage({
           {listed.rows.length > 0 && <CollectiveForm rows={listed.rows} />}
         </section>
       )}
-    </main>
+    </Page>
   );
 }

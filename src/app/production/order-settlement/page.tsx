@@ -17,10 +17,11 @@ export default async function ProductionOrderSettlementPage({ searchParams }: {
   const session = await requireSession(PROD_ORDER_SETTLEMENT_ROUTE);
   if (!can(session, PROD_ORDER_SETTLEMENT_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Production order settlement</h1>
+      <Page
+      title="Production order settlement" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the production-order settlement capability (PROD.ORDER.SETTLE).</p>
-      </main>
+      </Page>
     );
   }
   const orderNumber = last((await searchParams).order);

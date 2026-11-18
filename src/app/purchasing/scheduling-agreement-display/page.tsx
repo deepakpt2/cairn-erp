@@ -23,10 +23,11 @@ export default async function SchedulingAgreementDisplayPage({ searchParams }: {
   const canDisplay = can(session, SCHEDULING_AGREEMENT_DISPLAY_CAPABILITY) || can(session, SCHEDULING_AGREEMENT_MAINTAIN_CAPABILITY);
   if (!canDisplay) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display scheduling agreement</h1>
+      <Page
+      title="Display scheduling agreement" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the scheduling-agreement display capability (PROC.SCHEDAGREE.DISPLAY).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

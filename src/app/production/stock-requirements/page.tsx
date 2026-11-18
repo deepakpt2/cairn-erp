@@ -10,6 +10,7 @@ import {
 } from '@/modules/production/stock-requirements';
 import StockRequirementsShell from './StockRequirementsShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,14 +58,10 @@ export default async function StockRequirementsPage({
   }
 
   return (
-    <div className="mx-auto max-w-[90rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.MRP.STOCKREQ · MD04</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('md04.title')}</h1>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('md04.subtitle')}</p>
-      </header>
+    <Page
+      title={t('md04.title')} code="PROD.MRP.STOCKREQ · MD04" width="90rem" back={null}
+      description={t('md04.subtitle')}
+    >
 
       {result && result.rows.length > 0 && <div><ReportExport report="stock-requirements" params={params} /></div>}
 
@@ -74,6 +71,6 @@ export default async function StockRequirementsPage({
         result={result}
         reportError={reportError}
       />
-    </div>
+    </Page>
   );
 }

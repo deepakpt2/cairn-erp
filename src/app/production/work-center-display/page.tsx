@@ -31,10 +31,11 @@ export default async function WorkCenterDisplayPage({ searchParams }: {
   const session = await requireSession(WORK_CENTER_DISPLAY_ROUTE);
   if (!can(session, WORK_CENTER_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display work center</h1>
+      <Page
+      title="Display work center" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the work-center display capability (PROD.WORKCENTER.DISPLAY).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

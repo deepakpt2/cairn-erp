@@ -9,6 +9,7 @@ import {
   getProductionVersion,
   listProductionVersions,
 } from '@/modules/production/production-version';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +24,11 @@ export default async function ProductionVersionDisplayPage({ searchParams }: {
   const session = await requireSession(PRODUCTION_VERSION_DISPLAY_ROUTE);
   if (!can(session, PRODUCTION_VERSION_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display production version</h1>
+      <Page
+      title="Display production version" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the production-version display capability.</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

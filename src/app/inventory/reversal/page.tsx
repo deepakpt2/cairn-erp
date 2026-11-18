@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -7,6 +6,7 @@ import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { REVERSE_CAPABILITY, getReversalDocument } from '@/modules/inventory/material-document-reversal';
 import Reversal from './Reversal';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,23 +38,16 @@ export default async function ReversalPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('mbst.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('mbst.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mbst.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mbst.title')} code={t('mbst.code')} back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('mbst.subtitle')}
+    >
 
       {document && changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="MATERIAL_DOCUMENT" argument={reversalKey} />
       )}
       <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <Reversal document={document} canPost={canReverse} displayOnly={changeLock?.mode === 'DISPLAY'} today={today} />
-    </div>
+    </Page>
   );
 }

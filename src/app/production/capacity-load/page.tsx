@@ -16,6 +16,7 @@ import {
   CAPACITY_ORDER_STATUSES, CAPACITY_PERIODS, CapacityLoadError, DEFAULT_WORKING_DAYS_PER_WEEK,
   drillDownFor, loadCapacityReport, type CapacityLoadReport, type CapacityPeriod,
 } from '@/modules/production/capacity-load';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,21 +78,22 @@ export default async function CapacityLoadPage({ searchParams }: { searchParams:
   const header = report?.warnings.filter((w) => w.scope === 'HEADER') ?? [];
 
   return (
-    <main className="mx-auto max-w-[96rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CAPACITY_LOAD_CAPABILITY} · CM01</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Capacity load</h1>
-          <div className="flex gap-2">
-            <Link href="/production/work-centers" className="btn btn-default min-h-11 sm:min-h-8">Work centers</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Available capacity of a plant&apos;s work centers against the load derived from production and planned orders. This is
-          calculated on every run from the standard values on the orders; no capacity requirement is stored. Nothing is scheduled or written here.
-        </p>
-      </header>
+    <Page
+      title="Capacity load" code={<>{CAPACITY_LOAD_CAPABILITY} · CM01</>} width="96rem"
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Available capacity of a plant&apos;s work centers against the load derived from production and planned orders. This is
+              calculated on every run from the standard values on the orders; no capacity requirement is stored. Nothing is scheduled or written here.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/work-centers">Work centers</LinkButton>
+        </>
+      }
+    >
 
       {!allowed ? (
         <p role="status" className="text-sm text-ink-soft">You do not hold {CAPACITY_LOAD_CAPABILITY}. Ask for it to display capacity load.</p>
@@ -198,6 +200,6 @@ export default async function CapacityLoadPage({ searchParams }: { searchParams:
           </section>
         </>
       )}
-    </main>
+    </Page>
   );
 }

@@ -20,6 +20,7 @@ import {
 } from '@/modules/production/routing';
 import RoutingForm from './RoutingForm';
 import { ControlKeyForm, StandardValueKeyForm, StatusForm, TaskListTypeForm, UsageForm } from './ConfigForms';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,10 +37,11 @@ export default async function RoutingsPage({ searchParams }: {
   const canChange = can(session, ROUTING_CHANGE_CAPABILITY);
   if (!canCreate && !canChange) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Routing</h1>
+      <Page
+      title="Routing" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the routing create or change capability.</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

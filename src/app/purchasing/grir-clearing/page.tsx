@@ -17,6 +17,7 @@ import {
 } from '@/modules/purchasing/grir-clearing';
 
 import { ClearResidualForm, ReverseClearingForm } from './GrirClearingForms';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,20 +75,21 @@ export default async function GrIrClearingPage({ searchParams }: {
   }
 
   return (
-    <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('grirClearing.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('grirClearing.title')}</h1>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/purchasing/invoice-overview" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.title')}</Link>
-            <Link href="/inventory/material-document-list" className="btn btn-default min-h-11 sm:min-h-8">{t('grirClearing.history')}</Link>
-            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-          </div>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('grirClearing.subtitle')}</p>
-        {notice && <p className="mt-3 text-sm" role="status" data-grir-notice>{notice}</p>}
-      </header>
+    <Page
+      title={t('grirClearing.title')} code={t('grirClearing.code')} width="120rem" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('grirClearing.subtitle')}</p>
+          {notice && <p className="mt-3 text-sm" role="status" data-grir-notice>{notice}</p>}
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/purchasing/invoice-overview">{t('invoiceOverview.title')}</LinkButton>
+          <LinkButton href="/inventory/material-document-list">{t('grirClearing.history')}</LinkButton>
+        </>
+      }
+    >
 
       {!canView && <p className="text-sm text-signal-error" role="alert">{t('grirClearing.capabilityMissing')}</p>}
 
@@ -232,6 +234,6 @@ export default async function GrIrClearingPage({ searchParams }: {
           </ul>
         )}
       </section>
-    </div>
+    </Page>
   );
 }

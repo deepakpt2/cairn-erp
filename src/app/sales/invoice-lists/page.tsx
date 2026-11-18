@@ -9,6 +9,7 @@ import {
   listInvoiceLists,
 } from '@/modules/sales/invoice-list';
 import { InvoiceLists } from './InvoiceLists';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,42 +35,41 @@ export default async function SalesInvoiceListsPage() {
   const canRelease = can(session, INVOICE_LIST_RELEASE_CAPABILITY);
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">
+    <Page
+      title="Invoice lists" code={<>
           {INVOICE_LIST_CREATE_CAPABILITY} · {INVOICE_LIST_RELEASE_CAPABILITY} · SD
-        </span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Invoice lists</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          One invoice for the period, listing the documents raised inside it. This is not a second
-          billing of the same goods — the invoices stand for what was delivered, and the list stands for
-          what is owed. It is also not the same act as collective billing:{' '}
-          <Link href="/sales/billing" className="link">the billing screen</Link> creates documents from
-          what is due, and this one groups documents that exist.
-        </p>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-          A document is listed only where <strong>both</strong> halves say so: an invoice-list type on
-          its billing type, and a schedule on the <strong>payer</strong> who owes the money. Both are
-          read on the day the document is billed and neither is revised afterwards, so a document that
-          was listed does not stop being listed because a master changed underneath it.
-        </p>
-        {!canCreate && !canRelease && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Read-only. Grouping requires {INVOICE_LIST_CREATE_CAPABILITY} and releasing requires{' '}
-            {INVOICE_LIST_RELEASE_CAPABILITY}; broad wildcard role patterns do not grant either.
-          </p>
-        )}
-        {canCreate && !canRelease && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            You may group lists but not release them. Releasing needs{' '}
-            {INVOICE_LIST_RELEASE_CAPABILITY}, which is held separately on purpose: whoever assembles
-            the month is not automatically who commits the company to a receivable.
-          </p>
-        )}
-      </header>
+        </>} width="7xl"
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              One invoice for the period, listing the documents raised inside it. This is not a second
+              billing of the same goods — the invoices stand for what was delivered, and the list stands for
+              what is owed. It is also not the same act as collective billing:{' '}
+              <Link href="/sales/billing" className="link">the billing screen</Link> creates documents from
+              what is due, and this one groups documents that exist.
+            </p>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              A document is listed only where <strong>both</strong> halves say so: an invoice-list type on
+              its billing type, and a schedule on the <strong>payer</strong> who owes the money. Both are
+              read on the day the document is billed and neither is revised afterwards, so a document that
+              was listed does not stop being listed because a master changed underneath it.
+            </p>
+          {!canCreate && !canRelease && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Read-only. Grouping requires {INVOICE_LIST_CREATE_CAPABILITY} and releasing requires{' '}
+                {INVOICE_LIST_RELEASE_CAPABILITY}; broad wildcard role patterns do not grant either.
+              </p>
+            )}
+          {canCreate && !canRelease && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                You may group lists but not release them. Releasing needs{' '}
+                {INVOICE_LIST_RELEASE_CAPABILITY}, which is held separately on purpose: whoever assembles
+                the month is not automatically who commits the company to a receivable.
+              </p>
+            )}
+        </>
+      }
+    >
 
       <InvoiceLists
         due={due}
@@ -90,6 +90,6 @@ export default async function SalesInvoiceListsPage() {
           stands today still does.
         </p>
       </section>
-    </main>
+    </Page>
   );
 }

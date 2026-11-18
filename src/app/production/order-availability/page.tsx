@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { randomUUID } from 'node:crypto';
 
 import { can, requireSession } from '@/platform/auth/current';
@@ -20,6 +19,7 @@ import {
   checkOrderAvailability,
   type OrderAvailabilityResult,
 } from '@/modules/production/order-availability';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,23 +98,27 @@ export default async function OrderAvailabilityPage({
   }]));
 
   return (
-    <div className="mx-auto max-w-[90rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">
+    <Page
+      title={t('co09.title')} code={<>
           {ORDER_AVAILABILITY_ORDER_CAPABILITY} + {ORDER_AVAILABILITY_ELEMENTS_CAPABILITY} · {ORDER_AVAILABILITY_ALIAS}
-        </span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('co09.title')}</h1>
-          <Link href="/production/production-order-display" className="btn btn-default min-h-11 sm:min-h-8">CO03</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('co09.subtitle')}</p>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-co09-gaps>
-          {t('co09.gapsLead')}
-        </p>
-        <ul className="mt-1 max-w-3xl list-disc space-y-1 ps-5 text-xs text-ink-faint" data-co09-refusals>
-          {ORDER_AVAILABILITY_GAPS.map((gap) => <li key={gap}>{gap}</li>)}
-        </ul>
-      </header>
+        </>} width="90rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('co09.subtitle')}</p>
+          <p className="max-w-3xl text-sm text-ink-soft" data-co09-gaps>
+              {t('co09.gapsLead')}
+            </p>
+          <ul className="mt-1 max-w-3xl list-disc space-y-1 ps-5 text-xs text-ink-faint" data-co09-refusals>
+              {ORDER_AVAILABILITY_GAPS.map((gap) => <li key={gap}>{gap}</li>)}
+            </ul>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/production-order-display">CO03</LinkButton>
+        </>
+      }
+    >
 
       <OrderAvailabilityWorkbench
         canUse={canUse}
@@ -133,6 +137,6 @@ export default async function OrderAvailabilityPage({
         actionMessageKind={actionMessageKind}
         requestKeys={requestKeys}
       />
-    </div>
+    </Page>
   );
 }

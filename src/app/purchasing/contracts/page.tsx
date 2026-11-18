@@ -32,10 +32,11 @@ export default async function PurchaseContractsPage({ searchParams }: {
     || can(session, RELEASE_CAPABILITIES.PURCHASE_CONTRACT);
   if (!allowed) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Purchase contract</h1>
+      <Page
+      title="Purchase contract" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold a purchase-contract capability.</p>
-      </main>
+      </Page>
     );
   }
   const params = await searchParams;

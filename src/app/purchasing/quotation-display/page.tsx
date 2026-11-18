@@ -14,6 +14,7 @@ import {
   type QuotationDisplayResult,
 } from '@/modules/purchasing/quotation-display';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -174,15 +175,10 @@ export default async function PurchasingQuotationDisplayPage({ searchParams }: {
   const opened = result?.found ? result.quotation : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('quotationDisplay.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('quotationDisplay.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('quotationDisplay.subtitle')}</p>
-      </header>
+    <Page
+      title={t('quotationDisplay.title')} code={t('quotationDisplay.code')} back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('quotationDisplay.subtitle')}
+    >
 
       {!canDisplay && (
         <p className="text-sm text-signal-error" role="alert">{t('quotationDisplay.capabilityMissing')}</p>
@@ -222,6 +218,6 @@ export default async function PurchasingQuotationDisplayPage({ searchParams }: {
       )}
 
       {opened && <QuotationView quotation={opened} canMaintain={canMaintain} />}
-    </div>
+    </Page>
   );
 }

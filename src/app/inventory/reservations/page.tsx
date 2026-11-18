@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
@@ -11,6 +10,7 @@ import {
 } from '@/modules/inventory/reservations';
 import Reservations from './Reservations';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,17 +44,10 @@ export default async function ReservationsPage({ searchParams }: {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('mb21.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('mb21.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mb21.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mb21.title')} code={t('mb21.code')} back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('mb21.subtitle')}
+    >
 
       {changeLock?.mode === 'CHANGE' && reservationKey && (
         <ChangeLock lockObject="RESERVATION" argument={reservationKey} />
@@ -67,6 +60,6 @@ export default async function ReservationsPage({ searchParams }: {
         canChange={changeLock?.mode === 'CHANGE'}
         today={today}
       />
-    </div>
+    </Page>
   );
 }

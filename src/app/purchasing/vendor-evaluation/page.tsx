@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { randomUUID } from 'node:crypto';
 import type { ReactNode } from 'react';
 
@@ -16,6 +15,7 @@ import {
 } from '@/modules/purchasing/vendor-evaluation';
 import { ManualScoreForm } from './ManualScoreForm';
 import { displayOnlyRemedy } from '@/ui/lock/remedy';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -142,15 +142,10 @@ export default async function VendorEvaluationPage({ searchParams }: {
     : null;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('vendorEvaluation.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('vendorEvaluation.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('vendorEvaluation.subtitle')}</p>
-      </header>
+    <Page
+      title={t('vendorEvaluation.title')} code={t('vendorEvaluation.code')} back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('vendorEvaluation.subtitle')}
+    >
 
       {!canEvaluate && <p className="text-sm text-signal-error" role="alert">{t('vendorEvaluation.capabilityMissing')}</p>}
 
@@ -182,6 +177,6 @@ export default async function VendorEvaluationPage({ searchParams }: {
       )}
       <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       {evaluation && <EvaluationView evaluation={evaluation} canScore={changeLock?.mode === 'CHANGE'} />}
-    </div>
+    </Page>
   );
 }

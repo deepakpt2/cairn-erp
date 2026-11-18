@@ -12,6 +12,7 @@ import {
   previewPlannedOrderConversion,
 } from '@/modules/production/planned-order-conversion';
 import ConvertForm from './ConvertForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,10 +29,11 @@ export default async function PlannedOrderConversionPage({
   const session = await requireSession(PLANNED_ORDER_CONVERT_ROUTE);
   if (!can(session, PLANNED_ORDER_CONVERT_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Convert planned order</h1>
+      <Page
+      title="Convert planned order" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold planned-order conversion ({PLANNED_ORDER_CONVERT_CAPABILITY}).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;
@@ -69,14 +71,18 @@ export default async function PlannedOrderConversionPage({
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <p className="text-sm text-ink-faint">PROD.PLANNEDORDER.CONVERT · CO40</p>
-      <h1 className="mt-1 text-xl font-semibold">Convert planned order</h1>
-      <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-        Convert one planned order into a production order. The whole quantity is converted. The planned order is not deleted.
-        Availability is not checked. Operations are not copied onto the production order.
-        <Link className="ml-2" href={PLANNED_ORDER_CONVERT_COLLECTIVE_ROUTE}>Collective conversion is a different screen.</Link>
-      </p>
+    <Page
+      title="Convert planned order" code="PROD.PLANNEDORDER.CONVERT · CO40" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            Convert one planned order into a production order. The whole quantity is converted. The planned order is not deleted.
+            Availability is not checked. Operations are not copied onto the production order.
+            <Link className="ml-2" href={PLANNED_ORDER_CONVERT_COLLECTIVE_ROUTE}>Collective conversion is a different screen.</Link>
+          </p>
+        </>
+      }
+    >
       {openError && <p role="status" data-co40-refused className="mt-3 text-sm text-danger">{openError}</p>}
       <form className="mt-4 grid gap-2 sm:grid-cols-4" method="get">
         <input className="input" name="plant" defaultValue={plant} maxLength={10} placeholder="Plant" />
@@ -151,6 +157,6 @@ export default async function PlannedOrderConversionPage({
           )}
         </section>
       )}
-    </main>
+    </Page>
   );
 }

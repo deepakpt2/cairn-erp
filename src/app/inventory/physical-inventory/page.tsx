@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -10,6 +9,7 @@ import {
 } from '@/modules/inventory/physical-inventory';
 import { CancelListed } from './CancelListed';
 import PhysicalInventoryShell from './PhysicalInventoryShell';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,15 +33,10 @@ export default async function PhysicalInventoryPage({ searchParams }: {
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.PHYINV.CREATE · MI01</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('mi01.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mi01.subtitle')}</p>
-      </header>
+    <Page
+      title={t('mi01.title')} code="INV.PHYINV.CREATE · MI01" back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('mi01.subtitle')}
+    >
 
       <PhysicalInventoryShell
         canCreate={can(session, PHYSICAL_INVENTORY_CREATE_CAPABILITY)}
@@ -88,6 +83,6 @@ export default async function PhysicalInventoryPage({ searchParams }: {
           </table>
         )}
       </section>
-    </div>
+    </Page>
   );
 }

@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
@@ -8,6 +7,7 @@ import {
 import { listCustomerInvoiceTaxCodes } from '@/modules/finance/customer-invoice';
 import { listBillings } from '@/modules/sales/billing';
 import CreditMemo from './CreditMemo';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,17 +36,10 @@ export default async function SalesCreditMemoPage({ searchParams }: {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{CUSTOMER_CREDIT_MEMO_CAPABILITY}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('customerCreditMemo.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('customerCreditMemo.subtitle')}</p>
-      </header>
+    <Page
+      title={t('customerCreditMemo.title')} code={CUSTOMER_CREDIT_MEMO_CAPABILITY} back={{ href: '/', label: t('nav.launchpad') }}
+      description={t('customerCreditMemo.subtitle')}
+    >
 
       <CreditMemo
         invoice={invoice}
@@ -56,6 +49,6 @@ export default async function SalesCreditMemoPage({ searchParams }: {
         canPost={can(session, CUSTOMER_CREDIT_MEMO_CAPABILITY)}
         today={today}
       />
-    </div>
+    </Page>
   );
 }

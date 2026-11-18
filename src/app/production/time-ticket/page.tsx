@@ -1,4 +1,3 @@
-import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -9,6 +8,7 @@ import {
   timeTicketRefusal,
 } from '@/modules/production/time-ticket';
 import TimeTicketWorkbench from './TimeTicketWorkbench';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,22 +52,26 @@ export default async function TimeTicketPage({
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.CONFIRM.ENTER · CO11N</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Enter time ticket</h1>
-          <Link href="/production/production-order-display" className="btn btn-default min-h-11 sm:min-h-8">CO03</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Confirm one operation of a released production order. A check writes nothing.
-          A posted confirmation is not edited here. The order status is not changed.
-          Automatic movements follow the material's marks. The confirmation and its movement intents are saved together; a failed posting remains available in COGI without rolling back the confirmation.
-        </p>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-co11n-gaps>
-          The operation is the one stored on the order. A later routing edit is not read. A confirmation profile, automatic confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO14 displays recorded confirmations; cancellation is CO13. CO15 confirms the order, not one operation.
-        </p>
-      </header>
+    <Page
+      title="Enter time ticket" code="PROD.CONFIRM.ENTER · CO11N" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Confirm one operation of a released production order. A check writes nothing.
+              A posted confirmation is not edited here. The order status is not changed.
+              Automatic movements follow the material's marks. The confirmation and its movement intents are saved together; a failed posting remains available in COGI without rolling back the confirmation.
+            </p>
+          <p className="max-w-3xl text-sm text-ink-soft" data-co11n-gaps>
+              The operation is the one stored on the order. A later routing edit is not read. A confirmation profile, automatic confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO14 displays recorded confirmations; cancellation is CO13. CO15 confirms the order, not one operation.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/production-order-display">CO03</LinkButton>
+        </>
+      }
+    >
       {openError && <p role="status" data-co11n-refused className="text-sm text-signal-error">{openError}</p>}
       {!can(session, TIME_TICKET_CAPABILITY) && (
         <p className="text-sm">You do not hold the confirmation capability ({TIME_TICKET_CAPABILITY}).</p>
@@ -84,6 +88,6 @@ export default async function TimeTicketPage({
           loaded={loaded}
         />
       )}
-    </div>
+    </Page>
   );
 }

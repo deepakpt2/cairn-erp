@@ -10,6 +10,7 @@ import {
 } from '@/modules/production/order-confirmation';
 import { ProductionOrderDisplayError, listProductionOrders } from '@/modules/production/production-order-display';
 import OrderConfirmationWorkbench from './OrderConfirmationWorkbench';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,22 +76,26 @@ export default async function OrderConfirmationPage({
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.CONFIRM.ORDER · CO15</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Enter order confirmation</h1>
-          <Link href="/production/production-order-display" className="btn btn-default min-h-11 sm:min-h-8">CO03</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Confirm a released production order at header level. A check writes nothing.
-          A posted confirmation is not edited here. The order status is not changed.
-          No goods movement is posted.
-        </p>
-        <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-co15-gaps>
-          Eligible operations are the ones stored on the order. This screen still confirms the order, not one operation. A confirmation profile, automatic final confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO11N confirms one operation. CO14 displays recorded confirmations; cancellation is CO13.
-        </p>
-      </header>
+    <Page
+      title="Enter order confirmation" code="PROD.CONFIRM.ORDER · CO15" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Confirm a released production order at header level. A check writes nothing.
+              A posted confirmation is not edited here. The order status is not changed.
+              No goods movement is posted.
+            </p>
+          <p className="max-w-3xl text-sm text-ink-soft" data-co15-gaps>
+              Eligible operations are the ones stored on the order. This screen still confirms the order, not one operation. A confirmation profile, automatic final confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO11N confirms one operation. CO14 displays recorded confirmations; cancellation is CO13.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/production-order-display">CO03</LinkButton>
+        </>
+      }
+    >
       {openError && <p role="status" data-co15-refused className="text-sm text-signal-error">{openError}</p>}
       {!can(session, ORDER_CONFIRMATION_CAPABILITY) && (
         <p className="text-sm">You do not hold the confirmation capability ({ORDER_CONFIRMATION_CAPABILITY}).</p>
@@ -133,6 +138,6 @@ export default async function OrderConfirmationPage({
           loaded={loaded}
         />
       )}
-    </div>
+    </Page>
   );
 }

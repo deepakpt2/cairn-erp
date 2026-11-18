@@ -11,6 +11,7 @@ import {
   type ProductionCogiStatusFilter,
 } from '@/modules/production/production-cogi';
 import ProductionCogiWorkbench from './ProductionCogiWorkbench';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,20 +69,24 @@ export default async function ProductionCogiPage({
   };
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{PRODUCTION_COGI_CAPABILITY} · COGI</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Failed production goods movements</h1>
-          <Link href="/production/time-ticket" className="btn btn-default min-h-11 sm:min-h-8">CO11N · time ticket</Link>
-        </div>
-        <p className="mt-1 max-w-4xl text-sm text-ink-soft">
-          Review movements created automatically by CO11N, inspect the last posting error, correct supported movement details, and retry the same movement request. The original confirmation and source payload remain unchanged.
-        </p>
-        <p className="mt-2 max-w-4xl text-sm text-ink-soft" data-cogi-scope>
-          Scope is CO11N only. CO15 header confirmations and manual MIGO postings do not create this queue. Discard retains the failure record; it does not post or adjust reservations.
-        </p>
-      </header>
+    <Page
+      title="Failed production goods movements" code={<>{PRODUCTION_COGI_CAPABILITY} · COGI</>} width="7xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Review movements created automatically by CO11N, inspect the last posting error, correct supported movement details, and retry the same movement request. The original confirmation and source payload remain unchanged.
+            </p>
+          <p className="max-w-3xl text-sm text-ink-soft" data-cogi-scope>
+              Scope is CO11N only. CO15 header confirmations and manual MIGO postings do not create this queue. Discard retains the failure record; it does not post or adjust reservations.
+            </p>
+        </>
+      }
+      actions={
+        <>
+          <LinkButton href="/production/time-ticket">CO11N · time ticket</LinkButton>
+        </>
+      }
+    >
       {openError && <p role="status" data-cogi-error className="text-sm text-signal-error">{openError}</p>}
       {!allowed && <p className="text-sm">You do not hold the authority {PRODUCTION_COGI_CAPABILITY}.</p>}
       <form className="grid gap-2 rounded border border-line bg-surface p-3 sm:grid-cols-3 lg:grid-cols-6" method="get">
@@ -146,6 +151,6 @@ export default async function ProductionCogiPage({
       )}
       {detail && <ProductionCogiWorkbench detail={detail} />}
       {one(params.id) && !detail && allowed && !openError && <p role="status" className="text-sm">This movement is not available in your tenant or organizational scope.</p>}
-    </main>
+    </Page>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from '@/modules/inventory/production-orders';
 import { wipBatchActive } from '@/modules/production/wip-batch';
 import OrderCreate from './OrderCreate';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,20 +33,19 @@ export default async function ProductionOrdersPage({ searchParams }: {
   const wipActive = existing ? existing.wipBatchActive === 'X' : await wipBatchActive(session.user.client);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.ORDER.CREATE · CO01</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('co01.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('co01.subtitle')}</p>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          OPKP is not this screen. A scheduling profile is read from the material plant view and snapshotted.
-          This screen does not print, schedule, check capacity, or post a goods receipt.
-          OMCWB was read. WIP batch is {wipActive ? 'active' : 'not active'}. A WIP batch was not created.
-        </p>
-      </header>
+    <Page
+      title={t('co01.title')} code="PROD.ORDER.CREATE · CO01" back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('co01.subtitle')}</p>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              OPKP is not this screen. A scheduling profile is read from the material plant view and snapshotted.
+              This screen does not print, schedule, check capacity, or post a goods receipt.
+              OMCWB was read. WIP batch is {wipActive ? 'active' : 'not active'}. A WIP batch was not created.
+            </p>
+        </>
+      }
+    >
 
       {existing && (
         <section aria-labelledby="order-existing" className="border border-line bg-surface p-4">
@@ -100,6 +100,6 @@ export default async function ProductionOrdersPage({ searchParams }: {
         canRelease={can(session, PRODUCTION_ORDER_RELEASE_CAPABILITY)}
         today={today}
       />
-    </div>
+    </Page>
   );
 }

@@ -9,6 +9,7 @@ import {
   listRoutings,
   resolveRouting,
 } from '@/modules/production/routing';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +24,11 @@ export default async function RoutingDisplayPage({ searchParams }: {
   const session = await requireSession(ROUTING_DISPLAY_ROUTE);
   if (!can(session, ROUTING_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Display routing</h1>
+      <Page
+      title="Display routing" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the routing display capability.</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

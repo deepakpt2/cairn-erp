@@ -14,6 +14,7 @@ import {
 } from '@/modules/inventory/batch-sort-sequence';
 
 import SortForm from './SortForm';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,18 +46,15 @@ export default async function BatchSortSequencePage({
     : [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · {ALIAS} / {CHANGE_ALIAS} / {DISPLAY_ALIAS}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Batch sort sequence</h1>
-          <Link href="/inventory/batch-classes" className="btn btn-default min-h-11 sm:min-h-8">Batch class</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          CU70 creates a sort sequence, CU71 changes it, and CU72 displays it. The name is at most 18 characters. Status 0 is in preparation, 1 is released, and 2 is locked.
-          Opening this screen does not create a sequence, select a batch, or post. A closed period does not block it.
-        </p>
-      </header>
+    <Page
+      title="Batch sort sequence" code={<>{ACTIVITY} · {ALIAS} / {CHANGE_ALIAS} / {DISPLAY_ALIAS}</>} width="4xl" back={null}
+      description="CU70 creates a sort sequence, CU71 changes it, and CU72 displays it. The name is at most 18 characters. Status 0 is in preparation, 1 is released, and 2 is locked. Opening this screen does not create a sequence, select a batch, or post. A closed period does not block it."
+      actions={
+        <>
+          <LinkButton href="/inventory/batch-classes">Batch class</LinkButton>
+        </>
+      }
+    >
 
       <section className="border border-line bg-white p-3 text-sm">
         <h2 className="font-semibold">Not executed</h2>
@@ -126,6 +124,6 @@ export default async function BatchSortSequencePage({
           </ul>
         </section>
       )}
-    </div>
+    </Page>
   );
 }

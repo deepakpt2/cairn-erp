@@ -13,6 +13,7 @@ import {
   type QuotationComparison,
 } from '@/modules/purchasing/quotation-comparison';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,17 +154,16 @@ export default async function PurchasingQuotationComparisonPage({ searchParams }
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{t('quotationComparison.code')}</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('quotationComparison.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('quotationComparison.subtitle')}</p>
-        <p className="mt-1 text-xs text-ink-soft" data-comparison-no-award>{t('quotationComparison.noAward')}</p>
-        <p className="mt-1 text-xs text-ink-soft" data-comparison-nothing-written>{t('quotationComparison.nothingWritten')}</p>
-      </header>
+    <Page
+      title={t('quotationComparison.title')} code={t('quotationComparison.code')} back={{ href: '/', label: t('nav.launchpad') }}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('quotationComparison.subtitle')}</p>
+          <p className="max-w-3xl text-sm text-ink-soft" data-comparison-no-award>{t('quotationComparison.noAward')}</p>
+          <p className="max-w-3xl text-sm text-ink-soft" data-comparison-nothing-written>{t('quotationComparison.nothingWritten')}</p>
+        </>
+      }
+    >
 
       {!canCompare && <p className="text-sm text-signal-error" role="alert">{t('quotationComparison.capabilityMissing')}</p>}
 
@@ -194,6 +194,6 @@ export default async function PurchasingQuotationComparisonPage({ searchParams }
       )}
 
       {comparison && <ComparisonView comparison={comparison} canDisplay={canDisplay} canMaintain={canMaintain} />}
-    </div>
+    </Page>
   );
 }

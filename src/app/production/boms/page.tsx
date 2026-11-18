@@ -38,10 +38,11 @@ export default async function MaterialBomsPage({ searchParams }: {
   const canChange = can(session, BOM_CHANGE_CAPABILITY);
   if (!canCreate && !canChange) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Material BOM</h1>
+      <Page
+      title="Material BOM" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the BOM create or change capability.</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

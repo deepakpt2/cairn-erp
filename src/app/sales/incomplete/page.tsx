@@ -4,6 +4,7 @@ import { requireSession } from '@/platform/auth/current';
 import {
   INCOMPLETION_PROCESS_CAPABILITY, listIncompleteDocuments,
 } from '@/modules/sales/incompletion';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,27 +22,26 @@ export default async function IncompleteDocumentsPage() {
   const documents = await listIncompleteDocuments(session.user.client);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{INCOMPLETION_PROCESS_CAPABILITY} · SD</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Incomplete documents</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Every order and delivery that stands and is missing something its procedure says it must
-          carry. A document is incomplete when it has log entries, and blocked for a function when an
-          entry that is not a warning names a status group that stops it. Filling the field in and
-          saving the document takes the entry with it: the log is what stands now, not what stood
-          the last time the document was judged.
-        </p>
-        {documents.length === 0 && (
-          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
-            Nothing is incomplete. Either no document is missing anything, or no document type has
-            been assigned an incompletion procedure yet.
-          </p>
-        )}
-      </header>
+    <Page
+      title="Incomplete documents" code={<>{INCOMPLETION_PROCESS_CAPABILITY} · SD</>}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Every order and delivery that stands and is missing something its procedure says it must
+              carry. A document is incomplete when it has log entries, and blocked for a function when an
+              entry that is not a warning names a status group that stops it. Filling the field in and
+              saving the document takes the entry with it: the log is what stands now, not what stood
+              the last time the document was judged.
+            </p>
+          {documents.length === 0 && (
+              <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+                Nothing is incomplete. Either no document is missing anything, or no document type has
+                been assigned an incompletion procedure yet.
+              </p>
+            )}
+        </>
+      }
+    >
 
       {documents.length > 0 && (
         <section aria-labelledby="incomplete" className="border border-line bg-surface p-4">
@@ -116,6 +116,6 @@ export default async function IncompleteDocumentsPage() {
           </p>
         </section>
       )}
-    </main>
+    </Page>
   );
 }

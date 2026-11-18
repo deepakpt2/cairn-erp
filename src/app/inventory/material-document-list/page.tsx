@@ -10,6 +10,7 @@ import {
 } from '@/modules/inventory/material-document-list';
 import MaterialDocumentListShell from './MaterialDocumentListShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,15 +68,15 @@ export default async function MaterialDocumentListPage({
   }
 
   return (
-    <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">INV.MATERIALDOC.LIST · MB51</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('mdList.title')}</h1>
-        </div>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mdList.subtitle')}</p>
-        {result && <div className="mt-3"><ReportExport report="material-document-list" params={params} /></div>}
-      </header>
+    <Page
+      title={t('mdList.title')} code="INV.MATERIALDOC.LIST · MB51" width="120rem" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('mdList.subtitle')}</p>
+          {result && <div className="mt-3"><ReportExport report="material-document-list" params={params} /></div>}
+        </>
+      }
+    >
 
       <MaterialDocumentListShell
         canUse={can(session, MATERIAL_DOC_LIST_CAPABILITY)}
@@ -83,6 +84,6 @@ export default async function MaterialDocumentListPage({
         result={result}
         listError={listError}
       />
-    </div>
+    </Page>
   );
 }

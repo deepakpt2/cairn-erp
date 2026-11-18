@@ -13,6 +13,7 @@ import {
   listPlannedOrders,
 } from '@/modules/production/planned-order-display';
 import PlannedOrderCreateForm from './PlannedOrderCreateForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,10 +30,11 @@ export default async function PlannedOrderCreatePage({
   const session = await requireSession(PLANNED_ORDER_CREATE_ROUTE);
   if (!can(session, PLANNED_ORDER_CREATE_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Create planned order</h1>
+      <Page
+      title="Create planned order" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the planned-order create capability ({PLANNED_ORDER_CREATE_CAPABILITY}).</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;
@@ -70,14 +72,18 @@ export default async function PlannedOrderCreatePage({
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <p className="text-sm text-ink-faint">PROD.PLANNEDORDER.CREATE · MD11</p>
-      <h1 className="mt-1 text-xl font-semibold">Create planned order</h1>
-      <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-        Create one planned order for a material produced in the plant. A bought material is refused.
-        A planned-order profile is not stored. Copying a reference creates a new number and does not change the original.
-        <Link className="ml-2" href={PLANNED_ORDER_DISPLAY_ROUTE}>Display writes nothing.</Link>
-      </p>
+    <Page
+      title="Create planned order" code="PROD.PLANNEDORDER.CREATE · MD11" width="5xl" back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+            Create one planned order for a material produced in the plant. A bought material is refused.
+            A planned-order profile is not stored. Copying a reference creates a new number and does not change the original.
+            <Link className="ml-2" href={PLANNED_ORDER_DISPLAY_ROUTE}>Display writes nothing.</Link>
+          </p>
+        </>
+      }
+    >
       {openError && <p role="status" data-md11-refused className="mt-3 text-sm text-danger">{openError}</p>}
       <form className="mt-4 grid gap-2 sm:grid-cols-4" method="get">
         <input className="input" name="plant" defaultValue={plant} maxLength={10} placeholder="Plant" />
@@ -114,6 +120,6 @@ export default async function PlannedOrderCreatePage({
           referenceOrder={reference?.orderNumber ?? ''}
         />
       )}
-    </main>
+    </Page>
   );
 }

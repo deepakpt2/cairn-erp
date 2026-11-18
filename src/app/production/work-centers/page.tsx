@@ -36,10 +36,11 @@ export default async function WorkCentersPage({ searchParams }: {
   const canChange = can(session, WORK_CENTER_CHANGE_CAPABILITY);
   if (!canCreate && !canChange) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Work center</h1>
+      <Page
+      title="Work center" width="3xl" back={null}
+    >
         <p className="mt-2 text-sm">You do not hold the work-center create or change capability.</p>
-      </main>
+      </Page>
     );
   }
   const raw = await searchParams;

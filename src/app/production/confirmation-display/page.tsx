@@ -17,6 +17,7 @@ import {
   type ConfirmationDisplaySelection,
   type ConfirmationDisplaySort,
 } from '@/modules/production/confirmation-display';
+import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -290,10 +291,11 @@ export default async function ConfirmationDisplayPage({
   const session = await requireSession(CONFIRMATION_DISPLAY_ROUTE);
   if (!can(session, PRODUCTION_ORDER_DISPLAY_CAPABILITY)) {
     return (
-      <main className="mx-auto max-w-5xl p-4 sm:p-6">
-        <h1 className="text-xl font-semibold">Display production order confirmation</h1>
+      <Page
+      title="Display production order confirmation" width="5xl" back={null}
+    >
         <p className="mt-2 text-sm" role="alert">You do not hold production-order display ({PRODUCTION_ORDER_DISPLAY_CAPABILITY}).</p>
-      </main>
+      </Page>
     );
   }
 
@@ -327,23 +329,21 @@ export default async function ConfirmationDisplayPage({
   }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6" data-co14-page>
-      <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">PROD.ORDER.DISPLAY · CO14</span>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Display production order confirmation</h1>
+    <Page
+      title="Display production order confirmation" code="PROD.ORDER.DISPLAY · CO14" width="7xl" back={null}
+      description="CO14 reads posted operation confirmations and CO15 header confirmations. It never creates, changes, cancels, or posts. The recorded date below is the row’s creation date; the posting date and recorded execution times are shown separately."
+      actions={
+        <>
           <nav aria-label="Production transactions" className="flex flex-wrap gap-2 text-sm">
-            <Link href="/production/production-order-display" className="btn btn-default min-h-11 sm:min-h-8">CO03 order display</Link>
-            <Link href="/production/time-ticket" className="btn btn-default min-h-11 sm:min-h-8">CO11N</Link>
-            <Link href="/production/order-confirmation" className="btn btn-default min-h-11 sm:min-h-8">CO15</Link>
-            <Link href="/production/confirmation-cancel" className="btn btn-default min-h-11 sm:min-h-8">CO13</Link>
-            <Link href="/production/order-information" className="btn btn-default min-h-11 sm:min-h-8">COOIS</Link>
-          </nav>
-        </div>
-        <p className="mt-2 max-w-4xl text-sm text-ink-soft">
-          CO14 reads posted operation confirmations and CO15 header confirmations. It never creates, changes, cancels, or posts. The recorded date below is the row’s creation date; the posting date and recorded execution times are shown separately.
-        </p>
-      </header>
+                      <LinkButton href="/production/production-order-display">CO03 order display</LinkButton>
+                      <LinkButton href="/production/time-ticket">CO11N</LinkButton>
+                      <LinkButton href="/production/order-confirmation">CO15</LinkButton>
+                      <LinkButton href="/production/confirmation-cancel">CO13</LinkButton>
+                      <LinkButton href="/production/order-information">COOIS</LinkButton>
+                    </nav>
+        </>
+      }
+    >
 
       {errorMessage && <p className="border border-signal-error/30 bg-signal-error-soft p-3 text-sm text-danger" role="alert" data-co14-error>{errorMessage}</p>}
       {detailNumber && !detail && !errorMessage && <p className="text-sm text-ink-soft" role="status">No confirmation was found.</p>}
@@ -369,6 +369,6 @@ export default async function ConfirmationDisplayPage({
 
       {detail && <ConfirmationDetail detail={detail} />}
       {result && <ResultTable page={result} />}
-    </main>
+    </Page>
   );
 }
