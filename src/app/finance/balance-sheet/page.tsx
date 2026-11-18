@@ -16,7 +16,7 @@ import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Balance Sheet / P&L Statement' };
 
-export default async function Page({ searchParams }: {
+export default async function ScreenPage({ searchParams }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession('/finance/balance-sheet');

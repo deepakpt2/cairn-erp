@@ -11,7 +11,7 @@ import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Customer Credit Management' };
 
-export default async function Page({ searchParams }: {
+export default async function ScreenPage({ searchParams }: {
   searchParams: Promise<{ customer?: string; area?: string }>;
 }) {
   const session = await requireSession('/finance/credit');

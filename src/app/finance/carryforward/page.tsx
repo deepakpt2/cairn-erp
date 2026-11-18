@@ -12,7 +12,7 @@ import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Balance Carryforward' };
 
-export default async function Page() {
+export default async function ScreenPage() {
   const session = await requireSession('/finance/carryforward');
   const canUse = can(session, CARRYFORWARD_CAPABILITY);
   const companies = (await listCompanyCodes(session.user.client))

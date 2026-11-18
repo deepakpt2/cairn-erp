@@ -18,7 +18,7 @@ import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Profit and Loss Statement' };
 
-export default async function Page({ searchParams }: {
+export default async function ScreenPage({ searchParams }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession('/finance/profit-loss');

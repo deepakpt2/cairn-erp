@@ -15,7 +15,7 @@ import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Close Cockpit' };
 
-export default async function Page({ searchParams }: {
+export default async function ScreenPage({ searchParams }: {
   searchParams: Promise<{ company?: string; list?: string; fy?: string; period?: string; error?: string }>;
 }) {
   const session = await requireSession('/finance/close-cockpit');

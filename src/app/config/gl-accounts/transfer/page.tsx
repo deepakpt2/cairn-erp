@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 const ROUTE = '/config/gl-accounts/transfer';
 
-export default async function Page({ searchParams }: {
+export default async function ScreenPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession(ROUTE);

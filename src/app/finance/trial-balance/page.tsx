@@ -14,7 +14,7 @@ import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Trial Balance / F.01' };
 
-export default async function Page({ searchParams }: {
+export default async function ScreenPage({ searchParams }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession('/finance/trial-balance');

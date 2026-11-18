@@ -11,7 +11,7 @@ import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Credit Exposure Monitor' };
 
-export default async function Page({ searchParams }: {
+export default async function ScreenPage({ searchParams }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession('/finance/credit-monitor');
