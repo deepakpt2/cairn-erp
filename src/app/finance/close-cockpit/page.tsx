@@ -11,6 +11,7 @@ import {
   type CloseCycleKey,
 } from '@/modules/finance/close-cockpit';
 import CloseCockpitShell from './CloseCockpitShell';
+import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Close Cockpit' };
 
@@ -52,15 +53,17 @@ export default async function Page({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.18em] text-accent uppercase">{t('finance.label')}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">{t('close.title')}</h1>
-        <p className="text-sm text-ink-soft">{t('close.intro')}</p>
-        <Link href="/finance/journal" className="mt-1 inline-block text-sm text-accent hover:underline">
-          {t('close.openJournal')}
-        </Link>
-      </header>
+    <Page
+      title={t('close.title')} code={t('finance.label')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('close.intro')}</p>
+          <Link href="/finance/journal" className="mt-1 inline-block text-sm text-accent hover:underline">
+              {t('close.openJournal')}
+            </Link>
+        </>
+      }
+    >
       <CloseCockpitShell
         canUse={canUse}
         companies={companies}
@@ -72,6 +75,6 @@ export default async function Page({ searchParams }: {
         events={events}
         notice={params.error ?? null}
       />
-    </main>
+    </Page>
   );
 }

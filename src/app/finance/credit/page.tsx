@@ -7,6 +7,7 @@ import {
   type CreditAuditView, type CustomerCreditView,
 } from '@/modules/finance/credit';
 import CreditShell from './CreditShell';
+import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Customer Credit Management' };
 
@@ -36,20 +37,22 @@ export default async function Page({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.18em] text-accent uppercase">{t('finance.label')}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">{t('credit.title')}</h1>
-        <p className="text-sm text-ink-soft">{t('credit.intro')}</p>
-        <Link href="/finance/customer-balances" className="mt-1 inline-block text-sm text-accent hover:underline">
-          {t('credit.openBalances')}
-        </Link>
-        {' · '}
-        <Link href="/finance/credit-monitor" className="mt-1 inline-block text-sm text-accent hover:underline">
-          {t('credit.openMonitor')}
-        </Link>
-      </header>
+    <Page
+      title={t('credit.title')} code={t('finance.label')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('credit.intro')}</p>
+          <Link href="/finance/customer-balances" className="mt-1 inline-block text-sm text-accent hover:underline">
+              {t('credit.openBalances')}
+            </Link>
+          {' · '}
+          <Link href="/finance/credit-monitor" className="mt-1 inline-block text-sm text-accent hover:underline">
+              {t('credit.openMonitor')}
+            </Link>
+        </>
+      }
+    >
       <CreditShell canUse={canUse} config={config} credit={credit} audit={audit} selected={selected} />
-    </main>
+    </Page>
   );
 }

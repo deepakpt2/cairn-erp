@@ -10,6 +10,7 @@ import {
 } from '@/modules/finance/trial-balance';
 import TrialBalanceShell from './TrialBalanceShell';
 import { ReportExport } from '@/ui/output/ReportExport';
+import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Trial Balance / F.01' };
 
@@ -46,18 +47,20 @@ export default async function Page({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.18em] text-accent uppercase">{t('finance.label')}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">{t('trial.title')}</h1>
-        <p className="text-sm text-ink-soft">{t('trial.intro')}</p>
-        <Link href="/finance/journal/balances" className="mt-1 inline-block text-sm text-accent hover:underline">
-          {t('trial.openBalances')}
-        </Link>
-        {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
-        {result && <div className="mt-3"><ReportExport report="trial-balance" params={params} /></div>}
-      </header>
+    <Page
+      title={t('trial.title')} code={t('finance.label')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('trial.intro')}</p>
+          <Link href="/finance/journal/balances" className="mt-1 inline-block text-sm text-accent hover:underline">
+              {t('trial.openBalances')}
+            </Link>
+          {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
+          {result && <div className="mt-3"><ReportExport report="trial-balance" params={params} /></div>}
+        </>
+      }
+    >
       <TrialBalanceShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
-    </main>
+    </Page>
   );
 }

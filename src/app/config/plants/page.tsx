@@ -11,6 +11,7 @@ import { country as countryReference } from '@/platform/tables/reference';
 import { companyCode as companyCodeTable } from '@/modules/foundation/schema';
 import { PlantCompanyCodeAssignmentForm, type PlantCompanyCodeChoice } from './PlantCompanyCodeAssignmentForm';
 import { PlantDefinitionForm, type PlantDefinitionDraft } from './PlantDefinitionForm';
+import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,17 +107,17 @@ export default async function PlantsPage({
     : EMPTY_DRAFT;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-6">
-      <header className="border-b border-line pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="code text-ink-faint">{PLANT_DEFINE}</span>
+    <Page
+      title={t('plant.title')} code={PLANT_DEFINE} width="5xl" back={null}
+      description={t('plant.subtitle')}
+      actions={
+        <>
           {canDefine && (
-            <Link className="btn btn-primary" href="/config/plants?new=1">{t('plant.create')}</Link>
-          )}
-        </div>
-        <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('plant.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('plant.subtitle')}</p>
-      </header>
+                      <Link className="btn btn-primary" href="/config/plants?new=1">{t('plant.create')}</Link>
+                    )}
+        </>
+      }
+    >
 
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="PLANT" argument={selected.plant} />
@@ -223,6 +224,6 @@ export default async function PlantsPage({
           ))}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

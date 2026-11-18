@@ -7,6 +7,7 @@ import {
   type CreditMonitorFilter, type CreditMonitorResult,
 } from '@/modules/finance/credit';
 import CreditMonitorShell from './CreditMonitorShell';
+import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Credit Exposure Monitor' };
 
@@ -39,20 +40,22 @@ export default async function Page({ searchParams }: {
     }
   }
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.18em] text-accent uppercase">{t('finance.label')}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">{t('monitor.title')}</h1>
-        <p className="text-sm text-ink-soft">{t('monitor.intro')}</p>
-        <Link href="/finance/credit" className="mt-1 inline-block text-sm text-accent hover:underline">
-          {t('monitor.openCredit')}
-        </Link>
-        {' · '}
-        <Link href="/finance/credit-release" className="mt-1 inline-block text-sm text-accent hover:underline">
-          {t('monitor.openRelease')}
-        </Link>
-      </header>
+    <Page
+      title={t('monitor.title')} code={t('finance.label')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('monitor.intro')}</p>
+          <Link href="/finance/credit" className="mt-1 inline-block text-sm text-accent hover:underline">
+              {t('monitor.openCredit')}
+            </Link>
+          {' · '}
+          <Link href="/finance/credit-release" className="mt-1 inline-block text-sm text-accent hover:underline">
+              {t('monitor.openRelease')}
+            </Link>
+        </>
+      }
+    >
       <CreditMonitorShell canUse={canUse} result={result} error={error} filter={filter} />
-    </main>
+    </Page>
   );
 }

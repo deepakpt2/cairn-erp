@@ -9,6 +9,7 @@ import {
   type GlAccountTransferResult, type GlAccountTransferSelection,
 } from '@/modules/finance/gl-account-transfer';
 import TransferShell from './TransferShell';
+import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Transfer G/L Account Master Data' };
 export const dynamic = 'force-dynamic';
@@ -54,20 +55,22 @@ export default async function Page({ searchParams }: {
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.18em] text-accent uppercase">{t('finance.label')}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">Transfer G/L Account Master Data</h1>
-        <p className="text-sm text-ink-soft">
-          Copy company-code segments of G/L accounts from a source to a target company code on the same chart of accounts.
-          Test runs validate everything and copy nothing; every run leaves a protocol.
-        </p>
-        <Link href="/config/gl-accounts" className="mt-1 inline-block text-sm text-accent hover:underline">
-          G/L account master…
-        </Link>
-        {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
-      </header>
+    <Page
+      title="Transfer G/L Account Master Data" code={t('finance.label')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">
+              Copy company-code segments of G/L accounts from a source to a target company code on the same chart of accounts.
+              Test runs validate everything and copy nothing; every run leaves a protocol.
+            </p>
+          <Link href="/config/gl-accounts" className="mt-1 inline-block text-sm text-accent hover:underline">
+              G/L account master…
+            </Link>
+          {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
+        </>
+      }
+    >
       <TransferShell canUse={canUse} companies={companies} charts={charts} selection={selection} result={result} />
-    </main>
+    </Page>
   );
 }

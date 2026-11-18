@@ -8,6 +8,7 @@ import {
   CARRYFORWARD_CAPABILITY, listCarryforwardResults, listCarryforwardRuns,
 } from '@/modules/finance/carryforward';
 import CarryforwardShell from './CarryforwardShell';
+import { Page } from '@/ui/kit';
 
 export const metadata: Metadata = { title: 'Balance Carryforward' };
 
@@ -20,16 +21,18 @@ export default async function Page() {
   const runs = canUse ? await listCarryforwardRuns(session.user.client) : [];
   const results = canUse && runs[0] ? await listCarryforwardResults(session.user.client, runs[0].runId) : [];
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
-      <header>
-        <p className="text-xs font-bold tracking-[0.18em] text-accent uppercase">{t('finance.label')}</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink">{t('carry.title')}</h1>
-        <p className="text-sm text-ink-soft">{t('carry.intro')}</p>
-        <Link href="/finance/close-cockpit" className="mt-1 inline-block text-sm text-accent hover:underline">
-          {t('carry.openCockpit')}
-        </Link>
-      </header>
+    <Page
+      title={t('carry.title')} code={t('finance.label')} back={null}
+      description={
+        <>
+          <p className="max-w-3xl text-sm text-ink-soft">{t('carry.intro')}</p>
+          <Link href="/finance/close-cockpit" className="mt-1 inline-block text-sm text-accent hover:underline">
+              {t('carry.openCockpit')}
+            </Link>
+        </>
+      }
+    >
       <CarryforwardShell canUse={canUse} companies={companies} runs={runs} results={results} />
-    </main>
+    </Page>
   );
 }
