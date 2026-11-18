@@ -39,7 +39,7 @@ Auditor workspace: time-boxed scoped read-only grants, no-post rule, audited aud
 access_review, access_review_item, audit_finding, audit_grant, audit_grant_scope
 
 ## Depends on
-platform, platform/auth, platform/change, platform/db, platform/i18n, platform/tables
+platform, platform/auth, platform/change, platform/db, platform/i18n, platform/tables, ui/kit
 
 ## Used by
 platform/auth, platform/tenancy

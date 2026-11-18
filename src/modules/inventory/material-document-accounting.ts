@@ -117,3 +117,45 @@ export function accountingForOriginal(input: {
   }
   return described;
 }
+
+export interface DocumentJournalLink {
+  /** SENDING | RECEIVING | PRICE_DIFFERENCE for a stock transport order movement; SINGLE for a legacy document. */
+  role: string;
+  companyCode: string;
+  journalDocumentNumber: string;
+  fiscalYear: number;
+  status: string;
+}
+
+/**
+ * Every accounting document a material document wrote, from the link table, falling back to the one journal
+ * a legacy document stores on its header. A viewer who may not see a company's books is not shown that
+ * company's journal: it is withheld and counted, never leaked.
+ */
+export async function journalLinksFor(
+  tx: Tx, client: string, documentNumber: string, headerJournal: string | null, viewerUserId?: string,
+): Promise<{ links: DocumentJournalLink[]; withheld: number }> {
+  const rows = await tx.execute(sql`
+    select l.role, l.company_code, l.journal_document_number, l.fiscal_year, coalesce(j.status, 'ABSENT') as status
+      from material_document_journal l
+      left join journal_entry j on j.client = l.client and j.document_number = l.journal_document_number and j.fiscal_year = l.fiscal_year
+     where l.client = ${client} and l.material_document_number = ${documentNumber}
+     order by l.role
+  `) as unknown as Array<{ role: string; company_code: string; journal_document_number: string; fiscal_year: number; status: string }>;
+  let links: DocumentJournalLink[] = rows.map((r) => ({
+    role: r.role, companyCode: r.company_code, journalDocumentNumber: r.journal_document_number,
+    fiscalYear: Number(r.fiscal_year), status: r.status,
+  }));
+  if (links.length === 0 && headerJournal) {
+    const [company, year] = headerJournal.split('/');
+    links = [{
+      role: 'SINGLE', companyCode: company ?? '', journalDocumentNumber: headerJournal,
+      fiscalYear: Number(year), status: await readJournalStatus(tx, client, headerJournal),
+    }];
+  }
+  if (!viewerUserId) return { links, withheld: 0 };
+  const { loadOrgRestrictions, hasOrgAccess } = await import('../../platform/auth/session');
+  const restrictions = await loadOrgRestrictions(tx, client, viewerUserId);
+  const visible = links.filter((l) => !l.companyCode || hasOrgAccess(restrictions, 'COMPANY_CODE', l.companyCode));
+  return { links: visible, withheld: links.length - visible.length };
+}

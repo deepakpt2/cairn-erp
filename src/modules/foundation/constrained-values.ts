@@ -181,7 +181,7 @@ async function search(
       `);
     case 'purchase-order':
       return rows(tx, sql`
-        select order_number as code, supplier_number as label, currency as meta
+        select order_number as code, coalesce(supplier_number, 'STO from plant ' || supplying_plant) as label, currency as meta
           from purchase_order
          where client = ${client}
            and (order_number ilike ${pattern} escape '\\' or supplier_number ilike ${pattern} escape '\\')

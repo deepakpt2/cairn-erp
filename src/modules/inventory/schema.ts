@@ -485,6 +485,14 @@ export const materialDocumentLine = pgTable('material_document_line', {
   returnOfDocument: varchar('return_of_document', { length: 20 }),
   returnOfDocumentYear: integer('return_of_document_year'),
   returnOfLine: integer('return_of_line'),
+  /**
+   * 9310: the stock transport order item a 351/352/101/102 line belongs to, and the ORIGINAL goods-issue
+   * line it traces back to. Deliberately not `purchase_order_number`, so no supplier-PO reader sees them.
+   */
+  stoOrderNumber: varchar('sto_order_number', { length: 20 }),
+  stoOrderItem: integer('sto_order_item'),
+  stoIssueDocument: varchar('sto_issue_document', { length: 20 }),
+  stoIssueLine: integer('sto_issue_line'),
   itemText: varchar('item_text', { length: 100 }),
   ...auditColumns,
 }, (t) => [
@@ -497,6 +505,55 @@ export const materialDocumentLine = pgTable('material_document_line', {
   check('material_document_line_return_lineage_check', sql`(${t.returnOfDocument} is null and ${t.returnOfDocumentYear} is null and ${t.returnOfLine} is null) or (${t.returnOfDocument} is not null and ${t.returnOfDocumentYear} is not null and ${t.returnOfLine} is not null)`),
   check('material_document_line_reversal_not_return_check', sql`${t.reversalOfDocument} is null or ${t.returnOfDocument} is null`),
   index('material_document_line_return_of_idx').on(t.client, t.returnOfDocument, t.returnOfDocumentYear, t.returnOfLine),
+]);
+
+/**
+ * The accounting documents a material document wrote (9310). A cross-company STO goods issue writes two,
+ * one per company; `material_document.journal_document_number` keeps the first for legacy readers.
+ */
+export const materialDocumentJournal = pgTable('material_document_journal', {
+  client: tenant(),
+  materialDocumentNumber: varchar('material_document_number', { length: 20 }).notNull(),
+  /** SENDING | RECEIVING | PRICE_DIFFERENCE */
+  role: varchar('role', { length: 16 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialDocumentNumber, t.role] }),
+]);
+
+/**
+ * The STO transit ledger (9310): one row per original goods-issue (351) line. In transit is
+ * issued - reversed - received. The snapshots are taken at issue and never rewritten.
+ */
+export const stoTransitAllocation = pgTable('sto_transit_allocation', {
+  client: tenant(),
+  issueDocument: varchar('issue_document', { length: 20 }).notNull(),
+  issueLine: integer('issue_line').notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  supplyingPlant: varchar('supplying_plant', { length: 10 }).notNull(),
+  receivingPlant: varchar('receiving_plant', { length: 10 }).notNull(),
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
+  baseUnit: varchar('base_unit', { length: 10 }).notNull(),
+  postingDate: varchar('posting_date', { length: 10 }).notNull(),
+  issuedQuantity: quantity('issued_quantity').notNull(),
+  receivedQuantity: quantity('received_quantity').notNull().default('0'),
+  reversedQuantity: quantity('reversed_quantity').notNull().default('0'),
+  sendingCompany: varchar('sending_company', { length: 10 }).notNull(),
+  receivingCompany: varchar('receiving_company', { length: 10 }).notNull(),
+  sourceCurrency: char('source_currency', { length: 3 }).notNull(),
+  issueValue: money('issue_value').notNull(),
+  receivingCurrency: char('receiving_currency', { length: 3 }).notNull(),
+  transitValue: money('transit_value').notNull(),
+  exchangeRate: numeric('exchange_rate', { precision: 23, scale: 8 }).notNull().default('1'),
+  receivedValue: money('received_value').notNull().default('0'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.issueDocument, t.issueLine] }),
 ]);
 
 export const stockQuantity = pgTable('stock_quantity', {

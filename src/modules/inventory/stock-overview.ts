@@ -12,8 +12,10 @@
  * Read-only: this module issues no insert, update or delete.
  *
  * A named batch filters this tree to the stock that stands on that batch.
- * The overview does not create a batch. In-transit is deferred by name (no
- * movement type in this canon produces transit stock). Refused by name: SAP's
+ * The overview does not create a batch. Stock in transit (ITEM-22: a stock transport
+ * order goods issue not yet received) is its own plant-level quantity of the receiving
+ * plant, outside every storage location and every on-hand figure, and counted once in
+ * the plant and material totals. Refused by name: SAP's
  * one-character special stock indicator — Cairn carries special stock as a named
  * stock type, which is exactly what the third tree level shows.
  */
@@ -22,6 +24,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import { IN_TRANSIT } from './stock-types';
 
 export const STOCK_OVERVIEW_CAPABILITY = 'INV.STOCK.VIEW';
 export const STOCK_OVERVIEW_ALIAS = 'MMBE';
@@ -72,9 +75,21 @@ export interface StorageLocationNode {
   warehouseDrillDown: string | null;
 }
 
+/** Stock in transit of a stock transport order: a plant-level quantity, never a storage location's, never available. */
+export interface TransitNode {
+  quantity: number;
+  batches: StockBatchNode[];
+  /** The orders it belongs to, from the transit ledger. */
+  orders: Array<{ orderNumber: string; itemNumber: number; batch: string; inTransit: number; drillDown: string }>;
+}
+
 export interface PlantNode {
   plant: string;
+  /** Everything counted at the plant: on-hand stock of every type PLUS transit, each once. */
   quantity: number;
+  /** In transit to this plant (351 posted, 101 not yet). Not unrestricted, not available, no storage location. */
+  transitQuantity: number;
+  transit: TransitNode | null;
   unrestrictedQuantity: number;
   qualityInspectionQuantity: number;
   blockedQuantity: number;
@@ -98,6 +113,8 @@ export interface StockOverviewResult {
   qualityInspectionQuantity: number;
   blockedQuantity: number;
   specialQuantity: number;
+  /** In transit, counted once in `totalQuantity` and shown apart from every on-hand figure. */
+  transitQuantity: number;
   truncated: boolean;
   maxHits: number;
   warnings: string[];
@@ -218,10 +235,33 @@ export async function stockOverview(input: {
     const rows = await tx.execute(sql`
       select plant, storage_location, stock_type, batch_number, quantity::text as quantity
       from stock_quantity
-      where client = ${client} and material_number = ${s.material!} ${sql.join(filters, sql` `)}
+      where client = ${client} and material_number = ${s.material!} and stock_type <> ${IN_TRANSIT} ${sql.join(filters, sql` `)}
       order by plant, storage_location, stock_type, batch_number
       limit ${maxHits + 1}
     `) as unknown as Array<{ plant: string; storage_location: string; stock_type: string; batch_number: string; quantity: string }>;
+
+    // Transit is its own plant-level quantity of the RECEIVING plant: no storage location exists for it, so a
+    // storage-location selection (which names a place) leaves it out and says so.
+    const transitRows = s.storageLocationFrom || s.storageLocationTo ? [] : await tx.execute(sql`
+      select plant, batch_number, quantity::text as quantity
+      from stock_quantity
+      where client = ${client} and material_number = ${s.material!} and stock_type = ${IN_TRANSIT}
+        ${s.plantFrom ? sql`and plant >= ${s.plantFrom}` : sql``}
+        ${s.plantTo ? sql`and plant <= ${s.plantTo}` : sql``}
+        ${batchFilter ? sql`and batch_number = ${batchFilter}` : sql``}
+      order by plant, batch_number
+    `) as unknown as Array<{ plant: string; batch_number: string; quantity: string }>;
+    if (s.storageLocationFrom || s.storageLocationTo) {
+      warnings.push('Stock in transit is a plant-level quantity with no storage location; it is not shown under a storage-location selection.');
+    }
+    const transitLedger = transitRows.length === 0 ? [] : await tx.execute(sql`
+      select receiving_plant as plant, order_number, item_number, batch_number,
+             (issued_quantity - reversed_quantity - received_quantity)::text as in_transit
+        from sto_transit_allocation
+       where client = ${client} and material_number = ${s.material!}
+         and issued_quantity - reversed_quantity - received_quantity > 0
+       order by receiving_plant, order_number, item_number, posting_date
+    `) as unknown as Array<{ plant: string; order_number: string; item_number: number; batch_number: string; in_transit: string }>;
 
     const truncated = rows.length > maxHits;
     const leaves = rows.slice(0, maxHits);
@@ -264,6 +304,16 @@ export async function stockOverview(input: {
       if (!types.has(stockType)) types.set(stockType, new Map());
       const batches = types.get(stockType)!;
       batches.set(batch, (batches.get(batch) ?? 0) + quantity);
+    }
+
+    const transitByPlant = new Map<string, Map<string, number>>();
+    for (const row of transitRows) {
+      const quantity = num(String(row.quantity));
+      if (!s.displayZero && quantity === 0) continue;
+      if (!transitByPlant.has(row.plant)) transitByPlant.set(row.plant, new Map());
+      const batches = transitByPlant.get(row.plant)!;
+      batches.set(row.batch_number ?? '', (batches.get(row.batch_number ?? '') ?? 0) + quantity);
+      if (!plantMap.has(row.plant)) plantMap.set(row.plant, new Map());
     }
 
     const plants: PlantNode[] = [];
@@ -320,10 +370,27 @@ export async function stockOverview(input: {
         }
       }
 
-      if (storageLocations.length === 0) continue;
+      const transitBatches = [...(transitByPlant.get(plant)?.entries() ?? [])]
+        .filter(([, quantity]) => s.displayZero || quantity !== 0)
+        .map(([batch, quantity]) => ({ batch, quantity: Number(quantity.toFixed(3)) }))
+        .sort((a, b) => a.batch.localeCompare(b.batch));
+      const transitQuantity = Number(transitBatches.reduce((sum, b) => sum + b.quantity, 0).toFixed(3));
+      if (storageLocations.length === 0 && transitBatches.length === 0) continue;
+      const transit: TransitNode | null = transitBatches.length === 0 ? null : {
+        quantity: transitQuantity,
+        batches: transitBatches,
+        orders: transitLedger.filter((l) => l.plant === plant).map((l) => ({
+          orderNumber: l.order_number, itemNumber: Number(l.item_number), batch: l.batch_number ?? '',
+          inTransit: num(String(l.in_transit)),
+          drillDown: `/purchasing/purchase-order-display?order=${encodeURIComponent(l.order_number)}`,
+        })),
+      };
+      plantTotal += transitQuantity;
       plants.push({
         plant,
         quantity: Number(plantTotal.toFixed(3)),
+        transitQuantity,
+        transit,
         unrestrictedQuantity: Number(plantUnrestricted.toFixed(3)),
         qualityInspectionQuantity: Number(plantQuality.toFixed(3)),
         blockedQuantity: Number(plantBlocked.toFixed(3)),
@@ -346,7 +413,8 @@ export async function stockOverview(input: {
       quality: acc.quality + plant.qualityInspectionQuantity,
       blocked: acc.blocked + plant.blockedQuantity,
       special: acc.special + plant.specialQuantity,
-    }), { total: 0, unrestricted: 0, quality: 0, blocked: 0, special: 0 });
+      transit: acc.transit + plant.transitQuantity,
+    }), { total: 0, unrestricted: 0, quality: 0, blocked: 0, special: 0, transit: 0 });
 
     return {
       capability: STOCK_OVERVIEW_CAPABILITY,
@@ -361,6 +429,7 @@ export async function stockOverview(input: {
       qualityInspectionQuantity: Number(totals.quality.toFixed(3)),
       blockedQuantity: Number(totals.blocked.toFixed(3)),
       specialQuantity: Number(totals.special.toFixed(3)),
+      transitQuantity: Number(totals.transit.toFixed(3)),
       truncated,
       maxHits,
       warnings,

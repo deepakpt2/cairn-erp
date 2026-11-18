@@ -258,6 +258,10 @@ export async function getOrderAdvances(client: string, orderNumber: string): Pro
         'Open the order, then look at its advances again.',
       );
     }
+    if (!order.supplierNumber) {
+      // A stock transport order is not bought from anybody: it can carry no advance.
+      return [];
+    }
     const rows = await tx.select().from(vendorDownPayment).where(and(
       eq(vendorDownPayment.client, client),
       eq(vendorDownPayment.vendorNumber, order.supplierNumber),

@@ -28,7 +28,7 @@ describe('SCR-132 material document reversal UI contract', () => {
   it('looks a document up by its number and fiscal year', () => {
     expect(shell).toMatch(/name="doc"[^>]*required/);
     expect(shell).toMatch(/name="fiscalYear"/);
-    expect(page).toContain('getReversalDocument(session.user.client, params.doc)');
+    expect(page).toContain('getReversalDocument(session.user.client, params.doc, session.user.userId)');
     expect(service).toContain('stands in fiscal year');
   });
 

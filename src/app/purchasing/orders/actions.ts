@@ -105,6 +105,27 @@ export async function saveOrderAction(
       incotermsLocation?: string;
       items?: unknown[];
     };
+    // A stock transport order passes through whole: the service refuses a field it does not carry by name,
+    // which it cannot do for a field this action quietly dropped.
+    if (input.documentType === 'STOCK_TRANSPORT') {
+      const stoBase = { ...(input as Record<string, unknown>), client: session.user.client, changedBy: session.user.username };
+      const editingSto = typeof orderNumber === 'string' && orderNumber;
+      if (editingSto) {
+        await assertChangeForSession(session, { lockObject: 'PURCHASE_ORDER', argument: orderNumber });
+      }
+      const stoResult = editingSto
+        ? await changeOrder({ ...stoBase, orderNumber } as never)
+        : await createOrder(stoBase as never);
+      revalidatePath(ROUTE);
+      return {
+        ok: true,
+        orderNumber: stoResult.orderNumber,
+        warnings: stoResult.warnings,
+        message: editingSto
+          ? `Stock transport order ${stoResult.orderNumber} saved.`
+          : `Stock transport order ${stoResult.orderNumber} created.`,
+      };
+    }
     const base = {
       client: session.user.client,
       changedBy: session.user.username,

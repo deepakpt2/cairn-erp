@@ -41,13 +41,17 @@ export async function purchaseOrderPdf(input: { client: string; orderNumber: str
       eq(purchaseOrderItem.client, client), eq(purchaseOrderItem.orderNumber, orderNumber),
     )).orderBy(asc(purchaseOrderItem.itemNumber))).filter((i) => !i.markedForDeletion);
 
-    const out: string[] = [RULE, padStart('PURCHASE ORDER', 48), RULE];
+    const out: string[] = [RULE, padStart(po.documentType === 'STOCK_TRANSPORT' ? 'STOCK TRANSPORT ORDER' : 'PURCHASE ORDER', 48), RULE];
     out.push(`${pad('Order', 20)}${pad(orderNumber, 22)}${pad('Date', 12)}${po.documentDate}`);
     out.push(`${pad('Purchasing org', 20)}${pad(`${po.purchasingOrg}/${po.purchasingGroup}`, 22)}${pad('Currency', 12)}${po.currency}`);
     if (po.paymentTermsCode) out.push(`${pad('Payment terms', 20)}${po.paymentTermsCode}`);
     if (po.incotermsCode) out.push(`${pad('Incoterms', 20)}${po.incotermsCode}${po.incotermsLocation ? ` ${po.incotermsLocation}` : ''}`);
     out.push(THIN);
-    out.push(...await addressBlock(tx, client, po.supplierNumber, 'Supplier'));
+    if (po.supplierNumber) {
+      out.push(...await addressBlock(tx, client, po.supplierNumber, 'Supplier'));
+    } else {
+      out.push(`${pad('Supplying plant', 20)}${po.supplyingPlant ?? ''}`);
+    }
     out.push(THIN);
     out.push(`${padStart('It', 4)} ${pad('Material / description', 28)}${padStart('Quantity', 10)} ${pad('Unit', 5)}${padStart('Price', 10)}${padStart('Amount', 11)}`);
     let total = 0;

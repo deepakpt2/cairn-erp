@@ -33,6 +33,8 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { StockTransportError, reverseStoDocumentInTx, stoDocumentKind } from './stock-transport';
 import { plant as plantTable, storageLocation } from '../foundation/schema';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
 import {
@@ -43,7 +45,7 @@ import { recordOutputsForPostedDocument } from './material-document-output';
 import { batchClassificationRefusal } from './batch-classification';
 import { noteBatchControlUse } from './batch-control-use';
 import {
-  accountingForOriginal, readJournalStatus, type JournalAccounting,
+  accountingForOriginal, journalLinksFor, readJournalStatus, type DocumentJournalLink, type JournalAccounting,
 } from './material-document-accounting';
 import { releaseDifferenceAllocations } from './physical-inventory-posting-status';
 import {
@@ -96,6 +98,9 @@ export interface ReversalDocumentView {
   reversedBy: string | null;
   /** Read from the journal row, not from the material-document status. */
   journalAccounting: JournalAccounting;
+  /** Every accounting document this document wrote: a cross-company STO issue wrote two. */
+  journals: DocumentJournalLink[];
+  withheldJournals: number;
   lines: ReversalLineView[];
 }
 
@@ -131,7 +136,7 @@ async function counterMovements(tx: Tx, client: string): Promise<Map<string, str
 }
 
 async function toView(
-  tx: Tx, client: string, header: typeof materialDocument.$inferSelect,
+  tx: Tx, client: string, header: typeof materialDocument.$inferSelect, viewerUserId?: string,
 ): Promise<ReversalDocumentView> {
   const lines = await tx.select().from(materialDocumentLine).where(and(
     eq(materialDocumentLine.client, client),
@@ -141,6 +146,7 @@ async function toView(
   const counters = await counterMovements(tx, client);
   const linesOpen = lines.some((line) => Number(line.baseQuantity) - (reversed[line.lineNumber] ?? 0) > 1e-9);
   const journalStatus = await readJournalStatus(tx, client, header.journalDocumentNumber);
+  const journalLinks = await journalLinksFor(tx, client, header.materialDocumentNumber, header.journalDocumentNumber, viewerUserId);
   let originalJournalStatus: Awaited<ReturnType<typeof readJournalStatus>> | null = null;
   if (header.reversalOf) {
     const [original] = await tx.select({ journalDocumentNumber: materialDocument.journalDocumentNumber }).from(materialDocument).where(and(
@@ -167,6 +173,8 @@ async function toView(
       originalJournalStatus,
       linesOpen,
     }),
+    journals: journalLinks.links,
+    withheldJournals: journalLinks.withheld,
     lines: lines.map((l) => {
       const done = reversed[l.lineNumber] ?? 0;
       return {
@@ -190,13 +198,15 @@ async function toView(
   };
 }
 
-export async function getReversalDocument(client: string, number: string): Promise<ReversalDocumentView | null> {
+export async function getReversalDocument(
+  client: string, number: string, viewerUserId?: string,
+): Promise<ReversalDocumentView | null> {
   return withTenant(client, async (tx) => {
     const [header] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, client), eq(materialDocument.materialDocumentNumber, number),
     ));
     if (!header) return null;
-    return toView(tx, client, header);
+    return toView(tx, client, header, viewerUserId);
   });
 }
 
@@ -215,6 +225,11 @@ export interface PostReversalInput {
   /** The package's reversal reason code; no master stands in this canon, so it is refused by name. */
   reason?: string;
   requestKey: string;
+  /**
+   * Who is reversing. Required for a stock transport order document (351/101): its reversal posts in both
+   * companies and the service judges the actor against both plants.
+   */
+  authorization?: ServiceAuthorityContext;
 }
 
 async function existingByRequestKey(tx: Tx, client: string, requestKey: string) {
@@ -389,6 +404,21 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     ...(input.lines ?? []).map(String).sort(),
   ]);
   return withTenant(input.client, async (tx) => {
+    // A stock transport order movement (351/101) reverses through its own service: it owns the transit
+    // ledger, both companies' journals and the document-level reversal rule. It replays by its own fingerprint.
+    if ((await stoDocumentKind(tx, input.client, input.materialDocumentNumber))) {
+      try {
+        await reverseStoDocumentInTx(tx, {
+          client: input.client, changedBy: input.changedBy, materialDocumentNumber: input.materialDocumentNumber,
+          postingDate: input.postingDate, documentDate: input.documentDate, headerText: input.headerText,
+          requestKey: input.requestKey, lines: input.lines,
+        }, input.authorization);
+      } catch (caught) {
+        if (caught instanceof StockTransportError) throw new MaterialReversalError(caught.message, caught.remedy);
+        throw caught;
+      }
+      return (await existingByRequestKey(tx, input.client, input.requestKey))!;
+    }
     await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
     if (replay) {

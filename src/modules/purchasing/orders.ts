@@ -19,6 +19,9 @@
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { assertPurchaseContractCallOff, PurchaseContractError } from './contract';
+import {
+  STO_ORDER_TYPE, StoOrderError, changeStockTransportOrder, createStockTransportOrder,
+} from './stock-transport-order';
 import { z } from 'zod';
 
 import { recordChange } from '../../platform/change';
@@ -60,6 +63,8 @@ export const PO_OBJECT_CLASS = 'purchase_order';
 /** Delivered document types this round; a maintenance screen is deferred (R-104). */
 export const ORDER_TYPES = [
   { code: 'STANDARD', name: 'Standard purchase order', rangeSubObject: 'POF' },
+  /** ITEM-22: no supplier, no price; supplied by a plant. Created and changed by stock-transport-order.ts. */
+  { code: STO_ORDER_TYPE, name: 'Stock transport order', rangeSubObject: 'POF' },
 ] as const;
 
 export class PurchaseOrderError extends Error {
@@ -202,7 +207,9 @@ export interface OrderItemRow {
 export interface OrderDocument {
   orderNumber: string;
   documentType: string;
+  /** Empty on a stock transport order, whose supply source is `supplyingPlant`. */
   supplierNumber: string;
+  supplyingPlant: string | null;
   supplierName: string;
   purchasingOrg: string;
   purchasingGroup: string;
@@ -709,8 +716,10 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
   const [header] = await tx.select().from(purchaseOrder)
     .where(and(eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, orderNumber)));
   if (!header) return null;
-  const [supplier] = await tx.select().from(businessPartner)
-    .where(and(eq(businessPartner.client, client), eq(businessPartner.partnerNumber, header.supplierNumber)));
+  const [supplier] = header.supplierNumber
+    ? await tx.select().from(businessPartner)
+      .where(and(eq(businessPartner.client, client), eq(businessPartner.partnerNumber, header.supplierNumber)))
+    : [];
   const items = await tx.select().from(purchaseOrderItem)
     .where(and(eq(purchaseOrderItem.client, client), eq(purchaseOrderItem.orderNumber, orderNumber)))
     .orderBy(asc(purchaseOrderItem.itemNumber));
@@ -729,7 +738,8 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
   return {
     orderNumber,
     documentType: header.documentType,
-    supplierNumber: header.supplierNumber,
+    supplierNumber: header.supplierNumber ?? '',
+    supplyingPlant: header.supplyingPlant,
     supplierName: supplier?.name ?? '',
     purchasingOrg: header.purchasingOrg,
     purchasingGroup: header.purchasingGroup,
@@ -952,9 +962,33 @@ async function writeItem(
   void documentDate;
 }
 
+function stoError(error: unknown): never {
+  if (error instanceof StoOrderError) throw new PurchaseOrderError(error.message, error.remedy, error.code);
+  throw error;
+}
+
+/** The payload names the type; a supplier order must not carry a supplying plant, nor an STO a supplier. */
+function isStoPayload(raw: unknown): boolean {
+  return (raw as { documentType?: string } | null)?.documentType === STO_ORDER_TYPE;
+}
+
+function refuseStoFieldsOnSupplierOrder(raw: unknown): void {
+  const supplying = (raw as { supplyingPlant?: unknown } | null)?.supplyingPlant;
+  if (typeof supplying === 'string' && supplying.trim()) {
+    throw new PurchaseOrderError(
+      'A supplier order carries no supplying plant.',
+      'Choose the stock transport order type to supply from a plant, or remove the supplying plant.',
+    );
+  }
+}
+
 export async function createOrder(
   raw: CreateOrderInput,
 ): Promise<{ orderNumber: string; warnings: string[] }> {
+  if (isStoPayload(raw)) {
+    return createStockTransportOrder(raw).catch(stoError);
+  }
+  refuseStoFieldsOnSupplierOrder(raw);
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -1119,6 +1153,24 @@ async function assertReleaseImpact(
 export async function changeOrder(
   raw: CreateOrderInput & { orderNumber: string },
 ): Promise<{ orderNumber: string; warnings: string[] }> {
+  // An order never changes type: the stored type decides which service may edit it.
+  const stored = await withTenant(raw.client, async (tx) => {
+    const [row] = await tx.select({ documentType: purchaseOrder.documentType }).from(purchaseOrder).where(and(
+      eq(purchaseOrder.client, raw.client), eq(purchaseOrder.orderNumber, raw.orderNumber),
+    ));
+    return row?.documentType ?? null;
+  });
+  if (stored === STO_ORDER_TYPE || isStoPayload(raw)) {
+    if (stored !== null && (stored === STO_ORDER_TYPE) !== isStoPayload(raw)) {
+      throw new PurchaseOrderError(
+        `Purchase order ${raw.orderNumber} is a ${stored} order and cannot be changed into a ${isStoPayload(raw) ? 'stock transport' : 'supplier'} order.`,
+        'An order keeps its type for life; create a new order of the other type.',
+      );
+    }
+    const { orderNumber, ...rest } = raw as unknown as { orderNumber: string } & Record<string, unknown>;
+    return changeStockTransportOrder(rest, orderNumber).catch(stoError);
+  }
+  refuseStoFieldsOnSupplierOrder(raw);
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];

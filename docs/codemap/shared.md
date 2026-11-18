@@ -37,11 +37,12 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | platform/tenancy | app/clients, app/config, app/page.tsx, finance, foundation, inventory, platform, production, purchasing |
 | ui/attention | app/page.tsx |
 | ui/fields | finance, foundation, inventory, purchasing, sales |
-| ui/kit | app/dev, purchasing, sales |
+| ui/kit | app/account, app/clients, app/config, app/dev, app/menu, app/registry, app/search, audit, finance, foundation, inventory, output, people, platform, production, purchasing, quality, sales |
 | ui/lock | finance, foundation, inventory, platform, production, purchasing, quality |
 | ui/output | finance, foundation, inventory, output, production, purchasing, sales |
 | ui/release | finance |
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
+| worker/config.ts | worker/index.ts |
 | worker/jobs.ts | worker/index.ts |
 
 ## Files (186)

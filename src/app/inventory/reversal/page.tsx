@@ -25,7 +25,7 @@ export default async function ReversalPage({ searchParams }: {
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
-  const document = params.doc ? await getReversalDocument(session.user.client, params.doc) : null;
+  const document = params.doc ? await getReversalDocument(session.user.client, params.doc, session.user.userId) : null;
   const today = new Date().toISOString().slice(0, 10);
   const canReverse = can(session, REVERSE_CAPABILITY);
   const reversalKey = document?.materialDocumentNumber.trim() ?? '';

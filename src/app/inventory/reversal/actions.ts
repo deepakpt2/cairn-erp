@@ -59,6 +59,8 @@ export async function reverseMaterialDocumentAction(
       headerText: text(form, 'headerText') || undefined,
       reason: text(form, 'reason') || undefined,
       requestKey: text(form, 'requestKey'),
+      // Needed for a stock transport order movement, whose reversal posts in both companies.
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {

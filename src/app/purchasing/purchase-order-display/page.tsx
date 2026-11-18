@@ -53,6 +53,78 @@ function stateLabel(state: string): string {
   return label === key ? state : label;
 }
 
+/** ITEM-22: the transit ledger and the movement history of a stock transport order. Never says transit was received. */
+function StoSection({ sto }: { sto: NonNullable<DisplayedOrder['stockTransport']> }) {
+  return (
+    <section aria-labelledby="po-sto" className="border border-line bg-surface p-4" data-po-sto>
+      <h2 id="po-sto" className="text-sm font-semibold">Stock transport: issued, in transit and received</h2>
+      <p className="mt-1 text-xs text-ink-soft">
+        Quantities are in the material base unit. In transit has been issued (351) and not yet received (101); it is not available stock
+        of the receiving plant until the receipt is posted.
+      </p>
+      <div className="table-scroll mt-2">
+        <table className="grid-table text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+              <th>Item</th><th>Material</th><th>Receiving plant</th>
+              <th className="text-right">Ordered</th><th className="text-right">Issued</th>
+              <th className="text-right">Received</th><th className="text-right">In transit</th><th className="text-right">Issueable</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sto.items.map((i) => (
+              <tr key={i.itemNumber} data-sto-item={i.itemNumber}>
+                <td>{i.itemNumber}</td><td>{i.materialNumber}</td><td>{i.receivingPlant}</td>
+                <td className="num">{i.orderedBase} {i.baseUnit}</td>
+                <td className="num" data-sto-issued>{i.netIssued}</td>
+                <td className="num" data-sto-received>{i.netReceived}</td>
+                <td className="num" data-sto-transit>{i.inTransit}</td>
+                <td className="num">{i.issueable}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <h3 className="mt-3 text-sm font-semibold">Movements and accounting documents</h3>
+      {sto.history.length === 0 ? <p className="mt-1 text-sm text-ink-soft">Nothing has been issued yet.</p> : (
+        <div className="table-scroll mt-1">
+          <table className="grid-table text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                <th>Movement</th><th>Material document</th><th>Posted</th><th>Item</th><th>Plant</th>
+                <th className="text-right">Quantity</th><th>Status</th><th>Accounting documents</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sto.history.map((h) => (
+                <tr key={`${h.materialDocumentNumber}-${h.itemNumber}`} data-sto-movement={h.code}>
+                  <td>{h.code}</td>
+                  <td><a className="underline" href={`/inventory/material-documents?document=${encodeURIComponent(h.materialDocumentNumber)}`}>{h.materialDocumentNumber}</a></td>
+                  <td>{h.postingDate}</td><td>{h.itemNumber}</td><td>{h.plant}</td>
+                  <td className="num">{h.quantity} {h.unit}</td><td>{h.status}</td>
+                  <td>
+                    {h.journals.length === 0 ? '—' : h.journals.map((j) => (
+                      <span key={j.journalDocumentNumber} className="me-2">
+                        <a className="underline" href={`/finance/journal/document?document=${encodeURIComponent(j.journalDocumentNumber)}`}>{j.journalDocumentNumber}</a>
+                        {' '}({j.role.toLowerCase()} · {j.companyCode})
+                      </span>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {sto.withheldJournals > 0 && (
+        <p className="mt-1 text-xs text-ink-soft" data-sto-withheld>
+          {sto.withheldJournals} accounting document(s) of a company outside your scope are not shown.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boolean }) {
   return (
     <section aria-labelledby="po-display-document" className="space-y-4" data-po-display>
@@ -62,7 +134,15 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
           <DownloadPdfButton action={downloadPurchaseOrderPdfAction} fields={{ orderNumber: order.orderNumber }} />
         </div>
         <p className="mt-1 text-sm" data-po-identity>
-          <span data-po-supplier>{order.supplierNumber}{order.supplierName ? ` · ${order.supplierName}` : ''}</span>
+          {order.stockTransport ? (
+            <span data-po-supply-plant>
+              Supplying plant {order.supplyingPlant} (company {order.stockTransport.supplyingCompany})
+              {' → '}receiving company {order.companyCode}
+              {' · '}{order.stockTransport.crossCompany ? 'cross-company' : 'same company'}
+            </span>
+          ) : (
+            <span data-po-supplier>{order.supplierNumber}{order.supplierName ? ` · ${order.supplierName}` : ''}</span>
+          )}
           {' · '}
           <span data-po-company>{order.companyCode}</span>
           {' · '}
@@ -100,16 +180,25 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
               {t('poDisplay.toChange')}
             </Link>
           )}
-          <Link href="/inventory/goods-receipt" className="btn btn-default min-h-11 sm:min-h-8" data-po-receipt>{t('poDisplay.toReceipt')}</Link>
-          <Link href={`/purchasing/invoice-overview?companyFrom=${encodeURIComponent(order.companyCode)}&fiscalYear=${order.documentDate.slice(0, 4)}&orderFrom=${encodeURIComponent(order.orderNumber)}&orderTo=${encodeURIComponent(order.orderNumber)}`} className="btn btn-default min-h-11 sm:min-h-8" data-po-invoices>
+          {order.stockTransport && (
+            <Link href={`/inventory/transfer-posting?sto=${encodeURIComponent(order.orderNumber)}`} className="btn btn-default min-h-11 sm:min-h-8" data-po-sto-issue>
+              Goods issue (351)
+            </Link>
+          )}
+          <Link href={order.stockTransport ? `/inventory/goods-receipt?order=${encodeURIComponent(order.orderNumber)}` : '/inventory/goods-receipt'} className="btn btn-default min-h-11 sm:min-h-8" data-po-receipt>
+            {order.stockTransport ? 'Goods receipt from transit (101)' : t('poDisplay.toReceipt')}
+          </Link>
+          {!order.stockTransport && <Link href={`/purchasing/invoice-overview?companyFrom=${encodeURIComponent(order.companyCode)}&fiscalYear=${order.documentDate.slice(0, 4)}&orderFrom=${encodeURIComponent(order.orderNumber)}&orderTo=${encodeURIComponent(order.orderNumber)}`} className="btn btn-default min-h-11 sm:min-h-8" data-po-invoices>
             {t('poDisplay.toInvoices')}
-          </Link>
-          <Link href={`/purchasing/grir-clearing?companyFrom=${encodeURIComponent(order.companyCode)}&orderFrom=${encodeURIComponent(order.orderNumber)}&orderTo=${encodeURIComponent(order.orderNumber)}&keyDate=${encodeURIComponent(order.documentDate)}`} className="btn btn-default min-h-11 sm:min-h-8" data-po-grir>
+          </Link>}
+          {!order.stockTransport && <Link href={`/purchasing/grir-clearing?companyFrom=${encodeURIComponent(order.companyCode)}&orderFrom=${encodeURIComponent(order.orderNumber)}&orderTo=${encodeURIComponent(order.orderNumber)}&keyDate=${encodeURIComponent(order.documentDate)}`} className="btn btn-default min-h-11 sm:min-h-8" data-po-grir>
             {t('poDisplay.toClearing')}
-          </Link>
+          </Link>}
         </div>
         <p className="mt-2 text-xs text-ink-soft" data-po-navigation>{t('poDisplay.navigation')}</p>
       </div>
+
+      {order.stockTransport && <StoSection sto={order.stockTransport} />}
 
       {order.items.map((item) => (
         <section key={item.itemNumber} aria-labelledby={`po-item-${item.itemNumber}`} className="border border-line bg-surface p-4" data-po-item={item.itemNumber}>
@@ -341,7 +430,7 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
   let search: Awaited<ReturnType<typeof openPurchaseOrderDisplay>>['search'] = null;
   if (canDisplay && Object.keys(params).length > 0) {
     try {
-      const result = await openPurchaseOrderDisplay(session.user.client, params);
+      const result = await openPurchaseOrderDisplay(session.user.client, params, session.user.userId);
       refusal = result.refusal;
       search = result.search;
       if (result.order?.found) opened = result.order.order;

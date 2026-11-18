@@ -11,6 +11,7 @@
  * balanced journal. A posted invoice is never edited — cancellation
  * is a linked mirror document judging its own posting date.
  */
+import { STO_ORDER_TYPE, stoRefusal } from './sto-guard';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
@@ -174,7 +175,7 @@ async function orderViewInTx(
   )).orderBy(purchaseOrderAssignment.itemNumber, purchaseOrderAssignment.lineNumber);
   return {
     orderNumber: header.orderNumber,
-    supplierNumber: header.supplierNumber,
+    supplierNumber: header.supplierNumber ?? '',
     companyCode: header.companyCode,
     currency: header.currency,
     items: items.map((item) => {
@@ -182,7 +183,8 @@ async function orderViewInTx(
       const done = invoiced.get(item.itemNumber) ?? 0;
       const assignmentRows = assigned.filter((row) => row.itemNumber === item.itemNumber);
       let refusal: string | null = null;
-      if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
+      if (header.documentType === STO_ORDER_TYPE) refusal = 'A stock transport order is never invoiced.';
+      else if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
       else if (!item.invoiceReceiptIndicator) refusal = 'The item is not invoiceable: its invoice receipt indicator is off.';
       else if (item.finalInvoiceIndicator) refusal = 'The final invoice has been posted against this item.';
       // An account-assigned item needs no material: what it buys is not stock, and the
@@ -629,6 +631,8 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
     if (replay) return replay;
 
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/iv/${input.orderNumber}`}, 0))`);
+    const stoRefused = await stoRefusal(tx, input.client, input.orderNumber, 'supplier invoice');
+    if (stoRefused) throw new InvoiceVerificationError(stoRefused.message, stoRefused.remedy);
     const view = await orderViewInTx(tx, input.client, input.orderNumber);
     if (!view) throw new InvoiceVerificationError(`Purchase order ${input.orderNumber} does not exist.`);
     if (!input.supplierReference) {

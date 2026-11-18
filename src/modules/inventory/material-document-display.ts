@@ -32,7 +32,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 
 import { type Tx, withTenant } from '../../platform/db/client';
 import { plant as plantTable } from '../foundation/schema';
-import { accountingForOriginal, readJournalStatus, type JournalAccounting } from './material-document-accounting';
+import { accountingForOriginal, readJournalStatus, journalLinksFor, type DocumentJournalLink, type JournalAccounting } from './material-document-accounting';
 import { material, materialDocument, materialDocumentLine, movementType } from './schema';
 
 export const MATERIAL_DOC_DISPLAY_CAPABILITY = 'INV.DISPLAY';
@@ -67,6 +67,11 @@ export interface DisplayedDocumentLine {
   currency: string | null;
   purchaseOrderNumber: string | null;
   purchaseOrderItem: number | null;
+  /** ITEM-22: the stock transport order item and the ORIGINAL goods issue (351) line this line traces to. */
+  stoOrderNumber: string | null;
+  stoOrderItem: number | null;
+  stoIssueDocument: string | null;
+  stoIssueLine: number | null;
   itemText: string | null;
   reversalOfDocument: string | null;
   reversalOfLine: number | null;
@@ -86,6 +91,10 @@ export interface DisplayedDocument {
   enteredAt: string;
   journalDocumentNumber: string | null;
   journalAccounting: JournalAccounting;
+  /** Every accounting document: a cross-company STO goods issue wrote one per company. */
+  journals: DocumentJournalLink[];
+  /** Journals of a company the viewer may not see are withheld, and counted here. */
+  withheldJournals: number;
   reversalOf: string | null;
   reversedBy: string | null;
   /** Derived from the plants the lines stand in; never typed and never stored. */
@@ -110,6 +119,8 @@ export async function displayMaterialDocument(input: {
   documentNumber: string;
   fiscalYear?: string;
   itemNumber?: string;
+  /** When given, journals of companies outside this user's scope are withheld. */
+  viewerUserId?: string;
 }): Promise<DisplayedDocument> {
   const number = input.documentNumber.trim();
   if (!number) {
@@ -226,11 +237,18 @@ export async function displayMaterialDocument(input: {
       currency: l.currency,
       purchaseOrderNumber: l.purchaseOrderNumber,
       purchaseOrderItem: l.purchaseOrderItem,
+      stoOrderNumber: l.stoOrderNumber,
+      stoOrderItem: l.stoOrderItem,
+      stoIssueDocument: l.stoIssueDocument,
+      stoIssueLine: l.stoIssueLine,
       itemText: l.itemText,
       reversalOfDocument: l.reversalOfDocument,
       reversalOfLine: l.reversalOfLine,
     });
 
+    const journalLinks = await journalLinksFor(
+      tx, input.client, header.materialDocumentNumber, header.journalDocumentNumber, input.viewerUserId,
+    );
     return {
       capability: MATERIAL_DOC_DISPLAY_CAPABILITY,
       materialDocumentNumber: header.materialDocumentNumber,
@@ -245,6 +263,8 @@ export async function displayMaterialDocument(input: {
         : String(header.createdAt),
       journalDocumentNumber: header.journalDocumentNumber,
       journalAccounting: await journalAccountingFor(tx, input.client, header, lines),
+      journals: journalLinks.links,
+      withheldJournals: journalLinks.withheld,
       reversalOf: header.reversalOf,
       reversedBy: header.reversedBy,
       companyCodes,

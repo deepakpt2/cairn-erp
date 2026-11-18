@@ -105,7 +105,10 @@ export const purchaseOrder = pgTable('purchase_order', {
   client: tenant(),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),
   documentType: varchar('document_type', { length: 20 }).notNull().default('STANDARD'),
-  supplierNumber: varchar('supplier_number', { length: 40 }).notNull(),
+  /** Null on a stock transport order (9310): its supply source is `supplyingPlant`, never a supplier. */
+  supplierNumber: varchar('supplier_number', { length: 40 }),
+  /** The issuing plant of a stock transport order. Null on every supplier order (CHECK in 9310). */
+  supplyingPlant: varchar('supplying_plant', { length: 10 }),
   purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
   purchasingGroup: varchar('purchasing_group', { length: 3 }).notNull(),
   companyCode: varchar('company_code', { length: 10 }).notNull(),

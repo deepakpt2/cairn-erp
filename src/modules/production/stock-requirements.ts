@@ -36,6 +36,7 @@ import { withTenant } from '../../platform/db/client';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { receiptMovementSign } from '../purchasing/receipt-unit-basis';
+import { stoPlanningElements, stoQuantityNumber } from './sto-planning';
 
 export const STOCK_REQUIREMENTS_CAPABILITY = 'PROD.MRP.STOCKREQ';
 export const STOCK_REQUIREMENTS_ALIAS = 'MD04';
@@ -47,7 +48,7 @@ export const PERIOD_SPLITS = ['DAILY', 'WEEKLY'] as const;
 export type PeriodSplit = (typeof PERIOD_SPLITS)[number];
 
 export type ElementType =
-  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PLANNED_ORDER' | 'PRODUCTION_ORDER' | 'PRODUCTION_COMPONENT' | 'SAFETY_STOCK' | 'RESERVATION' | 'DEPENDENT_REQUIREMENT';
+  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'STO_RECEIPT' | 'STO_TRANSIT' | 'STO_ISSUE' | 'PLANNED_ORDER' | 'PRODUCTION_ORDER' | 'PRODUCTION_COMPONENT' | 'SAFETY_STOCK' | 'RESERVATION' | 'DEPENDENT_REQUIREMENT';
 export type ElementDirection = 'RECEIPT' | 'REQUIREMENT';
 export type ExceptionCode = 'SHORTAGE' | 'SAFETY_BREACH' | 'PAST_DUE';
 
@@ -238,6 +239,8 @@ export async function stockRequirementsList(input: {
     const excludedTypes: string[] = [];
     for (const row of stockRows) {
       const quantity = num(row.quantity);
+      // Stock in transit is planned as its own receipt element below, not as excluded stock.
+      if (row.stock_type === 'IN_TRANSIT') continue;
       if ((MRP_AVAILABLE_STOCK_TYPES as readonly string[]).includes(row.stock_type)) {
         openingStock += quantity;
       } else {
@@ -294,6 +297,7 @@ export async function stockRequirementsList(input: {
       left join schedule sc on sc.order_number = i.order_number and sc.item_number = i.item_number
       where i.client = ${client} and i.material_number = ${s.material!} and i.plant = ${s.plant!}
         and not i.marked_for_deletion
+        and po.document_type <> 'STOCK_TRANSPORT'
       order by po.document_date, i.order_number, i.item_number
     `) as unknown as Array<Record<string, unknown>>;
 
@@ -390,6 +394,26 @@ export async function stockRequirementsList(input: {
         documentItem: String(row.item_number),
         quantity: open,
         drillDown: `/purchasing/orders?order=${encodeURIComponent(String(row.order_number))}`,
+      });
+    }
+    // Stock transport orders (ITEM-22): not-yet-issued and in-transit supply at the receiving plant, the open
+    // issue requirement at the supplying plant, each exactly once and never read from movement signs.
+    const sto = await stoPlanningElements(tx, client, s.material!, s.plant!, today);
+    if (sto.unitBlocked > 0) {
+      warnings.push(`${sto.unitBlocked} stock transport order item(s) are left out: the material carries no conversion for their unit.`);
+    }
+    for (const e of sto.elements) {
+      elements.push({
+        date: e.date,
+        elementType: e.kind === 'RECEIPT' ? 'STO_RECEIPT' : e.kind === 'TRANSIT' ? 'STO_TRANSIT' : 'STO_ISSUE',
+        elementLabel: e.kind === 'RECEIPT' ? 'Stock transport order (not yet issued)'
+          : e.kind === 'TRANSIT' ? 'In transit (estimated arrival: arrival date is not recorded)'
+            : 'Stock transport order issue',
+        direction: e.kind === 'ISSUE' ? 'REQUIREMENT' : 'RECEIPT',
+        documentNumber: e.orderNumber,
+        documentItem: String(e.itemNumber),
+        quantity: stoQuantityNumber(e.quantity),
+        drillDown: `/purchasing/purchase-order-display?order=${encodeURIComponent(e.orderNumber)}`,
       });
     }
     for (const row of plannedRows) {

@@ -26,6 +26,7 @@ import { allocateNumber } from '../../platform/numbering';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { createRequisition, changeRequisition } from '../purchasing/requisitions';
 import { explodePlannedSupply } from './mrp-explosion';
+import { stoPlanningElements } from './sto-planning';
 import { structuralBomLevels } from './mrp-structure';
 
 export const MRP_RUN_CAPABILITY = 'PROD.MRP.RUN';
@@ -793,7 +794,7 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
          group by order_number, item_number
       ) sc on sc.order_number = i.order_number and sc.item_number = i.item_number
      where i.client = ${client} and i.material_number = ${candidate.materialNumber} and i.plant = ${candidate.plant}
-       and not i.marked_for_deletion
+       and not i.marked_for_deletion and po.document_type <> 'STOCK_TRANSPORT'
   `);
   const planned = await rows(tx, sql`
     select order_number, quantity::text as quantity, finish_date::text as finish_date, firming_status, version
@@ -860,6 +861,17 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
     if (open <= 0n) continue;
     elements.push({ date: String(row.delivery_date || day), delta: open });
     supply += open;
+  }
+  // Stock transport orders (ITEM-22): each quantity once, never from movement signs.
+  const stoPlan = await stoPlanningElements(tx, client, candidate.materialNumber, candidate.plant, day);
+  for (const e of stoPlan.elements) {
+    if (e.kind === 'ISSUE') {
+      elements.push({ date: e.date, delta: -e.quantity });
+      demand += e.quantity;
+    } else {
+      elements.push({ date: e.date, delta: e.quantity });
+      supply += e.quantity;
+    }
   }
   for (const row of planned) {
     if (String(row.firming_status) !== 'FIRMED') continue;

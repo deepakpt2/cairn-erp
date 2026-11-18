@@ -10,6 +10,7 @@
  * one balanced journal in a single transaction. Posted documents
  * are immutable: correction is a reversal document.
  */
+import { stoRefusal } from '../purchasing/sto-guard';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { AuthzError } from '../../platform/auth/current';
@@ -275,7 +276,7 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
     const received = await receivedQuantities(tx, client, orderNumber);
     return {
       orderNumber: header.orderNumber,
-      supplierNumber: header.supplierNumber,
+      supplierNumber: header.supplierNumber ?? '',
       companyCode: header.companyCode,
       currency: header.currency,
       releaseRequired: Boolean(release),
@@ -580,6 +581,9 @@ export async function postGoodsReceipt(
       .sort(),
   ]);
   return withTenant(input.client, async (tx) => {
+    // A stock transport order is received from transit by its own service, never as a supplier receipt.
+    const stoRefused = await stoRefusal(tx, input.client, input.orderNumber, 'goods receipt against a supplier');
+    if (stoRefused) throw new GoodsReceiptError(stoRefused.message, stoRefused.remedy);
     await authorizeReceiptOrderInTx(tx, input.client, input.orderNumber, input.lines, options?.authorization);
     await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
@@ -922,7 +926,7 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
   const received = await receivedQuantities(tx, client, orderNumber);
   return {
     orderNumber: header.orderNumber,
-    supplierNumber: header.supplierNumber,
+    supplierNumber: header.supplierNumber ?? '',
     companyCode: header.companyCode,
     currency: header.currency,
     releaseRequired: Boolean(release),
@@ -1036,6 +1040,12 @@ export async function reverseGoodsReceipt(
       eq(materialDocumentLine.materialDocumentNumber, input.materialDocumentNumber),
     )).orderBy(materialDocumentLine.lineNumber);
     if (originalLines.length === 0) throw new GoodsReceiptError('The document carries no lines.');
+    if (originalLines.some((line) => line.stoOrderNumber)) {
+      throw new GoodsReceiptError(
+        `Material document ${input.materialDocumentNumber} is a stock transport order movement, not a supplier receipt.`,
+        'Reverse it on the material document reversal screen: it undoes the receipt (102) or the goods issue (352) against the transit ledger.',
+      );
+    }
     await lockStockScope(
       tx, input.client,
       [...new Set(originalLines.map((line) => line.materialNumber).filter((m): m is string => Boolean(m)))].sort(),

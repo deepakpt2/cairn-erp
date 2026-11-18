@@ -7,6 +7,7 @@
  * invoice quantity is summed. Cancelled invoices and reversed documents stay
  * in the history. They are not erased. This module writes nothing.
  */
+import { getStoStatus, type StoOrderStatus } from '../inventory/stock-transport';
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
@@ -201,7 +202,16 @@ export interface DisplayedChange {
 export interface DisplayedOrder {
   orderNumber: string;
   documentType: string;
+  /** Empty on a stock transport order. */
   supplierNumber: string;
+  /** The supplying plant of a stock transport order; null on a supplier order. */
+  supplyingPlant: string | null;
+  /**
+   * ITEM-22: for a stock transport order, the transit ledger view: ordered, issued, received and in transit per
+   * item (base unit), the allocations, and the movement history with every accounting document the viewer may see.
+   * Null on a supplier order.
+   */
+  stockTransport: StoOrderStatus | null;
   supplierName: string;
   companyCode: string;
   purchasingOrg: string;
@@ -361,12 +371,14 @@ function selection(params: Record<string, string>) {
 
 const MISSING = 'Purchase order does not exist or is not available to this user.';
 
-export async function displayPurchaseOrder(client: string, orderNumber: string): Promise<PurchaseOrderDisplayResult> {
+export async function displayPurchaseOrder(
+  client: string, orderNumber: string, viewerUserId?: string,
+): Promise<PurchaseOrderDisplayResult> {
   const number = key(orderNumber);
   if (!number) return { found: false, message: MISSING };
   const loaded = await withTenant(client, async (tx) => {
     const [header] = await tx.execute(sql`
-      select po.order_number, po.document_type, po.supplier_number, coalesce(bp.name, '') as supplier_name,
+      select po.order_number, po.document_type, po.supplier_number, po.supplying_plant, coalesce(bp.name, '') as supplier_name,
              po.company_code, po.purchasing_org, po.purchasing_group, po.document_date::text as document_date,
              po.currency, ${PO_RELEASE_STATUS_SQL} as release_status, po.created_by, po.created_at
         from purchase_order po
@@ -512,10 +524,21 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
     });
     assignmentsByItem.set(itemNumber, list);
   }
+  const isSto = text(loaded.header.document_type) === 'STOCK_TRANSPORT';
+  const stockTransport = isSto ? await getStoStatus(client, number, viewerUserId ? { userId: viewerUserId } : undefined) : null;
   const displayedItems: DisplayedItem[] = loaded.items.map((row) => {
     const quantity = text(row.quantity);
-    const received = text(row.received);
-    const invoiced = text(row.invoiced);
+    // A stock transport order is received from transit and never invoiced: its received quantity is the net
+    // received of the transit ledger (stated in the order unit), and there is nothing to invoice.
+    let received = text(row.received);
+    if (isSto) {
+      const ledger = stockTransport?.items.find((i) => i.itemNumber === Number(row.item_number));
+      const orderedBase = Number(ledger?.orderedBase ?? 0);
+      received = ledger && orderedBase > 0
+        ? (Number(ledger.netReceived) * Number(quantity) / orderedBase).toFixed(3)
+        : '0';
+    }
+    const invoiced = isSto ? received : text(row.invoiced);
     const unit = text(row.unit);
     const baseUnit = row.base_unit == null ? null : text(row.base_unit);
     return {
@@ -574,6 +597,8 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
       orderNumber: text(loaded.header.order_number),
       documentType: text(loaded.header.document_type),
       supplierNumber: text(loaded.header.supplier_number),
+      supplyingPlant: loaded.header.supplying_plant == null ? null : text(loaded.header.supplying_plant),
+      stockTransport,
       supplierName: text(loaded.header.supplier_name),
       companyCode: text(loaded.header.company_code),
       purchasingOrg: text(loaded.header.purchasing_org),
@@ -757,7 +782,7 @@ export async function searchPurchaseOrders(
   });
 }
 
-export async function openPurchaseOrderDisplay(client: string, params: Record<string, string>): Promise<{
+export async function openPurchaseOrderDisplay(client: string, params: Record<string, string>, viewerUserId?: string): Promise<{
   refusal: { message: string; remedy?: string } | null;
   order: PurchaseOrderDisplayResult | null;
   search: PurchaseOrderSearchResult | null;
@@ -766,7 +791,7 @@ export async function openPurchaseOrderDisplay(client: string, params: Record<st
     refuseNamed(params);
     const chosen = selection(params);
     if (chosen.orderNumber) {
-      return { refusal: null, order: await displayPurchaseOrder(client, chosen.orderNumber), search: null };
+      return { refusal: null, order: await displayPurchaseOrder(client, chosen.orderNumber, viewerUserId), search: null };
     }
     return { refusal: null, order: null, search: await searchPurchaseOrders(client, params) };
   } catch (error) {

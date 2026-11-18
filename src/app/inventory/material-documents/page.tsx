@@ -53,6 +53,7 @@ export default async function MaterialDocumentPage({ searchParams }: {
         documentNumber: params.document,
         fiscalYear: params.fiscalYear,
         itemNumber: params.item,
+        viewerUserId: session.user.userId,
       });
     } catch (caught) {
       if (caught instanceof MaterialDocumentDisplayError) {
@@ -197,6 +198,24 @@ export default async function MaterialDocumentPage({ searchParams }: {
                   ? t('mbst.noJournal')
                   : t(accountingCaption(document.journalAccounting.state))}
             </p>
+            {document.journals.length > 1 || document.withheldJournals > 0 ? (
+              <ul className="mt-1 text-xs" data-journals>
+                {document.journals.map((j) => (
+                  <li key={j.journalDocumentNumber} data-journal-role={j.role}>
+                    {j.role.toLowerCase().replace('_', ' ')} · company {j.companyCode}:{' '}
+                    <Link className="code text-accent hover:underline" href={`/finance/journal/document?document=${encodeURIComponent(j.journalDocumentNumber)}`}>
+                      {j.journalDocumentNumber}
+                    </Link>
+                    {' '}({j.status.toLowerCase()})
+                  </li>
+                ))}
+                {document.withheldJournals > 0 ? (
+                  <li className="text-ink-faint" data-journals-withheld>
+                    {document.withheldJournals} accounting document(s) of a company outside your scope are not shown.
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
             <p className="mt-1 text-xs text-ink-soft" data-accounting={document.journalAccounting.state}>
               {t(accountingCaption(document.journalAccounting.state))}
             </p>
@@ -269,7 +288,21 @@ export default async function MaterialDocumentPage({ searchParams }: {
                             {line.purchaseOrderNumber}
                             {line.purchaseOrderItem !== null ? ` / ${line.purchaseOrderItem}` : ''}
                           </Link>
+                        ) : line.stoOrderNumber ? (
+                          <Link
+                            href={`/purchasing/purchase-order-display?order=${encodeURIComponent(line.stoOrderNumber)}`}
+                            className="link"
+                            data-sto-order={line.stoOrderNumber}
+                          >
+                            STO {line.stoOrderNumber}
+                            {line.stoOrderItem !== null ? ` / ${line.stoOrderItem}` : ''}
+                          </Link>
                         ) : '—'}
+                        {line.stoIssueDocument ? (
+                          <span className="ms-1 text-ink-faint" data-sto-issue-origin>
+                            issue {line.stoIssueDocument}{line.stoIssueLine !== null ? ` / ${line.stoIssueLine}` : ''}
+                          </span>
+                        ) : null}
                         {line.reversalOfDocument ? (
                           <span className="ms-1 text-ink-faint">
                             {t('mdDoc.reversalOf')} {line.reversalOfDocument}

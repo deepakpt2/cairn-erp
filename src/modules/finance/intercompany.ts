@@ -72,8 +72,14 @@ export interface IntercompanyPostingResult {
   receivingLocalCurrency: string;
 }
 
-/** Latest AVERAGE rate from a currency to the company's local currency on or before a date. */
-async function rateToLocal(
+/**
+ * The AVERAGE rate in force on a date: the newest row whose `valid_from` is ON OR BEFORE it.
+ *
+ * The date filter belongs in the query. Selecting the newest row first and rejecting it when it is
+ * future-dated (the earlier behaviour) refused a posting although an older, valid rate stood. The
+ * effective rate is rate x ratio_to / ratio_from, inverted when the row is quoted indirectly.
+ */
+export async function rateToLocal(
   tx: Tx, client: string, currency: string, localCurrency: string, onDate: string,
 ): Promise<number | null> {
   if (currency === localCurrency) return 1;
@@ -82,9 +88,11 @@ async function rateToLocal(
     eq(exchangeRate.rateType, 'AVERAGE'),
     eq(exchangeRate.fromCurrency, currency),
     eq(exchangeRate.toCurrency, localCurrency),
-  )).orderBy(sql`${exchangeRate.validFrom} desc`);
-  if (!row || row.validFrom > onDate) return null;
-  return Number(row.rate) * row.ratioTo / ratio(row.ratioFrom);
+    sql`${exchangeRate.validFrom} <= ${onDate}`,
+  )).orderBy(sql`${exchangeRate.validFrom} desc`).limit(1);
+  if (!row) return null;
+  const quoted = Number(row.rate) * row.ratioTo / ratio(row.ratioFrom);
+  return row.isIndirectQuote && quoted !== 0 ? 1 / quoted : quoted;
 }
 
 const ratio = (n: number) => (n === 0 ? 1 : n);
@@ -247,8 +255,8 @@ export async function deleteIntercompanyConfig(input: {
   });
 }
 
-/** The side's clearing account: the pair override first, the company OBYA account second. */
-async function clearingAccountFor(
+/** The side's clearing account: the pair override first, the company OBYA account second (shared with the STO posting). */
+export async function clearingAccountFor(
   tx: Tx, client: string, companyCodeKey: string, override: string | null,
 ): Promise<string> {
   if (override) return override;

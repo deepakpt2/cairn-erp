@@ -17,3 +17,9 @@ export const BLOCKED = 'BLOCKED';
  * valued, and a movement into it posts no accounting document.
  */
 export const RETURNS = 'RETURNS';
+
+/**
+ * Stock in transit of a stock transport order (351 issued, 101 not yet posted). A plant-level quantity of
+ * the RECEIVING plant with a blank storage location: it is counted and valued, and it is NOT available.
+ */
+export const IN_TRANSIT = 'IN_TRANSIT';

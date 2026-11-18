@@ -18,7 +18,8 @@
     "modules/platform/personal-account.ts",
     "platform/auth/current.ts",
     "platform/auth/mfa.ts",
-    "platform/auth/session.ts"
+    "platform/auth/session.ts",
+    "ui/kit/index.ts"
   ],
   "app/api/auth/mfa/route.ts": [
     "app/api/auth/redirect.ts",
@@ -55,7 +56,8 @@
     "modules/audit/access-review.ts",
     "modules/platform/role-admin.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/audit/findings/FindingForms.tsx": [
     "app/audit/findings/actions.ts"
@@ -68,7 +70,8 @@
     "app/audit/findings/FindingForms.tsx",
     "modules/audit/workspace.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/audit/grants/GrantForms.tsx": [
     "app/audit/grants/actions.ts"
@@ -81,7 +84,8 @@
     "app/audit/grants/GrantForms.tsx",
     "modules/audit/workspace.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/audit/workspace/WorkspaceClient.tsx": [
     "app/audit/workspace/actions.ts"
@@ -94,7 +98,8 @@
     "app/audit/workspace/WorkspaceClient.tsx",
     "modules/audit/workspace.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/clients/actions.ts": [
     "platform/auth/current.ts",
@@ -103,7 +108,8 @@
   ],
   "app/clients/new/TenantForm.tsx": [
     "app/clients/actions.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/clients/new/page.tsx": [
     "app/clients/new/TenantForm.tsx"
@@ -111,7 +117,8 @@
   "app/clients/page.tsx": [
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "platform/tenancy/index.ts"
+    "platform/tenancy/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/command.ts": [
     "app/registry/screen-terms.ts",
@@ -136,7 +143,8 @@
     "app/config/account-determination/AccountDetermination.tsx",
     "modules/foundation/account-determination.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/actions.ts": [
     "platform/auth/current.ts",
@@ -163,7 +171,8 @@
     "modules/foundation/activity-price.ts",
     "modules/foundation/activity-rate-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/activity-rates/price-actions.ts": [
     "modules/foundation/activity-price.ts",
@@ -184,7 +193,8 @@
     "app/config/activity-types/ActivityTypes.tsx",
     "modules/foundation/activity-type-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/availability-check/AvailabilityCheckForm.tsx": [
     "app/config/availability-check/actions.ts",
@@ -199,7 +209,8 @@
   "app/config/availability-check/page.tsx": [
     "app/config/availability-check/AvailabilityCheckForm.tsx",
     "modules/production/availability-check.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/banks/Banks.tsx": [
     "app/config/banks/actions.ts",
@@ -217,7 +228,8 @@
     "app/config/banks/Banks.tsx",
     "modules/foundation/bank-master.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-access-sequences/AccessSequenceForm.tsx": [
     "app/config/batch-access-sequences/actions.ts",
@@ -234,7 +246,8 @@
     "modules/inventory/batch-access-sequence.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-classification/ClassificationForm.tsx": [
     "app/config/batch-classification/actions.ts",
@@ -251,7 +264,8 @@
     "modules/inventory/batch-classification.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-condition-tables/ConditionTableForm.tsx": [
     "app/config/batch-condition-tables/actions.ts",
@@ -268,7 +282,8 @@
     "modules/inventory/batch-condition-table.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-conversion/ConversionForm.tsx": [
     "app/config/batch-conversion/actions.ts",
@@ -281,7 +296,8 @@
   "app/config/batch-conversion/page.tsx": [
     "app/config/batch-conversion/ConversionForm.tsx",
     "modules/inventory/batch-conversion.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-determination/BatchDetermination.tsx": [
     "app/config/batch-determination/actions.ts",
@@ -295,7 +311,8 @@
   "app/config/batch-determination/page.tsx": [
     "app/config/batch-determination/BatchDetermination.tsx",
     "modules/sales/batch-determination.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-document-management/DocumentForm.tsx": [
     "app/config/batch-document-management/actions.ts",
@@ -310,7 +327,8 @@
   "app/config/batch-document-management/page.tsx": [
     "app/config/batch-document-management/DocumentForm.tsx",
     "modules/inventory/batch-document-management.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-initial-status/InitialStatusForm.tsx": [
     "app/config/batch-initial-status/actions.ts",
@@ -327,7 +345,8 @@
     "modules/inventory/initial-batch-status.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-level/BatchLevelForm.tsx": [
     "app/config/batch-level/actions.ts",
@@ -343,11 +362,13 @@
     "app/config/batch-level/BatchLevelForm.tsx",
     "modules/inventory/batch-conversion.ts",
     "modules/inventory/batch-level.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-management/page.tsx": [
     "modules/inventory/batch-management-img.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-number-assignment/BatchNumberAssignmentForm.tsx": [
     "app/config/batch-number-assignment/actions.ts",
@@ -362,7 +383,8 @@
   "app/config/batch-number-assignment/page.tsx": [
     "app/config/batch-number-assignment/BatchNumberAssignmentForm.tsx",
     "modules/inventory/batch-number-assignment.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-number-ranges/BatchNumberRangeForms.tsx": [
     "app/config/batch-number-ranges/actions.ts",
@@ -377,7 +399,8 @@
   "app/config/batch-number-ranges/page.tsx": [
     "app/config/batch-number-ranges/BatchNumberRangeForms.tsx",
     "modules/inventory/batch-number-range.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-search-allocations/AllocationForm.tsx": [
     "app/config/batch-search-allocations/actions.ts",
@@ -396,7 +419,8 @@
     "modules/inventory/schema.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-search-procedures/SearchProcedureForm.tsx": [
     "app/config/batch-search-procedures/actions.ts",
@@ -413,7 +437,8 @@
     "modules/inventory/batch-search-procedure.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-status-plants/PlantBatchStatusForm.tsx": [
     "app/config/batch-status-plants/actions.ts",
@@ -430,7 +455,8 @@
     "modules/inventory/batch-status-plant.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-status/BatchStatusForm.tsx": [
     "app/config/batch-status/actions.ts",
@@ -445,7 +471,8 @@
   "app/config/batch-status/page.tsx": [
     "app/config/batch-status/BatchStatusForm.tsx",
     "modules/inventory/batch-status.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/batch-strategy-types/StrategyTypeForm.tsx": [
     "app/config/batch-strategy-types/actions.ts",
@@ -462,7 +489,8 @@
     "modules/inventory/batch-strategy-type.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/billing-split/BillingSplit.tsx": [
     "app/config/billing-split/actions.ts",
@@ -475,7 +503,8 @@
   "app/config/billing-split/page.tsx": [
     "app/config/billing-split/BillingSplit.tsx",
     "modules/sales/billing.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/characteristics/Characteristics.tsx": [
     "app/config/characteristics/actions.ts",
@@ -491,7 +520,8 @@
     "app/config/characteristics/Characteristics.tsx",
     "modules/foundation/characteristic-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/chart-of-accounts/ChartLifecycleControl.tsx": [
     "app/config/chart-of-accounts/ChartOfAccountsForm.tsx",
@@ -544,7 +574,8 @@
     "app/config/chart-of-accounts/copy/CopyChartForm.tsx",
     "modules/foundation/chart-of-accounts-maintenance.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/chart-of-accounts/page.tsx": [
     "app/config/chart-of-accounts/ChartOfAccountsForm.tsx",
@@ -553,7 +584,8 @@
     "app/config/chart-of-accounts/GroupChartOfAccounts.tsx",
     "modules/foundation/chart-of-accounts-maintenance.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/checking-control/CheckingControlForm.tsx": [
     "app/config/checking-control/actions.ts",
@@ -568,7 +600,8 @@
   "app/config/checking-control/page.tsx": [
     "app/config/checking-control/CheckingControlForm.tsx",
     "modules/production/checking-control.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/classes/Classes.tsx": [
     "app/config/classes/actions.ts",
@@ -584,7 +617,8 @@
     "app/config/classes/Classes.tsx",
     "modules/foundation/class-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/company-codes/CompanyCodeCoaAssignmentForm.tsx": [
     "app/config/company-codes/actions.ts",
@@ -618,7 +652,8 @@
     "modules/foundation/schema.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/company-codes/page.tsx": [
     "app/config/company-codes/CompanyCodeCoaAssignmentForm.tsx",
@@ -628,7 +663,8 @@
     "platform/auth/current.ts",
     "platform/db/client.ts",
     "platform/i18n/index.ts",
-    "platform/tables/reference.ts"
+    "platform/tables/reference.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/consolidation/ConsolidationWorkbenchShell.tsx": [
     "app/config/consolidation/actions.ts",
@@ -643,7 +679,8 @@
   "app/config/consolidation/page.tsx": [
     "app/config/consolidation/ConsolidationWorkbenchShell.tsx",
     "modules/finance/consolidation-workbench.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/controlling-area/AssignmentControlField.tsx": [
     "platform/i18n/index.ts"
@@ -690,7 +727,8 @@
     "modules/foundation/schema.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/controlling-area/page.tsx": [
     "app/config/controlling-area/ControllingAreaForm.tsx",
@@ -698,7 +736,8 @@
     "app/config/controlling-area/ControllingAreasList.tsx",
     "modules/foundation/controlling-area-maintenance.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/cost-center-hierarchy/CostCenterHierarchy.tsx": [
     "app/config/cost-center-hierarchy/actions.ts",
@@ -715,7 +754,8 @@
     "app/config/cost-center-hierarchy/CostCenterHierarchy.tsx",
     "modules/foundation/cost-center-hierarchy.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/cost-centers/CostCenters.tsx": [
     "app/config/cost-centers/actions.ts",
@@ -731,7 +771,8 @@
     "app/config/cost-centers/CostCenters.tsx",
     "modules/foundation/cost-center-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/credit-control-areas/CreditControlAreaSetup.tsx": [
     "app/config/credit-control-areas/actions.ts",
@@ -749,7 +790,8 @@
     "modules/finance/credit-control-area-maintenance.ts",
     "platform/auth/current.ts",
     "platform/auth/session.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/delivery-completion/DeliveryCompletion.tsx": [
     "app/config/delivery-completion/actions.ts",
@@ -763,7 +805,8 @@
     "app/config/delivery-completion/DeliveryCompletion.tsx",
     "modules/purchasing/delivery-completion.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/distribution-channels/DeactivateDistributionChannelForm.tsx": [
     "app/config/distribution-channels/actions.ts",
@@ -789,6 +832,7 @@
     "platform/db/client.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -816,6 +860,7 @@
     "platform/db/client.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -831,7 +876,8 @@
   "app/config/document-layout/page.tsx": [
     "app/config/document-layout/DocumentLayoutForm.tsx",
     "modules/output/document-layout.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/document-types/DocumentTypes.tsx": [
     "app/config/document-types/actions.ts",
@@ -849,7 +895,8 @@
     "app/config/document-types/DocumentTypes.tsx",
     "modules/foundation/document-type-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/exchange-rates/ExchangeRates.tsx": [
     "app/config/exchange-rates/actions.ts",
@@ -867,7 +914,8 @@
     "app/config/exchange-rates/ExchangeRates.tsx",
     "modules/foundation/exchange-rate-maintenance.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/factory-calendars/FactoryCalendarForms.tsx": [
     "app/config/factory-calendars/actions.ts",
@@ -881,7 +929,8 @@
   "app/config/factory-calendars/page.tsx": [
     "app/config/factory-calendars/FactoryCalendarForms.tsx",
     "modules/foundation/factory-calendar.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/fiscal-year-variants/AssignCompanyCodesUI.tsx": [
     "app/config/fiscal-year-variants/assign-company-codes/actions.ts",
@@ -914,13 +963,15 @@
     "modules/foundation/schema.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/fiscal-year-variants/page.tsx": [
     "app/config/fiscal-year-variants/FiscalYearVariants.tsx",
     "modules/foundation/fiscal-year-variant-maintenance.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/gl-accounts/AccountGroups.tsx": [
     "app/config/gl-accounts/GlAccountDialog.tsx",
@@ -955,6 +1006,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -995,7 +1047,8 @@
     "modules/foundation/chart-of-accounts-maintenance.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/gl-accounts/transfer/TransferShell.tsx": [
     "modules/finance/gl-account-transfer.ts"
@@ -1006,7 +1059,8 @@
     "modules/foundation/chart-of-accounts-maintenance.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/gl-accounts/view/page.tsx": [
     "app/config/gl-accounts/GlAccountModeScreen.tsx",
@@ -1029,7 +1083,8 @@
     "app/config/house-banks/HouseBanks.tsx",
     "modules/foundation/house-bank-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/incompletion/IncompletionSetup.tsx": [
     "app/config/incompletion/actions.ts",
@@ -1042,7 +1097,8 @@
   "app/config/incompletion/page.tsx": [
     "app/config/incompletion/IncompletionSetup.tsx",
     "modules/sales/incompletion.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/industries/Industries.tsx": [
     "app/config/industries/actions.ts",
@@ -1058,7 +1114,8 @@
     "app/config/industries/Industries.tsx",
     "modules/foundation/industry-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/industry-sectors/IndustrySectors.tsx": [
     "app/config/industry-sectors/actions.ts",
@@ -1074,7 +1131,8 @@
     "app/config/industry-sectors/IndustrySectors.tsx",
     "modules/inventory/industry-sector-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/intercompany-clearing/IntercompanyClearing.tsx": [
     "app/config/intercompany-clearing/actions.ts",
@@ -1091,7 +1149,8 @@
     "app/config/intercompany-clearing/IntercompanyClearing.tsx",
     "modules/finance/intercompany.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/material-groups/MaterialGroups.tsx": [
     "app/config/material-groups/actions.ts",
@@ -1107,7 +1166,8 @@
     "app/config/material-groups/MaterialGroups.tsx",
     "modules/inventory/material-group-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/material-number-ranges/MaterialNumberRanges.tsx": [
     "app/config/material-number-ranges/actions.ts",
@@ -1123,7 +1183,8 @@
     "app/config/material-number-ranges/MaterialNumberRanges.tsx",
     "modules/inventory/material-number-range-groups.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/material-period-control/MaterialPeriodControl.tsx": [
     "app/config/material-period-control/actions.ts",
@@ -1139,7 +1200,8 @@
     "app/config/material-period-control/MaterialPeriodControl.tsx",
     "modules/inventory/material-period-control.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/material-types/MaterialTypes.tsx": [
     "app/config/material-types/actions.ts",
@@ -1157,7 +1219,8 @@
     "modules/inventory/material-number-range-groups.ts",
     "modules/inventory/material-type-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/movement-types/MovementTypes.tsx": [
     "app/config/movement-types/actions.ts",
@@ -1175,7 +1238,8 @@
     "app/config/movement-types/MovementTypes.tsx",
     "modules/inventory/movement-type-configuration.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/mrp-controllers/MrpControllers.tsx": [
     "app/config/mrp-controllers/actions.ts",
@@ -1195,7 +1259,8 @@
     "platform/auth/current.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/number-range-objects/NumberRangeObjects.tsx": [
     "app/config/number-range-objects/actions.ts",
@@ -1212,7 +1277,8 @@
     "app/config/number-range-objects/NumberRangeObjects.tsx",
     "modules/foundation/number-ranges.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/number-ranges/RangeForm.tsx": [
     "app/config/number-ranges/actions.ts",
@@ -1235,6 +1301,7 @@
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
     "platform/numbering/index.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -1251,7 +1318,8 @@
   "app/config/order-type-parameters/page.tsx": [
     "app/config/order-type-parameters/OrderTypeParameterForm.tsx",
     "modules/production/order-type-parameters.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/page.tsx": [
     "app/config/WorkbenchTree.tsx",
@@ -1259,7 +1327,8 @@
     "platform/auth/current.ts",
     "platform/db/client.ts",
     "platform/i18n/index.ts",
-    "platform/tenancy/index.ts"
+    "platform/tenancy/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/pay-components/PayComponents.tsx": [
     "app/config/pay-components/actions.ts",
@@ -1275,7 +1344,8 @@
   "app/config/pay-components/page.tsx": [
     "app/config/pay-components/PayComponents.tsx",
     "modules/people/pay-components.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/payment-methods/PaymentMethodForm.tsx": [
     "app/config/payment-methods/actions.ts",
@@ -1304,6 +1374,7 @@
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
     "platform/tables/reference.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -1329,6 +1400,7 @@
     "platform/db/client.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -1346,7 +1418,8 @@
   "app/config/people-record-types/page.tsx": [
     "app/config/people-record-types/RecordTypes.tsx",
     "modules/people/record-types.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/plants/PlantCompanyCodeAssignmentForm.tsx": [
     "app/config/plants/actions.ts",
@@ -1374,6 +1447,7 @@
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
     "platform/tables/reference.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/config/posting-period-variants/PostingPeriodVariants.tsx": [
@@ -1405,13 +1479,15 @@
     "modules/foundation/posting-period-variant-assignment.ts",
     "modules/foundation/posting-period-variant-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/posting-period-variants/page.tsx": [
     "app/config/posting-period-variants/PostingPeriodVariants.tsx",
     "modules/foundation/posting-period-variant-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/posting-periods/PeriodRules.tsx": [
     "platform/i18n/index.ts",
@@ -1429,7 +1505,8 @@
     "modules/foundation/company-code-assignments.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/pricing-procedure/PricingProcedureSetup.tsx": [
     "app/config/pricing-procedure/actions.ts",
@@ -1442,7 +1519,8 @@
   "app/config/pricing-procedure/page.tsx": [
     "app/config/pricing-procedure/PricingProcedureSetup.tsx",
     "modules/sales/pricing-procedure-maintenance.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/production-order-types/ProductionOrderTypeForm.tsx": [
     "app/config/production-order-types/actions.ts",
@@ -1457,7 +1535,8 @@
   "app/config/production-order-types/page.tsx": [
     "app/config/production-order-types/ProductionOrderTypeForm.tsx",
     "modules/production/production-order-type.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/profit-center-hierarchy/ProfitCenterHierarchy.tsx": [
     "app/config/profit-center-hierarchy/actions.ts",
@@ -1474,7 +1553,8 @@
     "app/config/profit-center-hierarchy/ProfitCenterHierarchy.tsx",
     "modules/foundation/profit-center-hierarchy.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/profit-centers/ProfitCenters.tsx": [
     "app/config/profit-centers/actions.ts",
@@ -1491,7 +1571,8 @@
     "app/config/profit-centers/ProfitCenters.tsx",
     "modules/foundation/profit-center-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/purchasing-groups/PurchasingGroupsGrid.tsx": [
     "app/config/purchasing-groups/actions.ts",
@@ -1508,7 +1589,8 @@
     "app/config/purchasing-groups/PurchasingGroupsGrid.tsx",
     "modules/foundation/purchasing-group-maintenance.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/purchasing-orgs/DeactivatePurchasingOrgForm.tsx": [
     "app/config/purchasing-orgs/actions.ts",
@@ -1541,7 +1623,8 @@
     "modules/foundation/schema.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/purchasing-orgs/assign-plant/AssignPlant.tsx": [
     "app/config/purchasing-orgs/assign-plant/actions.ts",
@@ -1559,7 +1642,8 @@
     "modules/purchasing/purchasing-org-plant-assignment.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/purchasing-orgs/page.tsx": [
     "app/config/purchasing-orgs/DeactivatePurchasingOrgForm.tsx",
@@ -1571,6 +1655,7 @@
     "platform/db/client.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/config/release-strategies/ReleaseStrategies.tsx": [
@@ -1588,7 +1673,8 @@
     "app/config/release-strategies/ReleaseStrategies.tsx",
     "modules/foundation/release-strategy-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/retained-earnings/RetainedEarnings.tsx": [
     "app/config/retained-earnings/actions.ts",
@@ -1605,7 +1691,8 @@
     "modules/foundation/retained-earnings-vocabulary.ts",
     "modules/foundation/retained-earnings.ts",
     "modules/foundation/services.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/sales-account-determination/SalesAccountDeterminationSetup.tsx": [
     "app/config/sales-account-determination/actions.ts",
@@ -1618,7 +1705,8 @@
   "app/config/sales-account-determination/page.tsx": [
     "app/config/sales-account-determination/SalesAccountDeterminationSetup.tsx",
     "modules/sales/account-determination-maintenance.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/sales-areas/SalesAreaForm.tsx": [
     "app/config/sales-areas/actions.ts",
@@ -1641,7 +1729,8 @@
     "app/config/sales-areas/SalesAreasList.tsx",
     "modules/foundation/sales-area-maintenance.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/sales-document-types/SalesDocumentTypeSetup.tsx": [
     "app/config/sales-document-types/actions.ts"
@@ -1653,7 +1742,8 @@
   "app/config/sales-document-types/page.tsx": [
     "app/config/sales-document-types/SalesDocumentTypeSetup.tsx",
     "modules/sales/document-type-maintenance.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/sales-orgs/DeactivateSalesOrgForm.tsx": [
     "app/config/sales-orgs/actions.ts",
@@ -1688,7 +1778,8 @@
     "modules/foundation/schema.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/sales-orgs/assign-distribution-channel/AssignmentForm.tsx": [
     "app/config/sales-orgs/assign-distribution-channel/actions.ts",
@@ -1713,7 +1804,8 @@
     "modules/foundation/schema.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/sales-orgs/assign-division/AssignmentForm.tsx": [
     "app/config/sales-orgs/assign-division/actions.ts",
@@ -1738,7 +1830,8 @@
     "modules/foundation/schema.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/sales-orgs/page.tsx": [
     "app/config/sales-orgs/DeactivateSalesOrgForm.tsx",
@@ -1752,6 +1845,7 @@
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
     "platform/tables/reference.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -1765,7 +1859,8 @@
   "app/config/sales-returns/page.tsx": [
     "app/config/sales-returns/ReturnsChainSetup.tsx",
     "modules/sales/returns-configuration.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/scheduling-profiles/SchedulingProfileForm.tsx": [
     "app/config/scheduling-profiles/actions.ts",
@@ -1782,7 +1877,8 @@
     "modules/foundation/schema.ts",
     "modules/inventory/scheduling-profile.ts",
     "platform/auth/current.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/settlement-configuration/SettlementMasters.tsx": [
     "app/config/settlement-configuration/actions.ts",
@@ -1797,7 +1893,8 @@
   "app/config/settlement-configuration/page.tsx": [
     "app/config/settlement-configuration/SettlementMasters.tsx",
     "modules/foundation/settlement-configuration-masters.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/shipping-points/ShippingConditionSetup.tsx": [
     "app/config/shipping-points/actions.ts",
@@ -1820,7 +1917,8 @@
     "app/config/shipping-points/ShippingPointAssignmentSetup.tsx",
     "app/config/shipping-points/ShippingPointSetup.tsx",
     "modules/sales/shipping-point-maintenance.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/special-gl/SpecialGl.tsx": [
     "app/config/special-gl/actions.ts",
@@ -1836,7 +1934,8 @@
     "app/config/special-gl/SpecialGl.tsx",
     "modules/foundation/special-gl.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/storage-locations/DeactivateStorageLocationForm.tsx": [
     "app/config/storage-locations/actions.ts",
@@ -1862,6 +1961,7 @@
     "platform/db/client.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -1881,7 +1981,8 @@
     "app/config/tax-codes/TaxCodes.tsx",
     "modules/foundation/tax-code-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/tolerance-groups/ToleranceGroups.tsx": [
     "app/config/tolerance-groups/actions.ts",
@@ -1899,7 +2000,8 @@
     "app/config/tolerance-groups/ToleranceGroups.tsx",
     "modules/foundation/employee-tolerance-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/valuation-classes/ValuationClasses.tsx": [
     "app/config/valuation-classes/actions.ts",
@@ -1915,7 +2017,8 @@
     "app/config/valuation-classes/ValuationClasses.tsx",
     "modules/inventory/valuation-class-definition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/config/wip-batch/WipForm.tsx": [
     "app/config/wip-batch/actions.ts",
@@ -1930,7 +2033,8 @@
   "app/config/wip-batch/page.tsx": [
     "app/config/wip-batch/WipForm.tsx",
     "modules/production/wip-batch.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/constrained-values/actions.ts": [
     "modules/foundation/constrained-values.ts",
@@ -1949,7 +2053,8 @@
     "modules/foundation/activity-rate-definition.ts",
     "modules/foundation/cost-allocation-cycle.ts",
     "modules/foundation/cost-center-planning.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/cost-center-planning/PlanGrid.tsx": [
     "app/controlling/cost-center-planning/actions.ts"
@@ -1962,7 +2067,8 @@
   "app/controlling/cost-center-planning/page.tsx": [
     "app/controlling/cost-center-planning/PlanGrid.tsx",
     "modules/foundation/cost-center-planning.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/cost-center-report/CostCenterReportShell.tsx": [
     "modules/foundation/cost-center-report.ts"
@@ -1972,16 +2078,19 @@
     "modules/foundation/controlling-area-maintenance.ts",
     "modules/foundation/cost-center-report.ts",
     "platform/auth/current.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/controlling/internal-order-display/page.tsx": [
     "modules/foundation/internal-order-display.ts",
     "modules/foundation/internal-order.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/internal-order-line-items/page.tsx": [
     "modules/foundation/internal-order-cost-report.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/internal-orders/OrderForm.tsx": [
     "app/controlling/internal-orders/actions.ts",
@@ -1997,6 +2106,7 @@
     "modules/foundation/internal-order.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/controlling/order-settlement-collective/CollectiveForm.tsx": [
@@ -2010,7 +2120,8 @@
     "app/controlling/order-settlement-collective/CollectiveForm.tsx",
     "modules/foundation/controlling-area-maintenance.ts",
     "modules/foundation/order-settlement.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/order-settlement/SettlementForm.tsx": [
     "app/controlling/order-settlement/actions.ts"
@@ -2022,12 +2133,14 @@
   "app/controlling/order-settlement/page.tsx": [
     "app/controlling/order-settlement/SettlementForm.tsx",
     "modules/foundation/order-settlement.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/original-budget-display/page.tsx": [
     "modules/foundation/internal-order-budget-display.ts",
     "modules/foundation/internal-order-budget.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/original-budget/BudgetForm.tsx": [
     "app/controlling/original-budget/actions.ts",
@@ -2043,6 +2156,7 @@
     "modules/foundation/internal-order-budget.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/controlling/plan-revaluation/RevaluationForm.tsx": [
@@ -2056,7 +2170,8 @@
     "app/controlling/plan-revaluation/RevaluationForm.tsx",
     "modules/foundation/controlling-area-maintenance.ts",
     "modules/foundation/plan-revaluation.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/profit-center-report/ProfitCenterReportShell.tsx": [
     "modules/foundation/profit-center-report.ts"
@@ -2069,7 +2184,8 @@
     "app/controlling/profit-center-report/ProfitCenterReportShell.tsx",
     "modules/foundation/controlling-area-maintenance.ts",
     "modules/foundation/profit-center-report.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/controlling/settlement-rules/RuleForm.tsx": [
     "app/controlling/settlement-rules/actions.ts",
@@ -2082,7 +2198,8 @@
   "app/controlling/settlement-rules/page.tsx": [
     "app/controlling/settlement-rules/RuleForm.tsx",
     "modules/foundation/settlement-configuration.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/dev/kit/page.tsx": [
     "ui/kit/index.ts"
@@ -2107,7 +2224,8 @@
     "modules/foundation/number-ranges.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/assets/acquire/AcquireForm.tsx": [
     "app/finance/assets/acquire/actions.ts",
@@ -2121,7 +2239,8 @@
     "app/finance/assets/acquire/AcquireForm.tsx",
     "modules/finance/asset-acquisition.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/assets/change/AssetChange.tsx": [
     "app/finance/assets/change/actions.ts",
@@ -2140,6 +2259,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -2155,7 +2275,8 @@
     "app/finance/assets/depreciate/DepreciateForm.tsx",
     "modules/finance/asset-depreciation.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/assets/history/HistoryForm.tsx": [
     "modules/finance/asset-history.ts"
@@ -2168,7 +2289,8 @@
     "app/finance/assets/history/HistoryForm.tsx",
     "modules/finance/asset-history.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/assets/new/AssetCreate.tsx": [
     "app/finance/assets/new/actions.ts",
@@ -2182,12 +2304,14 @@
     "app/finance/assets/new/AssetCreate.tsx",
     "modules/finance/asset-master.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/assets/page.tsx": [
     "modules/finance/asset-master.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/assets/retire/RetireForm.tsx": [
     "app/finance/assets/retire/actions.ts",
@@ -2201,7 +2325,8 @@
     "app/finance/assets/retire/RetireForm.tsx",
     "modules/finance/asset-retirement.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/balance-sheet/BalanceSheetShell.tsx": [
     "modules/finance/balance-sheet.ts",
@@ -2215,6 +2340,7 @@
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/carryforward/CarryforwardShell.tsx": [
@@ -2232,7 +2358,8 @@
     "modules/foundation/company-code-assignments.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/cash-flow/CashflowShell.tsx": [
     "modules/finance/cash-flow-vocabulary.ts"
@@ -2243,6 +2370,7 @@
     "modules/finance/cash-flow.ts",
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/clearing-reset/ResetForm.tsx": [
@@ -2253,7 +2381,8 @@
     "modules/finance/clearing-reset.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/close-cockpit/CloseCockpitShell.tsx": [
     "app/finance/close-cockpit/actions.ts",
@@ -2273,7 +2402,8 @@
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/consolidated-statements/ConsolidatedStatementsShell.tsx": [
     "modules/finance/consolidated-statements-vocabulary.ts"
@@ -2283,6 +2413,7 @@
     "modules/finance/consolidated-statements.ts",
     "modules/finance/consolidation-workbench.ts",
     "platform/auth/current.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/consolidation-monitor/ConsolidationMonitorShell.tsx": [
@@ -2297,7 +2428,8 @@
     "app/finance/consolidation-monitor/ConsolidationMonitorShell.tsx",
     "modules/finance/consolidation-monitor.ts",
     "modules/finance/consolidation-workbench.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/credit-monitor/CreditMonitorShell.tsx": [
     "modules/finance/credit.ts",
@@ -2307,7 +2439,8 @@
     "app/finance/credit-monitor/CreditMonitorShell.tsx",
     "modules/finance/credit.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/credit-release/CreditReleaseShell.tsx": [
     "app/finance/credit-release/actions.ts",
@@ -2324,7 +2457,8 @@
     "app/finance/credit-release/CreditReleaseShell.tsx",
     "modules/finance/credit.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/credit/CreditShell.tsx": [
     "app/finance/credit/actions.ts",
@@ -2342,18 +2476,21 @@
     "app/finance/credit/CreditShell.tsx",
     "modules/finance/credit.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/customer-ageing/page.tsx": [
     "modules/finance/customer-ageing.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/customer-balances/page.tsx": [
     "modules/finance/customer-balances.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/customer-clearing/CustomerClearing.tsx": [
@@ -2371,7 +2508,8 @@
     "app/finance/customer-clearing/CustomerClearing.tsx",
     "modules/finance/customer-clearing.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/customer-down-payment-clearing/CustomerDownPaymentClearing.tsx": [
     "app/finance/customer-down-payment-clearing/actions.ts",
@@ -2388,7 +2526,8 @@
     "app/finance/customer-down-payment-clearing/CustomerDownPaymentClearing.tsx",
     "modules/finance/customer-down-payment-clearing.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/customer-down-payment-request/CustomerDownPaymentRequest.tsx": [
     "app/finance/customer-down-payment-request/actions.ts",
@@ -2403,7 +2542,8 @@
     "app/finance/customer-down-payment-request/CustomerDownPaymentRequest.tsx",
     "modules/finance/customer-down-payment-request.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/customer-down-payment/CustomerDownPayment.tsx": [
     "app/finance/customer-down-payment/actions.ts",
@@ -2417,7 +2557,8 @@
     "app/finance/customer-down-payment/CustomerDownPayment.tsx",
     "modules/finance/customer-down-payment.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/customer-invoice/CustomerInvoice.tsx": [
     "app/finance/customer-invoice/actions.ts",
@@ -2433,20 +2574,23 @@
     "app/finance/customer-invoice/CustomerInvoice.tsx",
     "modules/finance/customer-invoice.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/document-reversal/page.tsx": [
     "modules/finance/document-reversal.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
   "app/finance/dunning/page.tsx": [
     "modules/finance/dunning.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/fx/valuation/ValuationForm.tsx": [
     "modules/finance/fx-valuation.ts",
@@ -2460,7 +2604,8 @@
     "app/finance/fx/valuation/ValuationForm.tsx",
     "modules/finance/fx-valuation.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/gl-clearing/GlClearing.tsx": [
     "app/finance/gl-clearing/actions.ts",
@@ -2476,7 +2621,8 @@
   "app/finance/gl-clearing/page.tsx": [
     "app/finance/gl-clearing/GlClearing.tsx",
     "modules/finance/gl-clearing.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/grir-reclass/GrIrForm.tsx": [
     "modules/finance/grir-reclass.ts",
@@ -2490,7 +2636,8 @@
     "app/finance/grir-reclass/GrIrForm.tsx",
     "modules/finance/grir-reclass.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/incoming-payment/IncomingPayment.tsx": [
     "app/finance/incoming-payment/actions.ts",
@@ -2505,7 +2652,8 @@
     "app/finance/incoming-payment/IncomingPayment.tsx",
     "modules/finance/incoming-payment.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/intercompany/IntercompanyPosting.tsx": [
     "app/finance/intercompany/actions.ts",
@@ -2520,7 +2668,8 @@
     "app/finance/intercompany/IntercompanyPosting.tsx",
     "modules/finance/intercompany.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/journal/balances/BalanceReportForm.tsx": [
     "modules/finance/gl-balances.ts"
@@ -2534,6 +2683,7 @@
     "modules/finance/gl-balances.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/journal/document/DocumentDisplay.tsx": [
@@ -2543,7 +2693,8 @@
     "app/finance/journal/document/DocumentDisplay.tsx",
     "modules/finance/document-display.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/journal/items/ItemsForm.tsx": [
     "modules/finance/journal-items.ts"
@@ -2553,13 +2704,15 @@
     "modules/finance/journal-items.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/journal/new/JournalForm.tsx": [
     "app/finance/journal/new/actions.ts",
     "platform/i18n/index.ts",
     "platform/posting/decimal.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts"
   ],
   "app/finance/journal/new/actions.ts": [
     "modules/finance/gl-document.ts",
@@ -2580,7 +2733,8 @@
   "app/finance/journal/page.tsx": [
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/journal/park/ParkedJournal.tsx": [
     "app/finance/journal/park/actions.ts",
@@ -2603,6 +2757,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -2619,16 +2774,19 @@
     "app/finance/outgoing-payment/OutgoingPayment.tsx",
     "modules/finance/outgoing-payment.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/payment-run/PaymentRun.tsx": [
     "app/finance/payment-run/actions.ts",
+    "modules/finance/payment-run-background.ts",
     "modules/finance/payment-run.ts",
     "modules/purchasing/release.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/release/ReleasePanel.tsx"
   ],
   "app/finance/payment-run/actions.ts": [
+    "modules/finance/payment-run-background.ts",
     "modules/finance/payment-run-release.ts",
     "modules/finance/payment-run.ts",
     "modules/purchasing/release.ts",
@@ -2637,10 +2795,12 @@
   ],
   "app/finance/payment-run/page.tsx": [
     "app/finance/payment-run/PaymentRun.tsx",
+    "modules/finance/payment-run-background.ts",
     "modules/finance/payment-run-release.ts",
     "modules/finance/payment-run.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/profit-loss/ProfitLossShell.tsx": [
     "modules/finance/balance-sheet.ts",
@@ -2656,6 +2816,7 @@
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/subledger-tie-out/SubledgerTieShell.tsx": [
@@ -2665,7 +2826,8 @@
     "app/finance/subledger-tie-out/SubledgerTieShell.tsx",
     "modules/finance/subledger-tie-out.ts",
     "modules/foundation/services.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/tax/report/TaxReportForm.tsx": [
     "modules/finance/tax-report.ts",
@@ -2675,7 +2837,8 @@
     "app/finance/tax/report/TaxReportForm.tsx",
     "modules/finance/tax-report.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/trial-balance/TrialBalanceShell.tsx": [
     "modules/finance/trial-balance.ts",
@@ -2688,6 +2851,7 @@
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/vendor-ageing/export/route.ts": [
@@ -2700,12 +2864,14 @@
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/vendor-balances/page.tsx": [
     "modules/finance/vendor-balances.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/vendor-clearing/VendorClearing.tsx": [
@@ -2723,7 +2889,8 @@
     "app/finance/vendor-clearing/VendorClearing.tsx",
     "modules/finance/vendor-clearing.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/vendor-credit-memo/VendorCreditMemo.tsx": [
     "app/finance/vendor-credit-memo/actions.ts",
@@ -2741,7 +2908,8 @@
     "modules/finance/vendor-credit-memo.ts",
     "modules/finance/vendor-invoice.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/vendor-down-payment-clearing/VendorDownPaymentClearing.tsx": [
     "app/finance/vendor-down-payment-clearing/actions.ts",
@@ -2758,7 +2926,8 @@
     "app/finance/vendor-down-payment-clearing/VendorDownPaymentClearing.tsx",
     "modules/finance/vendor-down-payment-clearing.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/vendor-down-payment-request/VendorDownPaymentRequest.tsx": [
     "app/finance/vendor-down-payment-request/actions.ts",
@@ -2773,7 +2942,8 @@
     "app/finance/vendor-down-payment-request/VendorDownPaymentRequest.tsx",
     "modules/finance/vendor-down-payment-request.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/vendor-down-payment/VendorDownPayment.tsx": [
     "app/finance/vendor-down-payment/actions.ts",
@@ -2787,7 +2957,8 @@
     "app/finance/vendor-down-payment/VendorDownPayment.tsx",
     "modules/finance/vendor-down-payment.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/finance/vendor-invoice/VendorInvoice.tsx": [
     "app/finance/vendor-invoice/actions.ts",
@@ -2803,7 +2974,8 @@
     "app/finance/vendor-invoice/VendorInvoice.tsx",
     "modules/finance/vendor-invoice.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/forgot-password/page.tsx": [
     "app/platform/users/actions.ts"
@@ -2865,7 +3037,8 @@
     "modules/foundation/partner-bank-profile-activation-view.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "platform/security/partner-bank-profile-activation.ts"
+    "platform/security/partner-bank-profile-activation.ts",
+    "ui/kit/index.ts"
   ],
   "app/foundation/partners/company-actions.ts": [
     "modules/foundation/supplier-companies.ts",
@@ -2916,6 +3089,7 @@
     "platform/security/bank-data-keyring.ts",
     "platform/security/partner-bank-profile-activation.ts",
     "platform/tables/reference.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -2953,11 +3127,13 @@
     "modules/inventory/batch-class.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/batch-cockpit/page.tsx": [
     "modules/inventory/batch-cockpit.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/batch-pickup/BatchPickupShell.tsx": [
     "modules/inventory/batch-pickup.ts",
@@ -2967,7 +3143,8 @@
     "app/inventory/batch-pickup/BatchPickupShell.tsx",
     "modules/inventory/batch-pickup.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/batch-search-strategies/StrategyForm.tsx": [
     "app/inventory/batch-search-strategies/actions.ts",
@@ -2985,7 +3162,8 @@
     "modules/inventory/batch-sort-sequence.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/batch-sort-sequences/SortForm.tsx": [
     "app/inventory/batch-sort-sequences/actions.ts",
@@ -3003,7 +3181,8 @@
     "modules/inventory/batch-sort-sequence.ts",
     "platform/auth/current.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/batches/BatchRelations.tsx": [
     "modules/inventory/batch-class.ts",
@@ -3031,6 +3210,7 @@
     "modules/inventory/batch-status.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -3039,7 +3219,8 @@
     "app/inventory/batches/DocumentTab.tsx",
     "modules/inventory/batch-display.ts",
     "modules/inventory/batch-level.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/batches/new/CreateBatchForm.tsx": [
     "app/inventory/batches/new/actions.ts",
@@ -3057,7 +3238,8 @@
     "modules/inventory/batch-master.ts",
     "modules/inventory/batch-number-assignment.ts",
     "modules/inventory/batch-status.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/goods-issue/GoodsIssue.tsx": [
     "app/inventory/goods-issue/actions.ts",
@@ -3072,21 +3254,31 @@
     "app/inventory/goods-issue/GoodsIssue.tsx",
     "modules/inventory/goods-issue.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/goods-receipt/GoodsReceipt.tsx": [
     "app/inventory/goods-receipt/actions.ts",
     "modules/inventory/goods-receipt.ts"
   ],
+  "app/inventory/goods-receipt/StoReceiptPanel.tsx": [
+    "app/inventory/goods-receipt/actions.ts",
+    "modules/inventory/stock-transport.ts",
+    "ui/fields/ConstrainedField.tsx"
+  ],
   "app/inventory/goods-receipt/actions.ts": [
     "modules/inventory/goods-receipt.ts",
+    "modules/inventory/stock-transport.ts",
     "platform/auth/current.ts"
   ],
   "app/inventory/goods-receipt/page.tsx": [
     "app/inventory/goods-receipt/GoodsReceipt.tsx",
+    "app/inventory/goods-receipt/StoReceiptPanel.tsx",
     "modules/inventory/goods-receipt.ts",
+    "modules/inventory/stock-transport.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/material-document-list/MaterialDocumentListShell.tsx": [
     "modules/inventory/material-document-list.ts",
@@ -3097,6 +3289,7 @@
     "modules/inventory/material-document-list.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/inventory/material-document-output/MaterialDocumentOutput.tsx": [
@@ -3117,12 +3310,14 @@
     "modules/inventory/material-document-output.ts",
     "modules/output/document-layout.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/material-documents/page.tsx": [
     "modules/inventory/material-document-display.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/materials/DeletionFlags.tsx": [
     "app/inventory/materials/actions.ts",
@@ -3161,6 +3356,7 @@
     "platform/db/client.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/inventory/materials/shelf-life-action.ts": [
@@ -3185,7 +3381,8 @@
     "app/inventory/migo/MigoShell.tsx",
     "modules/inventory/migo.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/physical-inventory-count/CountWorkbench.tsx": [
     "app/inventory/physical-inventory-count/actions.ts",
@@ -3203,6 +3400,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -3220,7 +3418,8 @@
     "modules/inventory/physical-inventory-differences.ts",
     "modules/inventory/physical-inventory-recount.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/physical-inventory-posting/PostingWorkbench.tsx": [
     "app/inventory/physical-inventory-posting/actions.ts",
@@ -3243,6 +3442,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -3265,6 +3465,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -3288,7 +3489,8 @@
     "app/inventory/physical-inventory/PhysicalInventoryShell.tsx",
     "modules/inventory/physical-inventory.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/price-change/PriceChange.tsx": [
     "app/inventory/price-change/actions.ts",
@@ -3302,7 +3504,8 @@
     "app/inventory/price-change/PriceChange.tsx",
     "modules/inventory/price-change.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/reservations/Reservations.tsx": [
     "app/inventory/reservations/actions.ts",
@@ -3321,6 +3524,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -3339,7 +3543,8 @@
     "app/inventory/return-delivery/ReturnDeliveryShell.tsx",
     "modules/inventory/return-delivery.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/reversal/Reversal.tsx": [
     "app/inventory/reversal/actions.ts",
@@ -3357,6 +3562,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -3372,7 +3578,8 @@
   "app/inventory/serial-numbers/page.tsx": [
     "app/inventory/serial-numbers/SerialNumbers.tsx",
     "modules/inventory/serial-number.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/shelf-life-list/ShelfLifeListShell.tsx": [
     "modules/inventory/shelf-life-list.ts",
@@ -3383,6 +3590,7 @@
     "modules/inventory/shelf-life-list.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/inventory/stock-ageing/StockAgeingShell.tsx": [
@@ -3394,7 +3602,8 @@
     "modules/inventory/stock-ageing.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/stock-overview/StockOverviewShell.tsx": [
     "modules/inventory/stock-overview.ts",
@@ -3405,6 +3614,7 @@
     "modules/inventory/stock-overview.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/inventory/stock-posting-date/StockOnPostingDateShell.tsx": [
@@ -3415,7 +3625,8 @@
     "app/inventory/stock-posting-date/StockOnPostingDateShell.tsx",
     "modules/inventory/stock-posting-date.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/stock-reconcile/ReconcileShell.tsx": [
     "app/inventory/stock-reconcile/actions.ts",
@@ -3430,7 +3641,13 @@
     "app/inventory/stock-reconcile/ReconcileShell.tsx",
     "modules/inventory/stock-reconcile.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
+  ],
+  "app/inventory/transfer-posting/StoIssuePanel.tsx": [
+    "app/inventory/transfer-posting/actions.ts",
+    "modules/inventory/stock-transport.ts",
+    "ui/fields/ConstrainedField.tsx"
   ],
   "app/inventory/transfer-posting/TransferPosting.tsx": [
     "app/inventory/transfer-posting/actions.ts",
@@ -3440,14 +3657,18 @@
     "ui/fields/ConstrainedField.tsx"
   ],
   "app/inventory/transfer-posting/actions.ts": [
+    "modules/inventory/stock-transport.ts",
     "modules/inventory/transfer-posting.ts",
     "platform/auth/current.ts"
   ],
   "app/inventory/transfer-posting/page.tsx": [
+    "app/inventory/transfer-posting/StoIssuePanel.tsx",
     "app/inventory/transfer-posting/TransferPosting.tsx",
+    "modules/inventory/stock-transport.ts",
     "modules/inventory/transfer-posting.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/uom-conversion/UomShell.tsx": [
     "app/inventory/uom-conversion/actions.ts",
@@ -3464,7 +3685,8 @@
     "app/inventory/uom-conversion/UomShell.tsx",
     "modules/inventory/unit-conversion.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/inventory/warehouse-stocks/WarehouseStocksShell.tsx": [
     "modules/inventory/warehouse-stocks.ts",
@@ -3475,7 +3697,8 @@
     "modules/inventory/warehouse-stocks.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/layout.tsx": [
     "app/globals.css",
@@ -3490,6 +3713,7 @@
   "app/menu/page.tsx": [
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/shell/menu-access.ts",
     "ui/shell/nav-tree.ts"
   ],
@@ -3523,7 +3747,8 @@
     "app/people/assignments/copy.ts",
     "modules/people/assignment.ts",
     "modules/people/org-structure.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/people/authority/Authority.tsx": [
     "modules/people/authority-chart.ts"
@@ -3532,7 +3757,8 @@
     "app/people/authority/Authority.tsx",
     "modules/people/authority-chart.ts",
     "modules/people/schema.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/people/employees/Employees.tsx": [
     "app/people/employees/actions.ts",
@@ -3555,7 +3781,8 @@
     "modules/people/employee-master.ts",
     "modules/people/payroll-structure.ts",
     "modules/people/record-types.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/people/organization/Organization.tsx": [
     "app/people/organization/actions.ts",
@@ -3571,18 +3798,22 @@
   "app/people/organization/page.tsx": [
     "app/people/organization/Organization.tsx",
     "modules/people/org-structure.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/people/payroll-results/page.tsx": [
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/people/payroll-runs/RunForms.tsx": [
-    "app/people/payroll-runs/actions.ts"
+    "app/people/payroll-runs/actions.ts",
+    "modules/people/payroll-background.ts"
   ],
   "app/people/payroll-runs/actions.ts": [
+    "modules/people/payroll-background.ts",
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "modules/people/salary-payment.ts",
@@ -3591,11 +3822,13 @@
   "app/people/payroll-runs/page.tsx": [
     "app/people/payroll-runs/RunForms.tsx",
     "modules/finance/payment-run.ts",
+    "modules/people/payroll-background.ts",
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "modules/people/salary-payment.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/people/salary-structures/StructureForms.tsx": [
     "app/people/salary-structures/actions.ts"
@@ -3608,7 +3841,8 @@
     "app/people/salary-structures/StructureForms.tsx",
     "modules/people/payroll-structure.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/people/time-leave/TimeLeave.tsx": [
     "app/people/time-leave/actions.ts",
@@ -3624,7 +3858,8 @@
   "app/people/time-leave/page.tsx": [
     "app/people/time-leave/TimeLeave.tsx",
     "modules/people/time-leave.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/platform/jobs/JobControls.tsx": [
     "app/platform/jobs/actions.ts",
@@ -3639,7 +3874,8 @@
     "app/platform/jobs/JobControls.tsx",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "platform/job/monitor.ts"
+    "platform/job/monitor.ts",
+    "ui/kit/index.ts"
   ],
   "app/platform/locks/DeleteLock.tsx": [
     "app/platform/locks/actions.ts",
@@ -3654,7 +3890,8 @@
     "app/platform/locks/DeleteLock.tsx",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/kit/index.ts"
   ],
   "app/platform/mail/MailForms.tsx": [
     "app/platform/mail/actions.ts",
@@ -3670,7 +3907,8 @@
     "modules/platform/user-admin.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/mail/service.ts"
+    "platform/mail/service.ts",
+    "ui/kit/index.ts"
   ],
   "app/platform/notifications/[id]/page.tsx": [
     "platform/auth/current.ts",
@@ -3680,7 +3918,8 @@
   "app/platform/notifications/page.tsx": [
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "platform/notification/notify.ts"
+    "platform/notification/notify.ts",
+    "ui/kit/index.ts"
   ],
   "app/platform/roles/RoleManager.tsx": [
     "app/platform/roles/actions.ts",
@@ -3697,7 +3936,8 @@
   "app/platform/roles/page.tsx": [
     "app/platform/roles/RoleManager.tsx",
     "modules/platform/role-admin.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/platform/users/UserDetailControls.tsx": [
     "app/platform/users/actions.ts"
@@ -3712,7 +3952,8 @@
     "modules/platform/role-admin.ts",
     "modules/platform/user-admin.ts",
     "platform/auth/current.ts",
-    "platform/auth/mfa.ts"
+    "platform/auth/mfa.ts",
+    "ui/kit/index.ts"
   ],
   "app/platform/users/access/ScopeManager.tsx": [
     "app/platform/users/access/actions.ts",
@@ -3726,7 +3967,8 @@
   "app/platform/users/access/page.tsx": [
     "app/platform/users/access/ScopeManager.tsx",
     "modules/platform/organisation-scope-admin.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/platform/users/actions.ts": [
     "app/platform/users/constants.ts",
@@ -3741,17 +3983,20 @@
     "app/platform/users/constants.ts",
     "modules/platform/role-admin.ts",
     "modules/platform/user-admin.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/bom-display/page.tsx": [
     "modules/production/material-bom-display.ts",
     "modules/production/material-bom.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/bom-explosion/page.tsx": [
     "modules/production/bom-explosion.ts",
     "platform/auth/current.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/boms/BomForm.tsx": [
     "app/production/boms/actions.ts",
@@ -3774,12 +4019,14 @@
     "modules/production/material-bom.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/capacity-load/page.tsx": [
     "modules/production/capacity-load.ts",
     "platform/auth/current.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/cogi/ProductionCogiWorkbench.tsx": [
     "app/production/cogi/actions.ts",
@@ -3792,7 +4039,8 @@
   "app/production/cogi/page.tsx": [
     "app/production/cogi/ProductionCogiWorkbench.tsx",
     "modules/production/production-cogi.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/confirmation-cancel/ConfirmationCancelWorkbench.tsx": [
     "app/production/confirmation-cancel/actions.ts",
@@ -3805,13 +4053,15 @@
   "app/production/confirmation-cancel/page.tsx": [
     "app/production/confirmation-cancel/ConfirmationCancelWorkbench.tsx",
     "modules/production/confirmation-cancel.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/confirmation-display/loading.tsx": [],
   "app/production/confirmation-display/page.tsx": [
     "modules/production/confirmation-display.ts",
     "modules/production/production-order-display.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/cost-estimate/CostEstimateForm.tsx": [
     "app/production/cost-estimate/actions.ts"
@@ -3824,20 +4074,24 @@
     "app/production/cost-estimate/CostEstimateForm.tsx",
     "modules/production/cost-estimate.ts",
     "platform/auth/current.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/mrp-exception-monitor/page.tsx": [
     "modules/production/mrp-exception-monitor.ts",
     "modules/production/stock-requirements.ts",
     "platform/auth/current.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/mrp-run/MrpRunWorkbench.tsx": [
     "app/production/mrp-run/actions.ts",
+    "modules/production/mrp-background.ts",
     "modules/production/mrp-run.ts",
     "platform/i18n/index.ts"
   ],
   "app/production/mrp-run/actions.ts": [
+    "modules/production/mrp-background.ts",
     "modules/production/mrp-run.ts",
     "platform/auth/current.ts"
   ],
@@ -3845,7 +4099,8 @@
     "app/production/mrp-run/MrpRunWorkbench.tsx",
     "modules/production/mrp-run.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/order-availability/OrderAvailabilityWorkbench.tsx": [
     "app/production/order-availability/actions.ts",
@@ -3863,7 +4118,8 @@
     "modules/production/order-availability.ts",
     "platform/auth/capability-policy.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/order-confirmation/OrderConfirmationWorkbench.tsx": [
     "app/production/order-confirmation/actions.ts",
@@ -3879,11 +4135,13 @@
     "app/production/order-confirmation/OrderConfirmationWorkbench.tsx",
     "modules/production/order-confirmation.ts",
     "modules/production/production-order-display.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/order-cost-report/page.tsx": [
     "modules/production/order-cost-report.ts",
     "platform/auth/current.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/production/order-information/OrderInformationResult.tsx": [
@@ -3902,7 +4160,8 @@
     "modules/production/planned-order-display.ts",
     "modules/production/production-order-change.ts",
     "modules/production/time-ticket.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/order-settlement/SettlementForm.tsx": [
     "app/production/order-settlement/actions.ts"
@@ -3914,7 +4173,8 @@
   "app/production/order-settlement/page.tsx": [
     "app/production/order-settlement/SettlementForm.tsx",
     "modules/production/order-settlement.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/orders/OrderCreate.tsx": [
     "app/production/orders/actions.ts",
@@ -3931,7 +4191,8 @@
     "modules/inventory/production-orders.ts",
     "modules/production/wip-batch.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/planned-order-change/PlannedOrderForm.tsx": [
     "app/production/planned-order-change/actions.ts",
@@ -3949,7 +4210,8 @@
     "modules/production/planned-order-change.ts",
     "modules/production/planned-order-display.ts",
     "platform/auth/current.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/planned-order-conversion-collective/CollectiveForm.tsx": [
     "app/production/planned-order-conversion-collective/actions.ts",
@@ -3964,7 +4226,8 @@
   "app/production/planned-order-conversion-collective/page.tsx": [
     "app/production/planned-order-conversion-collective/CollectiveForm.tsx",
     "modules/production/planned-order-conversion.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/planned-order-conversion/ConvertForm.tsx": [
     "app/production/planned-order-conversion/actions.ts",
@@ -3977,7 +4240,8 @@
   "app/production/planned-order-conversion/page.tsx": [
     "app/production/planned-order-conversion/ConvertForm.tsx",
     "modules/production/planned-order-conversion.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/planned-order-create/PlannedOrderCreateForm.tsx": [
     "app/production/planned-order-create/actions.ts"
@@ -3991,11 +4255,13 @@
     "app/production/planned-order-create/PlannedOrderCreateForm.tsx",
     "modules/production/planned-order-create.ts",
     "modules/production/planned-order-display.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/planned-order-display/page.tsx": [
     "modules/production/planned-order-display.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/production-order-change/OrderChangeForm.tsx": [
     "app/production/production-order-change/actions.ts",
@@ -4013,15 +4279,18 @@
     "modules/production/production-order-change.ts",
     "modules/production/production-order-display.ts",
     "platform/auth/current.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/production-order-display/page.tsx": [
     "modules/production/production-order-display.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/production-version-display/page.tsx": [
     "modules/production/production-version.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/production-versions/VersionForm.tsx": [
     "app/production/production-versions/actions.ts",
@@ -4041,11 +4310,13 @@
     "modules/production/production-version.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/routing-display/page.tsx": [
     "modules/production/routing.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/routings/ConfigForms.tsx": [
     "app/production/routings/actions.ts"
@@ -4068,7 +4339,8 @@
     "modules/production/routing.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/single-item-planning/SingleItemWorkbench.tsx": [
     "app/production/single-item-planning/actions.ts",
@@ -4083,7 +4355,8 @@
     "app/production/single-item-planning/SingleItemWorkbench.tsx",
     "modules/production/mrp-run.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/single-level-planning/SingleLevelWorkbench.tsx": [
     "app/production/single-level-planning/actions.ts",
@@ -4098,7 +4371,8 @@
     "app/production/single-level-planning/SingleLevelWorkbench.tsx",
     "modules/production/mrp-run.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/stock-requirements/StockRequirementsShell.tsx": [
     "modules/production/stock-requirements.ts",
@@ -4109,6 +4383,7 @@
     "modules/production/stock-requirements.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/production/time-ticket/TimeTicketWorkbench.tsx": [
@@ -4123,12 +4398,14 @@
   "app/production/time-ticket/page.tsx": [
     "app/production/time-ticket/TimeTicketWorkbench.tsx",
     "modules/production/time-ticket.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/work-center-display/page.tsx": [
     "modules/production/work-center-display.ts",
     "modules/production/work-center.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/production/work-centers/CategoryForm.tsx": [
     "app/production/work-centers/actions.ts"
@@ -4151,7 +4428,8 @@
     "modules/production/work-center.ts",
     "platform/auth/current.ts",
     "platform/db/client.ts",
-    "platform/lock/enqueue.ts"
+    "platform/lock/enqueue.ts",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/blocked-invoice/BlockedInvoiceForms.tsx": [
     "app/purchasing/blocked-invoice/actions.ts",
@@ -4167,12 +4445,14 @@
     "modules/purchasing/blocked-invoice.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/contract-display/page.tsx": [
     "modules/purchasing/contract-display.ts",
     "modules/purchasing/contract.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/contracts/Contracts.tsx": [
     "app/purchasing/contracts/actions.ts",
@@ -4191,12 +4471,14 @@
     "modules/purchasing/release.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/purchasing/delivery-schedule-display/page.tsx": [
     "modules/purchasing/scheduling-agreement-schedule-display.ts",
     "modules/purchasing/scheduling-agreement-schedule.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/delivery-schedule/ScheduleForm.tsx": [
     "app/purchasing/delivery-schedule/actions.ts",
@@ -4212,6 +4494,7 @@
     "modules/purchasing/scheduling-agreement-schedule.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/purchasing/grir-clearing/GrirClearingForms.tsx": [
@@ -4228,14 +4511,16 @@
     "modules/purchasing/grir-clearing.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/grir-reconciliation/page.tsx": [
     "modules/purchasing/grir-clearing.ts",
     "modules/purchasing/grir-reconciliation.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/info-record/InfoRecord.tsx": [
     "app/purchasing/info-record/actions.ts",
@@ -4257,6 +4542,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -4265,6 +4551,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/purchasing/invoice-verification/InvoiceVerification.tsx": [
@@ -4279,7 +4566,8 @@
     "app/purchasing/invoice-verification/InvoiceVerification.tsx",
     "modules/purchasing/invoice-verification.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/orders-by-account-assignment/PoAccountAssignmentShell.tsx": [
     "modules/purchasing/po-account-assignment.ts",
@@ -4289,12 +4577,19 @@
     "app/purchasing/orders-by-account-assignment/PoAccountAssignmentShell.tsx",
     "modules/purchasing/po-account-assignment.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/orders/Orders.tsx": [
+    "app/purchasing/orders/StockTransportForm.tsx",
     "app/purchasing/orders/actions.ts",
     "modules/purchasing/orders.ts",
     "modules/purchasing/release.ts",
+    "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts"
+  ],
+  "app/purchasing/orders/StockTransportForm.tsx": [
+    "modules/purchasing/orders.ts",
     "ui/fields/ConstrainedField.tsx",
     "ui/kit/index.ts"
   ],
@@ -4334,6 +4629,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -4352,6 +4648,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts",
     "ui/output/DocumentPrint.tsx"
   ],
   "app/purchasing/purchase-order-list/PurchaseOrderListShell.tsx": [
@@ -4363,6 +4660,7 @@
     "modules/purchasing/purchase-order-list.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/purchasing/quota-arrangement/QuotaArrangement.tsx": [
@@ -4382,6 +4680,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -4391,14 +4690,16 @@
     "modules/purchasing/quotation.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/quotation-display/page.tsx": [
     "modules/purchasing/quotation-display.ts",
     "modules/purchasing/quotation.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/quotation/Quotation.tsx": [
     "app/purchasing/quotation/actions.ts",
@@ -4417,6 +4718,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -4429,6 +4731,7 @@
     "modules/purchasing/requisition-list.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/purchasing/requisitions/Requisitions.tsx": [
@@ -4450,6 +4753,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/purchasing/rfq/RequestForQuotation.tsx": [
@@ -4473,12 +4777,14 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/purchasing/scheduling-agreement-display/page.tsx": [
     "modules/purchasing/scheduling-agreement-display.ts",
     "modules/purchasing/scheduling-agreement.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/scheduling-agreement-releases/ReleaseForm.tsx": [
     "app/purchasing/scheduling-agreement-releases/actions.ts"
@@ -4490,7 +4796,8 @@
   "app/purchasing/scheduling-agreement-releases/page.tsx": [
     "app/purchasing/scheduling-agreement-releases/ReleaseForm.tsx",
     "modules/purchasing/scheduling-agreement-release.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/purchasing/scheduling-agreements/Agreements.tsx": [
     "app/purchasing/scheduling-agreements/actions.ts",
@@ -4509,6 +4816,7 @@
     "modules/purchasing/scheduling-agreement.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/purchasing/source-list/SourceList.tsx": [
@@ -4528,6 +4836,7 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -4548,6 +4857,7 @@
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts",
     "ui/fields/ConstrainedField.tsx",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx",
     "ui/lock/remedy.ts"
   ],
@@ -4570,6 +4880,7 @@
     "modules/quality/usage-decision.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts",
+    "ui/kit/index.ts",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/quality/lots/Lots.tsx": [
@@ -4583,7 +4894,8 @@
   "app/quality/lots/page.tsx": [
     "app/quality/lots/Lots.tsx",
     "modules/quality/lot.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/registry/RegistrySearch.tsx": [
     "app/registry/actions.ts",
@@ -4597,7 +4909,8 @@
     "app/registry/RegistrySearch.tsx",
     "app/registry/screen-terms.ts",
     "platform/i18n/index.ts",
-    "platform/registry/index.ts"
+    "platform/registry/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/registry/screen-terms.ts": [
     "platform/registry/index.ts",
@@ -4618,6 +4931,7 @@
     "modules/sales/analysis.ts",
     "modules/sales/registers.ts",
     "platform/auth/current.ts",
+    "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/sales/billing-plans/BillingPlans.tsx": [
@@ -4632,7 +4946,8 @@
   "app/sales/billing-plans/page.tsx": [
     "app/sales/billing-plans/BillingPlans.tsx",
     "modules/sales/billing-plan.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/billing/Billing.tsx": [
     "app/sales/billing/actions.ts",
@@ -4654,7 +4969,8 @@
     "modules/sales/down-payment.ts",
     "modules/sales/output.ts",
     "modules/sales/rebate.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/conditions/Conditions.tsx": [
     "app/sales/conditions/actions.ts",
@@ -4668,7 +4984,8 @@
     "app/sales/conditions/Conditions.tsx",
     "modules/sales/conditions.ts",
     "modules/sales/sales-order.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/credit-memo-request/CreditMemoRequest.tsx": [
     "app/sales/credit-memo-request/actions.ts",
@@ -4686,7 +5003,8 @@
     "modules/sales/billing.ts",
     "modules/sales/credit-memo.ts",
     "modules/sales/sales-order.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/credit-memo/CreditMemo.tsx": [
     "app/sales/credit-memo/actions.ts",
@@ -4705,7 +5023,8 @@
     "modules/finance/customer-invoice.ts",
     "modules/sales/billing.ts",
     "platform/auth/current.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/delivery/Delivery.tsx": [
     "app/sales/delivery/actions.ts",
@@ -4720,15 +5039,18 @@
     "app/sales/delivery/Delivery.tsx",
     "modules/sales/delivery.ts",
     "modules/sales/sales-order.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/documents/page.tsx": [
     "modules/sales/registers.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/incomplete/page.tsx": [
     "modules/sales/incompletion.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/invoice-lists/InvoiceLists.tsx": [
     "app/sales/invoice-lists/actions.ts",
@@ -4741,7 +5063,8 @@
   "app/sales/invoice-lists/page.tsx": [
     "app/sales/invoice-lists/InvoiceLists.tsx",
     "modules/sales/invoice-list.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/orders/AvailabilityPanel.tsx": [
     "app/sales/orders/availability-actions.ts",
@@ -4785,7 +5108,8 @@
     "app/sales/output/SalesOutput.tsx",
     "modules/output/document-layout.ts",
     "modules/sales/output.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/quotations/Quotations.tsx": [
     "app/sales/orders/Orders.tsx",
@@ -4805,7 +5129,8 @@
     "app/sales/quotations/Quotations.tsx",
     "modules/sales/quotation.ts",
     "modules/sales/sales-order.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/rebate-agreements/RebateAgreements.tsx": [
     "app/sales/rebate-agreements/actions.ts",
@@ -4818,7 +5143,8 @@
   "app/sales/rebate-agreements/page.tsx": [
     "app/sales/rebate-agreements/RebateAgreements.tsx",
     "modules/sales/rebate.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/sales/returns/Returns.tsx": [
     "app/sales/returns/actions.ts",
@@ -4837,12 +5163,14 @@
     "modules/sales/delivery.ts",
     "modules/sales/returns.ts",
     "modules/sales/sales-order.ts",
-    "platform/auth/current.ts"
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
   ],
   "app/search/page.tsx": [
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/registry/index.ts",
+    "ui/kit/index.ts",
     "ui/shell/menu-access.ts",
     "ui/shell/nav-search.ts"
   ],
@@ -5256,6 +5584,11 @@
     "platform/periods/index.ts",
     "platform/posting/index.ts"
   ],
+  "modules/finance/jobs/payment-run.ts": [
+    "modules/finance/payment-run-background.ts",
+    "platform/job/registry.ts",
+    "platform/job/types.ts"
+  ],
   "modules/finance/journal-items.ts": [
     "platform/db/client.ts",
     "platform/periods/index.ts"
@@ -5289,6 +5622,18 @@
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
     "platform/posting/index.ts"
+  ],
+  "modules/finance/payment-run-background.ts": [
+    "modules/finance/payment-run-release.ts",
+    "modules/finance/payment-run.ts",
+    "modules/finance/schema.ts",
+    "modules/foundation/schema.ts",
+    "modules/foundation/supplier-company-schema.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/job/actor.ts",
+    "platform/job/queue.ts",
+    "platform/job/types.ts"
   ],
   "modules/finance/payment-run-release.ts": [
     "modules/finance/payment-run.ts",
@@ -6352,6 +6697,7 @@
     "modules/purchasing/account-assignment.ts",
     "modules/purchasing/delivery-completion.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/sto-guard.ts",
     "platform/auth/current.ts",
     "platform/auth/session.ts",
     "platform/change/index.ts",
@@ -6394,6 +6740,7 @@
     "platform/posting/index.ts"
   ],
   "modules/inventory/material-document-accounting.ts": [
+    "platform/auth/session.ts",
     "platform/db/client.ts"
   ],
   "modules/inventory/material-document-display.ts": [
@@ -6427,7 +6774,9 @@
     "modules/inventory/physical-inventory-posting-status.ts",
     "modules/inventory/physical-inventory.ts",
     "modules/inventory/schema.ts",
+    "modules/inventory/stock-transport.ts",
     "modules/sales/goods-issue-reversal.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -6685,6 +7034,7 @@
   ],
   "modules/inventory/stock-overview.ts": [
     "modules/inventory/batch-posting.ts",
+    "modules/inventory/stock-types.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -6696,6 +7046,30 @@
   "modules/inventory/stock-reconcile.ts": [
     "modules/inventory/physical-inventory.ts",
     "platform/db/client.ts"
+  ],
+  "modules/inventory/stock-transport.ts": [
+    "modules/finance/intercompany.ts",
+    "modules/finance/schema.ts",
+    "modules/inventory/balance-update.ts",
+    "modules/inventory/batch-classification.ts",
+    "modules/inventory/batch-control-use.ts",
+    "modules/inventory/batch-posting.ts",
+    "modules/inventory/material-document-output.ts",
+    "modules/inventory/physical-inventory.ts",
+    "modules/inventory/schema.ts",
+    "modules/inventory/stock-types.ts",
+    "modules/inventory/transfer-posting.ts",
+    "modules/inventory/unit-conversion.ts",
+    "modules/purchasing/release.ts",
+    "modules/purchasing/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/numbering/index.ts",
+    "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts"
   ],
   "modules/inventory/stock-types.ts": [],
   "modules/inventory/storage-location.ts": [
@@ -6846,6 +7220,11 @@
     "platform/notification/notify.ts",
     "platform/tables/security.ts"
   ],
+  "modules/people/jobs/payroll-run.ts": [
+    "modules/people/payroll-background.ts",
+    "platform/job/registry.ts",
+    "platform/job/types.ts"
+  ],
   "modules/people/org-structure.ts": [
     "modules/people/schema.ts",
     "platform/auth/current.ts",
@@ -6864,6 +7243,18 @@
     "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts"
+  ],
+  "modules/people/payroll-background.ts": [
+    "modules/people/payroll-access.ts",
+    "modules/people/payroll-posting.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
+    "modules/people/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/job/queue.ts",
+    "platform/job/types.ts"
   ],
   "modules/people/payroll-posting.ts": [
     "modules/finance/gl-document.ts",
@@ -7033,6 +7424,11 @@
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
+  "modules/production/jobs/plant-run.ts": [
+    "modules/production/mrp-background.ts",
+    "platform/job/registry.ts",
+    "platform/job/types.ts"
+  ],
   "modules/production/material-bom-display.ts": [
     "modules/production/material-bom.ts"
   ],
@@ -7046,6 +7442,14 @@
     "platform/db/client.ts",
     "platform/tables/reference.ts",
     "platform/tenancy/index.ts"
+  ],
+  "modules/production/mrp-background.ts": [
+    "modules/production/mrp-run.ts",
+    "platform/db/client.ts",
+    "platform/job/actor.ts",
+    "platform/job/queue.ts",
+    "platform/job/types.ts",
+    "platform/numbering/index.ts"
   ],
   "modules/production/mrp-exception-monitor.ts": [
     "modules/production/stock-requirements.ts",
@@ -7063,8 +7467,10 @@
     "modules/inventory/production-document-quantity.ts",
     "modules/production/mrp-explosion.ts",
     "modules/production/mrp-structure.ts",
+    "modules/production/sto-planning.ts",
     "modules/purchasing/requisitions.ts",
     "platform/db/client.ts",
+    "platform/job/queue.ts",
     "platform/numbering/index.ts",
     "platform/posting/decimal.ts"
   ],
@@ -7290,9 +7696,15 @@
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
+  "modules/production/sto-planning.ts": [
+    "modules/inventory/unit-conversion.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
+  ],
   "modules/production/stock-requirements.ts": [
     "modules/inventory/production-document-quantity.ts",
     "modules/inventory/unit-conversion.ts",
+    "modules/production/sto-planning.ts",
     "modules/purchasing/receipt-unit-basis.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
@@ -7425,6 +7837,7 @@
     "modules/inventory/valuation-class-definition.ts",
     "modules/purchasing/account-assignment.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/sto-guard.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/document/index.ts",
@@ -7451,6 +7864,7 @@
     "modules/purchasing/release.ts",
     "modules/purchasing/schema.ts",
     "modules/purchasing/source-list.ts",
+    "modules/purchasing/stock-transport-order.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -7462,6 +7876,7 @@
     "modules/foundation/supplier-company-schema.ts",
     "modules/inventory/schema.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/sto-guard.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -7474,6 +7889,7 @@
     "platform/posting/decimal.ts"
   ],
   "modules/purchasing/purchase-order-display.ts": [
+    "modules/inventory/stock-transport.ts",
     "modules/purchasing/account-assignment.ts",
     "modules/purchasing/item-state.ts",
     "modules/purchasing/receipt-unit-basis.ts",
@@ -7654,6 +8070,23 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts"
+  ],
+  "modules/purchasing/sto-guard.ts": [
+    "platform/db/client.ts"
+  ],
+  "modules/purchasing/stock-transport-order.ts": [
+    "modules/foundation/purchasing-org-plant.ts",
+    "modules/foundation/schema.ts",
+    "modules/inventory/batch-posting.ts",
+    "modules/inventory/schema.ts",
+    "modules/inventory/unit-conversion.ts",
+    "modules/purchasing/release.ts",
+    "modules/purchasing/schema.ts",
+    "modules/purchasing/sto-guard.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/numbering/index.ts",
+    "platform/posting/decimal.ts"
   ],
   "modules/purchasing/vendor-evaluation.ts": [
     "platform/change/index.ts",
@@ -8138,6 +8571,11 @@
     "platform/tables/audit-trail.ts"
   ],
   "platform/i18n/index.ts": [],
+  "platform/job/actor.ts": [
+    "platform/auth/authority.ts",
+    "platform/db/client.ts",
+    "platform/tables/security.ts"
+  ],
   "platform/job/cron.ts": [],
   "platform/job/execute.ts": [
     "platform/auth/session.ts",
@@ -8169,6 +8607,7 @@
     "platform/job/types.ts",
     "platform/tables/system.ts"
   ],
+  "platform/job/queues.ts": [],
   "platform/job/registry.ts": [
     "platform/job/types.ts"
   ],
@@ -8178,7 +8617,9 @@
     "platform/job/queue.ts",
     "platform/tables/system.ts"
   ],
-  "platform/job/types.ts": [],
+  "platform/job/types.ts": [
+    "platform/db/client.ts"
+  ],
   "platform/lock/enqueue.ts": [
     "platform/change/index.ts",
     "platform/db/client.ts",
@@ -8826,17 +9267,22 @@
   "ui/shell/screen-links.ts": [
     "ui/shell/screen-catalog.ts"
   ],
+  "worker/config.ts": [],
   "worker/index.ts": [
     "platform/db/client.ts",
     "platform/job/execute.ts",
     "platform/job/queue.ts",
     "platform/job/scheduler.ts",
     "platform/job/types.ts",
+    "worker/config.ts",
     "worker/jobs.ts"
   ],
   "worker/jobs.ts": [
+    "modules/finance/jobs/payment-run.ts",
     "modules/output/jobs/dispatch.ts",
     "modules/people/jobs/grant-expiring.ts",
+    "modules/people/jobs/payroll-run.ts",
+    "modules/production/jobs/plant-run.ts",
     "platform/mail/jobs/send.ts",
     "platform/notification/jobs/fanout.ts"
   ]

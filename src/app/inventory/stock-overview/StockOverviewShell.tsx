@@ -93,6 +93,7 @@ export default function StockOverviewShell({ canUse, selection, result, reportEr
               {' · '}{t('stockOvw.quality')} {result.qualityInspectionQuantity.toFixed(3)}
               {' · '}{t('stockOvw.blocked')} {result.blockedQuantity.toFixed(3)}
               {' · '}{t('stockOvw.special')} {result.specialQuantity.toFixed(3)}
+              {result.transitQuantity !== 0 ? <>{' · '}<span data-transit-total>{t('stockOvw.transit')} {result.transitQuantity.toFixed(3)}</span></> : null}
             </span>
           ) : null}
         </div>
@@ -115,6 +116,7 @@ export default function StockOverviewShell({ canUse, selection, result, reportEr
                   {' · '}{t('stockOvw.quality')} {plant.qualityInspectionQuantity.toFixed(3)}
                   {' · '}{t('stockOvw.blocked')} {plant.blockedQuantity.toFixed(3)}
                   {' · '}{t('stockOvw.special')} {plant.specialQuantity.toFixed(3)}
+                  {plant.transitQuantity !== 0 ? <>{' · '}<span data-transit-plant>{t('stockOvw.transit')} {plant.transitQuantity.toFixed(3)}</span></> : null}
                 </span>
                 <span className="ms-auto space-x-3 text-xs">
                   {plant.movementsDrillDown ? <Link className="code" href={plant.movementsDrillDown}>{t('stockOvw.movements')}</Link> : null}
@@ -123,6 +125,28 @@ export default function StockOverviewShell({ canUse, selection, result, reportEr
                 </span>
               </summary>
               <div className="mt-2 space-y-2 border-s border-line ps-4">
+                {plant.transit ? (
+                  <div data-transit-node={plant.plant} className="text-sm">
+                    <p className="font-semibold">
+                      {t('stockOvw.transit')} <span className="code">{plant.transit.quantity.toFixed(3)}</span>
+                      {plant.transit.batches.length > 0 && plant.transit.batches.some((b) => b.batch)
+                        ? <span className="ms-2 text-xs text-ink-soft">{plant.transit.batches.map((b) => `${b.batch || '—'}: ${b.quantity.toFixed(3)}`).join(' · ')}</span>
+                        : null}
+                    </p>
+                    <p className="text-xs text-ink-soft">{t('stockOvw.transitNote')}</p>
+                    {plant.transit.orders.length > 0 ? (
+                      <ul className="mt-1 text-xs">
+                        {plant.transit.orders.map((o) => (
+                          <li key={`${o.orderNumber}|${o.itemNumber}|${o.batch}`}>
+                            <Link className="code" href={o.drillDown}>{o.orderNumber}/{o.itemNumber}</Link>
+                            {' '}{o.inTransit.toFixed(3)}{o.batch ? ` · ${o.batch}` : ''}
+                            {' · '}<Link className="code" href={`/inventory/goods-receipt?order=${encodeURIComponent(o.orderNumber)}`}>{t('stockOvw.movements')}</Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
                 {plant.storageLocations.map((location) => (
                   <details key={`${plant.plant}|${location.storageLocation}`} open={false}
                     data-location={`${plant.plant}|${location.storageLocation}`}>

@@ -11,6 +11,14 @@ import {
   validateTransfer,
   type TransferValidation,
 } from '@/modules/inventory/transfer-posting';
+import { StockTransportError, postStoIssue } from '@/modules/inventory/stock-transport';
+
+export interface StoIssueActionState {
+  ok: boolean;
+  message: string;
+  remedy?: string;
+  documentNumber?: string;
+}
 
 export interface TransferActionState {
   ok: boolean;
@@ -22,6 +30,54 @@ export interface TransferActionState {
 }
 
 const ROUTE = '/inventory/transfer-posting';
+
+/**
+ * ITEM-22: the stock transport order goods issue (351). The order, the items, the quantities, the issuing
+ * storage location and the batch come from the form; the plants, the material and the receiving side come
+ * from the order and are never read from the request.
+ */
+export async function postStoIssueAction(
+  _previous: StoIssueActionState,
+  form: FormData,
+): Promise<StoIssueActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, TRANSFER_POST_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the transfer posting capability.' };
+  }
+  const items: Array<{ itemNumber: number; quantity: string; entryUnit?: string; storageLocation: string; batch?: string }> = [];
+  for (const [key, value] of form.entries()) {
+    if (!key.startsWith('qty-') || typeof value !== 'string' || value.trim() === '' || Number(value) === 0) continue;
+    const itemNumber = Number(key.slice(4));
+    items.push({
+      itemNumber, quantity: value.trim(),
+      entryUnit: text(form, `unit-${itemNumber}`) || undefined,
+      storageLocation: text(form, `sloc-${itemNumber}`),
+      batch: text(form, `batch-${itemNumber}`) || undefined,
+    });
+  }
+  try {
+    const doc = await postStoIssue({
+      client: session.user.client,
+      changedBy: session.user.username,
+      orderNumber: text(form, 'orderNumber'),
+      items,
+      postingDate: text(form, 'postingDate'),
+      documentDate: text(form, 'documentDate'),
+      headerText: text(form, 'headerText') || undefined,
+      requestKey: text(form, 'requestKey'),
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      message: `Goods issue (351) posted as material document ${doc.materialDocumentNumber}`
+        + (doc.journals.length > 0 ? ` with ${doc.journals.length} accounting document(s).` : '.'),
+      documentNumber: doc.materialDocumentNumber,
+    };
+  } catch (error) {
+    if (error instanceof StockTransportError) return { ok: false, message: error.message, remedy: error.remedy };
+    throw error;
+  }
+}
 
 function text(form: FormData, name: string): string {
   const value = form.get(name);

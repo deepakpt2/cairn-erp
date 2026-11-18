@@ -102,6 +102,15 @@ const COUNTER_ALIASES: Record<string, [string, string]> = {
   '460': ['459', 'TR_RETURNS_BLOCK_REV'],
 };
 
+/**
+ * ITEM-22: 351 / 352 are the stock transport order's goods issue and its reversal. They post only against
+ * an order, through the STO goods-issue mode of this screen (`postStoIssue`), never as a free transfer.
+ */
+const STO_ALIASES: Record<string, string> = {
+  '351': 'the goods issue of a stock transport order, which needs the order and its item',
+  '352': 'the reversal of a stock transport order goods issue',
+};
+
 /** Two-step movements canon does not carry — §14 requires them refused by name, never run one-step. */
 const TWO_STEP_ALIASES: Record<string, string> = {
   '303': 'transfer to in-transit stock',
@@ -149,6 +158,14 @@ async function resolveScenario(
     throw new TransferPostingError(
       `Movement type ${trimmed} is a two-step transfer (${TWO_STEP_ALIASES[trimmed]}), which this canon does not carry.`,
       'A two-step transfer puts stock in transit, and canon has no in-transit stock dimension. Post a one-step transfer, or leave the goods where they are.',
+    );
+  }
+  if (STO_ALIASES[trimmed]) {
+    throw new TransferPostingError(
+      `Movement type ${trimmed} is ${STO_ALIASES[trimmed]}, not a free transfer.`,
+      trimmed === '351'
+        ? 'Choose the stock transport order mode, name the order and its items, and post the goods issue from there.'
+        : 'Reverse the goods issue document on the material document reversal screen; the counter movement is never entered by hand.',
     );
   }
   const counter = COUNTER_ALIASES[trimmed];
@@ -379,7 +396,7 @@ function requireDate(value: string, label: string): void {
   }
 }
 
-async function loadPlant(
+export async function loadPlant(
   tx: Tx, client: string, plant: string, materialNumber: string, role: string, companyCode: string | null,
 ): Promise<PreparedPlant> {
   const [row] = await tx.select().from(plantTable).where(and(
@@ -441,7 +458,7 @@ async function loadPlant(
   return { plant, companyCode: row.companyCode, valuation: preparedValuation };
 }
 
-async function loadStorageLocation(
+export async function loadStorageLocation(
   tx: Tx, client: string, plant: string, storageLocationCode: string, role: string,
 ): Promise<typeof storageLocation.$inferSelect> {
   try {
@@ -529,7 +546,7 @@ async function moveValuation(
   );
 }
 
-async function resolveAccount(
+export async function resolveAccount(
   tx: Tx, client: string, chart: string, event: string, valuationClass: string,
 ): Promise<string> {
   const rows = await tx.select().from(accountDetermination).where(and(
@@ -548,7 +565,7 @@ async function resolveAccount(
 }
 
 /** The material period judges the posting date before anything moves (OMSY). */
-async function judgePeriod(tx: Tx, client: string, plant: string, postingDate: string) {
+export async function judgePeriod(tx: Tx, client: string, plant: string, postingDate: string) {
   const [plantRow] = await tx.select().from(plantTable).where(and(
     eq(plantTable.client, client), eq(plantTable.plant, plant),
   ));
@@ -1221,6 +1238,12 @@ export async function reverseTransfer(
       eq(materialDocumentLine.client, input.client),
       eq(materialDocumentLine.materialDocumentNumber, input.materialDocumentNumber),
     )).orderBy(materialDocumentLine.lineNumber);
+    if (lines.some((l) => l.stoOrderNumber)) {
+      throw new TransferPostingError(
+        `Material document ${input.materialDocumentNumber} is a stock transport order movement, not a transfer posting.`,
+        'Reverse it on the material document reversal screen: it undoes the receipt (102) or the goods issue (352) against the transit ledger.',
+      );
+    }
     const issue = lines.find((l) => l.lineDirection === 'ISSUE');
     const receipt = lines.find((l) => l.lineDirection === 'RECEIPT');
     if (!issue?.materialNumber || !receipt) {

@@ -58,7 +58,7 @@ User/role/organisation-scope administration, job monitor, notifications inbox. R
 —
 
 ## Depends on
-foundation, people, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/lock, platform/mail, platform/notification, platform/tables, platform/tenancy, ui/lock
+foundation, people, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/lock, platform/mail, platform/notification, platform/tables, platform/tenancy, ui/kit, ui/lock
 
 ## Used by
 app/account, app/forgot-password, app/reset-password, audit, platform/attention, platform/auth, platform/tenancy, ui/lock

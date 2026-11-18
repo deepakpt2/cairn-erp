@@ -32,8 +32,8 @@
 - `modules/foundation/supplier-partner-schema.ts`: supplier_partner_function, supplier_purchasing_partner
 - `modules/foundation/supplier-purchasing-schema.ts`: supplier_purchasing_org
 
-### inventory (53)
-- `modules/inventory/schema.ts`: account_category_reference, batch, batch_access_sequence, batch_access_step, batch_assigned_receipt, batch_condition_table, batch_condition_table_field, batch_conversion_check, batch_conversion_conflict, batch_document_management, batch_level_configuration, batch_level_conversion, batch_number_assignment, batch_search_allocation, batch_search_procedure, batch_search_procedure_step, batch_search_strategy, batch_search_strategy_key, batch_sort_sequence, batch_sort_sequence_criterion, batch_status_management, batch_status_plant, batch_status_plant_conversion, batch_strategy_type, industry_sector, material, material_document, material_document_line, material_group, material_number_range_group, material_period_control, material_plant, material_sales, material_type, material_type_valuation, material_uom_conversion, material_valuation, movement_type, mrp_controller, physical_inventory_difference_allocation, physical_inventory_document, physical_inventory_item, physical_inventory_recount_link, planning_file, production_order, production_order_component, production_scheduling_profile, reservation_header, reservation_item, serial_number, stock_quantity, valuation_class, valuation_class_reference
+### inventory (55)
+- `modules/inventory/schema.ts`: account_category_reference, batch, batch_access_sequence, batch_access_step, batch_assigned_receipt, batch_condition_table, batch_condition_table_field, batch_conversion_check, batch_conversion_conflict, batch_document_management, batch_level_configuration, batch_level_conversion, batch_number_assignment, batch_search_allocation, batch_search_procedure, batch_search_procedure_step, batch_search_strategy, batch_search_strategy_key, batch_sort_sequence, batch_sort_sequence_criterion, batch_status_management, batch_status_plant, batch_status_plant_conversion, batch_strategy_type, industry_sector, material, material_document, material_document_journal, material_document_line, material_group, material_number_range_group, material_period_control, material_plant, material_sales, material_type, material_type_valuation, material_uom_conversion, material_valuation, movement_type, mrp_controller, physical_inventory_difference_allocation, physical_inventory_document, physical_inventory_item, physical_inventory_recount_link, planning_file, production_order, production_order_component, production_scheduling_profile, reservation_header, reservation_item, serial_number, sto_transit_allocation, stock_quantity, valuation_class, valuation_class_reference
 
 ### people (29)
 - `modules/people/schema.ts`: absence, delegation, delegation_approval, delegation_scope, employee, employee_record, job, leave_quota, org_hierarchy, org_unit, pay_component, pay_component_config, payroll_calc_stage, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, payroll_run_operation, position, position_assignment, record_field, record_field_value, record_type, salary_payment, salary_structure, salary_structure_assignment, salary_structure_component, time_recording, time_type
@@ -142,13 +142,14 @@
 | fiscal_year_period | foundation | audit, finance, platform/periods, production |
 | fiscal_year_variant | foundation | finance, inventory, platform/periods, platform/tenancy, production |
 | fixed_asset | finance | dev/walkthrough-asset.ts, purchasing |
-| gl_account | finance | foundation, people, platform/posting, platform/tenancy, production, purchasing, sales |
-| gl_account_company | finance | foundation |
+| gl_account | finance | foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
+| gl_account_company | finance | foundation, inventory |
 | gl_account_group | finance | foundation |
 | house_bank | foundation | finance, people, platform/tenancy |
 | incompletion_group | sales | foundation |
 | industry | foundation | platform/tenancy |
 | industry_sector | inventory | platform/tenancy |
+| intercompany_clearing_config | finance | inventory |
 | internal_order | foundation | finance, purchasing |
 | internal_order_budget_profile | foundation | platform/tenancy |
 | internal_order_type | foundation | platform/tenancy |
@@ -157,7 +158,7 @@
 | job_log | platform/tables | platform/job |
 | job_run | platform/tables | finance, people, platform/auth, platform/job, production |
 | journal_entry | finance | foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing |
-| journal_entry_line | finance | dev/walkthrough-asset.ts, foundation, people, platform/posting, platform/tenancy, production, purchasing |
+| journal_entry_line | finance | dev/walkthrough-asset.ts, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing |
 | lock_wait_log | platform/tables | platform/lock |
 | mail_message | platform/tables | platform/mail |
 | mail_server_config | platform/tables | platform/mail |
@@ -195,7 +196,7 @@
 | payment_run_company | finance | platform/attention |
 | payment_terms | foundation | finance, platform/tenancy, purchasing |
 | payroll_run_exception | people | platform/tenancy |
-| planning_file | inventory | production |
+| planning_file | inventory | production, purchasing |
 | plant | foundation | finance, inventory, platform, platform/auth, platform/tenancy, production, purchasing, sales |
 | position_assignment | people | platform/auth, platform/notification |
 | position_capability | platform/tables | platform/auth, platform/notification |
@@ -256,6 +257,7 @@
 | shipping_condition | sales | foundation |
 | sod_rule | platform/tables | audit, platform |
 | special_gl_config | foundation | finance, sales |
+| sto_transit_allocation | inventory | production, purchasing |
 | stock_quantity | inventory | dev/walkthrough-volume.ts, production, sales |
 | storage_location | foundation | inventory, platform/tenancy, production, purchasing |
 | supplier_company_code | foundation | finance, purchasing |

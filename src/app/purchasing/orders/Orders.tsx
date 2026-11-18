@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import type { OrderChoices, OrderDocument } from '@/modules/purchasing/orders';
 import { ActionRow, Button, Notice } from '@/ui/kit';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import StockTransportForm from './StockTransportForm';
 import type { DocumentReleaseState } from '@/modules/purchasing/release';
 import {
   cancelOrderReleaseAction,
@@ -249,6 +250,8 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
     incotermsCode: selected?.incotermsCode ?? '',
     incotermsLocation: selected?.incotermsLocation ?? '',
   });
+  /** ITEM-22: a stock transport order has its own body; the type of an existing order never changes. */
+  const isSto = header.documentType === 'STOCK_TRANSPORT';
   const [headerTab, setHeaderTab] = useState<HeaderTab>('ORG');
   const [itemTab, setItemTab] = useState<ItemTab>('SCHEDULE');
   const [activeItem, setActiveItem] = useState(0);
@@ -426,6 +429,50 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
         {lockMessage && (
           <div className="mt-2"><Notice tone="warn" title={lockMessage} /></div>
         )}
+        {!selected && (
+          <div className="mt-3 flex flex-wrap items-center gap-3" role="radiogroup" aria-label="Order type">
+            <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">Order type</span>
+            {[['STANDARD', 'Supplier order'], ['STOCK_TRANSPORT', 'Stock transport order (plant to plant)']].map(([code, label]) => (
+              <label key={code} className="flex items-center gap-1 text-sm">
+                <input
+                  type="radio" name="orderTypeChoice" value={code}
+                  checked={header.documentType === code}
+                  onChange={() => setHeader({ ...header, documentType: code })}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        )}
+        {selected && isSto && (
+          <p className="mt-2 text-sm text-ink-soft" data-order-type="STOCK_TRANSPORT">
+            Stock transport order: supplied from plant {selected.supplyingPlant}. The type of an order does not change.
+          </p>
+        )}
+        {isSto && (
+          <>
+            <StockTransportForm
+              choices={choices}
+              selected={selected}
+              viewOnly={viewOnly || !canCreate}
+              formAction={formAction}
+              pending={pending}
+            />
+            {state.message && (
+              <div className="mt-3"><Notice tone={state.ok ? 'ok' : 'error'} title={state.message} remedy={state.remedy}>
+                {state.ok && state.orderNumber ? (
+                  <>
+                    {' '}
+                    <a className="underline" href={`/purchasing/purchase-order-display?order=${encodeURIComponent(state.orderNumber)}`}>
+                      Display stock transport order {state.orderNumber}
+                    </a>
+                  </>
+                ) : null}
+              </Notice></div>
+            )}
+          </>
+        )}
+        {!isSto && (
         <form action={formAction}>
           <input type="hidden" name="payload" value={payload()} />
           <input type="hidden" name="orderNumber" value={selected?.orderNumber ?? ''} />
@@ -1076,6 +1123,7 @@ export default function Orders({ choices, selected, canCreate, viewOnly = false,
           </ActionRow>
           </fieldset>
         </form>
+        )}
       </section>
     </div>
   );

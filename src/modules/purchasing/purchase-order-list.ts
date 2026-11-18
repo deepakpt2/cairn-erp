@@ -79,6 +79,13 @@ export interface PoListSelection {
 export interface PoListRow {
   orderNumber: string;
   itemNumber: number;
+  /** STANDARD or STOCK_TRANSPORT. A stock transport order has no supplier, price or invoice. */
+  documentType: string;
+  supplyingPlant: string;
+  /** Stock transport order, base unit: net issued (351 - 352), net received (101 - 102), in transit. */
+  stoNetIssued: number;
+  stoNetReceived: number;
+  stoInTransit: number;
   supplierNumber: string;
   supplierName: string;
   purchasingOrg: string;
@@ -329,8 +336,15 @@ export async function listPurchaseOrders(input: {
         select order_number, item_number, min(delivery_date)::text as delivery_date
         from purchase_order_schedule_line where client = ${client}
         group by order_number, item_number
+      ), sto as (
+        select order_number, item_number,
+               sum(issued_quantity - reversed_quantity) as net_issued, sum(received_quantity) as net_received
+        from sto_transit_allocation where client = ${client}
+        group by order_number, item_number
       ), rows as (
-        select po.order_number, i.item_number, po.supplier_number, po.purchasing_org, po.purchasing_group,
+        select po.order_number, i.item_number, po.supplier_number, po.document_type, coalesce(po.supplying_plant, '') as supplying_plant,
+               coalesce(sto.net_issued, 0) as sto_net_issued, coalesce(sto.net_received, 0) as sto_net_received,
+               po.purchasing_org, po.purchasing_group,
                po.company_code, po.document_date::text as document_date, po.currency, ${PO_RELEASE_STATUS_SQL} as release_status,
                coalesce(i.material_number, '') as material_number, i.short_text,
                coalesce(i.material_group, '') as material_group, coalesce(i.plant, '') as plant,
@@ -340,11 +354,18 @@ export async function listPurchaseOrders(input: {
                coalesce(i.account_assignment_category, '') as account_assignment_category,
                coalesce(i.requisition_number, '') as requisition_number, i.requisition_item,
                case when i.requisition_number is null then null else r.quantity end as requisition_quantity,
-               coalesce(gr.delivered, 0) as delivered,
-               coalesce(ir.invoiced, 0) as invoiced,
+               -- A stock transport order is received from transit and never invoiced: the ledger's net received
+               -- (base unit, equal to the order unit only where the item is ordered in the base unit) stands for
+               -- delivered, and nothing is outstanding to invoice.
+               case when po.document_type = 'STOCK_TRANSPORT' then case when i.unit = m.base_unit then coalesce(sto.net_received, 0) else 0 end
+                    else coalesce(gr.delivered, 0) end as delivered,
+               case when po.document_type = 'STOCK_TRANSPORT' then case when i.unit = m.base_unit then coalesce(sto.net_received, 0) else 0 end
+                    else coalesce(ir.invoiced, 0) end as invoiced,
                coalesce(sc.delivery_date, '') as delivery_date
         from purchase_order_item i
         join purchase_order po on po.client = i.client and po.order_number = i.order_number
+        left join material m on m.client = i.client and m.material_number = i.material_number
+        left join sto on sto.order_number = i.order_number and sto.item_number = i.item_number
         left join gr on gr.purchase_order_number = i.order_number and gr.purchase_order_item = i.item_number
         left join ir on ir.purchase_order_number = i.order_number and ir.purchase_order_item = i.item_number
         left join schedule sc on sc.order_number = i.order_number and sc.item_number = i.item_number
@@ -383,8 +404,13 @@ export async function listPurchaseOrders(input: {
       return {
         orderNumber: String(r.order_number),
         itemNumber: Number(r.item_number),
-        supplierNumber: String(r.supplier_number),
-        supplierName: nameOf.get(String(r.supplier_number)) ?? '',
+        documentType: String(r.document_type ?? 'STANDARD'),
+        supplyingPlant: String(r.supplying_plant ?? ''),
+        stoNetIssued: num(r.sto_net_issued),
+        stoNetReceived: num(r.sto_net_received),
+        stoInTransit: num((Number(r.sto_net_issued) - Number(r.sto_net_received)).toFixed(3)),
+        supplierNumber: r.supplier_number == null ? '' : String(r.supplier_number),
+        supplierName: r.supplier_number == null ? '' : nameOf.get(String(r.supplier_number)) ?? '',
         purchasingOrg: String(r.purchasing_org ?? ''),
         purchasingGroup: String(r.purchasing_group ?? ''),
         companyCode: String(r.company_code ?? ''),
@@ -411,7 +437,9 @@ export async function listPurchaseOrders(input: {
         openInvoiceQuantity: num(r.open_invoice),
         accountAssignmentCategory: String(r.account_assignment_category ?? ''),
         status,
-        drillDown: `/purchasing/orders?order=${encodeURIComponent(String(r.order_number))}`,
+        drillDown: r.document_type === 'STOCK_TRANSPORT'
+          ? `/purchasing/purchase-order-display?order=${encodeURIComponent(String(r.order_number))}`
+          : `/purchasing/orders?order=${encodeURIComponent(String(r.order_number))}`,
       };
     });
 

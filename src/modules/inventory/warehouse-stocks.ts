@@ -28,8 +28,8 @@ export const WAREHOUSE_STOCK_CAPABILITY = 'INV.STOCK.WAREHOUSE';
 export const WAREHOUSE_STOCK_ALIAS = 'MB52';
 
 // Stock type identities live in a client-safe file; re-exported here for existing importers.
-import { UNRESTRICTED, QUALITY_INSPECTION, BLOCKED, RETURNS } from './stock-types';
-export { UNRESTRICTED, QUALITY_INSPECTION, BLOCKED, RETURNS };
+import { UNRESTRICTED, QUALITY_INSPECTION, BLOCKED, RETURNS, IN_TRANSIT } from './stock-types';
+export { UNRESTRICTED, QUALITY_INSPECTION, BLOCKED, RETURNS, IN_TRANSIT };
 
 export const SCOPE_OF_LIST_OPTIONS = ['ALV', 'STANDARD'] as const;
 export type ScopeOfList = (typeof SCOPE_OF_LIST_OPTIONS)[number];
@@ -66,6 +66,8 @@ export interface WarehouseStockRow {
   blockedQuantity: number;
   /** Returns stock: counted here, not valuated, and not available to promise. */
   returnsQuantity: number;
+  /** Stock in transit of a stock transport order (receiving plant, no storage location): not available. */
+  transitQuantity: number;
   specialQuantity: number;
   totalQuantity: number;
   /** null where no valuation record stands — unknown, never zero. */
@@ -93,6 +95,7 @@ export interface WarehouseStockResult {
     qualityInspectionQuantity: number;
     blockedQuantity: number;
     returnsQuantity: number;
+    transitQuantity: number;
     specialQuantity: number;
     totalQuantity: number;
     value: number | null;
@@ -252,7 +255,8 @@ export async function listWarehouseStocks(input: {
              sum(case when s.stock_type = ${QUALITY_INSPECTION} then s.quantity else 0 end) as quality_qty,
              sum(case when s.stock_type = ${BLOCKED} then s.quantity else 0 end) as blocked_qty,
              sum(case when s.stock_type = ${RETURNS} then s.quantity else 0 end) as returns_qty,
-             sum(case when s.stock_type not in (${UNRESTRICTED}, ${QUALITY_INSPECTION}, ${BLOCKED}, ${RETURNS}) then s.quantity else 0 end) as special_qty,
+             sum(case when s.stock_type = ${IN_TRANSIT} then s.quantity else 0 end) as transit_qty,
+             sum(case when s.stock_type not in (${UNRESTRICTED}, ${QUALITY_INSPECTION}, ${BLOCKED}, ${RETURNS}, ${IN_TRANSIT}) then s.quantity else 0 end) as special_qty,
              -- Value is struck on what the company owns, not on what stands in the plant. Returns stock is
              -- the one bucket this screen knows is not valuated: the goods are back but they are not stock
              -- again until inspection releases them, and movement 651 wrote no accounting document for them.
@@ -339,6 +343,7 @@ export async function listWarehouseStocks(input: {
         qualityInspectionQuantity: num(r.quality_qty),
         blockedQuantity: num(r.blocked_qty),
         returnsQuantity: num(r.returns_qty),
+        transitQuantity: num(r.transit_qty),
         specialQuantity: num(r.special_qty),
         totalQuantity,
         price,
@@ -374,6 +379,7 @@ export async function listWarehouseStocks(input: {
       qualityInspectionQuantity: out.reduce((sum, r) => sum + r.qualityInspectionQuantity, 0),
       blockedQuantity: out.reduce((sum, r) => sum + r.blockedQuantity, 0),
       returnsQuantity: out.reduce((sum, r) => sum + r.returnsQuantity, 0),
+      transitQuantity: out.reduce((sum, r) => sum + r.transitQuantity, 0),
       specialQuantity: out.reduce((sum, r) => sum + r.specialQuantity, 0),
       totalQuantity: out.reduce((sum, r) => sum + r.totalQuantity, 0),
       value: valuationKnown || out.some((r) => r.value !== null) ? Number(valueTotal.toFixed(2)) : null,

@@ -209,12 +209,17 @@ export async function orderAttributes(tx: Tx, client: string, number: string): P
   ));
   const standing = items.filter((i) => !i.markedForDeletion);
   const attributes: ReleaseAttributes = {
-    TOTAL_VALUE: Math.round(standing.reduce((sum, i) => sum + Number(i.netValue), 0) * 100) / 100,
     PURCHASING_GROUP: header.purchasingGroup,
     COMPANY_CODE: header.companyCode,
-    SUPPLIER: header.supplierNumber,
     PURCHASING_ORG: header.purchasingOrg,
   };
+  // A stock transport order has no supplier and no net value. Neither is invented for it (a zero would walk it
+  // past every value strategy): the attributes are left out and `assertStoReleaseEvaluable` refuses the order
+  // while a strategy still judges on them.
+  if (header.documentType !== 'STOCK_TRANSPORT') {
+    attributes.TOTAL_VALUE = Math.round(standing.reduce((sum, i) => sum + Number(i.netValue), 0) * 100) / 100;
+  }
+  if (header.supplierNumber) attributes.SUPPLIER = header.supplierNumber;
   const plantValue = agreed(standing.map((i) => i.plant));
   if (plantValue) attributes.PLANT = plantValue;
   return attributes;
@@ -364,6 +369,28 @@ export async function syncDocumentRelease(
       client, category, number, attributes,
       groupCode: determination.groupCode, strategyCode: determination.strategyCode,
     });
+  }
+}
+
+/**
+ * A stock transport order has no net value and no supplier, so a release strategy that judges on either
+ * cannot be evaluated for it honestly. It is refused, never treated as approved and never given a zero.
+ */
+export async function assertStoReleaseEvaluable(tx: Tx, client: string): Promise<void> {
+  const rows = await tx.execute(sql`
+    select distinct c.group_code, c.strategy_code, c.characteristic_name
+      from release_strategy_criterion c
+      join release_strategy s on s.client = c.client and s.group_code = c.group_code and s.strategy_code = c.strategy_code
+      join release_group g on g.client = s.client and g.group_code = s.group_code
+     where c.client = ${client} and g.document_category = 'PURCHASE_ORDER' and s.lifecycle_status = 'ACTIVE'
+       and c.characteristic_name in ('TOTAL_VALUE', 'SUPPLIER')
+  `) as unknown as Array<{ group_code: string; strategy_code: string; characteristic_name: string }>;
+  if (rows.length > 0) {
+    const named = rows.map((r) => `${r.group_code}/${r.strategy_code} (${r.characteristic_name})`).join(', ');
+    throw new ReleaseError(
+      `A stock transport order has no net value and no supplier, so the purchase order release strategy ${named} cannot be evaluated for it.`,
+      'Remove the total value and supplier criteria from the purchase order strategies that should also govern stock transport orders, or deactivate the strategy; the order is not treated as approved.',
+    );
   }
 }
 

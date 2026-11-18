@@ -90,12 +90,14 @@ describe('SCR-128 stock overview UI contract', () => {
     expect(service).not.toMatch(/\bdelete from\b/i);
   });
 
-  it('refuses the special stock indicator and defers batch and in-transit by name', () => {
+  it('refuses the special stock indicator and, since ITEM-22, shows stock in transit apart from every on-hand figure', () => {
     expect(service).toContain('The special stock indicator');
     expect(service).toContain('A named batch filters this tree');
     expect(service).toContain('named stock type');
-    expect(service).toContain('produces transit stock'); // in-transit deferred in the module header
-    expect(service).not.toContain('IN_TRANSIT');
+    // Transit is its own plant-level quantity of the receiving plant, read apart from the location tree.
+    expect(service).toContain('Stock in transit (ITEM-22');
+    expect(service).toContain("stock_type <> ${IN_TRANSIT}");
+    expect(service).toContain('transitQuantity');
   });
 
   it('reports truncation and every warning on screen', () => {

@@ -85,7 +85,7 @@ HR: employees, org assignments, time/leave, pay components, salary structures & 
 absence, delegation, delegation_approval, delegation_scope, employee, employee_record, job, leave_quota, org_hierarchy, org_unit, pay_component, pay_component_config, payroll_calc_stage, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, payroll_run_operation, position, position_assignment, record_field, record_field_value, record_type, salary_payment, salary_structure, salary_structure_assignment, salary_structure_component, time_recording, time_type
 
 ## Depends on
-finance, foundation, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/notification, platform/numbering, platform/periods, platform/posting, platform/tables
+finance, foundation, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/notification, platform/numbering, platform/periods, platform/posting, platform/tables, ui/kit
 
 ## Used by
 dev/walkthrough-volume.ts, platform, platform/auth, platform/notification, platform/tenancy, purchasing, worker/jobs.ts

@@ -555,6 +555,12 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
           'Return against a receipt that stands.',
         );
       }
+      if (original.stoOrderNumber) {
+        throw new ReturnDeliveryError(
+          `Line ${original.lineNumber} of ${input.documentNumber} is a stock transport order movement; a supplier return does not apply to it.`,
+          'Reverse the receipt (102) or the goods issue (352) on the material document reversal screen.',
+        );
+      }
       if (!original.purchaseOrderNumber || original.purchaseOrderItem == null) {
         throw new ReturnDeliveryError(
           `Line ${original.lineNumber} of ${input.documentNumber} carries no purchase order, and a return delivery references one.`,

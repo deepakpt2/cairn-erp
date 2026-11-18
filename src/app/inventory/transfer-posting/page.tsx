@@ -7,6 +7,8 @@ import {
   transferStockAt,
 } from '@/modules/inventory/transfer-posting';
 import TransferPosting from './TransferPosting';
+import StoIssuePanel from './StoIssuePanel';
+import { getStoStatus } from '@/modules/inventory/stock-transport';
 import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +24,7 @@ const ROUTE = '/inventory/transfer-posting';
  * counter movement type, never a hand-entered document.
  */
 export default async function TransferPostingPage({ searchParams }: {
-  searchParams: Promise<{ material?: string; plant?: string; doc?: string }>;
+  searchParams: Promise<{ material?: string; plant?: string; doc?: string; sto?: string }>;
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
@@ -32,6 +34,8 @@ export default async function TransferPostingPage({ searchParams }: {
   const plant = params.plant ?? document?.lines[0]?.plant ?? '';
   const stock = material && plant ? await transferStockAt(client, material, plant) : [];
   const today = new Date().toISOString().slice(0, 10);
+  const stoNumber = (params.sto ?? '').trim().toUpperCase();
+  const stoStatus = stoNumber ? await getStoStatus(client, stoNumber, { userId: session.user.userId }) : null;
 
   return (
     <Page
@@ -44,6 +48,13 @@ export default async function TransferPostingPage({ searchParams }: {
         stock={stock}
         canPost={can(session, TRANSFER_POST_CAPABILITY)}
         today={today}
+      />
+      <StoIssuePanel
+        status={stoStatus}
+        orderNumber={stoNumber}
+        canPost={can(session, TRANSFER_POST_CAPABILITY)}
+        today={today}
+        lookupMessage={stoNumber && !stoStatus ? `${stoNumber} is not a stock transport order.` : null}
       />
     </Page>
   );

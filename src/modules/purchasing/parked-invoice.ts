@@ -7,6 +7,7 @@
  * including the number. The match is calculated when the document is read.
  * It is not a stored status.
  */
+import { stoRefusal } from './sto-guard';
 import { and, desc, eq, ne, sql } from 'drizzle-orm';
 
 import { changeHistory, recordChange } from '../../platform/change';
@@ -391,6 +392,14 @@ async function prepare(
   if (!header) {
     throw new ParkedInvoiceError(`Purchase order ${orderNumber} does not stand.`, 'Open a standing purchase order.');
   }
+  const stoRefused = await stoRefusal(tx, input.client, orderNumber, 'parked supplier invoice');
+  if (stoRefused || !header.supplierNumber) {
+    throw new ParkedInvoiceError(
+      stoRefused?.message ?? `Order ${orderNumber} carries no supplier.`,
+      stoRefused?.remedy ?? 'Park the invoice against a supplier order.',
+    );
+  }
+  const supplierNumber: string = header.supplierNumber;
   const currency = header.currency.trim();
   if (currency.length !== 3) {
     throw new ParkedInvoiceError(`The order currency ${header.currency} is not a standing currency.`);
@@ -404,11 +413,11 @@ async function prepare(
 
   const [supplier] = await tx.select().from(supplierCompany).where(and(
     eq(supplierCompany.client, input.client),
-    eq(supplierCompany.partnerNumber, header.supplierNumber),
+    eq(supplierCompany.partnerNumber, supplierNumber),
     eq(supplierCompany.companyCode, header.companyCode),
   ));
   if (supplier?.isBlocked) {
-    throw new ParkedInvoiceError(`Supplier ${header.supplierNumber} is blocked for ${header.companyCode}.`);
+    throw new ParkedInvoiceError(`Supplier ${supplierNumber} is blocked for ${header.companyCode}.`);
   }
 
   const company = await getCompanyCode(tx, input.client, header.companyCode);
@@ -440,7 +449,7 @@ async function prepare(
 
   const notes: string[] = [];
   if (!supplier) {
-    notes.push(`Supplier ${header.supplierNumber} has no company data for ${header.companyCode}. Payment terms were not derived. Invoice verification will refuse the post until they stand.`);
+    notes.push(`Supplier ${supplierNumber} has no company data for ${header.companyCode}. Payment terms were not derived. Invoice verification will refuse the post until they stand.`);
   }
   const preparedLines: Prepared['lines'] = [];
   const viewLines: ParkedLineView[] = [];
@@ -535,7 +544,7 @@ async function prepare(
   const duplicatePosted = await tx.select({ invoiceNumber: supplierInvoice.invoiceNumber }).from(supplierInvoice).where(and(
     eq(supplierInvoice.client, input.client),
     eq(supplierInvoice.companyCode, header.companyCode),
-    eq(supplierInvoice.supplierNumber, header.supplierNumber),
+    eq(supplierInvoice.supplierNumber, supplierNumber),
     eq(supplierInvoice.supplierReference, dates.reference),
     eq(supplierInvoice.status, 'POSTED'),
     sql`${supplierInvoice.cancellationOf} is null`,
@@ -547,7 +556,7 @@ async function prepare(
     );
   }
   await assertReferenceFree(
-    tx, input.client, header.companyCode, header.supplierNumber, dates.reference, exceptParkedNumber,
+    tx, input.client, header.companyCode, supplierNumber, dates.reference, exceptParkedNumber,
   );
 
   let paymentTermsCode: string | null = null;
@@ -567,7 +576,7 @@ async function prepare(
   }
 
   return {
-    supplierNumber: header.supplierNumber,
+    supplierNumber: supplierNumber,
     companyCode: header.companyCode,
     currency,
     paymentTerms: paymentTermsCode,
@@ -578,7 +587,7 @@ async function prepare(
     preview: {
       parkedNumber: null,
       orderNumber,
-      supplierNumber: header.supplierNumber,
+      supplierNumber: supplierNumber,
       companyCode: header.companyCode,
       currency,
       supplierReference: dates.reference,
@@ -970,6 +979,8 @@ export async function openOrderForPark(client: string, orderNumber: string): Pro
       eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, number),
     ));
     if (!header) return null;
+    const stoRefused = await stoRefusal(tx, client, number, 'parked supplier invoice');
+    if (stoRefused) throw new ParkedInvoiceError(stoRefused.message, stoRefused.remedy);
     const items = await tx.select().from(purchaseOrderItem).where(and(
       eq(purchaseOrderItem.client, client), eq(purchaseOrderItem.orderNumber, number),
     )).orderBy(purchaseOrderItem.itemNumber);
@@ -984,7 +995,7 @@ export async function openOrderForPark(client: string, orderNumber: string): Pro
     )).orderBy(parkedSupplierInvoice.parkedNumber);
     return {
       orderNumber: header.orderNumber,
-      supplierNumber: header.supplierNumber,
+      supplierNumber: header.supplierNumber ?? '',
       companyCode: header.companyCode,
       currency: header.currency,
       items: items.map((item) => {

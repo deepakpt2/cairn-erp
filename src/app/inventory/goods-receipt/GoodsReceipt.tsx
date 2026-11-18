@@ -16,8 +16,9 @@ function newRequestKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export default function GoodsReceipt({ order, document, canPost, today }: {
+export default function GoodsReceipt({ order, orderHint = '', document, canPost, today }: {
   order: ReceiptOrderView | null;
+  orderHint?: string;
   document: MaterialDocumentView | null;
   canPost: boolean;
   today: string;
@@ -48,7 +49,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Purchase order</span>
-            <input name="order" className="input w-full" placeholder="Order number" defaultValue={order?.orderNumber ?? ''} />
+            <input name="order" className="input w-full" placeholder="Order number" defaultValue={order?.orderNumber ?? orderHint} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Material document</span>

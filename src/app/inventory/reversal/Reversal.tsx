@@ -70,6 +70,10 @@ export default function Reversal({ document, canPost, displayOnly = false, today
               : document.journalAccounting.state === 'NONE'
                 ? ` · ${t('mbst.noJournal')}`
                 : ''}
+            {document.journals.length > 1
+              ? ` · ${document.journals.map((j) => `${j.role.toLowerCase().replace('_', ' ')} ${j.companyCode}: ${j.journalDocumentNumber} (${j.status.toLowerCase()})`).join(' · ')}`
+              : ''}
+            {document.withheldJournals > 0 ? ` · ${document.withheldJournals} accounting document(s) of a company outside your scope are not shown` : ''}
             {document.reversalOf ? ` · ${t('mbst.reversalOf')} ${document.reversalOf}` : ''}
             {document.reversedBy ? ` · ${t('mbst.reversedBy')} ${document.reversedBy}` : ''}
           </p>

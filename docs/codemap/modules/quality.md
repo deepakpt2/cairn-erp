@@ -32,7 +32,7 @@ QM: inspection lots, characteristics/results, usage decisions. Routes: `/quality
 inspection_characteristic, inspection_result, quality_lot, usage_decision
 
 ## Depends on
-inventory, platform/auth, platform/change, platform/db, platform/lock, platform/numbering, platform/tables, ui/lock
+inventory, platform/auth, platform/change, platform/db, platform/lock, platform/numbering, platform/tables, ui/kit, ui/lock
 
 ## Used by
 dev/walkthrough-volume.ts, platform/tenancy
