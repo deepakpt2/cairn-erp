@@ -113,7 +113,7 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
             <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Age the open items</button>
           </div>
         </form>
-        {loadError && <p role="status" className="mt-2 text-sm text-red-700">{loadError}</p>}
+        {loadError && <p role="status" className="mt-2 text-sm text-signal-error">{loadError}</p>}
         {view && (
           <p className="mt-2 text-sm">
             Company <strong>{view.companyCode}</strong> as of <strong>{view.keyDate}</strong>, in {view.currency}:

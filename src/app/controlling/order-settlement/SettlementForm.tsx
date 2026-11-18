@@ -30,7 +30,7 @@ export default function SettlementForm({ orderNumber }: { orderNumber: string })
         Update posts only when a settlement rule is already stored. A receiver and a percentage are not entered here. The rule screen is /controlling/settlement-rules. KO02 and KO8B are not this screen.
       </p>
       {state.message && (
-        <p className={state.ok ? 'text-sm' : 'text-sm text-red-700'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
+        <p className={state.ok ? 'text-sm' : 'text-sm text-signal-error'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm sm:col-span-2">

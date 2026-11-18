@@ -71,7 +71,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
             {order.releaseRequired && (order.released ? ' · released' : ' · not yet released')}
           </p>
           {postState.message && (
-            <p role="status" className={`mt-2 text-sm ${postState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${postState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {postState.message}{postState.remedy ? ` ${postState.remedy}` : ''}
             </p>
           )}
@@ -184,7 +184,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
             </table>
           </div>
           {reverseState.message && (
-            <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {reverseState.message}{reverseState.remedy ? ` ${reverseState.remedy}` : ''}
             </p>
           )}

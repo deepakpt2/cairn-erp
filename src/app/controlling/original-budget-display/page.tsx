@@ -52,7 +52,7 @@ export default async function OriginalBudgetDisplayPage({ searchParams }: {
         </label>
         <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit">Display</button>
       </form>
-      {message && <p className="text-sm text-red-700" role="alert">{message}</p>}
+      {message && <p className="text-sm text-signal-error" role="alert">{message}</p>}
       {budget && (
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div><dt className="text-ink-soft">Order</dt><dd>{budget.orderNumber} · {budget.description}</dd></div>

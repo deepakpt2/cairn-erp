@@ -63,7 +63,7 @@ export default async function SalesAccountDeterminationPage() {
                   <td>
                     {configuration.rows.some((row) => row.accountKey === key.key && row.isActive)
                       ? 'Yes'
-                      : <span className="text-red-700">No — a document of this key cannot be posted</span>}
+                      : <span className="text-signal-error">No — a document of this key cannot be posted</span>}
                   </td>
                 </tr>
               ))}
@@ -112,7 +112,7 @@ export default async function SalesAccountDeterminationPage() {
                     </td>
                     <td>
                       {row.isActive
-                        ? (row.accountStands ? 'Answers' : <span className="text-red-700">Account missing from the chart</span>)
+                        ? (row.accountStands ? 'Answers' : <span className="text-signal-error">Account missing from the chart</span>)
                         : 'Withdrawn'}
                     </td>
                   </tr>

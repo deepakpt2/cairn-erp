@@ -56,7 +56,7 @@ export default async function ConfirmationCancelPage({
           A time event is not stored. CO14 is not this screen. A material document posted in MIGO is not reversed here.
         </p>
       </header>
-      {openError && <p role="status" data-co13-refused className="text-sm text-red-700">{openError}</p>}
+      {openError && <p role="status" data-co13-refused className="text-sm text-signal-error">{openError}</p>}
       {!allowed && (
         <p className="text-sm">You do not hold the authority {CONFIRMATION_CANCEL_CAPABILITY}.</p>
       )}

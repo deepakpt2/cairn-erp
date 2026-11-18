@@ -78,7 +78,7 @@ export default function Reservations({ reservation, scenarios, canPost, canChang
       <section aria-labelledby="reservation-create" className="border border-line bg-surface p-4">
         <h2 id="reservation-create" className="text-sm font-semibold">{t('mb21.create')}</h2>
         {createState.message && (
-          <p role="status" className={`mt-2 text-sm ${createState.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${createState.ok ? 'text-ink' : 'text-signal-error'}`}>
             {createState.message}{createState.remedy ? ` ${createState.remedy}` : ''}
           </p>
         )}
@@ -143,12 +143,12 @@ export default function Reservations({ reservation, scenarios, canPost, canChang
           </p>
 
           {withdrawState.message && (
-            <p role="status" className={`mt-2 text-sm ${withdrawState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${withdrawState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {withdrawState.message}{withdrawState.remedy ? ` ${withdrawState.remedy}` : ''}
             </p>
           )}
           {completeState.message && (
-            <p role="status" className={`mt-2 text-sm ${completeState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${completeState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {completeState.message}{completeState.remedy ? ` ${completeState.remedy}` : ''}
             </p>
           )}

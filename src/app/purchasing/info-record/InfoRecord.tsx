@@ -77,7 +77,7 @@ function Notice({ state }: { state: InfoRecordActionState }) {
   if (!state.message) return null;
   const standing = state.message.match(/IR-\d{7}/)?.[0];
   return (
-    <div role="status" data-info-record-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <div role="status" data-info-record-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       <p>{state.message}</p>
       {state.remedy && <p className="mt-1 text-ink-soft">{state.remedy}</p>}
       {state.ok && state.wrote === false && <p data-info-record-preview className="mt-1">{t('infoRecord.previewNote')}</p>}
@@ -157,7 +157,7 @@ export default function InfoRecordWorkbench({
           <Link href={ROUTE} className="btn btn-default min-h-11 sm:min-h-8">{t('infoRecord.newRecord')}</Link>
         </form>
         {requestedNumber && !record && (
-          <p role="status" className="mt-2 text-sm text-red-700">{t('infoRecord.notFound', { number: requestedNumber })}</p>
+          <p role="status" className="mt-2 text-sm text-signal-error">{t('infoRecord.notFound', { number: requestedNumber })}</p>
         )}
         {namedExisting && record && (
           <p className="mt-2 text-sm text-ink-soft">{t('infoRecord.namedExisting', { number: record.infoRecordNumber })}</p>
@@ -206,7 +206,7 @@ export default function InfoRecordWorkbench({
           </form>
 
           {scopeMissing && (
-            <p role="status" className="mt-3 text-sm text-red-700" data-info-record-scope-missing>
+            <p role="status" className="mt-3 text-sm text-signal-error" data-info-record-scope-missing>
               {requestedPlant
                 ? t('infoRecord.segmentMissingPlant', { number: record.infoRecordNumber, org: requestedOrg, plant: requestedPlant })
                 : t('infoRecord.segmentMissing', { number: record.infoRecordNumber, org: requestedOrg })}
@@ -420,7 +420,7 @@ export default function InfoRecordWorkbench({
           <Notice state={checkState} />
           <Notice state={createState} />
         </form>
-        {!canMaintain && <p className="mt-3 text-sm text-red-700">{t('infoRecord.capabilityMissing')}</p>}
+        {!canMaintain && <p className="mt-3 text-sm text-signal-error">{t('infoRecord.capabilityMissing')}</p>}
       </section>
 
     </>

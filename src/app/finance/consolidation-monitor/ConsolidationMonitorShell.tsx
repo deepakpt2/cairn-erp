@@ -25,9 +25,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function statusClass(status: string): string {
-  if (status === 'COMPLETED') return 'text-emerald-700';
-  if (status === 'ERROR') return 'text-red-700';
-  if (status === 'WARNING' || status === 'BLOCKED') return 'text-amber-700';
+  if (status === 'COMPLETED') return 'text-signal-ok';
+  if (status === 'ERROR') return 'text-signal-error';
+  if (status === 'WARNING' || status === 'BLOCKED') return 'text-signal-warn';
   if (status === 'RUNNING') return 'text-sky-700';
   return 'text-ink-soft';
 }
@@ -90,7 +90,7 @@ export default function ConsolidationMonitorShell({
         </div>
       )}
       {actionState?.message && (
-        <div className={`border p-3 ${actionState.ok ? 'border-emerald-700/30 bg-emerald-50' : 'border-signal-error/30 bg-signal-error-soft'}`} role="status">
+        <div className={`border p-3 ${actionState.ok ? 'border-emerald-700/30 bg-signal-ok-soft' : 'border-signal-error/30 bg-signal-error-soft'}`} role="status">
           <p className="text-sm text-ink">{actionState.message}</p>
           {actionState.remedy && <p className="mt-0.5 text-sm text-ink-soft">{actionState.remedy}</p>}
         </div>

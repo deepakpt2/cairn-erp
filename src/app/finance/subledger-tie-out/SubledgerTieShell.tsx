@@ -52,7 +52,7 @@ export default function SubledgerTieShell({ canUse, companies, selection, result
       </form>
 
       {reportError ? (
-        <div className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" role="alert">{reportError}</div>
+        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" role="alert">{reportError}</div>
       ) : null}
 
       <section className="panel overflow-x-auto" aria-label="Subledger tie-out">

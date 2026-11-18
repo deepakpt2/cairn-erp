@@ -56,7 +56,7 @@ function EvaluationView({ evaluation, canScore }: { evaluation: VendorEvaluation
           {t('vendorEvaluation.overall')} {evaluation.overallScore ?? '—'}
         </p>
         {evaluation.blocked && (
-          <p className="mt-2 text-sm text-red-700" role="status" data-ve-blocked>{t('vendorEvaluation.blocked')}</p>
+          <p className="mt-2 text-sm text-signal-error" role="status" data-ve-blocked>{t('vendorEvaluation.blocked')}</p>
         )}
       </div>
 
@@ -152,7 +152,7 @@ export default async function VendorEvaluationPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('vendorEvaluation.subtitle')}</p>
       </header>
 
-      {!canEvaluate && <p className="text-sm text-red-700" role="alert">{t('vendorEvaluation.capabilityMissing')}</p>}
+      {!canEvaluate && <p className="text-sm text-signal-error" role="alert">{t('vendorEvaluation.capabilityMissing')}</p>}
 
       <section aria-labelledby="ve-selection" className="border border-line bg-surface p-4">
         <h2 id="ve-selection" className="text-sm font-semibold">{t('vendorEvaluation.selection')}</h2>
@@ -174,7 +174,7 @@ export default async function VendorEvaluationPage({ searchParams }: {
             <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" data-ve-check>{t('vendorEvaluation.check')}</button>
           </div>
         </form>
-        {refusal && <p className="mt-3 text-sm text-red-700" role="alert" data-ve-refused>{refusal}</p>}
+        {refusal && <p className="mt-3 text-sm text-signal-error" role="alert" data-ve-refused>{refusal}</p>}
       </section>
 
       {changeLock?.mode === 'CHANGE' && evaluationKey && (

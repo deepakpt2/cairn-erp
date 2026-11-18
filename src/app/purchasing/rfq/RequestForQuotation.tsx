@@ -25,7 +25,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function Notice({ state }: { state: RfqActionState }) {
   if (!state.message) return null;
   return (
-    <div role="status" data-rfq-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <div role="status" data-rfq-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       <p>{state.message}</p>
       {state.remedy && <p className="mt-1">{state.remedy}</p>}
       {state.ok && state.wrote === false && (
@@ -116,7 +116,7 @@ function ChangeNotice({ state }: { state: RfqActionState }) {
   if (!state.message) return null;
   const rows = changedFields(state);
   return (
-    <div role="status" data-rfq-change-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <div role="status" data-rfq-change-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       <p>{state.message}</p>
       {state.remedy && <p className="mt-1">{state.remedy}</p>}
       {state.ok && state.wrote === false && state.change?.headerIsTheEvents && (
@@ -164,7 +164,7 @@ function ChangeRequest({
   return (
     <section aria-labelledby="rfq-change" data-rfq-change className="border border-line bg-surface p-4">
       <h2 id="rfq-change" className="text-sm font-semibold">{t('requestForQuotation.changeTitle')}</h2>
-      {lockMessage && <p role="status" className="mt-2 border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{lockMessage}</p>}
+      {lockMessage && <p role="status" className="mt-2 border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn">{lockMessage}</p>}
       <p className="mt-1 text-xs text-ink-soft">{t('requestForQuotation.changeHint')}</p>
       <p className="mt-1 text-xs text-ink-soft" data-rfq-header-note>{t('requestForQuotation.headerIsTheEvents')}</p>
       <form key={formKey} action={changeAction} className="mt-3 space-y-3">
@@ -278,7 +278,7 @@ export default function RequestForQuotation({
           <Link href={ROUTE} className="btn btn-default min-h-11 sm:min-h-8">{t('requestForQuotation.newRequest')}</Link>
         </form>
         {requestedEvent && !opened && (
-          <p role="status" className="mt-2 text-sm text-red-700">{t('requestForQuotation.notFound', { number: requestedEvent })}</p>
+          <p role="status" className="mt-2 text-sm text-signal-error">{t('requestForQuotation.notFound', { number: requestedEvent })}</p>
         )}
         <p className="mt-2 text-xs text-ink-soft">{t('requestForQuotation.scopeHint')}</p>
         {recent.length > 0 && (
@@ -344,7 +344,7 @@ export default function RequestForQuotation({
             ))}
           </ul>
           {selectedRequest && !selected && (
-            <p role="status" className="mt-2 text-sm text-red-700">{t('requestForQuotation.notFound', { number: selectedRequest })}</p>
+            <p role="status" className="mt-2 text-sm text-signal-error">{t('requestForQuotation.notFound', { number: selectedRequest })}</p>
           )}
           {!selected && <p className="mt-2 text-xs text-ink-soft">{t('requestForQuotation.chooseRequest')}</p>}
         </section>
@@ -448,7 +448,7 @@ export default function RequestForQuotation({
           <Notice state={checkState} />
           <Notice state={createState} />
         </form>
-        {!canMaintain && <p className="mt-3 text-sm text-red-700">{t('requestForQuotation.capabilityMissing')}</p>}
+        {!canMaintain && <p className="mt-3 text-sm text-signal-error">{t('requestForQuotation.capabilityMissing')}</p>}
       </section>
     </>
   );

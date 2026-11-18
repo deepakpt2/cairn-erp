@@ -12,7 +12,7 @@ const INITIAL: CustomerClearingActionState = { ok: false, message: '' };
 function Message({ state }: { state: CustomerClearingActionState }) {
   if (!state.message) return null;
   return (
-    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       {state.message}{state.remedy ? ` ${state.remedy}` : ''}
     </p>
   );
@@ -83,7 +83,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
           </label>
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">Load open items</button>
         </form>
-        {loadError && <p role="status" className="mt-2 text-sm text-red-700">{loadError}</p>}
+        {loadError && <p role="status" className="mt-2 text-sm text-signal-error">{loadError}</p>}
         {view && (
           <p className="mt-2 text-sm">
             Customer <strong>{view.customer}</strong> in company <strong>{view.companyCode}</strong>:
@@ -257,7 +257,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
               clearing document balances by construction, and remainders stand open by the partial model.
             </p>
             {overAllocated && (
-              <p role="status" className="mt-2 text-sm text-red-700">
+              <p role="status" className="mt-2 text-sm text-signal-error">
                 An allocation stands above an item's remaining amount, or not above zero.
               </p>
             )}

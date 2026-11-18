@@ -43,7 +43,7 @@ export default function ReconcileShell({
       </section>
 
       {reportError && (
-        <p role="alert" className="border border-red-300 bg-red-50 p-3 text-sm text-red-800">{reportError}</p>
+        <p role="alert" className="border border-signal-error/40 bg-signal-error-soft p-3 text-sm text-signal-error">{reportError}</p>
       )}
 
       {result && (
@@ -51,7 +51,7 @@ export default function ReconcileShell({
           <h2 id="reconcile-report" className="text-sm font-semibold">{t('recon.reportHeader')}</h2>
           <p
             role="status"
-            className={`mt-2 text-sm ${result.balanced ? 'text-ink' : 'text-red-700'}`}
+            className={`mt-2 text-sm ${result.balanced ? 'text-ink' : 'text-signal-error'}`}
             data-reconcile-verdict={result.balanced ? 'BALANCED' : 'DRIFT'}
             data-dimensions-checked={result.dimensionsChecked}
           >
@@ -60,7 +60,7 @@ export default function ReconcileShell({
               : `${result.drift.length} ${t('recon.driftTail')} ${result.dimensionsChecked} ${t('recon.dimensionsTail')}`}
           </p>
 
-          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
             {state.message}{state.remedy ? ` ${state.remedy}` : ''}
           </p>
 

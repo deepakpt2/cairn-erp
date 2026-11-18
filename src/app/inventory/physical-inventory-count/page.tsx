@@ -133,11 +133,11 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
         </form>
 
         {refusal && (
-          <p role="status" data-count-refused className="mt-2 text-sm text-red-700">{refusal}</p>
+          <p role="status" data-count-refused className="mt-2 text-sm text-signal-error">{refusal}</p>
         )}
 
         {doc && !refusal && !document && (
-          <p role="status" className="mt-2 text-sm text-red-700">
+          <p role="status" className="mt-2 text-sm text-signal-error">
             {t('mi04.notFound', { document: doc, year: yearText })}
           </p>
         )}

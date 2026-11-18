@@ -79,7 +79,7 @@ export default async function AssetHistoryPage({ searchParams }: {
       </header>
 
       {error && (
-        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error">
           {error}
         </p>
       )}

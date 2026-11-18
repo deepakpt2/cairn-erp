@@ -20,7 +20,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function Notice({ state }: { state: PriceChangeState }) {
   if (!state.message) return null;
   return (
-    <div role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <div role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       <p>{state.message}</p>
       {state.remedy && <p className="mt-1">{state.remedy}</p>}
       {state.warnings?.map((warning) => <p key={warning} className="mt-1">{warning}</p>)}
@@ -99,7 +99,7 @@ export default function PriceChange({
           </button>
           <Notice state={saveState} />
         </form>
-        {!canPost && <p className="mt-3 text-sm text-red-700">{t('priceChange.capabilityMissing')}</p>}
+        {!canPost && <p className="mt-3 text-sm text-signal-error">{t('priceChange.capabilityMissing')}</p>}
       </section>
 
       {future.length > 0 && (

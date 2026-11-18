@@ -172,7 +172,7 @@ export default async function PricingProcedurePage() {
                       {row.areaStands ? (
                         'Yes'
                       ) : (
-                        <span className="text-red-700">No — no document in that area is priced</span>
+                        <span className="text-signal-error">No — no document in that area is priced</span>
                       )}
                     </td>
                   </tr>

@@ -20,7 +20,7 @@ const INITIAL: PricingActionState = { ok: false, message: '' };
 function Notice({ state }: { state: PricingActionState }) {
   if (!state.message) return null;
   return (
-    <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       {state.message}
       {state.remedy ? ` ${state.remedy}` : ''}
     </p>
@@ -489,7 +489,7 @@ export function PricingProcedureSetup({
                         {determination.salesOrg || '(any)'}/{determination.distributionChannel || '(any)'}/{determination.division || '(any)'}
                       </dd>
                       <dt className="text-ink-faint">Area stands</dt>
-                      <dd>{determination.areaStands ? 'Yes' : <span className="text-red-700">No — the area named does not exist</span>}</dd>
+                      <dd>{determination.areaStands ? 'Yes' : <span className="text-signal-error">No — the area named does not exist</span>}</dd>
                       <dt className="text-ink-faint">Prices by</dt>
                       <dd className="font-mono">{determination.procedureCode}</dd>
                     </dl>

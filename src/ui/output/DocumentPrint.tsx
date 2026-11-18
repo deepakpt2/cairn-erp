@@ -142,10 +142,10 @@ export function DownloadPdfButton({ action, fields, disabled }: {
         {pending ? 'Building PDF…' : 'Download PDF'}
       </button>
       {state && !state.ok ? (
-        <span role="alert" className="text-xs text-red-700">{state.message}{state.remedy ? ` ${state.remedy}` : ''}</span>
+        <span role="alert" className="text-xs text-signal-error">{state.message}{state.remedy ? ` ${state.remedy}` : ''}</span>
       ) : null}
       {state?.ok && state.warning ? (
-        <span role="status" data-pdf-warning className="text-xs text-amber-700">{state.warning}</span>
+        <span role="status" data-pdf-warning className="text-xs text-signal-warn">{state.warning}</span>
       ) : null}
     </span>
   );

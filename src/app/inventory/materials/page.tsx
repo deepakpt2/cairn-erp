@@ -82,7 +82,7 @@ export default async function MaterialsPage({ searchParams }: {
       </div><p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('material.subtitle')}</p>
     </header>
     {changeLock?.mode === 'CHANGE' && detail && <ChangeLock lockObject="MATERIAL" argument={detail.base.materialNumber} />}
-    {changeLock?.mode === 'DISPLAY' && <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{displayOnlyMessage(changeLock)}</p>}
+    {changeLock?.mode === 'DISPLAY' && <p role="status" className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn">{displayOnlyMessage(changeLock)}</p>}
     {params.material && !detail && <div className="border border-signal-error/30 bg-signal-error-soft p-3 text-sm text-signal-error">{t('material.notFound', { number: params.material })}</div>}
     {source && <p className="border border-accent-line bg-accent-soft p-3 text-sm">{t('material.copyNote', { number: source.base.materialNumber })}</p>}
     {detail && <>

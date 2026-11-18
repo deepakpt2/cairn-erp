@@ -99,7 +99,7 @@ export default function ConfirmationCancelWorkbench({
           </button>
         </div>
         {state.message && (
-          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`} data-co13-message>
+          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`} data-co13-message>
             {state.message}{state.remedy ? ` ${state.remedy}` : ''}
           </p>
         )}

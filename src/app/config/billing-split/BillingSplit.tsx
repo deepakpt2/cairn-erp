@@ -42,7 +42,7 @@ function CriterionRow({
               {pending ? 'Saving…' : row.isActive ? 'Withdraw' : 'Maintain'}
             </button>
             {state.message ? (
-              <span role="status" className={`text-xs ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+              <span role="status" className={`text-xs ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
                 {state.message}
               </span>
             ) : null}

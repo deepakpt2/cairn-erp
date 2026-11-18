@@ -49,7 +49,7 @@ export default function BalancesForm({ view, error, canDisplay }: {
       <section aria-labelledby="gb-results" className="border border-line bg-surface p-4">
         <h2 id="gb-results" className="text-sm font-semibold">Balances</h2>
         {error ? (
-          <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>
+          <p role="alert" className="mt-2 text-sm text-signal-error">{error}</p>
         ) : !view ? (
           <p className="mt-2 text-sm text-ink-soft">Enter a selection and execute to read the account's balances.</p>
         ) : (

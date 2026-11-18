@@ -16,7 +16,7 @@ export function CategoryForm({
     <form action={formAction} className="panel space-y-3 p-4">
       <h2 className="text-sm font-semibold">Category</h2>
       <p className="text-sm text-ink-soft">A category is defined here. No category such as 0001 is delivered. Required sections are not mandatory for every category.</p>
-      {state.message && <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>{state.message}</p>}
+      {state.message && <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>{state.message}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
           <span className="field-label">Category</span>

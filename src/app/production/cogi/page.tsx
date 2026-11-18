@@ -82,7 +82,7 @@ export default async function ProductionCogiPage({
           Scope is CO11N only. CO15 header confirmations and manual MIGO postings do not create this queue. Discard retains the failure record; it does not post or adjust reservations.
         </p>
       </header>
-      {openError && <p role="status" data-cogi-error className="text-sm text-red-700">{openError}</p>}
+      {openError && <p role="status" data-cogi-error className="text-sm text-signal-error">{openError}</p>}
       {!allowed && <p className="text-sm">You do not hold the authority {PRODUCTION_COGI_CAPABILITY}.</p>}
       <form className="grid gap-2 rounded border border-line bg-surface p-3 sm:grid-cols-3 lg:grid-cols-6" method="get">
         <label className="text-xs text-ink-soft">Status

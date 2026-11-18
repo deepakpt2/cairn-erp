@@ -177,7 +177,7 @@ export default function Requisitions({ choices, selected, canCreate, viewOnly = 
                 {' '}({selectedRelease.steps.map((code, i) => `${i + 1}. ${code}`).join(' · ')}).
               </p>
               {releaseMessage.message && (
-                <p role="status" className={`mt-2 text-sm ${releaseMessage.ok ? 'text-ink' : 'text-red-700'}`}>
+                <p role="status" className={`mt-2 text-sm ${releaseMessage.ok ? 'text-ink' : 'text-signal-error'}`}>
                   {releaseMessage.message}
                   {releaseMessage.remedy ? ` ${releaseMessage.remedy}` : ''}
                 </p>
@@ -256,7 +256,7 @@ export default function Requisitions({ choices, selected, canCreate, viewOnly = 
         </div>
 
         {lockMessage && (
-          <p role="status" className="mt-2 border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{lockMessage}</p>
+          <p role="status" className="mt-2 border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn">{lockMessage}</p>
         )}
         <form action={formAction}>
           <input type="hidden" name="payload" value={payload()} />
@@ -440,7 +440,7 @@ export default function Requisitions({ choices, selected, canCreate, viewOnly = 
           ))}
 
           {state.message && (
-            <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
               {state.message}
               {state.remedy ? ` ${state.remedy}` : ''}
               {state.ok && state.requisitionNumber ? (
@@ -454,7 +454,7 @@ export default function Requisitions({ choices, selected, canCreate, viewOnly = 
             </p>
           )}
           {state.warnings?.map((warning) => (
-            <p key={warning} role="status" className="mt-1 text-sm text-amber-700">{warning}</p>
+            <p key={warning} role="status" className="mt-1 text-sm text-signal-warn">{warning}</p>
           ))}
 
           <div className="mt-4 flex justify-end">

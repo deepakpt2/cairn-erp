@@ -59,7 +59,7 @@ export default function DepreciateForm({ canRun, today, runs, selectedRunId, sel
           <input type="hidden" name="runType" value={runType} />
           <input type="hidden" name="intent" value={testRun ? 'test' : 'live'} />
           {state.message && (
-            <p role="status" className={`mb-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mb-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
               {state.message}{state.remedy ? ` ${state.remedy}` : ''}
             </p>
           )}

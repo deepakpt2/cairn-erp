@@ -68,8 +68,8 @@ export default async function DeliverySchedulePage({ searchParams }: {
         </label>
         <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit">Open</button>
       </form>
-      {agreement && !document && <p className="text-sm text-red-700" role="alert">Scheduling agreement {agreement} does not exist.</p>}
-      {document && itemText && document.items.length === 0 && <p className="text-sm text-red-700" role="alert">Item {itemText} does not belong to this agreement.</p>}
+      {agreement && !document && <p className="text-sm text-signal-error" role="alert">Scheduling agreement {agreement} does not exist.</p>}
+      {document && itemText && document.items.length === 0 && <p className="text-sm text-signal-error" role="alert">Item {itemText} does not belong to this agreement.</p>}
       {document && (
         <section className="space-y-2 text-sm">
           <p>

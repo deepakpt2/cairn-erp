@@ -39,7 +39,7 @@ export default function OrderConfirmationWorkbench({
         <p>Previously confirmed at header {loaded.previouslyConfirmed} {loaded.unit}. Remaining {loaded.remainingQuantity} {loaded.unit}. Scrap {loaded.previouslyScrapped}. Rework {loaded.previouslyReworked}.</p>
         <p>Start {loaded.scheduledStart}. Finish {loaded.scheduledFinish}. Those dates are not rewritten by a confirmation.</p>
         {loaded.productionVersion && <p>Production version {loaded.productionVersion} is the one copied onto this order. A different version was not read.</p>}
-        {loaded.blockingReason && <p className="text-red-700">{loaded.blockingReason}</p>}
+        {loaded.blockingReason && <p className="text-signal-error">{loaded.blockingReason}</p>}
         {loaded.gaps.map((gap) => <p key={gap} className="text-ink-soft">{gap}</p>)}
       </section>
 
@@ -134,7 +134,7 @@ export default function OrderConfirmationWorkbench({
           </button>
         </div>
         {state.message && (
-          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
             {state.message}{state.remedy ? ` ${state.remedy}` : ''}
           </p>
         )}

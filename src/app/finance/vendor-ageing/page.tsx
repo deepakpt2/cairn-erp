@@ -234,7 +234,7 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
           </div>
         </form>
         {errors.map((message) => (
-          <p key={message} role="status" className="mt-2 text-sm text-red-700">{message}</p>
+          <p key={message} role="status" className="mt-2 text-sm text-signal-error">{message}</p>
         ))}
         {views.map((view) => (
           <p key={view.companyCode} className="mt-2 text-sm">

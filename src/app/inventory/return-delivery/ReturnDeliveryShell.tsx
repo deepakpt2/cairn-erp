@@ -59,7 +59,7 @@ export default function ReturnDeliveryShell({
       <section aria-labelledby="return-reference" className="border border-line bg-surface p-4">
         <h2 id="return-reference" className="text-sm font-semibold">{t('mbrl.referenceHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('mbrl.referenceHint')}</p>
-        <p role="status" className={`mt-2 text-sm ${reference.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${reference.ok ? 'text-ink' : 'text-signal-error'}`}>
           {reference.message}
         </p>
         <form action={loadReference} className="mt-3 flex flex-wrap items-end gap-3">
@@ -194,7 +194,7 @@ export default function ReturnDeliveryShell({
 
       <section aria-labelledby="return-result" className="border border-line bg-surface p-4">
         <h2 id="return-result" className="text-sm font-semibold">{t('mbrl.resultHeader')}</h2>
-        <p role="status" className={`mt-2 text-sm ${posted.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${posted.ok ? 'text-ink' : 'text-signal-error'}`}>
           {posted.message}{posted.remedy ? ` ${posted.remedy}` : ''}
         </p>
         {posted.posted && (

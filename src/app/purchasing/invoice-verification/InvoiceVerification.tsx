@@ -100,7 +100,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
             Item amounts are net of tax.
           </p>
           {postState.message && (
-            <p role="status" className={`mt-2 text-sm ${postState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${postState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {postState.message}{postState.remedy ? ` ${postState.remedy}` : ''}
             </p>
           )}
@@ -191,7 +191,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                   <strong>{stillPayable.toFixed(2)} {order.currency}</strong>.
                 </p>
                 {overCleared && (
-                  <p className="mt-1 text-sm text-red-700">
+                  <p className="mt-1 text-sm text-signal-error">
                     The advances asked to clear {advancesClearing.toFixed(2)} exceed the invoice gross
                     {' '}{grossNow.toFixed(2)}. An advance is money already paid, not a discount: clear
                     no more than the invoice is worth.
@@ -409,7 +409,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
             </table>
           </div>
           {cancelState.message && (
-            <p role="status" className={`mt-2 text-sm ${cancelState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${cancelState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {cancelState.message}{cancelState.remedy ? ` ${cancelState.remedy}` : ''}
             </p>
           )}

@@ -14,7 +14,7 @@ const INITIAL: VendorCreditMemoActionState = { ok: false, message: '' };
 function Message({ state }: { state: VendorCreditMemoActionState }) {
   if (!state.message) return null;
   return (
-    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       {state.message}{state.remedy ? ` ${state.remedy}` : ''}
     </p>
   );

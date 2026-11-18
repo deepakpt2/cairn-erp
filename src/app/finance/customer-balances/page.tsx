@@ -113,7 +113,7 @@ async function BalancesShell({ params }: {
             <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Display balances</button>
           </div>
         </form>
-        {loadError && <p role="status" className="mt-2 text-sm text-red-700">{loadError}</p>}
+        {loadError && <p role="status" className="mt-2 text-sm text-signal-error">{loadError}</p>}
         {view && (
           <p className="mt-2 text-sm">
             Customer <strong>{view.customer}</strong> in company <strong>{view.companyCode}</strong>,

@@ -65,7 +65,7 @@ export default function BalanceReportForm({ selection, report, reportError, canD
       </form>
 
       {reportError ? (
-        <p role="alert" className="mt-2 text-sm text-red-700">{reportError}</p>
+        <p role="alert" className="mt-2 text-sm text-signal-error">{reportError}</p>
       ) : report ? (
         <>
           <p className="mt-2 text-sm text-ink-soft">
@@ -76,7 +76,7 @@ export default function BalanceReportForm({ selection, report, reportError, canD
             </a>
           </p>
           {report.warnings.map((warning) => (
-            <p key={warning} className="mt-2 border border-amber-300 bg-amber-50 p-2 text-sm">{warning}</p>
+            <p key={warning} className="mt-2 border border-signal-warn/40 bg-signal-warn-soft p-2 text-sm">{warning}</p>
           ))}
           <div className="mt-2 overflow-x-auto">
             <table className="grid-table text-left text-sm">

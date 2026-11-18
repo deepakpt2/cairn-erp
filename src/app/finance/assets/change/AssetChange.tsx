@@ -15,7 +15,7 @@ const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-in
 function Message({ state }: { state: AssetActionState }) {
   if (!state.message) return null;
   return (
-    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       {state.message}{state.remedy ? ` ${state.remedy}` : ''}
     </p>
   );

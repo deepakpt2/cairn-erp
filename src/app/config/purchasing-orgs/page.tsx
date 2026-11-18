@@ -143,7 +143,7 @@ export default async function PurchasingOrgsPage({
         <ChangeLock lockObject="PURCHASING_ORG" argument={selected.purchasingOrg} />
       )}
       {changeLock?.mode === 'DISPLAY' && (
-        <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">
+        <p role="status" className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn">
           {displayOnlyMessage(changeLock)}
         </p>
       )}

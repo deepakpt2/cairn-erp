@@ -30,9 +30,9 @@ interface Props {
 
 function ResultStatus({ status }: { status: string }) {
   const style = status === 'ACCEPTED'
-    ? 'text-xs font-medium text-green-700'
+    ? 'text-xs font-medium text-signal-ok'
     : status === 'REJECTED'
-      ? 'text-xs font-medium text-red-700'
+      ? 'text-xs font-medium text-signal-error'
       : 'text-xs text-ink-soft';
   return <span className={style}>{status}</span>;
 }
@@ -72,19 +72,19 @@ export default function InspectionWorkbench({
   );
 
   const resultMessage = resultState.message ? (
-    <p className={`mt-2 text-sm ${resultState.ok ? 'text-green-700' : 'text-red-700'}`}>
+    <p className={`mt-2 text-sm ${resultState.ok ? 'text-signal-ok' : 'text-signal-error'}`}>
       {resultState.message}
     </p>
   ) : null;
 
   const decideMessage = decideState.message ? (
-    <p className={`mt-2 text-sm ${decideState.ok ? 'text-green-700' : 'text-red-700'}`}>
+    <p className={`mt-2 text-sm ${decideState.ok ? 'text-signal-ok' : 'text-signal-error'}`}>
       {decideState.message}
     </p>
   ) : null;
 
   const charMessage = charState.message ? (
-    <p className={`mt-2 text-sm ${charState.ok ? 'text-green-700' : 'text-red-700'}`}>
+    <p className={`mt-2 text-sm ${charState.ok ? 'text-signal-ok' : 'text-signal-error'}`}>
       {charState.message}
     </p>
   ) : null;
@@ -139,7 +139,7 @@ export default function InspectionWorkbench({
         </dl>
 
         {lockMessage && (
-          <p className="mt-3 border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">
+          <p className="mt-3 border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn">
             {lockMessage}
           </p>
         )}
@@ -160,11 +160,11 @@ export default function InspectionWorkbench({
             </div>
             <div className="border-b border-line p-2">
               <div className="text-xs text-ink-faint">Accepted</div>
-              <div className="font-medium text-green-700">{summary.resultsAccepted}</div>
+              <div className="font-medium text-signal-ok">{summary.resultsAccepted}</div>
             </div>
             <div className="border-b border-line p-2">
               <div className="text-xs text-ink-faint">Rejected</div>
-              <div className="font-medium text-red-700">{summary.resultsRejected}</div>
+              <div className="font-medium text-signal-error">{summary.resultsRejected}</div>
             </div>
           </div>
           <p className="mt-2 text-xs text-ink-soft">

@@ -125,7 +125,7 @@ export default function Contracts({
   return (
     <div className="space-y-6">
       {message.message && (
-        <p className={message.ok ? 'text-sm text-ink' : 'text-sm text-red-700'} role="status">
+        <p className={message.ok ? 'text-sm text-ink' : 'text-sm text-signal-error'} role="status">
           {message.message} {message.remedy ?? ''}
         </p>
       )}

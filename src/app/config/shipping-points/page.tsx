@@ -68,7 +68,7 @@ export default async function ShippingPointsPage() {
                     <td className="font-mono">{row.shippingPoint}</td>
                     <td>{row.name}</td>
                     <td className="font-mono">{row.assignments}</td>
-                    <td>{row.isActive ? 'Loads' : <span className="text-red-700">Withdrawn</span>}</td>
+                    <td>{row.isActive ? 'Loads' : <span className="text-signal-error">Withdrawn</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -101,7 +101,7 @@ export default async function ShippingPointsPage() {
                     <td className="font-mono">{row.shippingCondition}</td>
                     <td>{row.description}</td>
                     <td className="font-mono">{row.carriers}</td>
-                    <td>{row.isActive ? 'Stands' : <span className="text-red-700">Withdrawn</span>}</td>
+                    <td>{row.isActive ? 'Stands' : <span className="text-signal-error">Withdrawn</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -150,7 +150,7 @@ export default async function ShippingPointsPage() {
                         ? 'Withdrawn'
                         : row.pointStands
                           ? 'Answers'
-                          : <span className="text-red-700">Its shipping point is withdrawn</span>}
+                          : <span className="text-signal-error">Its shipping point is withdrawn</span>}
                     </td>
                   </tr>
                 ))}

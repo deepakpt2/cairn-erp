@@ -108,7 +108,7 @@ export default function MaterialDocumentOutput({ result, selection, slip, route,
             <p className="text-sm text-ink-soft">{t('mb90.runHint')}</p>
           </div>
         </form>
-        <p role="status" className={`mt-2 text-sm ${runState.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${runState.ok ? 'text-ink' : 'text-signal-error'}`}>
           {runState.message}{runState.remedy ? ` ${runState.remedy}` : ''}
         </p>
       </section>
@@ -147,10 +147,10 @@ export default function MaterialDocumentOutput({ result, selection, slip, route,
             </p>
           </div>
 
-          <p role="status" className={`mt-2 text-sm ${oneState.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${oneState.ok ? 'text-ink' : 'text-signal-error'}`}>
             {oneState.message}{oneState.remedy ? ` ${oneState.remedy}` : ''}
           </p>
-          <p role="status" className={`mt-1 text-sm ${recipientState.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-1 text-sm ${recipientState.ok ? 'text-ink' : 'text-signal-error'}`}>
             {recipientState.message}{recipientState.remedy ? ` ${recipientState.remedy}` : ''}
           </p>
 
@@ -189,7 +189,7 @@ export default function MaterialDocumentOutput({ result, selection, slip, route,
                     <td>
                       <span data-status-code={row.statusCode}>{row.status}</span>
                       <span className="ms-1 text-ink-faint">({row.statusCode})</span>
-                      {row.errorText ? <div className="text-xs text-red-700">{row.errorText}</div> : null}
+                      {row.errorText ? <div className="text-xs text-signal-error">{row.errorText}</div> : null}
                     </td>
                     <td className="text-right tabular-nums">{row.sendCount}</td>
                     <td>{row.recipient ?? '—'}</td>

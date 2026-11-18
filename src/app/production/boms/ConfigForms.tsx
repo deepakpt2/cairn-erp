@@ -8,7 +8,7 @@ const INITIAL: BomActionState = { ok: false };
 
 function Note({ state }: { state: BomActionState }) {
   if (!state.message) return null;
-  return <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>{state.message}</p>;
+  return <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>{state.message}</p>;
 }
 
 export function UsageForm() {

@@ -118,7 +118,7 @@ export default async function OrderInformationPage({
           The operations list reads the snapshot stored on the order. An order with no snapshot is omitted. Sequences other than the copied standard sequence, capacities, automatic goods movements, purchase documents, and cost are not this list. Confirmation display is CO14; cancellation is CO13.
         </p>
       </header>
-      {openError && <p role="status" data-coois-refused className="text-sm text-red-700">{openError}</p>}
+      {openError && <p role="status" data-coois-refused className="text-sm text-signal-error">{openError}</p>}
       {!can(session, ORDER_INFORMATION_CAPABILITY) && (
         <p className="text-sm">You do not hold the list capability ({ORDER_INFORMATION_CAPABILITY}).</p>
       )}

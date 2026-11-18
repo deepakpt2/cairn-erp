@@ -167,7 +167,7 @@ function SelectedDelivery({
         {' · '}plant {selected.plant}
         {' · '}{selected.shippingPoint
           ? <>shipping point {selected.shippingPoint}</>
-          : <span className="text-red-700">no shipping point</span>}
+          : <span className="text-signal-error">no shipping point</span>}
         {' · '}sales area {selected.salesOrg}/{selected.distributionChannel}/{selected.division}
         {selected.materialDocumentNumber ? (
           <>

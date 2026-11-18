@@ -47,7 +47,7 @@ export default function WorkCenterForm({
       <input type="hidden" name="capacities" value={JSON.stringify(capacities)} />
       <input type="hidden" name="costing" value={JSON.stringify(costing)} />
       {state.message && (
-        <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}
         </p>
       )}

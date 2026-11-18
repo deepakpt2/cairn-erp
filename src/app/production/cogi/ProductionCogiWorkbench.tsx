@@ -49,10 +49,10 @@ export default function ProductionCogiWorkbench({ detail }: { detail: Production
         <div className="text-right text-sm text-ink-soft">Attempted {failure.attemptCount} time(s)<br />Current correction revision {detail.currentRevision}</div>
       </header>
 
-      {failure.errorText && <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="status"><strong>{failure.failureCode ?? 'Posting error'}</strong><br />{failure.errorText}</div>}
-      {failure.status === 'POSTED' && <p className="rounded border border-green-200 bg-green-50 p-3 text-sm text-green-900">Material document {failure.materialDocumentNumber}/{failure.documentYear} stands. Reprocessing will not create another document.</p>}
-      {failure.status === 'BLOCKED' && <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm">The source confirmation was cancelled. This movement cannot be posted; retain it for review or discard it with a reason.</p>}
-      {failure.status === 'DISCARDED' && <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm">Discarded by {failure.discardedBy} at {stamp(failure.discardedAt)}. Reason: {failure.dispositionReason}. The failed record and reservation state were retained.</p>}
+      {failure.errorText && <div className="rounded border border-signal-error/40 bg-signal-error-soft p-3 text-sm text-red-900" role="status"><strong>{failure.failureCode ?? 'Posting error'}</strong><br />{failure.errorText}</div>}
+      {failure.status === 'POSTED' && <p className="rounded border border-signal-ok/40 bg-signal-ok-soft p-3 text-sm text-green-900">Material document {failure.materialDocumentNumber}/{failure.documentYear} stands. Reprocessing will not create another document.</p>}
+      {failure.status === 'BLOCKED' && <p className="rounded border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm">The source confirmation was cancelled. This movement cannot be posted; retain it for review or discard it with a reason.</p>}
+      {failure.status === 'DISCARDED' && <p className="rounded border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm">Discarded by {failure.discardedBy} at {stamp(failure.discardedAt)}. Reason: {failure.dispositionReason}. The failed record and reservation state were retained.</p>}
 
       <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <p><span className="text-ink-faint">Posting date</span><br />{failure.postingDate}</p>
@@ -118,18 +118,18 @@ export default function ProductionCogiWorkbench({ detail }: { detail: Production
             <input className="input mt-1" name="reason" maxLength={200} required placeholder="For example: storage location corrected after stock review" />
           </label>
           <button className="btn" type="submit" disabled={correcting}>{correcting ? 'Saving correction…' : 'Save correction revision'}</button>
-          {correctionState.message && <p role="status" className={correctionState.ok ? 'text-sm text-green-800' : 'text-sm text-red-700'}>{correctionState.message}{correctionState.remedy ? ` ${correctionState.remedy}` : ''}</p>}
+          {correctionState.message && <p role="status" className={correctionState.ok ? 'text-sm text-signal-ok' : 'text-sm text-signal-error'}>{correctionState.message}{correctionState.remedy ? ` ${correctionState.remedy}` : ''}</p>}
         </form>
       )}
 
       {retryable && (
-        <form action={retryAction} className="space-y-3 rounded border border-amber-300 bg-amber-50 p-3" data-cogi-retry>
+        <form action={retryAction} className="space-y-3 rounded border border-signal-warn/40 bg-signal-warn-soft p-3" data-cogi-retry>
           <h3 className="font-semibold">Reprocess this movement</h3>
           <p className="text-sm">This uses the original request key and the latest saved correction revision. Posting may create a material document and related stock/accounting effects; the posting is atomic and will not be duplicated by retrying an already posted record.</p>
           <input type="hidden" name="failureId" value={failure.id} />
           <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" name="confirmReprocess" required />I have reviewed the movement and confirm it should now be posted.</label>
           <button className="btn" type="submit" disabled={retrying}>{retrying ? 'Reprocessing…' : 'Reprocess goods movement'}</button>
-          {retryState.message && <p role="status" className={retryState.ok ? 'text-sm text-green-900' : 'text-sm text-red-800'}>{retryState.message}</p>}
+          {retryState.message && <p role="status" className={retryState.ok ? 'text-sm text-green-900' : 'text-sm text-signal-error'}>{retryState.message}</p>}
         </form>
       )}
 
@@ -143,7 +143,7 @@ export default function ProductionCogiWorkbench({ detail }: { detail: Production
           </label>
           <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" name="confirmDiscard" required />I confirm this movement must not be posted and understand reservations will not be adjusted.</label>
           <button className="btn btn-default" type="submit" disabled={discarding}>{discarding ? 'Discarding…' : 'Retain as discarded'}</button>
-          {discardState.message && <p role="status" className={discardState.ok ? 'text-sm text-green-800' : 'text-sm text-red-700'}>{discardState.message}</p>}
+          {discardState.message && <p role="status" className={discardState.ok ? 'text-sm text-signal-ok' : 'text-sm text-signal-error'}>{discardState.message}</p>}
         </form>
       )}
 
@@ -160,7 +160,7 @@ export default function ProductionCogiWorkbench({ detail }: { detail: Production
           <h3 className="font-semibold">Posting attempts</h3>
           {detail.attempts.length === 0 ? <p className="mt-2 text-sm text-ink-soft">No posting attempt has been recorded.</p> : (
             <ol className="mt-2 space-y-2 text-sm">
-              {[...detail.attempts].reverse().map((attempt) => <li key={attempt.id} className="border-t border-line pt-2"><strong>Attempt {attempt.attemptNumber} · {attempt.status}</strong> · revision {attempt.payloadRevision}<br />{attempt.attemptedBy} · started {stamp(attempt.startedAt)} · finished {stamp(attempt.finishedAt)}{attempt.materialDocumentNumber ? <><br />Material document {attempt.materialDocumentNumber}/{attempt.documentYear}</> : null}{attempt.errorText ? <><br /><span className="text-red-700">{attempt.failureCode}: {attempt.errorText}</span></> : null}</li>)}
+              {[...detail.attempts].reverse().map((attempt) => <li key={attempt.id} className="border-t border-line pt-2"><strong>Attempt {attempt.attemptNumber} · {attempt.status}</strong> · revision {attempt.payloadRevision}<br />{attempt.attemptedBy} · started {stamp(attempt.startedAt)} · finished {stamp(attempt.finishedAt)}{attempt.materialDocumentNumber ? <><br />Material document {attempt.materialDocumentNumber}/{attempt.documentYear}</> : null}{attempt.errorText ? <><br /><span className="text-signal-error">{attempt.failureCode}: {attempt.errorText}</span></> : null}</li>)}
             </ol>
           )}
         </div>

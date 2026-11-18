@@ -31,7 +31,7 @@ export default function OrderCreate({
       <section aria-labelledby="order-create" className="border border-line bg-surface p-4">
         <h2 id="order-create" className="text-sm font-semibold">{t('co01.createHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('co01.createHint')}</p>
-        <p role="status" className={`mt-2 text-sm ${created.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${created.ok ? 'text-ink' : 'text-signal-error'}`}>
           {created.message}{created.remedy ? ` ${created.remedy}` : ''}
         </p>
 
@@ -127,7 +127,7 @@ export default function OrderCreate({
         <section aria-labelledby="order-release" className="border border-line bg-surface p-4">
           <h2 id="order-release" className="text-sm font-semibold">{t('co01.releaseHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('co01.releaseHint')}</p>
-          <p role="status" className={`mt-2 text-sm ${released.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${released.ok ? 'text-ink' : 'text-signal-error'}`}>
             {released.message}{released.remedy ? ` ${released.remedy}` : ''}
           </p>
           <LockNotice message={releaseLock?.mode === 'DISPLAY' ? releaseLock.message : null} remedy={releaseLock?.remedy} />

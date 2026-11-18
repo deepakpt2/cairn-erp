@@ -165,7 +165,7 @@ export default function SalesOutput({ rows, counts, conditions, types, canProces
                   <td>
                     <span data-status-code={STATUS_ALIAS[row.status] ?? '?'}>{row.status}</span>
                     <span className="ms-1 text-ink-faint">({STATUS_ALIAS[row.status] ?? '?'})</span>
-                    {row.errorText ? <div className="text-xs text-red-700">{row.errorText}</div> : null}
+                    {row.errorText ? <div className="text-xs text-signal-error">{row.errorText}</div> : null}
                   </td>
                   <td className="text-right tabular-nums">{row.sendCount}</td>
                   <td>{row.recipient ?? '—'}</td>

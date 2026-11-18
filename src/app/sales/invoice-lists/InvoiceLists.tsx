@@ -120,7 +120,7 @@ function CreateForm({
         </p>
       )}
       {state.message && (
-        <p role="status" className={`max-w-3xl text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`max-w-3xl text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
           {state.message}
           {!state.ok && state.remedy ? ` ${state.remedy}` : ''}
         </p>
@@ -179,13 +179,13 @@ function ListRow({ row, canCreate, canRelease }: {
           </span>
         )}
         {released.message && (
-          <span role="status" className={`block text-xs ${released.ok ? 'text-ink' : 'text-red-700'}`}>
+          <span role="status" className={`block text-xs ${released.ok ? 'text-ink' : 'text-signal-error'}`}>
             {released.message}
             {!released.ok && released.remedy ? ` ${released.remedy}` : ''}
           </span>
         )}
         {cancelled.message && (
-          <span role="status" className={`block text-xs ${cancelled.ok ? 'text-ink' : 'text-red-700'}`}>
+          <span role="status" className={`block text-xs ${cancelled.ok ? 'text-ink' : 'text-signal-error'}`}>
             {cancelled.message}
             {!cancelled.ok && cancelled.remedy ? ` ${cancelled.remedy}` : ''}
           </span>

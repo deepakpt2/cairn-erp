@@ -23,7 +23,7 @@ const LOCK_OBJECT = 'AVAILABILITY_CHECK';
 function Notice({ state }: { state: AvailabilityActionState }) {
   if (!state.message) return null;
   return (
-    <p role="status" className={state.ok ? 'text-sm' : 'text-sm text-red-700'}>
+    <p role="status" className={state.ok ? 'text-sm' : 'text-sm text-signal-error'}>
       {state.message}{state.remedy ? ` ${state.remedy}` : ''}
     </p>
   );

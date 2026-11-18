@@ -35,7 +35,7 @@ export default function PhysicalInventoryShell({
       <section aria-labelledby="count-header" className="border border-line bg-surface p-4">
         <h2 id="count-header" className="text-sm font-semibold">{t('mi01.header')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('mi01.headerHint')}</p>
-        <p role="status" className={`mt-2 text-sm ${createState.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${createState.ok ? 'text-ink' : 'text-signal-error'}`}>
           {createState.message}{createState.remedy ? ` ${createState.remedy}` : ''}
         </p>
         <form action={createAction}>
@@ -153,7 +153,7 @@ export default function PhysicalInventoryShell({
             >
               {cancelling ? t('mi01.cancelling') : t('mi01.cancel')}
             </button>
-            <span role="status" className={`text-sm ${cancelState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <span role="status" className={`text-sm ${cancelState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {cancelState.message}{cancelState.remedy ? ` ${cancelState.remedy}` : ''}
             </span>
           </form>

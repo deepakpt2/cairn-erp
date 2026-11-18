@@ -125,7 +125,7 @@ export default async function MaterialDocumentPage({ searchParams }: {
 
       {error && (
         <div className="panel p-4 text-sm" role="alert">
-          <span className="text-red-700">{error}</span>
+          <span className="text-signal-error">{error}</span>
           {remedy ? <span className="text-ink-soft"> {remedy}</span> : null}
         </div>
       )}

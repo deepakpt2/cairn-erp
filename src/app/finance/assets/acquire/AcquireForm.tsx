@@ -43,7 +43,7 @@ export default function AcquireForm({ preview: initialPreview, canAcquire, today
         <form className="mt-3">
           <input type="hidden" name="requestKey" value={requestKey} />
           {(simState.message || postState.message) && (
-            <p role="status" className={`mb-3 text-sm ${(postState.message ? postState.ok : simState.ok) ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mb-3 text-sm ${(postState.message ? postState.ok : simState.ok) ? 'text-ink' : 'text-signal-error'}`}>
               {postState.message || simState.message}
               {postState.remedy ?? simState.remedy ? ` ${postState.remedy ?? simState.remedy}` : ''}
             </p>
@@ -132,7 +132,7 @@ export default function AcquireForm({ preview: initialPreview, canAcquire, today
       <section aria-labelledby="aq-reverse" className="border border-line bg-surface p-4">
         <h2 id="aq-reverse" className="text-sm font-semibold">Reverse an acquisition</h2>
         {reverseState.message && (
-          <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-signal-error'}`}>
             {reverseState.message}{reverseState.remedy ? ` ${reverseState.remedy}` : ''}
           </p>
         )}

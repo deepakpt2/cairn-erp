@@ -61,7 +61,7 @@ export function ManualScoreForm({
         </button>
       </div>
       {state.message && (
-        <p role={state.ok ? 'status' : 'alert'} className={state.ok ? 'text-sm' : 'text-sm text-red-700'} data-ve-save-result={criterion.criterionCode}>
+        <p role={state.ok ? 'status' : 'alert'} className={state.ok ? 'text-sm' : 'text-sm text-signal-error'} data-ve-save-result={criterion.criterionCode}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}
         </p>
       )}

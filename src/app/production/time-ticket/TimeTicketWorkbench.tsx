@@ -34,7 +34,7 @@ export default function TimeTicketWorkbench({
         <p>Plant {loaded.plant}. Quantity {loaded.orderQuantity} {loaded.unit}. Status {loaded.status}. Record version {loaded.version}.</p>
         <p>Start {loaded.scheduledStart}. Finish {loaded.scheduledFinish}. Those dates are not rewritten by a confirmation.</p>
         {loaded.productionVersion && <p>Production version {loaded.productionVersion} is the one copied onto this order. A later routing edit is not read.</p>}
-        {loaded.blockingReason && <p className="text-red-700">{loaded.blockingReason}</p>}
+        {loaded.blockingReason && <p className="text-signal-error">{loaded.blockingReason}</p>}
         {loaded.gaps.map((gap) => <p key={gap} className="text-ink-soft">{gap}</p>)}
       </section>
 
@@ -216,7 +216,7 @@ export default function TimeTicketWorkbench({
                 </table>
               ) : null}
               {state.ticket.movementFailures.length > 0 && (
-                <ul className="mt-2 space-y-1 text-sm text-red-700" data-co11n-movement-recovery>
+                <ul className="mt-2 space-y-1 text-sm text-signal-error" data-co11n-movement-recovery>
                   {state.ticket.movementFailures.map((failure) => (
                     <li key={failure.id} data-co11n-recovery-id={failure.id}>
                       {failure.movementKind === 'ISSUE' ? 'Goods issue' : 'Goods receipt'} {failure.status.toLowerCase()}
@@ -254,7 +254,7 @@ export default function TimeTicketWorkbench({
             </button>
           </div>
           {state.message && (
-            <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
               {state.message}{state.remedy ? ` ${state.remedy}` : ''}
             </p>
           )}

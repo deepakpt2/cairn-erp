@@ -28,7 +28,7 @@ export default function BudgetForm({ budget }: { budget: OriginalBudgetView }) {
     <form action={action} className="space-y-3">
       <input type="hidden" name="payload" value={payload} />
       {state.message && (
-        <p className={state.ok ? 'text-sm' : 'text-sm text-red-700'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
+        <p className={state.ok ? 'text-sm' : 'text-sm text-signal-error'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
       )}
       <p className="text-sm text-ink-soft">
         Currency {budget.currency}. Profile {budget.budgetProfile ?? 'none'}. Availability control is {budget.availabilityControl ? 'marked on the profile and is not executed' : 'not active'}. Supplements, returns, and carryforward are not this screen.

@@ -111,7 +111,7 @@ export default function RecountWorkbench({
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">{t('recount.load')}</button>
         </form>
         {requestedNumber && !document && (
-          <p role="status" className="mt-2 text-sm text-red-700">
+          <p role="status" className="mt-2 text-sm text-signal-error">
             {t('recount.notFound', { document: requestedNumber, year: requestedYear })}
           </p>
         )}
@@ -243,7 +243,7 @@ export default function RecountWorkbench({
 
           {checkState.message && (
             <div data-recount-preview className="mt-3 border border-line bg-canvas p-3">
-              <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-red-700'}`}>
+              <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-signal-error'}`}>
                 {checkState.message}{checkState.remedy ? ` ${checkState.remedy}` : ''}
               </p>
               {checkState.preview && (
@@ -279,7 +279,7 @@ export default function RecountWorkbench({
 
           {createState.message && (
             <div data-recount-result className="mt-3 border border-line bg-canvas p-3">
-              <p role="status" className={`text-sm font-medium ${createState.ok ? 'text-ink' : 'text-red-700'}`}>
+              <p role="status" className={`text-sm font-medium ${createState.ok ? 'text-ink' : 'text-signal-error'}`}>
                 {createState.message}{createState.remedy ? ` ${createState.remedy}` : ''}
               </p>
               {raised && (
@@ -320,7 +320,7 @@ export default function RecountWorkbench({
           </button>
         </form>
         {cancelState.message && (
-          <p role="status" className={`mt-2 text-sm ${cancelState.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${cancelState.ok ? 'text-ink' : 'text-signal-error'}`}>
             {cancelState.message}{cancelState.remedy ? ` ${cancelState.remedy}` : ''}
           </p>
         )}

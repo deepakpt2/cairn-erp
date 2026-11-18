@@ -117,7 +117,7 @@ export function ReturnsChainSetup({
       </form>
 
       {state.message && (
-        <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
           {state.message}
           {state.remedy ? ` ${state.remedy}` : ''}
         </p>

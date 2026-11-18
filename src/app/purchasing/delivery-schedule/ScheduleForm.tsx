@@ -85,7 +85,7 @@ export default function ScheduleForm({ document, itemNumber }: {
         <button className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending || lines.length === 0}>{pending ? 'Saving' : 'Save schedule'}</button>
       </div>
       {state.message && (
-        <p className={state.ok ? 'text-sm' : 'text-sm text-red-700'} role="status">{state.message} {state.remedy ?? ''}</p>
+        <p className={state.ok ? 'text-sm' : 'text-sm text-signal-error'} role="status">{state.message} {state.remedy ?? ''}</p>
       )}
       <p className="text-sm text-ink-soft">A partial schedule is allowed. Saving does not send a supplier release, run MRP, or post inventory. A firm zone is not stored.</p>
     </form>

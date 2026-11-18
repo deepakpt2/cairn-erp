@@ -101,7 +101,7 @@ export default async function BlockedInvoicePage({ searchParams }: {
         {notice && <p className="mt-3 text-sm" role="status" data-blocked-invoice-notice>{notice}</p>}
       </header>
 
-      {!canRelease && <p className="text-sm text-red-700" role="alert">{t('blockedInvoice.capabilityMissing')}</p>}
+      {!canRelease && <p className="text-sm text-signal-error" role="alert">{t('blockedInvoice.capabilityMissing')}</p>}
 
       <section aria-labelledby="blocked-invoice-selection" className="border border-line bg-surface p-4">
         <h2 id="blocked-invoice-selection" className="text-sm font-semibold">{t('blockedInvoice.selection')}</h2>
@@ -136,7 +136,7 @@ export default async function BlockedInvoicePage({ searchParams }: {
             <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" data-blocked-invoice-list>{t('blockedInvoice.list')}</button>
           </div>
         </form>
-        {listError && <p className="mt-3 text-sm text-red-700" role="alert" data-blocked-invoice-error>{listError}</p>}
+        {listError && <p className="mt-3 text-sm text-signal-error" role="alert" data-blocked-invoice-error>{listError}</p>}
       </section>
 
       {canPlace && (

@@ -54,7 +54,7 @@ export default function RuleForm({
     <form action={action} className="space-y-3">
       <input type="hidden" name="payload" value={payload} />
       {state.message && (
-        <p className={state.ok ? 'text-sm' : 'text-sm text-red-700'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
+        <p className={state.ok ? 'text-sm' : 'text-sm text-signal-error'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
       )}
 
       <section className="border border-line p-3 text-sm" aria-label="Settlement configuration this order reads">
@@ -145,7 +145,7 @@ export default function RuleForm({
         </label>
       </div>
       {profile && !allowed && (
-        <p className="text-sm text-red-700" role="status">
+        <p className="text-sm text-signal-error" role="status">
           Profile {profile.profileCode} does not allow distribution by this method, so the rule will be refused until the profile allows it.
         </p>
       )}

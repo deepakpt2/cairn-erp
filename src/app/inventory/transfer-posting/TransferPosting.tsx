@@ -81,7 +81,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
       <section aria-labelledby="transfer-item" className="border border-line bg-surface p-4">
         <h2 id="transfer-item" className="text-sm font-semibold">{t('mb1b.item')}</h2>
         {postState.message && (
-          <p role="status" className={`mt-2 text-sm ${postState.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${postState.ok ? 'text-ink' : 'text-signal-error'}`}>
             {postState.message}{postState.remedy ? ` ${postState.remedy}` : ''}
           </p>
         )}
@@ -164,7 +164,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
 
         {checkState.message && (
           <div data-transfer-preview className="mt-3 border border-line bg-canvas p-3">
-            <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {checkState.message}{checkState.remedy ? ` ${checkState.remedy}` : ''}
             </p>
             {checkState.preview && (
@@ -287,7 +287,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
                   <td>{line.plant}</td>
                   <td>{line.storageLocation}</td>
                   <td>{line.stockType}</td>
-                  <td className={`py-1 text-right tabular-nums ${line.lineDirection === 'ISSUE' ? 'text-red-700' : ''}`}>
+                  <td className={`py-1 text-right tabular-nums ${line.lineDirection === 'ISSUE' ? 'text-signal-error' : ''}`}>
                     {line.lineDirection === 'ISSUE' ? '−' : ''}{Number(line.quantity).toFixed(3)}
                   </td>
                   <td className="text-right tabular-nums num">{Number(line.value).toFixed(2)}</td>
@@ -297,7 +297,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
           </table>
 
           {reverseState.message && (
-            <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {reverseState.message}{reverseState.remedy ? ` ${reverseState.remedy}` : ''}
             </p>
           )}

@@ -63,7 +63,7 @@ describe('CO13 screen and migration contract', () => {
     expect(form).toContain('data-co13-cancellation={state.result.cancellationNumber}');
     expect(form).toContain('data-co13-original={state.result.confirmationNumber}');
     expect(form).toContain('Not cancelled.');
-    expect(form).toContain("state.ok ? 'text-ink' : 'text-red-700'");
+    expect(form).toContain("state.ok ? 'text-ink' : 'text-signal-error'");
     expect(form).toContain('disabled={blocked || !acknowledged || pending}');
     expect(form).toContain('name="confirmCancel"');
     expect(form).toContain('router.refresh()');

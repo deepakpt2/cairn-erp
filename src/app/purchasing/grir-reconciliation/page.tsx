@@ -104,7 +104,7 @@ export default async function GrIrReconciliationPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('grirReconciliation.subtitle')}</p>
       </header>
 
-      {!canView && <p className="text-sm text-red-700" role="alert">{t('grirReconciliation.capabilityMissing')}</p>}
+      {!canView && <p className="text-sm text-signal-error" role="alert">{t('grirReconciliation.capabilityMissing')}</p>}
 
       <section aria-labelledby="grir-recon-selection" className="border border-line bg-surface p-4">
         <h2 id="grir-recon-selection" className="text-sm font-semibold">{t('grirReconciliation.selection')}</h2>
@@ -146,7 +146,7 @@ export default async function GrIrReconciliationPage({ searchParams }: {
             <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" data-grir-recon-list>{t('grirReconciliation.list')}</button>
           </div>
         </form>
-        {listError && <p className="mt-3 text-sm text-red-700" role="alert" data-grir-recon-error>{listError}</p>}
+        {listError && <p className="mt-3 text-sm text-signal-error" role="alert" data-grir-recon-error>{listError}</p>}
       </section>
 
       <section aria-labelledby="grir-recon-exceptions" className="border border-line bg-surface p-4">
@@ -218,7 +218,7 @@ export default async function GrIrReconciliationPage({ searchParams }: {
                     <td>
                       <span data-grir-recon-reason-category>{t(`grirReconciliation.category.${row.category}`)}</span>
                       <div className="text-ink-soft" data-grir-recon-reason>{row.reason}</div>
-                      {row.refusal && <div className="text-red-700" data-grir-recon-refusal>{row.refusal}</div>}
+                      {row.refusal && <div className="text-signal-error" data-grir-recon-refusal>{row.refusal}</div>}
                     </td>
                     <td>
                       <div className="flex flex-col gap-1 text-xs">

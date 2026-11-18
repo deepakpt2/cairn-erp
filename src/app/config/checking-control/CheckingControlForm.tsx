@@ -91,7 +91,7 @@ export default function CheckingControlForm({
           <h2 className="text-sm font-semibold">{editing ? 'Change checking control' : 'Create checking control'}</h2>
           {editing && <LockNotice message={lock?.message} remedy={lock?.remedy} />}
           {state.message && (
-            <p role="status" className={state.ok ? 'text-sm' : 'text-sm text-red-700'}>
+            <p role="status" className={state.ok ? 'text-sm' : 'text-sm text-signal-error'}>
               {state.message}{state.remedy ? ` ${state.remedy}` : ''}
             </p>
           )}

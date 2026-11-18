@@ -497,7 +497,7 @@ function SelectedBilling({
                   </td>
                   <td>
                     {row.status.toLowerCase()}
-                    {row.errorText ? <div className="text-xs text-red-700">{row.errorText}</div> : null}
+                    {row.errorText ? <div className="text-xs text-signal-error">{row.errorText}</div> : null}
                   </td>
                   <td className="text-right">{row.sendCount}</td>
                   <td>{row.recipient ?? '—'}</td>

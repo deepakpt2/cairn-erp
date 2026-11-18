@@ -54,7 +54,7 @@ export function ReleasePanel({ id, label, fields, state, canRelease, releaseActi
             {hint ? ` ${hint}` : ''}
           </p>
           {message.message && (
-            <p role="status" className={`mt-2 text-sm ${message.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mt-2 text-sm ${message.ok ? 'text-ink' : 'text-signal-error'}`}>
               {message.message}
               {message.remedy ? ` ${message.remedy}` : ''}
             </p>

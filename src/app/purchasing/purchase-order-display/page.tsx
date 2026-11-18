@@ -371,7 +371,7 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('poDisplay.subtitle')}</p>
       </header>
 
-      {!canDisplay && <p className="text-sm text-red-700" role="alert">{t('poDisplay.capabilityMissing')}</p>}
+      {!canDisplay && <p className="text-sm text-signal-error" role="alert">{t('poDisplay.capabilityMissing')}</p>}
 
       <section aria-labelledby="po-display-selection" className="border border-line bg-surface p-4">
         <h2 id="po-display-selection" className="text-sm font-semibold">{t('poDisplay.selection')}</h2>
@@ -419,11 +419,11 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
           </div>
         </form>
         {refusal && (
-          <p className="mt-3 text-sm text-red-700" role="alert" data-po-refused>
+          <p className="mt-3 text-sm text-signal-error" role="alert" data-po-refused>
             {refusal.message}{refusal.remedy ? ` ${refusal.remedy}` : ''}
           </p>
         )}
-        {missing && <p className="mt-3 text-sm text-red-700" role="alert" data-po-missing>{missing}</p>}
+        {missing && <p className="mt-3 text-sm text-signal-error" role="alert" data-po-missing>{missing}</p>}
       </section>
 
       {opened && <OrderView order={opened} canChange={canChange} />}

@@ -31,7 +31,7 @@ export default function ProductionOrderSettlementForm({ orderNumber }: { orderNu
         screen is /production/settlement-rules. KO8B, KO9E, and CJ88 are not this screen.
       </p>
       {state.message && (
-        <p className={state.ok ? 'text-sm' : 'text-sm text-red-700'} role={state.ok ? 'status' : 'alert'}>
+        <p className={state.ok ? 'text-sm' : 'text-sm text-signal-error'} role={state.ok ? 'status' : 'alert'}>
           {state.message}
         </p>
       )}

@@ -185,7 +185,7 @@ export default async function PurchasingQuotationDisplayPage({ searchParams }: {
       </header>
 
       {!canDisplay && (
-        <p className="text-sm text-red-700" role="alert">{t('quotationDisplay.capabilityMissing')}</p>
+        <p className="text-sm text-signal-error" role="alert">{t('quotationDisplay.capabilityMissing')}</p>
       )}
 
       {canDisplay && (
@@ -205,7 +205,7 @@ export default async function PurchasingQuotationDisplayPage({ searchParams }: {
           </form>
           <p className="mt-2 text-xs text-ink-soft" data-quotation-not-interchangeable>{t('quotationDisplay.notInterchangeable')}</p>
           {result && !result.found && (
-            <p role="status" className="mt-2 text-sm text-red-700" data-quotation-miss={result.reason}>{miss(result)}</p>
+            <p role="status" className="mt-2 text-sm text-signal-error" data-quotation-miss={result.reason}>{miss(result)}</p>
           )}
           {recent.length > 0 && (
             <ul className="mt-3 flex flex-wrap gap-2 text-sm">

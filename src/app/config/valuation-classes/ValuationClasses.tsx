@@ -195,7 +195,7 @@ export default function ValuationClasses({
           </table>
         </div>
         {referenceLocked && referenceNotice.message && (
-          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800"><span className="block">{referenceNotice.message}</span>{referenceNotice.remedy && <span className="mt-1 block text-xs">{referenceNotice.remedy}</span>}</p>
+          <p role="status" className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn"><span className="block">{referenceNotice.message}</span>{referenceNotice.remedy && <span className="mt-1 block text-xs">{referenceNotice.remedy}</span>}</p>
         )}
         <ClaimFailureNotice claim={referenceClaim} onRetry={referenceRetry} />
         {canMaintain && (referenceMode === 'CREATE' || (referenceRow && !referenceLocked && referenceGranted)) && (
@@ -282,7 +282,7 @@ export default function ValuationClasses({
           </table>
         </div>
         {classLocked && classNotice.message && (
-          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800"><span className="block">{classNotice.message}</span>{classNotice.remedy && <span className="mt-1 block text-xs">{classNotice.remedy}</span>}</p>
+          <p role="status" className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn"><span className="block">{classNotice.message}</span>{classNotice.remedy && <span className="mt-1 block text-xs">{classNotice.remedy}</span>}</p>
         )}
         <ClaimFailureNotice claim={classClaim} onRetry={classRetry} />
         {canMaintain && (classMode === 'CREATE' || (classRow && !classLocked && classGranted)) && (
@@ -394,7 +394,7 @@ export default function ValuationClasses({
           </table>
         </div>
         {typeLocked && typeNotice.message && (
-          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800"><span className="block">{typeNotice.message}</span>{typeNotice.remedy && <span className="mt-1 block text-xs">{typeNotice.remedy}</span>}</p>
+          <p role="status" className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn"><span className="block">{typeNotice.message}</span>{typeNotice.remedy && <span className="mt-1 block text-xs">{typeNotice.remedy}</span>}</p>
         )}
         <ClaimFailureNotice claim={typeClaim} onRetry={typeRetry} />
         {canMaintain && typeRow && !typeLocked && typeGranted && (

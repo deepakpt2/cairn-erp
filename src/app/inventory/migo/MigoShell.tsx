@@ -132,7 +132,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
         <section aria-labelledby="movement-reversal" className="border border-line bg-surface p-4">
           <h2 id="movement-reversal" className="text-sm font-semibold">{t('migo.reversalHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('migo.reversalHint')}</p>
-          <p role="status" className={`mt-2 text-sm ${reversal.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${reversal.ok ? 'text-ink' : 'text-signal-error'}`}>
             {reversal.message}{reversal.remedy ? ` ${reversal.remedy}` : ''}
           </p>
           <form action={reversalAction}>
@@ -185,7 +185,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
         <section aria-labelledby="movement-transfer" className="border border-line bg-surface p-4">
           <h2 id="movement-transfer" className="text-sm font-semibold">{t('migo.transferHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('migo.transferHint')}</p>
-          <p role="status" className={`mt-2 text-sm ${transfer.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${transfer.ok ? 'text-ink' : 'text-signal-error'}`}>
             {transfer.message}{transfer.remedy ? ` ${transfer.remedy}` : ''}
           </p>
           <form action={transferAction}>
@@ -308,7 +308,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
         <section aria-labelledby="movement-receipt" className="border border-line bg-surface p-4">
           <h2 id="movement-receipt" className="text-sm font-semibold">{t('migo.receiptHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('migo.receiptHint')}</p>
-          <p role="status" className={`mt-2 text-sm ${receipt.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${receipt.ok ? 'text-ink' : 'text-signal-error'}`}>
             {receipt.message}{receipt.remedy ? ` ${receipt.remedy}` : ''}
           </p>
           <form action={receiptAction}>
@@ -417,7 +417,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
       {cell?.kind === 'POST_HERE' && cell.form === 'ISSUE' && (
         <section aria-labelledby="movement-items" className="border border-line bg-surface p-4">
           <h2 id="movement-items" className="text-sm font-semibold">{t('migo.itemsHeader')}</h2>
-          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
             {state.message}{state.remedy ? ` ${state.remedy}` : ''}
           </p>
           <form action={action}>

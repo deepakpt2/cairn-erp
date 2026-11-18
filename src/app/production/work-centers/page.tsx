@@ -92,7 +92,7 @@ export default async function WorkCentersPage({ searchParams }: {
         {canCreate && <Link className="btn btn-default min-h-11 sm:min-h-8" href={`${WORK_CENTER_ROUTE}?create=1`}>Create</Link>}
       </form>
       {plant && center && !document && (
-        <p className="text-sm text-red-700" role="alert">Work center {center} does not exist in plant {plant}.</p>
+        <p className="text-sm text-signal-error" role="alert">Work center {center} does not exist in plant {plant}.</p>
       )}
       {document && (
         <p className="text-sm">

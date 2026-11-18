@@ -45,7 +45,7 @@ export default async function SingleItemPlanningPage({
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('md02.subtitle')}</p>
       </header>
-      {refusal && <p role="status" data-md02-refused className="text-sm text-red-700">{refusal}</p>}
+      {refusal && <p role="status" data-md02-refused className="text-sm text-signal-error">{refusal}</p>}
       <SingleItemWorkbench
         canPlan={can(session, MRP_RUN_CAPABILITY)}
         canRegenerate={can(session, MRP_REGENERATE_CAPABILITY)}

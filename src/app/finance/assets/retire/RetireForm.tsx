@@ -90,7 +90,7 @@ export default function RetireForm({ canRetire, today, assets }: {
           <input type="hidden" name="requestKey" value={requestKey} />
           <input type="hidden" name="scope" value={scope} />
           {(simState.message || postState.message) && (
-            <p role="status" className={`mb-3 text-sm ${(postState.message ? postState.ok : simState.ok) ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`mb-3 text-sm ${(postState.message ? postState.ok : simState.ok) ? 'text-ink' : 'text-signal-error'}`}>
               {postState.message || simState.message}
               {postState.remedy ?? simState.remedy ? ` ${postState.remedy ?? simState.remedy}` : ''}
             </p>
@@ -135,7 +135,7 @@ export default function RetireForm({ canRetire, today, assets }: {
               <input {...bind('text')} className={inputCls} maxLength={50} placeholder="Scrapped after failure" /></label>
           </div>
           {scope === 'COMPLETE' && (
-            <p className="mt-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p className="mt-3 rounded border border-signal-warn/40 bg-signal-warn-soft px-3 py-2 text-sm text-amber-900">
               Warning: a complete retirement ends this asset. It leaves future depreciation and
               takes no further acquisition or retirement once posted. Reverse it asset-aware if
               it was posted in error — never delete it.
@@ -214,7 +214,7 @@ export default function RetireForm({ canRetire, today, assets }: {
       <section aria-labelledby="rt-reverse" className="border border-line bg-surface p-4">
         <h2 id="rt-reverse" className="text-sm font-semibold">Reverse a retirement</h2>
         {reverseState.message && (
-          <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-signal-error'}`}>
             {reverseState.message}{reverseState.remedy ? ` ${reverseState.remedy}` : ''}
           </p>
         )}

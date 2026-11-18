@@ -154,7 +154,7 @@ export default function PostingWorkbench({
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">{t('diffpost.load')}</button>
         </form>
         {requestedNumber && !document && (
-          <p role="status" className="mt-2 text-sm text-red-700">
+          <p role="status" className="mt-2 text-sm text-signal-error">
             {t('diffpost.notFound', { document: requestedNumber, year: requestedYear })}
           </p>
         )}
@@ -282,7 +282,7 @@ export default function PostingWorkbench({
 
           {checkState.message && (
             <div data-posting-preview className="mt-3 border border-line bg-canvas p-3">
-              <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-red-700'}`}>
+              <p role="status" className={`text-sm font-medium ${checkState.ok ? 'text-ink' : 'text-signal-error'}`}>
                 {checkState.message}{checkState.remedy ? ` ${checkState.remedy}` : ''}
               </p>
               {checkState.preview && (
@@ -327,7 +327,7 @@ export default function PostingWorkbench({
           )}
 
           {postState.message && (
-            <p role="status" data-posting-result className={`mt-3 text-sm ${postState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" data-posting-result className={`mt-3 text-sm ${postState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {postState.message}{postState.remedy ? ` ${postState.remedy}` : ''}
             </p>
           )}
@@ -383,7 +383,7 @@ export default function PostingWorkbench({
             })
           )}
           {reverseState.message && (
-            <p role="status" data-posting-reversal className={`mt-3 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" data-posting-reversal className={`mt-3 text-sm ${reverseState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {reverseState.message}{reverseState.remedy ? ` ${reverseState.remedy}` : ''}
             </p>
           )}

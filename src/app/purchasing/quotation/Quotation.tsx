@@ -25,7 +25,7 @@ function Notice({ state }: { state: QuotationActionState }) {
   if (!state.message) return null;
   const preview = state.preview;
   return (
-    <div role="status" data-quotation-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <div role="status" data-quotation-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       <p>{state.message}</p>
       {state.remedy && <p className="mt-1">{state.remedy}</p>}
       {state.ok && state.wrote === false && (
@@ -111,7 +111,7 @@ export default function Quotation({
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">{t('quotation.load')}</button>
         </form>
         {requested && !opened && (
-          <p role="status" className="mt-2 text-sm text-red-700">{t('quotation.notFound', { number: requested })}</p>
+          <p role="status" className="mt-2 text-sm text-signal-error">{t('quotation.notFound', { number: requested })}</p>
         )}
         <p className="mt-2 text-xs text-ink-soft" data-quotation-no-comparison>{t('quotation.noComparison')}</p>
         {recent.length > 0 && (
@@ -207,7 +207,7 @@ export default function Quotation({
           )}
           <Notice state={checkState} />
           <Notice state={saveState} />
-          {!canMaintain && <p className="mt-3 text-sm text-red-700">{t('quotation.capabilityMissing')}</p>}
+          {!canMaintain && <p className="mt-3 text-sm text-signal-error">{t('quotation.capabilityMissing')}</p>}
         </section>
       )}
     </>

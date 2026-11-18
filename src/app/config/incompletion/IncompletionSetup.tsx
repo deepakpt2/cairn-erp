@@ -18,7 +18,7 @@ const INITIAL: IncompletionActionState = { ok: false, message: '' };
 function Notice({ state }: { state: IncompletionActionState }) {
   if (!state.message) return null;
   return (
-    <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       {state.message}
       {state.remedy ? ` ${state.remedy}` : ''}
     </p>

@@ -147,7 +147,7 @@ export function SalesOrgDefinitionForm({
       </div>
 
       {state.message && (
-        <div role={state.ok ? 'status' : 'alert'} className={`rounded border px-3 py-2 text-sm ${state.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+        <div role={state.ok ? 'status' : 'alert'} className={`rounded border px-3 py-2 text-sm ${state.ok ? 'border-signal-ok/40 bg-signal-ok-soft text-signal-ok' : 'border-signal-error/40 bg-signal-error-soft text-signal-error'}`}>
           <p>{state.message}</p>
           {!state.ok && state.remedy && <p className="mt-1 text-xs">{state.remedy}</p>}
         </div>

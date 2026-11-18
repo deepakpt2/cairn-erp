@@ -57,7 +57,7 @@ export default async function SingleLevelPlanningPage({
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('md03.subtitle')}</p>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-md03-gaps>{t('md03.gaps')}</p>
       </header>
-      {refusal && <p role="status" data-md03-refused className="text-sm text-red-700">{refusal}</p>}
+      {refusal && <p role="status" data-md03-refused className="text-sm text-signal-error">{refusal}</p>}
       <SingleLevelWorkbench
         canPlan={can(session, MRP_SINGLE_LEVEL_CAPABILITY) && can(session, MRP_RUN_CAPABILITY)}
         canRegenerate={can(session, MRP_REGENERATE_CAPABILITY)}

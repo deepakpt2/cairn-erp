@@ -67,7 +67,7 @@ export default async function IncompleteDocumentsPage() {
                     {' · '}
                     {document.missing} missing
                     {document.blocking > 0 ? (
-                      <span className="text-red-700"> · {document.blocking} stopping something</span>
+                      <span className="text-signal-error"> · {document.blocking} stopping something</span>
                     ) : (
                       <span> · {document.blocking} stopping anything</span>
                     )}

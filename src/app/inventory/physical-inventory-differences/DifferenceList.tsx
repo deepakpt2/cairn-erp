@@ -148,8 +148,8 @@ export default function DifferenceList({
             <Link href={ROUTE} className="btn btn-default min-h-11 sm:min-h-8">{t('mi20.reset')}</Link>
           </div>
         </form>
-        {listError && <p role="status" data-difference-message className="mt-2 text-sm text-red-700">{listError}</p>}
-        {workflowMessage && <p role="status" data-difference-workflow className="mt-2 text-sm text-red-700">{workflowMessage}</p>}
+        {listError && <p role="status" data-difference-message className="mt-2 text-sm text-signal-error">{listError}</p>}
+        {workflowMessage && <p role="status" data-difference-workflow className="mt-2 text-sm text-signal-error">{workflowMessage}</p>}
       </section>
 
       {document && (

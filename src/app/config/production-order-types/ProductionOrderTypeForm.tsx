@@ -59,7 +59,7 @@ export default function ProductionOrderTypeForm({
           <h2 className="text-sm font-semibold">{editing ? 'Change order type' : 'Create order type'}</h2>
           {editing && <LockNotice message={lock?.message} remedy={lock?.remedy} />}
           {state.message && (
-            <p role="status" className={state.ok ? 'text-sm' : 'text-sm text-red-700'}>
+            <p role="status" className={state.ok ? 'text-sm' : 'text-sm text-signal-error'}>
               {state.message}{state.remedy ? ` ${state.remedy}` : ''}
             </p>
           )}

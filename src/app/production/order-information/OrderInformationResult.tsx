@@ -161,7 +161,7 @@ export default function OrderInformationResultView({
           <label className="flex items-center gap-2"><input type="checkbox" name="isDefault" /> Default for this list</label>
           <button className="btn btn-default min-h-11 sm:min-h-8" type="submit" disabled={pending}>{pending ? 'Saving…' : 'Save layout'}</button>
         </div>
-        {state.message && <p className={`mt-2 ${state.ok ? '' : 'text-red-700'}`}>{state.message}</p>}
+        {state.message && <p className={`mt-2 ${state.ok ? '' : 'text-signal-error'}`}>{state.message}</p>}
         {layouts.length > 0 && (
           <ul className="mt-2" data-coois-layouts>
             {layouts.map((layout) => (

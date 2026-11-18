@@ -39,7 +39,7 @@ export default function ReleaseForm({ agreement }: { agreement: string }) {
     <form action={action} className="space-y-3">
       <input type="hidden" name="payload" value={payload} />
       {state.message && (
-        <p className={state.ok ? 'text-sm' : 'text-sm text-red-700'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
+        <p className={state.ok ? 'text-sm' : 'text-sm text-signal-error'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
@@ -108,7 +108,7 @@ export default function ReleaseForm({ agreement }: { agreement: string }) {
             <p key={`skip-${index}`}>{row.agreementNumber}{row.itemNumber ? ` item ${row.itemNumber}` : ''}{row.releaseType ? ` ${row.releaseType}` : ''}: {row.reason}</p>
           ))}
           {state.result.failed.map((row, index) => (
-            <p key={`fail-${index}`} className="text-red-700">{row.agreementNumber}: {row.reason}</p>
+            <p key={`fail-${index}`} className="text-signal-error">{row.agreementNumber}: {row.reason}</p>
           ))}
         </div>
       )}

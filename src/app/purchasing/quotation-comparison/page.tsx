@@ -165,7 +165,7 @@ export default async function PurchasingQuotationComparisonPage({ searchParams }
         <p className="mt-1 text-xs text-ink-soft" data-comparison-nothing-written>{t('quotationComparison.nothingWritten')}</p>
       </header>
 
-      {!canCompare && <p className="text-sm text-red-700" role="alert">{t('quotationComparison.capabilityMissing')}</p>}
+      {!canCompare && <p className="text-sm text-signal-error" role="alert">{t('quotationComparison.capabilityMissing')}</p>}
 
       {canCompare && (
         <section aria-labelledby="quotation-comparison-lookup" className="border border-line bg-surface p-4">
@@ -189,7 +189,7 @@ export default async function PurchasingQuotationComparisonPage({ searchParams }
             <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" data-comparison-run>{t('quotationComparison.run')}</button>
           </form>
           <p className="mt-2 text-xs text-ink-soft" data-comparison-not-key>{t('quotationComparison.notKey')}</p>
-          {error && <p role="status" className="mt-2 text-sm text-red-700" data-comparison-miss>{error}</p>}
+          {error && <p role="status" className="mt-2 text-sm text-signal-error" data-comparison-miss>{error}</p>}
         </section>
       )}
 

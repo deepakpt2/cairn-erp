@@ -107,9 +107,9 @@ export default async function MaterialBomDisplayPage({ searchParams }: {
           </ul>
         </section>
       )}
-      {openError && <p className="text-sm text-red-700" role="alert">{openError}</p>}
+      {openError && <p className="text-sm text-signal-error" role="alert">{openError}</p>}
       {materialNumber && plant && usage && !document && !openError && (alternative || listed.length === 0) && (
-        <p className="text-sm text-red-700" role="alert">No BOM exists for {materialNumber} in plant {plant} and usage {usage}{alternative ? ` alternative ${alternative}` : ''}.</p>
+        <p className="text-sm text-signal-error" role="alert">No BOM exists for {materialNumber} in plant {plant} and usage {usage}{alternative ? ` alternative ${alternative}` : ''}.</p>
       )}
       {document && (
         <>

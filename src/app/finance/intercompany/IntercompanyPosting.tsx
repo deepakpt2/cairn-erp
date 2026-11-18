@@ -30,7 +30,7 @@ export function IntercompanyPosting({ companies, pairs, canPost, today }: {
     <section aria-labelledby="ic-post" className="border border-line bg-surface p-4">
       <h2 id="ic-post" className="text-sm font-semibold">{t('icPost.section')}</h2>
       {state.message && (
-        <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}
         </p>
       )}

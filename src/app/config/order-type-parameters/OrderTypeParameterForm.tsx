@@ -74,7 +74,7 @@ export default function OrderTypeParameterForm({
           <h2 className="text-sm font-semibold">{editing ? 'Change parameters' : 'Create parameters'}</h2>
           {editing && <LockNotice message={lock?.message} remedy={lock?.remedy} />}
           {state.message && (
-            <p role="status" className={state.ok ? 'text-sm' : 'text-sm text-red-700'}>
+            <p role="status" className={state.ok ? 'text-sm' : 'text-sm text-signal-error'}>
               {state.message}{state.remedy ? ` ${state.remedy}` : ''}
             </p>
           )}

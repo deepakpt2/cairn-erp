@@ -86,10 +86,10 @@ export default function CountWorkbench({
           <p className="mt-2 text-sm text-ink-soft">{t('mi04.blockHint')}</p>
         )}
         {document.ineligibleReason && (
-          <p role="status" className="mt-2 text-sm text-red-700">{document.ineligibleReason}</p>
+          <p role="status" className="mt-2 text-sm text-signal-error">{document.ineligibleReason}</p>
         )}
         {state.message && (
-          <p role="status" data-count-message className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" data-count-message className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
             {state.message}{state.remedy ? ` ${state.remedy}` : ''}
           </p>
         )}
@@ -233,7 +233,7 @@ export default function CountWorkbench({
         <h2 id="count-corrections" className="text-sm font-semibold">{t('mi04.correctionsTitle')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('mi04.correctionsHint')}</p>
         {clearState.message && (
-          <p role="status" className={`mt-2 text-sm ${clearState.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${clearState.ok ? 'text-ink' : 'text-signal-error'}`}>
             {clearState.message}{clearState.remedy ? ` ${clearState.remedy}` : ''}
           </p>
         )}

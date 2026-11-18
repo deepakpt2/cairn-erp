@@ -121,9 +121,9 @@ export default async function MaterialBomsPage({ searchParams }: {
         <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit">Open</button>
         {canCreate && <Link className="btn btn-default min-h-11 sm:min-h-8" href={`${BOM_ROUTE}?create=1`}>Create</Link>}
       </form>
-      {openError && <p className="text-sm text-red-700" role="alert">{openError}</p>}
+      {openError && <p className="text-sm text-signal-error" role="alert">{openError}</p>}
       {materialNumber && plant && usage && !creating && !document && !ambiguous && !openError && (
-        <p className="text-sm text-red-700" role="alert">No BOM exists for {materialNumber} in plant {plant} and usage {usage}{alternative ? ` alternative ${alternative}` : ''}.</p>
+        <p className="text-sm text-signal-error" role="alert">No BOM exists for {materialNumber} in plant {plant} and usage {usage}{alternative ? ` alternative ${alternative}` : ''}.</p>
       )}
       {ambiguous && (
         <section className="panel p-4">

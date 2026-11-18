@@ -68,7 +68,7 @@ export default async function TimeTicketPage({
           The operation is the one stored on the order. A later routing edit is not read. A confirmation profile, automatic confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO14 displays recorded confirmations; cancellation is CO13. CO15 confirms the order, not one operation.
         </p>
       </header>
-      {openError && <p role="status" data-co11n-refused className="text-sm text-red-700">{openError}</p>}
+      {openError && <p role="status" data-co11n-refused className="text-sm text-signal-error">{openError}</p>}
       {!can(session, TIME_TICKET_CAPABILITY) && (
         <p className="text-sm">You do not hold the confirmation capability ({TIME_TICKET_CAPABILITY}).</p>
       )}

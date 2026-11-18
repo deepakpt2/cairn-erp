@@ -27,7 +27,7 @@ export function IntercompanyClearing({ pairs, companies, canMaintain }: {
       <section aria-labelledby="icc-pairs" className="border border-line bg-surface p-4">
         <h2 id="icc-pairs" className="text-sm font-semibold">{t('icCfg.pairs')}</h2>
         {state.message && (
-          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
             {state.message}{state.remedy ? ` ${state.remedy}` : ''}
           </p>
         )}

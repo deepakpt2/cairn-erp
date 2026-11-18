@@ -30,7 +30,7 @@ function Cell({ part }: { part: ReturnsConfigurationPart }) {
         {part.stands ? (
           'Stands'
         ) : (
-          <span className="text-red-700">Does not stand</span>
+          <span className="text-signal-error">Does not stand</span>
         )}
       </td>
       <td>{part.documentsStanding}</td>

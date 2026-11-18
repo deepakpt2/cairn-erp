@@ -45,7 +45,7 @@ export default function UomShell({
       <section aria-labelledby="uom-define" className="border border-line bg-surface p-4">
         <h2 id="uom-define" className="text-sm font-semibold">{t('uom.defineHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('uom.defineHint')}</p>
-        <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}
         </p>
         <form
@@ -90,7 +90,7 @@ export default function UomShell({
 
       <section aria-labelledby="uom-list" className="border border-line bg-surface p-4">
         <h2 id="uom-list" className="text-sm font-semibold">{t('uom.listHeader')}</h2>
-        <p role="status" className={`mt-2 text-sm ${removal.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${removal.ok ? 'text-ink' : 'text-signal-error'}`}>
           {removal.message}
         </p>
         {rows.length === 0 ? (

@@ -97,7 +97,7 @@ export default function ItemsForm({ result, error, canList }: {
       <section aria-labelledby="ji-results" className="border border-line bg-surface p-4">
         <h2 id="ji-results" className="text-sm font-semibold">Line items</h2>
         {error ? (
-          <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>
+          <p role="alert" className="mt-2 text-sm text-signal-error">{error}</p>
         ) : !result ? (
           <p className="mt-2 text-sm text-ink-soft">Enter a selection and execute to read the posted lines.</p>
         ) : result.rows.length === 0 ? (
@@ -105,7 +105,7 @@ export default function ItemsForm({ result, error, canList }: {
         ) : (
           <>
             {result.truncated && (
-              <p className="mt-2 text-sm text-red-700">
+              <p className="mt-2 text-sm text-signal-error">
                 The result exceeds the {result.cap} hit limit and stands truncated — narrow the selection.
               </p>
             )}

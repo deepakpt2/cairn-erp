@@ -87,11 +87,11 @@ export default function ProfitCenterReportShell({ canUse, areas, selection, resu
       </form>
 
       {reportError ? (
-        <div className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" role="alert">{reportError}</div>
+        <div className="border border-signal-error/40 bg-signal-error-soft px-3 py-2 text-sm text-signal-error dark:border-red-900 dark:bg-red-950/40 dark:text-red-200" role="alert">{reportError}</div>
       ) : null}
 
       {result?.truncated ? (
-        <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" role="status">
+        <div className="border border-signal-warn/40 bg-signal-warn-soft px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" role="status">
           Results are incomplete: the maximum of {result.maxHits} hits was reached. Narrow the selection to see the remaining line items.
         </div>
       ) : null}

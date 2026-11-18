@@ -89,7 +89,7 @@ export default async function GrIrClearingPage({ searchParams }: {
         {notice && <p className="mt-3 text-sm" role="status" data-grir-notice>{notice}</p>}
       </header>
 
-      {!canView && <p className="text-sm text-red-700" role="alert">{t('grirClearing.capabilityMissing')}</p>}
+      {!canView && <p className="text-sm text-signal-error" role="alert">{t('grirClearing.capabilityMissing')}</p>}
 
       <section aria-labelledby="grir-clearing-selection" className="border border-line bg-surface p-4">
         <h2 id="grir-clearing-selection" className="text-sm font-semibold">{t('grirClearing.selection')}</h2>
@@ -130,7 +130,7 @@ export default async function GrIrClearingPage({ searchParams }: {
             <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" data-grir-list>{t('grirClearing.list')}</button>
           </div>
         </form>
-        {listError && <p className="mt-3 text-sm text-red-700" role="alert" data-grir-error>{listError}</p>}
+        {listError && <p className="mt-3 text-sm text-signal-error" role="alert" data-grir-error>{listError}</p>}
       </section>
 
       <section aria-labelledby="grir-clearing-residuals" className="border border-line bg-surface p-4">
@@ -167,7 +167,7 @@ export default async function GrIrClearingPage({ searchParams }: {
                       {row.remaining.toFixed(2)} {row.currency}
                       <div className="text-ink-soft">{row.surplus === 'DELIVERY' ? t('grirClearing.delivery') : t('grirClearing.invoice')} · {row.category === 'QUANTITY' ? t('grirClearing.quantityResidual') : t('grirClearing.valueResidual')}</div>
                       {row.furtherActivity && <div className="text-ink-soft" data-grir-further>{row.furtherActivity}</div>}
-                      {row.refusal && <div className="text-red-700" data-grir-refusal>{row.refusal}</div>}
+                      {row.refusal && <div className="text-signal-error" data-grir-refusal>{row.refusal}</div>}
                     </td>
                     <td>{row.grIrAccount ?? '—'} / {row.offsetAccount ?? '—'}</td>
                     <td>

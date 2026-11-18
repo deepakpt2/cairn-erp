@@ -64,7 +64,7 @@ function Ratings({ ratings, preferred }: { ratings: QuotaRating[]; preferred?: s
 function Notice({ state }: { state: QuotaActionState }) {
   if (!state.message) return null;
   return (
-    <div role="status" data-quota-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <div role="status" data-quota-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       <p>{state.message}</p>
       {state.remedy && <p className="mt-1">{state.remedy}</p>}
       {state.ok && state.wrote === false && (
@@ -138,7 +138,7 @@ export default function QuotaWorkbench({
           <Link href={ROUTE} className="btn btn-default min-h-11 sm:min-h-8">{t('quotaArrangement.newArrangement')}</Link>
         </form>
         {requestedQuota && !opened && (
-          <p role="status" className="mt-2 text-sm text-red-700">{t('quotaArrangement.notFound', { number: requestedQuota })}</p>
+          <p role="status" className="mt-2 text-sm text-signal-error">{t('quotaArrangement.notFound', { number: requestedQuota })}</p>
         )}
         {requestedMaterial && requestedPlant && arrangements.length === 0 && !opened && (
           <p className="mt-2 text-sm text-ink-soft">{t('quotaArrangement.noArrangement', { material: requestedMaterial, plant: requestedPlant })}</p>
@@ -352,7 +352,7 @@ export default function QuotaWorkbench({
           <Notice state={checkState} />
           <Notice state={createState} />
         </form>
-        {!canMaintain && <p className="mt-3 text-sm text-red-700">{t('quotaArrangement.capabilityMissing')}</p>}
+        {!canMaintain && <p className="mt-3 text-sm text-signal-error">{t('quotaArrangement.capabilityMissing')}</p>}
       </section>
     </>
   );

@@ -91,7 +91,7 @@ export default async function OrderConfirmationPage({
           Eligible operations are the ones stored on the order. This screen still confirms the order, not one operation. A confirmation profile, automatic final confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO11N confirms one operation. CO14 displays recorded confirmations; cancellation is CO13.
         </p>
       </header>
-      {openError && <p role="status" data-co15-refused className="text-sm text-red-700">{openError}</p>}
+      {openError && <p role="status" data-co15-refused className="text-sm text-signal-error">{openError}</p>}
       {!can(session, ORDER_CONFIRMATION_CAPABILITY) && (
         <p className="text-sm">You do not hold the confirmation capability ({ORDER_CONFIRMATION_CAPABILITY}).</p>
       )}

@@ -90,8 +90,8 @@ export default function CashflowShell({ canUse, companies, selection, result, re
       )}
 
       {result && result.warnings.length > 0 && (
-        <section className="border border-amber-600/30 bg-amber-50 p-3" aria-label="Cash flow warnings">
-          <h2 className="text-sm font-semibold text-amber-800">Warnings</h2>
+        <section className="border border-amber-600/30 bg-signal-warn-soft p-3" aria-label="Cash flow warnings">
+          <h2 className="text-sm font-semibold text-signal-warn">Warnings</h2>
           <ul className="mt-1 list-disc pl-5 text-sm text-ink-soft">
             {result.warnings.map((warning) => <li key={warning}>{warning}</li>)}
           </ul>

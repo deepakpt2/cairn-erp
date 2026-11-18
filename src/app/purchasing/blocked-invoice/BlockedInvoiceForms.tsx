@@ -29,7 +29,7 @@ function Notice({ state }: { state: BlockedInvoiceActionState }) {
   if (!state.message) return null;
   return (
     <p
-      className={state.ok ? 'text-sm text-ink' : 'text-sm text-red-700'}
+      className={state.ok ? 'text-sm text-ink' : 'text-sm text-signal-error'}
       role={state.ok ? 'status' : 'alert'}
       data-blocked-invoice-notice
       data-blocked-invoice-nothing-written={state.wrote === true ? undefined : 'true'}

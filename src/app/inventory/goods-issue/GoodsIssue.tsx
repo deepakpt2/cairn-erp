@@ -60,7 +60,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
     <>
       <section aria-labelledby="issue-header" className="border border-line bg-surface p-4">
         <h2 id="issue-header" className="text-sm font-semibold">{t('mb1a.header')}</h2>
-        <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}
         </p>
         <form action={action}>

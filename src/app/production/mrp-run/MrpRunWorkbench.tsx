@@ -87,7 +87,7 @@ export default function MrpRunWorkbench({
           </button>
         </div>
         {state.message && (
-          <p role="status" data-mrp-message className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+          <p role="status" data-mrp-message className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
             {state.message}{state.remedy ? ` ${state.remedy}` : ''}
           </p>
         )}

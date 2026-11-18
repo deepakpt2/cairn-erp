@@ -133,7 +133,7 @@ export default function Characteristics({ rows, canMaintain }: {
         </p>
       )}
       {state.message && (
-        <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+        <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
           {state.message}
           {state.remedy ? ` ${state.remedy}` : ''}
         </p>

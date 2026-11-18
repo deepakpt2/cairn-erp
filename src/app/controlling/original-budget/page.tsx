@@ -58,7 +58,7 @@ export default async function OriginalBudgetPage({ searchParams }: {
         </label>
         <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit">Open</button>
       </form>
-      {orderNumber && !budget && <p className="text-sm text-red-700" role="alert">Internal order {orderNumber} does not exist.</p>}
+      {orderNumber && !budget && <p className="text-sm text-signal-error" role="alert">Internal order {orderNumber} does not exist.</p>}
       {budget && (
         <section className="space-y-1 text-sm">
           <p>{budget.orderNumber} · {budget.orderType} · {budget.description}</p>

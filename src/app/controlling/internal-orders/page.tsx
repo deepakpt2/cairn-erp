@@ -67,7 +67,7 @@ export default async function InternalOrdersPage({ searchParams }: {
         <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit">Open</button>
         <Link className="btn btn-default min-h-11 sm:min-h-8" href={`${INTERNAL_ORDER_ROUTE}?create=1`}>Create</Link>
       </form>
-      {requested && !document && <p className="text-sm text-red-700" role="alert">Internal order {requested} does not exist.</p>}
+      {requested && !document && <p className="text-sm text-signal-error" role="alert">Internal order {requested} does not exist.</p>}
       {document && (
         <p className="text-sm">
           {document.orderNumber} · {document.orderType} · {document.controllingArea} · {document.companyCode} · {document.currency}

@@ -76,7 +76,7 @@ export default async function SalesDocumentTypesPage() {
                       {type.rangeStands ? (
                         'Yes'
                       ) : (
-                        <span className="text-red-700">
+                        <span className="text-signal-error">
                           No — no document of this type can be numbered
                         </span>
                       )}

@@ -29,7 +29,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function Notice({ state }: { state: SourceListActionState }) {
   if (!state.message) return null;
   return (
-    <div role="status" data-source-list-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <div role="status" data-source-list-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       <p>{state.message}</p>
       {state.remedy && <p className="mt-1">{state.remedy}</p>}
       {state.ok && state.wrote === false && <p data-source-list-preview className="mt-1">{t('sourceList.previewNote')}</p>}
@@ -110,7 +110,7 @@ export default function SourceListWorkbench({
           <Link href={ROUTE} className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.newEntry')}</Link>
         </form>
         {requestedSource && !opened && (
-          <p role="status" className="mt-2 text-sm text-red-700">{t('sourceList.notFound', { number: requestedSource })}</p>
+          <p role="status" className="mt-2 text-sm text-signal-error">{t('sourceList.notFound', { number: requestedSource })}</p>
         )}
         {requestedMaterial && requestedPlant && !list && (
           <p className="mt-2 text-sm text-ink-soft">{t('sourceList.noList', { material: requestedMaterial, plant: requestedPlant })}</p>
@@ -267,7 +267,7 @@ export default function SourceListWorkbench({
           <Notice state={checkState} />
           <Notice state={createState} />
         </form>
-        {!canMaintain && <p className="mt-3 text-sm text-red-700">{t('sourceList.capabilityMissing')}</p>}
+        {!canMaintain && <p className="mt-3 text-sm text-signal-error">{t('sourceList.capabilityMissing')}</p>}
       </section>
     </>
   );

@@ -65,7 +65,7 @@ export default async function WorkCenterDisplayPage({ searchParams }: {
         <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit">Display</button>
       </form>
       {plant && center && !document && (
-        <p className="text-sm text-red-700" role="alert">Work center {center} does not exist in plant {plant}.</p>
+        <p className="text-sm text-signal-error" role="alert">Work center {center} does not exist in plant {plant}.</p>
       )}
       {document && (
         <>

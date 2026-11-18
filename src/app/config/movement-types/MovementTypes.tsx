@@ -179,7 +179,7 @@ export default function MovementTypes({
       </section>
 
       {lockedOut && notice.message && (
-        <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800"><span className="block">{notice.message}</span>{notice.remedy && <span className="mt-1 block text-xs">{notice.remedy}</span>}</p>
+        <p role="status" className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn"><span className="block">{notice.message}</span>{notice.remedy && <span className="mt-1 block text-xs">{notice.remedy}</span>}</p>
       )}
       <ClaimFailureNotice claim={claim} onRetry={retry} />
       {canMaintain && (mode === 'CREATE' || (row && !lockedOut && !waitingForLock)) && (

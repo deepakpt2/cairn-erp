@@ -116,7 +116,7 @@ export default async function InvoiceOverviewPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('invoiceOverview.subtitle')}</p>
       </header>
 
-      {!canList && <p className="text-sm text-red-700" role="alert">{t('invoiceOverview.capabilityMissing')}</p>}
+      {!canList && <p className="text-sm text-signal-error" role="alert">{t('invoiceOverview.capabilityMissing')}</p>}
 
       <section aria-labelledby="invoice-overview-selection" className="border border-line bg-surface p-4">
         <h2 id="invoice-overview-selection" className="text-sm font-semibold">{t('invoiceOverview.selection')}</h2>
@@ -201,7 +201,7 @@ export default async function InvoiceOverviewPage({ searchParams }: {
         </form>
       </section>
 
-      {listError && <p role="alert" className="text-sm text-red-700" data-invoice-overview-error>{listError}</p>}
+      {listError && <p role="alert" className="text-sm text-signal-error" data-invoice-overview-error>{listError}</p>}
 
       {result && (
         <section aria-labelledby="invoice-overview-list" className="border border-line bg-surface p-4" data-invoice-overview>

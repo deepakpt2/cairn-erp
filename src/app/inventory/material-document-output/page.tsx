@@ -99,7 +99,7 @@ export default async function MaterialDocumentOutputPage({ searchParams }: {
         <div className="panel p-4 text-sm text-ink-soft" role="alert">{t('mb90.capabilityMissing')}</div>
       )}
 
-      {listError && <div className="panel p-4 text-sm text-red-700" role="alert">{listError}</div>}
+      {listError && <div className="panel p-4 text-sm text-signal-error" role="alert">{listError}</div>}
 
       {canRun && (
         <MaterialDocumentOutput

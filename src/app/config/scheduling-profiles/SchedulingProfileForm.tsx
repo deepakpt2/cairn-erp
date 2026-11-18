@@ -136,7 +136,7 @@ export default function SchedulingProfileForm({
             </label>
           </div>
           {saveState.message && (
-            <p role="status" className={`text-sm ${saveState.ok ? 'text-ink' : 'text-red-700'}`}>
+            <p role="status" className={`text-sm ${saveState.ok ? 'text-ink' : 'text-signal-error'}`}>
               {saveState.message} {saveState.remedy ?? ''}
             </p>
           )}
@@ -205,7 +205,7 @@ export default function SchedulingProfileForm({
               <input name="assignReason" className="field-input mt-1 w-full" required />
             </label>
             {assignState.message && (
-              <p role="status" className={`text-sm sm:col-span-2 ${assignState.ok ? 'text-ink' : 'text-red-700'}`}>
+              <p role="status" className={`text-sm sm:col-span-2 ${assignState.ok ? 'text-ink' : 'text-signal-error'}`}>
                 {assignState.message} {assignState.remedy ?? ''}
               </p>
             )}

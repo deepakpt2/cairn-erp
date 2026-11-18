@@ -49,10 +49,10 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
           )}
         </form>
         {mismatch && (
-          <p role="alert" data-company-mismatch className="mt-2 text-sm text-red-700">{mismatch}</p>
+          <p role="alert" data-company-mismatch className="mt-2 text-sm text-signal-error">{mismatch}</p>
         )}
         {notFound && (
-          <p role="alert" className="mt-2 text-sm text-red-700">
+          <p role="alert" className="mt-2 text-sm text-signal-error">
             No posted document stands under this key within your scope.
           </p>
         )}

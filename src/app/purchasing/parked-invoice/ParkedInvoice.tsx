@@ -30,7 +30,7 @@ function Notice({ state }: { state: ParkedInvoiceActionState }) {
   if (!state.message) return null;
   const preview = state.preview;
   return (
-    <div role="status" data-parked-invoice-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+    <div role="status" data-parked-invoice-result className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
       <p>{state.message}</p>
       {state.remedy && <p className="mt-1">{state.remedy}</p>}
       {state.ok && state.wrote === false && (
@@ -127,10 +127,10 @@ export default function ParkedInvoice({
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">{t('parkedInvoice.load')}</button>
         </form>
         {requestedOrder && !opened && (
-          <p role="status" className="mt-2 text-sm text-red-700">{t('parkedInvoice.notFound', { number: requestedOrder })}</p>
+          <p role="status" className="mt-2 text-sm text-signal-error">{t('parkedInvoice.notFound', { number: requestedOrder })}</p>
         )}
         {requestedPark && !standing && (
-          <p role="status" className="mt-2 text-sm text-red-700">{t('parkedInvoice.parkMissing', { number: requestedPark })}</p>
+          <p role="status" className="mt-2 text-sm text-signal-error">{t('parkedInvoice.parkMissing', { number: requestedPark })}</p>
         )}
         <p className="mt-2 text-xs text-ink-soft" data-parked-invoice-no-post>{t('parkedInvoice.noPost')}</p>
         {recent.length > 0 && (
@@ -291,7 +291,7 @@ export default function ParkedInvoice({
               </ul>
             </div>
           )}
-          {!canPark && <p className="mt-3 text-sm text-red-700">{t('parkedInvoice.capabilityMissing')}</p>}
+          {!canPark && <p className="mt-3 text-sm text-signal-error">{t('parkedInvoice.capabilityMissing')}</p>}
         </section>
       )}
     </>
