@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
-import { EMPLOYEE_CAPABILITY, EMPLOYEE_ROUTE, RECORD_CAPABILITY, getEmployee, listEmployees } from '@/modules/people/employee-master';
+import { EMPLOYEE_CAPABILITY, EMPLOYEE_ROUTE, EmployeeMasterError, RECORD_CAPABILITY, searchEmployees, viewEmployee } from '@/modules/people/employee-master';
+import { HIRE_APPROVE_CAPABILITY } from '@/modules/people/employee-tier';
+import { listPositions } from '@/modules/people/org-structure';
 import { listRecordTypes } from '@/modules/people/record-types';
 import {
   PAYROLL_RESULT_CAPABILITY,
@@ -48,10 +50,22 @@ export default async function PeopleEmployeesPage({ searchParams }: {
   const personnelNumber = (params.employee ?? '').trim().toUpperCase();
   const query = (params.q ?? '').trim();
 
+  let scopeNote: string | null = null;
+  const positions = (await listPositions(client)).filter((p) => p.isValid).map((p) => ({ code: p.code, title: p.title, tier: p.tier }));
   const [employees, types, selected] = await Promise.all([
-    listEmployees(client, query),
+    searchEmployees(client, query, access).catch((error) => {
+      if (!(error instanceof EmployeeMasterError)) throw error;
+      scopeNote = `${error.message} ${error.remedy}`;
+      return [];
+    }),
     listRecordTypes(client),
-    personnelNumber ? getEmployee(client, personnelNumber) : Promise.resolve(null),
+    personnelNumber
+      ? viewEmployee(client, personnelNumber, access).catch((error) => {
+          if (!(error instanceof EmployeeMasterError)) throw error;
+          scopeNote ??= `${error.message} ${error.remedy}`;
+          return null;
+        })
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -65,8 +79,11 @@ export default async function PeopleEmployeesPage({ searchParams }: {
         </>
       }
     >
+      {scopeNote ? <p role="status" className="panel p-3 text-sm">{scopeNote}</p> : null}
       <Employees
         employees={employees}
+        positions={positions}
+        canApprove={can(session, HIRE_APPROVE_CAPABILITY)}
         types={types}
         selected={selected}
         query={query}

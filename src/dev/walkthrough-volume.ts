@@ -71,6 +71,10 @@ import {
   decideAbsence, defineTimeType, getTimeRecording, listTimeTypes, recordTime, requestAbsence, setLeaveQuota,
   TIME_ENTER_CAPABILITY,
 } from '../modules/people/time-leave';
+import { isLeaveError } from '../modules/people/leave-access';
+import { SYSTEM_ACCRUAL_ACCESS, accrueChunk } from '../modules/people/leave-accrual';
+import { previewAbsence, requestLeaveAbsence } from '../modules/people/leave-absence';
+import { addGroupMember, assignLeavePolicy, defineLeaveGroup, defineLeavePolicy, listLeavePolicies } from '../modules/people/leave-policy';
 import { definePayComponent, listPayComponents, savePayComponentMapping } from '../modules/people/pay-components';
 import {
   ASSIGNMENT_CAPABILITY, EMPLOYEE_CAPABILITY, ORG_UNIT_CAPABILITY, PAY_COMPONENT_CAPABILITY,
@@ -850,6 +854,56 @@ async function runPayments(ctx: VolumeContext, key: (name: string) => string): P
   }
 }
 
+/**
+ * Leave-policy demo: a policy with monthly annual leave that falls back to unpaid leave, a person assignment and a
+ * group assignment, the monthly accrual run, and one policy-governed request left for approval so the paid/unpaid
+ * preview and confirmation can be tried on /people/time-leave. Idempotent; a refusal is recorded, not hidden.
+ */
+async function runLeaveDemo(ctx: VolumeContext): Promise<void> {
+  const ADMIN = ['*'] as const;
+  const person = `EMPV${pad(EMPLOYEE_COUNT - 2)}`;
+  const grouped = `EMPV${pad(EMPLOYEE_COUNT - 1)}`;
+  const yearStart = `${ctx.dates.po.slice(0, 4)}-01-01`;
+  try {
+    const standingTypes = new Set((await listTimeTypes(ctx.tenant)).map((row) => row.code));
+    if (!standingTypes.has('UNPDL')) {
+      await defineTimeType({ client: ctx.tenant, code: 'UNPDL', name: 'Unpaid leave', description: 'Shared unpaid balance (annual-leave fallback)',
+        typeKind: 'ABSENCE', reducesQuota: true, isPaid: false, changedBy: ctx.actor }, ADMIN);
+      ctx.record('leave demo time type UNPDL', true);
+    }
+    const policies = await listLeavePolicies(ctx.tenant, ADMIN);
+    if (!policies.some((p) => p.code === 'VOLPOL')) {
+      await defineLeavePolicy({
+        client: ctx.tenant, code: 'VOLPOL', name: 'Volume standard policy', validFrom: yearStart, partialMonthMode: 'PRORATE_DAYS',
+        lines: [
+          { timeTypeCode: 'ANNLV', annualDays: '24', accrualMode: 'MONTHLY', fallbackTypeCode: 'UNPDL' },
+          { timeTypeCode: 'UNPDL', annualDays: '15', accrualMode: 'ANNUAL_UPFRONT', fallbackTypeCode: null },
+          { timeTypeCode: 'SICKL', annualDays: '12', accrualMode: 'ANNUAL_UPFRONT', fallbackTypeCode: null },
+        ], changedBy: ctx.actor,
+      }, ADMIN);
+      await defineLeaveGroup({ client: ctx.tenant, code: 'VOLGRP', name: 'Volume leave group', changedBy: ctx.actor }, ADMIN);
+      await addGroupMember({ client: ctx.tenant, groupCode: 'VOLGRP', personnelNumber: grouped, validFrom: yearStart, changedBy: ctx.actor }, ADMIN);
+      await assignLeavePolicy({ client: ctx.tenant, subjectKind: 'GROUP', subject: 'VOLGRP', policyCode: 'VOLPOL', validFrom: yearStart, changedBy: ctx.actor }, ADMIN);
+      await assignLeavePolicy({ client: ctx.tenant, subjectKind: 'PERSON', subject: person, policyCode: 'VOLPOL', validFrom: yearStart, changedBy: ctx.actor }, ADMIN);
+      ctx.record('leave demo policy VOLPOL, group VOLGRP and assignments', true);
+    }
+    // Posts every completed month's credit that is due; credits already posted are skipped by their source keys.
+    const run = await accrueChunk(ctx.tenant, { access: SYSTEM_ACCRUAL_ACCESS, after: null, limit: 500, window: 'ALL' });
+    ctx.record(`leave demo accrual (${run.posted} credit(s) posted)`, run.posted > 0);
+    const key = `${ctx.requestPrefix}-leave-demo-${person}`;
+    const plan = await previewAbsence({ client: ctx.tenant, personnelNumber: person, timeTypeCode: 'ANNLV', validFrom: ctx.dates.sales, validTo: ctx.dates.delivery }, [TIME_ENTER_CAPABILITY]);
+    const out = await requestLeaveAbsence({
+      client: ctx.tenant, personnelNumber: person, timeTypeCode: 'ANNLV', validFrom: ctx.dates.sales, validTo: ctx.dates.delivery,
+      reason: 'Leave policy demo: left REQUESTED for approval', requestKey: key.slice(0, 64),
+      confirmUnpaidDays: plan.managed ? plan.unpaidDays : undefined, changedBy: ctx.actor,
+    }, [TIME_ENTER_CAPABILITY]);
+    ctx.record(`leave demo absence request ${person}`, !out.replayed);
+  } catch (error) {
+    if (!isLeaveError(error)) throw error;
+    ctx.record(`leave demo skipped: ${error.code}`, false);
+  }
+}
+
 /* ── HR: master data, time and leave, pay components. No payroll results. ───── */
 
 async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: string) => string): Promise<void> {
@@ -947,7 +1001,7 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
     }
     await defineTimeType({ client: ctx.tenant, code: timeType.code, name: timeType.name,
       description: 'Volume time type', typeKind: timeType.typeKind, reducesQuota: timeType.reducesQuota,
-      changedBy: ctx.actor }, [TIME_ENTER_CAPABILITY]);
+      changedBy: ctx.actor }, ['PEOPLE.LEAVE.CONFIGURE']);
     ctx.record(`volume time type ${timeType.code}`, true);
   }
 
@@ -955,10 +1009,11 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
     const personnelNumber = `EMPV${pad(i)}`;
     // Both absence types need a quota of their own: approving an absence that reduces
     // quota is refused outright when no quota row stands for that type and year.
-    for (const quota of QUOTAS) {
+    // The last two employees are policy-managed (runLeaveDemo): a legacy quota would be a second source of truth for them.
+    for (const quota of i >= EMPLOYEE_COUNT - 2 ? [] : QUOTAS) {
       await setLeaveQuota({ client: ctx.tenant, personnelNumber, timeTypeCode: quota.timeTypeCode,
         year: ctx.dates.po.slice(0, 4), entitlement: quota.entitlement, changedBy: ctx.actor },
-        [TIME_ENTER_CAPABILITY]);
+        ['PEOPLE.LEAVE.ADJUST']);
     }
 
     if (i % 3 === 0) {
@@ -969,7 +1024,7 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
           validFrom: ctx.dates.sales, validTo: ctx.dates.delivery, reason: 'Volume absence',
           changedBy: ctx.actor, requestKey: absenceKey }, [TIME_ENTER_CAPABILITY]);
         await decideAbsence({ client: ctx.tenant, personnelNumber, timeTypeCode,
-          validFrom: ctx.dates.sales, status: 'APPROVED', changedBy: ctx.actor }, [TIME_ENTER_CAPABILITY]);
+          validFrom: ctx.dates.sales, status: 'APPROVED', changedBy: ctx.actor }, ['PEOPLE.LEAVE.APPROVE']);
         counts.absences += 1;
       }
     }
@@ -984,6 +1039,8 @@ async function runPeople(ctx: VolumeContext, counts: VolumeCounts, key: (name: s
       counts.timeRecordings += 1;
     }
   }
+
+  await runLeaveDemo(ctx);
 
   const components = [
     { code: 'BASICSAL', name: 'Basic salary', componentKind: 'EARNING' as const, debitAccount: '500000' },

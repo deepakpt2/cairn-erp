@@ -50,11 +50,12 @@ import { createTenant, destroyTenant, type TestTenant } from './helpers';
  */
 
 const ACTOR = 'PEOPLE_9197_TEST';
-const TIME_AUTH = [TIME_ENTER_CAPABILITY] as const;
+const TIME_AUTH = [TIME_ENTER_CAPABILITY, 'PEOPLE.LEAVE.APPROVE', 'PEOPLE.LEAVE.ADJUST'] as const;
 const EMPLOYEE_AUTH = [EMPLOYEE_CAPABILITY] as const;
 const createEmployee = (input: Parameters<typeof createEmployeeService>[0]) => createEmployeeService(input, EMPLOYEE_AUTH);
-const defineTimeType = (input: Parameters<typeof defineTimeTypeService>[0]) => defineTimeTypeService(input, TIME_AUTH);
-const changeTimeType = (input: Parameters<typeof changeTimeTypeService>[0]) => changeTimeTypeService(input, TIME_AUTH);
+const CONFIG_AUTH = ['PEOPLE.LEAVE.CONFIGURE'] as const;
+const defineTimeType = (input: Parameters<typeof defineTimeTypeService>[0]) => defineTimeTypeService(input, CONFIG_AUTH);
+const changeTimeType = (input: Parameters<typeof changeTimeTypeService>[0]) => changeTimeTypeService(input, CONFIG_AUTH);
 const requestAbsence = (input: Parameters<typeof requestAbsenceService>[0]) => requestAbsenceService(input, TIME_AUTH);
 const decideAbsence = (input: Parameters<typeof decideAbsenceService>[0]) => decideAbsenceService(input, TIME_AUTH);
 const cancelAbsence = (input: Parameters<typeof cancelAbsenceService>[0]) => cancelAbsenceService(input, TIME_AUTH);

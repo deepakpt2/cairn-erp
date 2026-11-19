@@ -17,8 +17,11 @@ import {
   changeRecordValues,
   createEmployee,
   createRecord,
+  decideHire,
   delimitRecord,
+  linkEmployeeUser,
 } from '@/modules/people/employee-master';
+import { HIRE_APPROVE_CAPABILITY } from '@/modules/people/employee-tier';
 
 const ROUTE = EMPLOYEE_ROUTE;
 
@@ -34,6 +37,11 @@ export interface EmployeeActionState {
   message?: string;
   remedy?: string;
   personnelNumber?: string;
+}
+
+/** The live session as service access: the service re-reads the session, capability and company/plant scope. */
+function liveAccess(session: SessionContext) {
+  return { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } };
 }
 
 function text(form: FormData, name: string): string {
@@ -105,10 +113,14 @@ export async function createEmployeeAction(
         isActive: true,
         changedBy: session.user.username,
         requestKey: optional(formData, 'requestKey'),
+        proposedPositionCode: optional(formData, 'proposedPositionCode'),
+        proposedPlant: optional(formData, 'proposedPlant'),
       },
-      session.user.capabilities,
+      liveAccess(session),
     );
-    return done(view.personnelNumber, `Employee ${view.personnelNumber} — ${view.fullName} — created with no record yet.`);
+    return done(view.personnelNumber, view.hireStatus === 'PENDING'
+      ? `Hire requested for ${view.personnelNumber} — ${view.fullName}. The person is not in use until an approver with a higher tier approves.`
+      : `Employee ${view.personnelNumber} — ${view.fullName} — created with no record yet.`);
   } catch (error) {
     return refuse(error);
   }
@@ -131,7 +143,7 @@ export async function changeEmployeeAction(
         // A submitted form always carries the state it wants: a ticked box is in use, an unticked one is not.
         changedBy: session.user.username,
       },
-      session.user.capabilities,
+      liveAccess(session),
     );
     return done(view.personnelNumber, `Employee ${view.personnelNumber}: ${view.fullName}, ${view.isActive ? 'in use' : 'not in use'}.`);
   } catch (error) {
@@ -156,7 +168,7 @@ export async function createRecordAction(
         changedBy: session.user.username,
         requestKey: optional(formData, 'requestKey'),
       },
-      session.user.capabilities,
+      liveAccess(session),
     );
     return done(personnelNumber, `Record of ${record.recordType} written from ${record.validFrom}.`);
   } catch (error) {
@@ -180,7 +192,7 @@ export async function delimitRecordAction(
         validTo: text(formData, 'validTo'),
         changedBy: session.user.username,
       },
-      session.user.capabilities,
+      liveAccess(session),
     );
     return done(personnelNumber, `Record of ${record.recordType} from ${record.validFrom} now ends on ${record.validTo}.`);
   } catch (error) {
@@ -205,9 +217,44 @@ export async function changeRecordValuesAction(
         values: answersOf(formData),
         changedBy: session.user.username,
       },
-      session.user.capabilities,
+      liveAccess(session),
     );
     return done(personnelNumber, `Record of ${record.recordType} from ${record.validFrom} corrected — ${record.values.length} field${record.values.length === 1 ? '' : 's'} now stand answered.`);
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+/** Approve or reject a pending hire. The service judges the approver's capability, reach and tier. */
+export async function decideHireAction(
+  _previous: EmployeeActionState, formData: FormData,
+): Promise<EmployeeActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, HIRE_APPROVE_CAPABILITY)) return denied(session, HIRE_APPROVE_CAPABILITY);
+  const personnelNumber = text(formData, 'personnelNumber');
+  try {
+    const view = await decideHire({
+      client: session.user.client, personnelNumber, decision: text(formData, 'decision'),
+      note: optional(formData, 'note'), changedBy: session.user.username,
+    }, liveAccess(session));
+    return done(view.personnelNumber, view.hireStatus === 'ACTIVE' ? `Hire of ${view.personnelNumber} approved.` : `Hire of ${view.personnelNumber} rejected.`);
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+/** Link (or unlink, with a blank username) the user whose tier this employee's position gives. */
+export async function linkUserAction(
+  _previous: EmployeeActionState, formData: FormData,
+): Promise<EmployeeActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, EMPLOYEE_CAPABILITY)) return denied(session, EMPLOYEE_CAPABILITY);
+  const personnelNumber = text(formData, 'personnelNumber');
+  try {
+    const view = await linkEmployeeUser({
+      client: session.user.client, personnelNumber, username: optional(formData, 'username') ?? null, changedBy: session.user.username,
+    }, liveAccess(session));
+    return done(view.personnelNumber, view.linkedUsername ? `${view.personnelNumber} is now linked to user ${view.linkedUsername}.` : `The user link of ${view.personnelNumber} was removed.`);
   } catch (error) {
     return refuse(error);
   }

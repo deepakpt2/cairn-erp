@@ -4609,6 +4609,22 @@ export const SCREENS: readonly ScreenLink[] = [
     },
   },
   {
+    // Leave policies: time types, versioned policies, groups and group/person assignment (9311).
+    id: "/config/time-types",
+    path: "/config/time-types",
+    query: {},
+    code: "PEOPLE.LEAVE.CONFIGURE",
+    title: "Time types & leave policies",
+    area: "configuration",
+    family: "people-time-leave",
+    accepts: [],
+    nav: {
+      module: "hr",
+      category: "Time & leave",
+      activity: "Time types & leave policies",
+    },
+  },
+  {
     // Time and leave, in the People area beside the other People transaction screens.
     id: "/people/time-leave",
     path: "/people/time-leave",
@@ -4617,7 +4633,7 @@ export const SCREENS: readonly ScreenLink[] = [
     title: "Time & leave",
     area: "people",
     family: "people-time-leave",
-    accepts: ["employee", "type", "status", "q"],
+    accepts: ["tab", "q", "status", "emp", "employees", "group", "year", "asOf"],
     nav: {
       module: "hr",
       category: "Time & leave",

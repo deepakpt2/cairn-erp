@@ -702,13 +702,24 @@ export async function computeResultDraft(tx: Tx, client: string, run: RunRow, pe
   const chart = company?.chartOfAccounts ?? null;
   if (!chart) refuse('NO_CHART', `Company code ${run.companyCode} has no chart of accounts.`, 'Assign one in Company Codes (CFG.ORG.COMPANYCODE.DEFINE).');
 
+  // Unpaid time comes from two disjoint sources, so nothing is counted twice:
+  //  - legacy absences (policy_managed = false): approved, of an unpaid time type;
+  //  - policy-managed absences: the unpaid spans of their active allocations (the split kept at approval).
   const absences = ((await tx.execute(sql`
     select a.valid_from::text as valid_from, a.valid_to::text as valid_to, a.status, t.is_paid
       from absence a
       join time_type t on t.client = a.client and t.code = a.time_type_code
      where a.client = ${client} and a.personnel_number = ${pn}
-       and a.status = 'APPROVED' and t.is_paid = false
+       and a.status = 'APPROVED' and t.is_paid = false and a.policy_managed = false
        and a.valid_from <= ${run.periodTo}::date and (a.valid_to is null or a.valid_to >= ${run.periodFrom}::date)
+    union all
+    select al.alloc_from::text, al.alloc_to::text, a.status, false as is_paid
+      from absence_allocation al
+      join absence a on a.client = al.client and a.id = al.absence_id
+     where al.client = ${client} and al.personnel_number = ${pn}
+       and a.status = 'APPROVED' and a.policy_managed = true
+       and al.is_paid = false and al.reversed_at is null
+       and al.alloc_from <= ${run.periodTo}::date and al.alloc_to >= ${run.periodFrom}::date
   `)) as unknown as Array<{ valid_from: string; valid_to: string | null; status: string; is_paid: boolean }>)
     .map((a) => ({ validFrom: day(a.valid_from)!, validTo: day(a.valid_to), status: a.status, isPaid: a.is_paid }));
 

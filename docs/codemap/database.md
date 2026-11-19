@@ -6,10 +6,11 @@
 - Every object must be owned by `cairn_integration_migrator` (SECURITY DEFINER functions and triggers run as it). Migrate only as that role.
 - Cross-module writes exist: foundation `services.ts` → finance `gl_account`; inventory hosts `production_order*`; purchasing hosts `customer_invoice*`.
 - Invariants often live in triggers or advisory locks, not indexes (payroll 9281, confirmation cancellation 9172, company-code refs). Grep `drizzle/*.sql` (not `history/`) before assuming none.
+- Leave tables (9311 policies/ledger/assignments, 9312 `leave_export`, 9313 capabilities) are People-owned raw SQL; erp_dev needs them applied before the leave screens show data.
 
 ## Tables by owning module (schema file: tables)
-### audit (5)
-- `modules/audit/schema.ts`: access_review, access_review_item, audit_finding, audit_grant, audit_grant_scope
+### audit (6)
+- `modules/audit/schema.ts`: access_review, access_review_item, audit_finding, audit_grant, audit_grant_scope, audit_period_pack
 
 ### finance (97)
 - `modules/finance/gl-account-group-schema.ts`: gl_account_group, gl_account_group_field_status, group_chart_accounts
@@ -87,15 +88,19 @@
 | bp_role | foundation | inventory, purchasing, sales |
 | business_partner | foundation | finance, inventory, output, purchasing, sales |
 | capability | platform/tables | audit, inventory, platform, platform/auth, platform/tenancy, production |
-| change_document | platform/tables | finance, foundation, inventory, platform/change, platform/notification, production, purchasing |
-| change_document_item | platform/tables | finance, foundation, platform/change, purchasing |
+| change_document | platform/tables | audit, finance, foundation, inventory, platform/change, platform/notification, production, purchasing |
+| change_document_item | platform/tables | audit, finance, foundation, platform/change, purchasing |
 | characteristic | foundation | inventory, platform/tenancy, purchasing |
 | chart_of_accounts | foundation | finance, people, platform/tenancy, sales |
 | class_assignment | foundation | inventory |
 | class_type | foundation | inventory |
 | classification_class | foundation | inventory, platform/tenancy |
-| client | platform/tables | finance, platform, platform/auth, platform/tenancy, purchasing |
+| client | platform/tables | finance, people, platform, platform/auth, platform/tenancy, purchasing |
 | client_settings | platform/tables | platform, platform/auth, platform/tenancy |
+| closing_execution_log | finance | audit |
+| closing_task_event | finance | audit |
+| closing_task_instance | finance | audit |
+| closing_task_list | finance | audit |
 | company_code | foundation | audit, finance, inventory, output, people, platform, platform/periods, platform/tenancy, production, purchasing, sales |
 | config_activity | platform/tables | platform/tenancy |
 | config_activity_status | platform/tables | foundation, platform/tenancy |
@@ -140,7 +145,7 @@
 | financial_statement_node | finance | foundation |
 | financial_statement_version | finance | foundation |
 | fiscal_year_period | foundation | audit, finance, platform/periods, production |
-| fiscal_year_variant | foundation | finance, inventory, platform/periods, platform/tenancy, production |
+| fiscal_year_variant | foundation | audit, finance, inventory, platform/periods, platform/tenancy, production |
 | fixed_asset | finance | dev/walkthrough-asset.ts, purchasing |
 | gl_account | finance | foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
 | gl_account_company | finance | foundation, inventory |
@@ -154,10 +159,10 @@
 | internal_order_budget_profile | foundation | platform/tenancy |
 | internal_order_type | foundation | platform/tenancy |
 | internal_order_type_budget_profile | foundation | platform/tenancy |
-| job_definition | platform/tables | platform/job |
+| job_definition | platform/tables | people, platform/job |
 | job_log | platform/tables | platform/job |
-| job_run | platform/tables | finance, people, platform/auth, platform/job, production |
-| journal_entry | finance | foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing |
+| job_run | platform/tables | audit, finance, people, platform/auth, platform/job, production |
+| journal_entry | finance | audit, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing |
 | journal_entry_line | finance | dev/walkthrough-asset.ts, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing |
 | lock_wait_log | platform/tables | platform/lock |
 | mail_message | platform/tables | platform/mail |
@@ -197,10 +202,10 @@
 | payment_terms | foundation | finance, platform/tenancy, purchasing |
 | payroll_run_exception | people | platform/tenancy |
 | planning_file | inventory | production, purchasing |
-| plant | foundation | finance, inventory, platform, platform/auth, platform/tenancy, production, purchasing, sales |
+| plant | foundation | finance, inventory, people, platform, platform/auth, platform/tenancy, production, purchasing, sales |
 | position_assignment | people | platform/auth, platform/notification |
 | position_capability | platform/tables | platform/auth, platform/notification |
-| posting_period_rule | foundation | platform/periods |
+| posting_period_rule | foundation | audit, platform/periods |
 | posting_period_variant | foundation | platform/periods, platform/tenancy |
 | production_order | inventory | platform/tenancy, production |
 | production_order_component | inventory | production |
@@ -229,7 +234,7 @@
 | reservation_header | inventory | production |
 | reservation_item | inventory | production |
 | reversal_reason | finance | foundation |
-| role | platform/tables | audit, finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
+| role | platform/tables | audit, finance, inventory, people, platform, platform/auth, platform/notification, platform/tenancy, production |
 | role_capability | platform/tables | finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
 | routing | production | platform/tenancy |
 | routing_control_key | production | platform/tenancy |
@@ -274,7 +279,7 @@
 | user_capability_scope | platform/tables | platform/auth |
 | user_mfa | platform/tables | platform/auth |
 | user_mfa_recovery_code | platform/tables | platform/auth |
-| user_role | platform/tables | audit, finance, inventory, platform, platform/auth, platform/notification, platform/tenancy, production |
+| user_role | platform/tables | audit, finance, inventory, people, platform, platform/auth, platform/notification, platform/tenancy, production |
 | user_session | platform/tables | audit, finance, inventory, platform, platform/auth, platform/job, platform/lock, production |
 | valuation_class | inventory | foundation, platform/tenancy |
 | vendor_down_payment | finance | foundation, purchasing |

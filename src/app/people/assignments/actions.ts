@@ -75,10 +75,10 @@ async function denied(session: SessionContext, doing: string): Promise<Assignmen
   };
 }
 
-async function guard(doing: string): Promise<{ client: string; actor: string; capabilities: string[] } | AssignmentActionState> {
+async function guard(doing: string): Promise<{ client: string; actor: string; capabilities: { authorization: { userId: string; sessionId: string } } } | AssignmentActionState> {
   const session = await requireSession(ROUTE);
   if (!can(session, ASSIGNMENT_CAPABILITY)) return denied(session, doing);
-  return { client: session.user.client, actor: session.user.username, capabilities: session.user.capabilities };
+  return { client: session.user.client, actor: session.user.username, capabilities: { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } } };
 }
 
 export async function assignAction(
@@ -94,6 +94,7 @@ export async function assignAction(
         positionCode: text(formData, 'positionCode'),
         controllingArea: text(formData, 'controllingArea'),
         costCenter: text(formData, 'costCenter'),
+        plant: optional(formData, 'plant'),
         validFrom: text(formData, 'validFrom'),
         changedBy: access.actor,
         requestKey: optional(formData, 'requestKey'),
@@ -157,6 +158,7 @@ export async function changeAssignmentAction(
         positionCode: optional(formData, 'positionCode'),
         controllingArea: optional(formData, 'controllingArea'),
         costCenter: optional(formData, 'costCenter'),
+        plant: optional(formData, 'plant'),
         changedBy: access.actor,
       },
       access.capabilities,

@@ -50,6 +50,7 @@ export default async function PeopleAssignmentsPage({ searchParams }: {
   }>;
 }) {
   const session = await requireSession(ASSIGNMENT_ROUTE);
+  const access = { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } };
   const params = await searchParams;
   const client = session.user.client;
   const employee = (params.employee ?? '').trim().toUpperCase();
@@ -58,7 +59,7 @@ export default async function PeopleAssignmentsPage({ searchParams }: {
   const openOnly = params.open === '1';
 
   const [rows, positions] = await Promise.all([
-    listAssignments({ client, query, positionCode: positionCode || undefined, openOnly }),
+    listAssignments({ client, query, positionCode: positionCode || undefined, openOnly }, access),
     listPositions(client),
   ]);
 
@@ -70,7 +71,7 @@ export default async function PeopleAssignmentsPage({ searchParams }: {
   let open: AssignmentView | null = null;
   if (employee !== '') {
     try {
-      [history, open] = await Promise.all([assignmentsOf(client, employee), openAssignmentOf(client, employee)]);
+      [history, open] = await Promise.all([assignmentsOf(client, employee, access), openAssignmentOf(client, employee, access)]);
     } catch (error) {
       if (!(error instanceof AssignmentError)) throw error;
       note = error.message;

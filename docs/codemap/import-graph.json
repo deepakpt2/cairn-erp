@@ -21,6 +21,11 @@
     "platform/auth/session.ts",
     "ui/kit/index.ts"
   ],
+  "app/api/audit/period-pack/[packId]/route.ts": [
+    "modules/audit/period-evidence.ts",
+    "modules/audit/workspace.ts",
+    "platform/auth/current.ts"
+  ],
   "app/api/auth/mfa/route.ts": [
     "app/api/auth/redirect.ts",
     "app/api/auth/session-cookie.ts",
@@ -44,6 +49,16 @@
     "platform/db/client.ts"
   ],
   "app/api/health/live/route.ts": [],
+  "app/api/leave/balances/export/[exportId]/route.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-export.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/api/leave/balances/export/route.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-report.ts",
+    "platform/auth/current.ts"
+  ],
   "app/audit/access-review/AccessReviewForm.tsx": [
     "app/audit/access-review/actions.ts"
   ],
@@ -88,14 +103,18 @@
     "ui/kit/index.ts"
   ],
   "app/audit/workspace/WorkspaceClient.tsx": [
-    "app/audit/workspace/actions.ts"
+    "app/audit/workspace/actions.ts",
+    "modules/audit/period-evidence.ts"
   ],
   "app/audit/workspace/actions.ts": [
+    "modules/audit/period-evidence-data.ts",
+    "modules/audit/period-evidence.ts",
     "modules/audit/workspace.ts",
     "platform/auth/current.ts"
   ],
   "app/audit/workspace/page.tsx": [
     "app/audit/workspace/WorkspaceClient.tsx",
+    "modules/audit/period-evidence.ts",
     "modules/audit/workspace.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
@@ -1984,6 +2003,27 @@
     "platform/i18n/index.ts",
     "ui/kit/index.ts"
   ],
+  "app/config/time-types/TimeTypes.tsx": [
+    "app/config/time-types/actions.ts",
+    "app/people/leave-live.ts",
+    "modules/people/leave-policy.ts",
+    "modules/people/time-leave.ts"
+  ],
+  "app/config/time-types/actions.ts": [
+    "app/people/leave-live.ts",
+    "modules/people/leave-policy.ts",
+    "modules/people/time-leave.ts"
+  ],
+  "app/config/time-types/page.tsx": [
+    "app/config/time-types/TimeTypes.tsx",
+    "modules/people/leave-access.ts",
+    "modules/people/leave-ledger.ts",
+    "modules/people/leave-policy.ts",
+    "modules/people/time-leave.ts",
+    "platform/auth/current.ts",
+    "platform/db/client.ts",
+    "ui/kit/index.ts"
+  ],
   "app/config/tolerance-groups/ToleranceGroups.tsx": [
     "app/config/tolerance-groups/actions.ts",
     "modules/foundation/employee-tolerance-definition.ts",
@@ -3770,6 +3810,7 @@
   ],
   "app/people/employees/actions.ts": [
     "modules/people/employee-master.ts",
+    "modules/people/employee-tier.ts",
     "platform/auth/current.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts",
@@ -3779,10 +3820,17 @@
     "app/people/employees/Employees.tsx",
     "app/people/employees/PayStructure.tsx",
     "modules/people/employee-master.ts",
+    "modules/people/employee-tier.ts",
+    "modules/people/org-structure.ts",
     "modules/people/payroll-structure.ts",
     "modules/people/record-types.ts",
     "platform/auth/current.ts",
     "ui/kit/index.ts"
+  ],
+  "app/people/leave-live.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/time-leave.ts",
+    "platform/auth/current.ts"
   ],
   "app/people/organization/Organization.tsx": [
     "app/people/organization/actions.ts",
@@ -3844,22 +3892,63 @@
     "platform/i18n/index.ts",
     "ui/kit/index.ts"
   ],
-  "app/people/time-leave/TimeLeave.tsx": [
+  "app/people/time-leave/AbsencesTab.tsx": [
     "app/people/time-leave/actions.ts",
+    "app/people/time-leave/ui.tsx",
+    "modules/people/leave-absence.ts",
+    "modules/people/leave-views.ts",
+    "modules/people/time-leave.ts"
+  ],
+  "app/people/time-leave/BalancesTab.tsx": [
+    "app/people/leave-live.ts",
+    "app/people/time-leave/actions.ts",
+    "app/people/time-leave/ui.tsx",
+    "modules/people/leave-accrual.ts",
+    "modules/people/leave-export.ts",
+    "modules/people/leave-report.ts",
+    "modules/people/leave-views.ts",
+    "modules/people/time-leave.ts"
+  ],
+  "app/people/time-leave/TimeLeave.tsx": [
+    "app/people/time-leave/AbsencesTab.tsx",
+    "app/people/time-leave/BalancesTab.tsx",
+    "app/people/time-leave/TimeRecordsTab.tsx",
+    "modules/people/leave-accrual.ts",
+    "modules/people/leave-export.ts",
+    "modules/people/leave-report.ts",
+    "modules/people/leave-views.ts",
+    "modules/people/time-leave.ts"
+  ],
+  "app/people/time-leave/TimeRecordsTab.tsx": [
+    "app/people/leave-live.ts",
+    "app/people/time-leave/actions.ts",
+    "app/people/time-leave/ui.tsx",
+    "modules/people/leave-views.ts",
     "modules/people/time-leave.ts"
   ],
   "app/people/time-leave/actions.ts": [
-    "modules/people/time-leave.ts",
-    "platform/auth/current.ts",
-    "platform/auth/session.ts",
-    "platform/db/client.ts",
-    "platform/tables/security.ts"
+    "app/people/leave-live.ts",
+    "modules/people/leave-absence.ts",
+    "modules/people/leave-accrual.ts",
+    "modules/people/leave-export.ts",
+    "modules/people/leave-ledger.ts",
+    "modules/people/time-leave.ts"
   ],
   "app/people/time-leave/page.tsx": [
     "app/people/time-leave/TimeLeave.tsx",
+    "modules/people/leave-access.ts",
+    "modules/people/leave-accrual.ts",
+    "modules/people/leave-export.ts",
+    "modules/people/leave-ledger.ts",
+    "modules/people/leave-report.ts",
+    "modules/people/leave-views.ts",
     "modules/people/time-leave.ts",
     "platform/auth/current.ts",
+    "platform/db/client.ts",
     "ui/kit/index.ts"
+  ],
+  "app/people/time-leave/ui.tsx": [
+    "app/people/leave-live.ts"
   ],
   "app/platform/jobs/JobControls.tsx": [
     "app/platform/jobs/actions.ts",
@@ -5208,6 +5297,10 @@
     "modules/inventory/production-receipt.ts",
     "modules/people/assignment.ts",
     "modules/people/employee-master.ts",
+    "modules/people/leave-absence.ts",
+    "modules/people/leave-access.ts",
+    "modules/people/leave-accrual.ts",
+    "modules/people/leave-policy.ts",
     "modules/people/org-structure.ts",
     "modules/people/pay-components.ts",
     "modules/people/record-types.ts",
@@ -5240,6 +5333,32 @@
     "platform/db/client.ts",
     "platform/tables/security.ts"
   ],
+  "modules/audit/jobs/period-pack.ts": [
+    "modules/audit/period-evidence.ts",
+    "platform/job/registry.ts",
+    "platform/job/types.ts"
+  ],
+  "modules/audit/period-evidence-archive.ts": [],
+  "modules/audit/period-evidence-data.ts": [
+    "platform/db/client.ts",
+    "platform/periods/index.ts"
+  ],
+  "modules/audit/period-evidence-report.ts": [
+    "modules/audit/period-evidence-archive.ts",
+    "modules/audit/period-evidence-data.ts"
+  ],
+  "modules/audit/period-evidence.ts": [
+    "modules/audit/period-evidence-archive.ts",
+    "modules/audit/period-evidence-data.ts",
+    "modules/audit/period-evidence-report.ts",
+    "modules/audit/schema.ts",
+    "modules/audit/workspace.ts",
+    "platform/auth/authority.ts",
+    "platform/db/client.ts",
+    "platform/job/actor.ts",
+    "platform/job/queue.ts",
+    "platform/job/types.ts"
+  ],
   "modules/audit/read-only.ts": [
     "platform/auth/pattern.ts",
     "platform/db/client.ts"
@@ -5249,6 +5368,7 @@
   ],
   "modules/audit/workspace.ts": [
     "modules/audit/schema.ts",
+    "platform/auth/authority.ts",
     "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/change/index.ts",
@@ -7180,8 +7300,11 @@
     "modules/sales/report-exports.ts"
   ],
   "modules/people/assignment.ts": [
+    "modules/people/employee-reach.ts",
+    "modules/people/employee-tier.ts",
     "modules/people/schema.ts",
     "platform/auth/current.ts",
+    "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
@@ -7207,10 +7330,22 @@
     "platform/tables/security.ts"
   ],
   "modules/people/employee-master.ts": [
+    "modules/people/employee-reach.ts",
+    "modules/people/employee-tier.ts",
     "modules/people/schema.ts",
     "platform/auth/current.ts",
+    "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/people/employee-reach.ts": [
+    "modules/people/leave-math.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/people/employee-tier.ts": [
     "platform/db/client.ts"
   ],
   "modules/people/jobs/grant-expiring.ts": [
@@ -7220,14 +7355,83 @@
     "platform/notification/notify.ts",
     "platform/tables/security.ts"
   ],
+  "modules/people/jobs/leave-accrual.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-accrual.ts",
+    "platform/db/client.ts",
+    "platform/job/registry.ts",
+    "platform/job/types.ts"
+  ],
+  "modules/people/jobs/leave-export.ts": [
+    "modules/people/leave-export.ts",
+    "platform/job/registry.ts",
+    "platform/job/types.ts"
+  ],
   "modules/people/jobs/payroll-run.ts": [
     "modules/people/payroll-background.ts",
     "platform/job/registry.ts",
     "platform/job/types.ts"
   ],
+  "modules/people/leave-absence.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-accrual.ts",
+    "modules/people/leave-ledger.ts",
+    "modules/people/leave-math.ts",
+    "modules/people/leave-policy.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/people/leave-access.ts": [
+    "modules/people/employee-reach.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/people/leave-accrual.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-ledger.ts",
+    "modules/people/leave-math.ts",
+    "modules/people/leave-policy.ts",
+    "platform/db/client.ts",
+    "platform/job/queue.ts"
+  ],
+  "modules/people/leave-export.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-report.ts",
+    "platform/db/client.ts",
+    "platform/job/queue.ts",
+    "platform/job/types.ts"
+  ],
+  "modules/people/leave-ledger.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-math.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/people/leave-math.ts": [],
+  "modules/people/leave-policy.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-math.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/people/leave-report.ts": [
+    "modules/people/leave-access.ts",
+    "modules/people/leave-accrual.ts",
+    "modules/people/leave-math.ts",
+    "modules/people/leave-policy.ts",
+    "platform/db/client.ts"
+  ],
+  "modules/people/leave-views.ts": [
+    "modules/people/leave-access.ts",
+    "platform/db/client.ts"
+  ],
   "modules/people/org-structure.ts": [
+    "modules/people/employee-reach.ts",
+    "modules/people/employee-tier.ts",
     "modules/people/schema.ts",
     "platform/auth/current.ts",
+    "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
@@ -7279,6 +7483,7 @@
     "platform/periods/index.ts"
   ],
   "modules/people/payroll-structure.ts": [
+    "modules/people/employee-reach.ts",
     "modules/people/payroll-access.ts",
     "modules/people/schema.ts",
     "platform/change/index.ts",
@@ -7310,6 +7515,9 @@
     "platform/tables/tenancy.ts"
   ],
   "modules/people/time-leave.ts": [
+    "modules/people/leave-absence.ts",
+    "modules/people/leave-access.ts",
+    "modules/people/leave-ledger.ts",
     "modules/people/schema.ts",
     "platform/auth/current.ts",
     "platform/auth/session.ts",
@@ -9278,9 +9486,12 @@
     "worker/jobs.ts"
   ],
   "worker/jobs.ts": [
+    "modules/audit/jobs/period-pack.ts",
     "modules/finance/jobs/payment-run.ts",
     "modules/output/jobs/dispatch.ts",
     "modules/people/jobs/grant-expiring.ts",
+    "modules/people/jobs/leave-accrual.ts",
+    "modules/people/jobs/leave-export.ts",
     "modules/people/jobs/payroll-run.ts",
     "modules/production/jobs/plant-run.ts",
     "platform/mail/jobs/send.ts",

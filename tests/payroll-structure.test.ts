@@ -340,7 +340,7 @@ describe('time types: paid or unpaid', () => {
     expect((await getTimeTypeView(tenant.client, 'OLDLEAVE')).isPaid).toBe(true);
     const unpaid = await defineTimeType(
       { client: tenant.client, code: 'UNPAID', name: 'Leave without pay', typeKind: 'ABSENCE', reducesQuota: false, isPaid: false, changedBy: PAYROLL_ACTOR },
-      [TIME_ENTER_CAPABILITY],
+      ['PEOPLE.LEAVE.CONFIGURE'],
     );
     expect(unpaid.isPaid).toBe(false);
   });

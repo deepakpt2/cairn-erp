@@ -124,6 +124,7 @@ function OpenAssignment({ assignment, canWrite }: { assignment: AssignmentView; 
             <Field label="Position" name="positionCode" hint="Blank leaves it." maxLength={10} />
             <Field label="Controlling area" name="controllingArea" maxLength={4} />
             <Field label="Cost centre" name="costCenter" hint="Blank leaves both. A cost centre given here is checked against the master as of the first day." maxLength={10} />
+            <Field label="Plant" name="plant" hint="Blank leaves it. The plant has to belong to the cost centre's company." maxLength={4} />
             <button className="btn btn-default min-h-11 sm:min-h-9" disabled={correctPending}>
               {correctPending ? 'Writing…' : 'Correct open assignment'}
             </button>
@@ -164,6 +165,7 @@ function Assign({ employee, positions, canWrite }: { employee: string; positions
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Controlling area" name="controllingArea" required maxLength={4} hint="Four characters, as the cost centre master keys them." />
             <Field label="Cost centre" name="costCenter" required maxLength={10} />
+            <Field label="Plant" name="plant" maxLength={4} hint="Where the person works. Plant-level HR clerks reach only the plants they are responsible for; blank means company-wide." />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="First day it applies" name="validFrom" type="date" required />
@@ -259,7 +261,7 @@ export default function Assignments(props: Props) {
                   <td>
                     <span className="code">{row.costCenter}</span>
                     {row.costCenterName ? <span className="text-ink-soft"> · {row.costCenterName}</span> : null}
-                    <span className="text-ink-faint"> · {row.controllingArea}</span>
+                    <span className="text-ink-faint"> · {row.controllingArea}{row.plant ? ` · plant ${row.plant}` : ''}</span>
                   </td>
                   <td className="text-ink-faint">{row.createdBy}</td>
                 </tr>
@@ -300,7 +302,7 @@ export default function Assignments(props: Props) {
                     {row.positionTitle ? <span className="text-ink-soft"> · {row.positionTitle}</span> : null}
                     {row.orgUnitCode ? <span className="text-ink-faint"> · {row.orgUnitCode}</span> : null}
                   </td>
-                  <td><span className="code">{row.costCenter}</span><span className="text-ink-faint"> · {row.controllingArea}</span></td>
+                  <td><span className="code">{row.costCenter}</span><span className="text-ink-faint"> · {row.controllingArea}{row.plant ? ` · plant ${row.plant}` : ''}</span></td>
                   <td>
                     {row.validFrom} → {row.validTo ?? 'open'}
                     {row.isCurrent ? <span className="ml-1 text-ink-faint">standing</span> : null}

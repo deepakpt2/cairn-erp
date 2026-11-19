@@ -28,6 +28,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import { withTenant, type Tx } from '../../platform/db/client';
 import { changeHistory, recordChange } from '../../platform/change';
+import { canTx, type OrgScope } from '../../platform/auth/authority';
 import { hasCapability, loadCapabilities } from '../../platform/auth/session';
 import {
   verifyServiceAuthorityInTx,
@@ -779,9 +780,78 @@ async function enforceAuditRead(
   probe: ScopeProbe,
   access: { route: string; eventType: 'READ' | 'EXPORT'; detail: string; objectKey?: string },
 ): Promise<AuditGrantView> {
+  return enforceAuditAccess(actor, { capabilities: [capability], probe }, access);
+}
+
+/** What a gated access must satisfy. Every part is judged by the server, now, on every call. */
+export interface AuditAccessRequest {
+  /** Every capability the access needs (e.g. AUDIT.WORKSPACE + AUDIT.PERIOD.EVIDENCE + AUDIT.EVIDENCE.EXPORT). */
+  capabilities: readonly string[];
+  /** The scope levels actually provided; only these are judged against the grant. */
+  probe: ScopeProbe;
+  /** Organisational reach checked by the ordinary authority engine for each capability (e.g. the company code). */
+  org?: OrgScope;
+  /** Require exactly this grant: it must belong to the actor and be live today. Without it, the actor's live grant is used. */
+  grantId?: string;
+  /** Default true. False when the caller logs its own success inside the transaction that does the work. */
+  logSuccess?: boolean;
+}
+
+/**
+ * `enforceAuditRead` generalised to several capabilities, an organisational reach and an exact grant.
+ *
+ * Judges, in order: each capability (with the actor's current organisational restrictions), a live grant
+ * (the named one, or the actor's own), then the scope probe. Every refusal is logged as CAPABILITY_DENIED and
+ * the transaction COMMITS before the error is thrown, so a denied attempt is never rolled back with its own
+ * log row. A success is logged with the event type the caller names.
+ */
+export async function enforceAuditAccess(
+  actor: AuditActor,
+  request: AuditAccessRequest,
+  access: { route: string; eventType: 'READ' | 'EXPORT'; detail: string; objectKey?: string; transactionCode?: string },
+): Promise<AuditGrantView> {
   const verdict = await withTenant(actor.client, async (tx) => {
-    await requireCapability(tx, actor.client, actor.userId, capability);
-    const grant = await activeGrantFor(tx, actor.client, actor.userId);
+    const deny = async (why: string, grantId: string | null, error: AuditError) => {
+      await logAuditAccess(tx, {
+        client: actor.client, userId: actor.userId, username: actor.username,
+        eventType: 'CAPABILITY_DENIED', route: access.route, objectKey: access.objectKey,
+        transactionCode: access.transactionCode, detail: `Refused ${access.eventType} (${access.detail}): ${why}`.slice(0, 500), grantId,
+      });
+      return { error };
+    };
+    for (const capability of request.capabilities) {
+      if (!(await canTx(tx, actor.client, actor.userId, capability, request.org ?? {}))) {
+        return deny(
+          `the authority ${capability} is not held${request.org?.companyCode ? ` for company code ${request.org.companyCode}` : ''}`, null,
+          new AuditError(
+            `You do not hold the authority ${capability}${request.org?.companyCode ? ` for company code ${request.org.companyCode}` : ''}.`,
+            `Ask an administrator to assign ${capability} to one of your roles.`,
+            'AUDIT_AUTHORITY',
+          ),
+        );
+      }
+    }
+    let grant: AuditGrantView | null;
+    if (request.grantId) {
+      const named = (await loadGrantViews(tx, actor.client, [request.grantId]))[0] ?? null;
+      grant = named && named.auditorUserId === actor.userId && named.status === 'ACTIVE' ? named : null;
+      if (named && named.auditorUserId !== actor.userId) {
+        return deny('the grant does not belong to the requester', named.grantId, new AuditError('This item was requested under a grant that is not yours.', undefined, 'AUDIT_NO_GRANT'));
+      }
+      if (!grant) {
+        const why = !named ? 'the original audit grant no longer exists'
+          : named.status === 'EXPIRED' ? `the original audit grant ${named.grantId} ended on ${named.validTo}`
+            : named.status === 'REVOKED' ? `the original audit grant ${named.grantId} was revoked`
+              : `the original audit grant ${named.grantId} is not live`;
+        return deny(why, named?.grantId ?? request.grantId, new AuditError(
+          `${why.charAt(0).toUpperCase()}${why.slice(1)}. Nothing can be read under it.`,
+          'Ask the controller who grants audit access for a new, time-boxed grant.',
+          named?.status === 'EXPIRED' ? 'AUDIT_GRANT_EXPIRED' : named?.status === 'REVOKED' ? 'AUDIT_GRANT_REVOKED' : 'AUDIT_NO_GRANT',
+        ));
+      }
+    } else {
+      grant = await activeGrantFor(tx, actor.client, actor.userId);
+    }
     if (!grant) {
       const last = (await loadGrantViews(tx, actor.client)).find((g) => g.auditorUserId === actor.userId) ?? null;
       const why = last?.status === 'EXPIRED'
@@ -791,44 +861,54 @@ async function enforceAuditRead(
           : last?.status === 'DRAFT'
             ? `Your audit grant ${last.grantId} starts on ${last.validFrom}.`
             : 'You hold no audit grant in this tenant.';
-      await logAuditAccess(tx, {
-        client: actor.client, userId: actor.userId, username: actor.username,
-        eventType: 'CAPABILITY_DENIED', route: access.route, objectKey: access.objectKey,
-        detail: `Refused ${access.eventType} (${access.detail}): ${why}`, grantId: last?.grantId ?? null,
-      });
-      return {
-        error: new AuditError(
-          `${why} Nothing can be read under it.`,
-          'Ask the controller who grants audit access for a new, time-boxed grant.',
-          last?.status === 'EXPIRED' ? 'AUDIT_GRANT_EXPIRED' : last?.status === 'REVOKED' ? 'AUDIT_GRANT_REVOKED' : 'AUDIT_NO_GRANT',
-        ),
-      };
+      return deny(why, last?.grantId ?? null, new AuditError(
+        `${why} Nothing can be read under it.`,
+        'Ask the controller who grants audit access for a new, time-boxed grant.',
+        last?.status === 'EXPIRED' ? 'AUDIT_GRANT_EXPIRED' : last?.status === 'REVOKED' ? 'AUDIT_GRANT_REVOKED' : 'AUDIT_NO_GRANT',
+      ));
     }
-    const gap = scopeGap(grant, probe);
+    const gap = scopeGap(grant, request.probe);
     if (gap) {
+      return deny(`${SCOPE_LABEL[gap.kind]} ${gap.value} is outside the grant`, grant.grantId, new AuditError(
+        `The ${SCOPE_LABEL[gap.kind]} ${gap.value} is outside your audit grant ${grant.grantId}, which covers ${SCOPE_LABEL[gap.kind]} ${grant.scope[gap.kind].join(', ')}.`,
+        'Ask the controller to widen the grant, or stay within it.',
+        'AUDIT_OUT_OF_SCOPE',
+      ));
+    }
+    if (request.logSuccess !== false) {
       await logAuditAccess(tx, {
         client: actor.client, userId: actor.userId, username: actor.username,
-        eventType: 'CAPABILITY_DENIED', route: access.route, objectKey: access.objectKey,
-        detail: `Refused ${access.eventType} (${access.detail}): ${SCOPE_LABEL[gap.kind]} ${gap.value} is outside the grant`,
-        grantId: grant.grantId,
+        eventType: access.eventType, route: access.route, objectKey: access.objectKey,
+        transactionCode: access.transactionCode, detail: access.detail, grantId: grant.grantId,
       });
-      return {
-        error: new AuditError(
-          `The ${SCOPE_LABEL[gap.kind]} ${gap.value} is outside your audit grant ${grant.grantId}, which covers ${SCOPE_LABEL[gap.kind]} ${grant.scope[gap.kind].join(', ')}.`,
-          'Ask the controller to widen the grant, or stay within it.',
-          'AUDIT_OUT_OF_SCOPE',
-        ),
-      };
     }
-    await logAuditAccess(tx, {
-      client: actor.client, userId: actor.userId, username: actor.username,
-      eventType: access.eventType, route: access.route, objectKey: access.objectKey,
-      detail: access.detail, grantId: grant.grantId,
-    });
     return { grant };
   });
   if ('error' in verdict) throw verdict.error;
   return verdict.grant;
+}
+
+/**
+ * Is this exact grant still live, the requester's own, and does it cover the probe? No writes, no logging:
+ * the caller (a background job re-judging its submitter) decides what to record. Judged on the dates and the
+ * revocation, never on a stored status.
+ */
+export async function grantStillCovers(
+  tx: Tx,
+  client: string,
+  grantId: string,
+  userId: string,
+  probe: ScopeProbe,
+): Promise<{ ok: true; grant: AuditGrantView } | { ok: false; code: string; why: string }> {
+  const grant = (await loadGrantViews(tx, client, [grantId]))[0] ?? null;
+  if (!grant) return { ok: false, code: 'GRANT_MISSING', why: 'the original audit grant no longer exists' };
+  if (grant.auditorUserId !== userId) return { ok: false, code: 'GRANT_REASSIGNED', why: 'the audit grant no longer belongs to the requester' };
+  if (grant.status === 'REVOKED') return { ok: false, code: 'GRANT_REVOKED', why: `the audit grant ${grantId} was revoked` };
+  if (grant.status === 'EXPIRED') return { ok: false, code: 'GRANT_EXPIRED', why: `the audit grant ${grantId} has expired` };
+  if (grant.status !== 'ACTIVE') return { ok: false, code: 'GRANT_NOT_LIVE', why: `the audit grant ${grantId} is not live` };
+  const gap = scopeGap(grant, probe);
+  if (gap) return { ok: false, code: 'OUT_OF_SCOPE', why: `${SCOPE_LABEL[gap.kind]} ${gap.value} is outside the grant` };
+  return { ok: true, grant };
 }
 
 /**

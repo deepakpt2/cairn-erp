@@ -173,6 +173,7 @@ export default async function WorkbenchPage({
     '/finance/journal/new',
     '/finance/credit',
     '/people/time-leave',
+    '/config/time-types',
     '/platform/users',
   ]);
 

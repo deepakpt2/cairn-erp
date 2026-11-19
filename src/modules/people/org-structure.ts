@@ -34,6 +34,9 @@ import { z } from 'zod';
 
 import { AuthzError } from '../../platform/auth/current';
 import { hasCapability } from '../../platform/auth/session';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { employeeToday, judgeLiveScope } from './employee-reach';
+import { actorTier, tierRefusal } from './employee-tier';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import {
@@ -65,11 +68,30 @@ const NAME_MAX = 60;
 const DESC_MAX = 200;
 
 /** Refuse a write when the caller holds none of the required authority. */
+export type PositionAccess = readonly string[] | { authorization: ServiceAuthorityContext | undefined };
+function isLive(access: PositionAccess | undefined): access is { authorization: ServiceAuthorityContext | undefined } {
+  return access !== undefined && !Array.isArray(access);
+}
+
+/**
+ * Setting a position's tier is promotion by chart, so a live caller needs a tier strictly above both the tier
+ * being replaced and the one being set: nobody raises a position to their own level or above, or edits one at or
+ * above theirs. A capability list is the in-process form (no limit); screens pass a live session when they set a tier.
+ */
+async function assertMayTier(tx: Tx, client: string, access: PositionAccess | undefined, tiers: readonly number[]): Promise<void> {
+  if (!isLive(access)) return;
+  const verdict = await judgeLiveScope(tx, client, access.authorization, [POSITION_CAPABILITY]);
+  if (!verdict.ok) throw new OrgStructureError(verdict.message, verdict.remedy);
+  const refused = tierRefusal(await actorTier(tx, client, access.authorization!.userId, await employeeToday(tx, client)), Math.max(...tiers), 'Setting this tier');
+  if (refused) throw new OrgStructureError(refused.message, refused.remedy);
+}
+
 function assertCapability(
-  capabilities: readonly string[] | undefined,
+  capabilities: PositionAccess | undefined,
   required: string,
   actor: string,
 ): void {
+  if (isLive(capabilities)) return; // judged live, in the write's own transaction
   if (!capabilities || !hasCapability([...capabilities], required)) {
     throw new AuthzError(required, actor);
   }
@@ -128,6 +150,8 @@ const definePositionInput = z.object({
   /** Required: §15.1's structure is units *and* positions, so a position is created where it stands. */
   orgUnitCode: orgCode,
   superiorCode: orgCode.optional(),
+  /** The authority tier the chart gives the position, 1..9 (default 1). */
+  tier: z.number().int().min(1).max(9).optional(),
   description: optionalText(DESC_MAX),
   changedBy: kept(60),
 });
@@ -141,6 +165,7 @@ const changePositionInput = z.object({
   orgUnitCode: orgCode.nullable().optional(),
   superiorCode: orgCode.nullable().optional(),
   isValid: z.boolean().optional(),
+  tier: z.number().int().min(1).max(9).optional(),
   description: optionalText(DESC_MAX),
   changedBy: kept(60),
 });
@@ -183,6 +208,8 @@ export interface PositionView {
   jobName: string | null;
   description: string | null;
   isValid: boolean;
+  /** Authority tier 1..9: the holder's tier, which decides who may add, approve and assign them. */
+  tier: number;
   orgUnitCode: string | null;
   orgUnitName: string | null;
   superiorCode: string | null;
@@ -790,12 +817,13 @@ export async function listJobs(clientInput: string, query?: string): Promise<Job
 /** Define a position in the unit it belongs to, with the position it reports to if one is decided now. */
 export async function definePosition(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: PositionAccess,
 ): Promise<PositionView> {
   const parsed = parse(definePositionInput, input);
   assertCapability(capabilities, POSITION_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     if (await positionRow(tx, parsed.client, parsed.code)) refusal('POSITION_EXISTS', parsed.code);
+    await assertMayTier(tx, parsed.client, capabilities, [parsed.tier ?? 1]);
     const unit = await unitRow(tx, parsed.client, parsed.orgUnitCode);
     if (!unit) refusal('UNIT_UNKNOWN', parsed.orgUnitCode);
     if (!unit!.isValid) refusal('UNIT_RETIRED', parsed.orgUnitCode);
@@ -815,6 +843,7 @@ export async function definePosition(
       jobCode: parsed.jobCode ?? null,
       description: parsed.description ?? null,
       isValid: true,
+      tier: parsed.tier ?? 1,
       createdBy: parsed.changedBy,
     });
     await attachOrMove(tx, {
@@ -861,7 +890,7 @@ export async function definePosition(
  */
 export async function changePosition(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: PositionAccess,
 ): Promise<PositionView> {
   const parsed = parse(changePositionInput, input);
   assertCapability(capabilities, POSITION_CAPABILITY, parsed.changedBy);
@@ -869,7 +898,11 @@ export async function changePosition(
     const standing = await positionRow(tx, parsed.client, parsed.code);
     if (!standing) refusal('POSITION_UNKNOWN', parsed.code);
 
-    const patch: { title?: string; jobCode?: string | null; description?: string | null; isValid?: boolean } = {};
+    const patch: { title?: string; jobCode?: string | null; description?: string | null; isValid?: boolean; tier?: number } = {};
+    if (parsed.tier !== undefined && parsed.tier !== standing!.tier) {
+      await assertMayTier(tx, parsed.client, capabilities, [standing!.tier, parsed.tier]);
+      patch.tier = parsed.tier;
+    }
     if (parsed.title !== undefined) patch.title = parsed.title;
     if (parsed.description !== undefined) patch.description = parsed.description;
     if (parsed.isValid !== undefined) patch.isValid = parsed.isValid;
@@ -926,7 +959,7 @@ export async function changePosition(
       objectKey: parsed.code,
       changeType: 'CHANGE',
       changedBy: parsed.changedBy,
-      before: { title: standing!.title, jobCode: standing!.jobCode, isValid: standing!.isValid },
+      before: { title: standing!.title, jobCode: standing!.jobCode, isValid: standing!.isValid, tier: standing!.tier },
       after: {
         ...patch,
         ...(movingUnit !== undefined ? { orgUnitCode: movingUnit } : {}),
@@ -970,6 +1003,7 @@ export async function getPosition(clientInput: string, codeValue: string): Promi
       jobName,
       description: row!.description ?? null,
       isValid: row!.isValid,
+      tier: Number(row!.tier),
       orgUnitCode: unitCode,
       orgUnitName: unitCode ? names.unitNames.get(unitCode) ?? null : null,
       superiorCode,
@@ -1026,6 +1060,7 @@ export async function listPositions(clientInput: string, query?: string): Promis
         jobName: row.jobCode ? jobNames.get(row.jobCode) ?? null : null,
         description: row.description ?? null,
         isValid: row.isValid,
+        tier: Number(row.tier),
         orgUnitCode: unitCode,
         orgUnitName: unitCode ? names.unitNames.get(unitCode) ?? null : null,
         superiorCode,

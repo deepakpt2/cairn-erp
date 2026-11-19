@@ -3,21 +3,25 @@
 import Link from 'next/link';
 import { useActionState, useId, useMemo, useState } from 'react';
 
-import type { EmployeeView } from '@/modules/people/employee-master';
+import type { EmployeeListRow, EmployeeView } from '@/modules/people/employee-master';
 import type { RecordFieldDefinition, RecordTypeDefinition } from '@/modules/people/record-types';
 import {
   changeEmployeeAction,
   changeRecordValuesAction,
   createEmployeeAction,
   createRecordAction,
+  decideHireAction,
   delimitRecordAction,
+  linkUserAction,
   type EmployeeActionState,
 } from './actions';
 
 const EMPTY: EmployeeActionState = { ok: false };
 
 interface Props {
-  employees: Array<Omit<EmployeeView, 'records'> & { recordCount: number }>;
+  employees: EmployeeListRow[];
+  positions: Array<{ code: string; title: string; tier: number }>;
+  canApprove: boolean;
   types: RecordTypeDefinition[];
   selected: EmployeeView | null;
   query: string;
@@ -67,7 +71,7 @@ function FieldAnswer({ field, initial, idSuffix }: { field: RecordFieldDefinitio
   );
 }
 
-function CreateEmployee({ allowed }: { allowed: boolean }) {
+function CreateEmployee({ allowed, positions }: { allowed: boolean; positions: Props['positions'] }) {
   const [state, action, pending] = useActionState(createEmployeeAction, EMPTY);
   const id = useId();
   if (!allowed) {
@@ -80,7 +84,7 @@ function CreateEmployee({ allowed }: { allowed: boolean }) {
   }
   return (
     <form action={action} className="panel space-y-3 p-4" aria-label="Create employee">
-      <p className="text-sm font-medium">Create an employee</p>
+      <p className="text-sm font-medium">Request a hire</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-xs text-ink-soft" htmlFor={`${id}-number`}>
           Personnel number (yours to choose — no interval is drawn, so a payroll provider&apos;s numbering carries over)
@@ -91,12 +95,25 @@ function CreateEmployee({ allowed }: { allowed: boolean }) {
           <input className="input mt-1" id={`${id}-name`} name="fullName" required maxLength={60} autoComplete="off" />
         </label>
       </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs text-ink-soft" htmlFor={`${id}-pos`}>
+          Position (its tier decides who may add and approve the person)
+          <select className="input mt-1" id={`${id}-pos`} name="proposedPositionCode" required defaultValue="">
+            <option value="" disabled>Choose…</option>
+            {positions.map((p) => <option key={p.code} value={p.code}>{p.code} · {p.title} · tier {p.tier}</option>)}
+          </select>
+        </label>
+        <label className="block text-xs text-ink-soft" htmlFor={`${id}-plant`}>
+          Plant (blank: company-wide; plant-level clerks must name theirs)
+          <input className="input mt-1" id={`${id}-plant`} name="proposedPlant" maxLength={4} autoComplete="off" />
+        </label>
+      </div>
       <input type="hidden" name="requestKey" value={`EMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`} />
       <div className="flex items-center gap-3">
         <button className="btn btn-primary min-h-11 sm:min-h-9" type="submit" disabled={pending}>
-          {pending ? 'Creating…' : 'Create employee'}
+          {pending ? 'Requesting…' : 'Request hire'}
         </button>
-        <span className="text-xs text-ink-faint">The employee is created in use, with no record yet.</span>
+        <span className="text-xs text-ink-faint">The person is not in use until an approver with a higher tier approves.</span>
       </div>
       <Notice state={state} />
     </form>
@@ -298,8 +315,54 @@ function NewRecord({
   );
 }
 
+function HireDecision({ employee, allowed }: { employee: EmployeeView; allowed: boolean }) {
+  const [state, action, pending] = useActionState(decideHireAction, EMPTY);
+  if (employee.hireStatus !== 'PENDING') return null;
+  return (
+    <section className="panel space-y-3 p-4" aria-label="Hire approval">
+      <p className="text-sm font-medium">Awaiting approval</p>
+      <p className="text-xs text-ink-soft">
+        Requested by {employee.hireRequestedBy ?? 'unknown'} for position {employee.proposedPositionCode}
+        {employee.proposedPlant ? `, plant ${employee.proposedPlant}` : ''} (tier {employee.tier}). An approver needs a tier above {employee.tier}
+        and cannot be the requester.
+      </p>
+      {allowed ? (
+        <form action={action} className="space-y-2">
+          <input type="hidden" name="personnelNumber" value={employee.personnelNumber} />
+          <label className="block max-w-xl text-xs text-ink-soft">Note (required to reject)
+            <input className="input mt-1" name="note" maxLength={200} autoComplete="off" />
+          </label>
+          <div className="flex gap-2">
+            <button className="btn btn-primary min-h-11 sm:min-h-9" name="decision" value="APPROVE" disabled={pending}>Approve hire</button>
+            <button className="btn btn-default min-h-11 sm:min-h-9" name="decision" value="REJECT" disabled={pending}>Reject</button>
+          </div>
+          <Notice state={state} />
+        </form>
+      ) : <p className="text-xs text-ink-faint">Approving needs PEOPLE.EMPLOYEE.APPROVE.</p>}
+    </section>
+  );
+}
+
+function LinkUser({ employee, allowed }: { employee: EmployeeView; allowed: boolean }) {
+  const [state, action, pending] = useActionState(linkUserAction, EMPTY);
+  if (!allowed || !employee.isActive) return null;
+  return (
+    <form action={action} className="panel space-y-2 p-4" aria-label="Linked user">
+      <p className="text-sm font-medium">Linked user</p>
+      <p className="text-xs text-ink-soft">
+        The user who is this person. Their tier (here {employee.tier}) comes from the position they hold, and decides
+        what they may add, approve and assign. Blank removes the link. You cannot link your own user.
+      </p>
+      <input type="hidden" name="personnelNumber" value={employee.personnelNumber} />
+      <input className="input max-w-xs" name="username" defaultValue={employee.linkedUsername ?? ''} maxLength={60} autoComplete="off" aria-label="Username" />
+      <div><button className="btn btn-default min-h-11 sm:min-h-9" disabled={pending}>{pending ? 'Saving…' : 'Save link'}</button></div>
+      <Notice state={state} />
+    </form>
+  );
+}
+
 export default function Employees({
-  employees, types, selected, query, canCreateMaster, canMaintainRecords,
+  employees, positions, canApprove, types, selected, query, canCreateMaster, canMaintainRecords,
 }: Props) {
   const id = useId();
   const grouped = useMemo(() => {
@@ -319,7 +382,7 @@ export default function Employees({
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
       <div className="space-y-4">
-        <CreateEmployee allowed={canCreateMaster} />
+        <CreateEmployee allowed={canCreateMaster} positions={positions} />
         <section className="panel p-4" aria-label="Employees">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Employees ({employees.length})</h2>
@@ -342,7 +405,7 @@ export default function Employees({
                     <span className="code">{row.personnelNumber}</span> · {row.fullName}
                   </Link>
                   <span className="text-xs text-ink-faint">
-                    {row.recordCount} record{row.recordCount === 1 ? '' : 's'}{row.isActive ? '' : ' · not in use'}
+                    {row.recordCount} record{row.recordCount === 1 ? '' : 's'}{row.hireStatus === 'PENDING' ? ' · awaiting approval' : row.hireStatus === 'REJECTED' ? ' · rejected' : row.isActive ? '' : ' · not in use'}
                   </span>
                 </li>
               ))}
@@ -360,10 +423,12 @@ export default function Employees({
               </h2>
               <p className="mt-1 text-xs text-ink-soft">
                 {selected.isActive ? 'In use.' : 'The number is no longer in use; the records below keep standing as they were written.'}
-                {' '}Created by {selected.createdBy}.
+                {' '}Created by {selected.createdBy}. Tier {selected.tier}{selected.linkedUsername ? `, linked to user ${selected.linkedUsername}` : ', no linked user'}.
               </p>
             </section>
+            <HireDecision employee={selected} allowed={canApprove} />
             <ChangeMaster employee={selected} allowed={canCreateMaster} />
+            <LinkUser employee={selected} allowed={canCreateMaster} />
             <NewRecord employee={selected} types={types} allowed={canMaintainRecords} />
             {grouped.length === 0 ? (
               <p className="text-sm text-ink-soft">This employee holds no record yet.</p>

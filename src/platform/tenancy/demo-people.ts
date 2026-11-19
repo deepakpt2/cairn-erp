@@ -40,8 +40,8 @@ import { hasCapability } from '../auth/pattern';
 import { completePasswordReset, createUser, initiatePasswordReset } from '../../modules/platform/user-admin';
 import { createRole, grantCapabilityToRole, grantRoleToUser } from '../../modules/platform/role-admin';
 import { grantCompanyCodeScope, grantPlantScope } from '../../modules/platform/organisation-scope-admin';
-import { defineJob, defineOrgUnit, definePosition } from '../../modules/people/org-structure';
-import { createEmployee } from '../../modules/people/employee-master';
+import { changePosition, defineJob, defineOrgUnit, definePosition } from '../../modules/people/org-structure';
+import { createEmployee, linkEmployeeUser } from '../../modules/people/employee-master';
 import { assignPosition } from '../../modules/people/assignment';
 import {
   DEMO_ACTOR,
@@ -75,6 +75,7 @@ const ORG_UNITS = [
   { code: 'VFPROC', name: 'Procurement', parentCode: 'VF' },
   { code: 'VFSAL', name: 'Sales', parentCode: 'VF' },
   { code: 'VFFIN', name: 'Finance', parentCode: 'VF' },
+  { code: 'VFHR', name: 'Human Resources', parentCode: 'VF' },
 ] as const;
 
 /** Jobs: what a position does, held separately from where it stands. */
@@ -94,6 +95,9 @@ const JOBS = [
   { code: 'JACCT', name: 'Accountant' },
   { code: 'JCTRL', name: 'Controller' },
   { code: 'JQC', name: 'Quality Inspector' },
+  { code: 'JHRMGR', name: 'HR Manager' },
+  { code: 'JHROFF', name: 'HR Officer' },
+  { code: 'JHRCLK', name: 'HR Clerk' },
 ] as const;
 
 /**
@@ -104,22 +108,28 @@ const JOBS = [
  * these edges rather than from the units.
  */
 const POSITIONS = [
-  { code: 'P1000', title: 'Managing Director', jobCode: 'JMD', orgUnitCode: 'VF' },
-  { code: 'P2000', title: 'Operations Manager', jobCode: 'JOPSMGR', orgUnitCode: 'VFOPS', superiorCode: 'P1000' },
-  { code: 'P2100', title: 'Production Supervisor', jobCode: 'JPRODSUP', orgUnitCode: 'VFPROD', superiorCode: 'P2000' },
-  { code: 'P2110', title: 'Production Clerk', jobCode: 'JPRODCLK', orgUnitCode: 'VFPROD', superiorCode: 'P2100' },
-  { code: 'P2120', title: 'Production Planner', jobCode: 'JPLANNER', orgUnitCode: 'VFPROD', superiorCode: 'P2100' },
-  { code: 'P2200', title: 'Warehouse Supervisor', jobCode: 'JWHSSUP', orgUnitCode: 'VFWHS', superiorCode: 'P2000' },
-  { code: 'P2210', title: 'Warehouse Clerk — Manufacturing', jobCode: 'JWHSCLK', orgUnitCode: 'VFWHS', superiorCode: 'P2200' },
-  { code: 'P2211', title: 'Warehouse Clerk — Distribution', jobCode: 'JWHSCLK', orgUnitCode: 'VFWHS', superiorCode: 'P2200' },
-  { code: 'P6000', title: 'Quality Inspector', jobCode: 'JQC', orgUnitCode: 'VFQUA', superiorCode: 'P2000' },
-  { code: 'P3000', title: 'Procurement Manager', jobCode: 'JPROCMGR', orgUnitCode: 'VFPROC', superiorCode: 'P1000' },
-  { code: 'P3100', title: 'Buyer', jobCode: 'JBUYER', orgUnitCode: 'VFPROC', superiorCode: 'P3000' },
-  { code: 'P4000', title: 'Sales Manager', jobCode: 'JSALMGR', orgUnitCode: 'VFSAL', superiorCode: 'P1000' },
-  { code: 'P4100', title: 'Sales Clerk', jobCode: 'JSALCLK', orgUnitCode: 'VFSAL', superiorCode: 'P4000' },
-  { code: 'P5000', title: 'Finance Manager', jobCode: 'JFINMGR', orgUnitCode: 'VFFIN', superiorCode: 'P1000' },
-  { code: 'P5100', title: 'Accountant', jobCode: 'JACCT', orgUnitCode: 'VFFIN', superiorCode: 'P5000' },
-  { code: 'P5200', title: 'Controller', jobCode: 'JCTRL', orgUnitCode: 'VFFIN', superiorCode: 'P5000' },
+  { code: 'P1000', title: 'Managing Director', jobCode: 'JMD', orgUnitCode: 'VF', tier: 9 },
+  { code: 'P2000', title: 'Operations Manager', jobCode: 'JOPSMGR', orgUnitCode: 'VFOPS', superiorCode: 'P1000', tier: 5 },
+  { code: 'P2100', title: 'Production Supervisor', jobCode: 'JPRODSUP', orgUnitCode: 'VFPROD', superiorCode: 'P2000', tier: 3 },
+  { code: 'P2110', title: 'Production Clerk', jobCode: 'JPRODCLK', orgUnitCode: 'VFPROD', superiorCode: 'P2100', tier: 2 },
+  { code: 'P2120', title: 'Production Planner', jobCode: 'JPLANNER', orgUnitCode: 'VFPROD', superiorCode: 'P2100', tier: 2 },
+  { code: 'P2200', title: 'Warehouse Supervisor', jobCode: 'JWHSSUP', orgUnitCode: 'VFWHS', superiorCode: 'P2000', tier: 3 },
+  { code: 'P2210', title: 'Warehouse Clerk — Manufacturing', jobCode: 'JWHSCLK', orgUnitCode: 'VFWHS', superiorCode: 'P2200', tier: 2 },
+  { code: 'P2211', title: 'Warehouse Clerk — Distribution', jobCode: 'JWHSCLK', orgUnitCode: 'VFWHS', superiorCode: 'P2200', tier: 2 },
+  { code: 'P6000', title: 'Quality Inspector', jobCode: 'JQC', orgUnitCode: 'VFQUA', superiorCode: 'P2000', tier: 2 },
+  { code: 'P3000', title: 'Procurement Manager', jobCode: 'JPROCMGR', orgUnitCode: 'VFPROC', superiorCode: 'P1000', tier: 5 },
+  { code: 'P3100', title: 'Buyer', jobCode: 'JBUYER', orgUnitCode: 'VFPROC', superiorCode: 'P3000', tier: 2 },
+  { code: 'P4000', title: 'Sales Manager', jobCode: 'JSALMGR', orgUnitCode: 'VFSAL', superiorCode: 'P1000', tier: 5 },
+  { code: 'P4100', title: 'Sales Clerk', jobCode: 'JSALCLK', orgUnitCode: 'VFSAL', superiorCode: 'P4000', tier: 2 },
+  { code: 'P5000', title: 'Finance Manager', jobCode: 'JFINMGR', orgUnitCode: 'VFFIN', superiorCode: 'P1000', tier: 5 },
+  { code: 'P5100', title: 'Accountant', jobCode: 'JACCT', orgUnitCode: 'VFFIN', superiorCode: 'P5000', tier: 2 },
+  { code: 'P5200', title: 'Controller', jobCode: 'JCTRL', orgUnitCode: 'VFFIN', superiorCode: 'P5000', tier: 2 },
+  // Human Resources. Tier is what decides who may add or approve whom: a clerk (3) can ask for clerks (2) in
+  // their own plant, an officer (4) approves supervisors and below, the HR manager (6) approves managers (5).
+  { code: 'P7000', title: 'HR Manager', jobCode: 'JHRMGR', orgUnitCode: 'VFHR', superiorCode: 'P1000', tier: 6 },
+  { code: 'P7100', title: 'HR Officer', jobCode: 'JHROFF', orgUnitCode: 'VFHR', superiorCode: 'P7000', tier: 4 },
+  { code: 'P7200', title: 'HR Clerk — Manufacturing', jobCode: 'JHRCLK', orgUnitCode: 'VFHR', superiorCode: 'P7100', tier: 3 },
+  { code: 'P7210', title: 'HR Clerk — Distribution', jobCode: 'JHRCLK', orgUnitCode: 'VFHR', superiorCode: 'P7100', tier: 3 },
 ] as const;
 
 /** The people. Fictional names for a fictional company; each sits in one position, paid from one cost centre. */
@@ -140,6 +150,10 @@ const EMPLOYEES = [
   { personnelNumber: '10000014', fullName: 'Karim Solh', positionCode: 'P5000', costCenter: 'CC5000' },
   { personnelNumber: '10000015', fullName: 'Amina Barakat', positionCode: 'P5100', costCenter: 'CC5000' },
   { personnelNumber: '10000016', fullName: 'Walid Farouk', positionCode: 'P5200', costCenter: 'CC5000' },
+  { personnelNumber: '10000101', fullName: 'Rania Khoury', positionCode: 'P7000', costCenter: 'CC5000' },
+  { personnelNumber: '10000102', fullName: 'Bassam Idris', positionCode: 'P7100', costCenter: 'CC5000' },
+  { personnelNumber: '10000103', fullName: 'Salma Nabil', positionCode: 'P7200', costCenter: 'CC1000' },
+  { personnelNumber: '10000020', fullName: 'Hadi Mourad', positionCode: 'P7210', costCenter: 'CC2000' },
 ] as const;
 
 /**
@@ -237,13 +251,25 @@ const ROLES = [
     // (src/modules/audit/read-only.ts); the role is display-only so that the demo
     // shows an auditor who never held a write in the first place.
     capabilities: [
-      'AUDIT.WORKSPACE', 'AUDIT.TRAIL.VIEW', 'AUDIT.EVIDENCE.EXPORT',
+      'AUDIT.WORKSPACE', 'AUDIT.TRAIL.VIEW', 'AUDIT.EVIDENCE.EXPORT', 'AUDIT.PERIOD.EVIDENCE',
       'FIN.RPT.BALANCESHEET', 'FIN.RPT.PROFITLOSS', 'FIN.RPT.TRIALBALANCE', 'FIN.RPT.CASHFLOW',
       'FIN.RPT.SUBLEDGER.TIE', 'FIN.RPT.CONSOLIDATE.STMT',
       'FIN.GL.BALANCE', 'FIN.JOURNAL.LIST', 'FIN.JOURNAL.DISPLAY', 'FIN.DOC.FLOW', 'FIN.AP.AGEING', 'FIN.AR.AGEING',
       'PROC.PO.LIST', 'PROC.PO.DISPLAY', 'SALES.DOCUMENTS.LIST', 'INV.MATERIALDOC.LIST', 'INV.STOCK.VIEW',
       'PLT.LOCK.DISPLAY', 'PLT.JOB.DISPLAY', 'PLT.NOTIFY.DISPLAY',
     ],
+  },
+  {
+    code: 'DEMO_HR_CLERK',
+    name: 'HR clerk (plant)',
+    description: 'Requests hires and maintains employee data for the plant they are scoped to; cannot approve',
+    capabilities: ['PEOPLE.EMPLOYEE.CREATE', 'PEOPLE.RECORD.MAINTAIN', 'PEOPLE.ASSIGNMENT.MAINTAIN', 'PEOPLE.AUTHORITY.VIEW', 'PEOPLE.TIME.ENTER', 'AUDIT.TRAIL.VIEW'],
+  },
+  {
+    code: 'DEMO_HR_OFFICER',
+    name: 'HR officer / manager (company)',
+    description: 'Maintains employee data company-wide, sets position tiers and approves hires of a lower tier',
+    capabilities: ['PEOPLE.EMPLOYEE.CREATE', 'PEOPLE.RECORD.MAINTAIN', 'PEOPLE.ASSIGNMENT.MAINTAIN', 'PEOPLE.AUTHORITY.VIEW', 'PEOPLE.TIME.ENTER', 'AUDIT.TRAIL.VIEW', 'PEOPLE.EMPLOYEE.APPROVE', 'PEOPLE.POSITION.CREATE', 'PEOPLE.LEAVE.*'],
   },
   {
     code: 'DEMO_QUALITY',
@@ -290,6 +316,13 @@ const USERS = [
   { username: 'demo.quality', fullName: 'Noor Adeeb', role: 'DEMO_QUALITY', plants: [DEMO_STRUCTURE.manufacturingPlant] },
   // The external auditor. Reads only, under the time-boxed grant the audit phase gives
   // (scripts/demo-provision.ts D6_AUDIT); no plant, because an auditor moves nothing.
+  // HR. The two clerks are limited to one plant each; the officer and the manager hold no Plant scope, so they
+  // reach the whole company. Each is linked to the employee of the same name, and that employee's position tier
+  // is the account's tier.
+  { username: 'demo.hrmanager', fullName: 'Rania Khoury', role: 'DEMO_HR_OFFICER', plants: [] },
+  { username: 'demo.hrofficer', fullName: 'Bassam Idris', role: 'DEMO_HR_OFFICER', plants: [] },
+  { username: 'demo.hrclerk1', fullName: 'Salma Nabil', role: 'DEMO_HR_CLERK', plants: [DEMO_STRUCTURE.manufacturingPlant] },
+  { username: 'demo.hrclerk2', fullName: 'Hadi Mourad', role: 'DEMO_HR_CLERK', plants: [DEMO_STRUCTURE.distributionPlant] },
   { username: 'demo.auditor', fullName: 'Leila Haddad', role: 'DEMO_AUDITOR', plants: [] },
 ] as const;
 
@@ -351,10 +384,17 @@ export async function buildDemoPeople(input: BuildDemoPeopleInput): Promise<Demo
           jobCode: position.jobCode,
           orgUnitCode: position.orgUnitCode,
           ...('superiorCode' in position ? { superiorCode: position.superiorCode } : {}),
+          tier: position.tier,
           changedBy: DEMO_ACTOR,
         },
         ADMINISTRATOR_PATTERNS,
       ).catch(ignoreExisting);
+      // A position defined by an earlier run carries the default tier; this brings it to the demo's.
+      await changePosition({ client, code: position.code, tier: position.tier, changedBy: DEMO_ACTOR }, ADMINISTRATOR_PATTERNS)
+        .catch((error: unknown) => {
+          if (error instanceof Error && /No field was given/.test(error.message)) return; // already at the demo's tier
+          ignoreExisting(error);
+        });
     }
 
     for (const employee of EMPLOYEES) {
@@ -377,6 +417,8 @@ export async function buildDemoPeople(input: BuildDemoPeopleInput): Promise<Demo
           positionCode: employee.positionCode,
           controllingArea: DEMO_STRUCTURE.controllingArea,
           costCenter: employee.costCenter,
+          // Where the person works, so plant-level HR clerks can be shown to reach only their plant.
+          plant: employee.costCenter === 'CC2000' ? DEMO_STRUCTURE.distributionPlant : DEMO_STRUCTURE.manufacturingPlant,
           validFrom: input.timeline.startDate,
           changedBy: DEMO_ACTOR,
         },
@@ -438,6 +480,16 @@ export async function buildDemoPeople(input: BuildDemoPeopleInput): Promise<Demo
       }
     }
   });
+
+  // Each account that matches an employee by name is linked to that employee, so its tier comes from their position.
+  for (const user of USERS) {
+    const person = EMPLOYEES.find((e) => e.fullName === user.fullName);
+    if (!person) continue;
+    await linkEmployeeUser(
+      { client, personnelNumber: person.personnelNumber, username: user.username, changedBy: DEMO_ACTOR },
+      ADMINISTRATOR_PATTERNS,
+    ).catch(ignoreExisting);
+  }
 
   // Every account in the credential file is opened by the password in it.
   //

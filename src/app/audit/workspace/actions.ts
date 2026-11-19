@@ -2,6 +2,15 @@
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
+  AUDIT_PERIOD_EVIDENCE_CAPABILITY,
+  cancelPeriodPack,
+  getPeriodPackStatus,
+  requestPeriodPack,
+  type PeriodPackView,
+} from '@/modules/audit/period-evidence';
+import { PeriodPackError } from '@/modules/audit/period-evidence-data';
+import {
+  AUDIT_EXPORT_CAPABILITY,
   AUDIT_TRAIL_CAPABILITY,
   AUDIT_WORKSPACE_CAPABILITY,
   AUDIT_WORKSPACE_ROUTE,
@@ -81,5 +90,55 @@ export async function searchHistoryAction(_prev: AuditSearchState, form: FormDat
   } catch (error) {
     if (error instanceof AuditError) return { ok: false, terms, message: error.message, remedy: error.remedy };
     throw error;
+  }
+}
+
+// ── Period-close evidence pack ──────────────────────────────────────────────
+
+export interface PeriodPackState {
+  ok: boolean;
+  message?: string;
+  remedy?: string;
+  pack?: PeriodPackView;
+  /** The selection submitted, so the form keeps it after a validation error. */
+  selection?: { companyCode: string; fiscalYear: string; postingPeriod: string };
+}
+
+function packRefusal(error: unknown): { message: string; remedy?: string } {
+  if (error instanceof AuditError || error instanceof PeriodPackError) return { message: error.message, remedy: error.remedy };
+  throw error;
+}
+
+/** Submit a pack request: validated, authorised and queued; returns at once with the pack id and status. */
+export async function requestPeriodPackAction(_prev: PeriodPackState, form: FormData): Promise<PeriodPackState> {
+  const session = await requireSession(ROUTE);
+  const selection = { companyCode: text(form, 'companyCode'), fiscalYear: text(form, 'fiscalYear'), postingPeriod: text(form, 'postingPeriod') };
+  for (const capability of [AUDIT_WORKSPACE_CAPABILITY, AUDIT_PERIOD_EVIDENCE_CAPABILITY, AUDIT_EXPORT_CAPABILITY]) {
+    if (!can(session, capability)) return { ok: false, selection, message: `You do not hold ${capability}.`, remedy: `Ask for ${capability}.` };
+  }
+  try {
+    const pack = await requestPeriodPack(actorOf(session), { ...selection, requestKey: text(form, 'requestKey') });
+    return { ok: true, selection, pack };
+  } catch (error) {
+    return { ok: false, selection, ...packRefusal(error) };
+  }
+}
+
+/** Refresh one pack's status through the server's own authorisation. */
+export async function pollPeriodPackAction(packId: string): Promise<PeriodPackState> {
+  const session = await requireSession(ROUTE);
+  try {
+    return { ok: true, pack: await getPeriodPackStatus(actorOf(session), packId) };
+  } catch (error) {
+    return { ok: false, ...packRefusal(error) };
+  }
+}
+
+export async function cancelPeriodPackAction(packId: string): Promise<PeriodPackState> {
+  const session = await requireSession(ROUTE);
+  try {
+    return { ok: true, pack: await cancelPeriodPack(actorOf(session), packId) };
+  } catch (error) {
+    return { ok: false, ...packRefusal(error) };
   }
 }

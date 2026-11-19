@@ -39,6 +39,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  smallint,
   primaryKey,
   text,
   timestamp,
@@ -151,6 +152,13 @@ export const employee = pgTable(
     isActive: boolean('is_active').notNull().default(true),
     requestKey: varchar('request_key', { length: 64 }),
     appUserId: varchar('app_user_id', { length: 36 }),
+    hireStatus: varchar('hire_status', { length: 10 }).notNull().default('ACTIVE'),
+    proposedPositionCode: varchar('proposed_position_code', { length: 10 }),
+    proposedPlant: varchar('proposed_plant', { length: 4 }),
+    hireRequestedBy: varchar('hire_requested_by', { length: 60 }),
+    hireDecidedBy: varchar('hire_decided_by', { length: 60 }),
+    hireDecidedAt: timestamp('hire_decided_at', { withTimezone: true }),
+    hireNote: varchar('hire_note', { length: 200 }),
     ...auditColumns,
   },
   (t) => [
@@ -287,10 +295,13 @@ export const position = pgTable(
     jobCode: varchar('job_code', { length: 10 }),
     description: varchar('description', { length: 200 }),
     isValid: boolean('is_valid').notNull().default(true),
+    /** Authority tier the org chart gives the position (1..9). An employee's tier is their position's. */
+    tier: smallint('tier').notNull().default(1),
     ...auditColumns,
   },
   (t) => [
     primaryKey({ columns: [t.client, t.code] }),
+    check('position_tier_ck', sql`${t.tier} between 1 and 9`),
     check('position_code_format_ck', sql`${t.code} ~ '^([A-Z][A-Z0-9]{1,9})$'`),
     foreignKey({
       name: 'position_job_fk',

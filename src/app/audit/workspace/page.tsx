@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import {
+  AUDIT_EXPORT_CAPABILITY,
   AUDIT_FINDING_ROUTE,
   AUDIT_TRAIL_CAPABILITY,
   AUDIT_WORKSPACE_CAPABILITY,
@@ -18,7 +19,9 @@ import {
   auditWorkspaceView,
 } from '@/modules/audit/workspace';
 
-import { ChangeHistorySearch, LogWorkspaceView } from './WorkspaceClient';
+import { AUDIT_PERIOD_EVIDENCE_CAPABILITY } from '@/modules/audit/period-evidence';
+
+import { ChangeHistorySearch, LogWorkspaceView, PeriodPackPanel } from './WorkspaceClient';
 import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -35,8 +38,10 @@ function ScopeList({ label, values }: { label: string; values: string[] }) {
   );
 }
 
-export default async function AuditorWorkspacePage() {
+export default async function AuditorWorkspacePage({ searchParams }: { searchParams?: Promise<{ pack?: string }> }) {
   const session = await requireSession(ROUTE);
+  const params = (await searchParams) ?? {};
+  const initialPackId = typeof params.pack === 'string' && /^[0-9a-f-]{36}$/i.test(params.pack) ? params.pack : null;
   const allowed = can(session, CAPABILITY);
   const view = allowed ? await auditWorkspaceView(session.user.client, session.user.userId) : null;
   const grant = view?.grant ?? null;
@@ -115,6 +120,10 @@ export default async function AuditorWorkspacePage() {
           </section>
 
           {grant && can(session, AUDIT_TRAIL_CAPABILITY) && <ChangeHistorySearch modules={grant.scope.MODULE} />}
+
+          {grant && can(session, AUDIT_PERIOD_EVIDENCE_CAPABILITY) && (
+            <PeriodPackPanel companies={grant.scope.COMPANY_CODE} canDownload={can(session, AUDIT_EXPORT_CAPABILITY)} initialPackId={initialPackId} />
+          )}
 
           <section className="panel overflow-x-auto" aria-label="Working state">
             <div className="flex items-center justify-between px-4 pt-4">

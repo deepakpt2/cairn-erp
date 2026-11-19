@@ -102,6 +102,28 @@ export async function withTenant<T>(
 
 
 /**
+ * Run a callback inside one tenant on ONE consistent PostgreSQL snapshot (REPEATABLE READ).
+ *
+ * The isolation level is part of BEGIN, so it is set before the first data query, and the tenant
+ * setting is applied inside the same transaction so row level security still holds. Everything the
+ * callback reads sees the database exactly as it stood when its first query ran; a concurrent commit
+ * is either entirely visible or entirely invisible. The callback must not write.
+ */
+export async function withTenantSnapshot<T>(
+  client: string,
+  fn: (tx: Tx) => Promise<T>,
+): Promise<T> {
+  await assertApplicationRole();
+  return db().transaction(
+    async (tx) => {
+      await tx.execute(sqlSafeSetting(client));
+      return fn(tx);
+    },
+    { isolationLevel: 'repeatable read' },
+  );
+}
+
+/**
  * Run a callback as one named person, inside one tenant.
  *
  * `withTenant` names the tenant and nobody, which is right for the tables whose

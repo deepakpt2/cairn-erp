@@ -33,6 +33,9 @@ import { z } from 'zod';
 
 import { AuthzError } from '../../platform/auth/current';
 import { hasCapability } from '../../platform/auth/session';
+import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
+import { companyPlantsOf, currentScopesOf, employeeToday, scopeCoversAssignment, scopeReaches, type EmployeeAssignmentScope } from './employee-reach';
+import { HIRE_APPROVE_CAPABILITY, actorTier, employeeTier, positionTier, tierRefusal } from './employee-tier';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import {
@@ -60,14 +63,89 @@ const TEXT_MAX = 500;
  * inventory and user-admin services: the service is the last line of defence, so it checks too —
  * a direct API call that bypasses the server action is stopped here. */
 function assertCapability(
-  capabilities: readonly string[] | undefined,
+  capabilities: EmployeeAccess | undefined,
   required: string,
   actor: string,
 ): void {
+  if (isLive(capabilities)) return; // judged live, in the write's own transaction
   if (!capabilities || !hasCapability([...capabilities], required)) {
     throw new AuthzError(required, actor);
   }
 }
+/**
+ * Who is calling. A capability list is the in-process form for trusted callers with no session (the demo
+ * provisioner, service tests) and carries no company or plant limit. `{ authorization }` is a live session: the
+ * service re-reads the session, the capability and the Company Code / Plant scope in its own transaction, and
+ * the employee must be inside that reach (company level, or the clerk's own plants). Screens only build the
+ * second form.
+ */
+export type EmployeeAccess = readonly string[] | { authorization: ServiceAuthorityContext | undefined };
+
+function isLive(access: EmployeeAccess | undefined): access is { authorization: ServiceAuthorityContext | undefined } {
+  return access !== undefined && !Array.isArray(access);
+}
+
+/** Judge a live caller for any of `capabilities`; returns their scope. Refuses in the service's own words. */
+async function judgeLive(tx: Tx, client: string, access: { authorization: ServiceAuthorityContext | undefined }, capabilities: readonly string[]) {
+  let first: { message: string; remedy: string } | null = null;
+  for (const capability of capabilities) {
+    const verdict = await verifyServiceAuthorityInTx(tx, client, access.authorization, capability, { requirePlantScope: false });
+    if (verdict.ok) return verdict;
+    first ??= verdict.refusal;
+  }
+  throw new EmployeeMasterError(first!.message, first!.remedy);
+}
+
+/** The employee is outside the caller's reach: said like "unknown", so it confirms nothing about the number. */
+function outOfReach(personnel: string): never {
+  return refusal('EMPLOYEE_UNKNOWN', personnel);
+}
+
+/**
+ * Where an employee stands for scope purposes: their current assignments, else (a pending hire with no assignment
+ * yet) the plant the hire was proposed for.
+ */
+async function scopesFor(tx: Tx, client: string, numbers: readonly string[], today: string): Promise<Map<string, EmployeeAssignmentScope[]>> {
+  const map = await currentScopesOf(tx, client, numbers, today);
+  const missing = numbers.filter((n) => !(map.get(n)?.length));
+  for (let i = 0; i < missing.length; i += 500) {
+    const chunk = missing.slice(i, i + 500);
+    const rows = (await tx.execute(sql`
+      select e.personnel_number as pn, e.proposed_plant as plant, pl.company_code as company
+        from employee e join plant pl on pl.client = e.client and pl.plant = e.proposed_plant
+       where e.client = ${client} and e.personnel_number in (${sql.join(chunk.map((n) => sql`${n}`), sql`, `)})
+         and e.hire_status = 'PENDING'`)) as unknown as Array<{ pn: string; plant: string; company: string | null }>;
+    for (const r of rows) if (r.company) map.set(r.pn, [{ company: r.company, plant: r.plant, validFrom: today, validTo: null }]);
+  }
+  return map;
+}
+
+function deny(message: string, remedy: string): never {
+  throw new EmployeeMasterError(message, remedy);
+}
+
+/**
+ * Inside the write's transaction: a live caller must hold the capability and reach the employee as they stand
+ * today. With `tier`, the caller's tier must also be strictly above the employee's. A capability-list caller was
+ * already checked and carries no limit (returns null).
+ */
+async function authorizeWrite(
+  tx: Tx, client: string, access: EmployeeAccess | undefined, capability: string, personnel: string, tier = false,
+): Promise<null | { userId: string; username: string; actor: Awaited<ReturnType<typeof actorTier>> }> {
+  if (!isLive(access)) return null;
+  const verdict = await judgeLive(tx, client, access, [capability]);
+  const today = await employeeToday(tx, client);
+  const scopes = (await scopesFor(tx, client, [personnel], today)).get(personnel) ?? [];
+  if (!scopeReaches(verdict.restrictions, scopes, await companyPlantsOf(tx, client), true)) outOfReach(personnel);
+  const userId = access.authorization!.userId;
+  const actor = await actorTier(tx, client, userId, today);
+  if (tier) {
+    const refused = tierRefusal(actor, await employeeTier(tx, client, personnel, today), 'This change');
+    if (refused) deny(refused.message, refused.remedy);
+  }
+  return { userId, username: verdict.username, actor };
+}
+
 /** The largest number `numeric(15,2)` holds: thirteen digits before the decimal point. */
 const NUMBER_PATTERN = /^-?\d{1,13}(\.\d{1,2})?$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -95,6 +173,9 @@ const createEmployeeInput = z.object({
   isActive: z.boolean().optional().default(true),
   changedBy: kept(60),
   requestKey: z.string().trim().min(8).max(64).optional(),
+  /** A hire made through a live session is a request for this position (its tier) and plant (its reach). */
+  proposedPositionCode: code.pipe(z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/)).optional(),
+  proposedPlant: code.pipe(z.string().regex(/^[A-Z0-9]{1,4}$/)).optional(),
 });
 
 const changeEmployeeInput = z.object({
@@ -153,12 +234,23 @@ export interface EmployeeRecordView {
   values: RecordFieldValueView[];
 }
 
+export type EmployeeListRow = Pick<EmployeeView, 'personnelNumber' | 'fullName' | 'isActive' | 'hireStatus' | 'createdBy' | 'createdAt'> & { recordCount: number };
+
 export interface EmployeeView {
   personnelNumber: string;
   fullName: string;
   isActive: boolean;
   createdBy: string;
   createdAt: string;
+  /** ACTIVE, PENDING (a hire awaiting a higher tier) or REJECTED. */
+  hireStatus: string;
+  proposedPositionCode: string | null;
+  proposedPlant: string | null;
+  hireRequestedBy: string | null;
+  hireNote: string | null;
+  /** The employee's tier today (their position's), and the user linked to them, if any. */
+  tier: number;
+  linkedUsername: string | null;
   records: EmployeeRecordView[];
 }
 
@@ -406,8 +498,15 @@ async function recordsOf(
   return out;
 }
 
-function viewOf(master: typeof employee.$inferSelect, records: EmployeeRecordView[]): EmployeeView {
+function viewOf(master: typeof employee.$inferSelect, records: EmployeeRecordView[], extra: { tier: number; linkedUsername: string | null }): EmployeeView {
   return {
+    hireStatus: master.hireStatus,
+    proposedPositionCode: master.proposedPositionCode ?? null,
+    proposedPlant: master.proposedPlant ?? null,
+    hireRequestedBy: master.hireRequestedBy ?? null,
+    hireNote: master.hireNote ?? null,
+    tier: extra.tier,
+    linkedUsername: extra.linkedUsername,
     personnelNumber: master.personnelNumber,
     fullName: master.fullName,
     isActive: master.isActive,
@@ -426,11 +525,37 @@ function viewOf(master: typeof employee.$inferSelect, records: EmployeeRecordVie
  */
 export async function createEmployee(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: EmployeeAccess,
 ): Promise<EmployeeView> {
   const parsed = parse(createEmployeeInput, input);
   assertCapability(capabilities, EMPLOYEE_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
+    // A live hire is a request: it names the position (whose tier the approver must be above) and the plant
+    // (whose reach the approver must hold), and the person is not active until a higher tier approves.
+    let hire: { requestedBy: string } | null = null;
+    if (isLive(capabilities)) {
+      const verdict = await judgeLive(tx, parsed.client, capabilities, [EMPLOYEE_CAPABILITY]);
+      if (!parsed.proposedPositionCode) {
+        deny('A hire is requested for a position, because the position carries the tier that decides who may approve it.', 'Choose the position the person will hold.');
+      }
+      const tier = await positionTier(tx, parsed.client, parsed.proposedPositionCode!);
+      if (tier === null) deny(`No position ${parsed.proposedPositionCode} stands in this tenant.`, 'Choose a position from the org chart.');
+      const today = await employeeToday(tx, parsed.client);
+      const refused = tierRefusal(await actorTier(tx, parsed.client, capabilities.authorization!.userId, today), tier!, 'Adding this employee');
+      if (refused) deny(refused.message, refused.remedy);
+      const cp = await companyPlantsOf(tx, parsed.client);
+      if (parsed.proposedPlant) {
+        const plants = (await tx.execute(sql`select company_code from plant where client = ${parsed.client} and plant = ${parsed.proposedPlant}`)) as unknown as Array<{ company_code: string | null }>;
+        const company = plants[0]?.company_code;
+        if (!company) deny(`Plant ${parsed.proposedPlant} is unknown or has no company code.`, 'Name a plant of the plant master.');
+        if (!scopeCoversAssignment(verdict.restrictions, { company: company!, plant: parsed.proposedPlant }, cp)) {
+          deny('Your Company Code or Plant scope does not cover that plant.', 'Request hires for the plants you are responsible for.');
+        }
+      } else if (!scopeReaches(verdict.restrictions, [], cp, true)) {
+        deny('Your scope is limited to particular plants, so a hire must name the plant it is for.', 'Enter the plant the person will work in.');
+      }
+      hire = { requestedBy: verdict.username };
+    }
     const standing = await employeeRow(tx, parsed.client, parsed.personnelNumber);
     if (standing) {
       if (parsed.requestKey && standing.requestKey === parsed.requestKey) return undefined; // replay: the row stands
@@ -441,9 +566,13 @@ export async function createEmployee(
         client: parsed.client,
         personnelNumber: parsed.personnelNumber,
         fullName: parsed.fullName,
-        isActive: parsed.isActive,
+        isActive: hire ? false : parsed.isActive,
         requestKey: parsed.requestKey ?? null,
         createdBy: parsed.changedBy,
+        ...(hire ? {
+          hireStatus: 'PENDING', proposedPositionCode: parsed.proposedPositionCode ?? null,
+          proposedPlant: parsed.proposedPlant ?? null, hireRequestedBy: hire.requestedBy,
+        } : {}),
       });
     } catch (caught) {
       if (typeof caught === 'object' && caught !== null && 'code' in caught && caught.code === '23505') {
@@ -456,8 +585,11 @@ export async function createEmployee(
       objectClass: EMPLOYEE_OBJECT_CLASS,
       objectKey: parsed.personnelNumber,
       changeType: 'CREATE',
-      changedBy: parsed.changedBy,
-      after: { personnelNumber: parsed.personnelNumber, fullName: parsed.fullName, isActive: parsed.isActive },
+      changedBy: hire?.requestedBy ?? parsed.changedBy, // a live request is logged under the session's user, never a typed name
+      after: {
+        personnelNumber: parsed.personnelNumber, fullName: parsed.fullName, isActive: hire ? false : parsed.isActive,
+        ...(hire ? { hireStatus: 'PENDING', requestedBy: hire.requestedBy, proposedPositionCode: parsed.proposedPositionCode, proposedPlant: parsed.proposedPlant ?? null } : {}),
+      },
     });
     return undefined;
   });
@@ -470,7 +602,7 @@ export async function createEmployee(
  */
 export async function changeEmployee(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: EmployeeAccess,
 ): Promise<EmployeeView> {
   const parsed = parse(changeEmployeeInput, input);
   assertCapability(capabilities, EMPLOYEE_CAPABILITY, parsed.changedBy);
@@ -480,6 +612,7 @@ export async function changeEmployee(
   if (Object.keys(patch).length === 0) refusal('NOTHING_TO_CHANGE');
 
   await withTenant(parsed.client, async (tx) => {
+    await authorizeWrite(tx, parsed.client, capabilities, EMPLOYEE_CAPABILITY, parsed.personnelNumber);
     const standing = await employeeRow(tx, parsed.client, parsed.personnelNumber);
     if (!standing) refusal('EMPLOYEE_UNKNOWN', parsed.personnelNumber);
     await tx.update(employee).set({ ...patch, changedBy: parsed.changedBy, changedAt: new Date() }).where(and(
@@ -507,12 +640,15 @@ export async function getEmployee(clientInput: string, personnelInput: string): 
   return withTenant(client, async (tx) => {
     const master = await employeeRow(tx, client, personnel);
     if (!master) refusal('EMPLOYEE_UNKNOWN', personnel);
-    return viewOf(master, await recordsOf(tx, client, personnel));
+    const linked = master.appUserId
+      ? ((await tx.execute(sql`select username from app_user where client = ${client} and id = ${master.appUserId}`)) as unknown as Array<{ username: string }>)[0]?.username ?? null
+      : null;
+    return viewOf(master, await recordsOf(tx, client, personnel), { tier: await employeeTier(tx, client, personnel, await employeeToday(tx, client)), linkedUsername: linked });
   });
 }
 
 /** The tenant's employees, with the count of records each holds. `query` is a name or number fragment. */
-export async function listEmployees(clientInput: string, query?: string): Promise<Array<Omit<EmployeeView, 'records'> & { recordCount: number }>> {
+export async function listEmployees(clientInput: string, query?: string, limit = 200): Promise<EmployeeListRow[]> {
   const client = parse(z.string(), clientInput).trim();
   const needle = (query ?? '').trim().toUpperCase();
   return withTenant(client, async (tx) => {
@@ -520,6 +656,7 @@ export async function listEmployees(clientInput: string, query?: string): Promis
       personnelNumber: employee.personnelNumber,
       fullName: employee.fullName,
       isActive: employee.isActive,
+      hireStatus: employee.hireStatus,
       createdBy: employee.createdBy,
       createdAt: employee.createdAt,
       recordCount: sql<number>`(
@@ -531,16 +668,146 @@ export async function listEmployees(clientInput: string, query?: string): Promis
         sql`${employee.personnelNumber} like ${`%${needle}%`}`,
         sql`upper(${employee.fullName}) like ${`%${needle}%`}`,
       )!]),
-    )).orderBy(asc(employee.personnelNumber)).limit(200);
+    )).orderBy(asc(employee.personnelNumber)).limit(limit);
     return rows.map((row) => ({
       personnelNumber: row.personnelNumber,
       fullName: row.fullName,
       isActive: row.isActive,
+      hireStatus: row.hireStatus,
       createdBy: row.createdBy,
       createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
       recordCount: Number(row.recordCount),
     }));
   });
+}
+
+const decideHireInput = z.object({
+  client: code.pipe(z.string().regex(/^[A-Z0-9]{2,4}$/, { message: 'CLIENT_FORMAT' })),
+  personnelNumber,
+  decision: z.enum(['APPROVE', 'REJECT']),
+  note: z.string().trim().max(200).optional(),
+  changedBy: kept(60),
+});
+
+/**
+ * Approve or reject a pending hire. A live approver must hold `PEOPLE.EMPLOYEE.APPROVE`, reach the plant the hire
+ * was proposed for, and have a tier strictly above the proposed position's. Nobody approves their own request,
+ * except an administrator, who stands outside the employee group.
+ */
+export async function decideHire(input: unknown, access?: EmployeeAccess): Promise<EmployeeView> {
+  const parsed = parse(decideHireInput, input);
+  assertCapability(access, HIRE_APPROVE_CAPABILITY, parsed.changedBy);
+  if (parsed.decision === 'REJECT' && !parsed.note) deny('A rejection needs a reason.', 'Write why the hire is not approved.');
+  await withTenant(parsed.client, async (tx) => {
+    const standing = await employeeRow(tx, parsed.client, parsed.personnelNumber);
+    let decidedBy = parsed.changedBy;
+    if (isLive(access)) {
+      const judged = await authorizeWrite(tx, parsed.client, access, HIRE_APPROVE_CAPABILITY, parsed.personnelNumber, true);
+      decidedBy = judged!.username;
+      if (judged!.actor.basis !== 'ADMIN' && standing?.hireRequestedBy === judged!.username) {
+        deny('You requested this hire, so you cannot approve it.', 'Ask another approver with a higher tier.');
+      }
+    }
+    if (!standing) refusal('EMPLOYEE_UNKNOWN', parsed.personnelNumber);
+    if (standing!.hireStatus !== 'PENDING') deny('That employee is not waiting for approval.', 'Only a pending hire can be approved or rejected.');
+    const approved = parsed.decision === 'APPROVE';
+    await tx.update(employee).set({
+      hireStatus: approved ? 'ACTIVE' : 'REJECTED', isActive: approved, hireDecidedBy: decidedBy, hireDecidedAt: new Date(),
+      hireNote: parsed.note ?? null, changedBy: decidedBy, changedAt: new Date(),
+    }).where(and(eq(employee.client, parsed.client), eq(employee.personnelNumber, parsed.personnelNumber)));
+    await recordChange(tx, {
+      client: parsed.client, objectClass: EMPLOYEE_OBJECT_CLASS, objectKey: parsed.personnelNumber, changeType: 'CHANGE', changedBy: decidedBy,
+      before: { hireStatus: 'PENDING' }, after: { hireStatus: approved ? 'ACTIVE' : 'REJECTED', note: parsed.note ?? null, requestedBy: standing!.hireRequestedBy },
+    });
+    return undefined;
+  });
+  return getEmployee(parsed.client, parsed.personnelNumber);
+}
+
+const linkInput = z.object({
+  client: code.pipe(z.string().regex(/^[A-Z0-9]{2,4}$/, { message: 'CLIENT_FORMAT' })),
+  personnelNumber,
+  /** Null removes the link. */
+  username: z.string().trim().min(1).max(60).nullable(),
+  changedBy: kept(60),
+});
+
+/**
+ * Link a user to an employee (or remove the link): the one explicit employee-to-user mapping, and the source of
+ * the user's tier. The linker's tier must be above the employee's, and nobody links their own user.
+ */
+export async function linkEmployeeUser(input: unknown, access?: EmployeeAccess): Promise<EmployeeView> {
+  const parsed = parse(linkInput, input);
+  assertCapability(access, EMPLOYEE_CAPABILITY, parsed.changedBy);
+  await withTenant(parsed.client, async (tx) => {
+    const judged = await authorizeWrite(tx, parsed.client, access, EMPLOYEE_CAPABILITY, parsed.personnelNumber, true);
+    const standing = await employeeRow(tx, parsed.client, parsed.personnelNumber);
+    if (!standing) refusal('EMPLOYEE_UNKNOWN', parsed.personnelNumber);
+    let userId: string | null = null;
+    if (parsed.username !== null) {
+      const users = (await tx.execute(sql`select id from app_user where client = ${parsed.client} and upper(username) = upper(${parsed.username})`)) as unknown as Array<{ id: string }>;
+      if (!users[0]) deny(`No user ${parsed.username} stands in this tenant.`, 'Use the sign-in name of an existing user.');
+      userId = users[0]!.id;
+      if (judged && judged.userId === userId) deny('You cannot link your own user.', 'Ask another HR officer with a higher tier.');
+      if (!standing!.isActive) deny('Only an active employee can be linked to a user.', 'Approve the hire first.');
+      const taken = (await tx.execute(sql`select personnel_number as pn from employee where client = ${parsed.client} and app_user_id = ${userId} and personnel_number <> ${parsed.personnelNumber}`)) as unknown as Array<{ pn: string }>;
+      if (taken[0]) deny(`User ${parsed.username} is already linked to employee ${taken[0].pn}.`, 'Remove that link first: a user is one person.');
+    }
+    const actor = judged?.username ?? parsed.changedBy;
+    await tx.update(employee).set({ appUserId: userId, changedBy: actor, changedAt: new Date() })
+      .where(and(eq(employee.client, parsed.client), eq(employee.personnelNumber, parsed.personnelNumber)));
+    await recordChange(tx, {
+      client: parsed.client, objectClass: EMPLOYEE_OBJECT_CLASS, objectKey: parsed.personnelNumber, changeType: 'CHANGE', changedBy: actor,
+      before: { linkedUserId: standing!.appUserId ?? null }, after: { linkedUserId: userId, username: parsed.username },
+    });
+    return undefined;
+  });
+  return getEmployee(parsed.client, parsed.personnelNumber);
+}
+
+/** Reading an employee needs the authority to maintain employees or their records (a view-only authority does not exist yet). */
+const READ_CAPABILITIES = [EMPLOYEE_CAPABILITY, RECORD_CAPABILITY] as const;
+const SEARCH_CANDIDATES = 2000;
+
+/**
+ * One employee, for a caller whose reach is judged here: the session, the capability and the Company Code /
+ * Plant scope are re-read in this transaction. An employee outside the caller's reach answers exactly like one
+ * that does not exist. A capability list is the in-process form and carries no limit.
+ */
+export async function viewEmployee(clientInput: string, personnelInput: string, access: EmployeeAccess | undefined): Promise<EmployeeView> {
+  const client = parse(z.string(), clientInput).trim();
+  const personnel = personnelInput.trim().toUpperCase();
+  await withTenant(client, async (tx) => {
+    if (isLive(access)) {
+      const { restrictions } = await judgeLive(tx, client, access, READ_CAPABILITIES);
+      const scopes = (await scopesFor(tx, client, [personnel], await employeeToday(tx, client))).get(personnel) ?? [];
+      if (!scopeReaches(restrictions, scopes, await companyPlantsOf(tx, client), true)) outOfReach(personnel);
+    } else if (!access || !READ_CAPABILITIES.some((c) => hasCapability([...access], c))) {
+      throw new AuthzError(READ_CAPABILITIES.join(' or '), 'employee read');
+    }
+  });
+  return getEmployee(client, personnel);
+}
+
+/** The employees the caller reaches (at most 200, by personnel number). Same judgement as `viewEmployee`. */
+export async function searchEmployees(
+  clientInput: string, query: string | undefined, access: EmployeeAccess | undefined,
+): Promise<EmployeeListRow[]> {
+  const client = parse(z.string(), clientInput).trim();
+  const restrictionsOf = await withTenant(client, async (tx) => {
+    if (isLive(access)) return (await judgeLive(tx, client, access, READ_CAPABILITIES)).restrictions;
+    if (!access || !READ_CAPABILITIES.some((c) => hasCapability([...access], c))) {
+      throw new AuthzError(READ_CAPABILITIES.join(' or '), 'employee read');
+    }
+    return null;
+  });
+  if (restrictionsOf === null) return listEmployees(client, query);
+  const candidates = await listEmployees(client, query, SEARCH_CANDIDATES);
+  const { scopes, plants } = await withTenant(client, async (tx) => ({
+    scopes: await scopesFor(tx, client, candidates.map((c) => c.personnelNumber), await employeeToday(tx, client)),
+    plants: await companyPlantsOf(tx, client),
+  }));
+  return candidates.filter((c) => scopeReaches(restrictionsOf, scopes.get(c.personnelNumber) ?? [], plants, true)).slice(0, 200);
 }
 
 /**
@@ -550,13 +817,14 @@ export async function listEmployees(clientInput: string, query?: string): Promis
  */
 export async function createRecord(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: EmployeeAccess,
 ): Promise<EmployeeRecordView> {
   const parsed = parse(createRecordInput, input);
   assertCapability(capabilities, RECORD_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
 
   await withTenant(parsed.client, async (tx) => {
+    await authorizeWrite(tx, parsed.client, capabilities, RECORD_CAPABILITY, parsed.personnelNumber);
     if (!(await employeeRow(tx, parsed.client, parsed.personnelNumber))) refusal('EMPLOYEE_UNKNOWN', parsed.personnelNumber);
     const [type] = await tx.select().from(recordType).where(and(
       eq(recordType.client, parsed.client),
@@ -654,7 +922,7 @@ export async function createRecord(
  */
 export async function delimitRecord(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: EmployeeAccess,
 ): Promise<EmployeeRecordView> {
   const parsed = parse(delimitInput, input);
   assertCapability(capabilities, RECORD_CAPABILITY, parsed.changedBy);
@@ -662,6 +930,7 @@ export async function delimitRecord(
   const to = dayOf(parsed.validTo);
 
   await withTenant(parsed.client, async (tx) => {
+    await authorizeWrite(tx, parsed.client, capabilities, RECORD_CAPABILITY, parsed.personnelNumber);
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${
       `${parsed.client}/employee-record/${parsed.personnelNumber}/${parsed.recordType}`}, 0))`);
     const [standing] = await tx.select().from(employeeRecord).where(and(
@@ -717,13 +986,14 @@ export async function delimitRecord(
  */
 export async function changeRecordValues(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: EmployeeAccess,
 ): Promise<EmployeeRecordView> {
   const parsed = parse(changeValuesInput, input);
   assertCapability(capabilities, RECORD_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
 
   await withTenant(parsed.client, async (tx) => {
+    await authorizeWrite(tx, parsed.client, capabilities, RECORD_CAPABILITY, parsed.personnelNumber);
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${
       `${parsed.client}/employee-record/${parsed.personnelNumber}/${parsed.recordType}`}, 0))`);
     const [standing] = await tx.select().from(employeeRecord).where(and(

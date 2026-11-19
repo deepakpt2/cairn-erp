@@ -38,6 +38,9 @@ import { and, asc, desc, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { AuthzError } from '../../platform/auth/current';
+import { LEAVE_ADJUST, LEAVE_CONFIGURE, LEAVE_ENTER, LeaveError, actorOf, assertReachesEmployee, isLeaveError, judgeLeave, type LeaveAccess } from './leave-access';
+import { lockEmployeeLeave } from './leave-ledger';
+import { approveLeaveAbsence, cancelLeaveAbsence, rejectLeaveAbsence, requestLeaveAbsence } from './leave-absence';
 import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
@@ -230,10 +233,13 @@ export interface TimeRecordingView {
 
 export class TimeLeaveError extends Error {
   readonly remedy: string;
-  constructor(message: string, remedy: string) {
+  /** The leave service's named refusal (UNPAID_NOT_CONFIRMED, SPLIT_CHANGED, …) when there is one. */
+  readonly code: string | null;
+  constructor(message: string, remedy: string, code: string | null = null) {
     super(message);
     this.name = 'TimeLeaveError';
     this.remedy = remedy;
+    this.code = code;
   }
 }
 
@@ -392,11 +398,12 @@ function yearOf(day: string): number {
 /** Define a time type. The kind is chosen here and never again. */
 export async function defineTimeType(
   input: unknown,
-  capabilities?: readonly string[],
+  access?: LeaveAccess,
 ): Promise<TimeTypeView> {
   const parsed = parse(defineTimeTypeInput, input);
-  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
+    const grant = await judgeLeave(tx, parsed.client, access, [LEAVE_CONFIGURE]);
+    parsed.changedBy = actorOf(grant, parsed.changedBy);
     const [standing] = await tx.select().from(timeType).where(and(
       eq(timeType.client, parsed.client),
       eq(timeType.code, parsed.code),
@@ -429,11 +436,12 @@ export async function defineTimeType(
 /** Rename, re-describe or retire a time type. The kind never changes; nothing is removed. */
 export async function changeTimeType(
   input: unknown,
-  capabilities?: readonly string[],
+  access?: LeaveAccess,
 ): Promise<TimeTypeView> {
   const parsed = parse(changeTimeTypeInput, input);
-  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
+    const grant = await judgeLeave(tx, parsed.client, access, [LEAVE_CONFIGURE]);
+    parsed.changedBy = actorOf(grant, parsed.changedBy);
     const [standing] = await tx.select().from(timeType).where(and(
       eq(timeType.client, parsed.client),
       eq(timeType.code, parsed.code),
@@ -463,188 +471,58 @@ export async function changeTimeType(
   return getTimeTypeView(parsed.client, parsed.code);
 }
 
+/** A leave-service refusal, reported in this module's error type (the screens and older callers catch that). */
+async function viaLeave<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (isLeaveError(error)) throw new TimeLeaveError(error.message, error.remedy, error.code);
+    throw error;
+  }
+}
+
+const identity = (client: string, personnelNumber: string, timeTypeCode: string, validFrom: string) =>
+  ({ client, personnelNumber, timeTypeCode, validFrom });
+
 /**
- * Request an absence. The advisory lock covers the overlap test and the insert,
- * because two clerks dating the same person's leave in the same moment would
- * otherwise both find the day free.
+ * Request an absence. Policy-managed requests carry a paid/unpaid split that the requester must confirm
+ * (`confirmUnpaidDays`); see leave-absence.ts. Judged for PEOPLE.TIME.ENTER and the employee's company.
  */
 export async function requestAbsence(
   input: unknown,
-  capabilities?: readonly string[],
+  access?: LeaveAccess,
 ): Promise<AbsenceView> {
-  const parsed = parse(requestAbsenceInput, input);
-  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
+  const parsed = parse(requestAbsenceInput.extend({ confirmUnpaidDays: z.union([z.number(), z.string()]).optional() }), input);
   const from = dayOf(parsed.validFrom);
-  const to = parsed.validTo ? dayOf(parsed.validTo) : null;
-  if (to && to < from) refusal('SPAN_ORDER');
-
-  await withTenant(parsed.client, async (tx) => {
-    await employeeName(tx, parsed.client, parsed.personnelNumber);
-    if (!(await employeeActive(tx, parsed.client, parsed.personnelNumber))) {
-      refusal('EMPLOYEE_INACTIVE', parsed.personnelNumber);
-    }
-    const type = await getTimeType(tx, parsed.client, parsed.timeTypeCode);
-    if (!type.isValid) refusal('TIME_TYPE_RETIRED', parsed.timeTypeCode);
-
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${parsed.client}/absence/${parsed.personnelNumber}`}, 0))`);
-
-    // A replay of the same key reports the absence that stands instead of writing a second one.
-    if (parsed.requestKey) {
-      const [replay] = await tx.select({ validFrom: absence.validFrom }).from(absence).where(and(
-        eq(absence.client, parsed.client),
-        eq(absence.personnelNumber, parsed.personnelNumber),
-        eq(absence.requestKey, parsed.requestKey),
-      )).limit(1);
-      if (replay) return undefined;
-    }
-
-    // An absence is in the way when it is still open, or when it ends on or after
-    // the day the new one would start. A row that ended before that day is history.
-    const blocking = await tx.select({
-      validFrom: absence.validFrom,
-      validTo: absence.validTo,
-      status: absence.status,
-    }).from(absence).where(and(
-      eq(absence.client, parsed.client),
-      eq(absence.personnelNumber, parsed.personnelNumber),
-      or(isNull(absence.validTo), gte(absence.validTo, from)),
-    )).orderBy(desc(absence.validFrom)).limit(1);
-    const clash = blocking[0];
-    if (clash) {
-      refusal('OVERLAP', `the absence from ${clash.validFrom} to ${clash.validTo ?? 'open'} already covers ${from}.`);
-    }
-
-    // If the type reduces quota, check the balance can cover the days requested.
-    if (type.reducesQuota) {
-      const days = spanDays(from, to);
-      const year = yearOf(from);
-      const [quota] = await tx.select().from(leaveQuota).where(and(
-        eq(leaveQuota.client, parsed.client),
-        eq(leaveQuota.personnelNumber, parsed.personnelNumber),
-        eq(leaveQuota.timeTypeCode, parsed.timeTypeCode),
-        eq(leaveQuota.year, year),
-      )).limit(1);
-      const remaining = toScaled(quota?.remaining ?? '0', 2);
-      const requested = toScaled(String(days), 2);
-      if (remaining < requested) refusal('QUOTA_EXCEEDED', `${days} day${days === 1 ? '' : 's'} requested, ${fromScaled(remaining, 2)} remaining.`);
-    }
-
-    await tx.insert(absence).values({
-      client: parsed.client,
-      personnelNumber: parsed.personnelNumber,
-      timeTypeCode: parsed.timeTypeCode,
-      validFrom: from,
-      validTo: to,
-      status: 'REQUESTED',
-      reason: parsed.reason ?? null,
-      requestKey: parsed.requestKey ?? null,
-      createdBy: parsed.changedBy,
-    });
-    await recordChange(tx, {
-      client: parsed.client,
-      objectClass: ABSENCE_OBJECT_CLASS,
-      objectKey: `${parsed.personnelNumber}/${parsed.timeTypeCode}/${from}`,
-      changeType: 'CREATE',
-      changedBy: parsed.changedBy,
-      transactionCode: 'PA2001',
-      after: {
-        personnelNumber: parsed.personnelNumber,
-        timeTypeCode: parsed.timeTypeCode,
-        validFrom: from,
-        validTo: to,
-        status: 'REQUESTED',
-      },
-    });
-    return undefined;
-  });
+  const to = parsed.validTo ? dayOf(parsed.validTo) : undefined;
+  await viaLeave(() => requestLeaveAbsence({ ...parsed, validFrom: from, validTo: to }, access));
   return getAbsence(parsed.client, parsed.personnelNumber, parsed.timeTypeCode, from);
 }
 
 /**
- * Approve or reject a requested absence. Approving reduces the leave quota for
- * the type's year; rejecting leaves it untouched. Only REQUESTED can be decided.
+ * Approve or reject a requested absence (PEOPLE.LEAVE.APPROVE). Approving a policy-managed absence
+ * rechecks the split under the employee lock and debits the ledger; see leave-absence.ts.
  */
 export async function decideAbsence(
   input: unknown,
-  capabilities?: readonly string[],
+  access?: LeaveAccess,
 ): Promise<AbsenceView> {
-  const parsed = parse(decideAbsenceInput, input);
-  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
+  const parsed = parse(decideAbsenceInput.extend({ confirmUnpaidDays: z.union([z.number(), z.string()]).optional() }), input);
   const from = dayOf(parsed.validFrom);
-
-  await withTenant(parsed.client, async (tx) => {
-    const [standing] = await tx.select().from(absence).where(and(
-      eq(absence.client, parsed.client),
-      eq(absence.personnelNumber, parsed.personnelNumber),
-      eq(absence.timeTypeCode, parsed.timeTypeCode),
-      eq(absence.validFrom, from),
-    )).limit(1);
-    if (!standing) refusal('ABSENCE_UNKNOWN', `${parsed.personnelNumber}/${parsed.timeTypeCode} from ${from}`);
-    if (standing.status !== 'REQUESTED') refusal('NOT_REQUESTED');
-
-    const type = await getTimeType(tx, parsed.client, parsed.timeTypeCode);
-
-    // Moving from REQUESTED to APPROVED reduces the quota; any other target
-    // leaves the quota as it stands (a rejection never took days).
-    if (parsed.status === 'APPROVED' && type.reducesQuota) {
-      const days = spanDays(from, standing.validTo);
-      const year = yearOf(from);
-      const [quota] = await tx.select().from(leaveQuota).where(and(
-        eq(leaveQuota.client, parsed.client),
-        eq(leaveQuota.personnelNumber, parsed.personnelNumber),
-        eq(leaveQuota.timeTypeCode, parsed.timeTypeCode),
-        eq(leaveQuota.year, year),
-      )).limit(1);
-      const remaining = toScaled(quota?.remaining ?? '0', 2);
-      const requested = toScaled(String(days), 2);
-      if (remaining < requested) refusal('QUOTA_EXCEEDED', `${days} day${days === 1 ? '' : 's'} needed, ${fromScaled(remaining, 2)} remaining.`);
-
-      await tx.update(leaveQuota).set({
-        taken: fromScaled(toScaled(quota?.taken ?? '0', 2) + requested, 2),
-        remaining: fromScaled(remaining - requested, 2),
-        changedBy: parsed.changedBy,
-        changedAt: new Date(),
-      }).where(and(
-        eq(leaveQuota.client, parsed.client),
-        eq(leaveQuota.personnelNumber, parsed.personnelNumber),
-        eq(leaveQuota.timeTypeCode, parsed.timeTypeCode),
-        eq(leaveQuota.year, year),
-      ));
-    }
-
-    await tx.update(absence).set({
-      status: parsed.status,
-      changedBy: parsed.changedBy,
-      changedAt: new Date(),
-    }).where(and(
-      eq(absence.client, parsed.client),
-      eq(absence.personnelNumber, parsed.personnelNumber),
-      eq(absence.timeTypeCode, parsed.timeTypeCode),
-      eq(absence.validFrom, from),
-    ));
-
-    await recordChange(tx, {
-      client: parsed.client,
-      objectClass: ABSENCE_OBJECT_CLASS,
-      objectKey: `${parsed.personnelNumber}/${parsed.timeTypeCode}/${from}`,
-      changeType: 'CHANGE',
-      changedBy: parsed.changedBy,
-      transactionCode: 'PA2001',
-      before: { status: standing.status },
-      after: { status: parsed.status },
-      reason: `Absence ${parsed.status.toLowerCase()} by the tenant's leave approver.`,
-    });
-    return undefined;
-  });
+  const args = { ...identity(parsed.client, parsed.personnelNumber, parsed.timeTypeCode, from), changedBy: parsed.changedBy, confirmUnpaidDays: parsed.confirmUnpaidDays };
+  await viaLeave(() => parsed.status === 'APPROVED' ? approveLeaveAbsence(args, access)
+    : parsed.status === 'REJECTED' ? rejectLeaveAbsence(args, access)
+    : parsed.status === 'CANCELLED' ? cancelLeaveAbsence(args, access)
+    : Promise.reject(new LeaveError('NOT_REQUESTED', 'An absence is decided as approved, rejected or cancelled.', 'Pick one of those.')));
   return getAbsence(parsed.client, parsed.personnelNumber, parsed.timeTypeCode, from);
 }
 
-/** Cancel an absence: REQUESTED → CANCELLED. Only a request can be cancelled. */
+/** Cancel an absence: a request, or (with a policy) an approved absence, whose days go back to the ledger. */
 export async function cancelAbsence(
   input: Omit<z.input<typeof decideAbsenceInput>, 'status'>,
-  capabilities?: readonly string[],
+  access?: LeaveAccess,
 ): Promise<AbsenceView> {
-  return decideAbsence({ ...input, status: 'CANCELLED' as const }, capabilities);
+  return decideAbsence({ ...input, status: 'CANCELLED' as const }, access);
 }
 
 /**
@@ -653,13 +531,15 @@ export async function cancelAbsence(
  */
 export async function recordTime(
   input: unknown,
-  capabilities?: readonly string[],
+  access?: LeaveAccess,
 ): Promise<TimeRecordingView> {
   const parsed = parse(recordTimeInput, input);
-  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   const day = dayOf(parsed.recordingDate);
 
-  await withTenant(parsed.client, async (tx) => {
+  await viaLeave(() => withTenant(parsed.client, async (tx) => {
+    const grant = await judgeLeave(tx, parsed.client, access, [LEAVE_ENTER]);
+    await assertReachesEmployee(tx, parsed.client, grant, parsed.personnelNumber, day, day);
+    parsed.changedBy = actorOf(grant, parsed.changedBy);
     await employeeName(tx, parsed.client, parsed.personnelNumber);
     if (!(await employeeActive(tx, parsed.client, parsed.personnelNumber))) {
       refusal('EMPLOYEE_INACTIVE', parsed.personnelNumber);
@@ -715,20 +595,23 @@ export async function recordTime(
       });
     }
     return undefined;
-  });
+  }));
   return getTimeRecording(parsed.client, parsed.personnelNumber, parsed.timeTypeCode, day);
 }
 
 /** Configure a leave quota: entitlement per employee, per type, per year. */
 export async function setLeaveQuota(
   input: unknown,
-  capabilities?: readonly string[],
+  access?: LeaveAccess,
 ): Promise<LeaveQuotaView> {
   const parsed = parse(setLeaveQuotaInput, input);
-  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   const year = Number(parsed.year);
 
-  await withTenant(parsed.client, async (tx) => {
+  await viaLeave(() => withTenant(parsed.client, async (tx) => {
+    const grant = await judgeLeave(tx, parsed.client, access, [LEAVE_ADJUST]);
+    await assertReachesEmployee(tx, parsed.client, grant, parsed.personnelNumber, `${year}-01-01`, `${year}-12-31`);
+    parsed.changedBy = actorOf(grant, parsed.changedBy);
+    await lockEmployeeLeave(tx, parsed.client, parsed.personnelNumber);
     await employeeName(tx, parsed.client, parsed.personnelNumber);
     if (!(await employeeActive(tx, parsed.client, parsed.personnelNumber))) {
       refusal('EMPLOYEE_INACTIVE', parsed.personnelNumber);
@@ -736,6 +619,8 @@ export async function setLeaveQuota(
     const type = await getTimeType(tx, parsed.client, parsed.timeTypeCode);
     if (!type.reducesQuota) refusal('TIME_TYPE_DOES_NOT_REDUCE_QUOTA', parsed.timeTypeCode);
 
+    const [owned] = (await tx.execute(sql`select mode from leave_quota where client = ${parsed.client} and personnel_number = ${parsed.personnelNumber} and time_type_code = ${parsed.timeTypeCode} and year = ${year}`)) as unknown as Array<{ mode: string }>;
+    if (owned?.mode === 'POLICY') throw new LeaveError('QUOTA_POLICY_OWNED', `The ${parsed.timeTypeCode} balance for ${year} is owned by a leave policy.`, 'Record a ledger adjustment (PEOPLE.LEAVE.ADJUST) instead of setting the quota.');
     const [existing] = await tx.select().from(leaveQuota).where(and(
       eq(leaveQuota.client, parsed.client),
       eq(leaveQuota.personnelNumber, parsed.personnelNumber),
@@ -786,7 +671,7 @@ export async function setLeaveQuota(
       after: { entitlement, taken, remaining },
     });
     return undefined;
-  });
+  }));
   return getLeaveQuota(parsed.client, parsed.personnelNumber, parsed.timeTypeCode, year);
 }
 

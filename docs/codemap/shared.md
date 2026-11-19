@@ -11,6 +11,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 - **Demo install:** refuses a non-empty DB; global phase ledger in `demo_installation*` (SQL-only tables). Phases append to `DEMO_PHASE_PLAN`; a FAILED marker blocks resume.
 - Money never floats: `platform/posting/decimal.ts` scaled bigints. `platform/schema.ts` is the only Drizzle entrypoint; new tables are re-exported there.
 - `ScreenArea` splits foundation into foundation/controlling/configuration; not 1:1 with modules. i18n is effectively `en` only.
+- `/api/leave/balances/export` (sync CSV) and `/api/leave/balances/export/[exportId]` (worker file) need a live session and re-judge VIEW+EXPORT+scope in the service; jobs `LEAVE.ACCRUAL.*`/`LEAVE.BALANCE.EXPORT` register in `worker/jobs.ts`.
 
 ## Used by
 | shared unit | used by |
@@ -23,12 +24,12 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | platform/db | app/api, app/config, audit, dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, output, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/periods, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales, worker/index.ts |
 | platform/document | inventory, platform/posting, purchasing |
 | platform/i18n | app/clients, app/config, app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search, app/signin, audit, finance, foundation, inventory, people, platform, platform/attention, platform/notification, production, purchasing, sales, ui/attention, ui/fields, ui/lock, ui/shell |
-| platform/job | finance, foundation, output, people, platform, platform/mail, platform/notification, production, purchasing, worker/index.ts |
+| platform/job | audit, finance, foundation, output, people, platform, platform/mail, platform/notification, production, purchasing, worker/index.ts |
 | platform/lock | finance, foundation, inventory, platform, platform/job, platform/posting, production, purchasing, quality, ui/lock |
 | platform/mail | output, platform, worker/jobs.ts |
 | platform/notification | finance, foundation, people, platform, platform/job, production, purchasing, sales, ui/shell, worker/jobs.ts |
 | platform/numbering | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, quality, sales |
-| platform/periods | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
+| platform/periods | audit, finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
 | platform/posting | finance, foundation, inventory, people, platform/tenancy, production, purchasing, sales |
 | platform/registry | app/command.ts, app/registry, app/search |
 | platform/schema.ts | platform/db |
@@ -122,7 +123,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | index.ts | recordChange, changeHistory | change_document, change_document_item |
 | partner-data-history.ts | PARTNER_BANK_OBJECT_CLASS, PARTNER_CONTACT_OBJECT_CLASS, MASKED_HISTORY_VALUE, isPartnerSensitiveHistoryClass, isPartnerHistoryMaskedField, projectPartnerHistorySnapshot, projectPartnerHistoryStoredValue |  |
 | **platform/db/** | | |
-| client.ts | sql, db, directSql, assertApplicationRole, withTenant, withTenantAs, closeDb |  |
+| client.ts | sql, db, directSql, assertApplicationRole, withTenant, withTenantSnapshot, withTenantAs, closeDb |  |
 | migrate.ts | runMigrations |  |
 | target-guard.ts | registerProtected, isProtected, validateTarget |  |
 | **platform/document/** | | |

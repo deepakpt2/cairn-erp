@@ -15,6 +15,7 @@
  *
  * Dates follow every dated people table: `valid_to` is the last day that applies (inclusive).
  */
+import { companyPlantsOf, currentScopesOf, scopeReaches } from './employee-reach';
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -118,6 +119,17 @@ async function assertEmployeeScope(tx: Tx, client: string, grant: PayrollGrant, 
     );
   }
   assertCompanyScope(grant, company, refuse);
+  // A plant-level caller (Plant scope short of the company's plants) reaches only employees whose latest position sits in one of their plants.
+  {
+    const scopes = (await currentScopesOf(tx, client, [personnelNumber], onDate)).get(personnelNumber) ?? [];
+    if (!scopeReaches(grant.restrictions, scopes, await companyPlantsOf(tx, client, grant))) {
+      refuse(
+        'PLANT_SCOPE',
+        `Employee ${personnelNumber} is not in a plant your scope covers.`,
+        'Ask an administrator to extend your Plant scope, or ask an officer with company-level access.',
+      );
+    }
+  }
 }
 
 // ── Input ───────────────────────────────────────────────────────────────────

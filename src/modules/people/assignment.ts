@@ -38,6 +38,12 @@ import { AuthzError } from '../../platform/auth/current';
 import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import type { OrgRestriction } from '../../platform/auth/session';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import {
+  assignmentScopes, companyPlantsOf, currentScopesOf, employeeToday, judgeLiveScope, scopeCoversAssignment, scopeReaches,
+} from './employee-reach';
+import { actorTier, employeeTier, positionTier, tierRefusal } from './employee-tier';
 import { ASSIGNMENT_CAPABILITY, ASSIGNMENT_OBJECT_CLASS, position, positionAssignment } from './schema';
 
 // The screen contract lives in `schema.ts`, beside the tables it names; re-exported here because a service is
@@ -49,16 +55,30 @@ const clientField = upper.pipe(z.string().regex(/^[A-Z0-9]{2,4}$/, { message: 'C
 const personnelNumber = upper.pipe(z.string().regex(/^[A-Z0-9]{2,20}$/, { message: 'PERSONNEL_FORMAT' }));
 const orgCode = upper.pipe(z.string().regex(/^([A-Z][A-Z0-9]{1,9})$/, { message: 'ORG_CODE_FORMAT' }));
 const areaCode = upper.pipe(z.string().regex(/^[A-Z0-9]{4}$/, { message: 'AREA_FORMAT' }));
+const plantCode = upper.pipe(z.string().regex(/^[A-Z0-9]{1,4}$/, { message: 'PLANT_FORMAT' }));
 const costCenterCode = upper.pipe(z.string().regex(/^[A-Z0-9]{1,10}$/, { message: 'COST_CENTER_FORMAT' }));
 const actor = z.string().transform((s) => s.trim()).refine((s) => s.length > 0 && s.length <= 60, { message: 'REQUIRED_TEXT' });
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * Who is calling. A capability list is the in-process form for trusted callers (demo provisioner, service
+ * tests) and carries no company or plant limit. `{ authorization }` is a live session: the service re-reads the
+ * session, capability and Company Code / Plant scope in its own transaction and judges the employee and the
+ * target company and plant against it. Screens only build the second form.
+ */
+export type AssignmentAccess = readonly string[] | { authorization: ServiceAuthorityContext | undefined };
+
+function isLive(access: AssignmentAccess | undefined): access is { authorization: ServiceAuthorityContext | undefined } {
+  return access !== undefined && !Array.isArray(access);
+}
+
 /** Refuse a write when the caller holds none of the required authority. */
 function assertCapability(
-  capabilities: readonly string[] | undefined,
+  capabilities: AssignmentAccess | undefined,
   required: string,
   actorName: string,
 ): void {
+  if (isLive(capabilities)) return; // judged live, inside the write's own transaction
   if (!capabilities || !hasCapability([...capabilities], required)) {
     throw new AuthzError(required, actorName);
   }
@@ -70,6 +90,7 @@ const assignInput = z.object({
   positionCode: orgCode,
   controllingArea: areaCode,
   costCenter: costCenterCode,
+  plant: plantCode.optional(),
   validFrom: z.string().trim(),
   changedBy: actor,
   requestKey: z.string().trim().min(8).max(64).optional(),
@@ -82,6 +103,7 @@ const changeAssignmentInput = z.object({
   positionCode: orgCode.optional(),
   controllingArea: areaCode.optional(),
   costCenter: costCenterCode.optional(),
+  plant: plantCode.optional(),
   changedBy: actor,
 });
 
@@ -104,6 +126,8 @@ export interface AssignmentView {
   controllingArea: string;
   costCenter: string;
   costCenterName: string | null;
+  /** The plant the person works in, or null when the assignment is not plant-bound (company-wide). */
+  plant: string | null;
   validFrom: string;
   validTo: string | null;
   /**
@@ -179,6 +203,16 @@ const REFUSALS: Record<string, [string, string]> = {
     `No field was given, so nothing would change.`,
     `Send the position, the cost centre or the area you want moved.`,
   ],
+  PLANT_FORMAT: [`A plant is one to four characters of capitals and digits.`, `Use the plant code the plant master holds, or leave it blank for a company-wide assignment.`],
+  PLANT_UNKNOWN: [`No plant of that code stands in this tenant.`, `Pick a plant from the plant master, or leave it blank.`],
+  PLANT_COMPANY: [
+    `That plant belongs to a different company code than the cost centre does.`,
+    `Choose a plant of the cost centre's company, or a cost centre of the plant's company.`,
+  ],
+  OUT_OF_SCOPE: [
+    `Your Company Code or Plant scope does not cover that company and plant.`,
+    `Assign into a plant you are responsible for, or ask an administrator to extend your scope.`,
+  ],
   SPAN_ORDER: [
     `An end date cannot fall before the day the assignment started.`,
     `validTo has to be on or after validFrom: the last day an assignment applies is never its first day's predecessor.`,
@@ -243,14 +277,14 @@ async function costCenterAsOf(
   area: string,
   costCenter: string,
   day: string,
-): Promise<{ name: string }> {
+): Promise<{ name: string; company: string }> {
   const rows = await tx.execute(sql`
-    select name, valid_from::text as valid_from, valid_to::text as valid_to
+    select name, company_code, valid_from::text as valid_from, valid_to::text as valid_to
       from public.cost_center
      where client = ${client} and controlling_area = ${area} and cost_center = ${costCenter}
        and valid_from <= ${day} and valid_to >= ${day}
      order by valid_from desc
-     limit 1`) as unknown as Array<{ name: string; valid_from: string; valid_to: string }>;
+     limit 1`) as unknown as Array<{ name: string; company_code: string; valid_from: string; valid_to: string }>;
   const row = rows[0];
   if (!row) {
     const [exists] = await tx.execute(sql`
@@ -258,7 +292,55 @@ async function costCenterAsOf(
        where client = ${client} and controlling_area = ${area} and cost_center = ${costCenter}`) as unknown as Array<{ n: number }>;
     refusal(Number(exists?.n ?? 0) > 0 ? 'COST_CENTER_NOT_VALID_YET' : 'COST_CENTER_UNKNOWN', costCenter);
   }
-  return { name: row!.name };
+  return { name: row!.name, company: row!.company_code };
+}
+
+/** A plant named on an assignment must exist and belong to the cost centre's company. */
+async function checkPlant(tx: Tx, client: string, plant: string, company: string): Promise<void> {
+  const rows = await tx.execute(sql`
+    select company_code from public.plant where client = ${client} and plant = ${plant}`) as unknown as Array<{ company_code: string | null }>;
+  if (rows.length === 0) refusal('PLANT_UNKNOWN', plant);
+  if (rows[0]!.company_code !== company) refusal('PLANT_COMPANY', `Plant ${plant} is in ${rows[0]!.company_code ?? 'no company'}, the cost centre in ${company}.`);
+}
+
+/**
+ * Inside a write's transaction. A live caller must hold the capability and reach the employee as they stand
+ * (when they already have assignments); `covers` then says whether a target company and plant is inside their
+ * scope, so a plant clerk can neither take over another plant's employee nor move one of their own out of reach.
+ * `null` is a trusted in-process caller: no limit.
+ */
+async function authorizeAssignment(
+  tx: Tx, client: string, access: AssignmentAccess | undefined,
+  what: { personnel: string; existingFrom?: string; positionCodes?: readonly string[] },
+): Promise<null | { held: Array<{ company: string; plant: string | null }>; covers: (t: { company: string; plant: string | null }) => boolean }> {
+  if (!isLive(access)) return null;
+  const verdict = await judgeLiveScope(tx, client, access.authorization, [ASSIGNMENT_CAPABILITY]);
+  if (!verdict.ok) throw new AssignmentError(verdict.message, verdict.remedy);
+  const cp = await companyPlantsOf(tx, client);
+  const held = what.existingFrom
+    ? await assignmentScopes(tx, client, what.personnel, what.existingFrom, what.existingFrom)
+    : (await currentScopesOf(tx, client, [what.personnel], await employeeToday(tx, client))).get(what.personnel) ?? [];
+  // An employee with assignments must be inside reach; the refusal reads like "no such record", so it confirms nothing.
+  if (held.length > 0 && !scopeReaches(verdict.restrictions, held, cp)) {
+    if (what.existingFrom) refusal('ASSIGNMENT_UNKNOWN', `${what.personnel} from ${what.existingFrom}`);
+    refusal('EMPLOYEE_UNKNOWN', what.personnel);
+  }
+  // Tier: the actor must be strictly above the employee as they stand and above any position they are being given.
+  const today = await employeeToday(tx, client);
+  const tiers = [await employeeTier(tx, client, what.personnel, today)];
+  for (const code of what.positionCodes ?? []) tiers.push((await positionTier(tx, client, code)) ?? 1);
+  const refused = tierRefusal(await actorTier(tx, client, access.authorization!.userId, today), Math.max(...tiers), 'This assignment');
+  if (refused) throw new AssignmentError(refused.message, refused.remedy);
+  return { held, covers: (t) => scopeCoversAssignment(verdict.restrictions, t, cp) };
+}
+
+/** A live caller reading one employee's assignments: the capability, and the employee inside their reach. */
+async function assertReadable(tx: Tx, client: string, access: AssignmentAccess | undefined, personnel: string): Promise<void> {
+  if (!isLive(access)) return;
+  const verdict = await judgeLiveScope(tx, client, access.authorization, [ASSIGNMENT_CAPABILITY]);
+  if (!verdict.ok) throw new AssignmentError(verdict.message, verdict.remedy);
+  const held = (await currentScopesOf(tx, client, [personnel], await employeeToday(tx, client))).get(personnel) ?? [];
+  if (held.length > 0 && !scopeReaches(verdict.restrictions, held, await companyPlantsOf(tx, client))) refusal('EMPLOYEE_UNKNOWN', personnel);
 }
 
 function shape(row: {
@@ -271,6 +353,7 @@ function shape(row: {
   controlling_area: string;
   cost_center: string;
   cost_center_name: string | null;
+  plant: string | null;
   valid_from: string;
   valid_to: string | null;
   created_by: string;
@@ -286,6 +369,7 @@ function shape(row: {
     controllingArea: row.controlling_area,
     costCenter: row.cost_center,
     costCenterName: row.cost_center_name,
+    plant: row.plant,
     validFrom: row.valid_from,
     validTo: row.valid_to,
     isCurrent: row.valid_to === null,
@@ -298,7 +382,7 @@ function shape(row: {
 const READ = sql`
   select a.personnel_number, e.full_name as employee_name, a.position_code, p.title as position_title,
          u.code as org_unit_code, u.name as org_unit_name,
-         a.controlling_area, a.cost_center,
+         a.controlling_area, a.cost_center, a.plant,
          (select cc.name from public.cost_center cc
            where cc.client = a.client and cc.controlling_area = a.controlling_area
              and cc.cost_center = a.cost_center and cc.valid_from <= a.valid_from and cc.valid_to >= a.valid_from
@@ -319,7 +403,7 @@ const READ = sql`
  */
 export async function assignPosition(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: AssignmentAccess,
 ): Promise<AssignmentView> {
   const parsed = parse(assignInput, input);
   assertCapability(capabilities, ASSIGNMENT_CAPABILITY, parsed.changedBy);
@@ -336,7 +420,10 @@ export async function assignPosition(
     )).limit(1);
     if (!thePosition) refusal('POSITION_UNKNOWN', parsed.positionCode);
     if (!thePosition!.isValid) refusal('POSITION_RETIRED', parsed.positionCode);
-    await costCenterAsOf(tx, parsed.client, parsed.controllingArea, parsed.costCenter, from);
+    const centre = await costCenterAsOf(tx, parsed.client, parsed.controllingArea, parsed.costCenter, from);
+    if (parsed.plant) await checkPlant(tx, parsed.client, parsed.plant, centre.company);
+    const judged = await authorizeAssignment(tx, parsed.client, capabilities, { personnel: parsed.personnelNumber, positionCodes: [parsed.positionCode] });
+    if (judged && !judged.covers({ company: centre.company, plant: parsed.plant ?? null })) refusal('OUT_OF_SCOPE');
 
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${
       `${parsed.client}/position-assignment/${parsed.personnelNumber}`}, 0))`);
@@ -374,6 +461,7 @@ export async function assignPosition(
         positionCode: parsed.positionCode,
         controllingArea: parsed.controllingArea,
         costCenter: parsed.costCenter,
+        plant: parsed.plant ?? null,
         validFrom: from,
         validTo: null,
         requestKey: parsed.requestKey ?? null,
@@ -415,13 +503,14 @@ export async function assignPosition(
  */
 export async function changeAssignment(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: AssignmentAccess,
 ): Promise<AssignmentView> {
   const parsed = parse(changeAssignmentInput, input);
   assertCapability(capabilities, ASSIGNMENT_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
 
   await withTenant(parsed.client, async (tx) => {
+    const judged = await authorizeAssignment(tx, parsed.client, capabilities, { personnel: parsed.personnelNumber, existingFrom: from, positionCodes: parsed.positionCode ? [parsed.positionCode] : [] });
     const [standing] = await tx.select().from(positionAssignment).where(and(
       eq(positionAssignment.client, parsed.client),
       eq(positionAssignment.personnelNumber, parsed.personnelNumber),
@@ -430,7 +519,7 @@ export async function changeAssignment(
     if (!standing) refusal('ASSIGNMENT_UNKNOWN', `${parsed.personnelNumber} from ${from}`);
     if (standing!.validTo !== null) refusal('NOT_CURRENT');
 
-    const patch: { positionCode?: string; controllingArea?: string; costCenter?: string } = {};
+    const patch: { positionCode?: string; controllingArea?: string; costCenter?: string; plant?: string } = {};
     if (parsed.positionCode !== undefined) {
       const [thePosition] = await tx.select().from(position).where(and(
         eq(position.client, parsed.client),
@@ -444,12 +533,22 @@ export async function changeAssignment(
       }
       patch.positionCode = parsed.positionCode;
     }
+    let movedCompany: string | undefined;
     const area = parsed.controllingArea ?? standing!.controllingArea;
     const centre = parsed.costCenter ?? standing!.costCenter;
     if (parsed.controllingArea !== undefined || parsed.costCenter !== undefined) {
-      await costCenterAsOf(tx, parsed.client, area, centre, from);
+      const moved = await costCenterAsOf(tx, parsed.client, area, centre, from);
       patch.controllingArea = area;
       patch.costCenter = centre;
+      movedCompany = moved.company;
+    }
+    if (parsed.plant !== undefined) patch.plant = parsed.plant;
+    // A new cost centre or plant is a new target: it must stand in the company, and inside the caller's scope.
+    const targetCompany = movedCompany ?? judged?.held[0]?.company ?? (await assignmentScopes(tx, parsed.client, parsed.personnelNumber, from, from))[0]?.company ?? '';
+    const targetPlant = parsed.plant ?? standing!.plant ?? null;
+    if (movedCompany !== undefined || parsed.plant !== undefined) {
+      if (parsed.plant !== undefined) await checkPlant(tx, parsed.client, parsed.plant, targetCompany);
+      if (judged && !judged.covers({ company: targetCompany, plant: targetPlant })) refusal('OUT_OF_SCOPE');
     }
     if (Object.keys(patch).length === 0) refusal('NOTHING_TO_CHANGE');
 
@@ -466,7 +565,7 @@ export async function changeAssignment(
       changeType: 'CHANGE',
       changedBy: parsed.changedBy,
       transactionCode: 'PA30',
-      before: { positionCode: standing!.positionCode, controllingArea: standing!.controllingArea, costCenter: standing!.costCenter },
+      before: { positionCode: standing!.positionCode, controllingArea: standing!.controllingArea, costCenter: standing!.costCenter, plant: standing!.plant },
       after: patch,
       reason: 'Correction of the open assignment, permitted while it is the newest record',
     });
@@ -479,7 +578,7 @@ export async function changeAssignment(
 /** End an assignment: the one write to `valid_to` a dated record ever takes. */
 export async function delimitAssignment(
   input: unknown,
-  capabilities?: readonly string[],
+  capabilities?: AssignmentAccess,
 ): Promise<AssignmentView> {
   const parsed = parse(delimitInput, input);
   assertCapability(capabilities, ASSIGNMENT_CAPABILITY, parsed.changedBy);
@@ -488,6 +587,7 @@ export async function delimitAssignment(
   if (to < from) refusal('SPAN_ORDER');
 
   await withTenant(parsed.client, async (tx) => {
+    await authorizeAssignment(tx, parsed.client, capabilities, { personnel: parsed.personnelNumber, existingFrom: from });
     const [standing] = await tx.select().from(positionAssignment).where(and(
       eq(positionAssignment.client, parsed.client),
       eq(positionAssignment.personnelNumber, parsed.personnelNumber),
@@ -538,10 +638,11 @@ export async function getAssignment(clientInput: string, personnelInput: string,
 }
 
 /** Everything one employee has been assigned to, newest first: the history the dated rows are kept for. */
-export async function assignmentsOf(clientInput: string, personnelInput: string): Promise<AssignmentView[]> {
+export async function assignmentsOf(clientInput: string, personnelInput: string, access?: AssignmentAccess): Promise<AssignmentView[]> {
   const client = parse(clientField, clientInput);
   const number = parse(personnelNumber, personnelInput);
   return withTenant(client, async (tx) => {
+    await assertReadable(tx, client, access, number);
     await employeeName(tx, client, number);
     const rows = await tx.execute(sql`${READ}
        where a.client = ${client} and a.personnel_number = ${number}
@@ -564,7 +665,7 @@ export interface AssignmentSearch {
  * position and cost centre filters are exact, because they are answers to "who is in this position" and
  * "who does this cost centre carry", and a like-match on a code would quietly answer both wrongly.
  */
-export async function listAssignments(search: AssignmentSearch): Promise<AssignmentView[]> {
+export async function listAssignments(search: AssignmentSearch, access?: AssignmentAccess): Promise<AssignmentView[]> {
   const parsed = parse(z.object({
     client: clientField,
     query: z.string().trim().optional(),
@@ -574,6 +675,12 @@ export async function listAssignments(search: AssignmentSearch): Promise<Assignm
   }), search);
   const needle = (parsed.query ?? '').trim().toUpperCase();
   return withTenant(parsed.client, async (tx) => {
+    let restrictions: OrgRestriction[] | null = null;
+    if (isLive(access)) {
+      const verdict = await judgeLiveScope(tx, parsed.client, access.authorization, [ASSIGNMENT_CAPABILITY]);
+      if (!verdict.ok) throw new AssignmentError(verdict.message, verdict.remedy);
+      restrictions = verdict.restrictions;
+    }
     const rows = await tx.execute(sql`${READ}
        where a.client = ${parsed.client}
          ${needle === '' ? sql`` : sql`and (a.personnel_number like ${`%${needle}%`} or upper(e.full_name) like ${`%${needle}%`})`}
@@ -581,8 +688,12 @@ export async function listAssignments(search: AssignmentSearch): Promise<Assignm
          ${parsed.costCenter ? sql`and a.cost_center = ${parsed.costCenter}` : sql``}
          ${parsed.openOnly ? sql`and a.valid_to is null` : sql``}
        order by a.personnel_number, a.valid_from desc
-       limit 200`) as unknown as Array<Parameters<typeof shape>[0]>;
-    return rows.map(shape);
+       limit ${restrictions === null ? 200 : 2000}`) as unknown as Array<Parameters<typeof shape>[0]>;
+    if (restrictions === null) return rows.map(shape);
+    // A scoped caller sees an employee's assignments only when they reach the employee as they stand today.
+    const scopes = await currentScopesOf(tx, parsed.client, [...new Set(rows.map((r) => r.personnel_number))], await employeeToday(tx, parsed.client));
+    const cp = await companyPlantsOf(tx, parsed.client);
+    return rows.filter((r) => scopeReaches(restrictions, scopes.get(r.personnel_number) ?? [], cp)).slice(0, 200).map(shape);
   });
 }
 
@@ -615,10 +726,11 @@ export async function incumbentsOf(clientInput: string, positionInput: string): 
  * the warning that a span cannot be started over one that is open. Null when nothing is open, in which case
  * any day is free.
  */
-export async function openAssignmentOf(clientInput: string, personnelInput: string): Promise<AssignmentView | null> {
+export async function openAssignmentOf(clientInput: string, personnelInput: string, access?: AssignmentAccess): Promise<AssignmentView | null> {
   const client = parse(clientField, clientInput);
   const number = parse(personnelNumber, personnelInput);
   return withTenant(client, async (tx) => {
+    await assertReadable(tx, client, access, number);
     const rows = await tx.execute(sql`${READ}
        where a.client = ${client} and a.personnel_number = ${number} and a.valid_to is null
        order by a.valid_from desc limit 1`) as unknown as Array<Parameters<typeof shape>[0]>;

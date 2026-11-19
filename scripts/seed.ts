@@ -455,6 +455,16 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'AUDIT.WORKSPACE', module: 'AUDIT', action: 'DISPLAY', posting: false, description: 'Open the auditor workspace' },
   { code: 'AUDIT.EVIDENCE.EXPORT', module: 'AUDIT', action: 'EXPORT', posting: false, description: 'Export an evidence pack' },
   { code: 'AUDIT.TRAIL.VIEW', module: 'AUDIT', action: 'DISPLAY', posting: false, description: 'View change history and document trail' },
+  // Migration 9309. Display-kind, absent from every role by default; downloading also needs AUDIT.EVIDENCE.EXPORT.
+  { code: 'AUDIT.PERIOD.EVIDENCE', module: 'AUDIT', action: 'DISPLAY', posting: false, description: 'Request and read a period-specific, read-only close evidence pack (posting-period rules, recorded changes, closing tasks, journal postings) in the auditor workspace; downloading also needs AUDIT.EVIDENCE.EXPORT' },
+  // Migrations 9311/9313 (leave policies). Granted to no role by default; APPROVE was copied from PEOPLE.TIME.ENTER holders by 9311.
+  { code: 'PEOPLE.LEAVE.CONFIGURE', module: 'PEOPLE', action: 'CONFIGURE', posting: false, description: 'Define time types and versioned leave policies' },
+  { code: 'PEOPLE.LEAVE.ASSIGN', module: 'PEOPLE', action: 'MAINTAIN', posting: false, description: 'Maintain leave groups, group membership and policy assignments (group or person)' },
+  { code: 'PEOPLE.LEAVE.APPROVE', module: 'PEOPLE', action: 'APPROVE', posting: false, description: 'Approve, reject or cancel an absence request, within the Company Code scope' },
+  { code: 'PEOPLE.LEAVE.ADJUST', module: 'PEOPLE', action: 'MAINTAIN', posting: false, description: 'Post a balance adjustment and convert legacy quotas to policy balances' },
+  { code: 'PEOPLE.LEAVE.EXPORT', module: 'PEOPLE', action: 'EXPORT', posting: false, description: 'Export leave balances as CSV, including the queued large export' },
+  { code: 'PEOPLE.EMPLOYEE.APPROVE', module: 'PEOPLE', action: 'APPROVE', posting: false, description: "Approve or reject a pending hire; the approver's tier must be above the new hire's" },
+  { code: 'PEOPLE.LEAVE.ACCRUE', module: 'PEOPLE', action: 'EXECUTE', posting: false, description: 'Start a manual or backfill leave accrual run and read its status' },
   // Migration 9276. Management's acts, never the auditor's: neither is read-kind, so a live
   // audit grant strips both even from a holder whose role carries them.
   { code: 'AUDIT.ACCESS.GRANT', module: 'AUDIT', action: 'MAINTAIN', posting: false, description: 'Grant and revoke time-boxed, scoped, read-only auditor access' },

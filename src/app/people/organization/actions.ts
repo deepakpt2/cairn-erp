@@ -96,10 +96,16 @@ async function denied(session: SessionContext, capability: string, doing: string
   };
 }
 
-async function guard(capability: string, doing: string): Promise<{ client: string; actor: string; capabilities: string[] } | OrgActionState> {
+async function guard(capability: string, doing: string): Promise<{ client: string; actor: string; capabilities: string[]; authorization: { userId: string; sessionId: string } } | OrgActionState> {
   const session = await requireSession(ROUTE);
   if (!can(session, capability)) return denied(session, capability, doing);
-  return { client: session.user.client, actor: session.user.username, capabilities: session.user.capabilities };
+  return { client: session.user.client, actor: session.user.username, capabilities: session.user.capabilities, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } };
+}
+
+/** A tier is an authority claim: a form that sets one is judged live (the service also checks the actor's tier). */
+function tierOf(formData: FormData): number | undefined {
+  const raw = optional(formData, 'tier');
+  return raw === undefined ? undefined : Number(raw);
 }
 
 export async function defineOrgUnitAction(
@@ -210,9 +216,10 @@ export async function definePositionAction(
         orgUnitCode: text(formData, 'orgUnitCode'),
         superiorCode: optional(formData, 'superiorCode'),
         description: optional(formData, 'description'),
+        tier: tierOf(formData),
         changedBy: access.actor,
       },
-      access.capabilities,
+      tierOf(formData) === undefined ? access.capabilities : { authorization: access.authorization },
     );
     return done(`Position ${view.code} — ${view.title} — created in ${view.orgUnitCode}.`, { position: view.code });
   } catch (error) {
@@ -238,9 +245,10 @@ export async function changePositionAction(
         superiorCode: superior === NONE ? null : superior,
         description: formData.has('description') ? text(formData, 'description') || null : undefined,
         isValid: validity(formData, 'isValid'),
+        tier: tierOf(formData),
         changedBy: access.actor,
       },
-      access.capabilities,
+      tierOf(formData) === undefined ? access.capabilities : { authorization: access.authorization },
     );
     return done(`Position ${view.code} updated — in ${view.orgUnitCode ?? 'no unit'}, reporting to ${view.superiorCode ?? 'nothing'}, ${view.incumbents} span${view.incumbents === 1 ? '' : 's'} not yet ended.`, { position: view.code });
   } catch (error) {

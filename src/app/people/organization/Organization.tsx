@@ -269,6 +269,7 @@ function DefinePosition({ allowed, units, jobs, positions }: {
             options={positions.map((p) => ({ code: p.code, label: p.title }))}
           />
           <Field label="Description" name="description" maxLength={200} />
+          <Field label="Tier (1–9)" name="tier" maxLength={1} defaultValue="1" hint="The authority tier of whoever holds this position. Adding, approving or assigning a person needs a tier above theirs." />
           <button className="btn btn-primary min-h-11 sm:min-h-9" disabled={pending}>
             {pending ? 'Writing…' : 'Define position'}
           </button>
@@ -315,6 +316,7 @@ function ChangePosition({ allowed, position, units, jobs, positions }: {
             noneLabel="Remove the reporting line"
           />
           <Field label="Description" name="description" defaultValue={position.description ?? ''} maxLength={200} />
+          <Field label="Tier (1–9)" name="tier" maxLength={1} defaultValue={String(position.tier)} hint="The authority tier of whoever holds this position. Adding, approving or assigning a person needs a tier above theirs. Changing it needs a tier above both the old and the new value." />
           <Validity defaultValue={position.isValid} />
           <button className="btn btn-primary min-h-11 sm:min-h-9" disabled={pending}>
             {pending ? 'Writing…' : 'Change position'}

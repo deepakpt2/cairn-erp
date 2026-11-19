@@ -11,7 +11,9 @@
  * (src/modules/audit/read-only.ts). Migration: drizzle/9276_audit_workspace.sql.
  */
 import {
+  char,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -21,6 +23,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -198,5 +201,58 @@ export const accessReviewItem = pgTable(
       columns: [t.client, t.reviewId],
       foreignColumns: [accessReview.client, accessReview.reviewId],
     }).onDelete('cascade'),
+  ],
+);
+
+// ── Period-close evidence pack (ITEM-21, migration 9309) ────────────────────
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+});
+
+export const AUDIT_PERIOD_PACK_STATUSES = ['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'EXPIRED'] as const;
+export type AuditPeriodPackStatus = (typeof AUDIT_PERIOD_PACK_STATUSES)[number];
+
+/**
+ * One requested period-close evidence pack and, once built, the ZIP itself. Bound to the requester and to
+ * the audit grant it was requested under. `artifact` is private: status reads never select it.
+ */
+export const auditPeriodPack = pgTable(
+  'audit_period_pack',
+  {
+    client: tenant(),
+    packId: uuid('pack_id').notNull(),
+    requesterUserId: varchar('requester_user_id', { length: 36 }).notNull(),
+    requesterUsername: varchar('requester_username', { length: 60 }).notNull(),
+    grantId: varchar('grant_id', { length: 36 }).notNull(),
+    companyCode: varchar('company_code', { length: 10 }).notNull(),
+    fiscalYear: integer('fiscal_year').notNull(),
+    postingPeriod: integer('posting_period').notNull(),
+    requestKey: varchar('request_key', { length: 80 }).notNull(),
+    jobRunId: varchar('job_run_id', { length: 36 }),
+    status: varchar('status', { length: 12 }).notNull().default('QUEUED'),
+    progressLabel: varchar('progress_label', { length: 80 }),
+    errorCode: varchar('error_code', { length: 40 }),
+    createdBy: varchar('created_by', { length: 60 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    snapshotAt: timestamp('snapshot_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    artifact: bytea('artifact'),
+    byteLength: integer('byte_length'),
+    manifestSha256: char('manifest_sha256', { length: 64 }),
+    changedBy: varchar('changed_by', { length: 60 }),
+    changedAt: timestamp('changed_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.packId] }),
+    uniqueIndex('audit_period_pack_request_uq').on(t.client, t.requesterUserId, t.requestKey),
+    index('audit_period_pack_requester_idx').on(t.client, t.requesterUserId, t.createdAt),
+    check('audit_period_pack_status_ck', sql`${t.status} in ('QUEUED','RUNNING','COMPLETED','FAILED','CANCELLED','EXPIRED')`),
+    foreignKey({
+      name: 'audit_period_pack_grant_fk',
+      columns: [t.client, t.grantId],
+      foreignColumns: [auditGrant.client, auditGrant.grantId],
+    }),
   ],
 );
