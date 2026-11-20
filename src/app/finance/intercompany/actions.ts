@@ -58,6 +58,7 @@ export async function postIntercompanyAction(
       confirmed: text(form, 'confirmed') === 'yes',
       requestKey: text(form, 'requestKey'),
       lines,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {

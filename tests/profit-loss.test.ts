@@ -6,7 +6,7 @@ import { calculateProfitLoss, type ProfitLossSelection } from '../src/modules/fi
 import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
-import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { financePoster, financeInputPoster, reportAuth } from './helpers/finance-actor';
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.
@@ -74,7 +74,7 @@ afterAll(async () => {
 
 describe('SCR-111 profit and loss statement (R-159)', () => {
   it('presents P&L only, with range movement beside year-to-date movement', async () => {
-    const result = await calculateProfitLoss({ client, selection: selection() });
+    const result = await calculateProfitLoss({ authorization: await reportAuth(client), client, selection: selection() });
     expect(result.nodes.map((n) => n.node)).toEqual(['PL', 'REVENUE', 'EXPENSES']);
     const revenue = result.nodes.find((n) => n.node === 'REVENUE');
     const account = revenue?.accounts.find((a) => a.accountNumber === '300000');
@@ -90,12 +90,12 @@ describe('SCR-111 profit and loss statement (R-159)', () => {
   });
 
   it('drops balance-sheet accounts entirely and names unassigned P&L accounts', async () => {
-    const result = await calculateProfitLoss({ client, selection: selection() });
+    const result = await calculateProfitLoss({ authorization: await reportAuth(client), client, selection: selection() });
     const accounts = result.nodes.flatMap((n) => n.accounts.map((a) => a.accountNumber));
     expect(accounts).not.toContain('101000');
     expect(result.unassigned).toEqual([]);
     // An active range over periods with no P&L postings zeroes, never errors.
-    const empty = await calculateProfitLoss({ client, selection: selection({ periodFrom: 8, periodTo: 9 }) });
+    const empty = await calculateProfitLoss({ authorization: await reportAuth(client), client, selection: selection({ periodFrom: 8, periodTo: 9 }) });
     const revenue = empty.nodes.find((n) => n.node === 'REVENUE');
     expect(revenue?.periodMovement).toBe(0);
     expect(revenue?.yearToDateMovement).toBe(7000); // YTD still through the cutoff

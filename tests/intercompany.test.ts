@@ -6,6 +6,7 @@
  * own; every line stamps the trading partner; either side failing rolls
  * the other back.
  */
+import { reportAuth } from './helpers/finance-actor';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -22,9 +23,10 @@ const ACTOR = 'SCR122-TEST';
 let tenant: TestTenant | undefined;
 let client = '';
 let currency = 'USD';
+let icAuth: { userId: string; sessionId: string };
 
 const postingInput = (overrides: Record<string, unknown> = {}) => ({
-  client, changedBy: ACTOR,
+  client, changedBy: ACTOR, authorization: icAuth,
   sendingCompanyCode: '1000', receivingCompanyCode: '2000',
   postingDate: '2026-05-10', documentDate: '2026-05-10',
   documentType: 'SA', currency, reference: 'IC-2026-001',
@@ -78,6 +80,7 @@ beforeAll(async () => {
       fiscalYear: 2026, prefix: 'JE', fromNumber: 1, toNumber: 999_999, createdBy: ACTOR,
     });
   });
+  icAuth = await reportAuth(client);
 }, 180_000);
 
 afterAll(async () => {
@@ -179,7 +182,7 @@ describe('SCR-122 intercompany posting', () => {
     await expect(postIntercompany(postingInput({ requestKey: 'ic-bad-1', receivingCompanyCode: '1000' })))
       .rejects.toThrow(/cannot trade with itself/);
     await expect(postIntercompany(postingInput({ requestKey: 'ic-bad-2', receivingCompanyCode: '9999' })))
-      .rejects.toThrow(/does not stand in this tenant/);
+      .rejects.toThrow(/does not stand in this tenant|Company Code scope/);
     await expect(postIntercompany(postingInput({
       requestKey: 'ic-bad-3',
       lines: [
@@ -209,6 +212,7 @@ describe('SCR-122 intercompany posting', () => {
 describe('SCR-122 intercompany configuration', () => {
   it('validates the pair, refuses deletion once served, and deletes an unused pair', async () => {
     const saved = await saveIntercompanyConfig({
+      authorization: await reportAuth(client),
       client, changedBy: ACTOR,
       sendingCompanyCode: '1000', receivingCompanyCode: '2000',
       sendingClearingGl: '110100', receivingClearingGl: '110100', defaultCurrency: currency,
@@ -216,23 +220,28 @@ describe('SCR-122 intercompany configuration', () => {
     expect(saved.sendingClearingGl).toBe('110100');
 
     await expect(saveIntercompanyConfig({
+      authorization: await reportAuth(client),
       client, changedBy: ACTOR, sendingCompanyCode: '1000', receivingCompanyCode: '1000',
     })).rejects.toThrow(/cannot trade with itself/);
     await expect(saveIntercompanyConfig({
+      authorization: await reportAuth(client),
       client, changedBy: ACTOR, sendingCompanyCode: '1000', receivingCompanyCode: '2000',
       sendingClearingGl: '500000',
     })).rejects.toThrow(/balance-sheet account/);
 
     // The 1000 -> 2000 pair has posted, so it stands as history.
     await expect(deleteIntercompanyConfig({
+      authorization: await reportAuth(client),
       client, changedBy: ACTOR, sendingCompanyCode: '1000', receivingCompanyCode: '2000',
     })).rejects.toThrow(/has served .* posting/);
 
     await saveIntercompanyConfig({
+      authorization: await reportAuth(client),
       client, changedBy: ACTOR, sendingCompanyCode: '2000', receivingCompanyCode: '1000',
       defaultCurrency: currency,
     });
     const deleted = await deleteIntercompanyConfig({
+      authorization: await reportAuth(client),
       client, changedBy: ACTOR, sendingCompanyCode: '2000', receivingCompanyCode: '1000',
     });
     expect(deleted.deleted).toBe(true);
@@ -240,9 +249,11 @@ describe('SCR-122 intercompany configuration', () => {
 
   it('refuses an inactive or unknown company in the pair', async () => {
     await expect(saveIntercompanyConfig({
+      authorization: await reportAuth(client),
       client, changedBy: ACTOR, sendingCompanyCode: '1000', receivingCompanyCode: '8888',
-    })).rejects.toThrow(/does not stand in this tenant/);
+    })).rejects.toThrow(/does not stand in this tenant|Company Code scope/);
     await expect(saveIntercompanyConfig({
+      authorization: await reportAuth(client),
       client, changedBy: ACTOR, sendingCompanyCode: '1000', receivingCompanyCode: '2000',
       sendingClearingGl: '999999',
     })).rejects.toThrow(/does not stand in the sending company/);

@@ -7,6 +7,7 @@
  * lines are named; the all-lines balance check stands; the
  * report persists nothing.
  */
+import { reportAuth } from './helpers/finance-actor';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -103,12 +104,12 @@ afterAll(async () => {
 
 describe('SCR-118 consolidated statements (R-166)', () => {
   it('rejects an undefined consolidation period', async () => {
-    await expect(calculateConsolidatedStatements({ client, selection: selection({ period: 20 }) }))
+    await expect(calculateConsolidatedStatements({ authorization: await reportAuth(client), client, selection: selection({ period: 20 }) }))
       .rejects.toThrow(/not defined by fiscal year variant/);
   });
 
   it('classifies FS items and aggregates mapped journal data per unit', async () => {
-    const result = await calculateConsolidatedStatements({ client, selection: selection({ comparative: true }) });
+    const result = await calculateConsolidatedStatements({ authorization: await reportAuth(client), client, selection: selection({ comparative: true }) });
     const asset = result.rows.find((row) => row.groupAccount === 'FS1000');
     expect(asset?.section).toBe('ASSETS');
     expect(Number(asset?.groupTotal)).toBe(850); // 1000 - 250 + 100
@@ -127,7 +128,7 @@ describe('SCR-118 consolidated statements (R-166)', () => {
       const rows = await tx.execute(sql`select count(*)::int as n from journal_entry where client = ${client}`) as unknown as Array<{ n: number }>;
       return rows[0]!.n;
     });
-    const result = await calculateConsolidatedStatements({ client, selection: selection({ view: 'INCOME_STATEMENT' }) });
+    const result = await calculateConsolidatedStatements({ authorization: await reportAuth(client), client, selection: selection({ view: 'INCOME_STATEMENT' }) });
     expect(Number(result.rows.find((row) => row.groupAccount === 'FS4000')?.groupTotal)).toBe(-1000);
     expect(Number(result.rows.find((row) => row.groupAccount === 'FS5000')?.groupTotal)).toBe(250);
     expect(result.rows.some((row) => row.groupAccount === 'FS1000')).toBe(false);

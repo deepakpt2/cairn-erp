@@ -10,6 +10,7 @@
  * unclassified account explaining the difference; the
  * report persists nothing.
  */
+import { reportAuth } from './helpers/finance-actor';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -156,22 +157,22 @@ function line(result: Awaited<ReturnType<typeof calculateCashflow>>, key: string
 
 describe('SCR-119 cash flow statement (R-167)', () => {
   it('refuses a period the company fiscal-year variant does not define', async () => {
-    await expect(calculateCashflow({ client, selection: selection({ periodTo: 17 }) }))
+    await expect(calculateCashflow({ authorization: await reportAuth(client), client, selection: selection({ periodTo: 17 }) }))
       .rejects.toThrow(/not defined by fiscal year variant/);
   });
 
   it('refuses a company with no house-bank G/L account, by name', async () => {
-    await expect(calculateCashflow({ client, selection: selection({ companyCodes: ['3000'] }) }))
+    await expect(calculateCashflow({ authorization: await reportAuth(client), client, selection: selection({ companyCodes: ['3000'] }) }))
       .rejects.toThrow(/3000 has no house-bank G\/L account/);
   });
 
   it('refuses a non-leading ledger', async () => {
-    await expect(calculateCashflow({ client, selection: selection({ ledger: 'ZL' }) }))
+    await expect(calculateCashflow({ authorization: await reportAuth(client), client, selection: selection({ ledger: 'ZL' }) }))
       .rejects.toThrow(/leading ledger 0L only/);
   });
 
   it('derives the indirect statement from balance movements with the depreciation add-back', async () => {
-    const result = await calculateCashflow({ client, selection: selection({ comparative: true }) });
+    const result = await calculateCashflow({ authorization: await reportAuth(client), client, selection: selection({ comparative: true }) });
     expect(Number(line(result, 'NET_INCOME')?.amountsByCompany['1000'])).toBe(3700);
     expect(Number(line(result, 'ADD_DEPRECIATION')?.amountsByCompany['1000'])).toBe(500);
     expect(Number(line(result, 'CHANGE_RECEIVABLES')?.amountsByCompany['1000'])).toBe(-1000);
@@ -190,7 +191,7 @@ describe('SCR-119 cash flow statement (R-167)', () => {
   });
 
   it('derives the direct statement from offsetting lines of cash-touching documents', async () => {
-    const result = await calculateCashflow({ client, selection: selection({ method: 'DIRECT' }) });
+    const result = await calculateCashflow({ authorization: await reportAuth(client), client, selection: selection({ method: 'DIRECT' }) });
     expect(Number(line(result, 'DIRECT_RECEIVABLES')?.amountsByCompany['1000'])).toBe(4000);
     expect(Number(line(result, 'DIRECT_PAYABLES')?.amountsByCompany['1000'])).toBe(-1500);
     expect(Number(line(result, 'DIRECT_OPERATING')?.amountsByCompany['1000'])).toBe(-800);
@@ -207,7 +208,7 @@ describe('SCR-119 cash flow statement (R-167)', () => {
       const rows = await tx.execute(sql`select count(*)::int as n from journal_entry where client = ${client}`) as unknown as Array<{ n: number }>;
       return rows[0]!.n;
     });
-    const result = await calculateCashflow({ client, selection: selection({ companyCodes: ['1000', '2000'] }) });
+    const result = await calculateCashflow({ authorization: await reportAuth(client), client, selection: selection({ companyCodes: ['1000', '2000'] }) });
     expect(result.totalsComparable).toBe(false);
     expect(line(result, 'NET_FINANCING')?.total).toBeNull();
     expect(Number(line(result, 'NET_FINANCING')?.amountsByCompany['2000'])).toBe(100);

@@ -58,7 +58,7 @@ export default async function ConsolidatedStatementsPage({
   let reportError: string | null = null;
   if (canUse && selection.area && selection.group && selection.version) {
     try {
-      result = await calculateConsolidatedStatements({ client: session.user.client, selection });
+      result = await calculateConsolidatedStatements({ client: session.user.client, selection, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     } catch (error) {
       reportError = error instanceof ConsolidatedStatementsError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

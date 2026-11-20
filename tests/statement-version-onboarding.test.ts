@@ -14,7 +14,7 @@ import { STANDARD_PACKAGE_VERSION, STANDARD_STATEMENT_VERSION, applyStandardPack
 
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
-import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { financePoster, financeInputPoster, reportAuth } from './helpers/finance-actor';
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.
@@ -165,7 +165,7 @@ describe('standard configuration package — the financial statement version it 
   });
 
   it('runs all three closing reports on that version, with turnover that equals the ledger', async () => {
-    const trial = await calculateTrialBalance({ client, selection: selection() });
+    const trial = await calculateTrialBalance({ authorization: await reportAuth(client), client, selection: selection() });
     const ledger = await ledgerTurnover();
 
     expect(trial.statementVersion).toBe(STANDARD_STATEMENT_VERSION.version);
@@ -185,18 +185,21 @@ describe('standard configuration package — the financial statement version it 
     expect(expenses?.balance).toBeCloseTo(1200, 2);
 
     const sheet = await calculateBalanceSheet({
+      authorization: await reportAuth(client),
       client, selection: { ...selection(), calculationType: 'ACCUMULATED', summaryLevel: 1 },
     });
     expect(sheet.statementVersion).toBe(STANDARD_STATEMENT_VERSION.version);
     expect(sheet.nodes.length).toBeGreaterThan(0);
     expect(sheet.currentYearResult).toBeNull(); // the result is a COMBINED figure, not an accumulated one
     const combined = await calculateBalanceSheet({
+      authorization: await reportAuth(client),
       client, selection: { ...selection(), calculationType: 'COMBINED', summaryLevel: 1 },
     });
     expect(combined.currentYearResult).not.toBeNull();
     expect(combined.currentYearResult).toBeCloseTo(4200 - 1200, 2); // revenue less expense for the year
 
     const profit = await calculateProfitLoss({
+      authorization: await reportAuth(client),
       client, selection: { ...selection(), calculationType: 'MOVEMENT', summaryLevel: 1 },
     });
     expect(profit.nodes.length).toBeGreaterThan(0);
@@ -209,18 +212,20 @@ describe('standard configuration package — the financial statement version it 
   });
 
   it('refuses a version that does not stand, and names the remedy — for a tenant or out of one', async () => {
-    await expect(calculateTrialBalance({ client, selection: selection({ statementVersion: 'NOPE' }) }))
+    await expect(calculateTrialBalance({ authorization: await reportAuth(client), client, selection: selection({ statementVersion: 'NOPE' }) }))
       .rejects.toThrow(/does not stand/);
-    const error = await calculateTrialBalance({ client, selection: selection({ statementVersion: 'NOPE' }) })
+    const error = await calculateTrialBalance({ authorization: await reportAuth(client), client, selection: selection({ statementVersion: 'NOPE' }) })
       .then(() => null, (caught: unknown) => caught as { remedy?: string });
     expect(error?.remedy).toBe('Configure the FSV first.');
 
     // A tenant created without the package stands nothing, which is what makes the
     // first assertion above a statement about onboarding rather than about shared state.
     await expect(calculateTrialBalance({
+      authorization: await reportAuth(bareClient),
       client: bareClient,
       selection: selection({ companyCode: bareCompany }),
-    })).rejects.toThrow(/does not stand/);
+      // A tenant with no company code grants no Company Code scope: authority is judged before existence.
+    })).rejects.toThrow(/does not stand|Company Code scope/);
     expect((await listStatementVersions(bareClient))).toHaveLength(0);
     expect(await statementShape(bareClient)).toEqual({ versions: 0, nodes: 0, assignments: 0 });
   });

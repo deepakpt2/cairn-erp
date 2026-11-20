@@ -13,6 +13,7 @@
  * and are counted), column widths fitted to the content, long cells truncated with an ellipsis, the
  * header repeated on every page, and "Page n of m" in the footer.
  */
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
 import { PDFDocument, PDFFont, StandardFonts, rgb } from 'pdf-lib';
 
 export interface ReportColumn {
@@ -48,7 +49,7 @@ export interface ReportAdapter {
   route: string;
   capability: string;
   /** Same query-string keys as the screen reads; throws a service error (with `remedy`) for a bad selection. */
-  build(client: string, query: URLSearchParams): Promise<ReportDoc>;
+  build(client: string, query: URLSearchParams, authorization: ServiceAuthorityContext | undefined): Promise<ReportDoc>;
 }
 
 export class ReportExportError extends Error {

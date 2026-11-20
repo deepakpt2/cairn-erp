@@ -6,7 +6,7 @@ import { calculateTrialBalance, type TrialBalanceSelection } from '../src/module
 import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
-import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { financePoster, financeInputPoster, reportAuth } from './helpers/finance-actor';
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.
@@ -85,7 +85,7 @@ afterAll(async () => {
 
 describe('SCR-106 trial balance / F.01 statement (R-154)', () => {
   it('derives opening, turnover and cutoff balances with signs and comparatives', async () => {
-    const result = await calculateTrialBalance({ client, selection: selection() });
+    const result = await calculateTrialBalance({ authorization: await reportAuth(client), client, selection: selection() });
     const assets = result.nodes.find((n) => n.node === 'ASSETS');
     const cash = assets?.accounts.find((a) => a.accountNumber === '101000');
     expect(cash?.balance).toBe(10500); // 7000 opening + 5000 − 1500
@@ -109,19 +109,20 @@ describe('SCR-106 trial balance / F.01 statement (R-154)', () => {
   });
 
   it('names unassigned accounts instead of dropping them', async () => {
-    const result = await calculateTrialBalance({ client, selection: selection() });
+    const result = await calculateTrialBalance({ authorization: await reportAuth(client), client, selection: selection() });
     expect(result.unassigned.map((a) => a.accountNumber)).toEqual(['400000']);
     expect(result.unassigned[0]?.balance).toBe(1500);
     expect(result.warnings.some((w) => w.includes('outside every FSV assignment'))).toBe(true);
   });
 
   it('includes special periods only when explicitly selected', async () => {
-    const excluded = await calculateTrialBalance({ client, selection: selection({ periodTo: 16 }) });
+    const excluded = await calculateTrialBalance({ authorization: await reportAuth(client), client, selection: selection({ periodTo: 16 }) });
     const cashOut = excluded.nodes.find((n) => n.node === 'ASSETS')?.accounts[0];
     expect(cashOut?.balance).toBe(10500); // period-13 debit of 100 excluded
     expect(excluded.warnings.some((w) => w.includes('special period'))).toBe(true);
 
     const included = await calculateTrialBalance({
+      authorization: await reportAuth(client),
       client, selection: selection({ periodTo: 16, includeSpecialPeriods: true }),
     });
     const cashIn = included.nodes.find((n) => n.node === 'ASSETS')?.accounts[0];
@@ -129,9 +130,10 @@ describe('SCR-106 trial balance / F.01 statement (R-154)', () => {
   });
 
   it('judges the version and chart, and handles a missing comparative gracefully', async () => {
-    await expect(calculateTrialBalance({ client, selection: selection({ statementVersion: 'NOPE' }) }))
+    await expect(calculateTrialBalance({ authorization: await reportAuth(client), client, selection: selection({ statementVersion: 'NOPE' }) }))
       .rejects.toThrow('does not stand');
     const noComparison = await calculateTrialBalance({
+      authorization: await reportAuth(client),
       client, selection: selection({ comparisonFiscalYear: undefined }),
     });
     const assets = noComparison.nodes.find((n) => n.node === 'ASSETS');

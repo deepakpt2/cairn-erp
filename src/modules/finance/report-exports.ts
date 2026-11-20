@@ -47,8 +47,8 @@ const indent = (depth: number, text: string) => `${'   '.repeat(depth)}${text}`;
 
 export const trialBalanceExport: ReportAdapter = {
   code: 'trial-balance', route: '/finance/trial-balance', capability: TRIAL_BALANCE_CAPABILITY,
-  async build(client, q) {
-    const r = await calculateTrialBalance({ client, selection: await statementSelection(client, q) });
+  async build(client, q, authorization) {
+    const r = await calculateTrialBalance({ client, selection: await statementSelection(client, q), authorization });
     const comp = r.comparisonFiscalYear !== null;
     const columns = [C('Node / account'), C('Description'), R('Debit'), R('Credit'), R('Balance'), ...(comp ? [R(`Balance ${r.comparisonFiscalYear}`), R('Variance'), R('Var %')] : [])];
     const rows: string[][] = [];
@@ -76,13 +76,13 @@ export const trialBalanceExport: ReportAdapter = {
 
 export const balanceSheetExport: ReportAdapter = {
   code: 'balance-sheet', route: '/finance/balance-sheet', capability: BALANCE_SHEET_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const base = await statementSelection(client, q);
     const selection: BalanceSheetSelection = {
       ...base, calculationType: (q.get('calculationType') as BalanceSheetSelection['calculationType']) || 'COMBINED',
       summaryLevel: Number(q.get('summaryLevel') ?? DEFAULT_SUMMARY_LEVEL),
     };
-    const r = await calculateBalanceSheet({ client, selection });
+    const r = await calculateBalanceSheet({ client, selection, authorization });
     const comp = r.comparisonFiscalYear !== null;
     const columns = [C('Node / account'), C('Description'), R('Opening'), R('Movement'), R('Closing'), ...(comp ? [R(`Closing ${r.comparisonFiscalYear}`), R('Variance')] : [])];
     const rows: string[][] = [];
@@ -105,10 +105,10 @@ export const balanceSheetExport: ReportAdapter = {
 
 export const profitLossExport: ReportAdapter = {
   code: 'profit-loss', route: '/finance/profit-loss', capability: PROFIT_LOSS_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const base = await statementSelection(client, q);
     const selection: BalanceSheetSelection = { ...base, calculationType: 'COMBINED', summaryLevel: Number(q.get('summaryLevel') ?? DEFAULT_SUMMARY_LEVEL) };
-    const r = await calculateProfitLoss({ client, selection });
+    const r = await calculateProfitLoss({ client, selection, authorization });
     const comp = r.comparisonFiscalYear !== null;
     const columns = [C('Node / account'), C('Description'), R('Period movement'), R('Year to date'), ...(comp ? [R(`Movement ${r.comparisonFiscalYear}`), R('Variance'), R('Var %')] : [])];
     const rows: string[][] = [];
@@ -330,7 +330,7 @@ export const glBalancesExport: ReportAdapter = {
 
 export const cashFlowExport: ReportAdapter = {
   code: 'cash-flow', route: '/finance/cash-flow', capability: CASHFLOW_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const companyCodes = (q.get('companies') ?? '').split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
     if (companyCodes.length === 0) throw new ReportExportError('Company codes are required for this export.', 'Run the report on screen first; the export uses the same selection.');
     const selection: CashflowSelection = {
@@ -342,7 +342,7 @@ export const cashFlowExport: ReportAdapter = {
       ledger: CASHFLOW_LEDGER,
       comparative: q.get('comparative') === '1',
     };
-    const r = await calculateCashflow({ client, selection });
+    const r = await calculateCashflow({ client, selection, authorization });
     const total = r.totalsComparable && r.companies.length > 1;
     const columns = [C('Line'), ...r.companies.map((c) => R(`${c.companyCode} (${c.currency})`)), ...(total ? [R('Total')] : []), ...(selection.comparative ? [R('Previous year')] : [])];
     const width = columns.length;
@@ -383,7 +383,7 @@ export const cashFlowExport: ReportAdapter = {
 
 export const consolidatedStatementsExport: ReportAdapter = {
   code: 'consolidated-statements', route: '/finance/consolidated-statements', capability: CONSOLIDATED_STATEMENTS_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const get = (name: string) => (q.get(name) ?? '').trim();
     const areas = await listConsolidationAreas(client);
     const area = get('area').toUpperCase() || areas.find((a) => a.status === 'ACTIVE')?.area || areas[0]?.area || '';
@@ -401,7 +401,7 @@ export const consolidatedStatementsExport: ReportAdapter = {
     if (!selection.area || !selection.group || !selection.version) {
       throw new ReportExportError('A consolidation area, group and version are required.', 'Run the report on screen first; the export uses the same selection.');
     }
-    const r = await calculateConsolidatedStatements({ client, selection });
+    const r = await calculateConsolidatedStatements({ client, selection, authorization });
     const columns = [C('FS item'), C('Title'), C('Section'), ...r.units.map((u) => R(u.unit)), R('Group total'), R('Period movement'), ...(selection.comparative ? [R('Previous year')] : [])];
     const width = columns.length;
     const rows: string[][] = [];

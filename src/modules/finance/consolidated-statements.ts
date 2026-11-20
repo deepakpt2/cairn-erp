@@ -13,6 +13,9 @@
  * nothing and stores nothing.
  */
 export * from './consolidated-statements-vocabulary';
+import { CONSOLIDATED_STATEMENTS_CAPABILITY } from './consolidated-statements-vocabulary';
+import { refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx } from '@/platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
 import {
   type ConsolidatedStatementsResult, type ConsolidatedStatementsSelection,
   type StatementSection,
@@ -90,6 +93,8 @@ interface AccountAggregate {
 export async function calculateConsolidatedStatements(input: {
   client: string;
   selection: ConsolidatedStatementsSelection;
+  /** The caller's verified authority: the capability, and Company Code scope for every company of the resolved units. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<ConsolidatedStatementsResult> {
   const { client } = input;
   const selection: ConsolidatedStatementsSelection = {
@@ -113,6 +118,9 @@ export async function calculateConsolidatedStatements(input: {
   }
 
   return withTenant(client, async (tx) => {
+    // Session and capability first: nothing about the consolidation set is disclosed to an unauthenticated caller.
+    const gate = await verifyCompanyAuthorityAnyInTx(tx, client, input.authorization, [CONSOLIDATED_STATEMENTS_CAPABILITY, `${CONSOLIDATED_STATEMENTS_CAPABILITY}.read`]);
+    if (!gate.ok) fail(gate.refusal.message, gate.refusal.remedy);
     const [area] = await tx.select().from(consolidationArea).where(and(
       eq(consolidationArea.client, client), eq(consolidationArea.area, selection.area),
     ));
@@ -170,6 +178,13 @@ export async function calculateConsolidatedStatements(input: {
       fail(`Consolidation unit ${selection.unit} is not assigned to group ${selection.group} for ${periodEnd}.`);
     }
     const units = selection.unit ? allUnits.filter((unit) => unit.unit === selection.unit) : allUnits;
+    // Every company that contributes to the result, derived from the stored units — not from a parameter. A group
+    // requested as a whole is refused when any contributor is outside scope; it is never trimmed and shown as complete.
+    const contributing = [...new Set(units.map((unit) => unit.companyCode))];
+    const scopeRefusal = await refuseCompaniesOutsideScopeInTx(tx, client, gate, contributing, {
+      derivedFrom: selection.unit ? `Consolidation unit ${selection.unit}` : `Consolidation group ${selection.group}`,
+    });
+    if (scopeRefusal) fail(scopeRefusal.message, scopeRefusal.remedy);
 
     /* FS items and mappings of the consolidation chart. */
     const groupAccounts = await tx.select().from(consolidationGroupAccount).where(and(

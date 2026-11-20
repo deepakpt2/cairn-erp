@@ -9,6 +9,7 @@
  * cumulative year-to-date movement through the cutoff, with
  * independent comparatives. Calculation lands in stage 3.
  */
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
 import type { BalanceSheetSelection } from './balance-sheet';
 
 export const PROFIT_LOSS_CAPABILITY = 'FIN.RPT.PROFITLOSS';
@@ -60,7 +61,7 @@ export interface ProfitLossResult {
 }
 
 
-import { calculateBalanceSheet, type BalanceSheetAccountRow } from './balance-sheet';
+import { calculateStatementEngineAs, type BalanceSheetAccountRow } from './balance-sheet';
 import { TrialBalanceError } from './trial-balance';
 
 function mapAccount(a: BalanceSheetAccountRow): ProfitLossAccountRow {
@@ -85,10 +86,13 @@ function mapAccount(a: BalanceSheetAccountRow): ProfitLossAccountRow {
  */
 export async function calculateProfitLoss(input: {
   client: string; selection: ProfitLossSelection;
+  /** The caller's verified authority: FIN.RPT.PROFITLOSS and Company Code scope — not the balance-sheet capability. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<ProfitLossResult> {
-  const bs = await calculateBalanceSheet({
+  const bs = await calculateStatementEngineAs(PROFIT_LOSS_CAPABILITY, {
     client: input.client,
     selection: { ...input.selection, calculationType: 'COMBINED' },
+    authorization: input.authorization,
   });
 
   // A node survives when its subtree keeps at least one P&L account.

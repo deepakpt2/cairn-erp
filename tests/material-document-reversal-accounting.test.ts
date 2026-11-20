@@ -15,6 +15,7 @@ import { JOURNAL_ACCOUNTING_NOTE } from '../src/modules/inventory/material-docum
 import { MaterialReversalError, reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { reportAuth } from './helpers/finance-actor';
 import { createTenant, destroyTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 
@@ -127,6 +128,7 @@ describe('journaled material-document reversal accounting', () => {
 
   async function trialAccount(account: string) {
     const statement = await calculateTrialBalance({
+      authorization: await reportAuth(client),
       client,
       selection: {
         companyCode: COMPANY, statementVersion: 'RA01', fiscalYear: 2026,
@@ -362,6 +364,7 @@ describe('journaled material-document reversal accounting', () => {
     const gl = await getGlBalances(client, { glAccount: account, companyCode: COMPANY, fiscalYear: 2026 });
     expect(gl.yearClosing).toBe(0);
     const balanceSheet = await calculateBalanceSheet({
+      authorization: await reportAuth(client),
       client,
       selection: {
         companyCode: COMPANY, statementVersion: 'RA01', fiscalYear: 2026,
@@ -501,6 +504,7 @@ describe('journaled material-document reversal accounting', () => {
     const afterIssue = (await trialAccount(account))?.balance ?? 0;
     const glAfterIssue = await getGlBalances(client, { glAccount: account, companyCode: COMPANY, fiscalYear: 2026 });
     const early = await calculateTrialBalance({
+      authorization: await reportAuth(client),
       client,
       selection: {
         companyCode: COMPANY, statementVersion: 'RA01', fiscalYear: 2026,
@@ -536,6 +540,7 @@ describe('journaled material-document reversal accounting', () => {
       glAccount: account, companyCode: COMPANY, fiscalYear: 2026, currency: 'EUR',
     })).rejects.toThrow(/cannot display in EUR/);
     await expect(calculateTrialBalance({
+      authorization: await reportAuth(client),
       client,
       selection: {
         companyCode: '2000', statementVersion: 'RA01', fiscalYear: 2026,

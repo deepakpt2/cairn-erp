@@ -101,7 +101,7 @@
 | closing_task_event | finance | audit |
 | closing_task_instance | finance | audit |
 | closing_task_list | finance | audit |
-| company_code | foundation | audit, finance, inventory, output, people, platform, platform/periods, platform/tenancy, production, purchasing, sales |
+| company_code | foundation | audit, finance, inventory, output, people, platform, platform/auth, platform/periods, platform/tenancy, production, purchasing, sales |
 | config_activity | platform/tables | platform/tenancy |
 | config_activity_status | platform/tables | foundation, platform/tenancy |
 | controlling_area | foundation | inventory, platform/tenancy, production |

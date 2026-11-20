@@ -42,7 +42,7 @@ export async function saveIntercompanyConfigAction(
   try {
     const sendingCompanyCode = read(form, 'sendingCompanyCode');
     const receivingCompanyCode = read(form, 'receivingCompanyCode');
-    const standing = await listIntercompanyConfigs(session.user.client);
+    const standing = await listIntercompanyConfigs(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     if (standing.some((pair) => pair.sendingCompanyCode.toUpperCase() === sendingCompanyCode.toUpperCase() && pair.receivingCompanyCode.toUpperCase() === receivingCompanyCode.toUpperCase())) {
       await assertChangeForSession(session, {
         lockObject: 'INTERCOMPANY_PAIR',
@@ -56,6 +56,7 @@ export async function saveIntercompanyConfigAction(
       sendingClearingGl: read(form, 'sendingClearingGl') || undefined,
       receivingClearingGl: read(form, 'receivingClearingGl') || undefined,
       defaultCurrency: read(form, 'defaultCurrency') || undefined,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {
@@ -86,6 +87,7 @@ export async function deleteIntercompanyConfigAction(
       client: session.user.client, changedBy: session.user.username,
       sendingCompanyCode,
       receivingCompanyCode,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return { ok: true, message: `Pair ${read(form, 'sendingCompanyCode')} to ${read(form, 'receivingCompanyCode')} stands deleted.` };

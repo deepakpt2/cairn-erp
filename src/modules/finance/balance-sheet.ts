@@ -73,6 +73,9 @@ export interface BalanceSheetResult {
 
 import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
+import { authorizeCompaniesInTx } from '@/platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
+
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
 import { getCompanyCode } from '@/platform/periods';
 import { ledgerJournalStatus } from './ledger-journal';
@@ -109,7 +112,27 @@ interface AccountFigures {
  */
 export async function calculateBalanceSheet(input: {
   client: string; selection: BalanceSheetSelection;
+  /** The caller's verified authority: FIN.RPT.BALANCESHEET and Company Code scope are judged here. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<BalanceSheetResult> {
+  return runStatementEngine(input, BALANCE_SHEET_CAPABILITY);
+}
+
+/**
+ * The same engine for the profit-and-loss statement, which authorises its OWN capability (FIN.RPT.PROFITLOSS) and
+ * must not require the user to hold the balance-sheet capability. Not a way to read a balance sheet without
+ * authority: the capability named here is verified against the live session in the same transaction.
+ */
+export async function calculateStatementEngineAs(
+  capability: string,
+  input: { client: string; selection: BalanceSheetSelection; authorization: ServiceAuthorityContext | undefined },
+): Promise<BalanceSheetResult> {
+  return runStatementEngine(input, capability);
+}
+
+async function runStatementEngine(input: {
+  client: string; selection: BalanceSheetSelection; authorization: ServiceAuthorityContext | undefined;
+}, capability: string): Promise<BalanceSheetResult> {
   const { client } = input;
   const s = { ...input.selection };
   if (!STATEMENT_LEDGERS.includes(s.ledger as (typeof STATEMENT_LEDGERS)[number])) {
@@ -137,6 +160,8 @@ export async function calculateBalanceSheet(input: {
   const today = calculatedAt.slice(0, 10);
 
   return withTenant(client, async (tx) => {
+    const authority = await authorizeCompaniesInTx(tx, client, input.authorization, capability, [s.companyCode]);
+    if (!authority.ok) fail(authority.refusal.message, authority.refusal.remedy);
     const company = await getCompanyCode(tx, client, s.companyCode);
     if (!company) fail(`Company code ${s.companyCode} does not stand.`);
     const chart = company.chartOfAccounts ?? '';

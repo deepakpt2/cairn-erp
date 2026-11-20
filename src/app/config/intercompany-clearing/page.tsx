@@ -21,11 +21,12 @@ const ROUTE = '/config/intercompany-clearing';
 export default async function IntercompanyClearingPage() {
   const session = await requireSession(ROUTE);
   const client = session.user.client;
-  const [pairs, companies] = await Promise.all([
-    listIntercompanyConfigs(client),
-    listCompanyChoices(client),
-  ]);
   const canMaintain = can(session, INTERCOMPANY_CONFIG_CAPABILITY);
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  // The service judges capability and Company Code scope itself; a caller without the capability sees nothing.
+  const [pairs, companies] = canMaintain
+    ? await Promise.all([listIntercompanyConfigs(client, authorization, [INTERCOMPANY_CONFIG_CAPABILITY]), listCompanyChoices(client, authorization, [INTERCOMPANY_CONFIG_CAPABILITY])])
+    : [[], []];
   return (
     <Page
       title={t('icCfg.title')} code={<>{INTERCOMPANY_CONFIG_CAPABILITY} · OBYA</>}

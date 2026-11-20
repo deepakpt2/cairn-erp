@@ -16,6 +16,9 @@
  * nothing and stores nothing.
  */
 export * from './cash-flow-vocabulary';
+import { CASHFLOW_CAPABILITY } from './cash-flow-vocabulary';
+import { refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx } from '@/platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
 import {
   CASHFLOW_LEDGER,
   type CashflowAccountClass, type CashflowLine, type CashflowResult,
@@ -352,6 +355,8 @@ const SECTION_TITLES: Record<CashflowSection['key'], string> = {
 export async function calculateCashflow(input: {
   client: string;
   selection: CashflowSelection;
+  /** The caller's verified authority: the capability and Company Code scope for EVERY selected company, judged here. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<CashflowResult> {
   const { client } = input;
   const selection: CashflowSelection = {
@@ -376,6 +381,11 @@ export async function calculateCashflow(input: {
   }
 
   return withTenant(client, async (tx) => {
+    const authority = await verifyCompanyAuthorityAnyInTx(tx, client, input.authorization, [CASHFLOW_CAPABILITY, `${CASHFLOW_CAPABILITY}.read`]);
+    if (!authority.ok) fail(authority.refusal.message, authority.refusal.remedy);
+    // Every selected company, judged before any company's data is loaded; one outside scope refuses the whole selection.
+    const outside = await refuseCompaniesOutsideScopeInTx(tx, client, authority, selection.companyCodes);
+    if (outside) fail(outside.message, outside.remedy);
     const contexts: CompanyContext[] = [];
     for (const companyCode of selection.companyCodes) {
       const ctx = await loadCompanyContext(tx, client, companyCode);

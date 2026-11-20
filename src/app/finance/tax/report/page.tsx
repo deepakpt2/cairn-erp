@@ -51,7 +51,7 @@ export default async function TaxReportPage({ searchParams }: {
           correctedReturn: defaults.correctedReturn,
           clearingAccount: defaults.clearingAccount || undefined,
         },
-      });
+      }, { authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     } catch (e) {
       if (e instanceof TaxReportError) error = e.message;
       else throw e;

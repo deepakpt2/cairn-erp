@@ -87,6 +87,9 @@ export class TrialBalanceError extends Error {
 
 import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
+import { authorizeCompaniesInTx } from '@/platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
+
 import { ledgerJournalStatus } from './ledger-journal';
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
 import { getCompanyCode } from '@/platform/periods';
@@ -109,6 +112,8 @@ interface AccountFigures {
 
 export async function calculateTrialBalance(input: {
   client: string; selection: TrialBalanceSelection;
+  /** The caller's verified authority. Required: capability and Company Code scope are judged here, not by the screen. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<TrialBalanceResult> {
   const { client } = input;
   const s = { ...input.selection };
@@ -123,6 +128,8 @@ export async function calculateTrialBalance(input: {
   const today = calculatedAt.slice(0, 10);
 
   return withTenant(client, async (tx) => {
+    const authority = await authorizeCompaniesInTx(tx, client, input.authorization, TRIAL_BALANCE_CAPABILITY, [s.companyCode]);
+    if (!authority.ok) fail(authority.refusal.message, authority.refusal.remedy);
     const company = await getCompanyCode(tx, client, s.companyCode);
     if (!company) fail(`Company code ${s.companyCode} does not stand.`);
     const chart = company.chartOfAccounts ?? '';

@@ -2379,6 +2379,7 @@
     "modules/finance/trial-balance.ts",
     "modules/foundation/company-code-assignments.ts",
     "modules/foundation/services.ts",
+    "platform/auth/company-scope.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/posting/money.ts",
@@ -2411,6 +2412,7 @@
     "modules/finance/cash-flow-vocabulary.ts",
     "modules/finance/cash-flow.ts",
     "modules/foundation/services.ts",
+    "platform/auth/company-scope.ts",
     "platform/auth/current.ts",
     "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
@@ -2871,6 +2873,7 @@
     "modules/finance/trial-balance.ts",
     "modules/foundation/company-code-assignments.ts",
     "modules/foundation/services.ts",
+    "platform/auth/company-scope.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/posting/money.ts",
@@ -2908,6 +2911,7 @@
     "modules/finance/trial-balance.ts",
     "modules/foundation/company-code-assignments.ts",
     "modules/foundation/services.ts",
+    "platform/auth/company-scope.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "platform/posting/money.ts",
@@ -5490,6 +5494,8 @@
   "modules/finance/balance-sheet.ts": [
     "modules/finance/ledger-journal.ts",
     "modules/finance/trial-balance.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
     "platform/posting/decimal.ts"
@@ -5509,6 +5515,8 @@
     "modules/finance/ledger-journal.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/finance/chart-of-accounts-copy.ts": [
@@ -5538,6 +5546,8 @@
     "modules/finance/ledger-journal.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/finance/consolidation-monitor-vocabulary.ts": [],
@@ -5760,6 +5770,9 @@
   "modules/finance/intercompany.ts": [
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
@@ -5843,7 +5856,8 @@
   ],
   "modules/finance/profit-loss.ts": [
     "modules/finance/balance-sheet.ts",
-    "modules/finance/trial-balance.ts"
+    "modules/finance/trial-balance.ts",
+    "platform/auth/service-authority.ts"
   ],
   "modules/finance/report-exports.ts": [
     "modules/finance/asset-history.ts",
@@ -5877,14 +5891,16 @@
   "modules/finance/tax-report.ts": [
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
     "platform/auth/service-authority.ts",
-    "platform/auth/session.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
     "platform/posting/index.ts"
   ],
   "modules/finance/trial-balance.ts": [
     "modules/finance/ledger-journal.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
     "platform/posting/decimal.ts"
@@ -7361,7 +7377,9 @@
     "modules/output/document-layout.ts",
     "platform/db/client.ts"
   ],
-  "modules/output/report-export.ts": [],
+  "modules/output/report-export.ts": [
+    "platform/auth/service-authority.ts"
+  ],
   "modules/output/report-registry.ts": [
     "modules/finance/report-exports.ts",
     "modules/foundation/report-exports.ts",
@@ -8850,6 +8868,11 @@
     "platform/tables/security.ts"
   ],
   "platform/auth/capability-policy.ts": [],
+  "platform/auth/company-scope.ts": [
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts"
+  ],
   "platform/auth/current.ts": [
     "modules/platform/personal-account.ts",
     "platform/auth/session.ts",

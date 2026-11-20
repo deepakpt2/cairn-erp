@@ -1,5 +1,6 @@
 import { can, requireSession } from '@/platform/auth/current';
 import { listCompanyCodes } from '@/modules/foundation/services';
+import { authorizedCompanyCodes } from '@/platform/auth/company-scope';
 import {
   CASHFLOW_CAPABILITY, CASHFLOW_LEDGER,
   type CashflowResult, type CashflowSelection,
@@ -23,7 +24,9 @@ export default async function CashflowPage({
   const get = (name: string, fallback = '') =>
     (typeof params[name] === 'string' ? (params[name] as string) : fallback).trim();
 
-  const companies = (await listCompanyCodes(session.user.client)).map((c) => ({
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  const allowedCompanies = new Set(await authorizedCompanyCodes(session.user.client, authorization, [CASHFLOW_CAPABILITY, `${CASHFLOW_CAPABILITY}.read`]));
+  const companies = (await listCompanyCodes(session.user.client)).filter((c) => allowedCompanies.has(c.companyCode)).map((c) => ({
     companyCode: c.companyCode, name: c.name, currency: c.currency,
   }));
   const requested = get('companies')
@@ -43,7 +46,7 @@ export default async function CashflowPage({
   let reportError: string | null = null;
   if (canUse && get('companies')) {
     try {
-      result = await calculateCashflow({ client: session.user.client, selection });
+      result = await calculateCashflow({ client: session.user.client, selection, authorization });
     } catch (error) {
       reportError = error instanceof CashflowError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

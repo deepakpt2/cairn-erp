@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { can, requireSession } from '@/platform/auth/current';
 import { listCompanyCodes } from '@/modules/foundation/services';
+import { authorizedCompanyCodes } from '@/platform/auth/company-scope';
 import { hasCompanyCodeAssignments } from '@/modules/foundation/company-code-assignments';
 import { listStatementVersions } from '@/modules/finance/trial-balance';
 import {
@@ -25,7 +26,10 @@ export default async function ScreenPage({ searchParams }: {
   const session = await requireSession('/finance/profit-loss');
   const params = await searchParams;
   const canUse = can(session, PROFIT_LOSS_CAPABILITY);
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  const allowedCompanies = new Set(await authorizedCompanyCodes(session.user.client, authorization, PROFIT_LOSS_CAPABILITY));
   const companies = (await listCompanyCodes(session.user.client))
+    .filter((c) => allowedCompanies.has(c.companyCode))
     .filter((c) => c.isActive && hasCompanyCodeAssignments(c))
     .map((c) => ({ companyCode: c.companyCode, name: c.name }));
   const versions = canUse ? await listStatementVersions(session.user.client) : [];
@@ -49,7 +53,7 @@ export default async function ScreenPage({ searchParams }: {
   let error: string | null = null;
   if (canUse && params.companyCode) {
     try {
-      result = await calculateProfitLoss({ client: session.user.client, selection });
+      result = await calculateProfitLoss({ client: session.user.client, selection, authorization });
     } catch (caught) {
       error = caught instanceof TrialBalanceError ? caught.message : 'The statement could not be calculated.';
     }

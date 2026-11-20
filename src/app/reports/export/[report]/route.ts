@@ -20,7 +20,7 @@ export async function GET(request: Request, context: { params: Promise<{ report:
   const query = new URL(request.url).searchParams;
   const format = query.get('format') === 'pdf' ? 'pdf' : 'csv';
   try {
-    const doc = await adapter.build(session.user.client, query);
+    const doc = await adapter.build(session.user.client, query, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     const out = await renderReport(doc, format, new Date().toISOString().slice(0, 16).replace('T', ' '));
     return new Response(out.body as BodyInit, {
       headers: {

@@ -246,3 +246,27 @@ async function standingActor(client: string, current?: FinanceActor): Promise<Fi
   if (current && (await sessionStands(client, current))) return current;
   return createFinanceActor(client);
 }
+
+/** The report, tax and intercompany authorities the company-scope-enforcing finance services ask for. */
+export const FINANCE_REPORT_CAPABILITIES: readonly string[] = [
+  'FIN.RPT.TRIALBALANCE', 'FIN.RPT.BALANCESHEET', 'FIN.RPT.PROFITLOSS', 'FIN.RPT.CASHFLOW', 'FIN.RPT.CONSOLIDATE.STMT',
+  'FIN.TAX.REPORT', 'FIN.IC.POST', 'CFG.FIN.IC.DEFINE',
+];
+const reportActors = new Map<string, Promise<FinanceActor>>();
+
+/**
+ * A signed-in actor holding every report/intercompany authority with Company Code and Plant reach over everything the
+ * tenant has right now. For tests of figures and postings, which are not about authority: they call the real
+ * service with a real session instead of a bypass. Reach is refreshed on every call, so companies and plants a suite
+ * adds after its first call are covered.
+ */
+export async function reportAuth(client: string): Promise<{ userId: string; sessionId: string }> {
+  let actor = reportActors.get(client);
+  if (!actor) {
+    actor = createFinanceActor(client, { capabilities: FINANCE_REPORT_CAPABILITIES });
+    reportActors.set(client, actor);
+  }
+  const resolved = await actor;
+  await refreshFinanceActorScopes(client, resolved);
+  return resolved.authorization;
+}

@@ -16,6 +16,9 @@
  * G/L balances, cleared by the standing FIN.GL.CLEAR screen when
  * settlement occurs — nothing IC-specific is added to clearing.
  */
+import { hasOrgAccess } from '../../platform/auth/session';
+import { authorizeCompaniesInTx, verifyCompanyAuthorityInTx, refuseCompaniesOutsideScopeInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
@@ -97,11 +100,20 @@ export async function rateToLocal(
 
 const ratio = (n: number) => (n === 0 ? 1 : n);
 
-export async function listIntercompanyConfigs(client: string): Promise<IntercompanyPairConfig[]> {
+/** Pairs the caller may see: both companies of a pair must lie inside the caller's Company Code scope. */
+export async function listIntercompanyConfigs(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[] = [INTERCOMPANY_CAPABILITY, INTERCOMPANY_CONFIG_CAPABILITY],
+): Promise<IntercompanyPairConfig[]> {
   return withTenant(client, async (tx) => {
-    const rows = await tx.select().from(intercompanyClearingConfig)
+    const authority = await verifyAnyCapability(tx, client, authorization, capabilities);
+    const all = await tx.select().from(intercompanyClearingConfig)
       .where(eq(intercompanyClearingConfig.client, client))
       .orderBy(intercompanyClearingConfig.sendingCompanyCode, intercompanyClearingConfig.receivingCompanyCode);
+    const rows = [];
+    for (const r of all) {
+      if (!(await refuseCompaniesOutsideScopeInTx(tx, client, authority, [r.sendingCompanyCode, r.receivingCompanyCode], { allowPlantLimited: true }))) rows.push(r);
+    }
     return rows.map((r) => ({
       sendingCompanyCode: r.sendingCompanyCode,
       receivingCompanyCode: r.receivingCompanyCode,
@@ -112,10 +124,22 @@ export async function listIntercompanyConfigs(client: string): Promise<Intercomp
   });
 }
 
+async function verifyAnyCapability(tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined, capabilities: readonly string[]) {
+  let first: { message: string; remedy: string } | null = null;
+  for (const capability of capabilities) {
+    const v = await verifyCompanyAuthorityInTx(tx, client, authorization, capability);
+    if (v.ok) return v;
+    first ??= v.refusal;
+  }
+  throw new IntercompanyError(first!.message, first!.remedy);
+}
+
 export async function saveIntercompanyConfig(input: {
   client: string; changedBy: string;
   sendingCompanyCode: string; receivingCompanyCode: string;
   sendingClearingGl?: string; receivingClearingGl?: string; defaultCurrency?: string;
+  /** The caller's verified authority: CFG.FIN.IC.DEFINE and Company Code scope for both companies. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<IntercompanyPairConfig> {
   const sending = input.sendingCompanyCode.trim().toUpperCase();
   const receiving = input.receivingCompanyCode.trim().toUpperCase();
@@ -129,6 +153,8 @@ export async function saveIntercompanyConfig(input: {
     );
   }
   return withTenant(input.client, async (tx) => {
+    const authority = await authorizeCompaniesInTx(tx, input.client, input.authorization, INTERCOMPANY_CONFIG_CAPABILITY, [sending, receiving], { allowPlantLimited: true });
+    if (!authority.ok) throw new IntercompanyError(authority.refusal.message, authority.refusal.remedy);
     const sendingCompany = await getCompanyCode(tx, input.client, sending);
     const receivingCompany = await getCompanyCode(tx, input.client, receiving);
     for (const [key, company] of [[sending, sendingCompany], [receiving, receivingCompany]] as const) {
@@ -210,8 +236,14 @@ export async function saveIntercompanyConfig(input: {
 
 export async function deleteIntercompanyConfig(input: {
   client: string; changedBy: string; sendingCompanyCode: string; receivingCompanyCode: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<{ deleted: true }> {
   return withTenant(input.client, async (tx) => {
+    const authority = await authorizeCompaniesInTx(
+      tx, input.client, input.authorization, INTERCOMPANY_CONFIG_CAPABILITY,
+      [input.sendingCompanyCode.trim().toUpperCase(), input.receivingCompanyCode.trim().toUpperCase()], { allowPlantLimited: true },
+    );
+    if (!authority.ok) throw new IntercompanyError(authority.refusal.message, authority.refusal.remedy);
     const [standing] = await tx.select().from(intercompanyClearingConfig).where(and(
       eq(intercompanyClearingConfig.client, input.client),
       eq(intercompanyClearingConfig.sendingCompanyCode, input.sendingCompanyCode.toUpperCase()),
@@ -300,6 +332,8 @@ export async function postIntercompany(input: {
   documentType: string; currency?: string; reference?: string;
   headerText?: string; confirmed: boolean; requestKey: string;
   lines: IntercompanyLineInput[];
+  /** The caller's verified authority: FIN.IC.POST and Company Code scope for BOTH companies, judged in the posting transaction. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<IntercompanyPostingResult> {
   const sending = input.sendingCompanyCode.trim().toUpperCase();
   const receiving = input.receivingCompanyCode.trim().toUpperCase();
@@ -327,8 +361,13 @@ export async function postIntercompany(input: {
   return withTenant(input.client, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/intercompany/${sending}/${receiving}`}, 0))`);
 
+    // Scope first — before a replay can return a stored pair, and before any company is read. Both sides, and the
+    // companies are the ones the posting actually writes (a replay below must name the same pair).
+    const authority = await authorizeCompaniesInTx(tx, input.client, input.authorization, INTERCOMPANY_CAPABILITY, [sending, receiving]);
+    if (!authority.ok) throw new IntercompanyError(authority.refusal.message, authority.refusal.remedy);
+
     const replay = input.requestKey
-      ? await standingForRequestKey(tx, input.client, input.requestKey)
+      ? await standingForRequestKey(tx, input.client, input.requestKey, sending, receiving)
       : null;
     if (replay) return replay;
 
@@ -529,7 +568,7 @@ export async function postIntercompany(input: {
 
 /** Replay lookup: one accepted submission key names one document pair. */
 async function standingForRequestKey(
-  tx: Tx, client: string, requestKey: string,
+  tx: Tx, client: string, requestKey: string, expectedSending: string, expectedReceiving: string,
 ): Promise<IntercompanyPostingResult | null> {
   const rows = await tx.select().from(intercompanyDocumentHeader)
     .where(eq(intercompanyDocumentHeader.client, client));
@@ -548,6 +587,10 @@ async function standingForRequestKey(
       eq(intercompanyDocumentHeader.documentNumber, row.documentNumber),
     ));
     if (!pair) return null;
+    // A key that names a different pair is not this request's replay and must not hand over that pair's documents.
+    if (pair.sendingCompanyCode !== expectedSending || pair.receivingCompanyCode !== expectedReceiving) {
+      throw new IntercompanyError('This request key has already been used for another posting.', 'Use a new request key for a new posting.');
+    }
     const sending = await getCompanyCode(tx, client, pair.sendingCompanyCode);
     const receiving = await getCompanyCode(tx, client, pair.receivingCompanyCode);
     const [config] = await tx.select().from(intercompanyClearingConfig).where(and(
@@ -571,13 +614,18 @@ async function standingForRequestKey(
 }
 
 /** The company pairs standing in the tenant, for the posting screen's pickers. */
-export async function listCompanyChoices(client: string): Promise<Array<{ companyCode: string; name: string; currency: string }>> {
+export async function listCompanyChoices(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[] = [INTERCOMPANY_CAPABILITY, INTERCOMPANY_CONFIG_CAPABILITY],
+): Promise<Array<{ companyCode: string; name: string; currency: string }>> {
   return withTenant(client, async (tx) => {
-    const rows = await tx.select({
+    const authority = await verifyAnyCapability(tx, client, authorization, capabilities);
+    const all = await tx.select({
       companyCode: companyMaster.companyCode, name: companyMaster.name, currency: companyMaster.currency,
     }).from(companyMaster).where(and(
       eq(companyMaster.client, client), eq(companyMaster.isActive, true),
     )).orderBy(companyMaster.companyCode);
-    return rows;
+    // Only companies the caller's scope covers are offered; an empty scope yields an empty list, never "the first company".
+    return all.filter((c) => hasOrgAccess(authority.restrictions, 'COMPANY_CODE', c.companyCode));
   });
 }

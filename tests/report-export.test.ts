@@ -2,6 +2,7 @@
  * Report export: the CSV/PDF engine (pure), the registry, and adapters against an empty tenant — what the
  * export does with a selection that returns nothing, and with one the service refuses.
  */
+import { reportAuth } from './helpers/finance-actor';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { reportToCsv, reportToPdf, safeStem, type ReportDoc } from '../src/modules/output/report-export';
@@ -109,25 +110,25 @@ describe('adapters on an empty tenant', () => {
       'requisition-list': new URLSearchParams(),
     };
     for (const code of Object.keys(selections)) {
-      const d = await reportAdapter(code)!.build(client, selections[code]);
+      const d = await reportAdapter(code)!.build(client, selections[code], await reportAuth(client));
       expect(d.sections[0].rows).toHaveLength(0);
       expect(reportToCsv(d)).toContain(d.title);
       expect((await reportToPdf(d, 'now')).pageCount).toBe(1);
     }
   });
   it('cash flow, consolidated statements and GR/IR refuse without a selection', async () => {
-    await expect(reportAdapter('cash-flow')!.build(client, new URLSearchParams())).rejects.toMatchObject({ remedy: expect.any(String) });
-    await expect(reportAdapter('consolidated-statements')!.build(client, new URLSearchParams())).rejects.toMatchObject({ remedy: expect.any(String) });
-    await expect(reportAdapter('grir-analysis')!.build(client, new URLSearchParams({ run: '00000000-0000-0000-0000-000000000000' }))).rejects.toMatchObject({ remedy: expect.any(String) });
-    await expect(reportAdapter('profit-center-report')!.build(client, new URLSearchParams())).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('cash-flow')!.build(client, new URLSearchParams(), await reportAuth(client))).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('consolidated-statements')!.build(client, new URLSearchParams(), await reportAuth(client))).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('grir-analysis')!.build(client, new URLSearchParams({ run: '00000000-0000-0000-0000-000000000000' }), await reportAuth(client))).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('profit-center-report')!.build(client, new URLSearchParams(), await reportAuth(client))).rejects.toMatchObject({ remedy: expect.any(String) });
   });
   it('sales analysis produces headers and per-currency totals', async () => {
-    const d = await reportAdapter('sales-analysis')!.build(client, new URLSearchParams({ kind: 'SALES', groupBy: 'MATERIAL' }));
+    const d = await reportAdapter('sales-analysis')!.build(client, new URLSearchParams({ kind: 'SALES', groupBy: 'MATERIAL' }), await reportAuth(client));
     expect(d.title).toContain('Sales analysis');
     expect(d.sections).toHaveLength(2);
   });
   it('a report that needs a selection refuses with the same words as the screen', async () => {
-    await expect(reportAdapter('vendor-balances')!.build(client, new URLSearchParams())).rejects.toMatchObject({ remedy: expect.any(String) });
-    await expect(reportAdapter('trial-balance')!.build(client, new URLSearchParams())).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('vendor-balances')!.build(client, new URLSearchParams(), await reportAuth(client))).rejects.toMatchObject({ remedy: expect.any(String) });
+    await expect(reportAdapter('trial-balance')!.build(client, new URLSearchParams(), await reportAuth(client))).rejects.toMatchObject({ remedy: expect.any(String) });
   });
 });

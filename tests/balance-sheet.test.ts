@@ -6,7 +6,7 @@ import { calculateBalanceSheet, type BalanceSheetSelection } from '../src/module
 import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
-import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { financePoster, financeInputPoster, reportAuth } from './helpers/finance-actor';
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.
@@ -76,7 +76,7 @@ const account = (result: Awaited<ReturnType<typeof calculateBalanceSheet>>, node
 
 describe('SCR-107 balance sheet / P&L statement (R-155)', () => {
   it('ACCUMULATED: opening plus movements through the cutoff, with comparatives', async () => {
-    const result = await calculateBalanceSheet({ client, selection: selection() });
+    const result = await calculateBalanceSheet({ authorization: await reportAuth(client), client, selection: selection() });
     const cash = account(result, 'ASSETS', '101000');
     expect(cash?.openingBalance).toBe(7000);
     expect(cash?.debitTurnover).toBe(5000);
@@ -90,7 +90,7 @@ describe('SCR-107 balance sheet / P&L statement (R-155)', () => {
   });
 
   it('MOVEMENT: strictly inside the range, opening excluded', async () => {
-    const result = await calculateBalanceSheet({ client, selection: selection({ calculationType: 'MOVEMENT' }) });
+    const result = await calculateBalanceSheet({ authorization: await reportAuth(client), client, selection: selection({ calculationType: 'MOVEMENT' }) });
     const cash = account(result, 'ASSETS', '101000');
     expect(cash?.openingBalance).toBe(0);
     expect(cash?.balance).toBe(3500); // 5000 − 1500
@@ -101,7 +101,7 @@ describe('SCR-107 balance sheet / P&L statement (R-155)', () => {
   });
 
   it('COMBINED: closing for balance sheet, movement for P&L, explicit current-year result', async () => {
-    const result = await calculateBalanceSheet({ client, selection: selection({ calculationType: 'COMBINED' }) });
+    const result = await calculateBalanceSheet({ authorization: await reportAuth(client), client, selection: selection({ calculationType: 'COMBINED' }) });
     const cash = account(result, 'ASSETS', '101000');
     expect(cash?.openingBalance).toBe(7000);
     expect(cash?.balance).toBe(10500);
@@ -114,21 +114,23 @@ describe('SCR-107 balance sheet / P&L statement (R-155)', () => {
   });
 
   it('summary level folds deeper nodes without changing a figure, and bad types are judged', async () => {
-    const folded = await calculateBalanceSheet({ client, selection: selection({ summaryLevel: 1 }) });
+    const folded = await calculateBalanceSheet({ authorization: await reportAuth(client), client, selection: selection({ summaryLevel: 1 }) });
     expect(folded.nodes.map((n) => n.node)).toEqual(['BS', 'PL']);
     const bs = folded.nodes.find((n) => n.node === 'BS');
     expect(bs?.balance).toBe(10500); // totals already include descendants
     expect(bs?.accounts.map((a) => a.accountNumber)).toContain('101000'); // accounts merged upward
 
-    const full = await calculateBalanceSheet({ client, selection: selection({ summaryLevel: 9 }) });
+    const full = await calculateBalanceSheet({ authorization: await reportAuth(client), client, selection: selection({ summaryLevel: 9 }) });
     expect(full.nodes.map((n) => n.node)).toContain('ASSETS');
 
     await expect(calculateBalanceSheet({
+      authorization: await reportAuth(client),
       client, selection: selection({ calculationType: 'BOGUS' as BalanceSheetSelection['calculationType'] }),
     })).rejects.toThrow('not configured');
-    await expect(calculateBalanceSheet({ client, selection: selection({ summaryLevel: 0 }) }))
+    await expect(calculateBalanceSheet({ authorization: await reportAuth(client), client, selection: selection({ summaryLevel: 0 }) }))
       .rejects.toThrow('Summary report level');
     await expect(calculateBalanceSheet({
+      authorization: await reportAuth(client),
       client, selection: selection({ comparisonPeriodFrom: 10, comparisonPeriodTo: 4 }),
     })).rejects.toThrow('comparison range is invalid');
   });

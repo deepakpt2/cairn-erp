@@ -209,12 +209,16 @@ const query = (extra: Record<string, string> = {}) => {
 };
 
 // Service results, computed here so the browser can be judged against them.
-const trial = await calculateTrialBalance({ client: TENANT, selection });
-const sheet = await calculateBalanceSheet({ client: TENANT, selection: { ...selection, calculationType: 'ACCUMULATED', summaryLevel: 1 } });
-const sheetCombined = await calculateBalanceSheet({ client: TENANT, selection: { ...selection, calculationType: 'COMBINED', summaryLevel: 1 } });
+// The services judge capability and Company Code scope themselves, so the reference figures are computed under a real,
+// short-lived session of the acceptance user (revoked on return), exactly as the browser's own requests are.
+const { withActingUser } = await import('../../src/platform/tenancy/demo-people');
+const asUser = <T,>(work: (authorization: { userId: string; sessionId: string }) => Promise<T>) => withActingUser(TENANT, USERNAME, work);
+const trial = await asUser((authorization) => calculateTrialBalance({ client: TENANT, selection, authorization }));
+const sheet = await asUser((authorization) => calculateBalanceSheet({ client: TENANT, selection: { ...selection, calculationType: 'ACCUMULATED', summaryLevel: 1 }, authorization }));
+const sheetCombined = await asUser((authorization) => calculateBalanceSheet({ client: TENANT, selection: { ...selection, calculationType: 'COMBINED', summaryLevel: 1 }, authorization }));
 // The profit-and-loss page hard-codes COMBINED and leaves summaryLevel to the same default the
 // balance sheet uses, so the comparison mirrors the page rather than the module's defaults.
-const profit = await calculateProfitLoss({ client: TENANT, selection: { ...selection, calculationType: 'COMBINED', summaryLevel: 1 } });
+const profit = await asUser((authorization) => calculateProfitLoss({ client: TENANT, selection: { ...selection, calculationType: 'COMBINED', summaryLevel: 1 }, authorization }));
 const ledger = await withTenant(TENANT, async (tx) => {
   const rows = (await tx.execute(sql`
     select coalesce(sum(case when l.debit_credit = 'S' then l.amount_local end), 0)::text as debit,
@@ -376,7 +380,7 @@ try {
   });
 
   await check('S9 · an unknown version is handled safely on screen', async () => {
-    const refusal = await calculateTrialBalance({ client: TENANT, selection: { ...selection, statementVersion: 'NOPE' } })
+    const refusal = await asUser((authorization) => calculateTrialBalance({ client: TENANT, selection: { ...selection, statementVersion: 'NOPE' }, authorization }))
       .then(() => null, (caught: unknown) => caught as { message?: string; remedy?: string });
     if (refusal === null) throw new Error('the service accepted a version that does not stand; the screen test is meaningless');
     await page.goto(`${BASE}/finance/trial-balance?${query({ statementVersion: 'NOPE' })}`, { waitUntil: 'domcontentloaded' });

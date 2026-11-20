@@ -20,11 +20,11 @@ const ROUTE = '/finance/intercompany';
 export default async function IntercompanyPage() {
   const session = await requireSession(ROUTE);
   const client = session.user.client;
-  const [companies, pairs] = await Promise.all([
-    listCompanyChoices(client),
-    listIntercompanyConfigs(client),
-  ]);
   const canPost = can(session, INTERCOMPANY_CAPABILITY);
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  const [companies, pairs] = canPost
+    ? await Promise.all([listCompanyChoices(client, authorization, [INTERCOMPANY_CAPABILITY]), listIntercompanyConfigs(client, authorization, [INTERCOMPANY_CAPABILITY])])
+    : [[], []];
   const today = new Date().toISOString().slice(0, 10);
   return (
     <Page

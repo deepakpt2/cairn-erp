@@ -58,8 +58,8 @@ export interface TaxReportResult {
 
 import { and, eq, sql } from 'drizzle-orm';
 
-import { hasOrgAccess } from '../../platform/auth/session';
-import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
+import { refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import { getCompanyCode, derivePosition } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
@@ -101,20 +101,14 @@ export async function executeTaxReport(input: {
   if (!country) throw new TaxReportError('A tax return country is required.');
 
   return withTenant(input.client, async (tx) => {
-    const company = await getCompanyCode(tx, input.client, selection.companyCode);
-    // A return states what the company owes the tax authority, and a productive
-    // run marks the lines it reports on. It is run by somebody: a session that
-    // stands, the authority to report tax, and a Company Code reach that covers
-    // the company whose tax is being reported.
-    const authority = await verifyServiceAuthorityInTx(
-      tx, input.client, options.authorization, TAX_REPORT_CAPABILITY, { requirePlantScope: false },
-    );
+    // A return states what the company owes the tax authority, and a productive run marks the lines it reports on.
+    // It is run by somebody: a live session, the authority to report tax, and Company Code scope for the selected
+    // company AND (below) for every company a tax group expands to — judged before any journal line is read or stamped.
+    const authority = await verifyCompanyAuthorityInTx(tx, input.client, options.authorization, TAX_REPORT_CAPABILITY);
     if (!authority.ok) throw new TaxReportError(authority.refusal.message + ' ' + authority.refusal.remedy);
-    if (!hasOrgAccess(authority.restrictions, 'COMPANY_CODE', selection.companyCode)) {
-      throw new TaxReportError(
-        `Your Company Code scope does not cover company code ${selection.companyCode}. Ask an administrator to extend your Company Code scope, then repeat the action.`
-      );
-    }
+    const selected = await refuseCompaniesOutsideScopeInTx(tx, input.client, authority, [selection.companyCode]);
+    if (selected) throw new TaxReportError(selected.message + ' ' + selected.remedy);
+    const company = await getCompanyCode(tx, input.client, selection.companyCode);
 
     if (!company?.isActive) {
       throw new TaxReportError(`Company code ${selection.companyCode} is not active or does not exist.`);
@@ -132,6 +126,8 @@ export async function executeTaxReport(input: {
         eq(companyCodeTable.isActive, true),
       ));
       companies = rows.map((r) => r.companyCode);
+      const group = await refuseCompaniesOutsideScopeInTx(tx, input.client, authority, companies, { derivedFrom: `Tax group ${selection.taxGroup}` });
+      if (group) throw new TaxReportError(group.message + ' ' + group.remedy);
       const currencies = new Set(rows.map((r) => r.currency));
       if (currencies.size > 1) {
         throw new TaxReportError('The grouped company codes do not share one currency; run the return per currency.');
@@ -298,8 +294,22 @@ export async function executeTaxReport(input: {
   });
 }
 
-export async function listTaxReturnRuns(client: string) {
-  return withTenant(client, async (tx) => tx.select().from(taxReturnRun)
-    .where(eq(taxReturnRun.client, client))
-    .orderBy(taxReturnRun.createdAt));
+/** Saved return runs the caller may see: only runs whose every company lies inside the caller's current scope. */
+export async function listTaxReturnRuns(client: string, authorization: ServiceAuthorityContext | undefined) {
+  return withTenant(client, async (tx) => {
+    const authority = await verifyCompanyAuthorityInTx(tx, client, authorization, TAX_REPORT_CAPABILITY);
+    if (!authority.ok) throw new TaxReportError(authority.refusal.message + ' ' + authority.refusal.remedy);
+    const runs = await tx.select().from(taxReturnRun).where(eq(taxReturnRun.client, client)).orderBy(taxReturnRun.createdAt);
+    const visible: typeof runs = [];
+    for (const run of runs) {
+      // A group run reported every active company of its country; it is visible only if all of them are in scope.
+      const companies = run.taxGroup
+        ? (await tx.select().from(companyCodeTable).where(and(
+            eq(companyCodeTable.client, client), eq(companyCodeTable.country, run.taxReturnCountry), eq(companyCodeTable.isActive, true),
+          ))).map((c) => c.companyCode).concat(run.companyCode)
+        : [run.companyCode];
+      if (!(await refuseCompaniesOutsideScopeInTx(tx, client, authority, companies))) visible.push(run);
+    }
+    return visible;
+  });
 }
