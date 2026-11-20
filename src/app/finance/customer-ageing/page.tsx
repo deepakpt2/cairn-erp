@@ -31,6 +31,7 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
   if (params.companyCode) {
     try {
       view = await getCustomerAgeing(session.user.client, {
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         companyCode: params.companyCode,
         keyDate: params.keyDate || today,
         customerFrom: params.customerFrom?.toUpperCase() || undefined,

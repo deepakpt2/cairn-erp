@@ -138,3 +138,18 @@ export async function verifyCompanyAuthorityAnyInTx(
   }
   return first!;
 }
+
+/** Verify authority (any of several acceptable capabilities) and every company in one step. */
+export async function authorizeCompaniesAnyInTx(
+  tx: Tx,
+  client: string,
+  authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[],
+  companyCodes: readonly string[],
+  options: { derivedFrom?: string; allowPlantLimited?: boolean } = {},
+): Promise<CompanyAuthorityVerdict> {
+  const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, capabilities);
+  if (!verdict.ok) return verdict;
+  const refusal = await refuseCompaniesOutsideScopeInTx(tx, client, verdict, companyCodes, options);
+  return refusal ? { ok: false, refusal } : verdict;
+}

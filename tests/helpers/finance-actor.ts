@@ -57,6 +57,17 @@ export const FINANCE_ACTOR_CAPABILITIES: readonly string[] = [
   'CO.SETTLE.RULE',
   'CO.BUDGET.ORIGINAL.CHANGE',
   'CO.PLANREVAL.CREATE',
+  // Ledger, document and subledger reads (company-scope enforced)
+  'FIN.GL.BALANCE',
+  'FIN.JOURNAL.LIST',
+  'FIN.DOC.FLOW',
+  'FIN.JOURNAL.DISPLAY',
+  'FIN.ASSET.REPORT',
+  'FIN.RPT.SUBLEDGER.TIE',
+  'FIN.AR.BALANCE',
+  'FIN.AP.BALANCE',
+  'FIN.AR.AGEING',
+  'FIN.AP.AGEING',
 ];
 
 export interface FinanceActorOptions {
@@ -293,6 +304,13 @@ export function withFinanceAuth<I extends { client: string; authorization: Servi
   service: (input: I) => Promise<R>,
 ): (input: Omit<I, 'authorization'>) => Promise<R> {
   return async (input) => service({ ...input, authorization: await financeAuth(input.client) } as I);
+}
+
+/** Wrap a `(client, input)` read service whose input carries a required `authorization`, so a figures test calls it with a real session. */
+export function withClientAuth<I extends { authorization: ServiceAuthorityContext | undefined }, R>(
+  service: (client: string, input: I) => Promise<R>,
+): (client: string, input: Omit<I, 'authorization'>) => Promise<R> {
+  return async (client, input) => service(client, { ...input, authorization: await financeAuth(client) } as I);
 }
 
 /** The username of the standing finance actor (what the services now record as the poster). */

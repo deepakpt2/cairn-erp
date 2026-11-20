@@ -6,9 +6,12 @@ import { postJournalEntry } from '../src/platform/posting';
 import { defineRange } from '../src/platform/numbering';
 import {
   FIN_JOURNAL_DISPLAY_CAPABILITY,
-  getJournalDocument,
+  getJournalDocument as getJournalDocumentService,
 } from '../src/modules/finance/document-display';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getJournalDocument = withClientAuth(getJournalDocumentService);
 
 /**
  * SCR-137 / FB03 — the universal drill-down anchor.

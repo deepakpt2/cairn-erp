@@ -53,6 +53,8 @@ import { MONEY_SCALE, roundToScale } from '../../platform/posting/decimal';
 import { and, eq, inArray } from 'drizzle-orm';
 import { LEDGER_JOURNAL_STATUSES, ledgerJournalStatus } from './ledger-journal';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
 import { withTenant } from '../../platform/db/client';
 import { getCompanyCode, getVariant } from '../../platform/periods';
 import { glAccount, journalEntry, journalEntryLine } from './schema';
@@ -63,8 +65,12 @@ const round2 = (n: number): number => Number(fromScaled(roundToScale(n, MONEY_SC
 export async function getGlBalances(client: string, input: {
   glAccount: string; companyCode: string; fiscalYear: number;
   currency?: string; includeSpecialPeriods?: boolean;
+  /** The verified session or job lease; the company is judged against its live scope. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<GlBalanceView> {
   return withTenant(client, async (tx) => {
+    const scope = await authorizeCompaniesAnyInTx(tx, client, input.authorization, [GL_BALANCE_CAPABILITY], [input.companyCode]);
+    if (!scope.ok) throw new GlBalanceError(scope.refusal.message, scope.refusal.remedy);
     const company = await getCompanyCode(tx, client, input.companyCode);
     if (!company?.fiscalYearVariant) {
       throw new GlBalanceError(`Company code ${input.companyCode} is not configured in this tenant.`, 'Correct the company selection.');
@@ -231,7 +237,7 @@ import { sql } from 'drizzle-orm';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 
 export async function getGlBalanceReport(
-  client: string, selection: GlBalanceReportSelection,
+  client: string, selection: GlBalanceReportSelection & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<GlBalanceReportView> {
   const companyCodes = [...new Set(selection.companyCodes.map((c) => c.trim()).filter(Boolean))];
   if (companyCodes.length === 0) {
@@ -262,6 +268,8 @@ export async function getGlBalanceReport(
   }
 
   return withTenant(client, async (tx) => {
+    const scope = await authorizeCompaniesAnyInTx(tx, client, selection.authorization, [GL_BALANCE_CAPABILITY], companyCodes);
+    if (!scope.ok) throw new GlBalanceError(scope.refusal.message, scope.refusal.remedy);
     const charts = new Map<string, string>();
     const currencies = new Map<string, string>();
     for (const companyCode of companyCodes) {

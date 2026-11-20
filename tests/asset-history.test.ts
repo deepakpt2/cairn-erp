@@ -8,9 +8,12 @@ import { postAssetAcquisition } from '../src/modules/finance/asset-acquisition';
 import { postAssetRetirement, reverseAssetRetirement } from '../src/modules/finance/asset-retirement';
 import { createAsset } from '../src/modules/finance/asset-master';
 import {
-  assetHistoryCsv, getAssetHistorySheet,
+  assetHistoryCsv, getAssetHistorySheet as getAssetHistorySheetService,
 } from '../src/modules/finance/asset-history';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getAssetHistorySheet = withClientAuth(getAssetHistorySheetService);
 
 const ACTOR = 'ASSET-HIST-TEST';
 let client = '';

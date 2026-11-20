@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     const rows: AssetHistoryRow[] = [];
     let page = 1;
     for (;;) {
-      const sheet = await getAssetHistorySheet(session.user.client, { ...base, page });
+      const sheet = await getAssetHistorySheet(session.user.client, { ...base, page, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, });
       rows.push(...sheet.rows);
       if (rows.length >= sheet.totalRows || sheet.rows.length === 0) break;
       page += 1;

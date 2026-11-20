@@ -2,12 +2,16 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { getGlBalanceReport, type GlBalanceReportSelection } from '../src/modules/finance/gl-balances';
-import { getJournalItems } from '../src/modules/finance/journal-items';
+import { getGlBalanceReport as getGlBalanceReportService, type GlBalanceReportSelection } from '../src/modules/finance/gl-balances';
+import { getJournalItems as getJournalItemsService } from '../src/modules/finance/journal-items';
 import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getGlBalanceReport = withClientAuth(getGlBalanceReportService);
+const getJournalItems = withClientAuth(getJournalItemsService);
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.

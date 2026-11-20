@@ -4,9 +4,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { getGlBalances } from '../src/modules/finance/gl-balances';
-import { getJournalDocument } from '../src/modules/finance/document-display';
-import { getJournalItems } from '../src/modules/finance/journal-items';
+import { getGlBalances as getGlBalancesService } from '../src/modules/finance/gl-balances';
+import { getJournalDocument as getJournalDocumentService } from '../src/modules/finance/document-display';
+import { getJournalItems as getJournalItemsService } from '../src/modules/finance/journal-items';
 import { calculateBalanceSheet } from '../src/modules/finance/balance-sheet';
 import { calculateTrialBalance } from '../src/modules/finance/trial-balance';
 import { postGoodsIssue } from '../src/modules/inventory/goods-issue';
@@ -18,6 +18,11 @@ import { getProductionOrderDisplay } from '../src/modules/production/production-
 import { reportAuth } from './helpers/finance-actor';
 import { createTenant, destroyTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getGlBalances = withClientAuth(getGlBalancesService);
+const getJournalItems = withClientAuth(getJournalItemsService);
+const getJournalDocument = withClientAuth(getJournalDocumentService);
 
 /**
  * Accounting consistency of a journaled material document reversed by line.

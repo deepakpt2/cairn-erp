@@ -70,6 +70,8 @@ export interface SubledgerTieResult {
 }
 
 import { sql } from 'drizzle-orm';
+import type { ServiceAuthorityContext } from '@/platform/auth/service-authority';
+import { authorizeCompaniesAnyInTx } from '@/platform/auth/company-scope';
 import { withTenant } from '@/platform/db/client';
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
 import { ledgerJournalStatus } from './ledger-journal';
@@ -93,6 +95,7 @@ const signed = (debitCredit: string, amount: string) =>
 
 export async function calculateSubledgerTie(input: {
   client: string; selection: SubledgerTieSelection;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<SubledgerTieResult> {
   const { client } = input;
   const s = { ...input.selection, ledger: (input.selection.ledger || TIE_LEDGER).toUpperCase() };
@@ -105,6 +108,8 @@ export async function calculateSubledgerTie(input: {
   const calculatedAt = new Date().toISOString();
 
   return withTenant(client, async (tx) => {
+    const scope = await authorizeCompaniesAnyInTx(tx, client, input.authorization, [SUBLEDGER_TIE_CAPABILITY], [s.companyCode]);
+    if (!scope.ok) fail(scope.refusal.message, scope.refusal.remedy);
     const companyRows = await tx.execute(sql`
       select company_code, currency, chart_of_accounts from company_code
       where client = ${client} and company_code = ${s.companyCode}

@@ -40,6 +40,7 @@ async function BalancesShell({ params }: {
   if (params.customer && params.companyCode) {
     try {
       view = await getCustomerBalances(session.user.client, {
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         customer: params.customer.toUpperCase(),
         companyCode: params.companyCode,
         fiscalYear: Number(params.fiscalYear ?? year),

@@ -11,6 +11,8 @@
  */
 import { and, eq, inArray } from 'drizzle-orm';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
 import { withTenant } from '../../platform/db/client';
 import { getCompanyCode, getVariant } from '../../platform/periods';
 import { supplierCompany } from '../foundation/supplier-company-schema';
@@ -72,8 +74,11 @@ export async function getVendorBalances(client: string, input: {
   supplier: string; companyCode: string; fiscalYear: number;
   displayCurrency?: string; periodFrom?: number; periodTo?: number;
   specialPeriods?: boolean; selectedPeriod?: number;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<VendorBalanceView> {
   return withTenant(client, async (tx) => {
+    const scope = await authorizeCompaniesAnyInTx(tx, client, input.authorization, [VENDOR_BALANCE_CAPABILITY], [input.companyCode]);
+    if (!scope.ok) throw new VendorBalanceError(scope.refusal.message, scope.refusal.remedy);
     const [standing] = await tx.select().from(supplierCompany).where(and(
       eq(supplierCompany.client, client),
       eq(supplierCompany.partnerNumber, input.supplier),

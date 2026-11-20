@@ -6,8 +6,11 @@ import { defineRange } from '../src/platform/numbering';
 import { derivePosition, getCompanyCode } from '../src/platform/periods';
 import { postJournalEntry } from '../src/platform/posting';
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
-import { getCustomerBalances } from '../src/modules/finance/customer-balances';
+import { getCustomerBalances as getCustomerBalancesService } from '../src/modules/finance/customer-balances';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getCustomerBalances = withClientAuth(getCustomerBalancesService);
 
 const ACTOR = 'SCR069_FD10N_TEST';
 

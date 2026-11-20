@@ -34,7 +34,7 @@ export default async function SubledgerTiePage({
   let reportError: string | null = null;
   if (can(session, `${SUBLEDGER_TIE_CAPABILITY}.read`)) {
     try {
-      result = await calculateSubledgerTie({ client: session.user.client, selection: initialSelection });
+      result = await calculateSubledgerTie({ client: session.user.client, selection: initialSelection, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, });
     } catch (error) {
       reportError = error instanceof SubledgerTieError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

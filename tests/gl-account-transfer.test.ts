@@ -5,11 +5,14 @@ import { withTenant } from '../src/platform/db/client';
 import {
   transferGlAccounts, type GlAccountTransferSelection,
 } from '../src/modules/finance/gl-account-transfer';
-import { getJournalItems } from '../src/modules/finance/journal-items';
+import { getJournalItems as getJournalItemsService } from '../src/modules/finance/journal-items';
 import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getJournalItems = withClientAuth(getJournalItemsService);
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.

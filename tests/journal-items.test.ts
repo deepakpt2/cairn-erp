@@ -3,8 +3,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { postJournalEntry } from '../src/platform/posting';
-import { getJournalItems, JournalItemsError } from '../src/modules/finance/journal-items';
+import { getJournalItems as getJournalItemsService, JournalItemsError } from '../src/modules/finance/journal-items';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getJournalItems = withClientAuth(getJournalItemsService);
 
 const ACTOR = 'ITEMS-TEST';
 let client = '';
@@ -70,7 +73,7 @@ describe('SCR-088 G/L line items (R-136)', () => {
     })).rejects.toThrowError(/does not stand/);
     await expect(getJournalItems(client, {
       accountFrom: '400000', companyCodes: ['9999'], status: 'ALL',
-    })).rejects.toThrowError(/not configured/);
+    })).rejects.toThrowError(/does not cover company code 9999/);
     await expect(getJournalItems(client, {
       accountFrom: '400000', companyCodes: [company], status: 'ALL',
       postingDateFrom: '2026-05-01', postingDateTo: '2026-04-01',

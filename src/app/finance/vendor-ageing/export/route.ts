@@ -20,6 +20,7 @@ export async function GET(request: Request) {
   const keyDate = params.get('keyDate') || new Date().toISOString().slice(0, 10);
   try {
     const view = await getVendorAgeing(session.user.client, {
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       companyCode,
       keyDate,
       supplierFrom: params.get('supplierFrom')?.toUpperCase() || undefined,

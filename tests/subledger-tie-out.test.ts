@@ -13,11 +13,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
 import {
-  calculateSubledgerTie, SubledgerTieError, type SubledgerTieSelection,
+  calculateSubledgerTie as calculateSubledgerTieService, SubledgerTieError, type SubledgerTieSelection,
 } from '../src/modules/finance/subledger-tie-out';
 import { closeDb, createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
 
 import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { withFinanceAuth } from './helpers/finance-actor';
+
+const calculateSubledgerTie = withFinanceAuth(calculateSubledgerTieService);
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.

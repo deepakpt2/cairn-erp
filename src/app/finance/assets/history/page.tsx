@@ -43,6 +43,7 @@ export default async function AssetHistoryPage({ searchParams }: {
   if (canReport && defaults.companyCodeFrom && defaults.fiscalYear) {
     try {
       sheet = await getAssetHistorySheet(session.user.client, {
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         companyCodeFrom: defaults.companyCodeFrom,
         companyCodeTo: defaults.companyCodeTo || undefined,
         assetClassFrom: defaults.assetClassFrom || undefined,

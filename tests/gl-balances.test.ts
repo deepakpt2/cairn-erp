@@ -3,9 +3,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { postJournalEntry } from '../src/platform/posting';
-import { getGlBalances } from '../src/modules/finance/gl-balances';
-import { getJournalItems } from '../src/modules/finance/journal-items';
+import { getGlBalances as getGlBalancesService } from '../src/modules/finance/gl-balances';
+import { getJournalItems as getJournalItemsService } from '../src/modules/finance/journal-items';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getGlBalances = withClientAuth(getGlBalancesService);
+const getJournalItems = withClientAuth(getJournalItemsService);
 
 const ACTOR = 'BALANCE-TEST';
 let client = '';

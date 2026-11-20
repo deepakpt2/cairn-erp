@@ -40,6 +40,7 @@ async function BalancesShell({ params }: {
   if (params.supplier && params.companyCode) {
     try {
       view = await getVendorBalances(session.user.client, {
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         supplier: params.supplier.toUpperCase(),
         companyCode: params.companyCode,
         fiscalYear: Number(params.fiscalYear ?? year),

@@ -2,10 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { postJournalEntry, reverseJournalEntry } from '../src/platform/posting';
-import { getJournalDocument, resolveDocumentNumber } from '../src/modules/finance/document-display';
+import { getJournalDocument as getJournalDocumentService, resolveDocumentNumber } from '../src/modules/finance/document-display';
 import { parkJournal } from '../src/modules/finance/parked-journal';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 import { defineRange } from '../src/platform/numbering';
+import { financeAuth, withClientAuth } from './helpers/finance-actor';
+
+const getJournalDocument = withClientAuth(getJournalDocumentService);
 
 const ACTOR = 'DISPLAY-TEST';
 let client = '';
@@ -68,10 +71,11 @@ describe('SCR-090 document display and flow (R-138)', () => {
     expect(found.document.creditLocal).toBe(250);
     expect(found.document.reference).toBeNull();
 
-    // SCR-137 reworked this: a company code that disagrees is now named rather than
-    // folded into "not found", which is SAP's own wording for the case.
+    // A company code outside the caller's scope (here one the tenant does not hold) is never probed: the
+    // document is hidden as "not found". The named mismatch between two companies the caller may read is
+    // proved in company-scope-reads.test.ts.
     const mismatch = await getJournalDocument(client, { documentNumber: secondDoc, companyCode: '9999', fiscalYear: 2026 });
-    expect(mismatch.kind).toBe('COMPANY_MISMATCH');
+    expect(mismatch.kind).toBe('NOT_FOUND');
     const wrongYear = await getJournalDocument(client, { documentNumber: secondDoc, companyCode: company, fiscalYear: 2025 });
     expect(wrongYear.kind).toBe('NOT_FOUND');
   });
@@ -102,7 +106,7 @@ describe('SCR-090 document display and flow (R-138)', () => {
     expect(first.document.flow.some((f) => f.kind === 'NEXT')).toBe(true);
     expect(first.document.flow.some((f) => f.kind === 'PREVIOUS')).toBe(false);
 
-    const resolved = await resolveDocumentNumber(client, secondDoc);
+    const resolved = await resolveDocumentNumber(client, secondDoc, await financeAuth(client));
     expect(resolved).toEqual({ companyCode: company, fiscalYear: 2026 });
   });
 });

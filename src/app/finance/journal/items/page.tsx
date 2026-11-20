@@ -29,6 +29,7 @@ export default async function JournalItemsPage({ searchParams }: {
   if (params.accountFrom && canList) {
     try {
       result = await getJournalItems(session.user.client, {
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         accountFrom: params.accountFrom,
         accountTo: params.accountTo || undefined,
         companyCodes: (params.companyCodes ?? '').split(',').map((c) => c.trim()).filter(Boolean),

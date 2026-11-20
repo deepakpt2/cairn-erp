@@ -10,8 +10,11 @@ import { createOrder } from '../src/modules/purchasing/orders';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
-import { getVendorBalances } from '../src/modules/finance/vendor-balances';
+import { getVendorBalances as getVendorBalancesService } from '../src/modules/finance/vendor-balances';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getVendorBalances = withClientAuth(getVendorBalancesService);
 
 const ACTOR = 'SCR065_FK10N_TEST';
 

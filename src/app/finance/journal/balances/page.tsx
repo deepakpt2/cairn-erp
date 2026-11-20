@@ -31,6 +31,7 @@ export default async function GlBalancesPage({ searchParams }: {
   if (params.account && canDisplay) {
     try {
       view = await getGlBalances(session.user.client, {
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         glAccount: params.account,
         companyCode: params.companyCode ?? '',
         fiscalYear: Number(params.fiscalYear),
@@ -59,7 +60,7 @@ export default async function GlBalancesPage({ searchParams }: {
   let reportError: string | null = null;
   if (params.report && canDisplay) {
     try {
-      report = await getGlBalanceReport(session.user.client, reportSelection);
+      report = await getGlBalanceReport(session.user.client, { ...reportSelection, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, });
     } catch (caught) {
       reportError = caught instanceof GlBalanceError
         ? `${caught.message}${caught.remedy ? ` ${caught.remedy}` : ''}`

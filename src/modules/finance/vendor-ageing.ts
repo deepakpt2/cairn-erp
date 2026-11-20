@@ -11,6 +11,8 @@
  * payment-term service. Amounts aggregate in company-code
  * currency. Nothing posts here.
  */
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
 import { withTenant } from '../../platform/db/client';
 import {
   AgeingDerivationError, aggregateAgeingPartners, deriveAgeingItems,
@@ -79,6 +81,7 @@ export async function getVendorAgeing(client: string, input: {
   thresholds?: [number, number, number];
   includeSpecialGl?: boolean;
   sort?: AgeingSort;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<VendorAgeingView> {
   const thresholds = input.thresholds ?? [30, 60, 90];
   if (input.supplierFrom && input.supplierTo && input.supplierFrom > input.supplierTo) {
@@ -90,6 +93,8 @@ export async function getVendorAgeing(client: string, input: {
   try {
     validateAgeingSelection({ keyDate: input.keyDate, thresholds });
     return await withTenant(client, async (tx) => {
+      const scope = await authorizeCompaniesAnyInTx(tx, client, input.authorization, [VENDOR_AGEING_CAPABILITY], [input.companyCode]);
+      if (!scope.ok) throw new VendorAgeingError(scope.refusal.message, scope.refusal.remedy);
       const { currency, items } = await deriveAgeingItems(tx, client, {
         side: 'AP',
         companyCode: input.companyCode,

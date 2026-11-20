@@ -36,7 +36,7 @@ export default async function JournalDocumentPage({ searchParams }: {
       let company = params.company ?? '';
       let year = params.year ? Number(params.year) : NaN;
       if (!params.company || !params.year) {
-        const resolved = await resolveDocumentNumber(session.user.client, params.document);
+        const resolved = await resolveDocumentNumber(session.user.client, params.document, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
         if (resolved) {
           company = resolved.companyCode;
           year = resolved.fiscalYear;
@@ -44,6 +44,7 @@ export default async function JournalDocumentPage({ searchParams }: {
       }
       if (company && Number.isInteger(year)) {
         const lookup = await getJournalDocument(session.user.client, {
+          authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
           documentNumber: params.document, companyCode: company, fiscalYear: year,
         });
         if (lookup.kind === 'FOUND') document = lookup.document;

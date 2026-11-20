@@ -96,6 +96,8 @@ export interface AssetHistorySheet {
 
 import { and, asc, eq, inArray } from 'drizzle-orm';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { authorizeCompaniesAnyInTx, verifyCompanyAuthorityAnyInTx } from '../../platform/auth/company-scope';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { getVariant, periodWindows } from '../../platform/periods';
 import { fiscalYearPeriod } from '../foundation/schema';
@@ -154,12 +156,19 @@ const inRange = (value: string, from?: string, to?: string) =>
   (!from || value >= from) && (!to || value <= to);
 
 export async function getAssetHistorySheet(
-  client: string, selection: AssetHistorySelection,
+  client: string, selection: AssetHistorySelection & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<AssetHistorySheet> {
   return withTenant(client, async (tx) => {
     const companies = (await tx.select().from(companyCodeTable).where(
       eq(companyCodeTable.client, client),
     )).filter((c) => inRange(c.companyCode, selection.companyCodeFrom, selection.companyCodeTo));
+    const scope = companies.length === 0
+      ? await verifyCompanyAuthorityAnyInTx(tx, client, selection.authorization, [ASSET_REPORT_CAPABILITY])
+      : await authorizeCompaniesAnyInTx(
+        tx, client, selection.authorization, [ASSET_REPORT_CAPABILITY], companies.map((c) => c.companyCode),
+        companies.length > 1 ? { derivedFrom: 'The company code range' } : {},
+      );
+    if (!scope.ok) throw new AssetHistoryError(scope.refusal.message, scope.refusal.remedy);
     if (companies.length === 0) {
       throw new AssetHistoryError(
         `No company code stands between ${selection.companyCodeFrom} and ${selection.companyCodeTo ?? selection.companyCodeFrom} in this tenant.`,

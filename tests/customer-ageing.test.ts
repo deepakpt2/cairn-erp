@@ -5,9 +5,12 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
 import { getReceivables, postIncomingPayment } from '../src/modules/finance/incoming-payment';
-import { getCustomerAgeing } from '../src/modules/finance/customer-ageing';
+import { getCustomerAgeing as getCustomerAgeingService } from '../src/modules/finance/customer-ageing';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getCustomerAgeing = withClientAuth(getCustomerAgeingService);
 
 const ACTOR = 'SCR070_AGEING_TEST';
 

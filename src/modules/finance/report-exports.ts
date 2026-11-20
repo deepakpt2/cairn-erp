@@ -160,9 +160,9 @@ function balanceQuery(q: URLSearchParams) {
 
 export const vendorBalancesExport: ReportAdapter = {
   code: 'vendor-balances', route: '/finance/vendor-balances', capability: VENDOR_BALANCE_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const supplier = need(q, 'supplier').toUpperCase();
-    const view = await getVendorBalances(client, { supplier, ...balanceQuery(q) });
+    const view = await getVendorBalances(client, { supplier, authorization, ...balanceQuery(q) });
     return {
       title: 'Vendor balances',
       subtitle: [`Supplier ${view.supplier} · company ${view.companyCode} · fiscal year ${view.fiscalYear}`],
@@ -174,9 +174,9 @@ export const vendorBalancesExport: ReportAdapter = {
 
 export const customerBalancesExport: ReportAdapter = {
   code: 'customer-balances', route: '/finance/customer-balances', capability: CUSTOMER_BALANCE_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const customer = need(q, 'customer').toUpperCase();
-    const view = await getCustomerBalances(client, { customer, ...balanceQuery(q) });
+    const view = await getCustomerBalances(client, { customer, authorization, ...balanceQuery(q) });
     return {
       title: 'Customer balances',
       subtitle: [`Customer ${view.customer} · company ${view.companyCode} · fiscal year ${view.fiscalYear}`],
@@ -188,10 +188,10 @@ export const customerBalancesExport: ReportAdapter = {
 
 export const vendorAgeingExport: ReportAdapter = {
   code: 'vendor-ageing', route: '/finance/vendor-ageing', capability: VENDOR_AGEING_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const companyCode = (q.get('companyCode') ?? q.get('companyFrom') ?? '').toUpperCase() || need(q, 'companyCode');
     const keyDate = q.get('keyDate') || new Date().toISOString().slice(0, 10);
-    const view = await getVendorAgeing(client, {
+    const view = await getVendorAgeing(client, { authorization,
       companyCode, keyDate,
       supplierFrom: q.get('supplierFrom')?.toUpperCase() || undefined,
       supplierTo: q.get('supplierTo')?.toUpperCase() || undefined,
@@ -223,10 +223,10 @@ export const vendorAgeingExport: ReportAdapter = {
 
 export const customerAgeingExport: ReportAdapter = {
   code: 'customer-ageing', route: '/finance/customer-ageing', capability: CUSTOMER_AGEING_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const companyCode = need(q, 'companyCode');
     const keyDate = q.get('keyDate') || new Date().toISOString().slice(0, 10);
-    const view = await getCustomerAgeing(client, {
+    const view = await getCustomerAgeing(client, { authorization,
       companyCode, keyDate,
       customerFrom: q.get('customerFrom')?.toUpperCase() || undefined,
       customerTo: q.get('customerTo')?.toUpperCase() || undefined,
@@ -257,8 +257,8 @@ export const customerAgeingExport: ReportAdapter = {
 
 export const journalItemsExport: ReportAdapter = {
   code: 'gl-line-items', route: '/finance/journal/items', capability: JOURNAL_ITEMS_CAPABILITY,
-  async build(client, q) {
-    const result = await getJournalItems(client, {
+  async build(client, q, authorization) {
+    const result = await getJournalItems(client, { authorization,
       accountFrom: need(q, 'accountFrom'),
       accountTo: q.get('accountTo') || undefined,
       companyCodes: (q.get('companyCodes') ?? '').split(',').map((c) => c.trim()).filter(Boolean),
@@ -297,8 +297,8 @@ export const journalItemsExport: ReportAdapter = {
 
 export const glBalancesExport: ReportAdapter = {
   code: 'gl-balances', route: '/finance/journal/balances', capability: GL_BALANCE_CAPABILITY,
-  async build(client, q) {
-    const view = await getGlBalanceReport(client, {
+  async build(client, q, authorization) {
+    const view = await getGlBalanceReport(client, { authorization,
       companyCodes: (q.get('reportCompanies') ?? '').split(',').map((c) => c.trim()).filter(Boolean),
       outputCurrency: q.get('outputCurrency')?.toUpperCase() || undefined,
       accountFrom: q.get('accountFrom') ?? '',
@@ -433,7 +433,7 @@ export const consolidatedStatementsExport: ReportAdapter = {
 
 export const assetHistoryExport: ReportAdapter = {
   code: 'asset-history', route: '/finance/assets/history', capability: ASSET_REPORT_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const get = (name: string) => q.get(name)?.trim() || undefined;
     const base = {
       companyCodeFrom: get('companyCodeFrom') ?? '', companyCodeTo: get('companyCodeTo'),
@@ -444,7 +444,7 @@ export const assetHistoryExport: ReportAdapter = {
     };
     const rows: AssetHistoryRow[] = [];
     for (let page = 1; ; page += 1) {
-      const sheet = await getAssetHistorySheet(client, { ...base, page });
+      const sheet = await getAssetHistorySheet(client, { ...base, page, authorization });
       rows.push(...sheet.rows);
       if (rows.length >= sheet.totalRows || sheet.rows.length === 0 || rows.length > 50_000) break;
     }
@@ -458,7 +458,7 @@ export const assetHistoryExport: ReportAdapter = {
 
 export const grIrExport: ReportAdapter = {
   code: 'grir-analysis', route: '/finance/grir-reclass', capability: GRIR_RECLASS_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const runId = (q.get('run') ?? '').trim();
     const run = runId ? await getGrIrRun(client, runId) : null;
     if (!run) throw new ReportExportError('GR/IR run not found.', 'Open a protocol on screen first; the export uses the same run.');

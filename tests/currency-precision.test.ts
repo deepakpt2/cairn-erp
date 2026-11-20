@@ -9,11 +9,15 @@ import { postVendorInvoice, VendorInvoiceError } from '../src/modules/finance/ve
 import { getReceivables, postIncomingPayment, IncomingPaymentError } from '../src/modules/finance/incoming-payment';
 import { getPayables, postOutgoingPayment as postOutgoingPaymentService } from '../src/modules/finance/outgoing-payment';
 import { postGlDocument as postGlDocumentService, GlDocumentError } from '../src/modules/finance/gl-document';
-import { getJournalDocument } from '../src/modules/finance/document-display';
-import { getGlBalanceReport } from '../src/modules/finance/gl-balances';
+import { getJournalDocument as getJournalDocumentService } from '../src/modules/finance/document-display';
+import { getGlBalanceReport as getGlBalanceReportService } from '../src/modules/finance/gl-balances';
 import { createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
 import { createSalesActor, refreshSalesActor } from './helpers/sales-actor';
 import { financePoster } from './helpers/finance-actor';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getGlBalanceReport = withClientAuth(getGlBalanceReportService);
+const getJournalDocument = withClientAuth(getJournalDocumentService);
 
 const ACTOR = 'CURRENCY-PRECISION-TEST';
 const postGlDocument = financePoster(postGlDocumentService);

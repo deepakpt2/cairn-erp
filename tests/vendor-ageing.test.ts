@@ -10,9 +10,12 @@ import { createOrder } from '../src/modules/purchasing/orders';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
-import { getVendorAgeing } from '../src/modules/finance/vendor-ageing';
+import { getVendorAgeing as getVendorAgeingService } from '../src/modules/finance/vendor-ageing';
 import { clearVendorItems, getVendorClearing } from '../src/modules/finance/vendor-clearing';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { withClientAuth } from './helpers/finance-actor';
+
+const getVendorAgeing = withClientAuth(getVendorAgeingService);
 
 const ACTOR = 'SCR066_AGEING_TEST';
 

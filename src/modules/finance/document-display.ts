@@ -115,6 +115,8 @@ export type DocumentLookup =
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { changeHistory } from '../../platform/change';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx } from '../../platform/auth/company-scope';
 import { withTenant } from '../../platform/db/client';
 import { MONEY_SCALE, fromScaled, roundToScale } from '../../platform/posting/decimal';
 import { journalEntry, journalEntryLine, parkedJournalHeader } from './schema';
@@ -128,7 +130,7 @@ const docHref = (documentNumber: string, companyCode: string, fiscalYear: number
   `/finance/journal/document?document=${encodeURIComponent(documentNumber)}&company=${encodeURIComponent(companyCode)}&year=${fiscalYear}`;
 
 export async function getJournalDocument(
-  client: string, key: DocumentKeyInput,
+  client: string, key: DocumentKeyInput & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<DocumentLookup> {
   const documentNumber = key.documentNumber.trim();
   if (!documentNumber || !key.companyCode.trim() || !Number.isInteger(key.fiscalYear)) {
@@ -138,12 +140,22 @@ export async function getJournalDocument(
     );
   }
   return withTenant(client, async (tx) => {
+    const authority = await verifyCompanyAuthorityAnyInTx(
+      tx, client, key.authorization, [FIN_JOURNAL_DISPLAY_CAPABILITY, DOCUMENT_FLOW_CAPABILITY],
+    );
+    if (!authority.ok) throw new DocumentDisplayError(authority.refusal.message, authority.refusal.remedy);
+    // A single document is read, not a company-wide aggregate: Plant scope does not refuse it. A document of a
+    // company outside the caller's scope is hidden, exactly as one that does not exist.
+    const inScope = async (company: string) =>
+      (await refuseCompaniesOutsideScopeInTx(tx, client, authority, [company], { allowPlantLimited: true })) === null;
+    if (!(await inScope(key.companyCode.trim()))) return { kind: 'NOT_FOUND' };
     const [header] = await tx.select().from(journalEntry).where(and(
       eq(journalEntry.client, client),
       eq(journalEntry.documentNumber, documentNumber),
       eq(journalEntry.fiscalYear, key.fiscalYear),
     ));
     if (header && header.companyCode !== key.companyCode.trim()) {
+      if (!(await inScope(header.companyCode))) return { kind: 'NOT_FOUND' };
       return {
         kind: 'COMPANY_MISMATCH',
         documentNumber: header.documentNumber,
@@ -155,6 +167,7 @@ export async function getJournalDocument(
       const [parked] = await tx.select({ parkedNumber: parkedJournalHeader.parkedNumber })
         .from(parkedJournalHeader).where(and(
           eq(parkedJournalHeader.client, client),
+          eq(parkedJournalHeader.companyCode, key.companyCode.trim()),
           eq(parkedJournalHeader.parkedNumber, documentNumber),
         ));
       return parked ? { kind: 'PARKED', parkedNumber: parked.parkedNumber } : { kind: 'NOT_FOUND' };
@@ -318,14 +331,23 @@ export async function getJournalDocument(
  * document, or an ambiguity refusal naming the years standing.
  */
 export async function resolveDocumentNumber(
-  client: string, documentNumber: string,
+  client: string, documentNumber: string, authorization: ServiceAuthorityContext | undefined,
 ): Promise<{ companyCode: string; fiscalYear: number } | null> {
   return withTenant(client, async (tx) => {
-    const rows = await tx.select({
+    const authority = await verifyCompanyAuthorityAnyInTx(
+      tx, client, authorization, [FIN_JOURNAL_DISPLAY_CAPABILITY, DOCUMENT_FLOW_CAPABILITY],
+    );
+    if (!authority.ok) throw new DocumentDisplayError(authority.refusal.message, authority.refusal.remedy);
+    const found = await tx.select({
       companyCode: journalEntry.companyCode, fiscalYear: journalEntry.fiscalYear,
     }).from(journalEntry).where(and(
       eq(journalEntry.client, client), eq(journalEntry.documentNumber, documentNumber),
     ));
+    // Only documents of companies the caller may read take part: others neither resolve nor make it ambiguous.
+    const rows: typeof found = [];
+    for (const row of found) {
+      if ((await refuseCompaniesOutsideScopeInTx(tx, client, authority, [row.companyCode], { allowPlantLimited: true })) === null) rows.push(row);
+    }
     if (rows.length === 0) return null;
     if (rows.length > 1) {
       throw new DocumentDisplayError(

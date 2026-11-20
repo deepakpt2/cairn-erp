@@ -70,6 +70,7 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
   for (const companyCode of selected) {
     try {
       views.push(await getVendorAgeing(session.user.client, {
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         companyCode,
         keyDate,
         supplierFrom: params.supplierFrom?.toUpperCase() || undefined,

@@ -101,6 +101,8 @@ export interface JournalItemsResult {
 import { MONEY_SCALE, fromScaled, roundToScale } from '../../platform/posting/decimal';
 import { sql } from 'drizzle-orm';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
 import { withTenant } from '../../platform/db/client';
 import { getCompanyCode } from '../../platform/periods';
 
@@ -137,7 +139,7 @@ interface RawRow {
 }
 
 export async function getJournalItems(
-  client: string, filters: JournalItemFilters,
+  client: string, filters: JournalItemFilters & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<JournalItemsResult> {
   const accountFrom = (filters.accountFrom ?? '').trim();
   const accountTo = (filters.accountTo ?? '').trim() || accountFrom;
@@ -156,6 +158,8 @@ export async function getJournalItems(
   const cap = Math.max(1, Math.min(filters.maxHits ?? JOURNAL_ITEMS_CAP, JOURNAL_ITEMS_CAP));
 
   return withTenant(client, async (tx) => {
+    const scope = await authorizeCompaniesAnyInTx(tx, client, filters.authorization, [JOURNAL_ITEMS_CAPABILITY], filters.companyCodes);
+    if (!scope.ok) throw new JournalItemsError(scope.refusal.message, scope.refusal.remedy);
     for (const companyCode of filters.companyCodes) {
       const company = await getCompanyCode(tx, client, companyCode);
       if (!company) {
