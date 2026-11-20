@@ -34,6 +34,7 @@ import {
   type DocumentRef,
 } from '../document';
 import { fromScaled, multiplyScaled, toScaled } from './decimal';
+import { MoneyError, moneyFor, type Money } from './money';
 import {
   derivePosition,
   checkPostingAllowed,
@@ -90,6 +91,13 @@ export interface PostJournalInput {
   reversalReason?: string;
   postedBy: string;
   transactionCode?: string;
+  /**
+   * 'CURRENCY' judges every amount against the currency's configured decimals: an amount with a non-zero digit
+   * beyond them is refused, an unknown currency is refused, and a local amount translated by the rate is rounded
+   * to the LOCAL currency's decimals. Omitted, amounts are stored at the schema's four decimals as before
+   * (callers that have not been moved to currency precision yet). New and converted callers pass 'CURRENCY'.
+   */
+  precision?: 'CURRENCY';
 }
 
 export interface PostedJournal {
@@ -115,6 +123,7 @@ export async function postJournalEntry(
   // ── Phase 3 · Validation ────────────────────────────────────────────────────
   assertLinesPresent(input.lines);
   assertPositiveAmounts(input.lines);
+  const money = input.precision === 'CURRENCY' ? await judgePrecision(tx, input) : null;
   const totals = computeTotals(input.lines);
   assertBalanced(totals);
   assertAccountsPresent(input.lines);
@@ -197,7 +206,9 @@ export async function postJournalEntry(
       const amountLocal = line.amountLocal ?? (
         input.currency === input.localCurrency
           ? line.amount
-          : fromScaled(multiplyScaled(toScaled(line.amount), exchangeRate)));
+          : money
+            ? fromScaled(multiplyScaled(toScaled(line.amount), exchangeRate, money.local.scale), money.local.scale)
+            : fromScaled(multiplyScaled(toScaled(line.amount), exchangeRate)));
       return {
         client: input.client,
         documentNumber,
@@ -471,6 +482,26 @@ function assertLinesPresent(lines: PostingLineInput[]) {
       'A document must have at least two line items.',
       'A single-line entry cannot balance. Add the corresponding debit or credit.',
     );
+  }
+}
+
+/**
+ * Judge the document against the currencies' decimals before anything is written. Document amounts are entered
+ * amounts, so one with excess precision is refused rather than rounded; a stated local amount is judged against
+ * the local currency the same way.
+ */
+async function judgePrecision(tx: Tx, input: PostJournalInput): Promise<{ document: Money; local: Money }> {
+  try {
+    const document = await moneyFor(tx, input.currency);
+    const local = input.localCurrency === input.currency ? document : await moneyFor(tx, input.localCurrency);
+    input.lines.forEach((line, index) => {
+      document.entered(line.amount, `Line ${index + 1} amount`);
+      if (line.amountLocal !== undefined) local.entered(line.amountLocal, `Line ${index + 1} local amount`);
+    });
+    return { document, local };
+  } catch (error) {
+    if (error instanceof MoneyError) throw new PostingError(error.message, error.remedy ?? 'Correct the amount and post again.');
+    throw error;
   }
 }
 

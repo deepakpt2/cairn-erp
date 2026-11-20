@@ -49,6 +49,7 @@ export interface GlBalanceView {
   yearClosing: number;
 }
 
+import { MONEY_SCALE, roundToScale } from '../../platform/posting/decimal';
 import { and, eq, inArray } from 'drizzle-orm';
 import { LEDGER_JOURNAL_STATUSES, ledgerJournalStatus } from './ledger-journal';
 
@@ -56,7 +57,8 @@ import { withTenant } from '../../platform/db/client';
 import { getCompanyCode, getVariant } from '../../platform/periods';
 import { glAccount, journalEntry, journalEntryLine } from './schema';
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Exact at the storage scale (4): balances and turnovers are never rounded to cents, so they equal the journal's sums. */
+const round2 = (n: number): number => Number(fromScaled(roundToScale(n, MONEY_SCALE), MONEY_SCALE));
 
 export async function getGlBalances(client: string, input: {
   glAccount: string; companyCode: string; fiscalYear: number;

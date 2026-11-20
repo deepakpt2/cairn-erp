@@ -106,7 +106,7 @@ describe('ITEM-22 STO create and change', () => {
     expect(number).toMatch(/^POF-\d{7}$/);
     const doc = await getOrder(client, number);
     expect(doc).toMatchObject({ documentType: 'STOCK_TRANSPORT', supplierNumber: '', supplyingPlant: '1000', companyCode: '1000' });
-    expect(doc?.items[0]).toMatchObject({ itemNumber: 10, plant: '1100', quantity: '100.000', netValue: '0.00' });
+    expect(doc?.items[0]).toMatchObject({ itemNumber: 10, plant: '1100', quantity: '100.000', netValue: '0.0000' });
     const status = await getStoStatus(client, number);
     expect(status).toMatchObject({ supplyingPlant: '1000', crossCompany: false });
     expect(status?.items[0]).toMatchObject({ orderedBase: '100.000', netIssued: '0.000', inTransit: '0.000', issueable: '100.000' });

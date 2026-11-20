@@ -2370,7 +2370,8 @@
   ],
   "app/finance/balance-sheet/BalanceSheetShell.tsx": [
     "modules/finance/balance-sheet.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/money.ts"
   ],
   "app/finance/balance-sheet/page.tsx": [
     "app/finance/balance-sheet/BalanceSheetShell.tsx",
@@ -2380,6 +2381,7 @@
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "platform/posting/money.ts",
     "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
@@ -2604,7 +2606,8 @@
     "app/finance/customer-invoice/actions.ts",
     "modules/finance/customer-invoice.ts",
     "modules/foundation/constrained-values.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/money.ts"
   ],
   "app/finance/customer-invoice/actions.ts": [
     "modules/finance/customer-invoice.ts",
@@ -2682,7 +2685,8 @@
   "app/finance/incoming-payment/IncomingPayment.tsx": [
     "app/finance/incoming-payment/actions.ts",
     "modules/finance/incoming-payment.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/money.ts"
   ],
   "app/finance/incoming-payment/actions.ts": [
     "modules/finance/incoming-payment.ts",
@@ -2693,6 +2697,7 @@
     "modules/finance/incoming-payment.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "platform/posting/money.ts",
     "ui/kit/index.ts"
   ],
   "app/finance/intercompany/IntercompanyPosting.tsx": [
@@ -2712,10 +2717,12 @@
     "ui/kit/index.ts"
   ],
   "app/finance/journal/balances/BalanceReportForm.tsx": [
-    "modules/finance/gl-balances.ts"
+    "modules/finance/gl-balances.ts",
+    "ui/money.ts"
   ],
   "app/finance/journal/balances/BalancesForm.tsx": [
-    "modules/finance/gl-balances.ts"
+    "modules/finance/gl-balances.ts",
+    "ui/money.ts"
   ],
   "app/finance/journal/balances/page.tsx": [
     "app/finance/journal/balances/BalanceReportForm.tsx",
@@ -2723,27 +2730,32 @@
     "modules/finance/gl-balances.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "platform/posting/money.ts",
     "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
   "app/finance/journal/document/DocumentDisplay.tsx": [
-    "modules/finance/document-display.ts"
+    "modules/finance/document-display.ts",
+    "ui/money.ts"
   ],
   "app/finance/journal/document/page.tsx": [
     "app/finance/journal/document/DocumentDisplay.tsx",
     "modules/finance/document-display.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "platform/posting/money.ts",
     "ui/kit/index.ts"
   ],
   "app/finance/journal/items/ItemsForm.tsx": [
-    "modules/finance/journal-items.ts"
+    "modules/finance/journal-items.ts",
+    "ui/money.ts"
   ],
   "app/finance/journal/items/page.tsx": [
     "app/finance/journal/items/ItemsForm.tsx",
     "modules/finance/journal-items.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "platform/posting/money.ts",
     "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
@@ -2781,6 +2793,7 @@
     "modules/finance/parked-journal.ts",
     "modules/purchasing/release.ts",
     "ui/fields/ConstrainedField.tsx",
+    "ui/money.ts",
     "ui/release/ReleasePanel.tsx"
   ],
   "app/finance/journal/park/actions.ts": [
@@ -2804,7 +2817,8 @@
   "app/finance/outgoing-payment/OutgoingPayment.tsx": [
     "app/finance/outgoing-payment/actions.ts",
     "modules/finance/outgoing-payment.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/money.ts"
   ],
   "app/finance/outgoing-payment/actions.ts": [
     "modules/finance/outgoing-payment.ts",
@@ -2815,6 +2829,7 @@
     "modules/finance/outgoing-payment.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "platform/posting/money.ts",
     "ui/kit/index.ts"
   ],
   "app/finance/payment-run/PaymentRun.tsx": [
@@ -2823,6 +2838,7 @@
     "modules/finance/payment-run.ts",
     "modules/purchasing/release.ts",
     "ui/lock/ChangeLock.tsx",
+    "ui/money.ts",
     "ui/release/ReleasePanel.tsx"
   ],
   "app/finance/payment-run/actions.ts": [
@@ -2845,7 +2861,8 @@
   "app/finance/profit-loss/ProfitLossShell.tsx": [
     "modules/finance/balance-sheet.ts",
     "modules/finance/profit-loss.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/money.ts"
   ],
   "app/finance/profit-loss/page.tsx": [
     "app/finance/profit-loss/ProfitLossShell.tsx",
@@ -2856,6 +2873,7 @@
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "platform/posting/money.ts",
     "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
@@ -2882,7 +2900,8 @@
   ],
   "app/finance/trial-balance/TrialBalanceShell.tsx": [
     "modules/finance/trial-balance.ts",
-    "platform/i18n/index.ts"
+    "platform/i18n/index.ts",
+    "ui/money.ts"
   ],
   "app/finance/trial-balance/page.tsx": [
     "app/finance/trial-balance/TrialBalanceShell.tsx",
@@ -2891,6 +2910,7 @@
     "modules/foundation/services.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
+    "platform/posting/money.ts",
     "ui/kit/index.ts",
     "ui/output/ReportExport.tsx"
   ],
@@ -3004,7 +3024,8 @@
     "app/finance/vendor-invoice/actions.ts",
     "modules/finance/vendor-invoice.ts",
     "modules/foundation/constrained-values.ts",
-    "ui/fields/ConstrainedField.tsx"
+    "ui/fields/ConstrainedField.tsx",
+    "ui/money.ts"
   ],
   "app/finance/vendor-invoice/actions.ts": [
     "modules/finance/vendor-invoice.ts",
@@ -4645,7 +4666,9 @@
   ],
   "app/purchasing/invoice-verification/InvoiceVerification.tsx": [
     "app/purchasing/invoice-verification/actions.ts",
-    "modules/purchasing/invoice-verification.ts"
+    "modules/purchasing/invoice-verification.ts",
+    "platform/posting/decimal.ts",
+    "ui/money.ts"
   ],
   "app/purchasing/invoice-verification/actions.ts": [
     "modules/purchasing/invoice-verification.ts",
@@ -5044,7 +5067,8 @@
     "modules/sales/billing.ts",
     "modules/sales/down-payment.ts",
     "modules/sales/output.ts",
-    "modules/sales/rebate.ts"
+    "modules/sales/rebate.ts",
+    "ui/money.ts"
   ],
   "app/sales/billing/actions.ts": [
     "modules/sales/billing.ts",
@@ -5553,7 +5577,8 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/customer-down-payment-clearing.ts": [
     "modules/finance/schema.ts",
@@ -5594,14 +5619,16 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/document-display.ts": [
     "modules/finance/schema.ts",
     "modules/foundation/customer-company-schema.ts",
     "modules/foundation/supplier-company-schema.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
   ],
   "modules/finance/document-reversal.ts": [
     "modules/finance/schema.ts",
@@ -5671,8 +5698,8 @@
     "platform/auth/session.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
-    "platform/posting/decimal.ts",
-    "platform/posting/index.ts"
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/grir-reclass.ts": [
     "modules/finance/schema.ts",
@@ -5694,7 +5721,9 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/intercompany.ts": [
     "modules/finance/schema.ts",
@@ -5711,7 +5740,8 @@
   ],
   "modules/finance/journal-items.ts": [
     "platform/db/client.ts",
-    "platform/periods/index.ts"
+    "platform/periods/index.ts",
+    "platform/posting/decimal.ts"
   ],
   "modules/finance/ledger-journal.ts": [],
   "modules/finance/outgoing-payment.ts": [
@@ -5724,7 +5754,9 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/parked-journal-release.ts": [
     "modules/finance/schema.ts",
@@ -5773,7 +5805,9 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/profit-loss.ts": [
     "modules/finance/balance-sheet.ts",
@@ -5852,7 +5886,8 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/vendor-down-payment-clearing.ts": [
     "modules/finance/schema.ts",
@@ -5894,7 +5929,8 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/walkthrough-credit-preflight.ts": [
     "modules/foundation/schema.ts",
@@ -6799,7 +6835,9 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/inventory/goods-receipt.ts": [
     "modules/foundation/schema.ts",
@@ -6825,7 +6863,8 @@
     "platform/document/index.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/inventory/industry-sector-definition.ts": [
     "modules/inventory/schema.ts",
@@ -7112,7 +7151,8 @@
     "platform/document/index.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/inventory/scheduling-profile.ts": [
     "modules/foundation/schema.ts",
@@ -8051,7 +8091,9 @@
     "platform/document/index.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/purchasing/item-state.ts": [],
   "modules/purchasing/orders.ts": [
@@ -8076,6 +8118,8 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/money.ts",
     "platform/tables/reference.ts"
   ],
   "modules/purchasing/parked-invoice.ts": [
@@ -8339,7 +8383,8 @@
   ],
   "modules/sales/account-determination.ts": [
     "modules/sales/schema.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
   ],
   "modules/sales/analysis.ts": [
     "modules/foundation/business-partner-schema.ts",
@@ -8398,7 +8443,9 @@
     "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
-    "platform/numbering/index.ts"
+    "platform/numbering/index.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/money.ts"
   ],
   "modules/sales/conditions.ts": [
     "modules/foundation/business-partner-schema.ts",
@@ -8420,7 +8467,9 @@
     "modules/sales/schema.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
-    "platform/numbering/index.ts"
+    "platform/numbering/index.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/money.ts"
   ],
   "modules/sales/delivering-plant.ts": [
     "modules/foundation/customer-sales-area-schema.ts",
@@ -8545,7 +8594,9 @@
     "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
     "modules/sales/schema.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/money.ts"
   ],
   "modules/sales/pricing.ts": [
     "modules/foundation/customer-sales-area-schema.ts",
@@ -8633,7 +8684,9 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
-    "platform/periods/index.ts"
+    "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/money.ts"
   ],
   "modules/sales/sales-order.ts": [
     "modules/finance/credit.ts",
@@ -8658,6 +8711,8 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/money.ts",
     "platform/tables/reference.ts"
   ],
   "modules/sales/schema.ts": [
@@ -8908,7 +8963,12 @@
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
     "platform/posting/decimal.ts",
+    "platform/posting/money.ts",
     "platform/tables/numbering.ts"
+  ],
+  "platform/posting/money.ts": [
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
   ],
   "platform/registry/index.ts": [
     "platform/db/client.ts",
@@ -9182,6 +9242,7 @@
     "modules/purchasing/invoice-verification.ts",
     "modules/purchasing/orders.ts",
     "modules/purchasing/purchase-order-list.ts",
+    "platform/posting/decimal.ts",
     "platform/tenancy/demo-masters.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
@@ -9215,6 +9276,7 @@
     "modules/quality/lot.ts",
     "modules/quality/usage-decision.ts",
     "platform/db/client.ts",
+    "platform/posting/decimal.ts",
     "platform/tenancy/demo-masters.ts",
     "platform/tenancy/demo-organisation.ts",
     "platform/tenancy/demo-people.ts",
@@ -9361,6 +9423,9 @@
   "ui/lock/remedy.ts": [
     "platform/i18n/index.ts",
     "platform/lock/enqueue.ts"
+  ],
+  "ui/money.ts": [
+    "platform/posting/decimal.ts"
   ],
   "ui/output/DocumentPrint.tsx": [
     "modules/output/document-layout.ts"

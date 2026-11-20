@@ -11,6 +11,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
+import { MONEY_SCALE, fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { MoneyError, moneyFor } from '../../platform/posting/money';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { bankAccount, houseBank, paymentMethod } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
@@ -39,7 +41,6 @@ export class PaymentRunError extends Error {
   }
 }
 
-export const round2 = (n: number) => Math.round(n * 100) / 100;
 export const runKey = (runDate: string, runId: string) => `${runDate}/${runId}`;
 
 /** The proposal or execution currently queued or running for a run. At most one can exist (unique index). */
@@ -127,7 +128,8 @@ export async function loadRun(tx: Tx, client: string, runDate: string, runId: st
       journalFiscalYear: p.journalFiscalYear, journalLineNumber: p.journalLineNumber,
       invoiceNumber: p.invoiceNumber, houseBankKey: p.houseBankKey, bankAccountId: p.bankAccountId,
     })),
-    payableTotal: round2(proposal.filter((p) => !p.exceptionCode).reduce((s, p) => s + Number(p.amount), 0)),
+    // A sum across the proposed items is exact at the storage scale (a run can span currencies, so no single minor unit applies).
+    payableTotal: Number(fromScaled(proposal.filter((p) => !p.exceptionCode).reduce((s, p) => s + roundToScale(p.amount, MONEY_SCALE), 0n))),
     exceptionCount: proposal.filter((p) => p.exceptionCode).length,
   };
 }
@@ -258,7 +260,8 @@ export async function openItems(tx: Tx, client: string, run: PaymentRunView): Pr
     partner: journalEntryLine.businessPartner,
     glAccount: journalEntryLine.glAccount,
     currency: journalEntryLine.currency,
-    amount: journalEntryLine.amountLocal,
+    // The payment settles the item in its own (document) currency, so its open amount is the document amount.
+    amount: journalEntryLine.amountDocument,
     originClass: journalEntry.originClass,
     originKey: journalEntry.originKey,
     postingDate: journalEntry.postingDate,
@@ -471,7 +474,12 @@ export async function executePaymentRun(input: {
       const company = await getCompanyCode(tx, input.client, group.company);
       if (!company?.fiscalYearVariant) throw new PaymentRunError(`Company code ${group.company} is not configured.`);
       const position = await derivePosition(tx, input.client, company.fiscalYearVariant, run.postingDate);
-      const total = round2(group.entries.reduce((s, e) => s + Number(e.item.amount), 0));
+      // Exact at the payment currency's decimals: each item is rounded once, the bank line is their exact sum.
+      const money = await moneyFor(tx, group.currency).catch((error: unknown) => {
+        if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
+        throw error;
+      });
+      const totalUnits = group.entries.reduce((s, e) => s + money.units(e.item.amount), 0n);
       const journal = await postJournalEntry(tx, {
         client: input.client,
         companyCode: group.company,
@@ -487,13 +495,14 @@ export async function executePaymentRun(input: {
         lines: [
           ...group.entries.map((e) => ({
             glAccount: e.glAccount, debitCredit: 'S' as const,
-            amount: Number(e.item.amount).toFixed(2), businessPartner: e.item.accountId,
+            amount: money.text(e.item.amount), businessPartner: e.item.accountId,
           })),
-          { glAccount: bank.glAccount, debitCredit: 'H' as const, amount: total.toFixed(2) },
+          { glAccount: bank.glAccount, debitCredit: 'H' as const, amount: money.fromUnits(totalUnits) },
         ],
         origin: { documentClass: RUN_CLASS, documentKey: runKey(run.runDate, run.runId) },
         postedBy: input.changedBy,
         transactionCode: PAYMENT_RUN_CAPABILITY,
+        precision: 'CURRENCY',
       }).catch((error: unknown) => {
         if (error instanceof PostingError) throw new PaymentRunError(error.message, error.remedy);
         throw error;

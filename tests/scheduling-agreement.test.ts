@@ -207,7 +207,7 @@ describe('scheduling agreement', () => {
       items: [{ itemNumber: 10, materialNumber: 'MAT-SA', shortText: 'Steel', targetQuantity: 10, unit: 'PC', netPrice: 9, plant: '1000' }],
     });
     const document = await getSchedulingAgreement(client, saved.agreementNumber);
-    expect(document?.items[0].netPrice).toBe('9.00');
+    expect(document?.items[0].netPrice).toBe('9.0000');
     expect(document?.items[0].scheduledQuantity).toBe('4.000');
     expect(document?.scheduleLines[0].quantity).toBe('4.000');
     const history = await withTenant(client, async (tx) => {
@@ -220,8 +220,8 @@ describe('scheduling agreement', () => {
       `) as unknown as Array<{ old_value: string; new_value: string; transaction_code: string }>;
       return row;
     });
-    expect(history.old_value).toBe('2.00');
-    expect(history.new_value).toBe('9.00');
+    expect(history.old_value).toBe('2.0000');
+    expect(history.new_value).toBe('9.0000');
     expect(history.transaction_code).toBe('ME32L');
   });
 
@@ -242,7 +242,7 @@ describe('scheduling agreement', () => {
     expect(refused.refusal?.message).toMatch(/price change/i);
     expect(refused.document).toBeNull();
     const opened = await openSchedulingAgreementDisplay(client, { agreement: saved.agreementNumber });
-    expect(opened.document?.items[0].netPrice).toBe('4.00');
+    expect(opened.document?.items[0].netPrice).toBe('4.0000');
     expect(opened.document?.scheduleLines).toEqual([]);
     const hidden = await openSchedulingAgreementDisplay(other, { agreement: saved.agreementNumber });
     expect(hidden.document).toBeNull();

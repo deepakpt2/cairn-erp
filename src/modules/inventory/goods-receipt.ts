@@ -22,6 +22,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { linkDocuments } from '../../platform/document';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
+import { MoneyError, moneyFor } from '../../platform/posting/money';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
 import { deliveryCompletionDecision, readDeliveryCompletionPolicy } from '../purchasing/delivery-completion';
@@ -116,7 +117,6 @@ async function resolveMovement(tx: Tx, client: string, direction: string, refere
   return rows[0];
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * What has been received against each order item — signed by what each line *did*, not by what it
@@ -637,6 +637,12 @@ export async function postGoodsReceipt(
       value: number; poValue: number; valuation: typeof materialValuation.$inferSelect;
     }> = [];
 
+    // Values are rounded at the order currency's decimals (3 for KWD), once each, exactly.
+    const money = await moneyFor(tx, view.currency).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new GoodsReceiptError(error.message, error.remedy);
+      throw error;
+    });
+
     for (const line of input.lines) {
       const item = itemsByNumber.get(line.itemNumber);
       if (!item) throw new GoodsReceiptError(`Order item ${line.itemNumber} does not stand on ${input.orderNumber}.`);
@@ -718,9 +724,9 @@ export async function postGoodsReceipt(
       // standard-price stock value is the material's cost per base unit, so it follows the
       // converted quantity - and a moving-average price divided by the base quantity is the price
       // of one base unit, not the price of one package.
-      const poValue = round2((line.quantity * Number(item.netPrice)) / Number(item.priceUnit));
+      const poValue = Number(money.fromUnits(money.extend(line.quantity, item.netPrice, item.priceUnit)));
       const stockValue = valuation.priceControl === 'STANDARD'
-        ? round2((baseQuantity * Number(valuation.standardPrice)) / Number(valuation.priceUnit))
+        ? Number(money.fromUnits(money.extend(baseQuantity, valuation.standardPrice, valuation.priceUnit)))
         : poValue;
       // SCR-142: an open count with a posting block refuses the receipt for this material here.
       const required = await storageLocationRequired(tx, input.client, item.materialNumber, item.plant);
@@ -774,14 +780,15 @@ export async function postGoodsReceipt(
     const grIrAccount = await resolveAccount(tx, input.client, chart, 'GR_IR_CLEARING', '');
     for (const p of prepared) {
       const inventoryAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', p.valuation.valuationClass!);
-      journalLines.push({ glAccount: inventoryAccount, debitCredit: 'S', amount: p.value.toFixed(2), material: p.item.materialNumber!, plant: p.item.plant });
-      journalLines.push({ glAccount: grIrAccount, debitCredit: 'H', amount: p.poValue.toFixed(2), material: p.item.materialNumber!, plant: p.item.plant });
-      const difference = round2(p.poValue - p.value);
-      if (difference !== 0) {
+      journalLines.push({ glAccount: inventoryAccount, debitCredit: 'S', amount: money.text(p.value), material: p.item.materialNumber!, plant: p.item.plant });
+      journalLines.push({ glAccount: grIrAccount, debitCredit: 'H', amount: money.text(p.poValue), material: p.item.materialNumber!, plant: p.item.plant });
+      const differenceUnits = money.units(p.poValue) - money.units(p.value);
+      const difference = Number(money.fromUnits(differenceUnits));
+      if (differenceUnits !== 0n) {
         const prdAccount = await resolveAccount(tx, input.client, chart, 'PRICE_DIFFERENCE', p.valuation.valuationClass!);
         journalLines.push({
           glAccount: prdAccount, debitCredit: difference > 0 ? 'S' : 'H',
-          amount: Math.abs(difference).toFixed(2), material: p.item.materialNumber!, plant: p.item.plant,
+          amount: money.text(Math.abs(difference)), material: p.item.materialNumber!, plant: p.item.plant,
         });
       }
     }
@@ -808,6 +815,7 @@ export async function postGoodsReceipt(
       origin: { documentClass: MATERIAL_DOCUMENT_CLASS, documentKey: number },
       postedBy: input.changedBy,
       transactionCode: GR_POST_CAPABILITY,
+      precision: 'CURRENCY',
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new GoodsReceiptError(error.message, error.remedy);
       throw error;

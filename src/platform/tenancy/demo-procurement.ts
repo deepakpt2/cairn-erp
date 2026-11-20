@@ -27,6 +27,7 @@
  * invoiced, and payables that tie to the invoices that stand open against them.
  */
 
+import { fromScaled, roundToScale } from '../posting/decimal';
 import {
   listAccountDeterminations,
   saveAccountDetermination,
@@ -758,9 +759,13 @@ function netOf(line: PlanLine): number {
   return round3(line.quantity * priceOf(line.material));
 }
 
+/** Gross as the invoice service states it: each line's tax is rounded once (half away from zero) at three decimals, then summed. */
 function grossOf(plan: PurchasePlan): number {
-  const net = plan.lines.reduce((sum, line) => sum + netOf(line), 0);
-  return round3(net * (1 + STANDARD_TAX_RATE / 100));
+  const gross = plan.lines.reduce((sum, line) => {
+    const net = netOf(line);
+    return sum + roundToScale(net, 3) + roundToScale((net * STANDARD_TAX_RATE) / 100, 3);
+  }, 0n);
+  return Number(fromScaled(gross, 3));
 }
 
 function round3(value: number): number {

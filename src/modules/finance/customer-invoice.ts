@@ -16,6 +16,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
+import { MoneyError, moneyFor, refusing } from '../../platform/posting/money';
 import { accountDetermination, profitCenter, taxCode } from '../foundation/schema';
 import { customerCompany } from '../foundation/customer-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
@@ -35,8 +36,6 @@ export class CustomerInvoiceError extends Error {
     this.remedy = remedy;
   }
 }
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface CustomerInvoiceView {
   invoiceNumber: string;
@@ -229,6 +228,17 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       throw new CustomerInvoiceError(`Company code ${input.companyCode} is not configured.`);
     }
     const chart = customer.chartOfAccounts;
+    // The document currency's decimals decide every amount below; an unknown currency is refused here.
+    const money = refusing(await moneyFor(tx, input.currency).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new CustomerInvoiceError(error.message, error.remedy);
+      throw error;
+    }), (e) => new CustomerInvoiceError(e.message, e.remedy));
+    const entered = (value: number, label: string): number => {
+      try { return Number(money.fromUnits(money.entered(value, label))); } catch (error) {
+        if (error instanceof MoneyError) throw new CustomerInvoiceError(error.message, error.remedy);
+        throw error;
+      }
+    };
 
     const duplicates = await tx.select().from(customerInvoice).where(and(
       eq(customerInvoice.client, input.client),
@@ -269,10 +279,10 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
             'Post the line to one account, or state the parts it is made of.',
           );
         }
-        const summed = round2(line.components.reduce((total, part) => total + part.amount, 0));
-        if (Math.abs(summed - round2(line.netAmount)) > 0.005) {
+        const summedUnits = line.components.reduce((total, part) => total + money.entered(part.amount, 'A component amount'), 0n);
+        if (summedUnits !== money.entered(line.netAmount, 'The line amount')) {
           throw new CustomerInvoiceError(
-            `The parts of a line post ${summed.toFixed(2)} between them, which is not the ${round2(line.netAmount).toFixed(2)} the line is worth.`,
+            `The parts of a line post ${money.fromUnits(summedUnits)} between them, which is not the ${money.text(line.netAmount)} the line is worth.`,
             'A line posts exactly what it is worth: correct the components, or the amount the line carries.',
           );
         }
@@ -286,7 +296,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       let tax = 0;
       if (line.taxAmount !== undefined) {
         // Priced already, and priced once: what posts is what the document was taxed by (§4.7).
-        tax = round2(line.taxAmount);
+        tax = entered(line.taxAmount, 'The tax amount');
         if (tax !== 0 && !code) {
           throw new CustomerInvoiceError(
             'A line that carries tax names the code it was taxed under.',
@@ -301,7 +311,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
             'Use a standing tax code, or leave the line untaxed.',
           );
         }
-        tax = round2((line.netAmount * rate) / 100);
+        tax = Number(money.fromUnits(money.percentOf(entered(line.netAmount, 'The line amount'), rate)));
       }
       if (line.profitCenter) {
         const [pc] = await tx.select().from(profitCenter).where(and(
@@ -316,18 +326,21 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       }
       prepared.push({
         glAccount: line.glAccount ?? null,
-        components: line.components ? line.components.map((part) => ({ glAccount: part.glAccount, amount: round2(part.amount) })) : null,
-        net: round2(line.netAmount), taxCode: code, tax,
+        components: line.components ? line.components.map((part) => ({ glAccount: part.glAccount, amount: entered(part.amount, 'A component amount') })) : null,
+        net: entered(line.netAmount, 'The line amount'), taxCode: code, tax,
         taxAccount: line.taxAccount ?? null,
         profitCenter: line.profitCenter || null, lineText: line.lineText || null,
       });
     }
 
-    const netTotal = round2(prepared.reduce((s, p) => s + p.net, 0));
-    const taxTotal = round2(prepared.reduce((s, p) => s + p.tax, 0));
-    if (Math.abs(round2(netTotal + taxTotal) - round2(input.grossAmount)) > 0.005) {
+    const netUnits = prepared.reduce((s, p) => s + money.units(p.net), 0n);
+    const taxUnits = prepared.reduce((s, p) => s + money.units(p.tax), 0n);
+    const netTotal = Number(money.fromUnits(netUnits));
+    const taxTotal = Number(money.fromUnits(taxUnits));
+    const grossUnits = money.entered(input.grossAmount, 'The gross amount');
+    if (netUnits + taxUnits !== grossUnits) {
       throw new CustomerInvoiceError(
-        `The gross amount ${round2(input.grossAmount).toFixed(2)} does not reconcile: lines net ${netTotal.toFixed(2)} plus tax ${taxTotal.toFixed(2)} is ${round2(netTotal + taxTotal).toFixed(2)}.`,
+        `The gross amount ${money.fromUnits(grossUnits)} does not reconcile: lines net ${money.fromUnits(netUnits)} plus tax ${money.fromUnits(taxUnits)} is ${money.fromUnits(netUnits + taxUnits)}.`,
         'Correct the gross amount or the line amounts so the document balances.',
       );
     }
@@ -338,7 +351,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       businessPartner?: string; taxCode?: string; profitCenter?: string;
     }> = [{
       glAccount: customer.reconciliationAccount, debitCredit: 'S',
-      amount: round2(input.grossAmount).toFixed(2), businessPartner: input.customerNumber,
+      amount: money.text(input.grossAmount), businessPartner: input.customerNumber,
     }];
     // Each line is credited where it belongs. A line posted by component is credited to each of its
     // accounts for its own amount, and a component that takes away — a discount, which is not revenue —
@@ -349,13 +362,13 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
           journalLines.push({
             glAccount: component.glAccount,
             debitCredit: component.amount < 0 ? 'S' : 'H',
-            amount: Math.abs(component.amount).toFixed(2),
+            amount: money.text(Math.abs(component.amount)),
             ...(p.profitCenter ? { profitCenter: p.profitCenter } : {}),
           });
         }
       } else {
         journalLines.push({
-          glAccount: p.glAccount as string, debitCredit: 'H', amount: p.net.toFixed(2),
+          glAccount: p.glAccount as string, debitCredit: 'H', amount: money.text(p.net),
           ...(p.profitCenter ? { profitCenter: p.profitCenter } : {}),
         });
       }
@@ -366,7 +379,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
     const taxByAccount = new Map<string, string | null>();
     for (const p of prepared) {
       if (p.tax > 0 && p.taxCode) {
-        taxByCode.set(p.taxCode, round2((taxByCode.get(p.taxCode) ?? 0) + p.tax));
+        taxByCode.set(p.taxCode, Number(money.fromUnits(money.units(taxByCode.get(p.taxCode) ?? 0) + money.units(p.tax))));
         if (p.taxAccount && !taxByAccount.has(p.taxCode)) taxByAccount.set(p.taxCode, p.taxAccount);
       }
     }
@@ -379,7 +392,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
         const determined = taxByAccount.get(code) ?? null;
         const glAccount = determined ?? (fallback ?? (fallback = await taxAccount(tx, input.client, chart)));
         journalLines.push({
-          glAccount, debitCredit: 'H', amount: amount.toFixed(2), taxCode: code,
+          glAccount, debitCredit: 'H', amount: money.text(amount), taxCode: code,
         });
       }
     }
@@ -424,6 +437,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       origin: { documentClass: INVOICE_CLASS, documentKey: number },
       postedBy: input.changedBy,
       transactionCode: CUSTOMER_INVOICE_CAPABILITY,
+      precision: 'CURRENCY',
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new CustomerInvoiceError(error.message, error.remedy);
       throw error;
@@ -434,7 +448,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       category: input.category ?? 'INVOICE', customerNumber: input.customerNumber, companyCode: input.companyCode,
       documentDate: input.documentDate, postingDate: input.postingDate,
       reference: input.reference, currency: input.currency.toUpperCase(),
-      grossAmount: String(round2(input.grossAmount)), taxAmount: String(taxTotal),
+      grossAmount: money.text(input.grossAmount), taxAmount: money.fromUnits(taxUnits),
       paymentTerms: termsCode ?? null, baselineDate: baseline, dueDate: due,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
@@ -446,15 +460,15 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       lineNumber += 1;
       await tx.insert(customerInvoiceLine).values({
         client: input.client, invoiceNumber: number, lineNumber,
-        glAccount: principalAccount(p), netAmount: String(p.net), taxCode: p.taxCode,
-        taxAmount: String(p.tax), profitCenter: p.profitCenter, lineText: p.lineText,
+        glAccount: principalAccount(p), netAmount: money.text(p.net), taxCode: p.taxCode,
+        taxAmount: money.text(p.tax), profitCenter: p.profitCenter, lineText: p.lineText,
         createdBy: input.changedBy,
       });
     }
     await recordChange(tx, {
       client: input.client, objectClass: INVOICE_CLASS, objectKey: number,
       changeType: 'CREATE', changedBy: input.changedBy, transactionCode: CUSTOMER_INVOICE_CAPABILITY,
-      after: { customer: input.customerNumber, gross: round2(input.grossAmount), tax: taxTotal, journal: journal.documentNumber },
+      after: { customer: input.customerNumber, gross: money.text(input.grossAmount), tax: money.fromUnits(taxUnits), journal: journal.documentNumber },
     });
     return (await byRequestKey(tx, input.client, input.requestKey))!;
   });

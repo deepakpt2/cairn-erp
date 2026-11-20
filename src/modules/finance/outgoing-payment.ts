@@ -23,6 +23,8 @@ import { hasOrgAccess } from '../../platform/auth/session';
 import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
+import { MONEY_SCALE, fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { MoneyError, moneyFor, type Money } from '../../platform/posting/money';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { accountDetermination, employeeToleranceGroup } from '../foundation/schema';
@@ -45,8 +47,6 @@ export class OutgoingPaymentError extends Error {
   }
 }
 
-const round4 = (n: number) => Math.round(n * 10000) / 10000;
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
@@ -162,7 +162,7 @@ export async function getPayables(
       originClass: journalEntry.originClass,
       originKey: journalEntry.originKey,
       currency: journalEntryLine.currency,
-      amount: journalEntryLine.amountLocal,
+      amount: journalEntryLine.amountDocument,
       debitCredit: journalEntryLine.debitCredit,
     }).from(journalEntryLine)
       .innerJoin(journalEntry, and(
@@ -179,7 +179,11 @@ export async function getPayables(
         sql`${journalEntryLine.clearingDocument} is null`,
       ))
       .orderBy(journalEntry.postingDate, journalEntryLine.documentNumber);
+    // Each item's discount is rounded at its own currency's decimals.
+    const itemMoney = new Map<string, Money>();
+    for (const code of new Set(rows.map((r) => String(r.currency).trim()))) itemMoney.set(code, await moneyFor(tx, code));
     const openItems = rows.map((r) => {
+      const m = itemMoney.get(String(r.currency).trim())!;
       const signed = r.debitCredit === 'H' ? Number(r.amount) : -Number(r.amount);
       const terms = r.originClass === 'vendor_invoice' && r.originKey
         ? invoiceTerms.get(r.originKey) : undefined;
@@ -195,12 +199,12 @@ export async function getPayables(
         currency: r.currency, amount: r.amount, signed,
         termsCode: terms?.termsCode ?? null,
         discountPercent: percent,
-        discountAmount: round2(signed * percent / 100),
+        discountAmount: m.round(m.fromUnits(m.percentOf(signed, percent))),
       };
     });
     return {
       vendor: vendorNumber, companyCode, openItems,
-      openBalance: round4(openItems.reduce((s, i) => s + i.signed, 0)),
+      openBalance: Number(fromScaled(openItems.reduce((s, i) => s + roundToScale(i.signed, MONEY_SCALE), 0n))),
     };
   });
 }
@@ -286,7 +290,7 @@ export async function postOutgoingPayment(input: {
     if (!company?.fiscalYearVariant) throw new OutgoingPaymentError(`Company code ${input.companyCode} is not configured.`);
 
     interface Held {
-      ref: PaymentItemRef; amount: string; currency: string; signed: number;
+      ref: PaymentItemRef; amount: string; currency: string; debitCredit: 'S' | 'H';
       termsCode: string | null; baseline: string | null;
     }
     const held: Held[] = [];
@@ -327,8 +331,7 @@ export async function postOutgoingPayment(input: {
         }
       }
       held.push({
-        ref, amount: line.amountLocal, currency: line.currency,
-        signed: line.debitCredit === 'H' ? Number(line.amountLocal) : -Number(line.amountLocal),
+        ref, amount: line.amountDocument, currency: line.currency, debitCredit: line.debitCredit as 'S' | 'H',
         termsCode, baseline,
       });
     }
@@ -347,39 +350,53 @@ export async function postOutgoingPayment(input: {
       termsByCode.set(row.termsCode, row);
     }
 
+    // Every amount below is a scaled integer at the PAYMENT currency's decimals (see incoming-payment.ts):
+    // entered amounts with excess precision are refused, calculated ones rounded once, comparisons exact.
+    const money = await moneyFor(tx, currencies[0]!).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new OutgoingPaymentError(error.message, error.remedy);
+      throw error;
+    });
+    const enter = (value: number, label: string): bigint => {
+      try { return money.entered(value, label); } catch (error) {
+        if (error instanceof MoneyError) throw new OutgoingPaymentError(error.message, error.remedy);
+        throw error;
+      }
+    };
+    const paymentUnits = enter(input.amount, 'The outgoing amount');
+
     interface Settled {
-      h: Held; open: number; applied: number; discount: number;
-      outcome: 'FULL' | 'RESIDUAL' | 'PARTIAL'; residual: number;
+      h: Held; open: bigint; applied: bigint; discount: bigint;
+      outcome: 'FULL' | 'RESIDUAL' | 'PARTIAL'; residual: bigint;
     }
     const settled: Settled[] = [];
     for (const h of held) {
-      const open = h.signed;
-      const discount = Number(h.ref.discount ?? 0);
-      if (open < 0) {
+      const open = h.debitCredit === 'H' ? money.units(h.amount) : -money.units(h.amount);
+      const discount = enter(h.ref.discount ?? 0, 'The discount');
+      if (open < 0n) {
         // A debit item (the vendor side of a credit memo) nets in full.
-        const applied = h.ref.applied === undefined ? open : Number(h.ref.applied);
-        if (discount !== 0 || round2(applied - open) !== 0) {
+        const applied = h.ref.applied === undefined ? open : enter(h.ref.applied, 'The applied amount');
+        if (discount !== 0n || applied !== open) {
           throw new OutgoingPaymentError(
             `Document ${h.ref.documentNumber} line ${h.ref.lineNumber} is a debit item and settles in full without discount.`,
             'Take debit items whole; they net against the payment.',
           );
         }
-        settled.push({ h, open, applied, discount: 0, outcome: 'FULL', residual: 0 });
+        settled.push({ h, open, applied, discount: 0n, outcome: 'FULL', residual: 0n });
         continue;
       }
-      const applied = h.ref.applied === undefined ? round2(open - discount) : Number(h.ref.applied);
-      if (!(applied >= 0) || !(discount >= 0)) {
+      const applied = h.ref.applied === undefined ? open - discount : enter(h.ref.applied, 'The applied amount');
+      if (applied < 0n || discount < 0n) {
         throw new OutgoingPaymentError(
           `Document ${h.ref.documentNumber} line ${h.ref.lineNumber}: applied and discount amounts may not stand negative.`,
         );
       }
-      if (round2(applied + discount) - open > 0.005) {
+      if (applied + discount > open) {
         throw new OutgoingPaymentError(
-          `Document ${h.ref.documentNumber} line ${h.ref.lineNumber}: applied ${applied.toFixed(2)} plus discount ${discount.toFixed(2)} exceeds the open amount of ${open.toFixed(2)}.`,
+          `Document ${h.ref.documentNumber} line ${h.ref.lineNumber}: applied ${money.fromUnits(applied)} plus discount ${money.fromUnits(discount)} exceeds the open amount of ${money.fromUnits(open)}.`,
           'Apply no more than the item stands open at.',
         );
       }
-      if (discount > 0) {
+      if (discount > 0n) {
         if (!h.termsCode) {
           throw new OutgoingPaymentError(
             `Document ${h.ref.documentNumber} line ${h.ref.lineNumber} carries no payment terms, so no cash discount stands eligible on it.`,
@@ -387,10 +404,10 @@ export async function postOutgoingPayment(input: {
           );
         }
         const percent = eligiblePercent(termsByCode.get(h.termsCode) ?? null, h.baseline, input.postingDate);
-        const eligible = round2(open * percent / 100);
-        if (discount - eligible > 0.005) {
+        const eligible = money.percentOf(money.fromUnits(open), percent);
+        if (discount > eligible) {
           throw new OutgoingPaymentError(
-            `The discount of ${discount.toFixed(2)} on document ${h.ref.documentNumber} exceeds the eligible ${eligible.toFixed(2)} (${percent}% under terms ${h.termsCode} at the posting date).`,
+            `The discount of ${money.fromUnits(discount)} on document ${h.ref.documentNumber} exceeds the eligible ${money.fromUnits(eligible)} (${percent}% under terms ${h.termsCode} at the posting date).`,
             'Take no more than the terms allow, or post without the discount.',
           );
         }
@@ -401,45 +418,47 @@ export async function postOutgoingPayment(input: {
           );
         }
         const capPercent = Number(tolerance.maxCashDiscountPercent);
-        if (discount - round2(open * capPercent / 100) > 0.005) {
+        const cap = money.percentOf(money.fromUnits(open), capPercent);
+        if (discount > cap) {
           throw new OutgoingPaymentError(
-            `The discount of ${discount.toFixed(2)} on document ${h.ref.documentNumber} exceeds the tolerance maximum of ${capPercent}% (${round2(open * capPercent / 100).toFixed(2)}).`,
+            `The discount of ${money.fromUnits(discount)} on document ${h.ref.documentNumber} exceeds the tolerance maximum of ${capPercent}% (${money.fromUnits(cap)}).`,
             'Take no more than the tolerance group permits.',
           );
         }
       }
-      const shortfall = round2(open - applied - discount);
-      const outcome: Settled['outcome'] = shortfall <= 0.005
+      const shortfall = open - applied - discount;
+      const outcome: Settled['outcome'] = shortfall <= 0n
         ? 'FULL'
         : (h.ref.outcome === 'PARTIAL' ? 'PARTIAL' : 'RESIDUAL');
-      settled.push({ h, open, applied, discount, outcome, residual: outcome === 'RESIDUAL' ? shortfall : 0 });
+      settled.push({ h, open, applied, discount, outcome, residual: outcome === 'RESIDUAL' ? shortfall : 0n });
     }
 
-    const cashApplied = round2(settled.reduce((s, x) => s + x.applied, 0));
-    const discountTotal = round2(settled.reduce((s, x) => s + x.discount, 0));
-    const onAccount = round2(input.onAccountAmount ?? 0);
-    if (onAccount < 0) throw new OutgoingPaymentError('The on-account amount may not stand negative.');
+    const cashApplied = settled.reduce((s, x) => s + x.applied, 0n);
+    const discountTotal = settled.reduce((s, x) => s + x.discount, 0n);
+    const onAccount = enter(input.onAccountAmount ?? 0, 'The on-account amount');
+    if (onAccount < 0n) throw new OutgoingPaymentError('The on-account amount may not stand negative.');
 
     // The unassigned remainder: tolerated as a posted difference, else refused.
-    const unassigned = round2(round4(input.amount) - cashApplied - onAccount);
-    let differenceLine: { debitCredit: 'S' | 'H'; amount: number } | null = null;
-    if (Math.abs(unassigned) > 0.005) {
-      const expense = unassigned > 0;
+    const unassigned = paymentUnits - cashApplied - onAccount;
+    let differenceLine: { debitCredit: 'S' | 'H'; amount: bigint } | null = null;
+    if (unassigned !== 0n) {
+      const expense = unassigned > 0n;
+      const magnitude = unassigned < 0n ? -unassigned : unassigned;
       const fail = () => new OutgoingPaymentError(
-        `The payment leaves an unassigned difference of ${unassigned.toFixed(2)} ${currencies[0]} beyond the tolerance of the default group.`,
+        `The payment leaves an unassigned difference of ${money.fromUnits(unassigned)} ${currencies[0]} beyond the tolerance of the default group.`,
         'Allocate the difference to items, post it on account, or widen the tolerance group.',
       );
       if (!tolerance) throw fail();
-      const amountLimit = Number(expense ? tolerance.paymentDiffExpenseAmount : tolerance.paymentDiffRevenueAmount);
+      const amountLimit = money.units(Number(expense ? tolerance.paymentDiffExpenseAmount : tolerance.paymentDiffRevenueAmount));
       const percentLimit = Number(expense ? tolerance.paymentDiffExpensePercent : tolerance.paymentDiffRevenuePercent);
-      const percentAmount = round2(round4(input.amount) * percentLimit / 100);
-      if (Math.abs(unassigned) - Math.min(amountLimit, percentAmount) > 0.005) throw fail();
-      differenceLine = { debitCredit: expense ? 'S' : 'H', amount: Math.abs(unassigned) };
+      const percentAmount = money.percentOf(money.fromUnits(paymentUnits), percentLimit);
+      if (magnitude > (amountLimit < percentAmount ? amountLimit : percentAmount)) throw fail();
+      differenceLine = { debitCredit: expense ? 'S' : 'H', amount: magnitude };
     }
 
     const chart = vendor.chartOfAccounts;
     let discountAccount: string | null = null;
-    if (discountTotal > 0) {
+    if (discountTotal > 0n) {
       discountAccount = await determinationAccount(tx, input.client, chart, 'CASH_DISCOUNT', 'REV');
       if (!discountAccount) {
         throw new OutgoingPaymentError(
@@ -468,45 +487,45 @@ export async function postOutgoingPayment(input: {
     };
     const lines: Line[] = [];
     for (const x of settled) {
-      if (x.open < 0) {
+      if (x.open < 0n) {
         lines.push({
-          glAccount: recon, debitCredit: 'H', amount: Math.abs(x.open).toFixed(2),
+          glAccount: recon, debitCredit: 'H', amount: money.fromUnits(-x.open),
           businessPartner: input.vendorNumber, lineText: `Settles ${x.h.ref.documentNumber}`,
         });
       } else if (x.outcome === 'PARTIAL') {
         lines.push({
-          glAccount: recon, debitCredit: 'S', amount: round2(x.applied + x.discount).toFixed(2),
+          glAccount: recon, debitCredit: 'S', amount: money.fromUnits(x.applied + x.discount),
           businessPartner: input.vendorNumber, lineText: `Partial payment for ${x.h.ref.documentNumber}`,
         });
       } else {
         lines.push({
-          glAccount: recon, debitCredit: 'S', amount: x.open.toFixed(2),
+          glAccount: recon, debitCredit: 'S', amount: money.fromUnits(x.open),
           businessPartner: input.vendorNumber, lineText: `Settles ${x.h.ref.documentNumber}`,
         });
         if (x.outcome === 'RESIDUAL') {
           lines.push({
-            glAccount: recon, debitCredit: 'H', amount: x.residual.toFixed(2),
+            glAccount: recon, debitCredit: 'H', amount: money.fromUnits(x.residual),
             businessPartner: input.vendorNumber, lineText: `Residual item for ${x.h.ref.documentNumber}`,
           });
         }
       }
     }
-    if (onAccount > 0) {
+    if (onAccount > 0n) {
       lines.push({
-        glAccount: recon, debitCredit: 'S', amount: onAccount.toFixed(2),
+        glAccount: recon, debitCredit: 'S', amount: money.fromUnits(onAccount),
         businessPartner: input.vendorNumber, lineText: 'On account',
       });
     }
-    if (discountAccount && discountTotal > 0) {
-      lines.push({ glAccount: discountAccount, debitCredit: 'H', amount: discountTotal.toFixed(2), lineText: 'Cash discount received' });
+    if (discountAccount && discountTotal > 0n) {
+      lines.push({ glAccount: discountAccount, debitCredit: 'H', amount: money.fromUnits(discountTotal), lineText: 'Cash discount received' });
     }
     if (differenceAccount && differenceLine) {
       lines.push({
         glAccount: differenceAccount, debitCredit: differenceLine.debitCredit,
-        amount: differenceLine.amount.toFixed(2), lineText: 'Payment difference',
+        amount: money.fromUnits(differenceLine.amount), lineText: 'Payment difference',
       });
     }
-    lines.push({ glAccount: input.bankGlAccount, debitCredit: 'H', amount: round4(input.amount).toFixed(2) });
+    lines.push({ glAccount: input.bankGlAccount, debitCredit: 'H', amount: money.fromUnits(paymentUnits) });
 
     const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
     const journal = await postJournalEntry(tx, {
@@ -525,6 +544,7 @@ export async function postOutgoingPayment(input: {
       origin: { documentClass: PAYMENT_CLASS, documentKey: `${input.companyCode}/${input.vendorNumber}` },
       postedBy: input.changedBy,
       transactionCode: OUTGOING_PAYMENT_CAPABILITY,
+      precision: 'CURRENCY',
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new OutgoingPaymentError(error.message, error.remedy);
       throw error;
@@ -561,8 +581,8 @@ export async function postOutgoingPayment(input: {
       vendorNumber: input.vendorNumber, companyCode: input.companyCode,
       documentDate: input.documentDate, postingDate: input.postingDate, clearingDate: input.clearingDate,
       valueDate: input.valueDate ?? null,
-      bankGlAccount: input.bankGlAccount, amount: String(round4(input.amount)),
-      discountAmount: String(discountTotal), onAccountAmount: String(onAccount),
+      bankGlAccount: input.bankGlAccount, amount: money.fromUnits(paymentUnits),
+      discountAmount: money.fromUnits(discountTotal), onAccountAmount: money.fromUnits(onAccount),
       currency: currencies[0], reference: input.reference ?? null,
       journalDocumentNumber: journal.documentNumber, itemsCleared: clearedCount,
       requestKey: input.requestKey, createdBy: input.changedBy,
@@ -571,7 +591,7 @@ export async function postOutgoingPayment(input: {
       client: input.client, objectClass: PAYMENT_CLASS,
       objectKey: `${input.companyCode}/${input.vendorNumber}/${paymentNumber}`,
       changeType: 'CREATE', changedBy: input.changedBy, transactionCode: OUTGOING_PAYMENT_CAPABILITY,
-      after: { journal: journal.documentNumber, amount: round4(input.amount), items: held.length },
+      after: { journal: journal.documentNumber, amount: money.fromUnits(paymentUnits), items: held.length },
     });
     return (await byRequestKey(tx, input.client, input.requestKey))!;
   });

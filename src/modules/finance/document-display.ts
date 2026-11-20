@@ -116,11 +116,13 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { changeHistory } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
+import { MONEY_SCALE, fromScaled, roundToScale } from '../../platform/posting/decimal';
 import { journalEntry, journalEntryLine, parkedJournalHeader } from './schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { customerCompany } from '../foundation/customer-company-schema';
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/** An exact sum at the storage scale (4): totals are never rounded to cents, so they equal the journal's own sums. */
+const exactSum = (values: number[]): number => Number(fromScaled(values.reduce((t, v) => t + roundToScale(v, MONEY_SCALE), 0n)));
 
 const docHref = (documentNumber: string, companyCode: string, fiscalYear: number) =>
   `/finance/journal/document?document=${encodeURIComponent(documentNumber)}&company=${encodeURIComponent(companyCode)}&year=${fiscalYear}`;
@@ -206,7 +208,7 @@ export async function getJournalDocument(
       clearingDate: l.clearingDate,
     }));
     const sum = (side: 'S' | 'H', pick: (l: DocumentLineView) => number) =>
-      round2(lines.filter((l) => l.debitCredit === side).reduce((s, l) => s + pick(l), 0));
+      exactSum(lines.filter((l) => l.debitCredit === side).map(pick));
 
     const flow: DocumentFlowLink[] = [];
     const findDoc = async (number: string) => {

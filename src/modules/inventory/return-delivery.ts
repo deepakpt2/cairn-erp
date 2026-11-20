@@ -31,6 +31,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { linkDocuments } from '../../platform/document';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
+import { MoneyError, moneyFor, type Money } from '../../platform/posting/money';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import {
   accountDetermination, plant,
@@ -535,6 +536,19 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
       postingBatch: string;
     }> = [];
 
+    // Values are rounded at the valuation currency's decimals (3 for KWD), once each, exactly.
+    const moneyCache = new Map<string, Money>();
+    const moneyIn = async (code: string): Promise<Money> => {
+      const hit = moneyCache.get(code);
+      if (hit) return hit;
+      const made = await moneyFor(tx, code).catch((error: unknown) => {
+        if (error instanceof MoneyError) throw new ReturnDeliveryError(error.message, error.remedy);
+        throw error;
+      });
+      moneyCache.set(code, made);
+      return made;
+    };
+
     for (const line of input.lines) {
       const original = byLine.get(line.originalLine);
       if (!original) {
@@ -737,9 +751,10 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
       // The share can never exceed the receipt: the guard above measures the quantity and what
       // remains in the same base unit, and the line's own check keeps both pairs above zero.
       const pricedQuantity = (quantity * Number(original.entryQuantity)) / Number(original.baseQuantity);
-      const poValue = round2((pricedQuantity * Number(original.unitPrice)) / Number(original.priceUnit ?? '1'));
+      const money = await moneyIn(valuation.currency as string);
+      const poValue = Number(money.fromUnits(money.extend(pricedQuantity, original.unitPrice ?? '0', original.priceUnit ?? '1')));
       const stockValue = valuation.priceControl === 'STANDARD'
-        ? round2((quantity * Number(valuation.standardPrice)) / Number(valuation.priceUnit))
+        ? Number(money.fromUnits(money.extend(quantity, valuation.standardPrice, valuation.priceUnit)))
         : poValue;
 
       prepared.push({
@@ -780,14 +795,15 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
     for (const p of prepared) {
       const inventoryAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', p.valuation.valuationClass!);
       // The mirror of the receipt: stock leaves, so inventory is credited and GR/IR reopened.
-      journalLines.push({ glAccount: inventoryAccount, debitCredit: 'H', amount: p.value.toFixed(2), material: p.original.materialNumber, plant: p.original.plant });
-      journalLines.push({ glAccount: grIrAccount, debitCredit: 'S', amount: p.poValue.toFixed(2), material: p.original.materialNumber, plant: p.original.plant });
-      const difference = round2(p.poValue - p.value);
+      const money = await moneyIn(p.valuation.currency as string);
+      journalLines.push({ glAccount: inventoryAccount, debitCredit: 'H', amount: money.text(p.value), material: p.original.materialNumber, plant: p.original.plant });
+      journalLines.push({ glAccount: grIrAccount, debitCredit: 'S', amount: money.text(p.poValue), material: p.original.materialNumber, plant: p.original.plant });
+      const difference = Number(money.fromUnits(money.units(p.poValue) - money.units(p.value)));
       if (difference !== 0) {
         const prdAccount = await resolveAccount(tx, input.client, chart, 'PRICE_DIFFERENCE', p.valuation.valuationClass!);
         journalLines.push({
           glAccount: prdAccount, debitCredit: difference > 0 ? 'H' : 'S',
-          amount: Math.abs(difference).toFixed(2), material: p.original.materialNumber, plant: p.original.plant,
+          amount: money.text(Math.abs(difference)), material: p.original.materialNumber, plant: p.original.plant,
         });
       }
     }
@@ -817,6 +833,7 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
       origin: { documentClass: MATERIAL_DOCUMENT_CLASS, documentKey: number },
       postedBy: input.changedBy,
       transactionCode: RETURN_CAPABILITY,
+      precision: 'CURRENCY',
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new ReturnDeliveryError(error.message, error.remedy);
       throw error;

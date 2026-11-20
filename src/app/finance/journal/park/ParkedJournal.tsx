@@ -1,5 +1,6 @@
 'use client';
 
+import { fmtFlex } from '@/ui/money';
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 
@@ -168,7 +169,7 @@ export default function ParkedJournal({ parked, editing, canPark, today, release
           </button>
 
           <p className="mt-2 text-sm text-ink-soft">
-            Debits {debit.toFixed(2)} · Credits {credit.toFixed(2)} · Difference {balance.toFixed(2)}.
+            Debits {fmtFlex(debit)} · Credits {fmtFlex(credit)} · Difference {fmtFlex(balance)}.
             A parked document may stand unbalanced; it must balance before it can be saved as
             complete or posted. Parking moves no account and changes no balance.
           </p>
@@ -226,8 +227,8 @@ export default function ParkedJournal({ parked, editing, canPark, today, release
                     <td>{doc.documentType}</td>
                     <td>{doc.postingDate}</td>
                     <td>{doc.currency}</td>
-                    <td className="num">{doc.totalDebit.toFixed(2)}</td>
-                    <td className="num">{doc.totalCredit.toFixed(2)}</td>
+                    <td className="num">{fmtFlex(doc.totalDebit)}</td>
+                    <td className="num">{fmtFlex(doc.totalCredit)}</td>
                     <td>{doc.status}</td>
                     <td>{doc.postedDocumentNumber ?? '—'}</td>
                     <td>

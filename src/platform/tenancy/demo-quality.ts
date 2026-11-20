@@ -45,6 +45,7 @@
  * the vendor still owes.
  */
 
+import { fromScaled, roundToScale } from '../posting/decimal';
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
@@ -450,8 +451,10 @@ function netOf(plan: DeliveryPlan): number {
   return round3(plan.quantity * priceOf(plan.material));
 }
 
+/** Gross as the invoice service states it: the line's tax is rounded once (half away from zero) at three decimals. */
 function grossOf(plan: DeliveryPlan): number {
-  return round3(netOf(plan) * (1 + STANDARD_TAX_RATE / 100));
+  const net = netOf(plan);
+  return Number(fromScaled(roundToScale(net, 3) + roundToScale((net * STANDARD_TAX_RATE) / 100, 3), 3));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

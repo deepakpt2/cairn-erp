@@ -1,11 +1,13 @@
 import Link from 'next/link';
 
 import type { JournalItemsResult } from '@/modules/finance/journal-items';
+import { fmtIn, type CurrencyDecimals } from '@/ui/money';
 
 const inputCls = 'input w-full';
 const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint';
 
-export default function ItemsForm({ result, error, canList }: {
+export default function ItemsForm({ result, error, canList, decimals }: {
+  decimals: CurrencyDecimals;
   result: JournalItemsResult | null;
   error: string | null;
   canList: boolean;
@@ -148,9 +150,9 @@ export default function ItemsForm({ result, error, canList }: {
                       <td>{row.documentType}</td>
                       <td>{row.glAccount}</td>
                       <td>{row.debitCredit}</td>
-                      <td className="num">{row.amountDocument.toFixed(2)}</td>
+                      <td className="num">{fmtIn(row.amountDocument, row.currency, decimals)}</td>
                       <td>{row.currency}</td>
-                      <td className="num">{row.amountLocal.toFixed(2)}</td>
+                      <td className="num">{fmtIn(row.amountLocal, row.localCurrency, decimals)}</td>
                       <td>{row.costCenter ?? '—'}</td>
                       <td>{row.profitCenter ?? '—'}</td>
                       <td>{row.itemStatus ?? '—'}</td>
@@ -182,11 +184,11 @@ export default function ItemsForm({ result, error, canList }: {
                           <td>{s.companyCode}</td>
                           <td>{s.glAccount}</td>
                           <td>{s.currency}</td>
-                          <td className="num">{s.debitDocument.toFixed(2)}</td>
-                          <td className="num">{s.creditDocument.toFixed(2)}</td>
+                          <td className="num">{fmtIn(s.debitDocument, s.currency, decimals)}</td>
+                          <td className="num">{fmtIn(s.creditDocument, s.currency, decimals)}</td>
                           <td>{s.localCurrency}</td>
-                          <td className="num">{s.debitLocal.toFixed(2)}</td>
-                          <td className="num">{s.creditLocal.toFixed(2)}</td>
+                          <td className="num">{fmtIn(s.debitLocal, s.localCurrency, decimals)}</td>
+                          <td className="num">{fmtIn(s.creditLocal, s.localCurrency, decimals)}</td>
                         </tr>
                       ))}
                     </tbody>

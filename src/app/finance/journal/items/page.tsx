@@ -7,6 +7,7 @@ import {
   type JournalItemsResult,
 } from '@/modules/finance/journal-items';
 import ItemsForm from './ItemsForm';
+import { currencyDecimalsFor } from '@/platform/posting/money';
 import { ReportExport } from '@/ui/output/ReportExport';
 import { Page } from '@/ui/kit';
 
@@ -73,7 +74,7 @@ export default async function JournalItemsPage({ searchParams }: {
           </Link>
         </p>
       )}
-      <ItemsForm result={result} error={error} canList={canList} />
+      <ItemsForm result={result} error={error} canList={canList} decimals={await currencyDecimalsFor(session.user.client)} />
     </Page>
   );
 }

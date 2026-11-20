@@ -1,5 +1,6 @@
 'use client';
 
+import { fmtFlex } from '@/ui/money';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
 import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
@@ -256,7 +257,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
             </div>
           )}
           <p className="mt-2 text-sm text-ink-soft">
-            Payable total {run.payableTotal.toFixed(2)} · {run.exceptionCount} exceptions.
+            Payable total {fmtFlex(run.payableTotal)} · {run.exceptionCount} exceptions.
           </p>
           <Message state={executeState} />
           {run.status === 'PROPOSAL' && run.payments.length === 0 && (

@@ -1,5 +1,6 @@
 'use client';
 
+import { fmtFlex } from '@/ui/money';
 import { useActionState, useState } from 'react';
 
 import type { CustomerInvoiceView, TaxCodeChoice } from '@/modules/finance/customer-invoice';
@@ -134,7 +135,7 @@ export default function CustomerInvoice({ invoice, taxes, canPost, today }: {
             </table>
           </div>
           <p className="mt-2 text-sm text-ink-soft">
-            Balance: lines net {netTotal.toFixed(2)} + tax {taxTotal.toFixed(2)} = {(netTotal + taxTotal).toFixed(2)}.
+            Balance: lines net {fmtFlex(netTotal)} + tax {fmtFlex(taxTotal)} = {fmtFlex((netTotal + taxTotal))}.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className="btn btn-default min-h-11 sm:min-h-8"

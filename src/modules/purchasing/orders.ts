@@ -17,6 +17,8 @@
  * posts nothing, so neither the FI periods
  * nor the material period control is consulted on save (R-104).
  */
+import { exactToScale, fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { MoneyError, moneyFor } from '../../platform/posting/money';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { assertPurchaseContractCallOff, PurchaseContractError } from './contract';
 import {
@@ -235,8 +237,10 @@ function addDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function round2(value: number): string {
-  return (Math.round(value * 100) / 100).toFixed(2);
+/** A unit price keeps the storage scale (4 decimals): it is a rate, not a posted value, so it is not cut to the currency's minor unit. */
+const PRICE_SCALE = 4;
+function roundPrice(value: number): string {
+  return fromScaled(roundToScale(value, PRICE_SCALE), PRICE_SCALE);
 }
 
 async function priceFromRecord(
@@ -276,7 +280,7 @@ async function priceFromRecord(
       throw error;
     }
   }
-  const rounded = round2(storedUnit === 1 && record.priceUnitOfMeasure !== orderUnit ? perOrderUnit : amount);
+  const rounded = roundPrice(storedUnit === 1 && record.priceUnitOfMeasure !== orderUnit ? perOrderUnit : amount);
   return {
     netPrice: Number(rounded),
     priceUnit: storedUnit,
@@ -485,7 +489,7 @@ async function judgeItem(
       }
       if (filled.rounded) {
         warnings.push(
-          `Info record ${record.infoRecordNumber} price ${record.amount} ${record.currency} is stored with more than two decimal places. The order snapshot rounds it to ${filled.netPrice}.`,
+          `Info record ${record.infoRecordNumber} price ${record.amount} ${record.currency} is stored with more than four decimal places. The order snapshot rounds it to ${filled.netPrice}.`,
         );
       }
     } else if (record.priceUnitOfMeasure !== unit) {
@@ -532,6 +536,13 @@ async function judgeItem(
     throw new PurchaseOrderError(
       record?.warning ?? 'A net price is required.',
       'Enter a price, or maintain an info record that applies to this item.',
+    );
+  }
+  // A typed price keeps up to four decimals; more is refused, never silently cut by the column.
+  if (exactToScale(netPrice, PRICE_SCALE) === null) {
+    throw new PurchaseOrderError(
+      `The price ${netPrice} has more than ${PRICE_SCALE} decimal places.`,
+      `Enter the price with at most ${PRICE_SCALE} decimal places.`,
     );
   }
   const [unitRow] = await tx.select().from(unitOfMeasure).where(eq(unitOfMeasure.code, unit));
@@ -660,6 +671,11 @@ async function judgeItem(
     materialPlant: plantExtension,
     infoRecord: record,
   });
+  // The item value is the one money figure here: quantity × price ÷ price unit, rounded once to the order currency.
+  const orderMoney = await moneyFor(tx, header.currency).catch((error: unknown) => {
+    if (error instanceof MoneyError) throw new PurchaseOrderError(error.message, error.remedy);
+    throw error;
+  });
   return {
     values: {
       client,
@@ -673,7 +689,7 @@ async function judgeItem(
       unit,
       netPrice: String(netPrice),
       priceUnit: String(priceUnit),
-      netValue: round2((item.quantity * netPrice) / priceUnit),
+      netValue: orderMoney.fromUnits(orderMoney.extend(item.quantity, netPrice, priceUnit)),
       infoRecordNumber: storeReference ? record?.infoRecordNumber ?? null : null,
       priceSequence: storeReference ? record?.priceSequence ?? null : null,
       sourceNumber,
@@ -1098,7 +1114,7 @@ export function releaseImpactingChanges(input: {
     }
     const price = next.netPrice == null ? row.netPrice : String(next.netPrice);
     const per = next.priceUnit == null ? row.priceUnit : String(next.priceUnit);
-    if (Number(price).toFixed(2) !== Number(row.netPrice).toFixed(2) || Number(per) !== Number(row.priceUnit)) {
+    if (Number(price).toFixed(4) !== Number(row.netPrice).toFixed(4) || Number(per) !== Number(row.priceUnit)) {
       impacts.push(`item ${row.itemNumber} price ${figure(row.netPrice)} to ${figure(price)} per ${figure(per)}`);
     }
     const typed = (next.overdeliveryTolerance ?? '').trim();

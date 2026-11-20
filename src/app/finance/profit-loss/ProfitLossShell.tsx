@@ -1,3 +1,4 @@
+import { fmt, type CurrencyDecimals } from '@/ui/money';
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { MAX_SUMMARY_LEVEL, MIN_SUMMARY_LEVEL, type BalanceSheetSelection } from '@/modules/finance/balance-sheet';
@@ -8,13 +9,15 @@ import type { ProfitLossResult } from '@/modules/finance/profit-loss';
  * FSV, reporting and comparison ranges; the P&L grid follows
  * in stage 3. Read-only by construction.
  */
-export default function ProfitLossShell({ canUse, companies, versions, selection, result }: {
+export default function ProfitLossShell({ canUse, companies, versions, selection, result, decimals }: {
+  decimals: CurrencyDecimals;
   canUse: boolean;
   companies: Array<{ companyCode: string; name: string }>;
   versions: Array<{ version: string; name: string; chartOfAccounts: string }>;
   selection: BalanceSheetSelection;
   result: ProfitLossResult | null;
 }) {
+  const d = decimals[result?.currency ?? ''] ?? 2;
   if (!canUse) {
     return (
       <div className="panel p-4 text-sm text-ink-soft">
@@ -84,7 +87,7 @@ export default function ProfitLossShell({ canUse, companies, versions, selection
               level: result.summaryLevel, ledger: result.ledger, currency: result.currency,
             })}
             {' · '}
-            <a className="text-accent hover:underline" href={`data:text/csv;charset=utf-8,${encodeURIComponent(toCsv(result))}`} download="profit-loss.csv">
+            <a className="text-accent hover:underline" href={`data:text/csv;charset=utf-8,${encodeURIComponent(toCsv(d, result))}`} download="profit-loss.csv">
               {t('pl.exportCsv')}
             </a>
           </p>
@@ -93,7 +96,7 @@ export default function ProfitLossShell({ canUse, companies, versions, selection
           ))}
           {result.currentYearResult !== null && (
             <p className="panel p-3 text-sm">
-              {t('pl.currentYearResult')}: <span className="tabular font-semibold">{result.currentYearResult.toFixed(2)} {result.currency}</span>
+              {t('pl.currentYearResult')}: <span className="tabular font-semibold">{fmt(result.currentYearResult, d)} {result.currency}</span>
             </p>
           )}
         </>
@@ -115,7 +118,7 @@ export default function ProfitLossShell({ canUse, companies, versions, selection
           <tbody>
             {result ? (
               result.nodes.map((node) => (
-                <NodeRows key={node.node} node={node} currency={result.currency} company={result.companyCode} year={result.fiscalYear} />
+                <NodeRows d={d} key={node.node} node={node} currency={result.currency} company={result.companyCode} year={result.fiscalYear} />
               ))
             ) : (
               <tr>
@@ -134,7 +137,7 @@ export default function ProfitLossShell({ canUse, companies, versions, selection
               {result.unassigned.map((account) => (
                 <tr key={account.accountNumber}>
                   <td className="code">{account.accountNumber} — {account.accountName}</td>
-                  <td className="tabular text-end num">{account.periodMovement.toFixed(2)} {result.currency}</td>
+                  <td className="tabular text-end num">{fmt(account.periodMovement, d)} {result.currency}</td>
                 </tr>
               ))}
             </tbody>
@@ -145,7 +148,8 @@ export default function ProfitLossShell({ canUse, companies, versions, selection
   );
 }
 
-function NodeRows({ node, currency, company, year }: {
+function NodeRows({ node, currency, company, year, d }: {
+  d: number;
   node: ProfitLossResult['nodes'][number];
   currency: string;
   company: string;
@@ -155,10 +159,10 @@ function NodeRows({ node, currency, company, year }: {
     <>
       <tr className={node.depth === 0 ? 'bg-sunken font-semibold' : 'font-medium'}>
         <td style={{ paddingLeft: `${0.75 + node.depth * 1.25}rem` }}>{node.description} <span className="code text-ink-faint">({node.node})</span></td>
-        <td className="tabular text-end num">{node.periodMovement.toFixed(2)}</td>
-        <td className="tabular text-end num">{node.yearToDateMovement.toFixed(2)}</td>
-        <td className="tabular text-end num">{node.comparativeMovement === null ? '—' : node.comparativeMovement.toFixed(2)}</td>
-        <td className="tabular text-end num">{node.variance === null ? '—' : node.variance.toFixed(2)}</td>
+        <td className="tabular text-end num">{fmt(node.periodMovement, d)}</td>
+        <td className="tabular text-end num">{fmt(node.yearToDateMovement, d)}</td>
+        <td className="tabular text-end num">{node.comparativeMovement === null ? '—' : fmt(node.comparativeMovement, d)}</td>
+        <td className="tabular text-end num">{node.variance === null ? '—' : fmt(node.variance, d)}</td>
         <td className="tabular text-end num">{node.variancePercent === null ? '—' : `${node.variancePercent.toFixed(1)}%`}</td>
         <td className="code">{currency}</td>
       </tr>
@@ -179,9 +183,9 @@ function NodeRows({ node, currency, company, year }: {
               {t('pl.lineItems')}
             </Link>
           </td>
-          <td className="tabular text-end num">{account.periodMovement.toFixed(2)}</td>
-          <td className="tabular text-end num">{account.yearToDateMovement.toFixed(2)}</td>
-          <td className="tabular text-end num">{account.comparativeMovement === null ? '—' : account.comparativeMovement.toFixed(2)}</td>
+          <td className="tabular text-end num">{fmt(account.periodMovement, d)}</td>
+          <td className="tabular text-end num">{fmt(account.yearToDateMovement, d)}</td>
+          <td className="tabular text-end num">{account.comparativeMovement === null ? '—' : fmt(account.comparativeMovement, d)}</td>
           <td colSpan={3} />
         </tr>
       ))}
@@ -189,7 +193,7 @@ function NodeRows({ node, currency, company, year }: {
   );
 }
 
-function toCsv(result: ProfitLossResult): string {
+function toCsv(d: number, result: ProfitLossResult): string {
   const head = 'Node/Account,Period Movement,Year-to-Date Movement,Comparative Movement,Variance,Variance %';
   const lines = [head];
   for (const node of result.nodes) {

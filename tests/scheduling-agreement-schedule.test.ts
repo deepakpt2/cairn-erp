@@ -101,7 +101,7 @@ describe('delivery schedule', () => {
     const document = await getSchedulingAgreement(client, saved.agreementNumber);
     expect(document?.items[0].scheduledQuantity).toBe('7.000');
     expect(document?.items[0].remainingQuantity).toBe('3.000');
-    expect(document?.items[0].netPrice).toBe('5.00');
+    expect(document?.items[0].netPrice).toBe('5.0000');
     expect(document?.scheduleLines.map((line) => line.quantity)).toEqual(['4.000', '3.000']);
     expect(document?.releaseStatus).toBe('NOT_REQUIRED');
     const after = await withTenant(client, async (tx) => {

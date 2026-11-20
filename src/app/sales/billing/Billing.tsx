@@ -1,5 +1,6 @@
 'use client';
 
+import { fmtFlex } from '@/ui/money';
 import Link from 'next/link';
 import { useActionState, useId, useState } from 'react';
 
@@ -40,7 +41,7 @@ interface Props {
 }
 
 function money(value: string): string {
-  return Number(value).toFixed(2);
+  return fmtFlex(value);
 }
 
 function Notice({ state, label }: { state: BillingActionState; label?: string }) {

@@ -1,3 +1,4 @@
+import { fmtIn, type CurrencyDecimals } from '@/ui/money';
 import Link from 'next/link';
 
 import type { GlBalanceView } from '@/modules/finance/gl-balances';
@@ -5,7 +6,8 @@ import type { GlBalanceView } from '@/modules/finance/gl-balances';
 const inputCls = 'input w-full';
 const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint';
 
-export default function BalancesForm({ view, error, canDisplay }: {
+export default function BalancesForm({ view, error, canDisplay, decimals }: {
+  decimals: CurrencyDecimals;
   view: GlBalanceView | null;
   error: string | null;
   canDisplay: boolean;
@@ -56,7 +58,7 @@ export default function BalancesForm({ view, error, canDisplay }: {
           <>
             <p className="mt-2 text-sm text-ink-soft">
               Account {view.glAccount} · Company {view.companyCode} · Fiscal year {view.fiscalYear} · {view.currency}.
-              Opening balance {view.openingBalance.toFixed(2)} — the sum of every earlier year, never period 1 turnover.
+              Opening balance {fmtIn(view.openingBalance, view.currency, decimals)} — the sum of every earlier year, never period 1 turnover.
             </p>
             <div className="mt-2 overflow-x-auto">
               <table className="grid-table text-left text-sm">
@@ -72,11 +74,11 @@ export default function BalancesForm({ view, error, canDisplay }: {
                   {view.periods.map((row) => (
                     <tr key={row.period}>
                       <td>{row.special ? `Special ${row.period}` : `Period ${row.period}`}</td>
-                      <td className="num">{row.opening.toFixed(2)}</td>
-                      <td className="num">{row.debitTurnover.toFixed(2)}</td>
-                      <td className="num">{row.creditTurnover.toFixed(2)}</td>
-                      <td className="num">{row.netChange.toFixed(2)}</td>
-                      <td className="num">{row.closing.toFixed(2)}</td>
+                      <td className="num">{fmtIn(row.opening, view.currency, decimals)}</td>
+                      <td className="num">{fmtIn(row.debitTurnover, view.currency, decimals)}</td>
+                      <td className="num">{fmtIn(row.creditTurnover, view.currency, decimals)}</td>
+                      <td className="num">{fmtIn(row.netChange, view.currency, decimals)}</td>
+                      <td className="num">{fmtIn(row.closing, view.currency, decimals)}</td>
                       <td>{row.itemCount}</td>
                       <td>
                         <Link className="text-accent hover:underline"
@@ -90,8 +92,8 @@ export default function BalancesForm({ view, error, canDisplay }: {
               </table>
             </div>
             <p className="mt-2 text-sm text-ink-soft">
-              Year: debits {view.yearDebit.toFixed(2)}, credits {view.yearCredit.toFixed(2)},
-              closing {view.yearClosing.toFixed(2)}.
+              Year: debits {fmtIn(view.yearDebit, view.currency, decimals)}, credits {fmtIn(view.yearCredit, view.currency, decimals)},
+              closing {fmtIn(view.yearClosing, view.currency, decimals)}.
             </p>
           </>
         )}

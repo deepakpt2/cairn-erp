@@ -217,10 +217,10 @@ async function assertPrice(tx: Tx, client: string, materialNumber: string, price
   }
   const [money] = await tx.select().from(currencyTable).where(eq(currencyTable.code, code));
   if (!money?.isActive) throw new InfoRecordError(`Currency ${code} does not exist or is inactive.`);
-  if (decimalScale(price.amount) > money.decimalPlaces) {
-    throw new InfoRecordError(
-      `The price has more decimal places than ${code} allows (${money.decimalPlaces}).`,
-    );
+  // A unit price is a rate, not a posted value: it may carry more decimals than the currency's minor unit
+  // (it is rounded to the minor unit only when a document value is calculated from it). The column holds four.
+  if (decimalScale(price.amount) > 4) {
+    throw new InfoRecordError(`The price has more than 4 decimal places, which is all a price stores.`);
   }
   const unit = price.priceUnitOfMeasure.trim().toUpperCase();
   try {

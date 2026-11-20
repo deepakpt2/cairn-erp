@@ -113,7 +113,7 @@ describe('SCR-056 purchase orders (ME21N)', () => {
     const doc = await getOrder(c, created.orderNumber);
     expect(doc).toMatchObject({ currency: 'KWD', releaseStatus: 'NOT_REQUIRED', supplierNumber: 'V10000' });
     expect(doc?.items[0]).toMatchObject({
-      itemNumber: 10, netPrice: '150.00', netValue: '1500.00', quantity: '10.000',
+      itemNumber: 10, netPrice: '150.0000', netValue: '1500.0000', quantity: '10.000',
     });
     expect(doc?.items[0].scheduleLines).toHaveLength(1);
     const history = await withTenant(c, (tx) => changeHistory(tx, c, 'purchase_order', created.orderNumber));
@@ -161,7 +161,7 @@ describe('SCR-056 purchase orders (ME21N)', () => {
     const doc = await getOrder(c, created.orderNumber);
     expect(doc?.items.map((i) => i.itemNumber)).toEqual([10, 20]);
     expect(doc?.items[0]).toMatchObject({ quantity: '8.000', markedForDeletion: true });
-    expect(doc?.items[1]).toMatchObject({ shortText: 'Second item', netValue: '50.00' });
+    expect(doc?.items[1]).toMatchObject({ shortText: 'Second item', netValue: '50.0000' });
     const history = await withTenant(c, (tx) => changeHistory(tx, c, 'purchase_order', created.orderNumber));
     expect(history.length).toBeGreaterThanOrEqual(2);
   });

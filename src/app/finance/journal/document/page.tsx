@@ -6,6 +6,7 @@ import {
   getJournalDocument, resolveDocumentNumber, type JournalDocumentView,
 } from '@/modules/finance/document-display';
 import DocumentDisplay from './DocumentDisplay';
+import { currencyDecimalsFor } from '@/platform/posting/money';
 import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -75,6 +76,7 @@ export default async function JournalDocumentPage({ searchParams }: {
         mismatch={mismatch}
         canDisplay={canDisplay}
         canFlow={canFlow}
+        decimals={await currencyDecimalsFor(session.user.client)}
       />
     </Page>
   );

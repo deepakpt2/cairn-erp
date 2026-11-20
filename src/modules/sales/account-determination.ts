@@ -23,6 +23,7 @@
  * invoice in the ledger with no rule behind it is worse than an invoice that was never raised, because
  * the first one has to be found and the second one only has to be fixed.
  */
+import { fromScaled, roundToScale } from '../../platform/posting/decimal';
 import { and, asc, eq } from 'drizzle-orm';
 
 import { type Tx } from '../../platform/db/client';
@@ -207,8 +208,11 @@ export async function determineLineAccounts(
     customerAccountAssignmentGroup?: string | null;
     materialAccountAssignmentGroup?: string | null;
     conditions: ConditionForKey[];
+    /** The document currency's decimals. Amounts are summed and written exactly at this scale (default 2). */
+    places?: number;
   },
 ): Promise<DeterminedLineAccounts | undefined> {
+  const places = input.places ?? 2;
   const usable = input.conditions.filter(
     (condition) => !condition.isStatistical && condition.accountKey && Number(condition.amount) !== 0,
   );
@@ -222,7 +226,7 @@ export async function determineLineAccounts(
     accountKey,
   });
 
-  const totals = new Map<string, number>();
+  const totals = new Map<string, bigint>();
   let taxKey: string | null = null;
   for (const condition of usable) {
     const accountKey = condition.accountKey!;
@@ -230,14 +234,15 @@ export async function determineLineAccounts(
       taxKey = accountKey;
       continue;
     }
-    totals.set(accountKey, Math.round(((totals.get(accountKey) ?? 0) + Number(condition.amount)) * 100) / 100);
+    // Exact: each condition amount is already a document amount at the currency's decimals; summing never cuts cents.
+    totals.set(accountKey, (totals.get(accountKey) ?? 0n) + roundToScale(condition.amount, places));
   }
 
   const components: LineComponent[] = [];
   for (const [accountKey, amount] of totals) {
-    if (Math.abs(amount) < 0.005) continue;
+    if (amount === 0n) continue;
     const determined = await determineSalesAccount(tx, client, key(accountKey));
-    components.push({ accountKey, glAccount: determined.glAccount, amount: amount.toFixed(2) });
+    components.push({ accountKey, glAccount: determined.glAccount, amount: fromScaled(amount, places) });
   }
   const taxAccount = taxKey
     ? (await determineSalesAccount(tx, client, key(taxKey))).glAccount

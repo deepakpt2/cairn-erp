@@ -112,7 +112,7 @@
 | credit_control_area | foundation | finance, platform/tenancy |
 | credit_determination | finance | sales |
 | credit_risk_category | finance | platform/tenancy |
-| currency | platform/tables | finance, foundation, inventory, people, platform/i18n, purchasing, sales |
+| currency | platform/tables | finance, foundation, inventory, people, platform/i18n, platform/posting, purchasing, sales |
 | customer_company_code | foundation | finance |
 | customer_credit | finance | sales |
 | customer_down_payment_request | finance | sales |

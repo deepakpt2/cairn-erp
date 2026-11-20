@@ -1,13 +1,15 @@
 import Link from 'next/link';
 
 import type { JournalDocumentView } from '@/modules/finance/document-display';
+import { fmtIn, type CurrencyDecimals } from '@/ui/money';
 
 const inputCls = 'field-input';
 const labelCls = 'field-label';
 
 const ACCOUNT_TYPE_LEGEND = 'Account type: S G/L · D supplier · K customer';
 
-export default function DocumentDisplay({ document, parkedNumber, notFound, mismatch, canDisplay, canFlow }: {
+export default function DocumentDisplay({ document, parkedNumber, notFound, mismatch, canDisplay, canFlow, decimals }: {
+  decimals: CurrencyDecimals;
   document: JournalDocumentView | null;
   parkedNumber: string | null;
   notFound: boolean;
@@ -122,9 +124,9 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
                       <td className="code">{line.accountType}</td>
                       <td>{line.glAccount}</td>
                       <td>{line.debitCredit}</td>
-                      <td className="num">{line.amountDocument.toFixed(2)}</td>
+                      <td className="num">{fmtIn(line.amountDocument, line.currency, decimals)}</td>
                       <td>{line.currency}</td>
-                      <td className="num">{line.amountLocal.toFixed(2)}</td>
+                      <td className="num">{fmtIn(line.amountLocal, document.localCurrency, decimals)}</td>
                       <td>{line.businessPartner ?? '—'}</td>
                       <td>{line.costCenter ?? '—'}</td>
                       <td>{line.profitCenter ?? '—'}</td>
@@ -140,16 +142,16 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
                 <tfoot>
                   <tr>
                     <td colSpan={4}>Debit</td>
-                    <td className="num">{document.debitDocument.toFixed(2)}</td>
+                    <td className="num">{fmtIn(document.debitDocument, document.documentCurrency, decimals)}</td>
                     <td>{document.documentCurrency}</td>
-                    <td className="num">{document.debitLocal.toFixed(2)}</td>
+                    <td className="num">{fmtIn(document.debitLocal, document.localCurrency, decimals)}</td>
                     <td colSpan={7} />
                   </tr>
                   <tr>
                     <td colSpan={4}>Credit</td>
-                    <td className="num">{document.creditDocument.toFixed(2)}</td>
+                    <td className="num">{fmtIn(document.creditDocument, document.documentCurrency, decimals)}</td>
                     <td>{document.documentCurrency}</td>
-                    <td className="num">{document.creditLocal.toFixed(2)}</td>
+                    <td className="num">{fmtIn(document.creditLocal, document.localCurrency, decimals)}</td>
                     <td colSpan={7} />
                   </tr>
                 </tfoot>

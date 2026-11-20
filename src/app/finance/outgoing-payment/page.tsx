@@ -1,4 +1,5 @@
 
+import { currencyDecimalsFor } from '@/platform/posting/money';
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import {
@@ -39,7 +40,7 @@ export default async function OutgoingPaymentPage({ searchParams }: {
       description={t('outgoingPayment.subtitle')}
     >
 
-      <OutgoingPayment
+      <OutgoingPayment decimals={await currencyDecimalsFor(session.user.client)}
         view={view}
         loadError={loadError}
         canEnter={can(session, OUTGOING_PAYMENT_CAPABILITY)}

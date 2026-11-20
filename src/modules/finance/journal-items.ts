@@ -98,6 +98,7 @@ export interface JournalItemsResult {
   pageSize: number;
 }
 
+import { MONEY_SCALE, fromScaled, roundToScale } from '../../platform/posting/decimal';
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
@@ -105,7 +106,8 @@ import { getCompanyCode } from '../../platform/periods';
 
 export const JOURNAL_ITEMS_CAP = 5000;
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Exact at the storage scale (4): subtotals equal the journal's own sums, never rounded to cents. */
+const round2 = (n: number): number => Number(fromScaled(roundToScale(n, MONEY_SCALE), MONEY_SCALE));
 
 interface RawRow {
   company_code: string;

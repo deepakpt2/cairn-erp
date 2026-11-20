@@ -22,7 +22,7 @@ import { derivePosition, getCompanyCode, PeriodError } from '../../platform/peri
 import {
   computeTotals, postJournalEntry, PostingError, type PostedJournal,
 } from '../../platform/posting';
-import { toScaled } from '../../platform/posting/decimal';
+import { MoneyError, moneyFor, refusing } from '../../platform/posting/money';
 import {
   hasCompanyCodeAssignments, missingCompanyCodeAssignments, describeMissingCompanyCodeAssignments,
 } from '../foundation/company-code-assignments';
@@ -68,8 +68,6 @@ export interface GlDocumentInput {
   headerText?: string;
   lines: GlDocumentLineInput[];
 }
-
-const CURRENCY_DECIMALS: Record<string, number> = { JPY: 0, KWD: 3, BHD: 3, OMR: 3 };
 
 function judgeDate(label: string, value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -201,29 +199,27 @@ export async function postGlDocument(
       );
     }
 
-    const decimals = CURRENCY_DECIMALS[company.currency] ?? 2;
+    // The authoritative currency configuration decides the decimals (never a hard-coded list), and an amount
+    // with a non-zero digit beyond them is refused, not altered.
+    const money = refusing(await moneyFor(tx, company.currency).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new GlDocumentError(error.message, error.remedy);
+      throw error;
+    }), (e) => new GlDocumentError(e.message, e.remedy));
     for (const [i, line] of input.lines.entries()) {
       if (!line.glAccount?.trim()) {
         throw new GlDocumentError(`Line ${i + 1} has no G/L account.`, 'Every line must carry an account.');
       }
       let scaled: bigint;
       try {
-        scaled = toScaled(line.amount);
-      } catch {
+        scaled = money.entered(line.amount, `Line ${i + 1} amount`);
+      } catch (error) {
+        if (error instanceof GlDocumentError) throw error; // an amount with a lost digit already says so, by currency
         throw new GlDocumentError(`Line ${i + 1} has an invalid amount (${line.amount}).`, 'Enter a positive amount.');
       }
       if (scaled <= 0n) {
         throw new GlDocumentError(
           `Line ${i + 1} has a non-positive amount (${line.amount}).`,
           'Enter a positive amount and set the line to debit or credit.',
-        );
-      }
-      // Precision is judged on value, not spelling: 50.0000 is a
-      // two-decimal amount written at canonical scale, 100.234 is not.
-      if (scaled % (10n ** BigInt(4 - decimals)) !== 0n) {
-        throw new GlDocumentError(
-          `Line ${i + 1}: amount ${line.amount} exceeds the ${decimals} decimal places of ${company.currency}.`,
-          'Correct the amount to the currency precision.',
         );
       }
       const [account] = await tx.select().from(glAccount).where(and(
@@ -344,6 +340,7 @@ export async function postGlDocument(
       lines: input.lines.map((line) => ({ ...line, glAccount: line.glAccount.trim() })),
       postedBy: input.changedBy,
       transactionCode: GL_DOCUMENT_CAPABILITY,
+      precision: 'CURRENCY',
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new GlDocumentError(error.message, error.remedy);
       if (error instanceof PeriodError) throw new GlDocumentError(error.message, error.remedy);

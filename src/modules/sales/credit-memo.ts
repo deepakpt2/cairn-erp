@@ -17,6 +17,8 @@
  * this module knows is which revenue account the invoice used, and that is the one it hands over, so the
  * reversal travels the same account determination the revenue did.
  */
+import { fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { currencyScale } from '../../platform/posting/money';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
@@ -142,8 +144,19 @@ function fixed3(value: string | number | null | undefined): string {
   return Number(value ?? 0).toFixed(3);
 }
 
+/** A stored document value written at its own currency's decimals. */
+async function valueText(tx: Tx, currency: string, value: string): Promise<string> {
+  const places = await currencyScale(tx, currency);
+  return fromScaled(roundToScale(value, places), places);
+}
+
+function roundTo(value: number, places: number): string {
+  return fromScaled(roundToScale(value, places), places);
+}
+
+/** Two decimals: only where no currency is in scope. Money in a document uses the document currency's decimals. */
 function round2(value: number): string {
-  return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+  return roundTo(value, 2);
 }
 
 function quantityDecimals(value: number): number {
@@ -389,14 +402,18 @@ export async function createCreditMemo(
       ));
       return {
         billingNumber: standing.number, replayed: true,
-        netValue: saved ? Number(saved.netValue).toFixed(2) : '0.00',
-        taxValue: saved ? Number(saved.taxValue).toFixed(2) : '0.00',
-        grossValue: saved ? Number(saved.grossValue).toFixed(2) : '0.00',
+        netValue: saved ? await valueText(tx, saved.currency, saved.netValue) : '0.00',
+        taxValue: saved ? await valueText(tx, saved.currency, saved.taxValue) : '0.00',
+        grossValue: saved ? await valueText(tx, saved.currency, saved.grossValue) : '0.00',
       };
     }
 
     const invoice = await requireCreditableInvoice(tx, input.client, input.billingNumber,
       (message, remedy) => { throw new CreditMemoError(message, remedy); });
+    // Every credited amount is rounded at the invoice currency's decimals, not at a fixed two.
+    const places = await currencyScale(tx, invoice.currency);
+    const round2 = (value: number) => roundTo(value, places);
+    const fixed = (value: number) => roundTo(value, places);
 
     // A credit raised from a request is raised from a released one, and it is bounded by what that
     // request asks for: the request is the authority for giving the money back, not a note about it.
@@ -488,7 +505,7 @@ export async function createCreditMemo(
         .filter((condition) => condition.lineNumber === billed.lineNumber);
       const scaled = standing.length > 0
         ? scaleLineConditions(standing, invoiced === 0 ? 0 : -credited / invoiced, {
-          lineNumber: 0, quantity: credited,
+          lineNumber: 0, quantity: credited, places,
         })
         : undefined;
 
@@ -510,9 +527,9 @@ export async function createCreditMemo(
         // price is negated so that quantity times price is the negative amount the document is worth.
         netPrice: roundAmount((Number(netAmount) * priceUnit) / (credited === 0 ? 1 : credited), 4),
         priceUnit,
-        netAmount: Number(netAmount).toFixed(2),
+        netAmount: fixed(Number(netAmount)),
         taxCode: billed.taxCode, taxRate: scaled ? scaled.taxRate : billed.taxRate,
-        taxAmount: Number(taxAmount).toFixed(2),
+        taxAmount: fixed(Number(taxAmount)),
         conditionNumber: scaled ? (scaled.conditionNumber || billed.conditionNumber) : billed.conditionNumber,
         referenceBillingNumber: billed.billingNumber, referenceBillingLineNumber: billed.lineNumber,
         createdBy: input.changedBy,
@@ -524,9 +541,9 @@ export async function createCreditMemo(
     }
 
     // The value of a credit memo is what the customer is being given back, so every total is negative.
-    const netValue = (-Number(round2(rows.reduce((sum, row) => sum + Math.abs(Number(row.netAmount)), 0)))).toFixed(2);
-    const taxValue = (-Number(round2(rows.reduce((sum, row) => sum + Math.abs(Number(row.taxAmount)), 0)))).toFixed(2);
-    const grossValue = (Number(netValue) + Number(taxValue)).toFixed(2);
+    const netValue = fixed(-Number(round2(rows.reduce((sum, row) => sum + Math.abs(Number(row.netAmount)), 0))));
+    const taxValue = fixed(-Number(round2(rows.reduce((sum, row) => sum + Math.abs(Number(row.taxAmount)), 0))));
+    const grossValue = fixed(Number(netValue) + Number(taxValue));
 
     let number: string;
     try {
@@ -783,6 +800,10 @@ export async function createCreditMemoRequest(
 
     const invoice = await requireCreditableInvoice(tx, input.client, input.billingNumber,
       (message, remedy) => { throw new CreditMemoError(message, remedy); });
+    // Every credited amount is rounded at the invoice currency's decimals, not at a fixed two.
+    const places = await currencyScale(tx, invoice.currency);
+    const round2 = (value: number) => roundTo(value, places);
+    const fixed = (value: number) => roundTo(value, places);
 
     const invoiceLines = await tx.select().from(billingDocumentLine).where(and(
       eq(billingDocumentLine.client, input.client),
@@ -835,7 +856,7 @@ export async function createCreditMemoRequest(
         .filter((condition) => condition.lineNumber === billed.lineNumber);
       const scaled = disputed.length > 0
         ? scaleLineConditions(disputed, invoiced === 0 ? 0 : item.quantity / invoiced, {
-          lineNumber: 0, quantity: item.quantity,
+          lineNumber: 0, quantity: item.quantity, places,
         })
         : undefined;
       const netAmount = scaled

@@ -21,6 +21,8 @@
  * receipt — an issuing direction, a movement that carries value, a destination that is not returns
  * stock. A return that valued the goods would be a purchase wearing a returns label.
  */
+import { fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { currencyScale } from '../../platform/posting/money';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
@@ -1103,8 +1105,19 @@ export interface CreateReturnsOrderInput {
   headerText?: string;
 }
 
+/** A stored document value written at its own currency's decimals. */
+async function valueText(tx: Tx, currency: string, value: string): Promise<string> {
+  const places = await currencyScale(tx, currency);
+  return fromScaled(roundToScale(value, places), places);
+}
+
+function roundTo(value: number, places: number): string {
+  return fromScaled(roundToScale(value, places), places);
+}
+
+/** Two decimals: only where no currency is in scope. Money in a document uses the document currency's decimals. */
 function round2(value: number): string {
-  return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+  return roundTo(value, 2);
 }
 
 /** Three decimals is what every quantity column here carries; more than that cannot be stored. */
@@ -1213,9 +1226,9 @@ export async function createReturnsOrder(
       ));
       return {
         orderNumber: standing.orderNumber, replayed: true,
-        netValue: saved ? Number(saved.netValue).toFixed(2) : '0.00',
-        taxValue: saved ? Number(saved.taxValue).toFixed(2) : '0.00',
-        grossValue: saved ? Number(saved.grossValue).toFixed(2) : '0.00',
+        netValue: saved ? await valueText(tx, saved.currency, saved.netValue) : '0.00',
+        taxValue: saved ? await valueText(tx, saved.currency, saved.taxValue) : '0.00',
+        grossValue: saved ? await valueText(tx, saved.currency, saved.grossValue) : '0.00',
       };
     }
 
@@ -1241,6 +1254,9 @@ export async function createReturnsOrder(
       );
     }
 
+    // Every returned amount is rounded at the invoice currency's decimals, not at a fixed two.
+    const places = await currencyScale(tx, invoice.currency);
+    const round2 = (value: number) => roundTo(value, places);
     const invoiceLines = await tx.select().from(billingDocumentLine).where(and(
       eq(billingDocumentLine.client, input.client),
       eq(billingDocumentLine.billingNumber, input.billingNumber),

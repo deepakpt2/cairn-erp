@@ -272,7 +272,7 @@ describe('SCR-151 purchasing info record', () => {
     expect(filled.warnings.join(' ')).toMatch(/below the info record minimum/);
     const doc = await getOrder(c, filled.orderNumber);
     expect(doc?.items[0]).toMatchObject({
-      netPrice: '10.00', priceUnit: '1', infoRecordNumber: record.info_record_number, priceSequence: 1,
+      netPrice: '10.0000', priceUnit: '1', infoRecordNumber: record.info_record_number, priceSequence: 1,
     });
 
     const typed = await createOrder({
@@ -282,7 +282,7 @@ describe('SCR-151 purchasing info record', () => {
     });
     expect(typed.warnings.join(' ')).toMatch(/keeps the price that was typed/);
     const typedDoc = await getOrder(c, typed.orderNumber);
-    expect(typedDoc?.items[0]).toMatchObject({ netPrice: '99.00', infoRecordNumber: record.info_record_number });
+    expect(typedDoc?.items[0]).toMatchObject({ netPrice: '99.0000', infoRecordNumber: record.info_record_number });
 
     await withTenant(c, async (tx) => {
       await tx.execute(sql`
@@ -305,7 +305,7 @@ describe('SCR-151 purchasing info record', () => {
       newPrice: { ...price, amount: 25, validFrom: doc!.documentDate, validTo: '2099-12-31' },
     });
     const again = await getOrder(c, filled.orderNumber);
-    expect(again?.items[0]).toMatchObject({ netPrice: '10.00', priceSequence: 1 });
+    expect(again?.items[0]).toMatchObject({ netPrice: '10.0000', priceSequence: 1 });
 
     await changeOrder({
       client: c, changedBy: ACTOR, orderNumber: filled.orderNumber, supplierNumber: 'V-IR',
@@ -313,7 +313,7 @@ describe('SCR-151 purchasing info record', () => {
       items: [{ ...orderItem, itemNumber: 10, netPrice: 10, priceUnit: 1, quantity: 6, scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 6 }] }],
     });
     const changed = await getOrder(c, filled.orderNumber);
-    expect(changed?.items[0]).toMatchObject({ quantity: '6.000', netPrice: '10.00', infoRecordNumber: record.info_record_number, priceSequence: 1 });
+    expect(changed?.items[0]).toMatchObject({ quantity: '6.000', netPrice: '10.0000', infoRecordNumber: record.info_record_number, priceSequence: 1 });
   });
 
   it('applies lead time to one schedule line only, and a missing conversion does not store the reference', async () => {
@@ -359,7 +359,7 @@ describe('SCR-151 purchasing info record', () => {
     });
     expect(unconverted.warnings.join(' ')).toMatch(/reference is not stored/);
     expect((await getOrder(c, unconverted.orderNumber))?.items[0]).toMatchObject({
-      netPrice: '40.00', unit: 'BOX', infoRecordNumber: null, priceSequence: null,
+      netPrice: '40.0000', unit: 'BOX', infoRecordNumber: null, priceSequence: null,
     });
 
     await withTenant(c, async (tx) => {
@@ -402,7 +402,7 @@ describe('SCR-151 purchasing info record', () => {
     expect(blocked.warnings.join(' ')).toMatch(/not used in its place/);
     const blockedDoc = await getOrder(c, blocked.orderNumber);
     expect(blockedDoc?.items[0].infoRecordNumber).toBeNull();
-    expect(blockedDoc?.items[0].netPrice).toBe('8.00');
+    expect(blockedDoc?.items[0].netPrice).toBe('8.0000');
 
     await withTenant(c, async (tx) => {
       await tx.execute(sql`

@@ -1,4 +1,5 @@
 
+import { currencyDecimalsFor } from '@/platform/posting/money';
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import {
@@ -77,8 +78,8 @@ export default async function GlBalancesPage({ searchParams }: {
       }
     >
 
-      <BalancesForm view={view} error={error} canDisplay={canDisplay} />
-      <BalanceReportForm
+      <BalancesForm decimals={await currencyDecimalsFor(session.user.client)} view={view} error={error} canDisplay={canDisplay} />
+      <BalanceReportForm decimals={await currencyDecimalsFor(session.user.client)}
         selection={reportSelection}
         report={report}
         reportError={reportError}

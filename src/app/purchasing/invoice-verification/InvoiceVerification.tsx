@@ -1,5 +1,7 @@
 'use client';
 
+import { fmtFlex } from '@/ui/money';
+import { fromScaled, roundToScale } from '@/platform/posting/decimal';
 import { useActionState, useState } from 'react';
 
 import type {
@@ -15,7 +17,8 @@ function newRequestKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-const money = (n: number) => Math.round(n * 100) / 100;
+// Exact at the storage scale (4): amounts are never cut to cents here; the server judges them against the currency.
+const money = (n: number): number => Number(fromScaled(roundToScale(n, 4), 4));
 
 export default function InvoiceVerification({ order, invoice, taxCodes, canPost, today }: {
   order: InvoiceOrderView | null;
@@ -115,7 +118,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Gross amount</span>
                 <input
-                  name="grossAmount" type="number" step="0.01" min="0" className="input w-full" placeholder="0.00" required
+                  name="grossAmount" type="number" step="any" min="0" className="input w-full" placeholder="0.000" required
                   value={gross} onChange={(e) => setGross(e.target.value)}
                 />
               </label>
@@ -157,16 +160,16 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                             </td>
                             <td className="code">{advance.paymentNumber}</td>
                             <td>{advance.postingDate}</td>
-                            <td>{money(advance.amount).toFixed(2)} {advance.currency}</td>
-                            <td>{money(advance.applied).toFixed(2)}</td>
-                            <td>{money(advance.remaining).toFixed(2)}</td>
+                            <td>{fmtFlex(money(advance.amount))} {advance.currency}</td>
+                            <td>{fmtFlex(money(advance.applied))}</td>
+                            <td>{fmtFlex(money(advance.remaining))}</td>
                             <td>
                               {usable ? (
                                 <input
-                                  type="number" step="0.01" min="0" max={advance.remaining}
+                                  type="number" step="any" min="0" max={advance.remaining}
                                   name={`advamt-${advance.paymentNumber}`} className="input w-28"
                                   aria-label={`Amount of advance ${advance.paymentNumber} to clear`}
-                                  value={advanceAmounts[advance.paymentNumber] ?? money(advance.remaining).toFixed(2)}
+                                  value={advanceAmounts[advance.paymentNumber] ?? fmtFlex(money(advance.remaining))}
                                   disabled={!selectedAdvances[advance.paymentNumber]}
                                   onChange={(e) => setAdvanceAmounts((a) => ({ ...a, [advance.paymentNumber]: e.target.value }))}
                                 />
@@ -186,14 +189,14 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                 </div>
                 <p className="mt-2 text-sm">
                   Advances cleared against this invoice{' '}
-                  <strong>{advancesClearing.toFixed(2)} {order.currency}</strong>
-                  {' '}of {grossNow.toFixed(2)} · still payable{' '}
-                  <strong>{stillPayable.toFixed(2)} {order.currency}</strong>.
+                  <strong>{fmtFlex(advancesClearing)} {order.currency}</strong>
+                  {' '}of {fmtFlex(grossNow)} · still payable{' '}
+                  <strong>{fmtFlex(stillPayable)} {order.currency}</strong>.
                 </p>
                 {overCleared && (
                   <p className="mt-1 text-sm text-signal-error">
-                    The advances asked to clear {advancesClearing.toFixed(2)} exceed the invoice gross
-                    {' '}{grossNow.toFixed(2)}. An advance is money already paid, not a discount: clear
+                    The advances asked to clear {fmtFlex(advancesClearing)} exceed the invoice gross
+                    {' '}{fmtFlex(grossNow)}. An advance is money already paid, not a discount: clear
                     no more than the invoice is worth.
                   </p>
                 )}
@@ -240,7 +243,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
                         <td>
                           {item.eligible && (
                             <input
-                              type="number" step="0.01" min="0" name={`amt-${item.itemNumber}`} className="input w-28"
+                              type="number" step="any" min="0" name={`amt-${item.itemNumber}`} className="input w-28"
                               value={amounts[item.itemNumber] ?? String(expected)}
                               onChange={(e) => setAmounts((a) => ({ ...a, [item.itemNumber]: e.target.value }))}
                             />
@@ -329,7 +332,7 @@ export default function InvoiceVerification({ order, invoice, taxCodes, canPost,
               </div>
             )}
             <p className="mt-3 text-sm text-ink-soft">
-              Balance: items net {netTotal.toFixed(2)} + tax {taxTotal.toFixed(2)} = {(netTotal + taxTotal).toFixed(2)} {order.currency}.
+              Balance: items net {fmtFlex(netTotal)} + tax {fmtFlex(taxTotal)} = {fmtFlex((netTotal + taxTotal))} {order.currency}.
               The gross amount entered must reconcile with this balance; a price variance against the order price posts separately and is named here.
             </p>
             <div className="mt-3">

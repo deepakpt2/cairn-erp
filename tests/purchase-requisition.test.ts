@@ -99,7 +99,7 @@ describe('SCR-055 purchase requisitions (ME51N)', () => {
       itemNumber: 10,
       shortText: 'Industrial steel plate',
       quantity: '10.000',
-      estimatedPrice: '150.00',
+      estimatedPrice: '150.0000',
       priceUnit: '1',
       accountAssignmentCategory: null,
       markedForDeletion: false,

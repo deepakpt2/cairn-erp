@@ -19,6 +19,8 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { linkDocuments } from '../../platform/document';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
+import { fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { MoneyError, currencyScale, moneyFor, refusing } from '../../platform/posting/money';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
 import { ClearingResetError, resetClearingTx } from '../finance/clearing-reset';
 import {
@@ -59,8 +61,6 @@ export class InvoiceVerificationError extends Error {
     this.remedy = remedy;
   }
 }
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 async function receivedQuantities(tx: Tx, client: string, orderNumber: string): Promise<Map<number, number>> {
   const rows = await tx.select({
@@ -308,14 +308,15 @@ export interface SupplierInvoiceView {
 }
 
 function toView(
+  scale: number,
   header: typeof supplierInvoice.$inferSelect,
   items: Array<typeof supplierInvoiceItem.$inferSelect>,
   settlements: SupplierInvoiceView['settlements'],
 ): SupplierInvoiceView {
   const applied = settlements
     .filter((row) => !row.reversed)
-    .reduce((sum, row) => sum + Number(row.totalApplied), 0);
-  const gross = Number(header.grossAmount);
+    .reduce((sum, row) => sum + roundToScale(row.totalApplied, scale), 0n);
+  const gross = roundToScale(header.grossAmount, scale);
   return {
     invoiceNumber: header.invoiceNumber, fiscalYear: header.fiscalYear,
     category: header.category, supplierNumber: header.supplierNumber,
@@ -334,8 +335,8 @@ function toView(
       varianceAmount: i.varianceAmount, taxCode: i.taxCode, taxAmount: i.taxAmount,
     })),
     settlements,
-    advanceApplied: round2(applied).toFixed(2),
-    remainingPayable: round2(gross - applied).toFixed(2),
+    advanceApplied: fromScaled(applied, scale),
+    remainingPayable: fromScaled(gross - applied, scale),
   };
 }
 
@@ -385,7 +386,7 @@ async function loadView(tx: Tx, client: string, number: string): Promise<Supplie
   const items = await tx.select().from(supplierInvoiceItem).where(and(
     eq(supplierInvoiceItem.client, client), eq(supplierInvoiceItem.invoiceNumber, number),
   )).orderBy(supplierInvoiceItem.lineNumber);
-  return toView(header, items, await loadSettlements(tx, client, number));
+  return toView(await currencyScale(tx, header.currency), header, items, await loadSettlements(tx, client, number));
 }
 
 export async function getSupplierInvoice(client: string, number: string): Promise<SupplierInvoiceView | null> {
@@ -508,7 +509,11 @@ async function settleAdvances(
   const groups = new Map<string, Array<{
     documentNumber: string; fiscalYear: number; lineNumber: number; applied: number;
   }>>();
-  let total = 0;
+  const money = refusing(await moneyFor(tx, input.currency).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new InvoiceVerificationError(error.message, error.remedy);
+      throw error;
+    }), (e) => new InvoiceVerificationError(e.message, e.remedy));
+  let total = 0n;
 
   for (const request of requested) {
     const paymentNumber = request.paymentNumber?.trim();
@@ -562,15 +567,15 @@ async function settleAdvances(
         'Reload the order; only what is still open can be cleared.',
       );
     }
-    const applied = request.amount === undefined ? open.remaining : round2(request.amount);
-    if (!(applied > 0)) {
+    const applied = request.amount === undefined ? money.units(open.remaining) : money.entered(request.amount, 'The advance amount');
+    if (!(applied > 0n)) {
       throw new InvoiceVerificationError(
         `Advance ${paymentNumber}: the amount to clear must stand above zero.`,
       );
     }
-    if (applied - open.remaining > 0.005) {
+    if (applied > money.units(open.remaining)) {
       throw new InvoiceVerificationError(
-        `Advance ${paymentNumber} stands open at ${open.remaining.toFixed(2)} ${input.currency}; ${applied.toFixed(2)} was asked of it.`,
+        `Advance ${paymentNumber} stands open at ${money.text(open.remaining)} ${input.currency}; ${money.fromUnits(applied)} was asked of it.`,
         'Clear no more than the advance still stands at.',
       );
     }
@@ -578,25 +583,25 @@ async function settleAdvances(
     const group = groups.get(advance.specialGlIndicator) ?? [];
     group.push({
       documentNumber: open.documentNumber, fiscalYear: open.fiscalYear,
-      lineNumber: open.lineNumber, applied,
+      lineNumber: open.lineNumber, applied: Number(money.fromUnits(applied)),
     });
     groups.set(advance.specialGlIndicator, group);
-    total = round2(total + applied);
+    total += applied;
   }
 
   // An advance is money already given, not a discount: clearing more than the
   // invoice is worth would leave the supplier owing us on a document that says
   // they owe nothing.
-  if (total - round2(input.grossAmount) > 0.005) {
+  if (total > money.entered(input.grossAmount, 'The gross amount')) {
     throw new InvoiceVerificationError(
-      `The advances asked to clear ${total.toFixed(2)} ${input.currency}, which exceeds the invoice gross ${round2(input.grossAmount).toFixed(2)}.`,
+      `The advances asked to clear ${money.fromUnits(total)} ${input.currency}, which exceeds the invoice gross ${money.text(input.grossAmount)}.`,
       'Clear no more than the invoice is worth.',
     );
   }
 
   const settlements: InvoiceSettlement[] = [];
   for (const [indicator, references] of groups) {
-    const applied = round2(references.reduce((sum, row) => sum + row.applied, 0));
+    const applied = Number(money.fromUnits(references.reduce((sum, row) => sum + money.units(row.applied), 0n)));
     const clearing = await clearDownPaymentsTx(tx, {
       client: input.client, changedBy: input.changedBy,
       vendorNumber: input.supplierNumber, companyCode: input.companyCode, indicator,
@@ -694,6 +699,17 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
     }
     const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
     const chart = supplier.chartOfAccounts;
+    // The invoice currency's decimals decide every amount below; an unknown currency is refused here.
+    const money = refusing(await moneyFor(tx, view.currency).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new InvoiceVerificationError(error.message, error.remedy);
+      throw error;
+    }), (e) => new InvoiceVerificationError(e.message, e.remedy));
+    const entered = (value: number, label: string): number => {
+      try { return Number(money.fromUnits(money.entered(value, label))); } catch (error) {
+        if (error instanceof MoneyError) throw new InvoiceVerificationError(error.message, error.remedy);
+        throw error;
+      }
+    };
 
     const itemsByNumber = new Map(view.items.map((i) => [i.itemNumber, i]));
     const taxRates = new Map<string, number>();
@@ -746,9 +762,10 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
         if (rate === undefined) {
           throw new InvoiceVerificationError(`Tax code ${code} does not stand for country ${company.country}.`, 'Choose a standing tax code.');
         }
-        taxAmount = round2((line.netAmount * rate) / 100);
+        taxAmount = Number(money.fromUnits(money.percentOf(entered(line.netAmount, 'The net amount'), rate)));
       }
-      const expected = round2((line.quantity * Number(item.netPrice)) / Number(item.priceUnit));
+      // The order-price value: quantity × price ÷ price unit, calculated once and rounded to the currency.
+      const expected = Number(money.fromUnits(money.extend(line.quantity, item.netPrice, item.priceUnit)));
       // An account-assigned item is judged again here, on the day the money is posted, by
       // the same rule the order was written under. A cost centre locked since October, an
       // internal order that ended, an asset since deactivated: none of them may take the
@@ -769,15 +786,17 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
         // The value is what the supplier charged: with no stock to revalue there is no
         // variance to separate, and the order price was a planning figure. The last share
         // takes the rounding so the shares add up to the invoice exactly.
-        const net = round2(line.netAmount);
-        let given = 0;
+        // The shares are allocated exactly: each takes its percentage rounded once, and the last takes the remainder,
+        // so they add up to the invoice net to the last minor unit (deterministic and auditable).
+        const netUnits = money.entered(line.netAmount, 'The net amount');
+        let given = 0n;
         judged.rows.forEach((row, index) => {
-          const amount = index === judged.rows.length - 1
-            ? round2(net - given)
-            : round2((net * row.percentage) / 100);
-          given = round2(given + amount);
+          const amountUnits = index === judged.rows.length - 1
+            ? netUnits - given
+            : money.percentOf(money.fromUnits(netUnits), row.percentage);
+          given += amountUnits;
           shares.push({
-            glAccount: row.glAccount, amount,
+            glAccount: row.glAccount, amount: Number(money.fromUnits(amountUnits)),
             costCenter: row.costCenter, internalOrder: row.internalOrder,
             assetNumber: row.assetNumber, assetSubNumber: row.assetSubNumber,
             assetTransactionType: row.assetTransactionType,
@@ -785,8 +804,8 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
         });
       }
       prepared.push({
-        item, quantity: line.quantity, netAmount: round2(line.netAmount), expected,
-        variance: round2(line.netAmount - expected),
+        item, quantity: line.quantity, netAmount: entered(line.netAmount, 'The net amount'), expected,
+        variance: Number(money.fromUnits(money.units(line.netAmount) - money.units(expected))),
         taxCode: code || null, taxAmount,
         valuationClass: item.accountAssignmentCategory
           ? ''
@@ -795,11 +814,12 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       });
     }
 
-    const netTotal = round2(prepared.reduce((s, p) => s + p.netAmount, 0));
-    const taxTotal = round2(prepared.reduce((s, p) => s + p.taxAmount, 0));
-    if (Math.abs(round2(netTotal + taxTotal) - round2(input.grossAmount)) > 0.005) {
+    const netUnits = prepared.reduce((t, p) => t + money.units(p.netAmount), 0n);
+    const taxUnits = prepared.reduce((t, p) => t + money.units(p.taxAmount), 0n);
+    const grossUnits = money.entered(input.grossAmount, 'The gross amount');
+    if (netUnits + taxUnits !== grossUnits) {
       throw new InvoiceVerificationError(
-        `The gross amount ${round2(input.grossAmount).toFixed(2)} does not reconcile: items net ${netTotal.toFixed(2)} plus tax ${taxTotal.toFixed(2)} is ${round2(netTotal + taxTotal).toFixed(2)}.`,
+        `The gross amount ${money.fromUnits(grossUnits)} does not reconcile: items net ${money.fromUnits(netUnits)} plus tax ${money.fromUnits(taxUnits)} is ${money.fromUnits(netUnits + taxUnits)}.`,
         'Correct the gross amount or the item amounts so the document balances.',
       );
     }
@@ -827,7 +847,7 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
         // value goes where the order said it belonged.
         for (const share of p.shares) {
           journalLines.push({
-            glAccount: share.glAccount, debitCredit: 'S', amount: share.amount.toFixed(2),
+            glAccount: share.glAccount, debitCredit: 'S', amount: money.text(share.amount),
             ...(share.costCenter ? { costCenter: share.costCenter } : {}),
             ...(share.internalOrder ? { internalOrder: share.internalOrder } : {}),
             ...(share.assetNumber ? { lineText: `Asset ${share.assetNumber}/${share.assetSubNumber ?? '0000'}` } : {}),
@@ -842,28 +862,28 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
         }
       } else {
         journalLines.push({
-          glAccount: await grIrAccount(), debitCredit: 'S', amount: p.expected.toFixed(2),
+          glAccount: await grIrAccount(), debitCredit: 'S', amount: money.text(p.expected),
           material: p.item.materialNumber!, plant: p.item.plant,
         });
         if (p.variance !== 0) {
           const prd = await resolveAccount(tx, input.client, chart, 'PRICE_DIFFERENCE', p.valuationClass);
           journalLines.push({
             glAccount: prd, debitCredit: p.variance > 0 ? 'S' : 'H',
-            amount: Math.abs(p.variance).toFixed(2), material: p.item.materialNumber!, plant: p.item.plant,
+            amount: money.text(Math.abs(p.variance)), material: p.item.materialNumber!, plant: p.item.plant,
           });
         }
       }
       if (p.taxAmount > 0 && p.taxCode) {
-        taxByCode.set(p.taxCode, round2((taxByCode.get(p.taxCode) ?? 0) + p.taxAmount));
+        taxByCode.set(p.taxCode, Number(money.fromUnits(money.units(taxByCode.get(p.taxCode) ?? 0) + money.units(p.taxAmount))));
       }
     }
     for (const [code, amount] of taxByCode) {
       const taxAccount = await resolveAccount(tx, input.client, chart, 'TAX', '');
-      journalLines.push({ glAccount: taxAccount, debitCredit: 'S', amount: amount.toFixed(2), taxCode: code });
+      journalLines.push({ glAccount: taxAccount, debitCredit: 'S', amount: money.text(amount), taxCode: code });
     }
     journalLines.push({
       glAccount: supplier.reconciliationAccount, debitCredit: 'H',
-      amount: round2(input.grossAmount).toFixed(2), businessPartner: view.supplierNumber,
+      amount: money.fromUnits(grossUnits), businessPartner: view.supplierNumber,
     });
 
     // Payment terms and the due date they compute.
@@ -902,6 +922,7 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       origin: { documentClass: INVOICE_CLASS, documentKey: number },
       postedBy: input.changedBy,
       transactionCode: INVOICE_CAPABILITY,
+      precision: 'CURRENCY',
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new InvoiceVerificationError(error.message, error.remedy);
       throw error;
@@ -940,7 +961,7 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       purchaseOrderNumber: input.orderNumber,
       invoiceDate: input.invoiceDate, postingDate: input.postingDate,
       supplierReference: input.supplierReference, currency: view.currency,
-      grossAmount: String(round2(input.grossAmount)), taxAmount: String(taxTotal),
+      grossAmount: money.fromUnits(grossUnits), taxAmount: money.fromUnits(taxUnits),
       paymentTerms: supplier.paymentTermsCode, baselineDate: baseline, dueDate: due,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
@@ -981,7 +1002,7 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       changeType: 'CREATE', changedBy: input.changedBy, transactionCode: INVOICE_CAPABILITY,
       after: {
         order: input.orderNumber, supplier: view.supplierNumber,
-        gross: round2(input.grossAmount), tax: taxTotal, journal: journal.documentNumber,
+        gross: money.fromUnits(grossUnits), tax: money.fromUnits(taxUnits), journal: journal.documentNumber,
         advances: settlements.map((row) => ({
           clearing: row.clearingNumber, indicator: row.indicator, applied: row.totalApplied,
         })),

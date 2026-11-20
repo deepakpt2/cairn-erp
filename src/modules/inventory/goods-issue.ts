@@ -31,6 +31,8 @@ import {
 import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { allocateNumber } from '../../platform/numbering';
+import { fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { MoneyError, currencyScale, moneyFor } from '../../platform/posting/money';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
@@ -231,7 +233,6 @@ export interface GoodsIssueView {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 function requireDate(value: string, what: string) {
   if (!ISO_DATE.test(value)) {
@@ -342,6 +343,7 @@ async function toView(
     eq(plantTable.client, client), eq(plantTable.plant, lines[0]?.plant ?? ''),
   ));
   const scenario = GOODS_ISSUE_SCENARIOS.find((s) => s.movementType === lines[0]?.movementType);
+  const valuePlaces = lines[0]?.currency ? await currencyScale(tx, lines[0].currency) : 2;
 
   return {
     materialDocumentNumber: header.materialDocumentNumber,
@@ -352,7 +354,7 @@ async function toView(
     movementCode: scenario?.code ?? '',
     journalDocumentNumber: header.journalDocumentNumber,
     companyCode: plantRow?.companyCode ?? '',
-    totalValue: lines.reduce((sum, l) => sum + Number(l.value), 0).toFixed(2),
+    totalValue: fromScaled(lines.reduce((sum, l) => sum + roundToScale(String(l.value ?? '0'), valuePlaces), 0n), valuePlaces),
     lines: lines.map((l, index) => ({
       lineNumber: l.lineNumber,
       movementType: l.movementType,
@@ -612,6 +614,11 @@ export async function postGoodsIssue(
       orderOpenAfter: string | null;
     };
     const prepared: Prepared[] = [];
+    // Values are rounded at the company currency's decimals (3 for KWD), once each, exactly.
+    const money = await moneyFor(tx, company.currency as string).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new GoodsIssueError(error.message, error.remedy);
+      throw error;
+    });
     const claimedStock = new Map<string, number>();
 
     for (const line of input.lines) {
@@ -900,7 +907,7 @@ export async function postGoodsIssue(
         if (caught instanceof UnitConversionError) throw new GoodsIssueError(caught.message, caught.remedy);
         throw caught;
       });
-      const value = round2(conversion.baseQuantity * price);
+      const value = Number(money.fromUnits(money.extend(conversion.baseQuantity, price, 1)));
       const claimKey = `${materialNumber}|${line.plant}|${issuingLocation}|UNRESTRICTED|${postingBatch}`;
       const alreadyClaimed = claimedStock.get(claimKey) ?? 0;
       if (!location.row?.allowNegativeStock && onHand + 1e-9 < conversion.baseQuantity + alreadyClaimed) {
@@ -940,12 +947,12 @@ export async function postGoodsIssue(
       }
       journalLines.push({
         glAccount: inventoryAccountCache.get(cacheKey)!,
-        debitCredit: 'H', amount: p.value.toFixed(2),
+        debitCredit: 'H', amount: money.text(p.value),
         material: p.materialNumber, plant: p.line.plant,
       });
       journalLines.push({
         glAccount: expenseAccountCache.get(cacheKey)!,
-        debitCredit: 'S', amount: p.value.toFixed(2),
+        debitCredit: 'S', amount: money.text(p.value),
         costCenter: scenario.accountAssignment === 'COST_CENTER' ? p.line.costCenter : undefined,
         productionOrder: p.productionOrderNumber ?? undefined,
         material: p.materialNumber, plant: p.line.plant,
@@ -973,6 +980,7 @@ export async function postGoodsIssue(
       origin: { documentClass: MATERIAL_DOCUMENT_CLASS, documentKey: number },
       postedBy: input.changedBy,
       transactionCode: GOODS_ISSUE_CAPABILITY,
+      precision: 'CURRENCY',
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new GoodsIssueError(error.message, error.remedy);
       throw error;

@@ -30,7 +30,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | platform/notification | finance, foundation, people, platform, platform/job, production, purchasing, sales, ui/shell, worker/jobs.ts |
 | platform/numbering | finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, quality, sales |
 | platform/periods | audit, finance, foundation, inventory, people, platform/posting, platform/tenancy, production, purchasing, sales |
-| platform/posting | finance, foundation, inventory, people, platform/tenancy, production, purchasing, sales |
+| platform/posting | finance, foundation, inventory, people, platform/tenancy, production, purchasing, sales, ui/money.ts |
 | platform/registry | app/command.ts, app/registry, app/search |
 | platform/schema.ts | platform/db |
 | platform/security | foundation, platform/auth, platform/mail |
@@ -40,13 +40,14 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | ui/fields | finance, foundation, inventory, purchasing, sales |
 | ui/kit | app/account, app/clients, app/config, app/dev, app/menu, app/registry, app/search, audit, finance, foundation, inventory, output, people, platform, production, purchasing, quality, sales |
 | ui/lock | finance, foundation, inventory, platform, production, purchasing, quality |
+| ui/money.ts | finance, purchasing, sales |
 | ui/output | finance, foundation, inventory, output, production, purchasing, sales |
 | ui/release | finance |
 | ui/shell | app/layout.tsx, app/menu, app/page.tsx, app/registry, app/search |
 | worker/config.ts | worker/index.ts |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (186)
+## Files (188)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -164,8 +165,9 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | index.ts | ACCOUNT_TYPE_LABELS, PeriodError, derivePosition, periodDates, checkPostingAllowed, periodStatus, getVariant, getCompanyCode, getPostingPeriodVariant, buildPeriodRows, periodWindows | company_code, fiscal_year_period, fiscal_year_variant, posting_period_rule, posting_period_variant |
 | windows.ts | periodWindows |  |
 | **platform/posting/** | | |
-| decimal.ts | MONEY_SCALE, toScaled, fromScaled, sumScaled, equalsScaled, multiplyScaled, DecimalError |  |
+| decimal.ts | MONEY_SCALE, toScaled, fromScaled, sumScaled, equalsScaled, multiplyScaled, divideRound, numberToDecimalText, roundToScale, exactToScale, DecimalError |  |
 | index.ts | JOURNAL_DOCUMENT_CLASS, postJournalEntry, reverseJournalEntry, computeTotals, PostingError | document_type, gl_account, journal_entry, journal_entry_line, number_range_allocation |
+| money.ts | MoneyError, currencyScale, assertStorableScale, moneyOf, refusing, moneyFor, allocateUnits, currencyDecimalsMap, currencyDecimalsFor | currency |
 | **platform/registry/** | | |
 | index.ts | resolveTerm, searchRegistry, suggestRegistry, aliasesFor, coverageLabel | term_alias, term_registry |
 | suggest.ts | compactCode, suggestionWords, equallyNear, exactOwnIdentifier, rankSuggestions, rankRegistry |  |
@@ -224,6 +226,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | standard-structure.ts | STANDARD_STRUCTURE, STRUCTURE_ACTIVITIES, applyStandardStructure, applyStandardStructureInTransaction | company_code, controlling_area, credit_control_area, plant, purchasing_org, purchasing_org_plant, sales_area, sales_org, sales_org_distribution_channel, sales_org_division, sales_org_text, storage_location |
 | walkthrough-install-guard.ts | WALKTHROUGH_INSTALL_OPERATION, WALKTHROUGH_INSTALL_OBJECT_CLASS, WALKTHROUGH_INSTALL_REASON, assertFreshWalkthroughTenantInventory, assertFreshWalkthroughFirstAdmin, assertWalkthroughScopeSet, assertWalkthroughCheckpointRequest, assertWalkthroughCheckpointActor, assertWalkthroughDatabaseTarget, assertWalkthroughSeedRuntime |  |
 | walkthrough-provisioning.ts | assertFreshWalkthroughTenant | app_user, auth_org_restriction, client, user_role |
+| **ui/** | | |
+| money.ts | fmt, fmtIn, fmtFlex |  |
 | **ui/attention/** | | |
 | AttentionPanel.tsx | AttentionPanel |  |
 | **ui/fields/** | | |

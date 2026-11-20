@@ -157,12 +157,12 @@ export const toleranceGroupValuesSchema = z.object({
     .trim()
     .transform((value) => value.toUpperCase())
     .pipe(z.string().regex(/^([A-Z0-9]{1,4})?$/, 'The Tolerance Group is up to four letters or digits, or blank for the default group.')),
-  maxDocumentAmount: decimal(13, 2, 'The Maximum Amount per Document'),
-  maxLineAmount: decimal(11, 2, 'The Maximum Amount per Line Item'),
+  maxDocumentAmount: decimal(13, 4, 'The Maximum Amount per Document'),
+  maxLineAmount: decimal(11, 4, 'The Maximum Amount per Line Item'),
   maxCashDiscountPercent: decimal(3, 3, 'The Maximum Cash Discount Percentage')
     .refine((value) => scaledValue(value, 3) <= 100_000n, 'The Maximum Cash Discount Percentage is between 0.000 and 100.000.'),
-  paymentDiffRevenueAmount: optionalDecimal(5, 2, 'The Payment Difference Revenue amount'),
-  paymentDiffExpenseAmount: optionalDecimal(5, 2, 'The Payment Difference Expense amount'),
+  paymentDiffRevenueAmount: optionalDecimal(5, 4, 'The Payment Difference Revenue amount'),
+  paymentDiffExpenseAmount: optionalDecimal(5, 4, 'The Payment Difference Expense amount'),
   paymentDiffRevenuePercent: optionalDecimal(2, 1, 'The Payment Difference Revenue percentage'),
   paymentDiffExpensePercent: optionalDecimal(2, 1, 'The Payment Difference Expense percentage'),
   reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),

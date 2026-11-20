@@ -150,7 +150,7 @@ describe('OBA4 define employee tolerance groups', () => {
     expect(result).toMatchObject({ changed: true, companyCode: '', groupKey: '' });
 
     expect(await storedGroup('', '')).toMatchObject({
-      maxDocumentAmount: '100000.00', maxLineAmount: '50000.00',
+      maxDocumentAmount: '100000.0000', maxLineAmount: '50000.0000',
       maxCashDiscountPercent: '3.000', createdBy: TEST_ACTOR,
     });
 
@@ -189,7 +189,7 @@ describe('OBA4 define employee tolerance groups', () => {
     }));
     expect(result.changed).toBe(true);
     expect(await storedGroup()).toMatchObject({
-      paymentDiffRevenueAmount: '0.00', paymentDiffExpenseAmount: '0.00',
+      paymentDiffRevenueAmount: '0.0000', paymentDiffExpenseAmount: '0.0000',
       paymentDiffRevenuePercent: '0.0', paymentDiffExpensePercent: '0.0',
     });
   });
@@ -207,7 +207,7 @@ describe('OBA4 define employee tolerance groups', () => {
       mode: 'CHANGE', maxLineAmount: '25000.00', maxCashDiscountPercent: '5.000',
     }));
     expect(changed.changed).toBe(true);
-    expect(await storedGroup()).toMatchObject({ maxLineAmount: '25000.00', maxCashDiscountPercent: '5.000' });
+    expect(await storedGroup()).toMatchObject({ maxLineAmount: '25000.0000', maxCashDiscountPercent: '5.000' });
 
     const repeated = await saveEmployeeToleranceGroup(creation({
       mode: 'CHANGE', maxLineAmount: '25000.00', maxCashDiscountPercent: '5.000',
@@ -218,7 +218,7 @@ describe('OBA4 define employee tolerance groups', () => {
     expect(documents).toHaveLength(2);
     const change = documents.find((document) => document.changeType === 'CHANGE');
     expect(change?.items.find((item) => item.fieldName === 'maxLineAmount'))
-      .toMatchObject({ oldValue: '50000.00', newValue: '25000.00', isSecurityRelevant: 'true' });
+      .toMatchObject({ oldValue: '50000.0000', newValue: '25000.0000', isSecurityRelevant: 'true' });
   });
 
   /* ── The zero rule, in its three shapes ───────────────────────────────────── */
@@ -231,8 +231,8 @@ describe('OBA4 define employee tolerance groups', () => {
     // A zero on either side switches that side off (R-88): both of these stand.
     await saveEmployeeToleranceGroup(creation({ groupKey: 'Z1', maxLineAmount: '0.00' }));
     await saveEmployeeToleranceGroup(creation({ groupKey: 'Z2', maxDocumentAmount: '0.00', maxLineAmount: '150000.00' }));
-    expect(await storedGroup(COMPANY, 'Z1')).toMatchObject({ maxLineAmount: '0.00' });
-    expect(await storedGroup(COMPANY, 'Z2')).toMatchObject({ maxDocumentAmount: '0.00', maxLineAmount: '150000.00' });
+    expect(await storedGroup(COMPANY, 'Z1')).toMatchObject({ maxLineAmount: '0.0000' });
+    expect(await storedGroup(COMPANY, 'Z2')).toMatchObject({ maxDocumentAmount: '0.0000', maxLineAmount: '150000.0000' });
   });
 
   it('stores the 100.000 cash discount ceiling whole, and refuses 100.001', async () => {
@@ -244,7 +244,7 @@ describe('OBA4 define employee tolerance groups', () => {
   });
 
   it('refuses values out of shape at each width, bad keys, and a missing reason', async () => {
-    await expect(saveEmployeeToleranceGroup(creation({ groupKey: 'Z5', maxDocumentAmount: '1.234' })))
+    await expect(saveEmployeeToleranceGroup(creation({ groupKey: 'Z5', maxDocumentAmount: '1.23456' })))
       .rejects.toThrow(/Maximum Amount per Document is a number/);
     await expect(saveEmployeeToleranceGroup(creation({ groupKey: 'Z5', paymentDiffRevenuePercent: '0.55' })))
       .rejects.toThrow(/Payment Difference Revenue percentage is a number/);

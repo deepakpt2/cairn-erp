@@ -1,3 +1,4 @@
+import { currencyDecimalsFor } from '@/platform/posting/money';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
@@ -68,7 +69,7 @@ export default async function ScreenPage({ searchParams }: {
         </>
       }
     >
-      <ProfitLossShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
+      <ProfitLossShell decimals={await currencyDecimalsFor(session.user.client)} canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
     </Page>
   );
 }

@@ -29,6 +29,8 @@
  * Every step that contributed is returned, so the caller can write the document's conditions beside the
  * totals. A discounted invoice whose arithmetic lives nowhere is a number nobody can defend.
  */
+import { fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { currencyScale } from '../../platform/posting/money';
 import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { type Tx, withTenant } from '../../platform/db/client';
@@ -103,8 +105,9 @@ function round(value: number, places: number): string {
   if (!Number.isFinite(value)) {
     throw new PricingProcedureError('A price did not scale to a number.', 'Check the condition record amount.');
   }
-  const factor = 10 ** places;
-  return (Math.round((value + Number.EPSILON) * factor) / factor).toFixed(places);
+  // Exact, from the number's shortest decimal form: 1.005 is 1.005 here (not its binary expansion), and an
+  // exact half rounds away from zero for either sign.
+  return fromScaled(roundToScale(value, places), places);
 }
 
 /** Money rounded to a stated number of places, for the documents that have to carry the figure. */
@@ -387,6 +390,10 @@ async function findRecord(
  * their share of it.
  */
 export async function priceDocument(tx: Tx, input: PriceDocumentInput): Promise<PricedDocument> {
+  // Money is rounded at the document currency's decimals (3 for KWD), never at a fixed two. Prices, rates and
+  // quantities keep their own precision; only the amounts a document states are rounded here, once each.
+  const places = await currencyScale(tx, input.currency);
+  const round2 = (value: number) => round(value, places);
   const procedureCode = await resolvePricingProcedure(tx, input.client, {
     salesOrg: input.salesOrg,
     distributionChannel: input.distributionChannel,
@@ -436,7 +443,7 @@ export async function priceDocument(tx: Tx, input: PriceDocumentInput): Promise<
         isHeader: true,
       }, country);
       if (!evaluated) continue;
-      const shares = distribute(evaluated.amount, states.map((state) => state.netValue));
+      const shares = distribute(evaluated.amount, states.map((state) => state.netValue), places);
       headerConditions.push({
         lineNumber: 0,
         stepNumber: step.stepNumber,
@@ -595,8 +602,9 @@ function documentStepValues(states: ItemState[]): Map<number, number> {
  * That is the whole point of distributing it — a document whose lines do not add up to its value is a
  * document that cannot be reconciled.
  */
-function distribute(total: number, weights: number[]): { parts: number[]; weights: number[] } {
-  const cents = Math.round(Number(round2(total)) * 100);
+function distribute(total: number, weights: number[], places = 2): { parts: number[]; weights: number[] } {
+  // Whole minor units of the currency (cents, fils, yen): the shares are integers that sum exactly to the total.
+  const cents = Number(roundToScale(total, places));
   const positive = weights.map((weight) => Math.max(weight, 0));
   const sum = positive.reduce((acc, weight) => acc + weight, 0);
   // Nothing to be in proportion to: every line carries the same share, which is what a document of
@@ -615,7 +623,7 @@ function distribute(total: number, weights: number[]): { parts: number[]; weight
     parts[entry.index] += cents < 0 ? -1 : 1;
     remaining -= 1;
   }
-  return { parts: parts.map((cents_) => cents_ / 100), weights };
+  return { parts: parts.map((cents_) => cents_ / 10 ** places), weights };
 }
 
 /**
@@ -663,16 +671,19 @@ export const TAX_STEP_NUMBER = 40;
  */
 export function taxConditionFor(input: {
   lineNumber: number; base: number; rate: number; amount: number; currency: string;
+  /** The document currency's decimals (default 2). */
+  places?: number;
 }): PricedCondition {
+  const places = input.places ?? 2;
   return {
     lineNumber: input.lineNumber,
     stepNumber: TAX_STEP_NUMBER,
     conditionType: TAX_CONDITION_TYPE,
     conditionClass: 'TAX',
     origin: 'ITEM',
-    baseValue: input.base.toFixed(2),
+    baseValue: round(input.base, places),
     rate: input.rate.toFixed(4),
-    amount: input.amount.toFixed(2),
+    amount: round(input.amount, places),
     priceUnit: 1,
     // A tax names the rate it was charged at and no record: there is no condition record to point at.
     conditionNumber: null,
@@ -1039,7 +1050,7 @@ export interface StoredCondition {
 export function scaleLineConditions(
   conditions: StoredCondition[],
   factor: number,
-  input: { lineNumber: number; quantity: number },
+  input: { lineNumber: number; quantity: number; /** The document currency's decimals (default 2). */ places?: number },
 ): {
   conditions: PricedCondition[];
   netAmount: string;
@@ -1051,6 +1062,7 @@ export function scaleLineConditions(
   conditionNumber: string;
 } | undefined {
   if (conditions.length === 0) return undefined;
+  const round2 = (value: number) => round(value, input.places ?? 2);
   const magnitude = Math.abs(factor);
   const flip = factor < 0 ? -1 : 1;
 

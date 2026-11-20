@@ -26,6 +26,8 @@
  * keeps both rows, which is also why re-billing a cancelled document is refused here and belongs to the credit
  * memo path that has to be built first (DI-020).
  */
+import { fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { currencyScale } from '../../platform/posting/money';
 import { z } from 'zod';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
@@ -473,7 +475,10 @@ export const billingPlanDateBillingInput = z.object({
 
 export type BillingPlanDateBillingInput = z.infer<typeof billingPlanDateBillingInput>;
 
-const round2 = (value: number) => (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+/** Money to `places` decimals as text, exact and half away from zero (see platform/posting/money.ts). */
+const roundTo = (value: number, places: number): string => fromScaled(roundToScale(value, places), places);
+/** Due-list values, where the row's currency is not known: exact at the storage scale, shown with at least two decimals. */
+const round2 = (value: number) => roundTo(value, 4).replace(/(\.\d\d)(\d*?)0*$/, (_m, two: string, rest: string) => two + rest);
 /** A share of a quantity, kept to the three decimal places the sales documents carry. */
 const roundQuantity = (value: number) => Math.round((value + Number.EPSILON) * 1000) / 1000;
 
@@ -1017,6 +1022,7 @@ async function postBuiltBilling(input: {
   // entitled to set the advance of one against the value of another: each is cleared against what is
   // left of the receivable, in turn, and what none of them reach stays open.
   let downPayment: DownPaymentClearing | null = null;
+  const clearedPlaces = await withTenant(input.client, (tx) => currencyScale(tx, built.currency));
   if (invoice.journalDocumentNumber) {
     for (const orderNumber of built.orderNumbers) {
       const cleared = await clearDownPaymentsForInvoice({
@@ -1036,7 +1042,7 @@ async function postBuiltBilling(input: {
       if (!downPayment) downPayment = cleared;
       else if (Number(cleared.cleared) > 0 || cleared.error) {
         downPayment = {
-          cleared: round2(Number(downPayment.cleared) + Number(cleared.cleared)),
+          cleared: fromScaled(roundToScale(downPayment.cleared, clearedPlaces) + roundToScale(cleared.cleared, clearedPlaces), clearedPlaces),
           clearingNumber: cleared.clearingNumber ?? downPayment.clearingNumber,
           error: [downPayment.error, cleared.error].filter((row) => row).join(' ') || null,
         };
@@ -1288,6 +1294,9 @@ async function buildLinesForDelivery(
       eq(salesOrder.client, client), eq(salesOrder.orderNumber, deliveryHeader.orderNumber),
     )).limit(1);
     if (!order) throw new BillingError(`Sales order ${deliveryHeader.orderNumber} could not be read.`);
+    // Every billed amount is rounded at the order currency's decimals, not at a fixed two.
+    const places = await currencyScale(tx, order.currency);
+    const round2 = (value: number) => roundTo(value, places);
     const country = order.companyCode
       ? (await tx.select({ country: companyCodeTable.country }).from(companyCodeTable).where(and(
         eq(companyCodeTable.client, client), eq(companyCodeTable.companyCode, order.companyCode),
@@ -1364,7 +1373,7 @@ async function buildLinesForDelivery(
         .filter((condition) => condition.lineNumber === line.orderLineNumber);
       const scaled = standing.length > 0
         ? scaleLineConditions(standing, ordered === 0 ? 0 : billed / ordered, {
-          lineNumber: 0, quantity: billed,
+          lineNumber: 0, quantity: billed, places,
         })
         : undefined;
 
@@ -1401,7 +1410,7 @@ async function buildLinesForDelivery(
         // Written down, so what the document posts can be read back from it: account key MWS reaches
         // determination for every document, and not only for the ones the procedure priced.
         billedConditions = [taxConditionFor({
-          lineNumber: 0, base: taxed.base, rate: taxed.rate, amount: taxAmount, currency: order.currency,
+          lineNumber: 0, base: taxed.base, rate: taxed.rate, amount: taxAmount, currency: order.currency, places,
         })];
       }
       netTotal += netAmount;
@@ -1438,6 +1447,7 @@ async function buildLinesForDelivery(
       const accounts = billedConditions
         ? await determineLineAccounts(tx, client, {
           chartOfAccounts: companyChart,
+          places,
           salesOrg: deliveryHeader.salesOrg,
           customerAccountAssignmentGroup: customerArea?.group,
           materialAccountAssignmentGroup: materialGroups.get(line.materialNumber),
@@ -1590,6 +1600,9 @@ async function writeBillingDocument(
     changeAfter?: Record<string, string>;
   },
 ): Promise<Extract<BuiltBilling, { replayed: false }>> {
+    // The document's own figures are written at the billing currency's decimals.
+    const round2 = (value: number) => roundTo(value, places);
+    const places = await currencyScale(tx, input.header.currency);
     // The document type is configuration now (9226); see the same note in sales-order.ts.
     const billingType = await salesDocumentTypeFor(tx, client, STANDARD_BILLING_TYPE);
     if (!billingType) {
@@ -1866,6 +1879,9 @@ export async function createBillingFromPlanDate(
     }
     const orderBlock = await standingDetermination(parsed.client, order.orderNumber);
     const held = orderBlock?.status === 'BLOCKED';
+    // Every billed amount is rounded at the order currency's decimals, not at a fixed two.
+    const places = await currencyScale(tx, order.currency);
+    const round2 = (value: number) => roundTo(value, places);
 
     // The share of the item this date bills. Nothing else is asked for and nothing else is accepted:
     // the quantity is the order's, and the value follows from it.
@@ -1884,7 +1900,7 @@ export async function createBillingFromPlanDate(
     const standing = (await documentConditionsOf(tx, parsed.client, 'ORDER', order.orderNumber))
       .filter((condition) => condition.lineNumber === orderLine.lineNumber);
     const scaled = standing.length > 0
-      ? scaleLineConditions(standing, billed / ordered, { lineNumber: 0, quantity: billed })
+      ? scaleLineConditions(standing, billed / ordered, { lineNumber: 0, quantity: billed, places })
       : undefined;
 
     let netAmount: number;
@@ -1918,7 +1934,7 @@ export async function createBillingFromPlanDate(
       rate = taxed.rate;
       taxAmount = Number(round2(taxed.amount));
       billedConditions = [taxConditionFor({
-        lineNumber: 0, base: taxed.base, rate: taxed.rate, amount: taxAmount, currency: order.currency,
+        lineNumber: 0, base: taxed.base, rate: taxed.rate, amount: taxAmount, currency: order.currency, places,
       })];
     }
     const netTotal = Number(round2(netAmount));
@@ -1946,6 +1962,7 @@ export async function createBillingFromPlanDate(
     const accounts = billedConditions
       ? await determineLineAccounts(tx, parsed.client, {
         chartOfAccounts: companyChart,
+        places,
         salesOrg: order.salesOrg,
         customerAccountAssignmentGroup: customerArea?.group,
         materialAccountAssignmentGroup: materialRow?.group,

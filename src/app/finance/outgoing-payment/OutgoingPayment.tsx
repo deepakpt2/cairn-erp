@@ -1,5 +1,6 @@
 'use client';
 
+import { fmt, type CurrencyDecimals } from '@/ui/money';
 import { useActionState, useState } from 'react';
 
 import type { OutgoingPaymentView } from '@/modules/finance/outgoing-payment';
@@ -20,12 +21,15 @@ function Message({ state }: { state: OutgoingPaymentActionState }) {
 const itemKey = (i: { documentNumber: string; fiscalYear: number; lineNumber: number }) =>
   `${i.documentNumber}|${i.fiscalYear}|${i.lineNumber}`;
 
-export default function OutgoingPayment({ view, loadError, canEnter, today }: {
+export default function OutgoingPayment({ view, loadError, canEnter, today, decimals }: {
+  decimals: CurrencyDecimals;
   view: OutgoingPaymentView | null;
   loadError: string | null;
   canEnter: boolean;
   today: string;
 }) {
+  // The decimals of the currency the open items stand in (a payment settles one currency).
+  const d = decimals[view?.openItems[0]?.currency ?? ''] ?? 2;
   const [state, action, posting] = useActionState(postPaymentAction, INITIAL);
   const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -69,7 +73,7 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
         {view && (
           <p className="mt-2 text-sm">
             Vendor <strong>{view.vendor}</strong> in company <strong>{view.companyCode}</strong>:
-            {' '}{view.openItems.length} open items standing at {view.openBalance.toFixed(2)}.
+            {' '}{view.openItems.length} open items standing at {fmt(view.openBalance, d)}.
           </p>
         )}
       </section>
@@ -149,11 +153,11 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
                         <td>{item.postingDate}</td>
                         <td>{item.dueDate}</td>
                         <td>{item.currency}</td>
-                        <td className="num">{item.signed.toFixed(2)}</td>
+                        <td className="num">{fmt(item.signed, d)}</td>
                         <td>
                           <input
                             name={`applied-${itemKey(item)}`} className="input w-24"
-                            placeholder={item.signed.toFixed(2)}
+                            placeholder={fmt(item.signed, d)}
                             value={applied[itemKey(item)] ?? ''}
                             onChange={(e) => setApplied((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
                           />
@@ -161,7 +165,7 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
                         <td>
                           <input
                             name={`discount-${itemKey(item)}`} className="input w-20"
-                            placeholder={item.discountAmount > 0 ? item.discountAmount.toFixed(2) : '0.00'}
+                            placeholder={item.discountAmount > 0 ? fmt(item.discountAmount, d) : fmt(0, d)}
                             value={discounts[itemKey(item)] ?? ''}
                             onChange={(e) => setDiscounts((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
                           />
@@ -178,7 +182,7 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
                 </table>
               </div>
               <p className="mt-2 text-sm text-ink-soft">
-                Allocated {allocated.toFixed(2)} · difference {difference.toFixed(2)}.
+                Allocated {fmt(allocated, d)} · difference {fmt(difference, d)}.
                 Each item settles by what is applied plus any discount taken, as chosen per item. What remains
                 unassigned posts on account or, within the tolerance group, as a payment difference.
               </p>

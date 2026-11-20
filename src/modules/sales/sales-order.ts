@@ -20,6 +20,8 @@
  * number, that determination is what a follow-on document reads, and releasing it is the separate
  * authorized act in `releaseSalesOrderCredit` and on /finance/credit-release.
  */
+import { fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { currencyScale } from '../../platform/posting/money';
 import { z } from 'zod';
 import { and, asc, eq, sql } from 'drizzle-orm';
 
@@ -765,6 +767,9 @@ export async function createSalesOrder(
       documentPricingProcedure: orderType.pricingProcedure,
       customerPricingProcedure: customer.pricingProcedure,
     }, 10);
+    // Header values are written at the order currency's decimals (3 for KWD), not at a fixed two.
+    const places = await currencyScale(tx, parsed.currency);
+    const round2 = (value: number) => fromScaled(roundToScale(value, places), places);
     const netValue = round2(lines.reduce((sum, l) => sum + Number(l.netAmount), 0));
     const taxValue = round2(lines.reduce((sum, l) => sum + Number(l.taxAmount), 0));
     const grossValue = round2(Number(netValue) + Number(taxValue));
@@ -1099,6 +1104,8 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
       netTotal += Number(row.netAmount);
       taxTotal += Number(row.taxAmount);
     }
+    const places = await currencyScale(tx, before.currency);
+    const round2 = (value: number) => fromScaled(roundToScale(value, places), places);
     const net = round2(netTotal);
     const tax = round2(taxTotal);
     const gross = round2(netTotal + taxTotal);

@@ -1,3 +1,4 @@
+import { currencyDecimalsFor } from '@/platform/posting/money';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
@@ -70,7 +71,7 @@ export default async function ScreenPage({ searchParams }: {
         </>
       }
     >
-      <BalanceSheetShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
+      <BalanceSheetShell decimals={await currencyDecimalsFor(session.user.client)} canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
     </Page>
   );
 }

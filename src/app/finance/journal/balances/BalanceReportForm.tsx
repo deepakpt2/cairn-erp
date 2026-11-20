@@ -1,3 +1,4 @@
+import { fmtIn, type CurrencyDecimals } from '@/ui/money';
 import Link from 'next/link';
 
 import type { GlBalanceReportSelection, GlBalanceReportView } from '@/modules/finance/gl-balances';
@@ -10,7 +11,8 @@ const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-in
  * by range, opening / range turnover / closing per account with
  * account-group subtotals. The derivation lands in stage 3.
  */
-export default function BalanceReportForm({ selection, report, reportError, canDisplay }: {
+export default function BalanceReportForm({ selection, report, reportError, canDisplay, decimals }: {
+  decimals: CurrencyDecimals;
   selection: GlBalanceReportSelection;
   report: GlBalanceReportView | null;
   reportError: string | null;
@@ -99,13 +101,13 @@ export default function BalanceReportForm({ selection, report, reportError, canD
                     <td>{row.glAccount} — {row.accountName}</td>
                     <td>{row.accountGroup}</td>
                     <td>{row.currency}</td>
-                    <td className="num">{row.openingBalance.toFixed(2)}</td>
-                    <td className="num">{row.debitTurnover.toFixed(2)}</td>
-                    <td className="num">{row.creditTurnover.toFixed(2)}</td>
-                    <td className="num">{row.netChange.toFixed(2)}</td>
-                    <td className="num">{row.closingBalance.toFixed(2)}</td>
-                    <td className="num">{row.debitBalance.toFixed(2)}</td>
-                    <td className="num">{row.creditBalance.toFixed(2)}</td>
+                    <td className="num">{fmtIn(row.openingBalance, row.currency, decimals)}</td>
+                    <td className="num">{fmtIn(row.debitTurnover, row.currency, decimals)}</td>
+                    <td className="num">{fmtIn(row.creditTurnover, row.currency, decimals)}</td>
+                    <td className="num">{fmtIn(row.netChange, row.currency, decimals)}</td>
+                    <td className="num">{fmtIn(row.closingBalance, row.currency, decimals)}</td>
+                    <td className="num">{fmtIn(row.debitBalance, row.currency, decimals)}</td>
+                    <td className="num">{fmtIn(row.creditBalance, row.currency, decimals)}</td>
                     <td>
                       <Link className="text-accent hover:underline"
                         href={`/finance/journal/items?accountFrom=${row.glAccount}&companyCodes=${row.companyCode}&fiscalYear=${report.fiscalYear}${report.periodFrom === report.periodTo ? `&postingPeriod=${report.periodFrom}` : ''}`}>
@@ -138,12 +140,12 @@ export default function BalanceReportForm({ selection, report, reportError, canD
                         <td>{subtotal.accountGroup}</td>
                         <td>{subtotal.currency}</td>
                         <td>{subtotal.accountCount}</td>
-                        <td className="num">{subtotal.debitTurnover.toFixed(2)}</td>
-                        <td className="num">{subtotal.creditTurnover.toFixed(2)}</td>
-                        <td className="num">{subtotal.netChange.toFixed(2)}</td>
-                        <td className="num">{subtotal.closingBalance.toFixed(2)}</td>
-                        <td className="num">{subtotal.debitBalance.toFixed(2)}</td>
-                        <td className="num">{subtotal.creditBalance.toFixed(2)}</td>
+                        <td className="num">{fmtIn(subtotal.debitTurnover, subtotal.currency, decimals)}</td>
+                        <td className="num">{fmtIn(subtotal.creditTurnover, subtotal.currency, decimals)}</td>
+                        <td className="num">{fmtIn(subtotal.netChange, subtotal.currency, decimals)}</td>
+                        <td className="num">{fmtIn(subtotal.closingBalance, subtotal.currency, decimals)}</td>
+                        <td className="num">{fmtIn(subtotal.debitBalance, subtotal.currency, decimals)}</td>
+                        <td className="num">{fmtIn(subtotal.creditBalance, subtotal.currency, decimals)}</td>
                       </tr>
                     ))}
                   </tbody>

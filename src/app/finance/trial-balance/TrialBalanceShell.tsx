@@ -1,3 +1,4 @@
+import { fmt, type CurrencyDecimals } from '@/ui/money';
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import type { TrialBalanceResult, TrialBalanceSelection } from '@/modules/finance/trial-balance';
@@ -9,13 +10,15 @@ import type { TrialBalanceResult, TrialBalanceSelection } from '@/modules/financ
  * to balances and line items. Read-only; unassigned accounts
  * are named, never dropped.
  */
-export default function TrialBalanceShell({ canUse, companies, versions, selection, result }: {
+export default function TrialBalanceShell({ canUse, companies, versions, selection, result, decimals }: {
+  decimals: CurrencyDecimals;
   canUse: boolean;
   companies: Array<{ companyCode: string; name: string }>;
   versions: Array<{ version: string; name: string; chartOfAccounts: string }>;
   selection: TrialBalanceSelection;
   result: TrialBalanceResult | null;
 }) {
+  const d = decimals[result?.currency ?? ''] ?? 2;
   if (!canUse) {
     return (
       <div className="panel p-4 text-sm text-ink-soft">
@@ -90,13 +93,13 @@ export default function TrialBalanceShell({ canUse, companies, versions, selecti
               </thead>
               <tbody>
                 {result.nodes.map((node) => (
-                  <NodeRows key={node.node} node={node} currency={result.currency} company={result.companyCode} year={result.fiscalYear} />
+                  <NodeRows d={d} key={node.node} node={node} currency={result.currency} company={result.companyCode} year={result.fiscalYear} />
                 ))}
                 <tr className="font-semibold">
                   <td>{t('trial.totalTurnover')}</td>
                   <td />
-                  <td className="tabular text-end num">{result.totalDebitTurnover.toFixed(2)}</td>
-                  <td className="tabular text-end num">{result.totalCreditTurnover.toFixed(2)}</td>
+                  <td className="tabular text-end num">{fmt(result.totalDebitTurnover, d)}</td>
+                  <td className="tabular text-end num">{fmt(result.totalCreditTurnover, d)}</td>
                   <td colSpan={3} />
                 </tr>
               </tbody>
@@ -111,7 +114,7 @@ export default function TrialBalanceShell({ canUse, companies, versions, selecti
                   {result.unassigned.map((account) => (
                     <tr key={account.accountNumber}>
                       <td className="code">{account.accountNumber} — {account.accountName}</td>
-                      <td className="tabular text-end num">{account.balance.toFixed(2)} {result.currency}</td>
+                      <td className="tabular text-end num">{fmt(account.balance, d)} {result.currency}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -124,7 +127,8 @@ export default function TrialBalanceShell({ canUse, companies, versions, selecti
   );
 }
 
-function NodeRows({ node, currency, company, year }: {
+function NodeRows({ node, currency, company, year, d }: {
+  d: number;
   node: TrialBalanceResult['nodes'][number];
   currency: string;
   company: string;
@@ -134,11 +138,11 @@ function NodeRows({ node, currency, company, year }: {
     <>
       <tr className={node.depth === 0 ? 'bg-sunken font-semibold' : 'font-medium'}>
         <td style={{ paddingLeft: `${0.75 + node.depth * 1.25}rem` }}>{node.description} <span className="code text-ink-faint">({node.node})</span></td>
-        <td className="tabular text-end num">{node.balance.toFixed(2)}</td>
-        <td className="tabular text-end num">{node.debitTurnover.toFixed(2)}</td>
-        <td className="tabular text-end num">{node.creditTurnover.toFixed(2)}</td>
-        <td className="tabular text-end num">{node.comparativeBalance === null ? '—' : node.comparativeBalance.toFixed(2)}</td>
-        <td className="tabular text-end num">{node.variance === null ? '—' : node.variance.toFixed(2)}</td>
+        <td className="tabular text-end num">{fmt(node.balance, d)}</td>
+        <td className="tabular text-end num">{fmt(node.debitTurnover, d)}</td>
+        <td className="tabular text-end num">{fmt(node.creditTurnover, d)}</td>
+        <td className="tabular text-end num">{node.comparativeBalance === null ? '—' : fmt(node.comparativeBalance, d)}</td>
+        <td className="tabular text-end num">{node.variance === null ? '—' : fmt(node.variance, d)}</td>
         <td className="tabular text-end num">{node.variancePercent === null ? '—' : `${node.variancePercent.toFixed(1)}%`}</td>
       </tr>
       {node.accounts.map((account) => (
@@ -151,10 +155,10 @@ function NodeRows({ node, currency, company, year }: {
               {account.accountNumber} — {account.accountName}
             </Link>
           </td>
-          <td className="tabular text-end num">{account.balance.toFixed(2)} {currency}</td>
-          <td className="tabular text-end num">{account.debitTurnover.toFixed(2)}</td>
-          <td className="tabular text-end num">{account.creditTurnover.toFixed(2)}</td>
-          <td className="tabular text-end num">{account.comparativeBalance === null ? '—' : account.comparativeBalance.toFixed(2)}</td>
+          <td className="tabular text-end num">{fmt(account.balance, d)} {currency}</td>
+          <td className="tabular text-end num">{fmt(account.debitTurnover, d)}</td>
+          <td className="tabular text-end num">{fmt(account.creditTurnover, d)}</td>
+          <td className="tabular text-end num">{account.comparativeBalance === null ? '—' : fmt(account.comparativeBalance, d)}</td>
           <td colSpan={2} />
         </tr>
       ))}

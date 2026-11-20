@@ -1,5 +1,6 @@
 'use client';
 
+import { fmt, type CurrencyDecimals } from '@/ui/money';
 import { useActionState, useState } from 'react';
 
 import type { IncomingPaymentView } from '@/modules/finance/incoming-payment';
@@ -20,12 +21,15 @@ function Message({ state }: { state: IncomingPaymentActionState }) {
 const itemKey = (i: { documentNumber: string; fiscalYear: number; lineNumber: number }) =>
   `${i.documentNumber}|${i.fiscalYear}|${i.lineNumber}`;
 
-export default function IncomingPayment({ view, loadError, canEnter, today }: {
+export default function IncomingPayment({ view, loadError, canEnter, today, decimals }: {
+  decimals: CurrencyDecimals;
   view: IncomingPaymentView | null;
   loadError: string | null;
   canEnter: boolean;
   today: string;
 }) {
+  // The decimals of the currency the open items stand in (a payment settles one currency).
+  const d = decimals[view?.openItems[0]?.currency ?? ''] ?? 2;
   const [state, action, posting] = useActionState(postPaymentAction, INITIAL);
   const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -69,7 +73,7 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
         {view && (
           <p className="mt-2 text-sm">
             Customer <strong>{view.customer}</strong> in company <strong>{view.companyCode}</strong>:
-            {' '}{view.openItems.length} open items standing at {view.openBalance.toFixed(2)}.
+            {' '}{view.openItems.length} open items standing at {fmt(view.openBalance, d)}.
           </p>
         )}
       </section>
@@ -149,7 +153,7 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
                         <td>
                           <input
                             name={`applied-${itemKey(item)}`} className="input w-24"
-                            placeholder={item.signed.toFixed(2)}
+                            placeholder={fmt(item.signed, d)}
                             value={applied[itemKey(item)] ?? ''}
                             onChange={(e) => setApplied((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
                           />
@@ -173,7 +177,7 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
                 </table>
               </div>
               <p className="mt-2 text-sm text-ink-soft">
-                Allocated {allocated.toFixed(2)} · unassigned {difference.toFixed(2)}.
+                Allocated {fmt(allocated, d)} · unassigned {fmt(difference, d)}.
                 Applied plus discount settles an item in full; less leaves a residual item or a partial
                 payment, as chosen per item. What remains unassigned posts on account or, within the
                 tolerance group, as a payment difference.

@@ -412,7 +412,7 @@ describe('purchase contract', () => {
     });
     const document = await getPurchaseContract(client, saved.contractNumber);
     expect(document?.items[0]).toMatchObject({
-      rfqNumber, quotationNumber: quotation.quotationNumber, netPrice: '7.50', targetQuantity: '9.000', plant: '1000',
+      rfqNumber, quotationNumber: quotation.quotationNumber, netPrice: '7.5000', targetQuantity: '9.000', plant: '1000',
     });
     const sourceRequest = await getRequestForQuotation(client, request.eventNumber);
     expect(sourceRequest?.requests[0].lines[0].quantity).toBe('9.000');
@@ -507,7 +507,7 @@ describe('purchase contract', () => {
       items: [{ materialNumber: 'MAT-CONT', targetQuantity: 10, unit: 'PC', plant: '1000' }],
     });
     const created = await getPurchaseContract(client, saved.contractNumber);
-    expect(created?.items[0].netPrice).toBe('6.00');
+    expect(created?.items[0].netPrice).toBe('6.0000');
     expect(saved.warnings.some((warning) => warning.includes('Info record'))).toBe(true);
     const afterCreate = await withTenant(client, async (tx) => {
       const [docs] = await tx.execute(sql`select count(*)::int as n from material_document where client = ${client}`) as unknown as Array<{ n: number }>;
@@ -576,7 +576,7 @@ describe('purchase contract', () => {
       items: [{ itemNumber: 10, shortText: 'Steel', targetQuantity: 10, unit: 'PC', netPrice: 9, plant: '1000', materialNumber: 'MAT-CONT' }],
     });
     const document = await getPurchaseContract(client, saved.contractNumber);
-    expect(document?.items[0].netPrice).toBe('9.00');
+    expect(document?.items[0].netPrice).toBe('9.0000');
     const unchanged = await withTenant(client, async (tx) => {
       const [row] = await tx.execute(sql`
         select net_price, material_number from purchase_order_item
@@ -591,10 +591,10 @@ describe('purchase contract', () => {
       `) as unknown as Array<{ old_value: string; new_value: string; transaction_code: string }>;
       return { price: String(row.net_price), material: String(row.material_number), history };
     });
-    expect(unchanged.price).toBe('2.00');
+    expect(unchanged.price).toBe('2.0000');
     expect(unchanged.material).toBe('MAT-CONT');
-    expect(unchanged.history.old_value).toBe('2.00');
-    expect(unchanged.history.new_value).toBe('9.00');
+    expect(unchanged.history.old_value).toBe('2.0000');
+    expect(unchanged.history.new_value).toBe('9.0000');
     expect(unchanged.history.transaction_code).toBe('ME32K');
   });
 
@@ -615,7 +615,7 @@ describe('purchase contract', () => {
     expect(refused.refusal?.message).toMatch(/price change/i);
     expect(refused.document).toBeNull();
     const opened = await openPurchaseContractDisplay(client, { contract: saved.contractNumber });
-    expect(opened.document?.items[0].netPrice).toBe('4.00');
+    expect(opened.document?.items[0].netPrice).toBe('4.0000');
     expect(opened.document?.items[0].calledOffQuantity).toBe('0.000');
     const hidden = await openPurchaseContractDisplay(other, { contract: saved.contractNumber });
     expect(hidden.document).toBeNull();
