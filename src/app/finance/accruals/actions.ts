@@ -79,6 +79,7 @@ export async function reverseAccrualAction(_previous: AccrualState, formData: Fo
     });
     await executeAccrualReversal({
       client: session.user.client, changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       companyCode: read('companyCode'), documentNumber: read('documentNumber'),
       fiscalYear: Number(read('fiscalYear')),
     });

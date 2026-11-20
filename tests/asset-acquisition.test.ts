@@ -8,11 +8,14 @@ import {
   simulateAssetAcquisition,
 } from '../src/modules/finance/asset-acquisition';
 import { createAsset, deactivateAsset, getAsset } from '../src/modules/finance/asset-master';
-import { reverseDocument } from '../src/modules/finance/document-reversal';
+import { reverseDocument as reverseDocumentService } from '../src/modules/finance/document-reversal';
 import { postingPeriodRule } from '../src/modules/foundation/schema';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
+import { withFinanceAuth } from './helpers/finance-actor';
+
 const ACTOR = 'ASSET-ACQ-TEST';
+const reverseDocument = withFinanceAuth(reverseDocumentService);
 let client = '';
 let otherClient = '';
 const company = '1000';

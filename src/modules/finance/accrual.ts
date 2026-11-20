@@ -53,7 +53,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import { type ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import { postGlDocument, GlDocumentError, type GlDocumentInput } from './gl-document';
-import { reverseDocument, DocumentReversalError } from './document-reversal';
+import { reverseDocument, DocumentReversalError, DOCUMENT_REVERSE_CAPABILITY } from './document-reversal';
+import { authorizeCompaniesInTx } from '../../platform/auth/company-scope';
 import { accrualDocument, journalEntry, journalEntryLine, reversalReason } from './schema';
 
 export interface AccrualPostInput {
@@ -218,7 +219,13 @@ async function markReversed(
 export async function executeAccrualReversal(input: {
   client: string; changedBy: string; companyCode: string;
   documentNumber: string; fiscalYear: number;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<AccrualDocumentView> {
+  // Judge capability and company scope before anything of the document is read or returned (also on the REVERSED shortcut).
+  const scope = await withTenant(input.client, (tx) =>
+    authorizeCompaniesInTx(tx, input.client, input.authorization, DOCUMENT_REVERSE_CAPABILITY, [input.companyCode]));
+  if (!scope.ok) throw new AccrualError(`${scope.refusal.message} ${scope.refusal.remedy}`);
+  const actor = scope.username;
   const view = await getAccrualDocument(input.client, input.companyCode, input.documentNumber, input.fiscalYear);
   if (!view) {
     throw new AccrualError(`Accrual document ${input.documentNumber} does not stand in company ${input.companyCode}.`);
@@ -226,14 +233,14 @@ export async function executeAccrualReversal(input: {
   if (view.reversalStatus === 'REVERSED') return view;
   try {
     const result = await reverseDocument({
-      client: input.client, changedBy: input.changedBy, companyCode: input.companyCode,
+      client: input.client, authorization: input.authorization, changedBy: actor, companyCode: input.companyCode,
       documentNumber: input.documentNumber, fiscalYear: input.fiscalYear,
       reasonCode: view.reversalReason, documentDate: view.reversalDate,
       postingDate: view.reversalDate, confirmed: true,
       requestKey: `accrual-reversal-${input.documentNumber}-${input.fiscalYear}`,
     });
     await markReversed(input.client, input.companyCode, input.documentNumber, input.fiscalYear,
-      result.reversalDocumentNumber, result.reversalFiscalYear, input.changedBy);
+      result.reversalDocumentNumber, result.reversalFiscalYear, actor);
   } catch (error) {
     if (error instanceof DocumentReversalError && /already stands reversed/.test(error.message)) {
       // Reconcile: the canonical link stands; complete the metadata.
@@ -247,7 +254,7 @@ export async function executeAccrualReversal(input: {
       });
       if (!linked) throw error;
       await markReversed(input.client, input.companyCode, input.documentNumber, input.fiscalYear,
-        linked.reversal_document_number, linked.reversal_fiscal_year, input.changedBy);
+        linked.reversal_document_number, linked.reversal_fiscal_year, actor);
     } else if (error instanceof DocumentReversalError) {
       throw new AccrualError(error.message, error.remedy);
     } else {

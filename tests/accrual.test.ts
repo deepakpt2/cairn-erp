@@ -2,16 +2,17 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { executeAccrualReversal, listDueAccruals, postAccrualDocument as postAccrualDocumentService } from '../src/modules/finance/accrual';
+import { executeAccrualReversal as executeAccrualReversalService, listDueAccruals, postAccrualDocument as postAccrualDocumentService } from '../src/modules/finance/accrual';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
-import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { financePoster, financeInputPoster, withFinanceAuth, financeActorName } from './helpers/finance-actor';
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.
 const postAccrualDocument = financeInputPoster(postAccrualDocumentService);
 
 const ACTOR = 'ACCRUAL-TEST';
+const executeAccrualReversal = withFinanceAuth(executeAccrualReversalService);
 let client = '';
 let company = '';
 let documentNumber = '';
@@ -93,7 +94,7 @@ describe('SCR-100 accrual/deferral documents FBS1/F.81 (R-148)', () => {
     });
     expect(reversed.reversalStatus).toBe('REVERSED');
     expect(reversed.reversalDocumentNumber).toBeTruthy();
-    expect(reversed.reversedBy).toBe(ACTOR);
+    expect(reversed.reversedBy).toBe(await financeActorName(client));
     expect(await journalCount()).toBe(journals + 1);
 
     const rows = await withTenant(client, async (tx) => tx.execute(sql`

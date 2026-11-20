@@ -45,6 +45,8 @@ export const FINANCE_ACTOR_CAPABILITIES: readonly string[] = [
   'FIN.AR.DUNNING.RUN',
   'FIN.TAX.REPORT',
   'FIN.ACCRUAL.POST',
+  'FIN.DOCUMENT.REVERSE',
+  'FIN.FX.VALUATE',
   'FIN.CLOSE.CARRYFORWARD',
   'FIN.GL.CLEAR',
   'FIN.AP.CLEAR',
@@ -269,4 +271,32 @@ export async function reportAuth(client: string): Promise<{ userId: string; sess
   const resolved = await actor;
   await refreshFinanceActorScopes(client, resolved);
   return resolved.authorization;
+}
+
+const standingFinanceActors = new Map<string, Promise<FinanceActor>>();
+
+/** A signed-in actor with the full finance set and reach over everything the tenant has now (refreshed per call). */
+export async function financeAuth(client: string): Promise<{ userId: string; sessionId: string }> {
+  let actor = standingFinanceActors.get(client);
+  if (actor && !(await sessionStands(client, await actor))) { standingFinanceActors.delete(client); actor = undefined; }
+  if (!actor) {
+    actor = createFinanceActor(client);
+    standingFinanceActors.set(client, actor);
+  }
+  const resolved = await actor;
+  await refreshFinanceActorScopes(client, resolved);
+  return resolved.authorization;
+}
+
+/** Wrap a service whose input carries a required `authorization`, so a figures/posting test calls it with a real session. */
+export function withFinanceAuth<I extends { client: string; authorization: ServiceAuthorityContext | undefined }, R>(
+  service: (input: I) => Promise<R>,
+): (input: Omit<I, 'authorization'>) => Promise<R> {
+  return async (input) => service({ ...input, authorization: await financeAuth(input.client) } as I);
+}
+
+/** The username of the standing finance actor (what the services now record as the poster). */
+export async function financeActorName(client: string): Promise<string> {
+  await financeAuth(client);
+  return (await standingFinanceActors.get(client)!).username;
 }

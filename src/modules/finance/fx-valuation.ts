@@ -73,6 +73,8 @@ export interface FxValuationResult {
 import { and, eq, sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
+import { authorizeCompaniesInTx, verifyCompanyAuthorityInTx, refuseCompaniesOutsideScopeInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
 import { accountDetermination, exchangeRate } from '../foundation/schema';
@@ -134,6 +136,8 @@ async function loadRun(tx: Parameters<Parameters<typeof withTenant>[1]>[0], clie
  */
 export async function executeFxValuation(input: {
   client: string; changedBy: string; selection: FxValuationSelection;
+  /** Verified session or job lease; capability and Company Code scope are judged in the posting transaction. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<FxValuationResult> {
   const s = input.selection;
   if (!FX_RATE_TYPES.includes(s.valuationMethod)) {
@@ -148,10 +152,16 @@ export async function executeFxValuation(input: {
   if (!s.requestKey?.trim()) throw new FxValuationError('A request key is required.');
 
   return withTenant(input.client, async (tx) => {
+    const scope = await authorizeCompaniesInTx(tx, input.client, input.authorization, FX_VALUATION_CAPABILITY, [s.companyCode]);
+    if (!scope.ok) throw new FxValuationError(`${scope.refusal.message} ${scope.refusal.remedy}`);
+    const actor = scope.username;
     const [existing] = await tx.select().from(fxValuationRun).where(and(
       eq(fxValuationRun.client, input.client), eq(fxValuationRun.requestKey, s.requestKey),
     ));
     if (existing) {
+      if (existing.companyCode !== s.companyCode) {
+        throw new FxValuationError('The request key already stands against another valuation run.');
+      }
       const replay = await loadRun(tx, input.client, existing.runId);
       if (replay) return replay;
     }
@@ -294,7 +304,7 @@ export async function executeFxValuation(input: {
       includeOpenItems: s.includeOpenItems, includeBalances: s.includeBalances,
       status: s.testRun ? 'TEST' : 'COMPLETED',
       totalGainAmount: String(totalGain), totalLossAmount: String(totalLoss),
-      createdBy: input.changedBy, completedAt: s.testRun ? null : new Date(),
+      createdBy: actor, completedAt: s.testRun ? null : new Date(),
     });
 
     let postingDocument: string | null = null;
@@ -337,7 +347,7 @@ export async function executeFxValuation(input: {
           fiscalYear: position.fiscalYear, postingPeriod: position.period,
           currency: local, localCurrency: local,
           headerText: `FX valuation ${s.valuationArea} ${s.valuationKeyDate}`,
-          lines, postedBy: input.changedBy, transactionCode: FX_VALUATION_CAPABILITY,
+          lines, postedBy: actor, transactionCode: FX_VALUATION_CAPABILITY,
         }).catch((error: unknown) => {
           if (error instanceof PostingError) throw new FxValuationError(`${error.message} ${error.remedy}`);
           throw error;
@@ -351,7 +361,7 @@ export async function executeFxValuation(input: {
           const reversal = await reverseJournalEntry(tx, {
             client: input.client, documentNumber: postingDocument, fiscalYear: position.fiscalYear,
             reversalDate: s.reversalDate, reason: `FX valuation reversal ${runId}`,
-            reversedBy: input.changedBy, transactionCode: FX_VALUATION_CAPABILITY,
+            reversedBy: actor, transactionCode: FX_VALUATION_CAPABILITY,
           }).catch((error: unknown) => {
             if (error instanceof PostingError) throw new FxValuationError(`${error.message} ${error.remedy}`);
             throw error;
@@ -395,8 +405,18 @@ export async function executeFxValuation(input: {
   });
 }
 
-export async function getFxValuationRun(client: string, runId: string): Promise<FxValuationResult | null> {
-  return withTenant(client, async (tx) => loadRun(tx, client, runId));
+/** A run of a company outside the caller's scope reads as absent; a missing capability or session refuses. */
+export async function getFxValuationRun(
+  client: string, runId: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<FxValuationResult | null> {
+  return withTenant(client, async (tx) => {
+    const verdict = await verifyCompanyAuthorityInTx(tx, client, authorization, FX_VALUATION_CAPABILITY);
+    if (!verdict.ok) throw new FxValuationError(`${verdict.refusal.message} ${verdict.refusal.remedy}`);
+    const run = await loadRun(tx, client, runId);
+    if (!run) return null;
+    const refusal = await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [run.companyCode]);
+    return refusal ? null : run;
+  });
 }
 
 export function fxValuationCsv(result: FxValuationResult): string {

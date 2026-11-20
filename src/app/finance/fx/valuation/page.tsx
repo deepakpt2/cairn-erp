@@ -43,6 +43,7 @@ export default async function FxValuationPage({ searchParams }: {
     try {
       result = await executeFxValuation({
         client: session.user.client, changedBy: session.user.username,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         selection: {
           companyCode: defaults.companyCode,
           valuationArea: defaults.valuationArea,

@@ -60,6 +60,7 @@ export default async function DocumentReversalPage({
     try {
       view = await getDocumentForReversal(session.user.client, {
         ...selected.data,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         reversalPostingDate: requestedPostingDate,
       });
     } catch (e) {
@@ -85,6 +86,7 @@ export default async function DocumentReversalPage({
       });
       const r = await reverseDocument({
         client: s.user.client,
+        authorization: { userId: s.user.userId, sessionId: s.sessionId ?? '' },
         changedBy: s.user.username,
         companyCode: parsed.data.companyCode,
         documentNumber: parsed.data.documentNumber,

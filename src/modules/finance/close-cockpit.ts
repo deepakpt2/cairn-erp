@@ -124,6 +124,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
 import { listDueAccruals, executeAccrualReversal } from './accrual';
 import { executeFxValuation } from './fx-valuation';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -497,7 +498,7 @@ export async function releaseTaskList(input: { client: string; changedBy: string
 interface HandlerResult { summary: string; documentNumber?: string; documentFiscalYear?: number }
 
 async function runHandler(client: string, actor: string, cycle: CloseCycleKey,
-  task: TaskRow, attempt: number): Promise<HandlerResult> {
+  task: TaskRow, attempt: number, authorization: ServiceAuthorityContext | undefined): Promise<HandlerResult> {
   const params = (() => {
     try { return task.parameters ? JSON.parse(task.parameters) as Record<string, string> : {}; }
     catch { return {} as Record<string, string>; }
@@ -522,7 +523,7 @@ async function runHandler(client: string, actor: string, cycle: CloseCycleKey,
     let firstDocument: string | undefined;
     for (const doc of due) {
       const reversed = await executeAccrualReversal({
-        client, changedBy: actor, companyCode: doc.companyCode,
+        client, authorization, changedBy: actor, companyCode: doc.companyCode,
         documentNumber: doc.documentNumber, fiscalYear: doc.fiscalYear,
       });
       firstDocument ??= reversed.reversalDocumentNumber ?? undefined;
@@ -536,7 +537,7 @@ async function runHandler(client: string, actor: string, cycle: CloseCycleKey,
     const keyDate = params.keyDate && DATE_RE.test(params.keyDate)
       ? params.keyDate : periodEndDate(cycle.fiscalYear, cycle.postingPeriod);
     const result = await executeFxValuation({
-      client, changedBy: actor,
+      client, authorization, changedBy: actor,
       selection: {
         companyCode: cycle.companyCode, valuationArea: params.valuationArea || 'STD',
         valuationKeyDate: keyDate, postingDate: params.postingDate && DATE_RE.test(params.postingDate) ? params.postingDate : keyDate,
@@ -572,9 +573,9 @@ async function completeOrBlock(tx: Tx, client: string, cycle: CloseCycleKey,
 }
 
 async function settleExecution(client: string, actor: string, cycle: CloseCycleKey,
-  executionId: string, task: TaskRow): Promise<{ status: TaskStatus }> {
+  executionId: string, task: TaskRow, authorization: ServiceAuthorityContext | undefined): Promise<{ status: TaskStatus }> {
   try {
-    const result = await runHandler(client, actor, cycle, task, task.attempt_count);
+    const result = await runHandler(client, actor, cycle, task, task.attempt_count, authorization);
     return withTenant(client, async (tx) => {
       await tx.execute(sql`
         update closing_execution_log set status = 'SUCCEEDED', ended_at = now(),
@@ -612,6 +613,8 @@ async function settleExecution(client: string, actor: string, cycle: CloseCycleK
 
 export async function executeTask(input: {
   client: string; changedBy: string; cycle: CloseCycleKey; taskId: string; mode: ExecutionMode;
+  /** Verified session or job lease the handlers' postings are authorised under (reversal, FX valuation). */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<{ status: TaskStatus; executionId: string; scheduled: boolean }> {
   const { client, changedBy, cycle, taskId, mode } = input;
   checkCycle(cycle);
@@ -659,12 +662,13 @@ export async function executeTask(input: {
     return { ...task, attempt_count: attempt };
   });
   if (mode === 'BACKGROUND') return { status: 'RUNNING', executionId, scheduled: true };
-  const settled = await settleExecution(client, changedBy, cycle, executionId, claimed);
+  const settled = await settleExecution(client, changedBy, cycle, executionId, claimed, input.authorization);
   return { status: settled.status, executionId, scheduled: false };
 }
 
 export async function processScheduledExecutions(input: {
   client: string; changedBy: string; cycle: CloseCycleKey;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<{ processed: number }> {
   const { client, changedBy, cycle } = input;
   checkCycle(cycle);
@@ -688,7 +692,7 @@ export async function processScheduledExecutions(input: {
       return tasks.find((t) => t.task_id === row.task_id);
     });
     if (!task) continue;
-    await settleExecution(client, changedBy, cycle, row.execution_id, task);
+    await settleExecution(client, changedBy, cycle, row.execution_id, task, input.authorization);
     processed += 1;
   }
   return { processed };

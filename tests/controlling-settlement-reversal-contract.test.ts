@@ -17,9 +17,9 @@ import { createInternalOrder as createInternalOrderService } from '../src/module
 import { settleOrder as settleOrderService } from '../src/modules/foundation/order-settlement';
 import { saveOrderSettlementConfiguration } from '../src/modules/foundation/settlement-configuration';
 import { ensureSettlementMasters } from './settlement-masters';
-import { reverseDocument } from '../src/modules/finance/document-reversal';
+import { reverseDocument as reverseDocumentService } from '../src/modules/finance/document-reversal';
 
-import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { financePoster, financeInputPoster, withFinanceAuth } from './helpers/finance-actor';
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.
@@ -27,6 +27,7 @@ const createInternalOrder = financePoster(createInternalOrderService);
 const settleOrder = financePoster(settleOrderService);
 
 const ACTOR = 'REVS_TEST';
+const reverseDocument = withFinanceAuth(reverseDocumentService);
 const clients: string[] = [];
 
 afterAll(async () => {

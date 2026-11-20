@@ -17,6 +17,8 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { authorizeCompaniesInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { derivePosition, getCompanyCode, PeriodError } from '../../platform/periods';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
 import { accountingReversalLink, journalEntry, journalEntryLine, reversalReason } from './schema';
@@ -272,6 +274,7 @@ function toResult(link: ReversalLink): DocumentReversalResult {
 }
 
 export async function getDocumentForReversal(client: string, input: {
+  authorization: ServiceAuthorityContext | undefined;
   companyCode: string;
   documentNumber: string;
   fiscalYear: number;
@@ -279,6 +282,8 @@ export async function getDocumentForReversal(client: string, input: {
 }): Promise<ReversalDocumentView> {
   if (input.reversalPostingDate) assertCalendarDate('Reversal posting date', input.reversalPostingDate);
   return withTenant(client, async (tx) => {
+    const scope = await authorizeCompaniesInTx(tx, client, input.authorization, DOCUMENT_REVERSE_CAPABILITY, [input.companyCode]);
+    if (!scope.ok) throw new DocumentReversalError(scope.refusal.message, scope.refusal.remedy);
     const header = await loadHeader(tx, client, input.documentNumber, input.fiscalYear);
     if (!header || header.companyCode !== input.companyCode) {
       throw new DocumentReversalError(
@@ -366,6 +371,8 @@ export async function getDocumentForReversal(client: string, input: {
 
 export async function reverseDocument(input: {
   client: string;
+  /** Verified session or job lease; capability and Company Code scope are judged in the posting transaction. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   companyCode: string;
   documentNumber: string;
@@ -393,6 +400,9 @@ export async function reverseDocument(input: {
   assertCalendarDate('Reversal posting date', input.postingDate);
 
   return withTenant(input.client, async (tx) => {
+    const scope = await authorizeCompaniesInTx(tx, input.client, input.authorization, DOCUMENT_REVERSE_CAPABILITY, [input.companyCode]);
+    if (!scope.ok) throw new DocumentReversalError(scope.refusal.message, scope.refusal.remedy);
+    const actor = scope.username;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/docrev/${input.companyCode}/${input.documentNumber}/${input.fiscalYear}`}, 0))`);
 
     if (input.requestKey) {
@@ -493,7 +503,7 @@ export async function reverseDocument(input: {
         reversalDocumentDate: input.documentDate,
         reversalDocumentType: REVERSAL_DOCUMENT_TYPE,
         reason: reasonCode,
-        reversedBy: input.changedBy,
+        reversedBy: actor,
         transactionCode: DOCUMENT_REVERSE_CAPABILITY,
       });
     } catch (e) {
@@ -517,11 +527,11 @@ export async function reverseDocument(input: {
       reversalPostingPeriod: position.period,
       reversalPostingDate: input.postingDate,
       reversalCurrency: header.documentCurrency,
-      reversedBy: input.changedBy,
+      reversedBy: actor,
       reversalAmountLocal: localTotals.debit,
       requestKey: input.requestKey ?? null,
-      createdBy: input.changedBy,
-      changedBy: input.changedBy,
+      createdBy: actor,
+      changedBy: actor,
     }).returning();
 
     await recordChange(tx, {
@@ -529,7 +539,7 @@ export async function reverseDocument(input: {
       objectClass: REVERSAL_CLASS,
       objectKey: `${input.companyCode}/${input.documentNumber}/${input.fiscalYear}`,
       changeType: 'REVERSE',
-      changedBy: input.changedBy,
+      changedBy: actor,
       transactionCode: DOCUMENT_REVERSE_CAPABILITY,
       reason: reasonCode,
       before: { status: header.status, reversedBy: null },

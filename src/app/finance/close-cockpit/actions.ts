@@ -99,12 +99,14 @@ export async function finalizeListAction(formData: FormData): Promise<void> {
 export async function processScheduledAction(formData: FormData): Promise<void> {
   await changeCycle(formData, (session, cycle) => processScheduledExecutions({
     client: session.user.client, changedBy: session.user.username, cycle,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
   }));
 }
 
 export async function executeTaskAction(formData: FormData): Promise<void> {
   await changeCycle(formData, (session, cycle) => executeTask({
     client: session.user.client, changedBy: session.user.username, cycle,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     taskId: String(formData.get('taskId') ?? '').trim(),
     mode: String(formData.get('mode') ?? 'FOREGROUND') === 'BACKGROUND' ? 'BACKGROUND' : 'FOREGROUND',
   }));

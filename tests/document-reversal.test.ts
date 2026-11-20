@@ -1,16 +1,21 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { getDocumentForReversal, reverseDocument } from '../src/modules/finance/document-reversal';
+import { getDocumentForReversal as getDocumentForReversalService, reverseDocument as reverseDocumentService } from '../src/modules/finance/document-reversal';
 import { reversalReason } from '../src/modules/finance/schema';
 import { postingPeriodRule } from '../src/modules/foundation/schema';
 import { withTenant } from '../src/platform/db/client';
 import { buildPeriodRows } from '../src/platform/periods';
 import { postJournalEntry, type PostedJournal } from '../src/platform/posting';
 import { createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
+import { financeActorName, financeAuth, withFinanceAuth } from './helpers/finance-actor';
 
 const ACTOR = 'SCR072_FB08_TEST';
 const COMPANY = '1000';
+const reverseDocument = withFinanceAuth(reverseDocumentService);
+async function getDocumentForReversal(client: string, input: Parameters<typeof getDocumentForReversalService>[1] extends infer I ? Omit<I & object, 'authorization'> : never) {
+  return getDocumentForReversalService(client, { ...input, authorization: await financeAuth(client) });
+}
 
 async function postOriginal(
   tenant: TestTenant,
@@ -168,7 +173,7 @@ describe('SCR-072 reverse accounting document (FB08)', () => {
     `));
     expect(links as unknown as Array<Record<string, unknown>>).toEqual([expect.objectContaining({
       reversal_reason: '01', dd: '2026-11-05', pd: '2026-11-20', reversal_posting_period: 11,
-      reversed_by: ACTOR, request_key: 'rev-main',
+      reversed_by: await financeActorName(t.client), request_key: 'rev-main',
     })]);
 
     const replay = await reverseDocument({

@@ -3,10 +3,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { postJournalEntry } from '../src/platform/posting';
-import { executeFxValuation } from '../src/modules/finance/fx-valuation';
+import { executeFxValuation as executeFxValuationService } from '../src/modules/finance/fx-valuation';
 import { createTenant, defineTestRanges, destroyTenant, seedAccounts } from './helpers';
 
+import { withFinanceAuth } from './helpers/finance-actor';
+
 const ACTOR = 'FXVAL-TEST';
+const executeFxValuation = withFinanceAuth(executeFxValuationService);
 let client = '';
 let company = '';
 

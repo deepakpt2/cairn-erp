@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { postGlDocument as postGlDocumentService } from '../src/modules/finance/gl-document';
-import { reverseDocument } from '../src/modules/finance/document-reversal';
+import { reverseDocument as reverseDocumentService } from '../src/modules/finance/document-reversal';
 import { saveCostCenter } from '../src/modules/foundation/cost-center-definition';
 import {
   AllocationCycleError,
@@ -33,9 +33,10 @@ import {
 import { configActivityStatus } from '@/platform/tables/registry';
 import { controllingAreaCompany } from '@/modules/foundation/schema';
 import { closeDb, createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
-import { createFinanceActor, financePoster, type FinanceActor } from './helpers/finance-actor';
+import { createFinanceActor, financePoster, type FinanceActor, withFinanceAuth } from './helpers/finance-actor';
 
 const ACTOR = 'KSU5-TEST';
+const reverseDocument = withFinanceAuth(reverseDocumentService);
 const REASON = 'KSU5 automated test';
 const YEAR = 2026;
 const ACCOUNT = '690000';

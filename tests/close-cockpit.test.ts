@@ -55,7 +55,7 @@ describe('SCR-101 period-end close cockpit CLOCO (R-149)', () => {
     expect(created.status).toBe('INITIAL');
     expect(created.totalTasks).toBe(3);
 
-    await expect(executeTask({ client, changedBy: ACTOR, cycle: cycle(), taskId: 'T10', mode: 'FOREGROUND' }))
+    await expect(executeTask({ client, changedBy: ACTOR, authorization: undefined, cycle: cycle(), taskId: 'T10', mode: 'FOREGROUND' }))
       .rejects.toThrow('release it before executing');
 
     const released = await releaseTaskList({ client, changedBy: ACTOR, cycle: cycle() });
@@ -63,18 +63,18 @@ describe('SCR-101 period-end close cockpit CLOCO (R-149)', () => {
     await expect(finalizeTaskList({ client, changedBy: ACTOR, cycle: cycle() }))
       .rejects.toThrow('cannot be finalized');
 
-    await expect(executeTask({ client, changedBy: ACTOR, cycle: cycle(), taskId: 'T20', mode: 'FOREGROUND' }))
+    await expect(executeTask({ client, changedBy: ACTOR, authorization: undefined, cycle: cycle(), taskId: 'T20', mode: 'FOREGROUND' }))
       .rejects.toThrow('predecessor(s) T10 are not completed');
 
-    const ran = await executeTask({ client, changedBy: ACTOR, cycle: cycle(), taskId: 'T10', mode: 'FOREGROUND' });
+    const ran = await executeTask({ client, changedBy: ACTOR, authorization: undefined, cycle: cycle(), taskId: 'T10', mode: 'FOREGROUND' });
     expect(ran.status).toBe('COMPLETED');
     const log = await listExecutions(client, cycle(), 'T10');
     expect(log[0]?.status).toBe('SUCCEEDED');
     expect(log[0]?.resultSummary).toContain('Period 2026/04');
-    await expect(executeTask({ client, changedBy: ACTOR, cycle: cycle(), taskId: 'T10', mode: 'FOREGROUND' }))
+    await expect(executeTask({ client, changedBy: ACTOR, authorization: undefined, cycle: cycle(), taskId: 'T10', mode: 'FOREGROUND' }))
       .rejects.toThrow('already stands completed');
 
-    const gated = await executeTask({ client, changedBy: ACTOR, cycle: cycle(), taskId: 'T20', mode: 'FOREGROUND' });
+    const gated = await executeTask({ client, changedBy: ACTOR, authorization: undefined, cycle: cycle(), taskId: 'T20', mode: 'FOREGROUND' });
     expect(gated.status).toBe('BLOCKED'); // handler succeeded, gates open
     const afterEvidence = await attachEvidence({
       client, changedBy: ACTOR, cycle: cycle(), taskId: 'T20', evidenceRef: 'close-pack/april.pdf',
@@ -91,14 +91,14 @@ describe('SCR-101 period-end close cockpit CLOCO (R-149)', () => {
   });
 
   it('schedules background executions without completing them until the runner settles them', async () => {
-    const scheduled = await executeTask({ client, changedBy: ACTOR, cycle: cycle(), taskId: 'T30', mode: 'BACKGROUND' });
+    const scheduled = await executeTask({ client, changedBy: ACTOR, authorization: undefined, cycle: cycle(), taskId: 'T30', mode: 'BACKGROUND' });
     expect(scheduled.scheduled).toBe(true);
     const before = await listTasks(client, cycle());
     expect(before.find((t) => t.taskId === 'T30')?.status).toBe('RUNNING');
     const pendingLog = await listExecutions(client, cycle(), 'T30');
     expect(pendingLog[0]?.status).toBe('SCHEDULED');
 
-    const processed = await processScheduledExecutions({ client, changedBy: ACTOR, cycle: cycle() });
+    const processed = await processScheduledExecutions({ client, changedBy: ACTOR, authorization: undefined, cycle: cycle() });
     expect(processed.processed).toBe(1);
     const after = await listTasks(client, cycle());
     expect(after.find((t) => t.taskId === 'T30')?.status).toBe('COMPLETED');
