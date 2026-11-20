@@ -47,6 +47,7 @@ import { recordSalesOutputs } from './output';
 import { type DocumentPartners, documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 import { DeliveringPlantError, deliveringPlantFor } from './delivering-plant';
 import { billedOf, deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
+import { markSalesPlanning, orderPlanningTargets } from './sales-demand';
 import { PricingError, assertMaterialAtPlant, resolveCustomerSalesData } from './pricing';
 import { MaterialSalesError, assertMaterialSalesArea } from './material-sales';
 import {
@@ -901,6 +902,10 @@ export async function createSalesOrder(
       documentCategory: 'SALES_ORDER', documentNumber: number,
     });
 
+    // The planning file, in this transaction: a new requirement is demand the next net-change run must see.
+    await markSalesPlanning(tx, parsed.client, parsed.changedBy, `Sales order ${number} created`,
+      lines.map((line) => ({ materialNumber: line.materialNumber, plant: line.plant })));
+
     return { orderNumber: number, replayed: false, creditArea, orderDate: parsed.orderDate };
   });
 
@@ -1141,6 +1146,12 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
       documentCategory: 'ORDER', documentNumber: parsed.orderNumber, documentType: before.documentType,
       objectClass: SALES_ORDER_OBJECT_CLASS,
     });
+    // Old and new material/plant: an item may move, change quantity or date, or be rejected, and both ends
+    // of the move are planned again.
+    await markSalesPlanning(tx, parsed.client, parsed.changedBy, `Sales order ${parsed.orderNumber} changed`, [
+      ...standing.map((row) => ({ materialNumber: row.materialNumber, plant: row.plant })),
+      ...lines.map((line) => ({ materialNumber: line.materialNumber, plant: line.plant })),
+    ]);
     return { orderDate: before.orderDate };
   });
 
@@ -1201,6 +1212,7 @@ export async function cancelSalesOrder(input: {
         'Reload the order first.',
       );
     }
+    await markSalesPlanning(tx, client, changedBy, `Sales order ${orderNumber} cancelled`, await orderPlanningTargets(tx, client, orderNumber));
     await recordChange(tx, {
       client, objectClass: SALES_ORDER_OBJECT_CLASS, objectKey: orderNumber, changeType: 'CHANGE', changedBy,
       reason: reason || 'Order cancelled in sales.',

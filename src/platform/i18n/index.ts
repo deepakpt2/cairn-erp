@@ -3505,6 +3505,7 @@ const en: Catalogue = {
   'md04.stoTransitElement': 'In transit (arrival date not recorded: estimate)',
   'md04.stoIssueElement': 'Stock transport order issue (requirement)',
   'md04.reservationElement': 'Reservation',
+  'md04.salesOrderElement': 'Sales order demand · requested open quantity',
   'md04.plannedElement': 'Planned order',
   'md04.productionElement': 'Production order',
   'md04.dependentElement': 'Open dependent requirement · active demand, not reconciled',

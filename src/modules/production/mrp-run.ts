@@ -27,6 +27,7 @@ import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { createRequisition, changeRequisition } from '../purchasing/requisitions';
 import { explodePlannedSupply } from './mrp-explosion';
 import { stoPlanningElements } from './sto-planning';
+import { salesDemandElements } from '../sales/sales-demand';
 import { structuralBomLevels } from './mrp-structure';
 
 export const MRP_RUN_CAPABILITY = 'PROD.MRP.RUN';
@@ -895,6 +896,24 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
     if (open <= 0n) continue;
     elements.push({ date: String(row.base_date), delta: -open });
     demand += open;
+  }
+  // Sales-order demand: the requested open quantity per schedule line, the projection MD04 reads. A planned
+  // material with a sales requirement and no supply is a shortage like any other; the proposal type follows
+  // the procurement type and the MRP type decides how the demand is consumed (see `walk`).
+  const salesDemand = await salesDemandElements(tx, client, candidate.materialNumber, candidate.plant);
+  for (const e of salesDemand.elements) {
+    elements.push({ date: e.date, delta: -e.quantity });
+    demand += e.quantity;
+    diagnostics.push({
+      severity: 'INFO', code: 'SALES_ORDER_DEMAND',
+      message: `Sales order ${e.orderNumber} item ${e.lineNumber}${e.scheduleNumber === null ? '' : ` schedule ${e.scheduleNumber}`} requires ${shown(e.quantity)} on ${e.date}.`,
+    });
+  }
+  for (const b of salesDemand.blocked) {
+    diagnostics.push({
+      severity: 'WARNING', code: 'SALES_ORDER_DEMAND_BLOCKED',
+      message: `Sales order ${b.orderNumber} item ${b.lineNumber} is left out of demand: ${b.reason}`.slice(0, 200),
+    });
   }
   const dependent = await dependentDemand(tx, client, candidate, runNumber);
   for (const row of dependent) {

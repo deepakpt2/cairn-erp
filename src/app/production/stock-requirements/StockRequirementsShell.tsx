@@ -25,6 +25,7 @@ export default function StockRequirementsShell({ canUse, selection, result, repo
         : type === 'STO_TRANSIT' ? t('md04.stoTransitElement')
         : type === 'STO_ISSUE' ? t('md04.stoIssueElement')
         : type === 'RESERVATION' ? t('md04.reservationElement')
+        : type === 'SALES_ORDER' ? t('md04.salesOrderElement')
           : type === 'PLANNED_ORDER' ? t('md04.plannedElement')
             : type === 'PRODUCTION_ORDER' ? t('md04.productionElement')
             : type === 'DEPENDENT_REQUIREMENT' ? t('md04.dependentElement')

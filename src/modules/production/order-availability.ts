@@ -138,7 +138,7 @@ export function holdsOrderAvailabilityAuthority(held: readonly string[]): boolea
 /** The element types whose inclusion the scope of check decides. */
 const SCOPED_ELEMENTS = [
   'PURCHASE_REQUISITION', 'PURCHASE_ORDER', 'PLANNED_ORDER', 'PRODUCTION_ORDER',
-  'SAFETY_STOCK', 'RESERVATION', 'DEPENDENT_REQUIREMENT', 'PRODUCTION_COMPONENT',
+  'SAFETY_STOCK', 'RESERVATION', 'DEPENDENT_REQUIREMENT', 'PRODUCTION_COMPONENT', 'SALES_ORDER',
 ] as const;
 type ScopedElement = (typeof SCOPED_ELEMENTS)[number];
 
@@ -550,6 +550,10 @@ function elementCounts(
       break;
     case 'RESERVATION':
       byFlag = scope.reservations === 'X';
+      break;
+    case 'SALES_ORDER':
+      // The scope's own "sales requirements" switch (blank = not counted); the demand is already in base units.
+      byFlag = scope.salesRequirements === 'X';
       break;
     default:
       byFlag = false;

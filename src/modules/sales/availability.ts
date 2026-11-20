@@ -30,8 +30,10 @@
  * is refused naming the row. The search for supply is bounded: a year past the latest date asked for,
  * and the stock/requirements list's own hit limit — a promise is never made from an unbounded search.
  *
- * Nothing here writes to `planning_file` and nothing transfers a requirement into MRP: decision (6)
- * drew that line, and MRP behaviour is untouched by this module.
+ * Nothing in THIS module writes to `planning_file`. Sales demand reaches MD04 and MRP through `sales-demand.ts`
+ * (requested open quantity, not the confirmed one); the order, delivery and goods-issue services mark the planning
+ * file. This check still counts other orders' promises itself (`promisedToOthers`) and selects only the supply and
+ * requirement elements its scope names, so the new SALES_ORDER element is never counted a second time here.
  */
 import { and, eq, sql } from 'drizzle-orm';
 

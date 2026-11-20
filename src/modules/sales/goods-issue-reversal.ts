@@ -25,6 +25,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import type { Tx } from '../../platform/db/client';
 import { billingDocument, delivery, deliveryLine } from './schema';
+import { deliveryPlanningTargets, markSalesPlanning } from './sales-demand';
 
 const DELIVERY_OBJECT_CLASS = 'delivery';
 
@@ -147,6 +148,10 @@ export async function noteGoodsIssueReversed(
     eq(delivery.deliveryNumber, header.deliveryNumber),
     eq(delivery.version, header.version),
   ));
+
+  // Stock came back and the order's demand with it, in this transaction: plan the pair again.
+  await markSalesPlanning(tx, client, changedBy, `Goods issue of delivery ${header.deliveryNumber} reversed`,
+    await deliveryPlanningTargets(tx, client, header.deliveryNumber));
 
   await recordChange(tx, {
     client, objectClass: DELIVERY_OBJECT_CLASS, objectKey: header.deliveryNumber,

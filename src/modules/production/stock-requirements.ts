@@ -25,7 +25,9 @@
  * requirement date is omitted. An open dependent requirement that conversion did not
  * match stays on this list. A later planning run may refresh that open row. A closed
  * dependent requirement is not listed.
- * Sales orders remain deferred. Excess-stock alerts have no stock ceiling.
+ * Sales orders are demand (SALES_ORDER): the requested open quantity of an open item, per schedule line, from
+ * `sales-demand.ts` — the same projection the MRP run reads. A goods issue reduces it, its reversal restores it, an
+ * unissued delivery does not. Excess-stock alerts have no stock ceiling.
  * Refused by name: MRP area, the one-character special stock indicator, a
  * simulation version, and PR-to-PO conversion (a posting action, not a report).
  */
@@ -37,6 +39,7 @@ import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversio
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { receiptMovementSign } from '../purchasing/receipt-unit-basis';
 import { stoPlanningElements, stoQuantityNumber } from './sto-planning';
+import { salesDemandElements, salesDemandQuantityNumber } from '../sales/sales-demand';
 
 export const STOCK_REQUIREMENTS_CAPABILITY = 'PROD.MRP.STOCKREQ';
 export const STOCK_REQUIREMENTS_ALIAS = 'MD04';
@@ -48,7 +51,7 @@ export const PERIOD_SPLITS = ['DAILY', 'WEEKLY'] as const;
 export type PeriodSplit = (typeof PERIOD_SPLITS)[number];
 
 export type ElementType =
-  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'STO_RECEIPT' | 'STO_TRANSIT' | 'STO_ISSUE' | 'PLANNED_ORDER' | 'PRODUCTION_ORDER' | 'PRODUCTION_COMPONENT' | 'SAFETY_STOCK' | 'RESERVATION' | 'DEPENDENT_REQUIREMENT';
+  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'STO_RECEIPT' | 'STO_TRANSIT' | 'STO_ISSUE' | 'PLANNED_ORDER' | 'PRODUCTION_ORDER' | 'PRODUCTION_COMPONENT' | 'SAFETY_STOCK' | 'RESERVATION' | 'DEPENDENT_REQUIREMENT' | 'SALES_ORDER';
 export type ElementDirection = 'RECEIPT' | 'REQUIREMENT';
 export type ExceptionCode = 'SHORTAGE' | 'SAFETY_BREACH' | 'PAST_DUE';
 
@@ -163,6 +166,8 @@ export async function stockRequirementsList(input: {
   client: string;
   today: string;
   selection: StockRequirementsSelection;
+  /** False masks the sales document identity and drill-down for a viewer without sales-order authority; the quantity and date still plan. */
+  canDisplaySalesOrders?: boolean;
 }): Promise<StockRequirementsResult> {
   const { client, today } = input;
   const raw = input.selection;
@@ -544,6 +549,24 @@ export async function stockRequirementsList(input: {
         drillDown: `/production/production-order-display?order=${encodeURIComponent(String(row.order_number))}`,
       });
     }
+    // Sales-order demand (requested open quantity, per schedule line) — the shared projection MRP reads too.
+    const salesDemand = await salesDemandElements(tx, client, s.material!, s.plant!);
+    const showSales = input.canDisplaySalesOrders !== false;
+    for (const e of salesDemand.elements) {
+      elements.push({
+        date: e.date,
+        elementType: 'SALES_ORDER',
+        elementLabel: 'Sales order demand · requested open quantity',
+        direction: 'REQUIREMENT',
+        documentNumber: showSales ? e.orderNumber : 'Sales order',
+        documentItem: showSales ? `${e.lineNumber}${e.scheduleNumber === null ? '' : `/${e.scheduleNumber}`}` : '',
+        quantity: salesDemandQuantityNumber(e.quantity),
+        drillDown: showSales ? `/sales/orders?order=${encodeURIComponent(e.orderNumber)}` : null,
+      });
+    }
+    for (const b of salesDemand.blocked) {
+      warnings.push(`Sales order ${showSales ? `${b.orderNumber} item ${b.lineNumber}` : 'item'} is left out of demand: ${b.reason}`);
+    }
     // Chronological: receipts before requirements on the same date, so a receipt
     // landing that day is available to meet the demand of that day.
     elements.sort((a, b) => (a.date === b.date
@@ -559,6 +582,9 @@ export async function stockRequirementsList(input: {
     }
     if (componentIssueReducedDemand) {
       warnings.push('A posted component issue is already subtracted from dated production-order component demand. It is not counted again. A reversal of that issue restores the open quantity.');
+    }
+    if (withinHorizon.some((row) => row.elementType === 'SALES_ORDER')) {
+      warnings.push('Sales order demand is the requested open quantity (unconfirmed orders included). A goods issue reduces it and stock together; a delivery that is not yet goods-issued does not. Where an item has several schedule lines the issued quantity is allocated to the earliest date first (inferred, not a stored link).');
     }
     if (poUnitBlocked > 0) {
       warnings.push(`${poUnitBlocked} purchase order item(s) stand in a unit this material carries no conversion for. Their ordered quantity is listed as the order holds it while the goods received are counted in ${baseUnit || 'the base unit'}, so their open quantity is the difference of two units and is not a coverage figure.`);

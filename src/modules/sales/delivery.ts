@@ -47,6 +47,7 @@ import { blockingEntries, describeBlocked, evaluateIncompletion } from './incomp
 import { recordSalesOutputs } from './output';
 import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
 import { CUSTOMER_MASTER_ROUTE, deliveryTermsFor } from './delivering-plant';
+import { deliveryPlanningTargets, markSalesPlanning } from './sales-demand';
 import { determineBatchesOn } from './batch-determination';
 import { material } from '../inventory/schema';
 import { capturePickSerialsOn, releasePickSerialsOn } from '../inventory/serial-number';
@@ -1581,6 +1582,9 @@ export async function postDeliveryGoodsIssue(
       );
     }
 
+    // The goods are out: stock and order demand fell together, so the net-change run plans the pair again.
+    await markSalesPlanning(tx, parsed.client, parsed.changedBy, `Goods issue of delivery ${header.deliveryNumber}`,
+      await deliveryPlanningTargets(tx, parsed.client, header.deliveryNumber));
     await recordChange(tx, {
       client: parsed.client, objectClass: DELIVERY_OBJECT_CLASS, objectKey: header.deliveryNumber,
       changeType: 'CHANGE', changedBy: parsed.changedBy,
