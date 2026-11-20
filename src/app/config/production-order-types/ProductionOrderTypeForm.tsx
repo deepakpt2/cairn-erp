@@ -34,6 +34,7 @@ export default function ProductionOrderTypeForm({
                 <th>Type</th>
                 <th>Description</th>
                 <th>Category</th>
+                <th>Financial WIP</th>
                 {canMaintain && <th>Action</th>}
               </tr>
             </thead>
@@ -43,6 +44,7 @@ export default function ProductionOrderTypeForm({
                   <td className="code">{row.orderType}</td>
                   <td>{row.description}</td>
                   <td className="code">{row.orderCategory}</td>
+                  <td>{row.wipMethod === 'ACTUAL_COST_NET_BALANCE' ? 'Actual-cost net balance' : 'Off'}</td>
                   {canMaintain && (
                     <td>
                       <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setEditing(row)}>Change</button>
@@ -73,6 +75,14 @@ export default function ProductionOrderTypeForm({
             Description
             <input name="description" defaultValue={editing?.description ?? ''} maxLength={40} className="field-input mt-1 w-full" required />
           </label>
+          <label className="block text-sm">
+            Financial WIP
+            <select name="wipMethod" defaultValue={editing?.wipMethod ?? ''} key={editing?.orderType ?? 'new'} className="field-input mt-1 w-full">
+              <option value="">Off: no work in process is capitalised</option>
+              <option value="ACTUAL_COST_NET_BALANCE">Actual-cost net balance (limited method)</option>
+            </select>
+          </label>
+          <p className="text-sm text-ink-soft">Financial WIP also needs the PRODUCTION_WIP and PRODUCTION_WIP_CHANGE accounts at /config/account-determination.</p>
           <p className="text-sm text-ink-soft">Category 10 is stored. A plant, a number range, and checking control are not entered.</p>
           <label className="block text-sm">
             Reason

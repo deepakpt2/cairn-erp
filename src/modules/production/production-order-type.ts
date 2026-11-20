@@ -54,6 +54,8 @@ export interface ProductionOrderTypeRow {
   orderType: string;
   description: string;
   orderCategory: typeof PRODUCTION_ORDER_CATEGORY;
+  /** '' = no financial WIP for this type; 'ACTUAL_COST_NET_BALANCE' = the limited actual-cost method. */
+  wipMethod: string;
   version: number;
 }
 
@@ -118,6 +120,7 @@ export async function listProductionOrderTypes(client: string): Promise<{
         orderType: row.orderType,
         description: row.description,
         orderCategory: PRODUCTION_ORDER_CATEGORY,
+        wipMethod: row.wipMethod,
         version: row.version,
       })),
       gaps: ORDER_TYPE_GAPS,
@@ -131,6 +134,8 @@ export async function saveProductionOrderType(input: {
   mode: 'CREATE' | 'CHANGE' | 'DELETE';
   orderType: string;
   description: string;
+  /** Optional; omitted keeps what stands (blank on create). Only '' or ACTUAL_COST_NET_BALANCE stand. */
+  wipMethod?: string;
   version: number;
   reason: string;
   extensions?: Record<string, string | undefined>;
@@ -139,6 +144,10 @@ export async function saveProductionOrderType(input: {
   const orderType = requireKey(input.orderType);
   const reason = requireReason(input.reason);
   const description = input.mode === 'DELETE' ? '' : requireDescription(input.description);
+  const requestedWip = input.wipMethod === undefined ? null : input.wipMethod.trim();
+  if (requestedWip !== null && requestedWip !== '' && requestedWip !== 'ACTUAL_COST_NET_BALANCE') {
+    fail(`WIP method ${requestedWip} does not stand. Nothing was saved.`, 'Choose no WIP, or ACTUAL_COST_NET_BALANCE. No other method is supported.');
+  }
 
   return withTenant(input.client, async (tx) => {
     const [existing] = await tx.select().from(productionOrderType)
@@ -151,6 +160,7 @@ export async function saveProductionOrderType(input: {
         orderType,
         description,
         orderCategory: PRODUCTION_ORDER_CATEGORY,
+        wipMethod: requestedWip ?? '',
         version: 1,
         createdBy: input.changedBy,
       });
@@ -170,6 +180,7 @@ export async function saveProductionOrderType(input: {
       } else {
         await tx.update(productionOrderType).set({
           description,
+          wipMethod: requestedWip ?? existing.wipMethod,
           version: existing.version + 1,
           changedBy: input.changedBy,
           changedAt: new Date(),
@@ -187,8 +198,8 @@ export async function saveProductionOrderType(input: {
       changedBy: input.changedBy,
       reason,
       transactionCode: ACTIVITY,
-      before: existing ? { description: existing.description, orderCategory: existing.orderCategory } : undefined,
-      after: input.mode === 'DELETE' ? undefined : { description, orderCategory: PRODUCTION_ORDER_CATEGORY },
+      before: existing ? { description: existing.description, orderCategory: existing.orderCategory, wipMethod: existing.wipMethod } : undefined,
+      after: input.mode === 'DELETE' ? undefined : { description, orderCategory: PRODUCTION_ORDER_CATEGORY, wipMethod: requestedWip ?? existing?.wipMethod ?? '' },
     });
     await markActivityComplete(tx, input.client, ACTIVITY, input.changedBy);
     if (input.mode === 'DELETE') return null;
@@ -196,6 +207,7 @@ export async function saveProductionOrderType(input: {
       orderType,
       description,
       orderCategory: PRODUCTION_ORDER_CATEGORY,
+      wipMethod: requestedWip ?? existing?.wipMethod ?? '',
       version: input.mode === 'CREATE' ? 1 : existing!.version + 1,
     };
   });

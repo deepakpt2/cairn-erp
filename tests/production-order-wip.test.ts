@@ -19,6 +19,7 @@ import {
   createProductionOrder,
   releaseProductionOrder,
 } from '../src/modules/inventory/production-orders';
+import { saveProductionOrderType } from '../src/modules/production/production-order-type';
 import { settleProductionOrder } from '../src/modules/production/order-settlement';
 import { getProductionOrderCostReport } from '../src/modules/production/order-cost-report';
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
@@ -70,6 +71,9 @@ async function standing(seed: string): Promise<Place> {
       insert into production_order_type (client, order_type, description, order_category, created_by)
       values (${tenant.client}, ${ORDER_TYPE}, 'Standard production', '10', ${ACTOR})
       on conflict do nothing
+    `);
+    await tx.execute(sql`
+      update production_order_type set wip_method = 'ACTUAL_COST_NET_BALANCE' where client = ${tenant.client} and order_type = ${ORDER_TYPE}
     `);
     await tx.execute(sql`
       insert into plant (client, plant, name, company_code, country, created_by)
@@ -633,6 +637,29 @@ describe('financial WIP (actual-cost net balance)', () => {
     expect(replay.orders[0]!.reasons.join(' ')).toMatch(/already posted as/);
     expect(replay.orders[0]!.document!.documentNumber).toBe(keyed.orders[0]!.document!.documentNumber);
     expect(await balance(p, WIP)).toBe(45);
+  });
+
+  it('is off per order type until the type enables it, and the type screen service validates the method', async () => {
+    const p = await standing('wip-switch');
+    await wipAccounts(p);
+    const auth = await wipActor(p);
+    const order = (await makeOrder(p)).orderNumber;
+    await material(p, order, '80.00');
+    await output(p, order, '40.00');
+    await withTenant(p.client, (tx) => tx.execute(sql`update production_order_type set wip_method = '' where client = ${p.client}`));
+    const off = (await run(p, auth, order, 1, false)).orders[0]!;
+    expect(off.status).toBe('NOT_ELIGIBLE');
+    expect(off.reasons.join(' ')).toMatch(/not enabled for order type PP01/);
+    expect(off.remedy).toMatch(/production-order-types/);
+    expect((await counts(p)).wip).toBe(0);
+    await expect(saveProductionOrderType({
+      client: p.client, changedBy: ACTOR, mode: 'CHANGE', orderType: ORDER_TYPE, description: 'Standard production', wipMethod: 'PERCENT_COMPLETE', version: 1, reason: 'x',
+    })).rejects.toThrow(/does not stand/);
+    const saved = await saveProductionOrderType({
+      client: p.client, changedBy: ACTOR, mode: 'CHANGE', orderType: ORDER_TYPE, description: 'Standard production', wipMethod: 'ACTUAL_COST_NET_BALANCE', version: 1, reason: 'Enable WIP',
+    });
+    expect(saved?.wipMethod).toBe('ACTUAL_COST_NET_BALANCE');
+    expect((await run(p, auth, order, 1, false)).posted).toBe(1);
   });
 
   it('does not capitalise a created order and targets zero for a technically completed one', async () => {

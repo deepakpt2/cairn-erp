@@ -48,6 +48,7 @@ export async function saveProductionOrderTypeAction(
       mode,
       orderType,
       description: read(form, 'description'),
+      wipMethod: read(form, 'wipMethod'),
       version: Number(read(form, 'version') || '0'),
       reason: read(form, 'reason'),
     });

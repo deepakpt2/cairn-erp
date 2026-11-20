@@ -69,7 +69,7 @@ export const ACCOUNT_DETERMINATION_ROUTE = '/config/account-determination';
 export const WIP_MAX_ORDERS = 200;
 
 export const WIP_METHOD_STATEMENT =
-  'Actual-cost WIP (limited): for a released order at the end of the period, eligible WIP = posted material and activity cost debits − production-output credits '
+  'Actual-cost WIP (limited, enabled per production order type): for a released order at the end of the period, eligible WIP = posted material and activity cost debits − production-output credits '
   + '(posting events PRODUCTION_CONSUMPTION, PRODUCTION_ACTIVITY and PRODUCTION_OUTPUT), net of reversals, excluding earlier WIP postings and settlements. '
   + 'Only the delta to the previously posted WIP is posted (debit WIP, credit change in WIP; the mirror when it falls). A technically completed order is settled, not capitalised, and its WIP is unwound. '
   + 'Manual or unclassified postings, negative balances, output above cost, other currencies, special periods and closed periods are refused with a remedy. '
@@ -301,6 +301,20 @@ export async function calculateWip(tx: Tx, client: string, orderNumber: string, 
     return blank(orderNumber, fiscalYear, period, { ...base, periodEnd: end.end, status: 'UNSUPPORTED', reasons: [`Period ${period}/${fiscalYear} ends ${end.end}, which company ${ctx.companyCode} places in ${position.period}/${position.fiscalYear}.`], remedy: 'Choose the period as the company\'s fiscal year defines it.' });
   }
   const withEnd = { ...base, periodEnd: end.end };
+
+  const [typeRow] = await tx.execute(sql`
+    select o.order_type, coalesce(t.wip_method, '') as wip_method
+      from production_order o
+      left join production_order_type t on t.client = o.client and t.order_type = o.order_type
+     where o.client = ${client} and o.order_number = ${orderNumber}
+  `) as unknown as Array<{ order_type: string | null; wip_method: string }>;
+  if (typeRow?.wip_method !== WIP_METHOD) {
+    return blank(orderNumber, fiscalYear, period, {
+      ...withEnd, status: 'NOT_ELIGIBLE',
+      reasons: [`Financial WIP is not enabled for order type ${typeRow?.order_type?.trim() || '(none)'} of order ${orderNumber}.`],
+      remedy: 'Set the WIP method of the order type to ACTUAL_COST_NET_BALANCE on the production order type screen (/config/production-order-types). A balance already capitalised is unwound by the final settlement.',
+    });
+  }
 
   if (ctx.status === 'CREATED') {
     return blank(orderNumber, fiscalYear, period, { ...withEnd, status: 'NOT_ELIGIBLE', reasons: [`Order ${orderNumber} is only created; it carries no actuals, so there is no WIP.`], remedy: 'Release the order.' });

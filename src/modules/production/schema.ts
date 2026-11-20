@@ -1227,6 +1227,8 @@ export const productionOrderType = pgTable('production_order_type', {
   description: varchar('description', { length: 40 }).notNull(),
   /** AUFTYP 10. Other categories are not this customizing. */
   orderCategory: char('order_category', { length: 2 }).notNull().default('10'),
+  /** '' = no financial WIP for orders of this type; 'ACTUAL_COST_NET_BALANCE' = the limited method of order-wip.ts. */
+  wipMethod: varchar('wip_method', { length: 24 }).notNull().default(''),
   version: integer('version').notNull().default(1),
   ...auditColumns,
 }, (t) => [
