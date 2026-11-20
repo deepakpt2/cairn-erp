@@ -23,7 +23,7 @@ import {
 } from '../src/modules/finance/intercompany';
 import {
   activateArea, assignUnit, saveArea, saveDataBasis, saveGroup, saveGroupAccount, saveMapping, saveMethod, saveTask, saveUnit, saveVersion,
-} from '../src/modules/finance/consolidation-workbench';
+} from './helpers/consolidation-workbench';
 import { authorizedCompanyCodes } from '../src/platform/auth/company-scope';
 import { createFinanceActor, FINANCE_REPORT_CAPABILITIES, type FinanceActor } from './helpers/finance-actor';
 import { closeDb, createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';

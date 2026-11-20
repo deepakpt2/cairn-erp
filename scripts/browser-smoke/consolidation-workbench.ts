@@ -6,7 +6,7 @@ import { withTenant } from '../../src/platform/db/client';
 import {
   activateArea, assignUnit, saveArea, saveDataBasis, saveGroup,
   saveMethod, saveUnit, saveVersion,
-} from '../../src/modules/finance/consolidation-workbench';
+} from '../../tests/helpers/consolidation-workbench';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };

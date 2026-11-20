@@ -34,7 +34,7 @@ function same(left: string, right: string) {
 }
 
 function handler(
-  fn: (form: FormData, actor: { client: string; changedBy: string; reason: string }) => Promise<string>,
+  fn: (form: FormData, actor: { client: string; changedBy: string; reason: string; authorization: { userId: string; sessionId: string } }) => Promise<string>,
   lock?: (form: FormData, session: { sessionId?: string; user: { client: string; userId: string } }) => Promise<void>,
 ) {
   return async (_prev: ConsolidationActionState, form: FormData): Promise<ConsolidationActionState> => {
@@ -46,6 +46,7 @@ function handler(
       if (lock) await lock(form, session);
       const message = await fn(form, {
         client: session.user.client, changedBy: session.user.username, reason: text(form, 'reason'),
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       });
       revalidatePath(ROUTE);
       return { ok: true, message };

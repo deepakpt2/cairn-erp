@@ -15,7 +15,7 @@ import {
   activateArea, assignUnit, getConsolidationWorkbench as getConsolidationWorkbenchService, saveArea,
   saveDataBasis, saveGroup, saveGroupAccount, saveMapping, saveMethod,
   saveTask, saveUnit, saveVersion,
-} from '../src/modules/finance/consolidation-workbench';
+} from './helpers/consolidation-workbench';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { financeAuth } from './helpers/finance-actor';
 

@@ -15,7 +15,7 @@ import { withTenant } from '../src/platform/db/client';
 import {
   activateArea, assignUnit, saveArea, saveDataBasis, saveGroup,
   saveGroupAccount, saveMapping, saveMethod, saveTask, saveUnit, saveVersion,
-} from '../src/modules/finance/consolidation-workbench';
+} from './helpers/consolidation-workbench';
 import {
   calculateConsolidatedStatements,
   type ConsolidatedStatementsSelection,

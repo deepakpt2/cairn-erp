@@ -19,6 +19,9 @@ import { executeGrIrAnalysis, getGrIrRun } from '../src/modules/finance/grir-rec
 import {
   activateArea, assignUnit, getConsolidationWorkbench, listConsolidationAreas, saveArea, saveDataBasis,
   saveGroup, saveMethod, saveTask, saveUnit, saveVersion,
+} from './helpers/consolidation-workbench';
+import {
+  assignUnit as assignUnitService, saveArea as saveAreaService, saveUnit as saveUnitService,
 } from '../src/modules/finance/consolidation-workbench';
 import {
   cancelConsolidationExecution, executeConsolidationTask, executeConsolidationTaskGroup,
@@ -51,7 +54,7 @@ const sel = (group: string, overrides: Partial<ConsolidationMonitorSelection> = 
 });
 
 /** The refusal is thrown and does not disclose existence. */
-async function refused(p: Promise<unknown>, pattern: RegExp = /scope|Company Code|capabilit|authori|session|signed-in|not hold|No company/i) {
+async function refused(p: Promise<unknown>, pattern: RegExp = /scope|Company Code|includes a company|capabilit|authori|session|signed-in|not hold|No company/i) {
   try { await p; } catch (error) {
     expect((error as Error).message).toMatch(pattern);
     expect((error as Error).message).not.toMatch(/does not stand/);
@@ -244,5 +247,28 @@ describe('consolidation workbench and monitor are company-scoped', () => {
     const still = await withTenant(client, async (tx) => tx.execute(sql`select status from consolidation_execution where client = ${client} and run_id = 'SCRUNB'`)) as unknown as Array<{ status: string }>;
     expect(still[0]!.status).toBe('RUNNING');
     expect((await cancelConsolidationExecution({ client, executedBy: 'x', runId: 'SCRUNB', authorization: onlyB.authorization })).status).toBe('CANCELLED');
+  });
+});
+
+describe('consolidation configuration writes are company-scoped', () => {
+  const base = { client: '', changedBy: 'x', reason: 'adversarial' };
+  it('refuses a write under another company\'s scope, without a session, capability or scope, and leaves nothing behind', async () => {
+    const b = { ...base, client };
+    const units = () => count('consolidation_unit');
+    const before = await units();
+    // A-only may not attach company B to a unit, nor touch the area that holds unit UB.
+    await refused(saveUnitService({ ...b, area: 'CSC1', unit: 'UX', title: 'X', companyCode: B, authorization: onlyA.authorization }));
+    await refused(saveUnitService({ ...b, area: 'CSC1', unit: 'UY', title: 'Y', companyCode: A, authorization: onlyA.authorization }));
+    await refused(assignUnitService({ ...b, area: 'CSC1', group: 'GA', unit: 'UA', validFrom: '2027-01-01', validTo: '2027-12-31', authorization: onlyA.authorization }));
+    for (const bad of [undefined, noScope.authorization, noCapability.authorization, otherTenantActor.authorization]) {
+      await refused(saveUnitService({ ...b, area: 'CSC1', unit: 'UZ', title: 'Z', companyCode: A, authorization: bad }));
+    }
+    expect(await units()).toBe(before);
+    // Both-company scope may.
+    await saveUnitService({ ...b, area: 'CSC1', unit: 'UOK', title: 'OK', companyCode: B, authorization: both.authorization });
+    expect(await units()).toBe(before + 1);
+    // A brand-new area (no units yet) is reachable with the capability, but attaching B still needs B in scope.
+    await saveAreaService({ ...b, area: 'CSC2', title: 'New', dataBasis: 'BS', consChart: 'GC01', fiscalYearVariant: 'K4', authorization: onlyA.authorization }).catch(() => undefined);
+    await refused(saveUnitService({ ...b, area: 'CSC2', unit: 'UN', title: 'N', companyCode: B, authorization: onlyA.authorization }));
   });
 });

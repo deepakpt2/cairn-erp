@@ -15,7 +15,7 @@ import type {
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
-import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
+import { authorizeCompaniesAnyInTx, verifyCompanyAuthorityAnyInTx } from '../../platform/auth/company-scope';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { chartOfAccounts, companyCode as foundationCompanyCode, fiscalYearVariant } from '../foundation/schema';
@@ -53,7 +53,11 @@ export const DIMENSION_SOURCES: Record<string, string> = {
   DOCUMENT_CURRENCY: 'journal_entry.document_currency',
 };
 
-interface Actor { client: string; changedBy: string; reason: string }
+interface Actor {
+  client: string; changedBy: string; reason: string;
+  /** The verified session the change is made under; the actor is not trusted without it. */
+  authorization: ServiceAuthorityContext | undefined;
+}
 
 function judgeReason(input: Actor) {
   if (!input.reason?.trim()) fail('A change reason is required.', 'State why this configuration changes.');
@@ -65,6 +69,28 @@ async function audit(tx: Tx, input: Actor, objectKey: string, after: Record<stri
     changeType: 'CREATE', changedBy: input.changedBy,
     transactionCode: CONSOLIDATION_CAPABILITY, after,
   });
+}
+
+/**
+ * A configuration change is made by somebody: a standing session, the workbench capability, and (for an
+ * area) an explicit Company Code scope covering every company of the area's units plus any company the
+ * change attaches. Judged before anything is read or written. Chart-level changes (no area) need the
+ * capability only. A plant limit does not refuse configuration.
+ */
+async function authorizeWriteInTx(tx: Tx, input: Actor, area: string | null, extraCompanies: readonly string[] = []) {
+  const units = area
+    ? await tx.select({ companyCode: consolidationUnit.companyCode }).from(consolidationUnit)
+      .where(and(eq(consolidationUnit.client, input.client), eq(consolidationUnit.area, area)))
+    : [];
+  const companies = [...new Set([...units.map((u) => u.companyCode), ...extraCompanies].filter(Boolean))];
+  // An area with no unit yet names no company: the session and the capability are still judged.
+  const verdict = companies.length === 0
+    ? await verifyCompanyAuthorityAnyInTx(tx, input.client, input.authorization, [CONSOLIDATION_CAPABILITY])
+    : await authorizeCompaniesAnyInTx(
+      tx, input.client, input.authorization, [CONSOLIDATION_CAPABILITY], companies,
+      { derivedFrom: 'The consolidation area', allowPlantLimited: true },
+    );
+  if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
 }
 
 async function judgeArea(tx: Tx, client: string, area: string) {
@@ -93,10 +119,12 @@ async function areaReadableInTx(
   const units = await tx.select({ companyCode: consolidationUnit.companyCode }).from(consolidationUnit)
     .where(and(eq(consolidationUnit.client, client), eq(consolidationUnit.area, areaKey)));
   const companies = [...new Set(units.map((u) => u.companyCode).filter(Boolean))];
-  const verdict = await authorizeCompaniesAnyInTx(
-    tx, client, authorization, WORKBENCH_READ_CAPABILITIES, companies,
-    { derivedFrom: 'The consolidation area', allowPlantLimited: true },
-  );
+  const verdict = companies.length === 0
+    ? await verifyCompanyAuthorityAnyInTx(tx, client, authorization, WORKBENCH_READ_CAPABILITIES)
+    : await authorizeCompaniesAnyInTx(
+      tx, client, authorization, WORKBENCH_READ_CAPABILITIES, companies,
+      { derivedFrom: 'The consolidation area', allowPlantLimited: true },
+    );
   return verdict.ok;
 }
 
@@ -194,6 +222,7 @@ export async function saveDataBasis(input: Actor & {
     }
   }
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, null);
     await tx.insert(consolidationDataBasis).values({
       client: input.client, basis, title: input.title, provider: 'JOURNAL', createdBy: input.changedBy,
     }).onConflictDoUpdate({
@@ -220,6 +249,7 @@ export async function saveArea(input: Actor & {
   const area = input.area.toUpperCase();
   if (!/^[A-Z0-9]{4}$/.test(area)) fail(`Consolidation area ${input.area} must be exactly four characters.`);
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, area);
     const [basis] = await tx.select().from(consolidationDataBasis).where(and(
       eq(consolidationDataBasis.client, input.client), eq(consolidationDataBasis.basis, input.dataBasis),
     ));
@@ -249,6 +279,7 @@ export async function saveUnit(input: Actor & {
 }): Promise<void> {
   judgeReason(input);
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, input.area, [input.companyCode]);
     await judgeArea(tx, input.client, input.area);
     const [company] = await tx.select().from(foundationCompanyCode).where(and(
       eq(foundationCompanyCode.client, input.client), eq(foundationCompanyCode.companyCode, input.companyCode),
@@ -274,6 +305,7 @@ export async function saveGroup(input: Actor & {
   const parent = (input.parentGroup ?? '').toUpperCase();
   if (parent === group) fail('A group cannot be its own parent.');
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, input.area);
     await judgeArea(tx, input.client, input.area);
     if (parent) {
       // Cycle judge: walk the parent chain; the new parent must not descend from this group.
@@ -308,6 +340,7 @@ export async function assignUnit(input: Actor & {
   judgeReason(input);
   if (input.validFrom > input.validTo) fail('The assignment validity is inverted.');
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, input.area);
     await judgeArea(tx, input.client, input.area);
     const [groupRow] = await tx.select().from(consolidationGroup).where(and(
       eq(consolidationGroup.client, input.client), eq(consolidationGroup.area, input.area),
@@ -343,6 +376,7 @@ export async function saveGroupAccount(input: Actor & {
 }): Promise<void> {
   judgeReason(input);
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, null);
     await tx.insert(consolidationGroupAccount).values({
       client: input.client, consChart: input.consChart.toUpperCase(),
       account: input.account, title: input.title, createdBy: input.changedBy,
@@ -360,6 +394,7 @@ export async function saveMapping(input: Actor & {
   judgeReason(input);
   if (input.sourceFrom > input.sourceTo) fail('The source account range is inverted.');
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, null);
     const [chart] = await tx.select().from(chartOfAccounts).where(and(
       eq(chartOfAccounts.client, input.client), eq(chartOfAccounts.chartOfAccounts, input.sourceChart),
     ));
@@ -396,6 +431,7 @@ export async function saveMethod(input: Actor & {
   judgeReason(input);
   if (!METHOD_KINDS.includes(input.kind)) fail(`Method kind ${input.kind} is not a configured kind.`);
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, input.area);
     await judgeArea(tx, input.client, input.area);
     const method = input.method.toUpperCase();
     await tx.insert(consolidationMethod).values({
@@ -416,6 +452,7 @@ export async function saveVersion(input: Actor & {
   const version = input.version.toUpperCase();
   if (!/^[A-Z0-9]{1,3}$/.test(version)) fail(`Version ${input.version} is not a configured version key.`, 'Versions run 1–3 characters.');
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, input.area);
     await judgeArea(tx, input.client, input.area);
     await tx.insert(consolidationVersion).values({
       client: input.client, area: input.area, version, title: input.title, createdBy: input.changedBy,
@@ -439,6 +476,7 @@ export async function saveTask(input: Actor & {
   const parent = (input.parentTask ?? '').toUpperCase();
   if (parent === task) fail('A task cannot be its own parent.');
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, input.area);
     await judgeArea(tx, input.client, input.area);
     const [version] = await tx.select().from(consolidationVersion).where(and(
       eq(consolidationVersion.client, input.client), eq(consolidationVersion.area, input.area),
@@ -503,6 +541,7 @@ export async function saveTask(input: Actor & {
 export async function activateArea(input: Actor & { area: string }): Promise<void> {
   judgeReason(input);
   await withTenant(input.client, async (tx) => {
+    await authorizeWriteInTx(tx, input, input.area);
     const area = await judgeArea(tx, input.client, input.area);
     const units = await tx.select({ unit: consolidationUnit.unit }).from(consolidationUnit).where(and(
       eq(consolidationUnit.client, input.client), eq(consolidationUnit.area, input.area),
