@@ -166,6 +166,17 @@ export default function TimeTicketWorkbench({
                   : 'Goods movements this confirmation would cause'}
               </p>
               <p className="mt-1 text-2xs text-ink-soft" role="status">{state.ticket.movementNote}</p>
+              {state.ticket.written && state.ticket.activityCosts.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-2xs" data-co11n-activity-cost>
+                  {state.ticket.activityCosts.map((cost) => (
+                    <li key={cost.parameter} data-activity-cost-status={cost.status}>
+                      Activity cost {cost.parameter}: {cost.status}
+                      {cost.amount ? ` · ${cost.amount} ${cost.currency ?? ''} (actual quantity valued at plan rate ${cost.planVersion}; ${cost.journalDocument ?? ''})` : ''}
+                      {cost.message && cost.status !== 'POSTED' ? ` — ${cost.message} ${cost.remedy ?? ''}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {state.ticket.replayed && (
                 <p className="mt-1 text-2xs" data-co11n-replay>
                   This request was already saved. Existing documents were not duplicated; eligible pending movements may have resumed.

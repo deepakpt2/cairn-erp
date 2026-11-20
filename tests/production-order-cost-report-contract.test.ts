@@ -53,7 +53,11 @@ describe('production-order cost report contracts', () => {
 
   it('does not mislabel plan-rate activity valuation, WIP, or variance as posted actuals', () => {
     expect(page).toMatch(/plan rates are not actuals/i);
+    expect(page).toMatch(/actual quantity valued at a configured plan rate/i);
     expect(page).toMatch(/does not settle, post, or calculate WIP or variance/i);
     expect(service).toMatch(/Plan activity rates are not treated as actual costs/);
+    expect(service).toMatch(/not an actual-rate calculation/);
+    // The posted amount is a journal line already; the evidence rows must never be added a second time.
+    expect(page).toMatch(/not added again/);
   });
 });

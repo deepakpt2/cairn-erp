@@ -85,7 +85,7 @@ const REFUSED: Record<string, string> = {
   co11n: 'CO11N confirms one operation. This screen confirms the order.',
   co13: 'Cancellation is not this screen. Open CO13. A posted confirmation was not cancelled.',
   co14: 'CO14 displays recorded confirmations at /production/confirmation-display. Open a saved confirmation there.',
-  cost: 'Activity cost is not calculated. No cost was posted.',
+  cost: 'A cost is not entered here. Activity cost is valued per operation confirmation at the work center\'s configured plan rate. No cost was entered.',
   capacity: 'Capacity is not updated by a confirmation.',
   quality: 'A quality inspection is not stored. None was created.',
   serial: 'A serial number is not confirmed here.',

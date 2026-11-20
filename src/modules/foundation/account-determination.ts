@@ -84,6 +84,16 @@ export const POSTING_EVENTS: PostingEvent[] = [
   // with no seeded row: an account nobody chose is not an answer, and inventing an allocation account
   // in the standard chart would be a chart-of-accounts decision, not a controlling one.
   { event: 'CO_ASSESSMENT', referenceAlias: 'CO_ASSESSMENT', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
+  // Production activity cost (CO11N). A confirmed activity quantity, valued at a configured plan rate, debits the
+  // production order and credits the sender cost centre — both lines on this one internal activity-allocation
+  // account, so the document nets to zero and is not new external expense. Registered with no seeded row: an
+  // account nobody chose is not an answer.
+  { event: 'PRODUCTION_ACTIVITY', referenceAlias: 'PRODUCTION_ACTIVITY', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
+  // Financial WIP of an unfinished production order (actual-cost method, order-wip.ts): the balance-sheet account the
+  // eligible order balance is capitalised on, and the profit-and-loss change-in-WIP account that is its offset.
+  // Both are named per chart and neither is seeded: WIP stays unconfigured, and is refused, until a tenant says so.
+  { event: 'PRODUCTION_WIP', referenceAlias: 'WIP', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
+  { event: 'PRODUCTION_WIP_CHANGE', referenceAlias: 'WIP_CHANGE', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
 ];
 
 export function postingEvent(event: string): PostingEvent | undefined {

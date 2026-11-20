@@ -228,6 +228,34 @@ function ConfirmationDetail({ detail }: { detail: NonNullable<Awaited<ReturnType
             </div>
           )}
         </section>
+        {detail.confirmationLevel === 'OPERATION' && detail.activities.length > 0 && (
+          <section aria-labelledby="co14-activity-cost-heading" data-co14-activity-cost>
+            <h3 id="co14-activity-cost-heading" className="font-semibold">Activity cost</h3>
+            {detail.activityCosts.length === 0 ? (
+              <p className="mt-1 text-ink-soft">
+                No activity cost has been posted for this confirmation (it may predate activity costing). It is never costed automatically after the fact: post it from the
+                production-order settlement screen (/production/order-settlement), where it is previewed first.
+              </p>
+            ) : (
+              <div className="mt-2 overflow-x-auto">
+                <table className="grid-table min-w-[640px]">
+                  <thead><tr><th>Activity</th><th>Status</th><th>Basis</th><th className="text-end">Amount</th><th>Sender / type</th><th>Posting</th><th>Reason</th></tr></thead>
+                  <tbody>{detail.activityCosts.map((cost) => (
+                    <tr key={cost.parameter} data-activity-cost-status={cost.status}>
+                      <td>{cost.parameter} · {cost.quantity} {cost.unit}</td>
+                      <td>{cost.status}</td>
+                      <td>{cost.rateBasis ? `Actual quantity at plan rate · plan ${cost.planVersion} ${cost.ratePeriod}/${cost.rateYear}` : '—'}</td>
+                      <td className="text-end">{cost.amount ? `${cost.amount} ${cost.currency ?? ''}` : '—'}</td>
+                      <td>{cost.costCenter ?? '—'} / {cost.activityType ?? '—'}</td>
+                      <td>{cost.journalDocument ?? '—'}{cost.reversalDocument ? ` · reversed by ${cost.reversalDocument}` : ''}</td>
+                      <td>{cost.message ? `${cost.message}${cost.remedy ? ` ${cost.remedy}` : ''}` : '—'}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
         <section aria-labelledby="co14-material-documents-heading">
           <h3 id="co14-material-documents-heading" className="font-semibold">Associated goods movements and material documents</h3>
           {detail.materialDocuments.length === 0 ? (

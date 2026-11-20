@@ -11,6 +11,7 @@ import { sql, type SQL } from 'drizzle-orm';
 
 import { withTenant, type Tx } from '../../platform/db/client';
 import { movementRequestKey } from './confirmation-movements';
+import { activityCostsOfConfirmation, type ActivityCostEvidence } from './activity-costing';
 
 export const CONFIRMATION_DISPLAY_ROUTE = '/production/confirmation-display';
 export const CONFIRMATION_DISPLAY_PAGE_SIZE = 25;
@@ -154,6 +155,8 @@ export interface ConfirmationDisplayDetail {
   cancellationReason: string | null;
   effects: ConfirmationDisplayEffect[];
   activities: ConfirmationDisplayActivity[];
+  /** Activity cost of the confirmed quantities: posted (with rate basis and document), reversed, or the recorded reason it is not. */
+  activityCosts: ActivityCostEvidence[];
   materialDocuments: ConfirmationDisplayMaterialDocument[];
 }
 
@@ -528,6 +531,7 @@ export async function getProductionConfirmationDisplay(
         unit: String(activity.unit),
         suggestedQuantity: activity.suggested_quantity == null ? null : String(activity.suggested_quantity),
       })),
+      activityCosts: await activityCostsOfConfirmation(tx, client, confirmationNumberValue),
       materialDocuments,
     };
   });

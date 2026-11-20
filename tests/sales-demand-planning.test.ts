@@ -565,6 +565,7 @@ describe('sales-order demand in stock/requirements and MRP', () => {
     await changeSalesOrder({
       ...base, orderNumber: placed.number, expectedVersion: placed.version, requestedDate: LATER,
       lines: [{ lineNumber: 10, materialNumber: 'SDP-NEW', plant: PLANT, orderQuantity: 25, quantityUnit: 'UNT', taxCode: 'T10', requestedDeliveryDate: LATER }],
+      rejectLines: [],
     });
     expect(await planningFile('SDP-OLD')).toMatchObject({ net_change: true });
     expect(await planningFile('SDP-NEW')).toMatchObject({ net_change: true });
@@ -580,6 +581,7 @@ describe('sales-order demand in stock/requirements and MRP', () => {
     await changeSalesOrder({
       ...base, orderNumber: placed.number, expectedVersion: placed.version + 1, requestedDate: LATER,
       lines: [{ lineNumber: 10, materialNumber: 'SDP-NEW', plant: PLANT, orderQuantity: 26, quantityUnit: 'UNT', taxCode: 'T10', requestedDeliveryDate: LATER }],
+      rejectLines: [],
     });
     const cleared = await withTenant(tenant.client, async (tx) => tx.execute(sql`
       update planning_file set net_change = false, reason = 'Planned'

@@ -104,6 +104,11 @@ const PRODUCTION_DETERMINATION = [
   { event: 'SCRAP', valuationClass: 'RAW_INVENTORY', glAccount: '410300' },
   { event: 'SCRAP', valuationClass: 'SEMI_INVENTORY', glAccount: '410300' },
   { event: 'SCRAP', valuationClass: 'FINISHED_INVENTORY', glAccount: '410300' },
+  // The activity-allocation account of CO11N activity costing (a work center costing line with rate basis PLAN_RATE
+  // then values a confirmed quantity at the plan rate). The standard chart delivers 420000 for it. The WIP accounts
+  // (PRODUCTION_WIP, PRODUCTION_WIP_CHANGE) are deliberately NOT seeded: the standard chart has no work-in-process
+  // account, and WIP stays refused until a tenant names its own at /config/account-determination.
+  { event: 'PRODUCTION_ACTIVITY', valuationClass: '', glAccount: '420000' },
 ] as const;
 
 interface ProductionPlan {
@@ -332,7 +337,7 @@ async function countDetermination(client: string): Promise<number | null> {
         select count(*)::text as n
           from account_determination
          where client = ${client}
-           and event in ('PRODUCTION_CONSUMPTION', 'PRODUCTION_OUTPUT', 'SCRAP')
+           and event in ('PRODUCTION_CONSUMPTION', 'PRODUCTION_OUTPUT', 'SCRAP', 'PRODUCTION_ACTIVITY')
       `) as unknown as Array<{ n: string }>;
       return Number(rows[0]?.n ?? 0);
     });

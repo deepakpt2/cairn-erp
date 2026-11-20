@@ -203,6 +203,11 @@ export const workCenterCosting = pgTable('work_center_costing', {
   costCenter: varchar('cost_center', { length: 10 }).notNull(),
   activityType: varchar('activity_type', { length: 6 }),
   formula: varchar('formula', { length: 6 }),
+  /** The confirmation parameter this line values; null on a line that only serves the cost estimate. */
+  parameter: varchar('parameter', { length: 6 }),
+  /** PLAN_RATE: an actual confirmed quantity valued at the plan rate. Null = no actual valuation. */
+  rateBasis: varchar('rate_basis', { length: 16 }),
+  planVersion: varchar('plan_version', { length: 3 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.plant, t.workCenter, t.lineNumber] }),
@@ -1716,4 +1721,80 @@ export const materialCostEstimateItem = pgTable('material_cost_estimate_item', {
   check('material_cost_estimate_item_source_ck', sql`${t.priceSource} in ('STANDARD','MOVING_AVERAGE','COSTED','ACTIVITY_PLAN','NOT_COSTED')`),
   check('material_cost_estimate_item_level_ck', sql`${t.level} >= 0`),
   check('material_cost_estimate_item_unit_ck', sql`${t.priceUnit} > 0`),
+]);
+
+/**
+ * Costing intent and outcome of one confirmed activity quantity (migration 9316): actual quantity valued at a
+ * configured plan rate and posted to the order against the sender cost centre. FAILED / NOT_CONFIGURED are
+ * recoverable exceptions; POSTED carries the journal reference, REVERSED the reversal of it.
+ */
+export const productionConfirmationCost = pgTable('production_confirmation_cost', {
+  client: tenant(),
+  confirmationNumber: varchar('confirmation_number', { length: 12 }).notNull(),
+  parameter: varchar('parameter', { length: 6 }).notNull(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  status: varchar('status', { length: 14 }).notNull(),
+  quantity: numeric('quantity', { precision: 23, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  plant: varchar('plant', { length: 10 }),
+  workCenter: varchar('work_center', { length: 8 }),
+  controllingArea: varchar('controlling_area', { length: 4 }),
+  costCenter: varchar('cost_center', { length: 10 }),
+  activityType: varchar('activity_type', { length: 6 }),
+  companyCode: varchar('company_code', { length: 10 }),
+  activityUnit: varchar('activity_unit', { length: 6 }),
+  activityQuantity: numeric('activity_quantity', { precision: 23, scale: 6 }),
+  rateBasis: varchar('rate_basis', { length: 40 }),
+  planVersion: varchar('plan_version', { length: 3 }),
+  rateYear: integer('rate_year'),
+  ratePeriod: smallint('rate_period'),
+  fixedPrice: numeric('fixed_price', { precision: 23, scale: 6 }),
+  variablePrice: numeric('variable_price', { precision: 23, scale: 6 }),
+  priceUnit: integer('price_unit'),
+  amount: numeric('amount', { precision: 23, scale: 4 }),
+  currency: char('currency', { length: 3 }),
+  postingDate: date('posting_date', { mode: 'string' }),
+  journalDocument: varchar('journal_document', { length: 40 }),
+  journalYear: integer('journal_year'),
+  reversalDocument: varchar('reversal_document', { length: 40 }),
+  reversalYear: integer('reversal_year'),
+  message: varchar('message', { length: 400 }),
+  remedy: varchar('remedy', { length: 400 }),
+  attempts: integer('attempts').notNull().default(0),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.confirmationNumber, t.parameter] }),
+  index('production_confirmation_cost_order_idx').on(t.client, t.orderNumber, t.status),
+]);
+
+/** Append-only ledger of actual-cost WIP postings (migration 9316). The last row's cumulative balance is the WIP. */
+export const productionOrderWipPosting = pgTable('production_order_wip_posting', {
+  client: tenant(),
+  postingId: varchar('posting_id', { length: 36 }).notNull(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  seq: integer('seq').notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  period: smallint('period').notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  kind: varchar('kind', { length: 10 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  costTotal: numeric('cost_total', { precision: 23, scale: 4 }).notNull(),
+  outputTotal: numeric('output_total', { precision: 23, scale: 4 }).notNull(),
+  eligibleWip: numeric('eligible_wip', { precision: 23, scale: 4 }).notNull(),
+  previousCumulative: numeric('previous_cumulative', { precision: 23, scale: 4 }).notNull(),
+  delta: numeric('delta', { precision: 23, scale: 4 }).notNull(),
+  cumulativeAfter: numeric('cumulative_after', { precision: 23, scale: 4 }).notNull(),
+  wipAccount: varchar('wip_account', { length: 10 }).notNull(),
+  changeAccount: varchar('change_account', { length: 10 }).notNull(),
+  journalDocument: varchar('journal_document', { length: 40 }).notNull(),
+  journalYear: integer('journal_year').notNull(),
+  previousPostingId: varchar('previous_posting_id', { length: 36 }),
+  evidence: jsonb('evidence').notNull(),
+  requestKey: varchar('request_key', { length: 64 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.postingId] }),
+  unique('production_order_wip_posting_seq_uq').on(t.client, t.orderNumber, t.seq),
 ]);

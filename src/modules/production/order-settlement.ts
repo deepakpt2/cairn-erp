@@ -6,9 +6,13 @@
  * netting debits against credits per G/L account, and distributing the unsettled balance
  * to configured receivers through the same journal posting engine.
  *
- * WIP calculation (DV-003) and variance categorization (DV-004) are deferred: the run
- * settles the net actuals balance as a single variance amount. No cost estimate, no
- * standard cost, no overhead application, and no WIP reversal is invented here.
+ * Variance categorization (DV-004) is deferred: the run settles the net actuals balance as a single
+ * variance amount. No cost estimate, no standard cost and no overhead application is invented here.
+ *
+ * Financial WIP (order-wip.ts) is the other half of the close. This is FINAL settlement: it refuses an
+ * order that is not technically completed (an unfinished order's balance is capitalised as WIP at period
+ * end, never cleared here as a variance), and for a completed order it unwinds the standing WIP in the
+ * same transaction, on the accounts it was posted on, so a balance cannot be both capitalised and settled.
  *
  * An update posts only through postJournalEntry, and only when a stored profile, an
  * allocation assignment, and a distribution rule say where the balance goes. A receiver,
@@ -40,6 +44,7 @@ import {
   productionOrderSetttlementDistributionRule,
 } from './schema';
 import { lockSettlementRuleForProductionOrder } from './settlement-configuration';
+import { postedWip, unwindWipForSettlementInTx } from './order-wip';
 
 export const PROD_ORDER_SETTLEMENT_CAPABILITY = 'PROD.ORDER.SETTLE';
 export const PROD_ORDER_SETTLEMENT_ROUTE = '/production/order-settlement';
@@ -212,6 +217,12 @@ function blockedReasons(order: { orderNumber: string; status: string }): string[
   const reasons: string[] = [];
   if (order.status === 'CREATED') {
     reasons.push(`Production order ${order.orderNumber} is created and cannot be settled. Only a released order carries actuals.`);
+  }
+  if (order.status === 'RELEASED') {
+    reasons.push(
+      `Production order ${order.orderNumber} is released and not technically completed. Final settlement would clear its work in process as a variance. `
+      + 'Technically complete the order first (CO02), or capitalise its work in process at period end with the WIP run on this screen.',
+    );
   }
   return reasons;
 }
@@ -541,6 +552,8 @@ async function settleOne(
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/production-order-settlement/${row.orderNumber}/${run.fiscalYear}/${run.settlementPeriod}`}, 0))`);
   }
 
+  // The financial WIP this order stands at. Settlement is the order's end: whatever is capitalised is unwound with it.
+  const wipState = await postedWip(tx, input.client, row.orderNumber);
   const nets = new Map<string, bigint>();
   const postedLines = await tx.execute(sql`
     select j.fiscal_year::int as fiscal_year, j.posting_period::int as posting_period, j.status,
@@ -590,6 +603,22 @@ async function settleOne(
     };
   }
   if (sources.length === 0) {
+    // Nothing is left to settle, but a capitalised balance must still not outlive the order.
+    if (wipState.cumulative !== 0n) {
+      if (run.testRun) {
+        return {
+          eligible: true, document: null,
+          order: { ...base, outcome: 'NOTHING_TO_SETTLE', reasons: [`Nothing to settle. WIP of ${fromScaled(wipState.cumulative)} would be unwound by an update run.`] },
+        };
+      }
+      const unwound = await unwindWipForSettlementInTx(tx, input.client, row.orderNumber, input.changedBy, {
+        fiscalYear: run.fiscalYear, period: run.settlementPeriod, postingDate,
+      });
+      return {
+        eligible: true, document: null,
+        order: { ...base, outcome: 'NOTHING_TO_SETTLE', reasons: [`Nothing to settle. The order's WIP of ${unwound?.amount ?? ''} was unwound by ${unwound?.documentNumber ?? ''}.`] },
+      };
+    }
     return {
       eligible: true,
       document: null,
@@ -738,11 +767,21 @@ async function settleOne(
         outcome: 'SIMULATED',
         amount: fromScaled(settledAmount),
         receivers: receiverResults,
-        reasons: ['Test run. Nothing was posted.'],
+        reasons: [
+          'Test run. Nothing was posted.',
+          ...(wipState.cumulative !== 0n ? [`WIP of ${fromScaled(wipState.cumulative)} stands on this order and would be unwound before the settlement is posted.`] : []),
+        ],
       },
     };
   }
 
+  // Every check has passed and a document will be posted: only now is the capitalised balance unwound, in this
+  // same transaction, so a refusal anywhere above can never leave the WIP unwound and the order unsettled.
+  const unwound = wipState.cumulative !== 0n
+    ? await unwindWipForSettlementInTx(tx, input.client, row.orderNumber, input.changedBy, {
+      fiscalYear: run.fiscalYear, period: run.settlementPeriod, postingDate,
+    })
+    : null;
   const posted = await postJournalEntry(tx, {
     client: input.client,
     companyCode: companyCodeValue,
@@ -785,7 +824,7 @@ async function settleOne(
       outcome: 'SETTLED',
       amount: fromScaled(settledAmount),
       receivers: receiverResults,
-      reasons: [`Posted ${posted.documentNumber}.`],
+      reasons: [`Posted ${posted.documentNumber}.`, ...(unwound ? [`WIP of ${unwound.amount} was unwound by ${unwound.documentNumber}.`] : [])],
     },
   };
 }

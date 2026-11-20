@@ -22,6 +22,7 @@ import {
   loadOrgRestrictions,
 } from '../../platform/auth/session';
 import { parseProductionOrderStatus, type ProductionOrderStatus } from './production-order-status';
+import { ActivityCostError, reverseConfirmationCostInTx } from './activity-costing';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { acquireLock } from '../../platform/lock';
@@ -530,6 +531,15 @@ export async function cancelConfirmation(client: string, input: {
       },
     });
     if (!recorded) fail('The cancellation was not recorded.');
+    // The activity cost posted for this confirmation is reversed from its own stored journal (the original amounts,
+    // not today's rate), once, in this transaction: a refusal (closed period, an order already settled) rolls the
+    // whole cancellation back and the confirmation stands exactly as it was.
+    try {
+      await reverseConfirmationCostInTx(tx, client, confirmationNumber, authority.username, `Confirmation ${confirmationNumber} cancelled: ${reason}`);
+    } catch (error) {
+      if (error instanceof ActivityCostError) fail(error.message, error.remedy);
+      throw error;
+    }
     const stored = await detailOf(tx, client, confirmationNumber);
     if (!stored?.cancellationNumber) fail('The cancellation was not saved.');
     return resultOf(stored, requestKey, false);

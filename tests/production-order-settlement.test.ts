@@ -25,6 +25,7 @@ import {
   productionOrderSettlementPosting,
 } from '../src/modules/production/order-settlement';
 import { getProductionOrderCostReport } from '../src/modules/production/order-cost-report';
+import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 
 const ACTOR = 'PROD_SETTLE_TEST';
 const PLANT = 'QO01';
@@ -312,6 +313,18 @@ describe('production order settlement', () => {
       client: place.client, changedBy: ACTOR, orderType: ORDER_TYPE, profileCode: 'SP01',
     });
     await settlementRule(place, saved.orderNumber, 'CC1000', '100');
+
+    // Final settlement is for a technically completed order: a released one is refused (its balance is WIP, not a variance).
+    const refused = await settleProductionOrder({ ...run(place, saved.orderNumber), testRun: false });
+    expect(refused.posted).toBe(false);
+    expect(refused.orders[0]?.reasons.join(' ')).toMatch(/released and not technically completed/);
+    const [versionRow] = await withTenant(place.client, (tx) => tx.execute(sql`
+      select version from production_order where client = ${place.client} and order_number = ${saved.orderNumber}
+    `)) as unknown as Array<{ version: number }>;
+    await technicallyCompleteProductionOrder({
+      authorization: await authority(place.client), client: place.client, changedBy: ACTOR, orderNumber: saved.orderNumber,
+      expectedVersion: Number(versionRow!.version), held: ['PROD.ORDER.CHANGE'], confirmed: true,
+    });
 
     const result = await settleProductionOrder({ ...run(place, saved.orderNumber), testRun: false });
     expect(result.posted).toBe(true);

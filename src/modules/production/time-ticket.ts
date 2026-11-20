@@ -30,6 +30,7 @@ import { acquireLock } from '../../platform/lock';
 import { allocateNumber } from '../../platform/numbering';
 import { toScaled } from '../../platform/posting/decimal';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
+import { activityCostsOfConfirmation, costConfirmation, type ActivityCostEvidence } from './activity-costing';
 import {
   movementConfiguration,
   planConfirmationMovements,
@@ -72,7 +73,7 @@ const REFUSED: Record<string, string> = {
   co13: 'Cancellation is not this screen. Open CO13. A posted confirmation was not cancelled.',
   co14: 'CO14 displays saved confirmations at /production/confirmation-display. A posted confirmation is not edited here.',
   co15: 'CO15 is order confirmation. This screen confirms one operation.',
-  cost: 'Activity cost is not calculated. No cost was posted.',
+  cost: 'A cost is not entered here. Activity cost is valued from the confirmed activity quantity at the work center\'s configured plan rate, after the confirmation is saved. No cost was entered.',
   workCenter: 'The work center is read from the operation. It was not changed.',
   milestone: 'A milestone confirmation is not configured.',
   progress: 'A progress confirmation is not configured.',
@@ -194,6 +195,8 @@ export interface TimeTicketView {
   /** Durable CO11N intents and their current outcomes; no COGI route is exposed here. */
   movementFailures: ProductionGoodsMovementFailureSummary[];
   movementNote: string;
+  /** Cost rows of the confirmed activities (empty on a preview): outcome, rate basis and posting reference. */
+  activityCosts: ActivityCostEvidence[];
   written: boolean;
   /** True when this request had already been saved. Nothing new was written. */
   replayed: boolean;
@@ -207,7 +210,7 @@ const GAPS = [
   'Only standard sequence 000000 is stored on the confirmation. Execution order is not written there. Predecessor and successor are not stored. An earlier operation does not have to be confirmed first.',
   'A confirmation profile is not configured. Automatic confirmation is refused.',
   'A movement follows the material marks only. Scrap is not grossed into a component quantity, no order type switches a receipt on or off, and a reservation is not cleared.',
-  'Personnel, a shift, and activity cost are not stored.',
+  'Personnel and a shift are not stored. Activity cost is valued after the save: the confirmed quantity at the work center\'s configured plan rate (labelled as such, not an actual rate), posted to the order against the sender cost center. A missing configuration is recorded as a recoverable exception, never a zero rate, and the confirmation stays saved.',
   'CO14 displays saved confirmations at /production/confirmation-display. Cancellation is CO13, not this screen; a posted confirmation is not edited here.',
   'The order status is not changed. Technical completion is a separate CO02 action.',
 ];
@@ -744,6 +747,7 @@ function viewOf(number: string, requestKey: string, prepared: Prepared, written:
     },
     movementsPosted: 0,
     movementFailures: [],
+    activityCosts: [],
     movementNote: prepared.movements.note,
     written,
     replayed: false,
@@ -808,6 +812,7 @@ async function storedView(
     movementsPosted: movements.filter((row) => row.posted).length,
     movementFailures,
     movementNote: movementNoteFor(movements, movementFailures),
+    activityCosts: await activityCostsOfConfirmation(tx, client, String(header.confirmation_number)),
     written: true,
     replayed,
   };
@@ -1030,6 +1035,11 @@ export async function enterTimeTicket(client: string, input: {
       authorization: input.authorization,
     });
     await waitForConfirmationMovementSettlement({ client, confirmationNumber });
+    // Activity cost: after the confirmation and its movements stand, in its own transaction. It never refuses the
+    // saved confirmation; a refusal is a recorded, retriable exception (production_confirmation_cost).
+    await costConfirmation(client, confirmationNumber, {
+      by: input.requestedBy, authorization: input.authorization, capability: TIME_TICKET_CAPABILITY,
+    });
     const stored = await withTenant(client, (tx) => storedView(tx, client, confirmationNumber, replayed));
     if (!stored) fail('The confirmation was saved but could not be read back.');
     return stored;

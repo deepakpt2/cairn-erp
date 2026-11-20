@@ -64,7 +64,8 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
         <>
           <p className="max-w-3xl text-sm text-ink-soft">
               Read-only posted journal actuals assigned to one production order. Debit, credit, and net are shown separately in document and local currency.
-              Confirmation activity quantities are not monetarily valued here; plan rates are not actuals. This report does not settle, post, or calculate WIP or variance.
+              Activity cost posted from a confirmation is an actual quantity valued at a configured plan rate (the rate basis is shown) and is counted once, as its journal line; plan rates are not actuals.
+              A confirmed activity that is not costed is shown with its reason. This report does not settle, post, or calculate WIP or variance.
             </p>
           {report && <div className="mt-3"><ReportExport report="production-order-cost" params={raw} /></div>}
         </>
@@ -147,6 +148,50 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
                       <td>{format(line.amountLocal, line.localCurrency)}</td>
                       <td>{line.material ?? '—'} / {line.plant ?? '—'}</td>
                       <td>{line.lineText ?? '—'}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {report.activityCosts.length > 0 && (
+            <section className="space-y-2" aria-label="Activity cost of confirmations">
+              <h2 className="text-lg font-semibold">Activity cost of confirmations ({report.activityCosts.length})</h2>
+              <p className="text-sm text-ink-soft">Evidence of the valuation. A posted amount is already a journal line above and is not added again.</p>
+              <div className="overflow-x-auto">
+                <table className="grid-table text-sm" data-cost-report-activity>
+                  <thead><tr className="text-left text-ink-faint"><th>Confirmation / parameter</th><th>Status</th><th>Quantity</th><th>Sender / activity type</th><th>Rate basis</th><th>Amount</th><th>Posting</th><th>Reason</th></tr></thead>
+                  <tbody>{report.activityCosts.map((row) => (
+                    <tr key={`${row.confirmationNumber}-${row.parameter}`} data-activity-cost={`${row.confirmationNumber}/${row.parameter}`} data-activity-status={row.status}>
+                      <td>{row.confirmationNumber} · {row.parameter}</td>
+                      <td>{row.status}</td>
+                      <td>{row.quantity} {row.unit}{row.activityQuantity && row.activityUnit && row.activityUnit !== row.unit ? ` = ${row.activityQuantity} ${row.activityUnit}` : ''}</td>
+                      <td>{row.costCenter ?? '—'} / {row.activityType ?? '—'}</td>
+                      <td>{row.rateBasis ? `Actual quantity at plan rate · plan ${row.planVersion} ${row.ratePeriod}/${row.rateYear} · ${row.fixedPrice} + ${row.variablePrice} per ${row.priceUnit}` : '—'}</td>
+                      <td>{row.amount ? format(row.amount, row.currency ?? '') : '—'}</td>
+                      <td>{row.journalDocument ? `${row.journalDocument}${row.reversalDocument ? ` · reversed by ${row.reversalDocument}` : ''}` : '—'}</td>
+                      <td>{row.message ? `${row.message}${row.remedy ? ` ${row.remedy}` : ''}` : '—'}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {report.wipPostings.length > 0 && (
+            <section className="space-y-2" aria-label="Financial WIP postings">
+              <h2 className="text-lg font-semibold">Financial WIP postings ({report.wipPostings.length})</h2>
+              <p className="text-sm text-ink-soft">Actual-cost WIP of this order. These documents carry no production order, so they are not in the journal totals above.</p>
+              <div className="overflow-x-auto">
+                <table className="grid-table text-sm" data-cost-report-wip>
+                  <thead><tr className="text-left text-ink-faint"><th>#</th><th>Period</th><th>Kind</th><th>Costs</th><th>Output credits</th><th>Eligible WIP</th><th>Delta</th><th>Balance after</th><th>Accounts (WIP / change)</th><th>Document</th></tr></thead>
+                  <tbody>{report.wipPostings.map((row) => (
+                    <tr key={row.postingId} data-wip-posting={row.seq}>
+                      <td>{row.seq}</td><td>{row.fiscalYear}-{String(row.period).padStart(2, '0')}</td><td>{row.kind}</td>
+                      <td>{format(row.costTotal, row.currency)}</td><td>{format(row.outputTotal, row.currency)}</td>
+                      <td>{format(row.eligibleWip, row.currency)}</td><td>{format(row.delta, row.currency)}</td><td>{format(row.cumulativeAfter, row.currency)}</td>
+                      <td>{row.wipAccount} / {row.changeAccount}</td><td>{row.journalDocument}</td>
                     </tr>
                   ))}</tbody>
                 </table>

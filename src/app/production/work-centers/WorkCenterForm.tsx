@@ -30,6 +30,9 @@ export default function WorkCenterForm({
     costCenter: row.costCenter,
     activityType: row.activityType ?? '',
     formula: row.formula ?? '',
+    parameter: row.parameter ?? '',
+    rateBasis: row.rateBasis ?? '',
+    planVersion: row.planVersion ?? '',
   })) ?? []);
   const mode = document ? 'CHANGE' : 'CREATE';
 
@@ -179,16 +182,30 @@ export default function WorkCenterForm({
       <section className="panel space-y-3 p-4">
         <h2 className="text-sm font-semibold">Costing</h2>
         {costing.map((row, index) => (
-          <div key={index} className="grid gap-2 border-t border-line pt-2 sm:grid-cols-5">
+          <div key={index} className="grid gap-2 border-t border-line pt-2 sm:grid-cols-4 lg:grid-cols-8">
             <input className="input" aria-label="Valid from" value={row.validFrom} disabled={locked} onChange={(event) => setCosting(costing.map((item, itemIndex) => itemIndex === index ? { ...item, validFrom: event.target.value } : item))} />
             <input className="input" aria-label="Valid to" value={row.validTo} disabled={locked} onChange={(event) => setCosting(costing.map((item, itemIndex) => itemIndex === index ? { ...item, validTo: event.target.value } : item))} />
             <input className="input" aria-label="Cost center" value={row.costCenter} maxLength={10} disabled={locked} onChange={(event) => setCosting(costing.map((item, itemIndex) => itemIndex === index ? { ...item, costCenter: event.target.value } : item))} />
             <input className="input" aria-label="Activity type" value={row.activityType} maxLength={6} disabled={locked} onChange={(event) => setCosting(costing.map((item, itemIndex) => itemIndex === index ? { ...item, activityType: event.target.value } : item))} />
             <input className="input" aria-label="Formula" value={row.formula} maxLength={6} disabled={locked} onChange={(event) => setCosting(costing.map((item, itemIndex) => itemIndex === index ? { ...item, formula: event.target.value } : item))} />
+            <input className="input" aria-label="Costing parameter" placeholder="Parameter valued" list="costing-parameters" value={row.parameter} maxLength={6} disabled={locked} onChange={(event) => setCosting(costing.map((item, itemIndex) => itemIndex === index ? { ...item, parameter: event.target.value.toUpperCase() } : item))} />
+            <select className="input" aria-label="Rate basis" value={row.rateBasis} disabled={locked} onChange={(event) => setCosting(costing.map((item, itemIndex) => itemIndex === index ? { ...item, rateBasis: event.target.value } : item))}>
+              <option value="">Cost estimate only</option>
+              <option value="PLAN_RATE">Actual quantity at plan rate</option>
+            </select>
+            <input className="input" aria-label="Plan version" placeholder="Plan version" value={row.planVersion} maxLength={3} disabled={locked} onChange={(event) => setCosting(costing.map((item, itemIndex) => itemIndex === index ? { ...item, planVersion: event.target.value.toUpperCase() } : item))} />
           </div>
         ))}
+        <datalist id="costing-parameters">
+          {parameters.map((item) => <option key={item.parameter} value={item.parameter}>{item.description}</option>)}
+        </datalist>
+        <p className="text-sm text-ink-soft">
+          Rate basis “Actual quantity at plan rate” values a confirmed activity quantity of the parameter at the plan activity rate of the plan version
+          (fixed + variable, per price unit) and posts it to the order against this cost center. It is not an actual-rate calculation. A line with
+          no rate basis serves the cost estimate only. The allocation account is named at /config/account-determination (PRODUCTION_ACTIVITY).
+        </p>
         {!locked && (
-          <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setCosting([...costing, { validFrom: '', validTo: '', costCenter: '', activityType: '', formula: '' }])}>
+          <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={() => setCosting([...costing, { validFrom: '', validTo: '', costCenter: '', activityType: '', formula: '', parameter: '', rateBasis: '', planVersion: '' }])}>
             Add costing
           </button>
         )}

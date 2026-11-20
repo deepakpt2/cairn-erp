@@ -4276,13 +4276,20 @@
   "app/production/order-settlement/SettlementForm.tsx": [
     "app/production/order-settlement/actions.ts"
   ],
+  "app/production/order-settlement/WipForm.tsx": [
+    "app/production/order-settlement/actions.ts"
+  ],
   "app/production/order-settlement/actions.ts": [
+    "modules/production/activity-costing.ts",
     "modules/production/order-settlement.ts",
+    "modules/production/order-wip.ts",
     "platform/auth/current.ts"
   ],
   "app/production/order-settlement/page.tsx": [
     "app/production/order-settlement/SettlementForm.tsx",
+    "app/production/order-settlement/WipForm.tsx",
     "modules/production/order-settlement.ts",
+    "modules/production/order-wip.ts",
     "platform/auth/current.ts",
     "ui/kit/index.ts"
   ],
@@ -7605,6 +7612,16 @@
     "platform/tables/security.ts",
     "platform/tables/tenancy.ts"
   ],
+  "modules/production/activity-costing.ts": [
+    "platform/auth/service-authority.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/lock/index.ts",
+    "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
+  ],
   "modules/production/availability-check.ts": [
     "modules/inventory/schema.ts",
     "modules/production/schema.ts",
@@ -7639,6 +7656,7 @@
     "platform/tenancy/index.ts"
   ],
   "modules/production/confirmation-cancel.ts": [
+    "modules/production/activity-costing.ts",
     "modules/production/confirmation-movements.ts",
     "modules/production/production-order-status.ts",
     "modules/production/time-ticket.ts",
@@ -7649,6 +7667,7 @@
     "platform/numbering/index.ts"
   ],
   "modules/production/confirmation-display.ts": [
+    "modules/production/activity-costing.ts",
     "modules/production/confirmation-movements.ts",
     "platform/db/client.ts"
   ],
@@ -7717,6 +7736,7 @@
     "modules/production/mrp-structure.ts",
     "modules/production/sto-planning.ts",
     "modules/purchasing/requisitions.ts",
+    "modules/sales/sales-demand.ts",
     "platform/db/client.ts",
     "platform/job/queue.ts",
     "platform/numbering/index.ts",
@@ -7768,6 +7788,8 @@
     "platform/posting/decimal.ts"
   ],
   "modules/production/order-cost-report.ts": [
+    "modules/production/activity-costing.ts",
+    "modules/production/order-wip.ts",
     "platform/auth/capability-policy.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts",
@@ -7787,6 +7809,7 @@
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
+    "modules/production/order-wip.ts",
     "modules/production/schema.ts",
     "modules/production/settlement-configuration.ts",
     "platform/db/client.ts",
@@ -7801,6 +7824,16 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/tenancy/index.ts"
+  ],
+  "modules/production/order-wip.ts": [
+    "modules/foundation/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/lock/index.ts",
+    "platform/periods/index.ts",
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/production/planned-order-change.ts": [
     "modules/production/planned-order-display.ts",
@@ -7954,11 +7987,13 @@
     "modules/inventory/unit-conversion.ts",
     "modules/production/sto-planning.ts",
     "modules/purchasing/receipt-unit-basis.ts",
+    "modules/sales/sales-demand.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
   "modules/production/time-ticket.ts": [
     "modules/inventory/unit-conversion.ts",
+    "modules/production/activity-costing.ts",
     "modules/production/confirmation-movements.ts",
     "modules/production/production-goods-movement-failures.ts",
     "modules/production/production-order-status.ts",
@@ -8492,6 +8527,7 @@
     "modules/sales/incompletion.ts",
     "modules/sales/output.ts",
     "modules/sales/partners.ts",
+    "modules/sales/sales-demand.ts",
     "modules/sales/sales-order.ts",
     "modules/sales/schema.ts",
     "modules/sales/shipping-point.ts",
@@ -8534,6 +8570,7 @@
     "platform/db/client.ts"
   ],
   "modules/sales/goods-issue-reversal.ts": [
+    "modules/sales/sales-demand.ts",
     "modules/sales/schema.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
@@ -8688,6 +8725,11 @@
     "platform/posting/decimal.ts",
     "platform/posting/money.ts"
   ],
+  "modules/sales/sales-demand.ts": [
+    "modules/sales/document-type.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
+  ],
   "modules/sales/sales-order.ts": [
     "modules/finance/credit.ts",
     "modules/finance/schema.ts",
@@ -8705,6 +8747,7 @@
     "modules/sales/partners.ts",
     "modules/sales/pricing-procedure.ts",
     "modules/sales/pricing.ts",
+    "modules/sales/sales-demand.ts",
     "modules/sales/schema.ts",
     "platform/auth/service-authority.ts",
     "platform/auth/session.ts",

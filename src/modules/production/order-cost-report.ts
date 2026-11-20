@@ -11,6 +11,9 @@ import { hasCapability } from '../../platform/auth/session';
 import { PRODUCTION_ORDER_COST_DISPLAY_CAPABILITY } from '../../platform/auth/capability-policy';
 
 export const PRODUCTION_ORDER_COST_REPORT_CAPABILITY = PRODUCTION_ORDER_COST_DISPLAY_CAPABILITY;
+import { activityCostsOfOrder, type ActivityCostEvidence } from './activity-costing';
+import { wipPostingsOfOrder, type ProductionOrderWipPostingRow } from './order-wip';
+
 export const PRODUCTION_ORDER_COST_REPORT_ROUTE = '/production/order-cost-report';
 
 export class ProductionOrderCostReportError extends Error {
@@ -81,6 +84,14 @@ export interface ProductionOrderCostReport {
   filter: { fiscalYear: number | null; periodFrom: number | null; periodTo: number | null };
   lines: ProductionOrderCostLine[];
   totals: ProductionOrderCostCurrencyTotal[];
+  /**
+   * The confirmed-activity cost rows of the order: the rate basis (actual quantity valued at a configured plan
+   * rate), the evidence of the valuation and the posting reference — or the recorded reason nothing was posted.
+   * A POSTED row's amount is ALREADY a journal line above; it is evidence and is never added a second time.
+   */
+  activityCosts: ActivityCostEvidence[];
+  /** Financial WIP postings of the order (ledger). They carry no production_order, so they are not in the totals above. */
+  wipPostings: ProductionOrderWipPostingRow[];
   gaps: string[];
 }
 
@@ -284,11 +295,17 @@ export async function getProductionOrderCostReport(
       };
     });
 
+    const activityCosts = await activityCostsOfOrder(tx, input.client, orderNumber);
+    const wipPostings = await wipPostingsOfOrder(tx, input.client, orderNumber, fiscalYear);
     const gaps: string[] = [
-      'Amounts are posted journal actuals only. Confirmation activity quantities are not monetarily valued.',
-      'Plan activity rates are not treated as actual costs. WIP and variance categorization are not calculated.',
-      'Material-document values are drilldown evidence and are not added again to journal amounts.',
+      'Amounts are posted journal actuals. Activity cost posted from a confirmation is included once, as its posted journal line: an actual confirmed quantity valued at a configured plan rate (rate basis shown below), not an actual-rate calculation.',
+      'Plan activity rates are not treated as actual costs: only a rate basis on the work center values a confirmed actual quantity. Variance categorization is not calculated.',
+      'Material-document values are drilldown evidence and are not added again to journal amounts. Financial WIP postings are listed separately and are not in the journal totals.',
     ];
+    const unposted = activityCosts.filter((row) => row.status === 'FAILED' || row.status === 'NOT_CONFIGURED');
+    if (unposted.length > 0) {
+      gaps.push(`${unposted.length} confirmed activity quantity(ies) of this order are NOT costed (${unposted.filter((row) => row.status === 'FAILED').length} failed, ${unposted.filter((row) => row.status === 'NOT_CONFIGURED').length} not configured): the order's actual cost is understated until they are posted. See the activity cost rows.`);
+    }
     if (!order.company_code?.trim() || !order.currency?.trim()) {
       gaps.push("The order's plant names no company code, or the order carries no currency. No company or currency was inferred.");
     }
@@ -314,6 +331,8 @@ export async function getProductionOrderCostReport(
       filter: { fiscalYear, periodFrom, periodTo },
       lines,
       totals: makeTotals(lines),
+      activityCosts,
+      wipPostings,
       gaps,
     };
   });

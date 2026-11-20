@@ -2,6 +2,8 @@
 import { can, requireSession } from '@/platform/auth/current';
 import { PROD_ORDER_SETTLEMENT_CAPABILITY, PROD_ORDER_SETTLEMENT_ROUTE } from '@/modules/production/order-settlement';
 import SettlementForm from './SettlementForm';
+import WipForm from './WipForm';
+import { WIP_METHOD_STATEMENT } from '@/modules/production/order-wip';
 import { Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -29,9 +31,11 @@ export default async function ProductionOrderSettlementPage({ searchParams }: {
   return (
     <Page
       title="Production order settlement" code="PROD.ORDER.SETTLE · KO88" width="4xl"
-      description="KO88 checks one production order. It does not select a range. An update posts only when a settlement rule is stored, and only through the journal. No receiver or percentage is entered here. The rule screen is /production/settlement-rules. WIP calculation (DV-003) and variance categorization (DV-004) are deferred."
+      description="KO88 checks one production order. It does not select a range. An update posts only when a settlement rule is stored, and only through the journal. No receiver or percentage is entered here. The rule screen is /production/settlement-rules. Final settlement is for a technically completed order (it unwinds the order's WIP first); an unfinished order's balance is capitalised as work in process below. Variance categorization (DV-004) is deferred."
     >
       <SettlementForm orderNumber={orderNumber} />
+      <hr className="my-6 border-line" />
+      <WipForm orderNumber={orderNumber} method={WIP_METHOD_STATEMENT} />
     </Page>
   );
 }

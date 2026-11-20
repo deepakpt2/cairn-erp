@@ -83,6 +83,11 @@ export interface WorkCenterCostingInput {
   costCenter: string;
   activityType?: string | null;
   formula?: string | null;
+  /** The confirmation parameter this line values (CO11N activity). Set together with the rate basis and plan version. */
+  parameter?: string | null;
+  /** PLAN_RATE: an actual confirmed quantity is valued at the plan activity rate. Blank: the line serves the cost estimate only. */
+  rateBasis?: string | null;
+  planVersion?: string | null;
 }
 
 export interface WorkCenterInput {
@@ -132,6 +137,9 @@ export interface WorkCenterCostingView {
   costCenter: string;
   activityType: string | null;
   formula: string | null;
+  parameter: string | null;
+  rateBasis: string | null;
+  planVersion: string | null;
 }
 
 export interface WorkCenterView {
@@ -307,18 +315,45 @@ function prepareCosting(rows: WorkCenterCostingInput[] | undefined): WorkCenterC
     if (row.validTo < row.validFrom) fail('Costing valid-to is before valid-from. Nothing was saved.');
     const center = asTyped(row.costCenter, 'Cost center', /^[A-Z0-9]{1,10}$/, 10);
     if (!center) fail('A costing row needs a cost center.');
+    const activityType = asTyped(row.activityType, 'Activity type', /^[A-Z0-9]{1,6}$/, 6);
+    const parameter = asTyped(row.parameter, 'Costing parameter', /^[A-Z0-9]{1,6}$/, 6);
+    const planVersion = asTyped(row.planVersion, 'Plan version', /^[A-Z0-9]{1,3}$/, 3);
+    const rateBasisText = (row.rateBasis ?? '').trim().toUpperCase();
+    if (rateBasisText !== '' && rateBasisText !== 'PLAN_RATE') {
+      fail(`Rate basis ${rateBasisText} does not stand.`, 'Only PLAN_RATE (actual quantity valued at the plan rate) is supported. Leave it blank for a cost-estimate-only line.');
+    }
+    const rateBasis = rateBasisText === '' ? null : 'PLAN_RATE';
+    if (rateBasis === null && (parameter || planVersion)) {
+      fail('A costing parameter or plan version needs the rate basis.', 'Choose rate basis PLAN_RATE, or clear the parameter and the plan version.');
+    }
+    if (rateBasis !== null && (!parameter || !planVersion || !activityType)) {
+      fail(
+        'A costing line that values actual activity needs a parameter, an activity type and a plan version.',
+        'Fill all three, or clear the rate basis. No rate, parameter or version is assumed.',
+      );
+    }
     return {
       validFrom: row.validFrom,
       validTo: row.validTo,
       costCenter: center,
-      activityType: asTyped(row.activityType, 'Activity type', /^[A-Z0-9]{1,6}$/, 6),
+      activityType,
       formula: asTyped(row.formula, 'Costing formula', /^[A-Z0-9]{1,6}$/, 6),
+      parameter,
+      rateBasis,
+      planVersion,
     };
   });
   for (let i = 0; i < prepared.length; i += 1) {
     for (let j = i + 1; j < prepared.length; j += 1) {
       const left = prepared[i];
       const right = prepared[j];
+      if (left.rateBasis && right.rateBasis && left.parameter === right.parameter
+        && left.validFrom <= right.validTo && right.validFrom <= left.validTo) {
+        fail(
+          `Costing intervals overlap for parameter ${left.parameter}.`,
+          'Shorten one interval so one parameter is valued by one line on any day; the parameters are never combined.',
+        );
+      }
       if ((left.activityType ?? '') !== (right.activityType ?? '')) continue;
       if (left.validFrom <= right.validTo && right.validFrom <= left.validTo) {
         fail(
@@ -476,6 +511,9 @@ async function readInTx(tx: Tx, client: string, plantCode: string, centerCode: s
       costCenter: row.costCenter,
       activityType: row.activityType,
       formula: row.formula,
+      parameter: row.parameter,
+      rateBasis: row.rateBasis,
+      planVersion: row.planVersion,
     })),
     routingReferences: 0,
     productionOrderReferences: 0,
@@ -534,6 +572,9 @@ async function replaceChildren(
       costCenter: row.costCenter,
       activityType: row.activityType ?? null,
       formula: row.formula ?? null,
+      parameter: row.parameter ?? null,
+      rateBasis: row.rateBasis ?? null,
+      planVersion: row.planVersion ?? null,
       createdBy: actor,
     });
   }
