@@ -20,9 +20,17 @@ import {
   listResults,
 } from '@/modules/people/payroll-run';
 import { getPayrollPosting } from '@/modules/people/payroll-posting';
+import { COMPANY_RESPONSIBILITY_NOTICE } from '@/modules/people/payroll-components';
 import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
+
+const SOURCE_LABEL: Record<string, string> = {
+  STRUCTURE: 'Structure rule',
+  EMPLOYEE_ADD: 'Employee addition',
+  EMPLOYEE_REPLACE: 'Employee replacement',
+  ONE_TIME: 'One-time adjustment',
+};
 
 const ROUTE = PAYROLL_RESULT_ROUTE;
 const CAPABILITY = PAYROLL_RESULT_CAPABILITY;
@@ -68,6 +76,8 @@ export default async function PayrollResultPage({
       }
     >
 
+      <p role="note" className="panel p-3 text-xs text-ink-soft">{COMPANY_RESPONSIBILITY_NOTICE}</p>
+
       {!allowed && (
         <p role="status" className="text-sm text-ink-soft">You do not hold the payroll result capability. Ask for {CAPABILITY}.</p>
       )}
@@ -110,7 +120,7 @@ export default async function PayrollResultPage({
               </p>
               <table className="grid-table mt-2">
                 <thead>
-                  <tr><th>#</th><th>Segment</th><th>Days</th><th>Component</th><th>Kind</th><th>Rule</th><th>Amount</th><th>{slipRun?.status === 'POSTED' ? 'Debited' : 'Debit'}</th><th>{slipRun?.status === 'POSTED' ? 'Credited' : 'Credit'}</th><th>Cost receiver</th></tr>
+                  <tr><th>#</th><th>Segment</th><th>Days</th><th>Component</th><th>Kind</th><th>Source</th><th>Rule and basis</th><th>Amount</th><th>{slipRun?.status === 'POSTED' ? 'Debited' : 'Debit'}</th><th>{slipRun?.status === 'POSTED' ? 'Credited' : 'Credit'}</th><th>Cost receiver</th></tr>
                 </thead>
                 <tbody>
                   {slip.lines.map((l) => (
@@ -120,7 +130,11 @@ export default async function PayrollResultPage({
                       <td>{l.payableDays}</td>
                       <td className="code">{l.componentCode}</td>
                       <td className="text-xs">{l.componentKind}</td>
-                      <td className="code text-xs">{l.amountKind === 'FIXED' ? `fixed ${l.amountValue}` : `${l.amountValue} % of ${l.baseAmount}`}</td>
+                      <td className="text-xs">{SOURCE_LABEL[l.sourceType] ?? l.sourceType}{l.prorationPolicy ? <div className="text-ink-soft">{l.prorationPolicy.toLowerCase().replaceAll('_', ' ')}</div> : null}</td>
+                      <td className="text-xs">
+                        <span className="code">{l.amountKind === 'FIXED' ? `fixed ${l.amountValue}` : `${l.amountValue} % of base ${l.baseAmount}`}</span>
+                        {l.calcBasis ? <div className="text-ink-soft">{l.calcBasis}</div> : null}
+                      </td>
                       <td className="code">{l.amount}</td>
                       <td className="code">{l.debitAccount ?? ''}</td>
                       <td className="code">{l.creditAccount ?? ''}</td>

@@ -437,6 +437,10 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'CO.ORDER.COST.DISPLAY', module: 'CO', action: 'DISPLAY', posting: false, description: 'Read the actual journal line items posted to one internal order (KOB1). Writes nothing' },
   { code: 'PEOPLE.PAYROLL.PAYMENT', module: 'PEOPLE', action: 'POST', posting: false, description: 'Pay the net pay of a posted payroll run from a house bank account' },
   { code: 'PEOPLE.PAYROLL.STRUCTURE.DEFINE', module: 'PEOPLE', action: 'DEFINE', posting: false, description: 'Define salary structures and their components, and assign employees to them' },
+  // Migration 9318. Granted to no role: company-configured recurring components and one-time adjustments are pay data.
+  { code: 'PEOPLE.PAYROLL.COMPONENT.MAINTAIN', module: 'PEOPLE', action: 'MAINTAIN', posting: false, description: 'Maintain employee-specific recurring payroll components (additions, deductions, employer contributions, replacements of a structure rule) on the employee screen' },
+  { code: 'PEOPLE.PAYROLL.ADJUSTMENT.ENTER', module: 'PEOPLE', action: 'CREATE', posting: false, description: 'Enter and cancel one-time payroll adjustments for an employee and period' },
+  { code: 'PEOPLE.PAYROLL.ADJUSTMENT.APPROVE', module: 'PEOPLE', action: 'APPROVE', posting: false, description: 'Approve or reject a one-time payroll adjustment entered by someone else' },
   // The People module's first codes, and they are deliberately master-data codes. `PEOPLE.PAYROLL.POST` has
   // been in this list since the design without anything behind it; the two below are the ones the screens at
   // /people/employees and /config/people-record-types actually enforce. The description says plainly that no

@@ -107,7 +107,7 @@ async function companyOfEmployee(tx: Tx, client: string, personnelNumber: string
  * caller carries no Company Code limit, so it has nothing to prove.) A leaver resolves through their
  * latest position, so ending a leaver's pay structure is not refused here.
  */
-async function assertEmployeeScope(tx: Tx, client: string, grant: PayrollGrant, personnelNumber: string, onDate: string): Promise<void> {
+export async function assertEmployeeScope(tx: Tx, client: string, grant: PayrollGrant, personnelNumber: string, onDate: string): Promise<void> {
   if (grant.restrictions === null) return;
   const company = await companyOfEmployee(tx, client, personnelNumber, onDate);
   if (!company) {

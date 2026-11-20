@@ -1022,6 +1022,11 @@ export const payrollResultLine = pgTable(
     costReceiverCategory: varchar('cost_receiver_category', { length: 10 }).notNull().default('NONE'),
     costCenter: varchar('cost_center', { length: 10 }),
     controllingArea: varchar('controlling_area', { length: 4 }),
+    /** 9318: where the line came from, and the basis it was calculated on, in words. */
+    sourceType: varchar('source_type', { length: 16 }).notNull().default('STRUCTURE'),
+    sourceId: varchar('source_id', { length: 36 }),
+    prorationPolicy: varchar('proration_policy', { length: 32 }),
+    calcBasis: varchar('calc_basis', { length: 240 }),
     ...auditColumns,
   },
   (t) => [
@@ -1212,5 +1217,80 @@ export const timeRecording = pgTable(
       foreignColumns: [timeType.client, timeType.code],
     }).onDelete('restrict'),
     check('time_recording_hours_ck', sql`${t.hours} > 0 and ${t.hours} <= 24`),
+  ],
+);
+
+// ── 9318: company-configured recurring components and one-time adjustments ──
+export const COMPONENT_MAINTAIN_CAPABILITY = 'PEOPLE.PAYROLL.COMPONENT.MAINTAIN';
+export const ADJUSTMENT_ENTER_CAPABILITY = 'PEOPLE.PAYROLL.ADJUSTMENT.ENTER';
+export const ADJUSTMENT_APPROVE_CAPABILITY = 'PEOPLE.PAYROLL.ADJUSTMENT.APPROVE';
+export const EMPLOYEE_COMPONENT_OBJECT_CLASS = 'employee_pay_component';
+export const PAYROLL_ADJUSTMENT_OBJECT_CLASS = 'payroll_adjustment';
+export const COMPONENT_MODES = ['ADD', 'REPLACE'] as const;
+export type ComponentMode = (typeof COMPONENT_MODES)[number];
+export const PRORATION_POLICIES = ['PAYABLE_CALENDAR_DAYS', 'NO_UNPAID_LEAVE_REDUCTION', 'FULL_PERIOD'] as const;
+export type ProrationPolicy = (typeof PRORATION_POLICIES)[number];
+export const ADJUSTMENT_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'APPLIED'] as const;
+export type AdjustmentStatus = (typeof ADJUSTMENT_STATUSES)[number];
+export const LINE_SOURCES = ['STRUCTURE', 'EMPLOYEE_ADD', 'EMPLOYEE_REPLACE', 'ONE_TIME'] as const;
+export type LineSource = (typeof LINE_SOURCES)[number];
+
+/** Employee-specific recurring component. ADD = separate line; REPLACE = suppresses the structure rule for its dates. */
+export const employeePayComponent = pgTable(
+  'employee_pay_component',
+  {
+    client: tenant(),
+    entryId: varchar('entry_id', { length: 36 }).notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    componentCode: varchar('component_code', { length: 10 }).notNull(),
+    mode: varchar('mode', { length: 8 }).notNull(),
+    amountKind: varchar('amount_kind', { length: 20 }).notNull(),
+    amountValue: numeric('amount_value', { precision: 23, scale: 4 }).notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    validTo: date('valid_to', { mode: 'string' }),
+    prorationPolicy: varchar('proration_policy', { length: 32 }).notNull(),
+    status: varchar('status', { length: 10 }).notNull().default('ACTIVE'),
+    reason: varchar('reason', { length: 200 }).notNull(),
+    withdrawnReason: varchar('withdrawn_reason', { length: 200 }),
+    requestKey: varchar('request_key', { length: 64 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.entryId] }),
+    index('employee_pay_component_employee_idx').on(t.client, t.personnelNumber, t.validFrom),
+  ],
+);
+
+/** One-time payroll adjustment: a payroll document with its own approval. */
+export const payrollAdjustment = pgTable(
+  'payroll_adjustment',
+  {
+    client: tenant(),
+    adjustmentId: varchar('adjustment_id', { length: 36 }).notNull(),
+    companyCode: varchar('company_code', { length: 4 }).notNull(),
+    fiscalYear: integer('fiscal_year').notNull(),
+    period: integer('period').notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    componentCode: varchar('component_code', { length: 10 }).notNull(),
+    componentKind: varchar('component_kind', { length: 24 }).notNull(),
+    amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    reason: varchar('reason', { length: 200 }).notNull(),
+    sourceReference: varchar('source_reference', { length: 100 }),
+    correctsResultId: varchar('corrects_result_id', { length: 36 }),
+    status: varchar('status', { length: 10 }).notNull().default('PENDING'),
+    decidedBy: varchar('decided_by', { length: 60 }),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decisionNote: varchar('decision_note', { length: 200 }),
+    appliedRunId: varchar('applied_run_id', { length: 36 }),
+    appliedResultId: varchar('applied_result_id', { length: 36 }),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
+    requestKey: varchar('request_key', { length: 64 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.adjustmentId] }),
+    index('payroll_adjustment_period_idx').on(t.client, t.companyCode, t.fiscalYear, t.period, t.status),
   ],
 );

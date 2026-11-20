@@ -567,7 +567,7 @@ async function calcChunk(ctx: JobContext, operationId: string): Promise<ChunkRes
     const predecessor = [...byRun.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
     const before = { employees: row.employeeCount, exceptions: row.exceptionCount };
     await tx.update(payrollRun)
-      .set({ employeeCount: included, exceptionCount: excepted, predecessorRunId: predecessor, calculatedBy: op.requested_by, calculatedAt: new Date(), changedBy: op.requested_by, changedAt: new Date() })
+      .set({ employeeCount: included, exceptionCount: excepted, predecessorRunId: predecessor, calculatedBy: op.requested_by, calculatedAt: sql`coalesce((select started_at from payroll_run_operation where client = ${client} and operation_id = ${operationId}), now())`, changedBy: op.requested_by, changedAt: new Date() })
       .where(and(eq(payrollRun.client, client), eq(payrollRun.runId, row.runId)));
     await recordChange(tx, {
       client, objectClass: PAYROLL_RUN_OBJECT_CLASS, objectKey: row.runId, changeType: 'CHANGE',

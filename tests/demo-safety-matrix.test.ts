@@ -149,8 +149,8 @@ const RESTART_MATRIX: readonly RestartRow[] = [
   },
   {
     phase: 'D11_PAYROLL_OFFCYCLE',
-    writes: 'A late joiner (10000019) with a position and STAFF assignment from the 20th of the run’s period, and a proposed off-cycle run for that period paying only her, naming the paid run as its predecessor. Nothing released, posted or paid.',
-    resumesBy: 'Employee and position looked up before they are written; request-keyed assignment (`DEMO-SAL-10000019`) and run (`DEMO-PAYRUN-OFFCYCLE-*`); an off-cycle run already standing for the period is left as it is.',
+    writes: 'A late joiner (10000019) with a position and STAFF assignment from the 20th of the run’s period, a fixed employee-specific pension replacement for her (9318), a proposed off-cycle run for that period paying only her, naming the paid run as its predecessor, and a one-time adjustment left pending approval. Nothing released, posted or paid.',
+    resumesBy: 'Employee and position looked up before they are written; request-keyed assignment (`DEMO-SAL-10000019`), recurring entry (`DEMO-EMPCOMP-10000019`), adjustment (`DEMO-ADJ-*`) and run (`DEMO-PAYRUN-OFFCYCLE-*`); an off-cycle run already standing for the period is left as it is.',
     guaranteedBy: ['buildDemoPayrollOffCycle'],
   },
   {

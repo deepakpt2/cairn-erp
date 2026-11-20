@@ -306,12 +306,35 @@ describe('determination, period and snapshot refusals', () => {
     expect((await getPayrollRun(tenant.client, run.runId, RUN_AUTH))!.status).toBe('RELEASED');
   });
 
-  it('16. a result with negative net pay is refused, naming the personnel number', async () => {
+  it('16. negative net pay is refused at calculation (a named exception), and a result that carries it anyway is refused at posting', async () => {
     const negative = await structure([['SAL', 'FIXED', '100'], ['ADV', 'FIXED', '500']]);
     const pn = await employeeOn(negative, '0', '2025-07-01', '2025-07-31');
-    const run = await releasedRun(7);
+    const proposed = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 7, changedBy: PAYROLL_ACTOR }, RUN_AUTH);
+    const exception = proposed.exceptions.find((e) => e.personnelNumber === pn);
+    expect(exception?.reasonCode).toBe('NEGATIVE_NET_PAY');
+    expect(exception?.message).toContain('500.00');
+    await cancelPayrollRun({ client: tenant.client, runId: proposed.runId, reason: 'negative net test', changedBy: PAYROLL_ACTOR }, RUN_AUTH);
+
+    // Defence in depth: a result that nevertheless carries negative net (written outside the calculation) cannot be posted.
+    const fine = await structure([['SAL', 'FIXED', '100']]);
+    const pn2 = await employeeOn(fine, '0', '2025-10-01', '2025-10-31');
+    const run = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 10, changedBy: PAYROLL_ACTOR }, RUN_AUTH);
+    expect(run.exceptions, JSON.stringify(run.exceptions)).toEqual([]);
+    await withTenant(tenant.client, async (tx) => {
+      const [old] = (await tx.execute(sql`select * from payroll_result where client = ${tenant.client} and run_id = ${run.runId} and personnel_number = ${pn2}`)) as unknown as Array<Record<string, string>>;
+      const [line] = (await tx.execute(sql`select * from payroll_result_line where client = ${tenant.client} and result_id = ${old!.result_id}`)) as unknown as Array<Record<string, string>>;
+      await tx.execute(sql`delete from payroll_result where client = ${tenant.client} and result_id = ${old!.result_id}`);
+      const id = 'NEG-' + Date.now();
+      await tx.execute(sql`insert into payroll_result (client, result_id, run_id, personnel_number, origin, currency, payable_days, total_days, covered_days, unpaid_leave_days, gross_pay, total_deductions, net_pay, employer_cost, cost_center, controlling_area, created_by)
+        values (${tenant.client}, ${id}, ${run.runId}, ${pn2}, 'CALCULATED', ${old!.currency}, ${old!.payable_days}, ${old!.total_days}, ${old!.covered_days}, ${old!.unpaid_leave_days}, 100, 500, -400, 0, ${old!.cost_center}, ${old!.controlling_area}, 'TEST')`);
+      for (const [no, component, kind, amount, debit, credit, receiver] of [[1, 'SAL', 'EARNING', 100, '500000', null, 'ASSIGNMENT'], [2, 'ADV', 'DEDUCTION', 500, null, '250000', 'NONE']] as const) {
+        await tx.execute(sql`insert into payroll_result_line (client, result_id, line_id, line_no, segment_from, segment_to, payable_days, structure_code, base_amount, component_code, component_kind, amount_kind, amount_value, amount, debit_account, credit_account, cost_receiver_category, cost_center, controlling_area, created_by)
+          values (${tenant.client}, ${id}, ${`${id}-${no}`}, ${no}, ${line!.segment_from}, ${line!.segment_to}, ${line!.payable_days}, ${line!.structure_code}, 0, ${component}, ${kind}, 'FIXED', ${amount}, ${amount}, ${debit}, ${credit}, ${receiver}, ${receiver === 'ASSIGNMENT' ? old!.cost_center : null}, ${receiver === 'ASSIGNMENT' ? old!.controlling_area : null}, 'TEST')`);
+      }
+    });
+    await releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: PAYROLL_ACTOR }, RUN_AUTH);
     const refusal = await expectPostingRefusal(post(run.runId), 'NEGATIVE_NET_PAY');
-    expect(refusal.message).toContain(pn);
+    expect(refusal.message).toContain(pn2);
     expect(refusal.message).toContain('-400');
   });
 

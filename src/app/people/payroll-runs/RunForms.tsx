@@ -138,7 +138,7 @@ export function ProposeRunForm({
   );
 }
 
-export function RunActions({ runId, status, exceptionCount, mayPost, busy = false }: { runId: string; status: string; exceptionCount: number; mayPost: boolean; busy?: boolean }) {
+export function RunActions({ runId, status, exceptionCount, mayPost, busy = false, pendingAdjustments = 0, stale = false }: { runId: string; status: string; exceptionCount: number; mayPost: boolean; busy?: boolean; pendingAdjustments?: number; stale?: boolean }) {
   const [recalc, recalcAction, recalcPending] = useActionState(recalculateRunAction, { ok: false });
   const [post, postAction, postPending] = useActionState(postPayrollRunAction, { ok: false });
   const [release, releaseAction, releasePending] = useActionState(releaseRunAction, { ok: false });
@@ -156,7 +156,17 @@ export function RunActions({ runId, status, exceptionCount, mayPost, busy = fals
           </form>
           <form action={releaseAction}>
             <input type="hidden" name="runId" value={runId} />
-            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={releasePending || busy}>Release</button>
+            {pendingAdjustments > 0 && (
+              <label className="mb-2 flex max-w-xl items-start gap-2 text-sm">
+                <input type="checkbox" name="acknowledgePending" value="yes" className="mt-1" />
+                <span>
+                  {pendingAdjustments} one-time adjustment{pendingAdjustments === 1 ? '' : 's'} for this period still await approval and are not in this run.
+                  Release without {pendingAdjustments === 1 ? 'it' : 'them'}.
+                </span>
+              </label>
+            )}
+            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={releasePending || busy || stale}>Release</button>
+            {stale && <p className="mt-1 text-xs text-signal-error">The calculation is out of date: recalculate before release.</p>}
           </form>
           {exceptionCount > 0 && (
             <p className="self-center text-xs text-ink-soft">Release is refused while {exceptionCount} employee{exceptionCount === 1 ? '' : 's'} stand{exceptionCount === 1 ? 's' : ''} as exceptions.</p>

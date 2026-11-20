@@ -3829,6 +3829,9 @@
   "app/people/employees/PayStructure.tsx": [
     "app/people/salary-structures/actions.ts"
   ],
+  "app/people/employees/RecurringComponents.tsx": [
+    "app/people/employees/component-actions.ts"
+  ],
   "app/people/employees/actions.ts": [
     "modules/people/employee-master.ts",
     "modules/people/employee-tier.ts",
@@ -3837,12 +3840,21 @@
     "platform/db/client.ts",
     "platform/tables/security.ts"
   ],
+  "app/people/employees/component-actions.ts": [
+    "modules/people/payroll-components.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
+    "platform/auth/current.ts"
+  ],
   "app/people/employees/page.tsx": [
     "app/people/employees/Employees.tsx",
     "app/people/employees/PayStructure.tsx",
+    "app/people/employees/RecurringComponents.tsx",
     "modules/people/employee-master.ts",
     "modules/people/employee-tier.ts",
     "modules/people/org-structure.ts",
+    "modules/people/payroll-components.ts",
+    "modules/people/payroll-run.ts",
     "modules/people/payroll-structure.ts",
     "modules/people/record-types.ts",
     "platform/auth/current.ts",
@@ -3871,11 +3883,15 @@
     "ui/kit/index.ts"
   ],
   "app/people/payroll-results/page.tsx": [
+    "modules/people/payroll-components.ts",
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "ui/kit/index.ts"
+  ],
+  "app/people/payroll-runs/Adjustments.tsx": [
+    "app/people/payroll-runs/adjustment-actions.ts"
   ],
   "app/people/payroll-runs/RunForms.tsx": [
     "app/people/payroll-runs/actions.ts",
@@ -3888,12 +3904,21 @@
     "modules/people/salary-payment.ts",
     "platform/auth/current.ts"
   ],
+  "app/people/payroll-runs/adjustment-actions.ts": [
+    "modules/people/payroll-components.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
+    "platform/auth/current.ts"
+  ],
   "app/people/payroll-runs/page.tsx": [
+    "app/people/payroll-runs/Adjustments.tsx",
     "app/people/payroll-runs/RunForms.tsx",
     "modules/finance/payment-run.ts",
     "modules/people/payroll-background.ts",
+    "modules/people/payroll-components.ts",
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
     "modules/people/salary-payment.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
@@ -7507,6 +7532,14 @@
     "platform/job/queue.ts",
     "platform/job/types.ts"
   ],
+  "modules/people/payroll-components.ts": [
+    "modules/people/payroll-access.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
+    "modules/people/schema.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts"
+  ],
   "modules/people/payroll-posting.ts": [
     "modules/finance/gl-document.ts",
     "modules/finance/schema.ts",
@@ -9210,6 +9243,7 @@
     "platform/tenancy/standard-structure.ts"
   ],
   "platform/tenancy/demo-payroll-offcycle.ts": [
+    "modules/people/payroll-components.ts",
     "modules/people/payroll-run.ts",
     "modules/people/payroll-structure.ts",
     "platform/db/client.ts",

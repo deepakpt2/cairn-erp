@@ -43,6 +43,7 @@ import {
   validateEmployeeForRun,
 } from './payroll-structure';
 import {
+  PAYROLL_ADJUSTMENT_OBJECT_CLASS,
   PAYROLL_RESULT_ROUTE,
   PAYROLL_RUN_CAPABILITY,
   PAYROLL_RUN_OBJECT_CLASS,
@@ -52,6 +53,7 @@ import {
   payrollResultLine,
   payrollRun,
   payrollRunException,
+  type LineSource,
   type PayrollRunStatus,
 } from './schema';
 
@@ -130,7 +132,11 @@ export function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infe
 /** Year and period may come straight from a form as text; they are coerced and checked. */
 export type ProposeRunInput = Omit<z.input<typeof proposeInput>, 'fiscalYear' | 'period'> & { fiscalYear: number | string; period: number | string };
 export type RecalculateRunInput = z.input<typeof runActionInput>;
-export type ReleaseRunInput = z.input<typeof runActionInput>;
+export const releaseInput = runActionInput.extend({
+  /** The releaser has seen the pending one-time adjustments of this period and releases without them. */
+  acknowledgePending: z.boolean().optional(),
+});
+export type ReleaseRunInput = z.input<typeof releaseInput>;
 export type CancelRunInput = z.input<typeof cancelInput>;
 
 // ── Dates and money: pure helpers ───────────────────────────────────────────
@@ -241,6 +247,27 @@ export function payableDaysFor(input: PayableDaysInput): PayableDaysResult {
   };
 }
 
+/**
+ * The sub-ranges of [from, to] that no cut covers, in order. Pure. A cut with a null end runs forever.
+ * Used to suppress a structure rule only on the days an employee-specific replacement covers.
+ */
+export function daysOutside(from: string, to: string, cuts: ReadonlyArray<readonly [string, string | null]>): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  let cursor = dayNumber(from);
+  const end = dayNumber(to);
+  const sorted = [...cuts].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [cf, ct] of sorted) {
+    const cutFrom = dayNumber(cf);
+    const cutTo = ct === null ? Infinity : dayNumber(ct);
+    if (cutTo < cursor || cutFrom > end) continue;
+    if (cutFrom > cursor) out.push([isoOf(cursor), isoOf(cutFrom - 1)]);
+    cursor = Math.max(cursor, cutTo + 1);
+    if (cursor > end) break;
+  }
+  if (cursor <= end) out.push([isoOf(cursor), isoOf(end)]);
+  return out;
+}
+
 export interface ComponentCalcInput {
   amountKind: 'FIXED' | 'PERCENT_OF_BASE';
   /** FIXED: the monthly amount. PERCENT_OF_BASE: the rate (7.5 = 7.5 %). At most 4 decimals. */
@@ -325,6 +352,12 @@ export interface RunException {
 
 export interface PayrollRunView extends PayrollRunRow {
   exceptions: RunException[];
+  /** PROPOSED only: why the calculation no longer matches the data (empty = current). Recalculate before release. */
+  staleReasons: string[];
+  /** One-time adjustments of this company and period still awaiting approval. */
+  pendingAdjustments: number;
+  /** Approved adjustments of this period for employees this run does not pay (covered elsewhere, or an exception). */
+  unpickedAdjustments: number;
 }
 
 export interface EmployeeRunInput {
@@ -368,6 +401,11 @@ export interface ResultLineRow {
   costReceiverCategory: string;
   costCenter: string | null;
   controllingArea: string | null;
+  /** 9318: where the line came from and the basis it was calculated on. */
+  sourceType: string;
+  sourceId: string | null;
+  prorationPolicy: string | null;
+  calcBasis: string | null;
 }
 
 const text = (v: unknown) => (v === null || v === undefined ? '0' : String(v));
@@ -433,7 +471,65 @@ export async function runView(tx: Tx, client: string, runId: string): Promise<Pa
     .leftJoin(employee, and(eq(employee.client, payrollRunException.client), eq(employee.personnelNumber, payrollRunException.personnelNumber)))
     .where(and(eq(payrollRunException.client, client), eq(payrollRunException.runId, runId)))
     .orderBy(asc(payrollRunException.personnelNumber), asc(payrollRunException.seq));
-  return { ...runRowOf(rows[0]), exceptions: exceptions.map((e) => ({ ...e, employeeName: e.employeeName ?? null, remedy: e.remedy ?? null, informational: INFORMATIONAL_EXCEPTIONS.has(e.reasonCode) })) };
+  const base = runRowOf(rows[0]);
+  const standing = await adjustmentStanding(tx, client, base);
+  return {
+    ...base,
+    exceptions: exceptions.map((e) => ({ ...e, employeeName: e.employeeName ?? null, remedy: e.remedy ?? null, informational: INFORMATIONAL_EXCEPTIONS.has(e.reasonCode) })),
+    staleReasons: base.status === 'PROPOSED' ? await staleReasonsOf(tx, client, base) : [],
+    pendingAdjustments: standing.pending,
+    unpickedAdjustments: standing.unpicked,
+  };
+}
+
+/** Pending adjustments of the run's company and period, and approved ones for employees the run does not pay. */
+async function adjustmentStanding(tx: Tx, client: string, run: RunRow): Promise<{ pending: number; unpicked: number }> {
+  const rows = (await tx.execute(sql`
+    select count(*) filter (where a.status = 'PENDING')::int as pending,
+           count(*) filter (where a.status = 'APPROVED' and not exists (
+             select 1 from payroll_result r where r.client = a.client and r.run_id = ${run.runId} and r.personnel_number = a.personnel_number))::int as unpicked
+      from payroll_adjustment a
+     where a.client = ${client} and a.company_code = ${run.companyCode} and a.fiscal_year = ${run.fiscalYear} and a.period = ${run.period}
+  `)) as unknown as Array<{ pending: number; unpicked: number }>;
+  return { pending: Number(rows[0]?.pending ?? 0), unpicked: Number(rows[0]?.unpicked ?? 0) };
+}
+
+/**
+ * Why a PROPOSED run's results no longer match the data it was calculated from. Exact for one-time adjustments
+ * (the approved set must equal the set the lines carry); by timestamp for recurring entries (any entry written
+ * after the calculation, for an employee of the run). Empty when the calculation is current.
+ */
+export async function staleReasonsOf(tx: Tx, client: string, run: RunRow & { calculatedAt?: string }): Promise<string[]> {
+  const reasons: string[] = [];
+  const mismatched = (await tx.execute(sql`
+    select a.adjustment_id, 'approved after calculation' as why
+      from payroll_adjustment a
+     where a.client = ${client} and a.company_code = ${run.companyCode} and a.fiscal_year = ${run.fiscalYear}
+       and a.period = ${run.period} and a.status = 'APPROVED'
+       and exists (select 1 from payroll_result r where r.client = a.client and r.run_id = ${run.runId} and r.personnel_number = a.personnel_number)
+       and not exists (select 1 from payroll_result_line l join payroll_result r on r.client = l.client and r.result_id = l.result_id
+                        where l.client = a.client and r.run_id = ${run.runId} and l.source_type = 'ONE_TIME' and l.source_id = a.adjustment_id)
+    union all
+    select l.source_id, 'no longer approved'
+      from payroll_result_line l join payroll_result r on r.client = l.client and r.result_id = l.result_id
+     where l.client = ${client} and r.run_id = ${run.runId} and l.source_type = 'ONE_TIME'
+       and not exists (select 1 from payroll_adjustment a where a.client = l.client and a.adjustment_id = l.source_id and a.status = 'APPROVED')
+  `)) as unknown as Array<{ adjustment_id: string; why: string }>;
+  for (const m of mismatched) reasons.push(`One-time adjustment ${m.adjustment_id} was ${m.why}.`);
+  {
+    const changed = (await tx.execute(sql`
+      select distinct e.personnel_number
+        from employee_pay_component e
+       where e.client = ${client}
+         and greatest(e.created_at, coalesce(e.changed_at, e.created_at)) > (select calculated_at from payroll_run where client = ${client} and run_id = ${run.runId})
+         and e.personnel_number in (
+           select personnel_number from payroll_result where client = ${client} and run_id = ${run.runId}
+           union select personnel_number from payroll_run_exception where client = ${client} and run_id = ${run.runId})
+       order by 1
+    `)) as unknown as Array<{ personnel_number: string }>;
+    if (changed.length) reasons.push(`Recurring pay components changed after the calculation for ${changed.map((c) => c.personnel_number).join(', ')}.`);
+  }
+  return reasons;
 }
 
 /** One run with its exceptions. Refused when the run's company lies outside the caller's scope. */
@@ -535,6 +631,10 @@ async function linesOf(tx: Tx, client: string, resultId: string): Promise<Result
     costReceiverCategory: l.costReceiverCategory,
     costCenter: l.costCenter ?? null,
     controllingArea: l.controllingArea ?? null,
+    sourceType: l.sourceType,
+    sourceId: l.sourceId ?? null,
+    prorationPolicy: l.prorationPolicy ?? null,
+    calcBasis: l.calcBasis ?? null,
   }));
 }
 
@@ -557,7 +657,7 @@ export async function getResultWithLines(
 
 // ── The calculation ─────────────────────────────────────────────────────────
 
-async function currencyDecimals(tx: Tx, currency: string): Promise<number> {
+export async function currencyDecimals(tx: Tx, currency: string): Promise<number> {
   const rows = (await tx.execute(sql`select decimal_places from currency where code = ${currency} limit 1`)) as unknown as Array<{ decimal_places: number }>;
   if (!rows[0]) refuse('PAYROLL_CURRENCY', `Currency ${currency} is not defined.`, 'Maintain it in the currency table.');
   return Number(rows[0].decimal_places);
@@ -724,6 +824,42 @@ export async function computeResultDraft(tx: Tx, client: string, run: RunRow, pe
     .map((a) => ({ validFrom: day(a.valid_from)!, validTo: day(a.valid_to), status: a.status, isPaid: a.is_paid }));
 
   const decimals = await currencyDecimals(tx, run.currency);
+  // One writer per employee: a recurring entry is not written while this employee is being calculated, and the
+  // calculation reads only what was committed before it started (staleness is judged against that).
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`employee-pay:${client}:${pn}`}, 0))`);
+  const entries = ((await tx.execute(sql`
+    select entry_id, component_code, mode, amount_kind, amount_value::text as amount_value, currency,
+           valid_from::text as valid_from, valid_to::text as valid_to, proration_policy
+      from employee_pay_component
+     where client = ${client} and personnel_number = ${pn} and status = 'ACTIVE'
+       and valid_from <= ${run.periodTo}::date and (valid_to is null or valid_to >= ${run.periodFrom}::date)
+     order by valid_from, component_code, entry_id
+  `)) as unknown as Array<{ entry_id: string; component_code: string; mode: 'ADD' | 'REPLACE'; amount_kind: 'FIXED' | 'PERCENT_OF_BASE'; amount_value: string; currency: string; valid_from: string; valid_to: string | null; proration_policy: string }>)
+    .map((e) => ({ ...e, valid_from: day(e.valid_from)!, valid_to: day(e.valid_to), currency: String(e.currency).trim() }));
+  const adjustments = (await tx.execute(sql`
+    select adjustment_id, component_code, component_kind, amount::text as amount, currency, reason, source_reference
+      from payroll_adjustment
+     where client = ${client} and company_code = ${run.companyCode} and fiscal_year = ${run.fiscalYear}
+       and period = ${run.period} and personnel_number = ${pn} and status = 'APPROVED'
+     order by created_at, adjustment_id
+  `)) as unknown as Array<{ adjustment_id: string; component_code: string; component_kind: string; amount: string; currency: string; reason: string; source_reference: string | null }>;
+
+  const mappingCache = new Map<string, Record<string, unknown> | null>();
+  const mappingOf = async (code: string) => {
+    if (!mappingCache.has(code)) {
+      const rows = (await tx.execute(sql`
+        select p.code as component_code, p.component_kind, p.is_valid, m.debit_account, m.credit_account,
+               m.cost_receiver_category, m.controlling_area as fixed_area, m.cost_center as fixed_centre,
+               (m.component_code is not null) as mapped
+          from pay_component p
+          left join pay_component_config m
+            on m.client = p.client and m.component_code = p.code and m.chart_of_accounts = ${chart}
+         where p.client = ${client} and p.code = ${code}
+      `)) as unknown as Array<Record<string, unknown>>;
+      mappingCache.set(code, rows[0] ?? null);
+    }
+    return mappingCache.get(code) ?? null;
+  };
   const componentCache = new Map<string, Array<Record<string, unknown>>>();
   const componentsOf = async (structureCode: string) => {
     if (!componentCache.has(structureCode)) {
@@ -745,6 +881,57 @@ export async function computeResultDraft(tx: Tx, client: string, run: RunRow, pe
   const resultId = randomUUID();
   const lines: Array<typeof payrollResultLine.$inferInsert> = [];
   const totals = { EARNING: 0n, DEDUCTION: 0n, EMPLOYER_CONTRIBUTION: 0n } as Record<string, bigint>;
+
+  /** A mapping row that a line may be written from: the component exists, is not an EOS provision and is mapped. */
+  const usable = (c: Record<string, unknown> | null, code: string, where: string) => {
+    if (!c) refuse('COMPONENT_UNKNOWN', `Component ${code} (${where}) does not exist.`, `Define it at ${PAY_COMPONENT_ROUTE}.`);
+    if (String(c.component_kind) === EOS_PROVISION_KIND) {
+      refuse('EOS_NOT_SUPPORTED', `${where} names end-of-service provision component ${code}; a run does not calculate those yet.`, `Remove ${code} from ${where}.`);
+    }
+    if (!c.mapped) {
+      refuse('COMPONENT_UNMAPPED', `Component ${code} is not mapped to an account in chart ${chart} of company ${run.companyCode}.`, `Map it at ${PAY_COMPONENT_ROUTE}.`);
+    }
+    return c;
+  };
+  const addLine = async (o: {
+    segment: Segment; c: Record<string, unknown>; code: string; from: string; to: string; payableDays: string;
+    amountKind: 'FIXED' | 'PERCENT_OF_BASE'; amountValue: string; amount: string; source: LineSource;
+    sourceId: string | null; policy: string | null; basis: string;
+  }) => {
+    const kind = String(o.c.component_kind);
+    const receiver = String(o.c.cost_receiver_category);
+    let costCenter: string | null = null;
+    let controllingArea: string | null = null;
+    if (receiver === 'ASSIGNMENT') {
+      const standing = (await tx.execute(sql`
+        select 1 from cost_center where client = ${client} and controlling_area = ${o.segment.controllingArea}
+           and cost_center = ${o.segment.costCenter} and valid_from <= ${o.segment.from}::date and valid_to >= ${o.segment.from}::date limit 1
+      `)) as unknown as unknown[];
+      if (standing.length === 0) {
+        refuse('NO_COST_CENTRE', `Component ${o.code} charges to employee ${pn}'s cost centre, and cost centre ${o.segment.costCenter} does not stand in controlling area ${o.segment.controllingArea} on ${o.segment.from}.`, `Give the position assignment a valid cost centre at ${EMPLOYEE_ROUTE}?employee=${pn}.`);
+      }
+      costCenter = o.segment.costCenter;
+      controllingArea = o.segment.controllingArea;
+    } else if (receiver === 'FIXED') {
+      costCenter = (o.c.fixed_centre as string | null) ?? null;
+      controllingArea = (o.c.fixed_area as string | null) ?? null;
+    }
+    totals[kind] = (totals[kind] ?? 0n) + scaled(o.amount, decimals);
+    lines.push({
+      client, resultId, lineId: randomUUID(), lineNo: lines.length + 1,
+      segmentFrom: o.from, segmentTo: o.to, payableDays: o.payableDays,
+      structureCode: o.segment.assignment.structureCode, baseAmount: o.segment.assignment.baseAmount,
+      componentCode: o.code, componentKind: kind, amountKind: o.amountKind, amountValue: o.amountValue, amount: o.amount,
+      debitAccount: (o.c.debit_account as string | null) ?? null, creditAccount: (o.c.credit_account as string | null) ?? null,
+      costReceiverCategory: receiver, costCenter, controllingArea, createdBy: changedBy,
+      sourceType: o.source, sourceId: o.sourceId, prorationPolicy: o.policy, calcBasis: o.basis.slice(0, 240),
+    });
+  };
+  const trimmed = (v: string) => (v.includes('.') ? v.replace(/0+$/, '').replace(/\.$/, '') : v);
+  const rule = (kind: 'FIXED' | 'PERCENT_OF_BASE', value: string, base: string) =>
+    kind === 'FIXED' ? `fixed ${value} per period` : `${trimmed(value)}% of the assigned base salary ${base} (not taxable gross)`;
+  const prorated = (payable: number, total: number) => `× ${payable}/${total} payable days`;
+
   let coveredDays = 0;
   let unpaidDays = 0;
   let payableDays = 0;
@@ -769,42 +956,110 @@ export async function computeResultDraft(tx: Tx, client: string, run: RunRow, pe
       if (!c.mapped) {
         refuse('COMPONENT_UNMAPPED', `Component ${code} is not mapped to an account in chart ${chart} of company ${run.companyCode}.`, `Map it at ${PAY_COMPONENT_ROUTE}.`);
       }
-      const receiver = String(c.cost_receiver_category);
-      let costCenter: string | null = null;
-      let controllingArea: string | null = null;
-      if (receiver === 'ASSIGNMENT') {
-        const standing = (await tx.execute(sql`
-          select 1 from cost_center where client = ${client} and controlling_area = ${segment.controllingArea}
-             and cost_center = ${segment.costCenter} and valid_from <= ${segment.from}::date and valid_to >= ${segment.from}::date limit 1
-        `)) as unknown as unknown[];
-        if (standing.length === 0) {
-          refuse('NO_COST_CENTRE', `Component ${code} charges to employee ${pn}'s cost centre, and cost centre ${segment.costCenter} does not stand in controlling area ${segment.controllingArea} on ${segment.from}.`, `Give the position assignment a valid cost centre at ${EMPLOYEE_ROUTE}?employee=${pn}.`);
-        }
-        costCenter = segment.costCenter;
-        controllingArea = segment.controllingArea;
-      } else if (receiver === 'FIXED') {
-        costCenter = (c.fixed_centre as string | null) ?? null;
-        controllingArea = (c.fixed_area as string | null) ?? null;
-      }
       const amountKind = String(c.amount_kind) as 'FIXED' | 'PERCENT_OF_BASE';
+      // A REPLACE entry suppresses this structure rule on the days it covers; the rule runs on the rest.
+      const cuts = entries.filter((e) => e.mode === 'REPLACE' && e.component_code === code);
+      for (const [from, to] of daysOutside(segment.from, segment.to, cuts.map((e) => [e.valid_from, e.valid_to] as const))) {
+        const whole = from === segment.from && to === segment.to;
+        const sub = whole ? days : payableDaysFor({ periodFrom: run.periodFrom, periodTo: run.periodTo, assignmentFrom: from, assignmentTo: to, absences });
+        const amount = calculateComponent({
+          amountKind, amountValue: String(c.amount_value), baseAmount: segment.assignment.baseAmount,
+          payableDays: sub.payableDays, totalDays: sub.totalDays, decimals,
+        });
+        await addLine({
+          segment, c, code, from, to, payableDays: String(sub.payableDays), amountKind, amountValue: String(c.amount_value), amount,
+          source: 'STRUCTURE', sourceId: null, policy: null,
+          basis: `Structure ${segment.assignment.structureCode}: ${rule(amountKind, String(c.amount_value), segment.assignment.baseAmount)} ${prorated(sub.payableDays, sub.totalDays)}`,
+        });
+      }
+    }
+    // Employee recurring entries (not FULL_PERIOD), for the part of this segment they cover.
+    for (const e of entries.filter((x) => x.proration_policy !== 'FULL_PERIOD')) {
+      const from = e.valid_from > segment.from ? e.valid_from : segment.from;
+      const to = e.valid_to !== null && e.valid_to < segment.to ? e.valid_to : segment.to;
+      if (from > to) continue;
+      const c = usable(await mappingOf(e.component_code), e.component_code, `employee entry ${e.entry_id}`);
+      if (!c.is_valid) refuse('COMPONENT_RETIRED', `Component ${e.component_code} is retired; employee ${pn} still has an entry for it.`, `Withdraw or end the entry at ${EMPLOYEE_ROUTE}?employee=${pn}.`);
+      if (e.currency !== run.currency) {
+        refuse('CURRENCY_DIFFERS', `Employee ${pn}'s entry for ${e.component_code} is in ${e.currency}, and the run for company ${run.companyCode} is in ${run.currency}; a run does not convert currencies.`, `Withdraw it and enter it in ${run.currency} at ${EMPLOYEE_ROUTE}?employee=${pn}.`);
+      }
+      const unreduced = e.proration_policy === 'NO_UNPAID_LEAVE_REDUCTION';
+      const sub = payableDaysFor({ periodFrom: run.periodFrom, periodTo: run.periodTo, assignmentFrom: from, assignmentTo: to, absences: unreduced ? [] : absences });
       const amount = calculateComponent({
-        amountKind, amountValue: String(c.amount_value), baseAmount: segment.assignment.baseAmount,
-        payableDays: days.payableDays, totalDays: days.totalDays, decimals,
+        amountKind: e.amount_kind, amountValue: e.amount_value, baseAmount: segment.assignment.baseAmount,
+        payableDays: sub.payableDays, totalDays: sub.totalDays, decimals,
       });
-      totals[kind] = (totals[kind] ?? 0n) + scaled(amount, decimals);
-      lines.push({
-        client, resultId, lineId: randomUUID(), lineNo: lines.length + 1,
-        segmentFrom: segment.from, segmentTo: segment.to, payableDays: String(days.payableDays),
-        structureCode: segment.assignment.structureCode, baseAmount: segment.assignment.baseAmount,
-        componentCode: code, componentKind: kind, amountKind, amountValue: String(c.amount_value), amount,
-        debitAccount: (c.debit_account as string | null) ?? null, creditAccount: (c.credit_account as string | null) ?? null,
-        costReceiverCategory: receiver, costCenter, controllingArea, createdBy: changedBy,
+      await addLine({
+        segment, c, code: e.component_code, from, to, payableDays: String(sub.payableDays), amountKind: e.amount_kind, amountValue: e.amount_value, amount,
+        source: e.mode === 'REPLACE' ? 'EMPLOYEE_REPLACE' : 'EMPLOYEE_ADD', sourceId: e.entry_id, policy: e.proration_policy,
+        basis: `Employee ${e.mode === 'REPLACE' ? 'replacement' : 'addition'} ${e.valid_from}..${e.valid_to ?? 'open'}: ${rule(e.amount_kind, e.amount_value, segment.assignment.baseAmount)} ${prorated(sub.payableDays, sub.totalDays)}${unreduced ? ' (unpaid leave not deducted)' : ''}`,
       });
     }
   }
 
+  // FULL_PERIOD entries: once per employee and period, never once per segment.
+  const full = entries.filter((e) => e.proration_policy === 'FULL_PERIOD');
+  if (full.length > 0) {
+    const first = segments[0]!;
+    const last = segments.at(-1)!;
+    for (const e of full) {
+      const ambiguous = (why: string): never => refuse(
+        'FULL_PERIOD_AMBIGUOUS',
+        `Employee ${pn}'s full-period entry for ${e.component_code} (${e.entry_id}) is ambiguous in ${run.periodFrom} to ${run.periodTo}: ${why}.`,
+        `Use "payable calendar days" for this entry, end/start entries on period boundaries, or enter a one-time payroll adjustment for ${run.period}/${run.fiscalYear}. Then recalculate the run.`,
+      );
+      if (new Set(segments.map((s) => s.assignment.assignmentId)).size > 1) ambiguous('the employee has more than one salary assignment, so the percentage base is not unique');
+      if (e.valid_from > first.from || (e.valid_to !== null && e.valid_to < last.to)) ambiguous(`the entry does not cover the employee's whole employment in the period (${first.from} to ${last.to})`);
+      if (entries.some((o) => o.entry_id !== e.entry_id && o.component_code === e.component_code && o.mode === e.mode)) ambiguous('another entry for the same component and mode overlaps the period');
+      const c = usable(await mappingOf(e.component_code), e.component_code, `employee entry ${e.entry_id}`);
+      if (!c.is_valid) refuse('COMPONENT_RETIRED', `Component ${e.component_code} is retired; employee ${pn} still has an entry for it.`, `Withdraw or end the entry at ${EMPLOYEE_ROUTE}?employee=${pn}.`);
+      if (e.currency !== run.currency) {
+        refuse('CURRENCY_DIFFERS', `Employee ${pn}'s entry for ${e.component_code} is in ${e.currency}, and the run for company ${run.companyCode} is in ${run.currency}; a run does not convert currencies.`, `Withdraw it and enter it in ${run.currency} at ${EMPLOYEE_ROUTE}?employee=${pn}.`);
+      }
+      const amount = calculateComponent({
+        amountKind: e.amount_kind, amountValue: e.amount_value, baseAmount: last.assignment.baseAmount,
+        payableDays: run.totalDays, totalDays: run.totalDays, decimals,
+      });
+      await addLine({
+        segment: last, c, code: e.component_code, from: first.from, to: last.to, payableDays: String(run.totalDays),
+        amountKind: e.amount_kind, amountValue: e.amount_value, amount,
+        source: e.mode === 'REPLACE' ? 'EMPLOYEE_REPLACE' : 'EMPLOYEE_ADD', sourceId: e.entry_id, policy: 'FULL_PERIOD',
+        basis: `Employee ${e.mode === 'REPLACE' ? 'replacement' : 'addition'}, full period, applied once: ${rule(e.amount_kind, e.amount_value, last.assignment.baseAmount)}`,
+      });
+    }
+  }
+
+  // Approved one-time adjustments of this company, year and period: fixed, not prorated, applied once at release.
+  const lastSegment = segments.at(-1)!;
+  for (const a of adjustments) {
+    const c = usable(await mappingOf(a.component_code), a.component_code, `adjustment ${a.adjustment_id}`);
+    if (String(c.component_kind) !== a.component_kind) {
+      refuse('ADJUSTMENT_KIND_CHANGED', `Adjustment ${a.adjustment_id} was entered as ${a.component_kind}, and component ${a.component_code} is now ${String(c.component_kind)}.`, 'Cancel the adjustment and enter it again.');
+    }
+    if (String(a.currency).trim() !== run.currency) {
+      refuse('CURRENCY_DIFFERS', `Adjustment ${a.adjustment_id} is in ${String(a.currency).trim()}, and the run is in ${run.currency}.`, 'Cancel it and enter it in the payroll currency.');
+    }
+    const fraction = (String(a.amount).split('.')[1] ?? '').replace(/0+$/, '');
+    if (fraction.length > decimals) {
+      refuse('ADJUSTMENT_PRECISION', `Adjustment ${a.adjustment_id} (${a.amount}) has more than ${decimals} decimals; ${run.currency} has ${decimals}.`, 'Cancel it and enter an amount the currency can pay.');
+    }
+    const amount = unscaled(scaled(a.amount, decimals), decimals);
+    await addLine({
+      segment: lastSegment, c, code: a.component_code, from: segments[0]!.from, to: lastSegment.to, payableDays: String(run.totalDays),
+      amountKind: 'FIXED', amountValue: a.amount, amount, source: 'ONE_TIME', sourceId: a.adjustment_id, policy: null,
+      basis: `One-time adjustment ${a.adjustment_id}: fixed ${amount}, not prorated and not recurring. Reason: ${a.reason}${a.source_reference ? ` (ref ${a.source_reference})` : ''}`,
+    });
+  }
+
   const gross = totals.EARNING ?? 0n;
   const deductions = totals.DEDUCTION ?? 0n;
+  if (deductions > gross) {
+    refuse(
+      'NEGATIVE_NET_PAY',
+      `Employee ${pn}'s deductions ${unscaled(deductions, decimals)} exceed their earnings ${unscaled(gross, decimals)} in period ${run.period}/${run.fiscalYear}; net pay would be negative. Nothing is capped, carried forward or netted automatically.`,
+      `Correct the employee's deductions at ${EMPLOYEE_ROUTE}?employee=${pn} or the pending adjustments, then recalculate the run.`,
+    );
+  }
   const last = segments.at(-1)!;
   return {
     result: {
@@ -1083,7 +1338,7 @@ export function assertProposed(row: typeof payrollRun.$inferSelect, verb: string
  * first). A released run is frozen.
  */
 export async function releasePayrollRun(input: ReleaseRunInput, access?: PayrollAccess): Promise<PayrollRunView> {
-  const parsed = parse(runActionInput, input);
+  const parsed = parse(releaseInput, input);
   return withTenant(parsed.client, async (tx) => {
     const grant = await judge(tx, parsed.client, access, EXECUTE);
     const standing = await loadRun(tx, parsed.client, parsed.runId);
@@ -1131,10 +1386,41 @@ export async function releasePayrollRun(input: ReleaseRunInput, access?: Payroll
       refuse('RUN_STALE', `Payroll run ${row.runId} was calculated before employee${missing.length > 1 ? 's' : ''} ${missing.join(', ')} joined the period's selection.`, `Recalculate the run at ${PAYROLL_RUN_ROUTE}?run=${row.runId}, then release it.`);
     }
 
+    const stale = await staleReasonsOf(tx, parsed.client, runRowFrom(row));
+    if (stale.length > 0) {
+      refuse('RUN_STALE_INPUTS', `Payroll run ${row.runId} was calculated before the pay data changed: ${stale.join(' ')}`, `Recalculate the run at ${PAYROLL_RUN_ROUTE}?run=${row.runId}, then release it.`);
+    }
+    const waiting = await adjustmentStanding(tx, parsed.client, runRowFrom(row));
+    if (waiting.pending > 0 && !parsed.acknowledgePending) {
+      refuse(
+        'PENDING_ADJUSTMENTS',
+        `${waiting.pending} one-time adjustment${waiting.pending > 1 ? 's' : ''} for company ${row.companyCode}, period ${row.period}/${row.fiscalYear} still await approval and are NOT in this run.`,
+        'Have them approved and recalculate the run, or release again and confirm that you release without them (a frozen period is corrected in a later period).',
+      );
+    }
+
     const now = new Date();
     await tx.update(payrollRun)
       .set({ status: 'RELEASED', releasedBy: parsed.changedBy, releasedAt: now, changedBy: parsed.changedBy, changedAt: now })
       .where(and(eq(payrollRun.client, parsed.client), eq(payrollRun.runId, row.runId)));
+    // Applied exactly once: the approved adjustments this run's lines carry become APPLIED, under the period lock,
+    // and only from APPROVED. A line whose adjustment is no longer approved was caught as stale above.
+    const applied = (await tx.execute(sql`
+      update payroll_adjustment a
+         set status = 'APPLIED', applied_run_id = ${row.runId}, applied_at = ${now.toISOString()}::timestamptz, changed_by = ${parsed.changedBy}, changed_at = ${now.toISOString()}::timestamptz,
+             applied_result_id = (select r.result_id from payroll_result r where r.client = a.client and r.run_id = ${row.runId} and r.personnel_number = a.personnel_number)
+       where a.client = ${parsed.client} and a.status = 'APPROVED'
+         and a.adjustment_id in (select l.source_id from payroll_result_line l join payroll_result r on r.client = l.client and r.result_id = l.result_id
+                                  where l.client = ${parsed.client} and r.run_id = ${row.runId} and l.source_type = 'ONE_TIME')
+      returning a.adjustment_id
+    `)) as unknown as Array<{ adjustment_id: string }>;
+    for (const a of applied) {
+      await recordChange(tx, {
+        client: parsed.client, objectClass: PAYROLL_ADJUSTMENT_OBJECT_CLASS, objectKey: a.adjustment_id, changeType: 'CHANGE',
+        changedBy: parsed.changedBy, transactionCode: PAYROLL_RUN_CAPABILITY,
+        before: { status: 'APPROVED' }, after: { status: 'APPLIED', runId: row.runId }, securityRelevantFields: ['status'],
+      });
+    }
     await recordChange(tx, {
       client: parsed.client,
       objectClass: PAYROLL_RUN_OBJECT_CLASS,
@@ -1143,7 +1429,7 @@ export async function releasePayrollRun(input: ReleaseRunInput, access?: Payroll
       changedBy: parsed.changedBy,
       transactionCode: PAYROLL_RUN_CAPABILITY,
       before: { status: 'PROPOSED' },
-      after: { status: 'RELEASED', employees: view.employeeCount, netPay: view.netPay },
+      after: { status: 'RELEASED', employees: view.employeeCount, netPay: view.netPay, adjustmentsApplied: applied.length, releasedWithPendingAdjustments: waiting.pending },
     });
     return (await runView(tx, parsed.client, row.runId))!;
   });
@@ -1169,6 +1455,20 @@ export async function cancelPayrollRun(input: CancelRunInput, access?: PayrollAc
       refuse('RUN_CANCELLED', `Payroll run ${row.runId} is already cancelled (${row.cancelReason ?? 'no reason'}).`);
     }
     const now = new Date();
+    // A cancelled released run gives its adjustments back, so a re-proposal picks them up again — never twice.
+    const returned = (await tx.execute(sql`
+      update payroll_adjustment
+         set status = 'APPROVED', applied_run_id = null, applied_result_id = null, applied_at = null, changed_by = ${parsed.changedBy}, changed_at = ${now.toISOString()}::timestamptz
+       where client = ${parsed.client} and applied_run_id = ${row.runId} and status = 'APPLIED'
+      returning adjustment_id
+    `)) as unknown as Array<{ adjustment_id: string }>;
+    for (const a of returned) {
+      await recordChange(tx, {
+        client: parsed.client, objectClass: PAYROLL_ADJUSTMENT_OBJECT_CLASS, objectKey: a.adjustment_id, changeType: 'CHANGE',
+        changedBy: parsed.changedBy, transactionCode: PAYROLL_RUN_CAPABILITY,
+        before: { status: 'APPLIED', runId: row.runId }, after: { status: 'APPROVED', reason: `run ${row.runId} cancelled` }, securityRelevantFields: ['status'],
+      });
+    }
     await tx.update(payrollRun)
       .set({ status: 'CANCELLED', cancelledBy: parsed.changedBy, cancelledAt: now, cancelReason: parsed.reason, changedBy: parsed.changedBy, changedAt: now })
       .where(and(eq(payrollRun.client, parsed.client), eq(payrollRun.runId, row.runId)));

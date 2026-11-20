@@ -16,6 +16,7 @@ import { withTenant } from '../db/client';
 import { derivePosition, periodDates } from '../periods';
 import { assignStructure } from '../../modules/people/payroll-structure';
 import { listPayrollRuns, proposePayrollRun } from '../../modules/people/payroll-run';
+import { addEmployeeComponent, enterAdjustment } from '../../modules/people/payroll-components';
 import { DEMO_ACTOR, DEMO_IDENTITY, DEMO_STRUCTURE } from './demo-organisation';
 import { ensureEmployee } from './demo-payroll-run';
 import type { DemoTimeline } from './demo-provisioning';
@@ -54,11 +55,25 @@ export async function buildDemoPayrollOffCycle(input: { client?: string; timelin
     currency: DEMO_IDENTITY.currency, validFrom: from, requestKey: `DEMO-SAL-${LATE_JOINER.personnelNumber}`, changedBy: DEMO_ACTOR,
   }, AUTHORITY);
 
+  // 9318: the company agrees a fixed employee pension amount for her, replacing the structure's percentage rule from her start date
+  // (a hypothetical amount, not a statutory rate), before the run is proposed so the proposal already uses it.
+  await addEmployeeComponent({
+    client, personnelNumber: LATE_JOINER.personnelNumber, componentCode: 'PENSION', mode: 'REPLACE', amountKind: 'FIXED', amountValue: '12.000',
+    currency: DEMO_IDENTITY.currency, validFrom: from, prorationPolicy: 'PAYABLE_CALENDAR_DAYS',
+    reason: 'Demo: fixed amount agreed with the employee, replaces the structure rate', requestKey: `DEMO-EMPCOMP-${LATE_JOINER.personnelNumber}`, changedBy: DEMO_ACTOR,
+  }, AUTHORITY);
+
   const runs = (await listPayrollRuns(client, AUTHORITY))
     .filter((r) => r.companyCode === companyCode && r.fiscalYear === fiscalYear && r.period === period && r.status !== 'CANCELLED');
   const standing = runs.find((r) => r.predecessorRunId !== null);
   const run = standing ?? await proposePayrollRun({
     client, companyCode, fiscalYear, period, requestKey: `DEMO-PAYRUN-OFFCYCLE-${fiscalYear}-${period}`, changedBy: DEMO_ACTOR,
+  }, AUTHORITY);
+  // A one-time adjustment left PENDING, to be approved by a different person at /people/payroll-runs: it stays out of the run until
+  // approved and the run is recalculated, and releasing without it needs an explicit acknowledgement.
+  await enterAdjustment({
+    client, companyCode, fiscalYear, period, personnelNumber: LATE_JOINER.personnelNumber, componentCode: 'TRANSPORT', amount: '25.000',
+    reason: 'Demo: one-off transport payment awaiting approval', sourceReference: 'DEMO-DOC-1', requestKey: `DEMO-ADJ-${LATE_JOINER.personnelNumber}-${fiscalYear}-${period}`, changedBy: DEMO_ACTOR,
   }, AUTHORITY);
   const covered = await withTenant(client, async (tx) => ((await tx.execute(sql`
     select count(*)::int as n from payroll_run_exception

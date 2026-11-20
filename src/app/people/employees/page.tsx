@@ -16,8 +16,17 @@ import {
   listStructures,
 } from '@/modules/people/payroll-structure';
 import { randomUUID } from 'node:crypto';
+import { PayrollRunError } from '@/modules/people/payroll-run';
 import Employees from './Employees';
 import { AssignStructureForm, EndAssignmentForm } from './PayStructure';
+import { AddComponentForm, EntryActions } from './RecurringComponents';
+import {
+  BASIS_LABEL,
+  COMPANY_RESPONSIBILITY_NOTICE,
+  COMPONENT_MAINTAIN_CAPABILITY,
+  listEmployeeComponents,
+  listEntryComponents,
+} from '@/modules/people/payroll-components';
 import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -96,6 +105,15 @@ export default async function PeopleEmployeesPage({ searchParams }: {
           personnelNumber={personnelNumber}
           canRead={can(session, SALARY_STRUCTURE_CAPABILITY) || can(session, PAYROLL_RESULT_CAPABILITY)}
           canAssign={can(session, SALARY_STRUCTURE_CAPABILITY)}
+          access={access}
+        />
+      )}
+      {selected && (
+        <RecurringComponentsSection
+          client={client}
+          personnelNumber={personnelNumber}
+          canRead={can(session, COMPONENT_MAINTAIN_CAPABILITY) || can(session, SALARY_STRUCTURE_CAPABILITY) || can(session, PAYROLL_RESULT_CAPABILITY)}
+          canMaintain={can(session, COMPONENT_MAINTAIN_CAPABILITY)}
           access={access}
         />
       )}
@@ -213,6 +231,78 @@ async function PayStructureSection({
           requestKey={randomUUID()}
           today={today}
         />
+      )}
+    </section>
+  );
+}
+
+/**
+ * Recurring pay components of this employee (9318): additions, deductions and employer contributions the company configures
+ * for them, effective-dated, added to or replacing the shared structure's rule. Usable during onboarding, before any payroll
+ * result exists. Pay is sensitive: shown only to holders of a payroll capability, and the service judges scope itself.
+ */
+async function RecurringComponentsSection({
+  client,
+  personnelNumber,
+  canRead,
+  canMaintain,
+  access,
+}: {
+  client: string;
+  personnelNumber: string;
+  canRead: boolean;
+  canMaintain: boolean;
+  access: { authorization: { userId: string; sessionId: string } };
+}) {
+  if (!canRead) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  let loaded;
+  try {
+    loaded = await Promise.all([
+      listEmployeeComponents(client, personnelNumber, access),
+      canMaintain ? listEntryComponents(client) : Promise.resolve([]),
+      defaultPayrollCurrency(client),
+    ]);
+  } catch (error) {
+    if (!(error instanceof PayrollStructureError) && !(error instanceof PayrollRunError)) throw error;
+    return (
+      <section className="panel p-4" aria-label="Recurring pay components">
+        <h2 className="panel-title">Recurring pay components</h2>
+        <p role="status" className="text-sm text-ink-soft">{error.message}{error.remedy ? ` ${error.remedy}` : ''}</p>
+      </section>
+    );
+  }
+  const [entries, components, currency] = loaded;
+  return (
+    <section className="panel space-y-3 p-4" aria-label="Recurring pay components">
+      <h2 className="panel-title">Recurring pay components</h2>
+      <p className="text-xs text-ink-soft">{COMPANY_RESPONSIBILITY_NOTICE}</p>
+      {entries.length === 0 ? (
+        <p className="text-sm text-ink-soft">No employee-specific components. This employee is paid by the shared salary structure only.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="grid-table">
+            <thead><tr><th>Component</th><th>Relation</th><th>Calculation</th><th>Proration</th><th>From</th><th>To</th><th>Status</th><th>Reason</th>{canMaintain && <th>Change</th>}</tr></thead>
+            <tbody>
+              {entries.map((e) => (
+                <tr key={e.entryId}>
+                  <td><span className="code">{e.componentCode}</span> <span className="text-xs text-ink-soft">{e.componentName} · {e.componentKind?.toLowerCase().replace('_', ' ')}</span></td>
+                  <td className="text-xs">{e.mode === 'ADD' ? 'adds to the structure' : 'replaces the structure rule'}</td>
+                  <td className="text-xs"><span className="code">{e.amountKind === 'FIXED' ? `${e.amountValue} ${e.currency}` : `${e.amountValue} %`}</span><div className="text-ink-soft">{BASIS_LABEL[e.amountKind]}</div></td>
+                  <td className="text-xs">{e.prorationPolicy.toLowerCase().replaceAll('_', ' ')}</td>
+                  <td className="text-xs">{e.validFrom}</td>
+                  <td className="text-xs">{e.validTo ?? 'open'}</td>
+                  <td className="text-xs">{e.status.toLowerCase()}{e.withdrawnReason ? ` — ${e.withdrawnReason}` : ''}</td>
+                  <td className="text-xs">{e.reason}<div className="text-ink-soft">{e.createdBy}</div></td>
+                  {canMaintain && <td>{e.status === 'ACTIVE' ? <EntryActions entryId={e.entryId} defaultEnd={e.validTo ?? today} /> : '—'}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {canMaintain && (
+        <AddComponentForm personnelNumber={personnelNumber} components={components} defaultCurrency={currency ?? ''} today={today} requestKey={randomUUID()} />
       )}
     </section>
   );

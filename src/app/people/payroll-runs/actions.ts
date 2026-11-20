@@ -118,7 +118,7 @@ export async function releaseRunAction(_prev: PayrollRunActionState, form: FormD
   const access = await guard();
   if (!('actor' in access)) return access;
   try {
-    const view = await releasePayrollRun({ client: access.client, runId: text(form, 'runId'), changedBy: access.actor }, access.access);
+    const view = await releasePayrollRun({ client: access.client, runId: text(form, 'runId'), changedBy: access.actor, acknowledgePending: text(form, 'acknowledgePending') === 'yes' }, access.access);
     refresh();
     return { ok: true, runId: view.runId, message: `Run released by ${view.releasedBy}: ${view.employeeCount} employees, net pay ${view.netPay} ${view.currency}. It is now frozen.` };
   } catch (error) {
