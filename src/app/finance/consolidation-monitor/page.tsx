@@ -30,9 +30,9 @@ export default async function ConsolidationMonitorPage({
   const canViewLogs = can(session, CONSOLIDATION_MONITOR_AUTHORITIES.logs)
     || can(session, CONSOLIDATE_CAPABILITY);
 
-  const areas = await listConsolidationAreas(session.user.client);
+  const areas = await listConsolidationAreas(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
   const area = get('area').toUpperCase() || areas.find((a) => a.status === 'ACTIVE')?.area || areas[0]?.area || '';
-  const workbench = area ? await getConsolidationWorkbench(session.user.client, area) : null;
+  const workbench = area ? await getConsolidationWorkbench(session.user.client, area, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
 
   const selection: ConsolidationMonitorSelection = {
     area,
@@ -63,7 +63,7 @@ export default async function ConsolidationMonitorPage({
   let monitorError: string | null = null;
   if (canUse && selection.area && selection.group && selection.version) {
     try {
-      view = await getConsolidationMonitor(session.user.client, selection, canViewLogs);
+      view = await getConsolidationMonitor(session.user.client, selection, canViewLogs, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       monitorError = error instanceof ConsolidationMonitorError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

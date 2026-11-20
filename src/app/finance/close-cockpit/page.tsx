@@ -30,7 +30,8 @@ export default async function ScreenPage({ searchParams }: {
     `);
     return (rows as unknown as Array<{ template_code: string }>).map((r) => r.template_code);
   }) : [];
-  const lists = canUse ? await listTaskLists(session.user.client) : [];
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  const lists = canUse ? await listTaskLists(session.user.client, authorization) : [];
 
   let selected: (CloseCycleKey & { list: Awaited<ReturnType<typeof getTaskList>> }) | null = null;
   let tasks: Awaited<ReturnType<typeof listTasks>> = [];
@@ -42,11 +43,11 @@ export default async function ScreenPage({ searchParams }: {
       fiscalYear: Number(params.fy), postingPeriod: Number(params.period),
     };
     try {
-      const list = await getTaskList(session.user.client, cycle);
+      const list = await getTaskList(session.user.client, cycle, authorization);
       selected = { ...cycle, list };
-      tasks = await listTasks(session.user.client, cycle);
-      executions = await listExecutions(session.user.client, cycle);
-      events = await listEvents(session.user.client, cycle);
+      tasks = await listTasks(session.user.client, cycle, {}, authorization);
+      executions = await listExecutions(session.user.client, cycle, undefined, authorization);
+      events = await listEvents(session.user.client, cycle, authorization);
     } catch {
       selected = null;
     }

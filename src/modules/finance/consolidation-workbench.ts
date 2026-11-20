@@ -15,6 +15,8 @@ import type {
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { chartOfAccounts, companyCode as foundationCompanyCode, fiscalYearVariant } from '../foundation/schema';
 import {
@@ -73,11 +75,40 @@ async function judgeArea(tx: Tx, client: string, area: string) {
   return row;
 }
 
-export async function listConsolidationAreas(client: string): Promise<ConsolidationArea[]> {
+/** Capabilities under which an area's configuration may be read (workbench or monitor). */
+const WORKBENCH_READ_CAPABILITIES = [
+  CONSOLIDATION_CAPABILITY, `${CONSOLIDATION_CAPABILITY}.read`,
+  'FIN.CONSOLIDATE', 'FIN.CONSOLIDATE.read', 'FIN.CONSOLIDATE.VIEW',
+] as const;
+
+/**
+ * An area's configuration names the companies of its units. It is judged as a whole: the
+ * session needs the capability and an explicit Company Code scope over every unit's company.
+ * Configuration is not a company-wide aggregate, so a plant limit does not refuse it. A
+ * refused area is answered as if it did not stand.
+ */
+async function areaReadableInTx(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined, areaKey: string,
+): Promise<boolean> {
+  const units = await tx.select({ companyCode: consolidationUnit.companyCode }).from(consolidationUnit)
+    .where(and(eq(consolidationUnit.client, client), eq(consolidationUnit.area, areaKey)));
+  const companies = [...new Set(units.map((u) => u.companyCode).filter(Boolean))];
+  const verdict = await authorizeCompaniesAnyInTx(
+    tx, client, authorization, WORKBENCH_READ_CAPABILITIES, companies,
+    { derivedFrom: 'The consolidation area', allowPlantLimited: true },
+  );
+  return verdict.ok;
+}
+
+export async function listConsolidationAreas(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<ConsolidationArea[]> {
   return withTenant(client, async (tx) => {
-    const rows = await tx.select().from(consolidationArea)
+    const all = await tx.select().from(consolidationArea)
       .where(eq(consolidationArea.client, client))
       .orderBy(consolidationArea.area);
+    const rows = [];
+    for (const row of all) if (await areaReadableInTx(tx, client, authorization, row.area)) rows.push(row);
     return rows.map((r) => ({
       area: r.area, title: r.title, dataBasis: r.dataBasis,
       consChart: r.consChart, fiscalYearVariant: r.fiscalYearVariant,
@@ -86,8 +117,11 @@ export async function listConsolidationAreas(client: string): Promise<Consolidat
   });
 }
 
-export async function getConsolidationWorkbench(client: string, areaKey: string): Promise<ConsolidationWorkbenchView | null> {
+export async function getConsolidationWorkbench(
+  client: string, areaKey: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<ConsolidationWorkbenchView | null> {
   return withTenant(client, async (tx) => {
+    if (!(await areaReadableInTx(tx, client, authorization, areaKey))) return null;
     const [area] = await tx.select().from(consolidationArea).where(and(
       eq(consolidationArea.client, client), eq(consolidationArea.area, areaKey),
     ));

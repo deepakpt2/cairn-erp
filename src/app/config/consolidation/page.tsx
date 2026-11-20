@@ -25,9 +25,9 @@ export default async function ConsolidationWorkbenchPage({
     ? (folderRaw as ConsolidationFolder)
     : 'DATA_BASIS';
 
-  const areas = await listConsolidationAreas(session.user.client);
+  const areas = await listConsolidationAreas(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
   const areaKey = get('area').toUpperCase() || areas[0]?.area || '';
-  const view = areaKey ? await getConsolidationWorkbench(session.user.client, areaKey) : null;
+  const view = areaKey ? await getConsolidationWorkbench(session.user.client, areaKey, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
 
   return (
     <Page

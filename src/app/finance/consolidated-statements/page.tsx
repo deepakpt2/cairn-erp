@@ -27,9 +27,9 @@ export default async function ConsolidatedStatementsPage({
   const get = (name: string, fallback = '') =>
     (typeof params[name] === 'string' ? (params[name] as string) : fallback).trim();
 
-  const areas = await listConsolidationAreas(session.user.client);
+  const areas = await listConsolidationAreas(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
   const area = get('area').toUpperCase() || areas.find((a) => a.status === 'ACTIVE')?.area || areas[0]?.area || '';
-  const workbench = area ? await getConsolidationWorkbench(session.user.client, area) : null;
+  const workbench = area ? await getConsolidationWorkbench(session.user.client, area, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
 
   const selection: ConsolidatedStatementsSelection = {
     area,

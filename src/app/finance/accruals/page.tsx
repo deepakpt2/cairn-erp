@@ -31,8 +31,9 @@ export default async function AccrualsPage() {
     .where(and(eq(reversalReason.client, session.user.client), eq(reversalReason.isActive, true)))
     .orderBy(reversalReason.reasonCode)) : [];
   const today = new Date().toISOString().slice(0, 10);
-  const due = canPost ? await listDueAccruals(session.user.client, today) : [];
-  const all = canPost ? await listAccrualDocuments(session.user.client) : [];
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  const due = canPost ? await listDueAccruals(session.user.client, today, authorization) : [];
+  const all = canPost ? await listAccrualDocuments(session.user.client, authorization) : [];
   const dueKeys = new Set(due.map((d) => `${d.documentNumber}|${d.fiscalYear}`));
   const listed = [...due, ...all.filter((d) => !dueKeys.has(`${d.documentNumber}|${d.fiscalYear}`))];
   return (

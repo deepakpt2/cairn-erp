@@ -54,6 +54,7 @@ export async function createListAction(_previous: CloseState, formData: FormData
       client: session.user.client, changedBy: session.user.username, cycle,
       templateCode: String(formData.get('templateCode') ?? '').trim().toUpperCase(),
       description: String(formData.get('description') ?? '').trim() || undefined,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     target = cycleUrl(cycle);
   } catch (error) {
@@ -87,12 +88,14 @@ async function changeCycle(
 export async function releaseListAction(formData: FormData): Promise<void> {
   await changeCycle(formData, (session, cycle) => releaseTaskList({
     client: session.user.client, changedBy: session.user.username, cycle,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
   }));
 }
 
 export async function finalizeListAction(formData: FormData): Promise<void> {
   await changeCycle(formData, (session, cycle) => finalizeTaskList({
     client: session.user.client, changedBy: session.user.username, cycle,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
   }));
 }
 
@@ -115,6 +118,7 @@ export async function executeTaskAction(formData: FormData): Promise<void> {
 export async function evidenceAction(formData: FormData): Promise<void> {
   await changeCycle(formData, (session, cycle) => attachEvidence({
     client: session.user.client, changedBy: session.user.username, cycle,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     taskId: String(formData.get('taskId') ?? '').trim(),
     evidenceRef: String(formData.get('evidenceRef') ?? ''),
   }));
@@ -123,6 +127,7 @@ export async function evidenceAction(formData: FormData): Promise<void> {
 export async function signoffAction(formData: FormData): Promise<void> {
   await changeCycle(formData, (session, cycle) => signOffTask({
     client: session.user.client, changedBy: session.user.username, cycle,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     taskId: String(formData.get('taskId') ?? '').trim(),
   }));
 }
@@ -130,6 +135,7 @@ export async function signoffAction(formData: FormData): Promise<void> {
 export async function overrideAction(formData: FormData): Promise<void> {
   await changeCycle(formData, (session, cycle) => overrideTaskStatus({
     client: session.user.client, changedBy: session.user.username, cycle,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     taskId: String(formData.get('taskId') ?? '').trim(),
     newStatus: String(formData.get('newStatus') ?? '') as TaskStatus,
     reason: String(formData.get('reason') ?? ''),
@@ -139,6 +145,7 @@ export async function overrideAction(formData: FormData): Promise<void> {
 export async function reopenAction(formData: FormData): Promise<void> {
   await changeCycle(formData, (session, cycle) => reopenTask({
     client: session.user.client, changedBy: session.user.username, cycle,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     taskId: String(formData.get('taskId') ?? '').trim(),
     reason: String(formData.get('reason') ?? ''),
   }));

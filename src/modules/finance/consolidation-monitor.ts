@@ -22,6 +22,8 @@ import { createHash } from 'node:crypto';
 
 import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 
+import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import {
   companyCode as foundationCompanyCode, fiscalYearPeriod, fiscalYearVariant,
@@ -46,6 +48,31 @@ export class ConsolidationMonitorError extends Error {
 
 function fail(message: string, remedy?: string): never {
   throw new ConsolidationMonitorError(message, remedy);
+}
+
+/**
+ * A consolidation group reads and runs over the companies of its units, so it is judged
+ * as a whole: the session must hold the capability and an explicit Company Code scope
+ * covering every company of the group's units. One company outside the scope refuses the
+ * whole request (the refusal does not name derived companies); a plant-limited user is
+ * refused because the group aggregates whole companies.
+ */
+async function authorizeUnitsInTx(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[], units: ReadonlyArray<{ companyCode: string }>,
+): Promise<void> {
+  const companies = [...new Set(units.map((u) => u.companyCode).filter(Boolean))];
+  const verdict = await authorizeCompaniesAnyInTx(tx, client, authorization, capabilities, companies, {
+    derivedFrom: 'The consolidation group',
+  });
+  if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
+}
+
+const MONITOR_READ_CAPABILITIES = [
+  CONSOLIDATE_CAPABILITY, `${CONSOLIDATE_CAPABILITY}.read`, `${CONSOLIDATE_CAPABILITY}.VIEW`,
+] as const;
+function runCapabilities(mode: string): readonly string[] {
+  return [CONSOLIDATE_CAPABILITY, mode === 'UPDATE' ? `${CONSOLIDATE_CAPABILITY}.UPDATE` : `${CONSOLIDATE_CAPABILITY}.TEST`];
 }
 
 type AreaRow = typeof consolidationArea.$inferSelect;
@@ -532,11 +559,13 @@ async function runAdapter(client: string, scope: ScopeData, task: TaskRow, unitR
 export async function getConsolidationMonitor(
   client: string,
   rawSelection: ConsolidationMonitorSelection,
-  includeLogs = false,
+  includeLogs: boolean,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<ConsolidationMonitorView> {
   const selection = normalizeSelection(rawSelection);
   const { scope, statuses, executions } = await withTenant(client, async (tx) => {
     const loadedScope = await loadScopeForClient(tx, selection, client);
+    await authorizeUnitsInTx(tx, client, authorization, MONITOR_READ_CAPABILITIES, loadedScope.units);
     const statusRows = await tx.select().from(consolidationTaskStatus).where(and(
       eq(consolidationTaskStatus.client, client), eq(consolidationTaskStatus.area, selection.area),
       eq(consolidationTaskStatus.groupName, selection.group), eq(consolidationTaskStatus.version, selection.version),
@@ -614,6 +643,7 @@ export async function executeConsolidationTask(input: {
   selection: ConsolidationMonitorSelection;
   task: string;
   unit: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<ConsolidationExecutionView> {
   const selection = normalizeSelection(input.selection);
   const taskId = input.task.trim().toUpperCase();
@@ -621,6 +651,7 @@ export async function executeConsolidationTask(input: {
 
   const reserved = await withTenant(input.client, async (tx) => {
     const scope = await loadScopeForClient(tx, selection, input.client);
+    await authorizeUnitsInTx(tx, input.client, input.authorization, runCapabilities(selection.mode), scope.units);
     const unit = scope.units.find((candidate) => candidate.unit === unitId);
     if (!unit) fail(`Consolidation unit ${unitId} is not in the selected monitor scope.`);
     const task = scope.tasks.find((candidate) => candidate.task === taskId);
@@ -734,10 +765,12 @@ export async function executeConsolidationTaskGroup(input: {
   selection: ConsolidationMonitorSelection;
   taskGroup: string;
   errorPolicy: 'STOP_ON_ERROR' | 'CONTINUE_ON_ERROR';
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<{ runs: ConsolidationExecutionView[]; stopped: boolean }> {
   const selection = normalizeSelection({ ...input.selection, taskGroup: input.taskGroup });
   const plan = await withTenant(input.client, async (tx) => {
     const scope = await loadScopeForClient(tx, selection, input.client);
+    await authorizeUnitsInTx(tx, input.client, input.authorization, runCapabilities(selection.mode), scope.units);
     const root = scope.tasks.find((task) => task.task === selection.taskGroup && !task.parentTask);
     if (!root) fail(`Task group ${selection.taskGroup} is not a root task.`);
     const tasks = orderedTasks(subtreeTasks(scope.tasks, root.task));
@@ -755,6 +788,7 @@ export async function executeConsolidationTaskGroup(input: {
         selection,
         task: task.task,
         unit: unit.unit,
+        authorization: input.authorization,
       });
       runs.push(run);
       if ((run.status === 'ERROR' || run.status === 'BLOCKED') && input.errorPolicy === 'STOP_ON_ERROR') {
@@ -769,6 +803,7 @@ export async function cancelConsolidationExecution(input: {
   client: string;
   executedBy: string;
   runId: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<ConsolidationExecutionView> {
   const runId = input.runId.trim().toUpperCase();
   return withTenant(input.client, async (tx) => {
@@ -776,6 +811,20 @@ export async function cancelConsolidationExecution(input: {
       eq(consolidationExecution.client, input.client), eq(consolidationExecution.runId, runId),
     ));
     if (!row) fail(`Consolidation run ${runId} does not stand.`);
+    // A run is cancelled over the companies it ran over: its unit, or every unit of its group.
+    const runUnits = await tx.select({ companyCode: consolidationUnit.companyCode }).from(consolidationUnit)
+      .where(and(
+        eq(consolidationUnit.client, input.client), eq(consolidationUnit.area, row.area),
+        row.unit
+          ? eq(consolidationUnit.unit, row.unit)
+          : inArray(consolidationUnit.unit, tx.select({ unit: consolidationUnitAssignment.unit })
+            .from(consolidationUnitAssignment).where(and(
+              eq(consolidationUnitAssignment.client, input.client),
+              eq(consolidationUnitAssignment.area, row.area),
+              eq(consolidationUnitAssignment.groupName, row.groupName),
+            ))),
+      ));
+    await authorizeUnitsInTx(tx, input.client, input.authorization, [CONSOLIDATE_CAPABILITY, `${CONSOLIDATE_CAPABILITY}.UPDATE`], runUnits);
     if (row.status !== 'RUNNING') fail(`Consolidation run ${runId} is ${row.status}; only a running attempt can be cancelled.`);
     const endedAt = new Date();
     const durationMs = Math.max(0, endedAt.getTime() - new Date(row.startedAt).getTime());

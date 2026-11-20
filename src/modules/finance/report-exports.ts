@@ -385,9 +385,9 @@ export const consolidatedStatementsExport: ReportAdapter = {
   code: 'consolidated-statements', route: '/finance/consolidated-statements', capability: CONSOLIDATED_STATEMENTS_CAPABILITY,
   async build(client, q, authorization) {
     const get = (name: string) => (q.get(name) ?? '').trim();
-    const areas = await listConsolidationAreas(client);
+    const areas = await listConsolidationAreas(client, authorization);
     const area = get('area').toUpperCase() || areas.find((a) => a.status === 'ACTIVE')?.area || areas[0]?.area || '';
-    const workbench = area ? await getConsolidationWorkbench(client, area) : null;
+    const workbench = area ? await getConsolidationWorkbench(client, area, authorization) : null;
     const selection: ConsolidatedStatementsSelection = {
       area,
       group: get('group').toUpperCase() || workbench?.groups[0]?.group || '',
@@ -460,7 +460,7 @@ export const grIrExport: ReportAdapter = {
   code: 'grir-analysis', route: '/finance/grir-reclass', capability: GRIR_RECLASS_CAPABILITY,
   async build(client, q, authorization) {
     const runId = (q.get('run') ?? '').trim();
-    const run = runId ? await getGrIrRun(client, runId) : null;
+    const run = runId ? await getGrIrRun(client, runId, authorization) : null;
     if (!run) throw new ReportExportError('GR/IR run not found.', 'Open a protocol on screen first; the export uses the same run.');
     return csvToReport(grIrCsv(run), { title: 'GR/IR analysis', subtitle: [`Run ${runId}`], fileStem: `grir-analysis-${runId}` });
   },

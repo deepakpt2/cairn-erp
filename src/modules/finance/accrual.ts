@@ -54,7 +54,7 @@ import { type ServiceAuthorityContext } from '../../platform/auth/service-author
 import { withTenant } from '../../platform/db/client';
 import { postGlDocument, GlDocumentError, type GlDocumentInput } from './gl-document';
 import { reverseDocument, DocumentReversalError, DOCUMENT_REVERSE_CAPABILITY } from './document-reversal';
-import { authorizeCompaniesInTx } from '../../platform/auth/company-scope';
+import { authorizeCompaniesInTx, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx } from '../../platform/auth/company-scope';
 import { accrualDocument, journalEntry, journalEntryLine, reversalReason } from './schema';
 
 export interface AccrualPostInput {
@@ -122,7 +122,7 @@ export async function postAccrualDocument(input: AccrualPostInput) {
     // The accrual rides the G/L posting's transaction, so it is the G/L posting
     // that asks who is acting — with the authority this caller was given.
     const posted = await postGlDocument(glInput, { authorization: input.authorization });
-    const view = await getAccrualDocument(input.client, input.companyCode, posted.documentNumber, posted.fiscalYear);
+    const view = await loadAccrualDocument(input.client, input.companyCode, posted.documentNumber, posted.fiscalYear);
     if (!view) throw new AccrualError('The posted accrual document could not be read back.');
     return view;
   } catch (error) {
@@ -156,7 +156,30 @@ async function toView(tx: Parameters<Parameters<typeof withTenant>[1]>[0], clien
   };
 }
 
-export async function getAccrualDocument(
+const ACCRUAL_READ_CAPABILITIES = [
+  ACCRUAL_CAPABILITY, `${ACCRUAL_CAPABILITY}.read`, DOCUMENT_REVERSE_CAPABILITY,
+] as const;
+
+/**
+ * The companies, among those named, whose accruals this session may read: the capability must
+ * stand and the company must be inside the explicit Company Code scope (a plant-limited user
+ * is refused). Everything else is simply absent, so the lists never disclose another company.
+ */
+async function readableCompaniesInTx(
+  tx: Parameters<Parameters<typeof withTenant>[1]>[0], client: string,
+  authorization: ServiceAuthorityContext | undefined, companies: readonly string[],
+): Promise<Set<string>> {
+  const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, ACCRUAL_READ_CAPABILITIES);
+  const readable = new Set<string>();
+  if (!verdict.ok) return readable;
+  for (const company of new Set(companies)) {
+    if (!(await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [company]))) readable.add(company);
+  }
+  return readable;
+}
+
+/** Internal, after the caller has already authorised the company. */
+async function loadAccrualDocument(
   client: string, companyCode: string, documentNumber: string, fiscalYear: number,
 ): Promise<AccrualDocumentView | null> {
   return withTenant(client, async (tx) => {
@@ -168,15 +191,28 @@ export async function getAccrualDocument(
   });
 }
 
+export async function getAccrualDocument(
+  client: string, companyCode: string, documentNumber: string, fiscalYear: number,
+  authorization: ServiceAuthorityContext | undefined,
+): Promise<AccrualDocumentView | null> {
+  const readable = await withTenant(client, (tx) => readableCompaniesInTx(tx, client, authorization, [companyCode]));
+  return readable.has(companyCode) ? loadAccrualDocument(client, companyCode, documentNumber, fiscalYear) : null;
+}
+
 /** Accrual documents whose reversal date is due and which stand unreversed. */
-export async function listDueAccruals(client: string, asOfDate: string): Promise<AccrualDocumentView[]> {
+export async function listDueAccruals(
+  client: string, asOfDate: string, authorization: ServiceAuthorityContext | undefined,
+  options: { companyCode?: string } = {},
+): Promise<AccrualDocumentView[]> {
   return withTenant(client, async (tx) => {
     const rows = await tx.select().from(accrualDocument).where(and(
       eq(accrualDocument.client, client), eq(accrualDocument.reversalStatus, 'PENDING'),
+      ...(options.companyCode ? [eq(accrualDocument.companyCode, options.companyCode)] : []),
     )).orderBy(accrualDocument.reversalDate, accrualDocument.documentNumber);
+    const readable = await readableCompaniesInTx(tx, client, authorization, rows.map((r) => r.companyCode));
     const views: AccrualDocumentView[] = [];
     for (const row of rows) {
-      if (row.reversalDate > asOfDate) continue;
+      if (row.reversalDate > asOfDate || !readable.has(row.companyCode)) continue;
       const view = await toView(tx, client, row);
       if (view.journalStatus === 'POSTED') views.push(view);
     }
@@ -184,12 +220,15 @@ export async function listDueAccruals(client: string, asOfDate: string): Promise
   });
 }
 
-export async function listAccrualDocuments(client: string): Promise<AccrualDocumentView[]> {
+export async function listAccrualDocuments(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<AccrualDocumentView[]> {
   return withTenant(client, async (tx) => {
     const rows = await tx.select().from(accrualDocument).where(eq(accrualDocument.client, client))
       .orderBy(accrualDocument.reversalDate, accrualDocument.documentNumber);
+    const readable = await readableCompaniesInTx(tx, client, authorization, rows.map((r) => r.companyCode));
     const views: AccrualDocumentView[] = [];
-    for (const row of rows) views.push(await toView(tx, client, row));
+    for (const row of rows.filter((r) => readable.has(r.companyCode))) views.push(await toView(tx, client, row));
     return views;
   });
 }
@@ -226,7 +265,7 @@ export async function executeAccrualReversal(input: {
     authorizeCompaniesInTx(tx, input.client, input.authorization, DOCUMENT_REVERSE_CAPABILITY, [input.companyCode]));
   if (!scope.ok) throw new AccrualError(`${scope.refusal.message} ${scope.refusal.remedy}`);
   const actor = scope.username;
-  const view = await getAccrualDocument(input.client, input.companyCode, input.documentNumber, input.fiscalYear);
+  const view = await loadAccrualDocument(input.client, input.companyCode, input.documentNumber, input.fiscalYear);
   if (!view) {
     throw new AccrualError(`Accrual document ${input.documentNumber} does not stand in company ${input.companyCode}.`);
   }
@@ -261,7 +300,7 @@ export async function executeAccrualReversal(input: {
       throw error;
     }
   }
-  const done = await getAccrualDocument(input.client, input.companyCode, input.documentNumber, input.fiscalYear);
+  const done = await loadAccrualDocument(input.client, input.companyCode, input.documentNumber, input.fiscalYear);
   if (!done) throw new AccrualError('The reversed accrual document could not be read back.');
   return done;
 }

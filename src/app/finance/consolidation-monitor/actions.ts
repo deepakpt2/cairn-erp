@@ -70,6 +70,7 @@ export async function executeTaskAction(
       selection,
       task: text(form, 'task'),
       unit: text(form, 'unit'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {
@@ -101,6 +102,7 @@ export async function executeTaskGroupAction(
       errorPolicy: text(form, 'errorPolicy').toUpperCase() === 'CONTINUE_ON_ERROR'
         ? 'CONTINUE_ON_ERROR'
         : 'STOP_ON_ERROR',
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     const last = result.runs[result.runs.length - 1];
@@ -129,6 +131,7 @@ export async function cancelExecutionAction(
       client: session.user.client,
       executedBy: session.user.username,
       runId: text(form, 'runId'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return { ok: true, message: `Run ${run.runId} cancelled; the task stands open for a retry.`, runId: run.runId };

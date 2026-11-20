@@ -15,11 +15,20 @@ import {
   saveGroupAccount, saveMapping, saveMethod, saveTask, saveUnit, saveVersion,
 } from '../src/modules/finance/consolidation-workbench';
 import {
-  cancelConsolidationExecution, executeConsolidationTask,
-  executeConsolidationTaskGroup, getConsolidationMonitor,
+  cancelConsolidationExecution as cancelConsolidationExecutionService,
+  executeConsolidationTask as executeConsolidationTaskService,
+  executeConsolidationTaskGroup as executeConsolidationTaskGroupService,
+  getConsolidationMonitor as getConsolidationMonitorService,
   type ConsolidationMonitorSelection,
 } from '../src/modules/finance/consolidation-monitor';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { financeAuth, withFinanceAuth } from './helpers/finance-actor';
+
+const executeConsolidationTask = withFinanceAuth(executeConsolidationTaskService);
+const executeConsolidationTaskGroup = withFinanceAuth(executeConsolidationTaskGroupService);
+const cancelConsolidationExecution = withFinanceAuth(cancelConsolidationExecutionService);
+const getConsolidationMonitor = async (c: string, sel: ConsolidationMonitorSelection, logs = false) =>
+  getConsolidationMonitorService(c, sel, logs, await financeAuth(c));
 
 const ACTOR = { changedBy: 'SCR117-TEST', reason: 'SCR-117 automated backend test' };
 let tenant: TestTenant | undefined;

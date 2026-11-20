@@ -12,11 +12,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import {
-  activateArea, assignUnit, getConsolidationWorkbench, saveArea,
+  activateArea, assignUnit, getConsolidationWorkbench as getConsolidationWorkbenchService, saveArea,
   saveDataBasis, saveGroup, saveGroupAccount, saveMapping, saveMethod,
   saveTask, saveUnit, saveVersion,
 } from '../src/modules/finance/consolidation-workbench';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { financeAuth } from './helpers/finance-actor';
+
+const getConsolidationWorkbench = async (c: string, area: string) =>
+  getConsolidationWorkbenchService(c, area, await financeAuth(c));
 
 const ACTOR = 'SCR116-TEST';
 const REASON = 'SCR-116 automated backend test';

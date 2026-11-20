@@ -76,6 +76,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { hasOrgAccess } from '../../platform/auth/session';
 import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
+import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
 import { withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
@@ -371,8 +372,21 @@ async function loadRun(tx: TxLike, client: string, runId: string): Promise<GrIrR
   };
 }
 
-export async function getGrIrRun(client: string, runId: string): Promise<GrIrResult | null> {
-  return withTenant(client, async (tx) => loadRun(tx, client, runId));
+/**
+ * A persisted run is read under the capability that made it and the Company Code scope of
+ * its own company. A run of a company outside the session's scope is answered as not found.
+ */
+export async function getGrIrRun(
+  client: string, runId: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<GrIrResult | null> {
+  return withTenant(client, async (tx) => {
+    const run = await loadRun(tx, client, runId);
+    if (!run) return null;
+    const verdict = await authorizeCompaniesAnyInTx(
+      tx, client, authorization, [GRIR_RECLASS_CAPABILITY, `${GRIR_RECLASS_CAPABILITY}.read`], [run.companyCode],
+    );
+    return verdict.ok ? run : null;
+  });
 }
 
 export function grIrCsv(result: GrIrResult): string {

@@ -125,8 +125,26 @@ import { withTenant } from '@/platform/db/client';
 import { listDueAccruals, executeAccrualReversal } from './accrual';
 import { executeFxValuation } from './fx-valuation';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { authorizeCompaniesAnyInTx } from '../../platform/auth/company-scope';
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
+
+const COCKPIT_READ_CAPABILITIES = [CLOSE_COCKPIT_CAPABILITY, `${CLOSE_COCKPIT_CAPABILITY}.read`] as const;
+
+/**
+ * A close cycle belongs to one company. Every read and every change of its task list is judged
+ * in the service's own transaction, before anything of the cycle is read: the session must hold
+ * the cockpit capability and an explicit Company Code scope covering the cycle's company (a
+ * plant-limited user is refused). Reads accept the `.read` capability; changes need the full one.
+ */
+async function authorizeCycleInTx(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
+  cycle: CloseCycleKey, access: 'read' | 'change',
+): Promise<void> {
+  const caps = access === 'read' ? COCKPIT_READ_CAPABILITIES : [CLOSE_COCKPIT_CAPABILITY];
+  const verdict = await authorizeCompaniesAnyInTx(tx, client, authorization, caps, [cycle.companyCode]);
+  if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -308,10 +326,12 @@ export async function listTemplateTasks(client: string, templateCode: string): P
 export async function createTaskListFromTemplate(input: {
   client: string; changedBy: string; cycle: CloseCycleKey;
   templateCode: string; description?: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<TaskListView> {
   const s = { ...input, cycle: { ...input.cycle } };
   checkCycle(s.cycle);
   return withTenant(s.client, async (tx) => {
+    await authorizeCycleInTx(tx, s.client, s.authorization, s.cycle, 'change');
     const template = await tx.execute(sql`
       select * from closing_task_template where client = ${s.client} and template_code = ${s.templateCode} order by sequence, task_id
     `);
@@ -376,19 +396,33 @@ async function getTaskListIn(tx: Tx, client: string, cycle: CloseCycleKey): Prom
   };
 }
 
-export async function getTaskList(client: string, cycle: CloseCycleKey): Promise<TaskListView> {
+export async function getTaskList(
+  client: string, cycle: CloseCycleKey, authorization: ServiceAuthorityContext | undefined,
+): Promise<TaskListView> {
   checkCycle(cycle);
-  return withTenant(client, (tx) => getTaskListIn(tx, client, cycle));
+  return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, authorization, cycle, 'read');
+    return getTaskListIn(tx, client, cycle);
+  });
 }
 
-export async function listTaskLists(client: string): Promise<TaskListView[]> {
+export async function listTaskLists(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<TaskListView[]> {
   return withTenant(client, async (tx) => {
     const rows = await tx.execute(sql`
       select company_code, task_list_id, fiscal_year, posting_period from closing_task_list
       where client = ${client} order by created_at desc limit 100
     `);
     const views: TaskListView[] = [];
+    const readable = new Map<string, boolean>();
     for (const r of rows as unknown as Array<{ company_code: string; task_list_id: string; fiscal_year: number; posting_period: number }>) {
+      // Lists of companies outside the session's scope are absent, never named.
+      if (!readable.has(r.company_code)) {
+        const verdict = await authorizeCompaniesAnyInTx(tx, client, authorization, COCKPIT_READ_CAPABILITIES, [r.company_code]);
+        readable.set(r.company_code, verdict.ok);
+      }
+      if (!readable.get(r.company_code)) continue;
       views.push(await getTaskListIn(tx, client, {
         companyCode: r.company_code, taskListId: r.task_list_id,
         fiscalYear: Number(r.fiscal_year), postingPeriod: Number(r.posting_period),
@@ -399,9 +433,10 @@ export async function listTaskLists(client: string): Promise<TaskListView[]> {
 }
 
 export async function listTasks(client: string, cycle: CloseCycleKey,
-  filter: { status?: string; owner?: string } = {}): Promise<TaskView[]> {
+  filter: { status?: string; owner?: string }, authorization: ServiceAuthorityContext | undefined): Promise<TaskView[]> {
   checkCycle(cycle);
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, authorization, cycle, 'read');
     const tasks = await loadTasks(tx, client, cycle);
     const deps = await loadDependencies(tx, client, cycle);
     const byTask = new Map<string, string[]>();
@@ -428,8 +463,11 @@ export async function listTasks(client: string, cycle: CloseCycleKey,
   });
 }
 
-export async function listExecutions(client: string, cycle: CloseCycleKey, taskId?: string): Promise<ExecutionLogView[]> {
+export async function listExecutions(
+  client: string, cycle: CloseCycleKey, taskId: string | undefined, authorization: ServiceAuthorityContext | undefined,
+): Promise<ExecutionLogView[]> {
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, authorization, cycle, 'read');
     const rows = await tx.execute(sql`
       select * from closing_execution_log
       where client = ${client} and company_code = ${cycle.companyCode} and task_list_id = ${cycle.taskListId}
@@ -448,8 +486,11 @@ export async function listExecutions(client: string, cycle: CloseCycleKey, taskI
   });
 }
 
-export async function listEvents(client: string, cycle: CloseCycleKey): Promise<CloseEventView[]> {
+export async function listEvents(
+  client: string, cycle: CloseCycleKey, authorization: ServiceAuthorityContext | undefined,
+): Promise<CloseEventView[]> {
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, authorization, cycle, 'read');
     const rows = await tx.execute(sql`
       select * from closing_task_event
       where client = ${client} and company_code = ${cycle.companyCode} and task_list_id = ${cycle.taskListId}
@@ -464,10 +505,11 @@ export async function listEvents(client: string, cycle: CloseCycleKey): Promise<
   });
 }
 
-export async function releaseTaskList(input: { client: string; changedBy: string; cycle: CloseCycleKey }): Promise<TaskListView> {
+export async function releaseTaskList(input: { client: string; changedBy: string; cycle: CloseCycleKey ; authorization: ServiceAuthorityContext | undefined;}): Promise<TaskListView> {
   const { client, changedBy, cycle } = input;
   checkCycle(cycle);
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, input.authorization, cycle, 'change');
     const list = await getTaskListIn(tx, client, cycle);
     if (list.status !== 'INITIAL') fail(`Task list stands ${list.status}; only an initial list can be released.`);
     const tasks = await loadTasks(tx, client, cycle);
@@ -519,7 +561,7 @@ async function runHandler(client: string, actor: string, cycle: CloseCycleKey,
   if (task.handler_code === 'ACCRUAL_REVERSALS') {
     const asOf = params.asOfDate && DATE_RE.test(params.asOfDate)
       ? params.asOfDate : periodEndDate(cycle.fiscalYear, cycle.postingPeriod);
-    const due = (await listDueAccruals(client, asOf)).filter((d) => d.companyCode === cycle.companyCode);
+    const due = await listDueAccruals(client, asOf, authorization, { companyCode: cycle.companyCode });
     let firstDocument: string | undefined;
     for (const doc of due) {
       const reversed = await executeAccrualReversal({
@@ -621,6 +663,7 @@ export async function executeTask(input: {
   if (!EXECUTION_MODES.includes(mode)) fail('Execution mode must be FOREGROUND or BACKGROUND.');
   const executionId = newId('CX');
   const claimed = await withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, input.authorization, cycle, 'change');
     const list = await getTaskListIn(tx, client, cycle);
     if (list.status !== 'RELEASED') fail(`Task list stands ${list.status}; release it before executing tasks.`);
     const tasks = await loadTasks(tx, client, cycle);
@@ -673,6 +716,7 @@ export async function processScheduledExecutions(input: {
   const { client, changedBy, cycle } = input;
   checkCycle(cycle);
   const pending = await withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, input.authorization, cycle, 'change');
     const rows = await tx.execute(sql`
       select execution_id, task_id from closing_execution_log
       where client = ${client} and company_code = ${cycle.companyCode} and task_list_id = ${cycle.taskListId}
@@ -716,12 +760,14 @@ async function maybeComplete(tx: Tx, client: string, cycle: CloseCycleKey, task:
 
 export async function attachEvidence(input: {
   client: string; changedBy: string; cycle: CloseCycleKey; taskId: string; evidenceRef: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<{ status: TaskStatus }> {
   const { client, changedBy, cycle, taskId } = input;
   checkCycle(cycle);
   const ref = input.evidenceRef.trim();
   if (!ref) fail('An evidence reference is required.');
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, input.authorization, cycle, 'change');
     await tx.execute(sql`
       update closing_task_instance set evidence_ref = ${ref.slice(0, 120)}, updated_by = ${changedBy}, updated_at = now()
       where client = ${client} and company_code = ${cycle.companyCode} and task_list_id = ${cycle.taskListId}
@@ -736,10 +782,12 @@ export async function attachEvidence(input: {
 
 export async function signOffTask(input: {
   client: string; changedBy: string; cycle: CloseCycleKey; taskId: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<{ status: TaskStatus }> {
   const { client, changedBy, cycle, taskId } = input;
   checkCycle(cycle);
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, input.authorization, cycle, 'change');
     await tx.execute(sql`
       update closing_task_instance set signed_off_by = ${changedBy}, signed_off_at = now(), updated_by = ${changedBy}, updated_at = now()
       where client = ${client} and company_code = ${cycle.companyCode} and task_list_id = ${cycle.taskListId}
@@ -755,6 +803,7 @@ export async function signOffTask(input: {
 export async function overrideTaskStatus(input: {
   client: string; changedBy: string; cycle: CloseCycleKey; taskId: string;
   newStatus: TaskStatus; reason: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<{ status: TaskStatus }> {
   const { client, changedBy, cycle, taskId } = input;
   checkCycle(cycle);
@@ -763,6 +812,7 @@ export async function overrideTaskStatus(input: {
     fail('Override target must be RELEASED, COMPLETED, ERROR or BLOCKED.');
   }
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, input.authorization, cycle, 'change');
     const tasks = await loadTasks(tx, client, cycle);
     const task = tasks.find((t) => t.task_id === taskId);
     if (!task) fail(`Task ${taskId} does not stand in this cycle.`);
@@ -779,12 +829,14 @@ export async function overrideTaskStatus(input: {
 
 export async function reopenTask(input: {
   client: string; changedBy: string; cycle: CloseCycleKey; taskId: string; reason: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<{ status: TaskStatus; warning: string }> {
   const { client, changedBy, cycle, taskId } = input;
   checkCycle(cycle);
   if (!input.reason.trim()) fail('A reason is mandatory to reopen a completed task.');
   const warning = 'Rerunning may duplicate accounting effects of the earlier execution; its history is preserved.';
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, input.authorization, cycle, 'change');
     const tasks = await loadTasks(tx, client, cycle);
     const task = tasks.find((t) => t.task_id === taskId);
     if (!task) fail(`Task ${taskId} does not stand in this cycle.`);
@@ -801,10 +853,12 @@ export async function reopenTask(input: {
 
 export async function finalizeTaskList(input: {
   client: string; changedBy: string; cycle: CloseCycleKey;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<TaskListView> {
   const { client, changedBy, cycle } = input;
   checkCycle(cycle);
   return withTenant(client, async (tx) => {
+    await authorizeCycleInTx(tx, client, input.authorization, cycle, 'change');
     const list = await getTaskListIn(tx, client, cycle);
     if (list.status !== 'RELEASED') fail(`Task list stands ${list.status}; only a released list can be finalized.`);
     const tasks = await loadTasks(tx, client, cycle);

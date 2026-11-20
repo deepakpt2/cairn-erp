@@ -68,6 +68,12 @@ export const FINANCE_ACTOR_CAPABILITIES: readonly string[] = [
   'FIN.AP.BALANCE',
   'FIN.AR.AGEING',
   'FIN.AP.AGEING',
+  // Consolidation configuration and monitor (company-scope enforced)
+  'FIN.RPT.CONSOLIDATE',
+  'FIN.CONSOLIDATE',
+  'FIN.CONSOLIDATE.TEST',
+  'FIN.CONSOLIDATE.UPDATE',
+  'FIN.CLOSE.COCKPIT',
 ];
 
 export interface FinanceActorOptions {

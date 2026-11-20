@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     return new Response('You do not hold the GR/IR reclassification capability.', { status: 403 });
   }
   const runId = new URL(request.url).searchParams.get('run')?.trim() ?? '';
-  const result = runId ? await getGrIrRun(session.user.client, runId) : null;
+  const result = runId ? await getGrIrRun(session.user.client, runId, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
   if (!result) return new Response('GR/IR run not found.', { status: 404 });
   return new Response(grIrCsv(result), {
     headers: {

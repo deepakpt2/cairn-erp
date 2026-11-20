@@ -230,16 +230,15 @@ describe('paths that reach the mutations', () => {
       task: { taskId: 'F10', taskName: 'FX', handlerCode: 'FX_VALUATION', parameters: JSON.stringify({ includeBalances: 'true', includeOpenItems: 'false' }) } as never,
       predecessors: [],
     });
-    await createTaskListFromTemplate({ client, changedBy: ACTOR, cycle, templateCode: 'MUT_TPL', description: 'scope' });
-    await releaseTaskList({ client, changedBy: ACTOR, cycle });
+    await createTaskListFromTemplate({ client, changedBy: ACTOR, cycle, templateCode: 'MUT_TPL', description: 'scope', authorization: both.authorization });
+    await releaseTaskList({ client, changedBy: ACTOR, cycle, authorization: both.authorization });
     const before = await state();
-    const denied = await executeTask({ client, changedBy: ACTOR, cycle, taskId: 'F10', mode: 'FOREGROUND', authorization: onlyA.authorization });
-    expect(denied.status).toBe('ERROR');
-    const log = (await listExecutions(client, cycle, 'F10'))[0] as unknown as { errorDetails?: string; error_details?: string };
-    expect(`${log.errorDetails ?? log.error_details ?? ''}`).toMatch(/does not cover company code 2000/);
+    // The cockpit itself now judges the cycle's company before the task is claimed: refused, nothing recorded.
+    await expect(executeTask({ client, changedBy: ACTOR, cycle, taskId: 'F10', mode: 'FOREGROUND', authorization: onlyA.authorization }))
+      .rejects.toThrow(/does not cover company code 2000/);
     expect(await state()).toEqual(before);
-    const none = await executeTask({ client, changedBy: ACTOR, cycle, taskId: 'F10', mode: 'FOREGROUND', authorization: undefined });
-    expect(none.status).toBe('ERROR');
+    await expect(executeTask({ client, changedBy: ACTOR, cycle, taskId: 'F10', mode: 'FOREGROUND', authorization: undefined }))
+      .rejects.toThrow();
     expect(await state()).toEqual(before);
     const ok = await executeTask({ client, changedBy: ACTOR, cycle, taskId: 'F10', mode: 'FOREGROUND', authorization: onlyB.authorization });
     expect(ok.status).toBe('COMPLETED');
