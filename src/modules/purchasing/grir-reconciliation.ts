@@ -28,6 +28,7 @@
  *     arrived, and it stays visible until they do. It is never netted off
  *     to make a report look tidier.
  */
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { listGrIrResiduals, type GrIrResidual, type GrIrSelection } from './grir-clearing';
 
 export const GRIR_RECONCILIATION_CAPABILITY = 'PROC.GRIR.RECONCILE';
@@ -161,10 +162,12 @@ function classify(row: GrIrResidual): { category: GrIrExceptionCategory; reason:
 }
 
 export async function listGrIrExceptions(
-  input: { client: string } & GrIrSelection & { categories?: GrIrExceptionCategory[] },
+  input: { client: string; authorization: ServiceAuthorityContext | undefined } & GrIrSelection & { categories?: GrIrExceptionCategory[] },
 ): Promise<GrIrReconciliationResult> {
   const residuals = await listGrIrResiduals({
     client: input.client,
+    authorization: input.authorization,
+    capabilities: [GRIR_RECONCILIATION_CAPABILITY, `${GRIR_RECONCILIATION_CAPABILITY}.read`],
     companyFrom: input.companyFrom,
     companyTo: input.companyTo,
     orderFrom: input.orderFrom,

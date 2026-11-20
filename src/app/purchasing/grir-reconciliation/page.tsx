@@ -77,6 +77,7 @@ export default async function GrIrReconciliationPage({ searchParams }: {
   if (canView && companyFrom && keyDate) {
     try {
       const result = await listGrIrExceptions({
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         client: session.user.client,
         companyFrom, companyTo, orderFrom, orderTo, itemNumber, plantFrom, plantTo, keyDate,
         ...(category ? { categories: [category] } : {}),

@@ -23,7 +23,9 @@ import { sql } from 'drizzle-orm';
 
 import { PO_RELEASE_STATUS_SQL } from './release';
 
-import { withTenant } from '../../platform/db/client';
+import { readableCompaniesInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { withTenant, type Tx } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { purchaseItemState, type PurchaseItemState } from './item-state';
 import { receiptMovementSign, receiptQuantityInOrderUnit, receiptUnitJoins } from './receipt-unit-basis';
@@ -177,11 +179,38 @@ const MASTERS: Array<{ key: keyof PoListSelection; table: string; column: string
   { key: 'materialGroupTo', table: 'material_group', column: 'material_group', label: 'material group' },
 ];
 
+/**
+ * Company-scoped purchase-order list: holds only purchase orders of companies inside the verified session's
+ * explicit Company Code scope.
+ */
 export async function listPurchaseOrders(input: {
   client: string;
   selection: PoListSelection;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<PoListResult> {
-  const { client } = input;
+  return listPurchaseOrdersCore(input.client, input.selection, async (tx) => {
+    const readable = await readableCompaniesInTx(tx, input.client, input.authorization, [PO_LIST_CAPABILITY, `${PO_LIST_CAPABILITY}.read`], { allowPlantLimited: true });
+    if (!readable.ok) fail(readable.refusal.message, readable.refusal.remedy);
+    return readable.companies;
+  });
+}
+
+/**
+ * Tenant-internal read for demo provisioning, which runs without a user session and looks up its own orders by
+ * signature. It is not company-scoped and must never be reached from a page, action or route
+ * (tests/company-scope-purchasing.test.ts checks that no `src/app` file imports it).
+ */
+export async function listPurchaseOrdersForProvisioning(input: { client: string; selection: PoListSelection }): Promise<PoListResult> {
+  return listPurchaseOrdersCore(input.client, input.selection, async () => null);
+}
+
+async function listPurchaseOrdersCore(
+  client: string,
+  rawSelection: PoListSelection,
+  /** The readable companies, or null for no company restriction (provisioning only). */
+  resolveCompanies: (tx: Tx) => Promise<string[] | null>,
+): Promise<PoListResult> {
+  const input = { selection: rawSelection };
   const raw = input.selection;
   const s: PoListSelection = {
     perspective: bound(raw.perspective)?.toUpperCase() ?? 'VENDOR',
@@ -242,6 +271,13 @@ export async function listPurchaseOrders(input: {
   const calculatedAt = new Date().toISOString();
 
   return withTenant(client, async (tx) => {
+    // The list is not selected by company, so it is limited to the companies the session may read; others are
+    // absent and never named. Judged before anything of the selection is looked up.
+    const readable = await resolveCompanies(tx);
+    const companyFilter = readable === null ? sql`true`
+      : readable.length > 0
+        ? sql`po.company_code in (${sql.join(readable.map((c) => sql`${c}`), sql`, `)})`
+        : sql`false`;
     // Every supplied range endpoint is judged against its master, so a key that
     // does not stand refuses by name instead of answering an empty list.
     for (const master of MASTERS) {
@@ -260,14 +296,14 @@ export async function listPurchaseOrders(input: {
     // "no commitment", so it refuses by name.
     if (s.orderFrom && s.orderFrom === s.orderTo) {
       const rows = await tx.execute(sql`
-        select 1 as hit from purchase_order where client = ${client} and order_number = ${s.orderFrom}
+        select 1 as hit from purchase_order po where client = ${client} and order_number = ${s.orderFrom} and ${companyFilter}
       `) as unknown as Array<{ hit: number }>;
       if (rows.length === 0) {
         fail(`The purchase order ${s.orderFrom} does not stand.`, 'Maintain the order or widen the range.');
       }
     }
 
-    const filters = [sql`i.client = ${client}`];
+    const filters = [sql`i.client = ${client}`, companyFilter];
     const range = (column: string, from?: string, to?: string) => {
       if (!from && !to) return;
       filters.push(sql`${sql.raw(column)} between ${from ?? ''} and ${to ?? '￿'}`);

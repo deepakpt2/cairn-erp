@@ -74,6 +74,16 @@ export const FINANCE_ACTOR_CAPABILITIES: readonly string[] = [
   'FIN.CONSOLIDATE.TEST',
   'FIN.CONSOLIDATE.UPDATE',
   'FIN.CLOSE.COCKPIT',
+  // Purchasing figures (company-scope enforced)
+  'PROC.INV.OVERVIEW',
+  'PROC.INV.BLOCK',
+  'PROC.INV.BLOCK.RELEASE',
+  'PROC.GRIR.RECONCILE',
+  'PROC.PO.LIST',
+  'PROC.PO.DISPLAY',
+  'PROC.GRIR.MAINTAIN',
+  'PROC.GRIR.MAINTAIN.POST',
+  'PROC.GRIR.MAINTAIN.REVERSE',
 ];
 
 export interface FinanceActorOptions {
@@ -270,6 +280,7 @@ async function standingActor(client: string, current?: FinanceActor): Promise<Fi
 export const FINANCE_REPORT_CAPABILITIES: readonly string[] = [
   'FIN.RPT.TRIALBALANCE', 'FIN.RPT.BALANCESHEET', 'FIN.RPT.PROFITLOSS', 'FIN.RPT.CASHFLOW', 'FIN.RPT.CONSOLIDATE.STMT',
   'FIN.TAX.REPORT', 'FIN.IC.POST', 'CFG.FIN.IC.DEFINE',
+  'PROC.PO.LIST', 'PROC.INV.OVERVIEW',
 ];
 const reportActors = new Map<string, Promise<FinanceActor>>();
 

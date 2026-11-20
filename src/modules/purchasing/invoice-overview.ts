@@ -12,6 +12,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { authorizeCompanyRangeInTx, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 
 export const INVOICE_OVERVIEW_CAPABILITY = 'PROC.INV.OVERVIEW';
@@ -565,10 +567,20 @@ function mapRow(row: RawRow): InvoiceOverviewRow {
   };
 }
 
+/** The invoice overview reads supplier-invoice figures per company: capability plus every company of the range in scope. */
+const OVERVIEW_CAPABILITIES = [INVOICE_OVERVIEW_CAPABILITY, `${INVOICE_OVERVIEW_CAPABILITY}.read`] as const;
+
 export async function listInvoiceOverview(input: {
   client: string;
   selection: InvoiceOverviewSelection;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<InvoiceOverviewResult> {
+  // Judged before the selection is validated, so a refusal never reveals which companies stand.
+  const scope = await withTenant(input.client, (tx) => authorizeCompanyRangeInTx(
+    tx, input.client, input.authorization, OVERVIEW_CAPABILITIES,
+    named(input.selection.companyFrom), named(input.selection.companyTo) || undefined,
+  ));
+  if (!scope.ok) fail(scope.refusal.message, scope.refusal.remedy);
   const { warnings, selection } = await normalize(input.client, input.selection);
   return withTenant(input.client, async (tx) => {
     await tx.execute(sql`select set_config('statement_timeout', '5000', true)`);
@@ -616,6 +628,7 @@ export async function listInvoiceOverview(input: {
 export async function readInvoiceOverviewDocument(
   client: string,
   documentNumber: string,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<InvoiceOverviewDocument | null> {
   const number = named(documentNumber).toUpperCase();
   if (!number) return null;
@@ -625,6 +638,14 @@ export async function readInvoiceOverviewDocument(
     const rows = await tx.execute(sql`
       select * from (${documentSource(client)}) documents where document_number = ${number}
     `) as unknown as RawRow[];
+    // Only documents of companies the caller may read take part; anything else is answered as not found.
+    const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, OVERVIEW_CAPABILITIES);
+    if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
+    const readable: RawRow[] = [];
+    for (const candidate of rows) {
+      if (!(await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [candidate.company_code], { allowPlantLimited: true }))) readable.push(candidate);
+    }
+    rows.splice(0, rows.length, ...readable);
     if (rows.length === 0) return null;
     if (rows.length > 1) {
       fail(

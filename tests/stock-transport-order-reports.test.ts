@@ -19,7 +19,7 @@ import { stockRequirementsList } from '../src/modules/production/stock-requireme
 import { defineRange } from '../src/platform/numbering';
 import { defineReleaseStrategy } from './helpers/release-config';
 import { buildStoFixture } from './helpers/sto-fixture';
-import { makeStoActor } from './helpers/sto-actor';
+import { makeStoActor, STO_CAPABILITIES } from './helpers/sto-actor';
 import { createProductionActor } from './helpers/production-actor';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 
@@ -57,7 +57,7 @@ beforeAll(async () => {
   const tenant = await createTenant('item22-reports');
   client = tenant.client;
   await buildStoFixture(client, ACTOR);
-  all = await makeStoActor(client, 'all', { plants: ['1000', '1100', '2000', '3000'] });
+  all = await makeStoActor(client, 'all', { plants: ['1000', '1100', '2000', '3000'], capabilities: [...STO_CAPABILITIES, 'PROC.PO.DISPLAY', 'PROC.PO.LIST'] });
 }, 240_000);
 
 afterAll(async () => {
@@ -269,7 +269,7 @@ describe('ITEM-22 history, display and the existing reversal screen path', () =>
     const issued = await issue(order, 40);
     gi = issued.materialDocumentNumber;
     gr = (await receive(order, 10)).materialDocumentNumber;
-    const shown = await displayPurchaseOrder(client, order, all.userId);
+    const shown = await displayPurchaseOrder(client, order, all);
     expect(shown.found).toBe(true);
     if (!shown.found) return;
     expect(shown.order).toMatchObject({ documentType: 'STOCK_TRANSPORT', supplierNumber: '', supplyingPlant: '1000' });
@@ -286,11 +286,15 @@ describe('ITEM-22 history, display and the existing reversal screen path', () =>
   });
 
   it('a viewer without the other company is not shown that company\'s accounting documents', async () => {
-    const co1000 = await makeStoActor(client, 'view1000', { plants: ['1000', '1100'] });
-    const shown = await displayPurchaseOrder(client, order, co1000.userId);
+    const co1000 = await makeStoActor(client, 'view1000', { plants: ['1000', '1100'], capabilities: [...STO_CAPABILITIES, 'PROC.PO.DISPLAY'] });
+    // The order belongs to company 2000: a viewer whose Company Code scope stops at 1000 is not shown it at all.
+    expect((await displayPurchaseOrder(client, order, co1000)).found).toBe(false);
+    // A viewer of company 2000 sees the order but not the sending company's accounting documents.
+    const co2000 = await makeStoActor(client, 'view2000', { plants: ['2000', '3000'], capabilities: [...STO_CAPABILITIES, 'PROC.PO.DISPLAY'] });
+    const shown = await displayPurchaseOrder(client, order, co2000);
     if (!shown.found) throw new Error('order not found');
     const journals = shown.order.stockTransport!.history[0].journals;
-    expect(journals.map((j) => j.companyCode)).toEqual(['1000']);
+    expect(journals.map((j) => j.companyCode)).toEqual(['2000']);
     expect(shown.order.stockTransport!.withheldJournals).toBe(1);
     const doc = await displayMaterialDocument({ client, documentNumber: gi, viewerUserId: co1000.userId });
     expect(doc.journals.map((j) => j.companyCode)).toEqual(['1000']);
@@ -305,7 +309,7 @@ describe('ITEM-22 history, display and the existing reversal screen path', () =>
   });
 
   it('the PO list shows an STO with the supplying plant, no supplier, and its ledger quantities', async () => {
-    const list = await listPurchaseOrders({ client, selection: { perspective: 'ORDER', orderFrom: order, orderTo: order } });
+    const list = await listPurchaseOrders({ client, authorization: all, selection: { perspective: 'ORDER', orderFrom: order, orderTo: order } });
     expect(list.rows).toHaveLength(1);
     expect(list.rows[0]).toMatchObject({
       documentType: 'STOCK_TRANSPORT', supplyingPlant: '1000', supplierNumber: '', supplierName: '',

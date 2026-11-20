@@ -59,6 +59,7 @@ export default async function BlockedInvoicePage({ searchParams }: {
   };
   if (includeReleased) selection.includeReleased = '1';
   const asked = companyFrom !== '' || fiscalYear !== '';
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const canRelease = can(session, BLOCKED_INVOICE_CAPABILITY);
   const canPlace = can(session, BLOCKED_INVOICE_HOLD_CAPABILITY);
   let rows: BlockedInvoiceRow[] = [];
@@ -68,6 +69,7 @@ export default async function BlockedInvoicePage({ searchParams }: {
     try {
       rows = await listBlockedInvoices({
         client: session.user.client,
+        authorization,
         companyFrom,
         companyTo,
         fiscalYear,
@@ -77,7 +79,7 @@ export default async function BlockedInvoicePage({ searchParams }: {
         invoiceNumber,
         includeReleased,
       });
-      if (invoiceNumber) events = await listBlockEvents(session.user.client, invoiceNumber);
+      if (invoiceNumber) events = await listBlockEvents(session.user.client, invoiceNumber, authorization);
     } catch (error) {
       listError = error instanceof BlockedInvoiceError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

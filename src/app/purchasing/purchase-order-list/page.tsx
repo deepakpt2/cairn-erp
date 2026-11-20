@@ -55,7 +55,7 @@ export default async function PurchaseOrderListPage({
   let listError: string | null = null;
   if (can(session, PO_LIST_CAPABILITY)) {
     try {
-      result = await listPurchaseOrders({ client: session.user.client, selection: initialSelection });
+      result = await listPurchaseOrders({ client: session.user.client, selection: initialSelection, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     } catch (error) {
       listError = error instanceof PoListError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

@@ -5,7 +5,10 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { changeOrder, createOrder } from '../src/modules/purchasing/orders';
-import { displayPurchaseOrder } from '../src/modules/purchasing/purchase-order-display';
+import { displayPurchaseOrder as displayPurchaseOrderService } from '../src/modules/purchasing/purchase-order-display';
+import { financeAuth, withFinanceAuth } from './helpers/finance-actor';
+
+const displayPurchaseOrder = async (c: string, n: string) => displayPurchaseOrderService(c, n, await financeAuth(c));
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';

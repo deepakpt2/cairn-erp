@@ -91,9 +91,9 @@ export default async function InvoiceOverviewPage({ searchParams }: {
   let listError: string | null = null;
   if (canList && asked) {
     try {
-      result = await listInvoiceOverview({ client: session.user.client, selection });
+      result = await listInvoiceOverview({ client: session.user.client, selection, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
       const document = last(params.document).toUpperCase();
-      if (document) detail = await readInvoiceOverviewDocument(session.user.client, document);
+      if (document) detail = await readInvoiceOverviewDocument(session.user.client, document, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       listError = error instanceof InvoiceOverviewError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

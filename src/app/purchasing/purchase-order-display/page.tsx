@@ -422,6 +422,7 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
     const text = last(value);
     if (text) params[name] = text;
   }
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const canDisplay = can(session, PO_DISPLAY_CAPABILITY);
   const canChange = can(session, PO_CREATE_CAPABILITY);
   let refusal: { message: string; remedy?: string } | null = null;
@@ -430,7 +431,7 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
   let search: Awaited<ReturnType<typeof openPurchaseOrderDisplay>>['search'] = null;
   if (canDisplay && Object.keys(params).length > 0) {
     try {
-      const result = await openPurchaseOrderDisplay(session.user.client, params, session.user.userId);
+      const result = await openPurchaseOrderDisplay(session.user.client, params, authorization);
       refusal = result.refusal;
       search = result.search;
       if (result.order?.found) opened = result.order.order;
@@ -442,7 +443,7 @@ export default async function PurchaseOrderDisplayPage({ searchParams }: {
     }
   } else if (canDisplay) {
     try {
-      search = (await openPurchaseOrderDisplay(session.user.client, {})).search;
+      search = (await openPurchaseOrderDisplay(session.user.client, {}, authorization)).search;
     } catch (error) {
       refusal = error instanceof PurchaseOrderDisplayError
         ? { message: error.message }

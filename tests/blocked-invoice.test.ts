@@ -11,16 +11,22 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
 import {
   activeBlockedInvoiceNumbers,
-  listBlockedInvoices,
-  placePaymentBlock,
-  previewPaymentBlock,
-  releasePaymentBlock,
+  listBlockedInvoices as listBlockedInvoicesService,
+  placePaymentBlock as placePaymentBlockService,
+  previewPaymentBlock as previewPaymentBlockService,
+  releasePaymentBlock as releasePaymentBlockService,
 } from '../src/modules/purchasing/blocked-invoice';
 import {
   cancelPaymentRun, createPaymentRun, executePaymentRun, generateProposal,
 } from '../src/modules/finance/payment-run';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
+import { financeActorName, withFinanceAuth } from './helpers/finance-actor';
+
+const listBlockedInvoices = withFinanceAuth(listBlockedInvoicesService);
+const placePaymentBlock = withFinanceAuth(placePaymentBlockService);
+const previewPaymentBlock = withFinanceAuth(previewPaymentBlockService);
+const releasePaymentBlock = withFinanceAuth(releasePaymentBlockService);
 const ACTOR = 'SCR162_MRBR_TEST';
 
 /**
@@ -230,7 +236,7 @@ describe('SCR-162 release blocked invoices', () => {
     const listed = await listBlockedInvoices({ client: c, companyFrom: '1000', fiscalYear: '2026' });
     expect(listed).toHaveLength(1);
     expect(listed[0]).toMatchObject({
-      invoiceNumber: posted.invoiceNumber, active: true, paymentState: 'OPEN', createdBy: ACTOR,
+      invoiceNumber: posted.invoiceNumber, active: true, paymentState: 'OPEN', createdBy: await financeActorName(c),
     });
     expect(listed[0].varianceAmount).not.toBe('0');
     expect(listed[0].comment).toBe('hold for review');

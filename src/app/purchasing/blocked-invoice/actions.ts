@@ -51,11 +51,12 @@ function extras(form: FormData): Partial<BlockedInvoiceInput> {
   return extra;
 }
 
-function inputOf(form: FormData, changedBy: string, client: string): BlockedInvoiceInput {
+function inputOf(form: FormData, session: { user: { username: string; client: string; userId: string }; sessionId?: string | null }): BlockedInvoiceInput {
   const version = text(form, 'expectedVersion');
   return {
-    client,
-    changedBy,
+    client: session.user.client,
+    changedBy: session.user.username,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     invoiceNumber: text(form, 'invoiceNumber'),
     comment: text(form, 'comment'),
     requestKey: text(form, 'requestKey'),
@@ -84,7 +85,7 @@ export async function checkBlockedInvoiceAction(
   if (!can(session, capability)) return missing(action);
   try {
     const preview = await previewPaymentBlock({
-      ...inputOf(form, session.user.username, session.user.client),
+      ...inputOf(form, session),
       action,
     });
     return { ok: preview.eligible, message: preview.message, wrote: false, invoiceNumber: preview.invoiceNumber, active: preview.active };
@@ -102,7 +103,7 @@ export async function placeBlockedInvoiceAction(
   let result;
   try {
     await assertChangeForSession(session, { lockObject: 'SUPPLIER_INVOICE', argument: text(form, 'invoiceNumber') });
-    result = await placePaymentBlock(inputOf(form, session.user.username, session.user.client));
+    result = await placePaymentBlock(inputOf(form, session));
   } catch (caught) {
     return refused(caught) ?? { ok: false, message: 'The hold could not be placed.' };
   }
@@ -126,7 +127,7 @@ export async function releaseBlockedInvoiceAction(
   let result;
   try {
     await assertChangeForSession(session, { lockObject: 'SUPPLIER_INVOICE', argument: text(form, 'invoiceNumber') });
-    result = await releasePaymentBlock(inputOf(form, session.user.username, session.user.client));
+    result = await releasePaymentBlock(inputOf(form, session));
   } catch (caught) {
     return refused(caught) ?? { ok: false, message: 'The hold could not be released.' };
   }

@@ -64,7 +64,7 @@ export default async function GrIrClearingPage({ searchParams }: {
   let listError: string | null = null;
   if (canView && companyFrom && keyDate) {
     try {
-      const selection = { client: session.user.client, companyFrom, companyTo, orderFrom, orderTo, itemNumber, plantFrom, plantTo, keyDate, surplus };
+      const selection = { client: session.user.client, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, companyFrom, companyTo, orderFrom, orderTo, itemNumber, plantFrom, plantTo, keyDate, surplus };
       rows = await listGrIrResiduals(selection);
       posted = await listGrIrMaintenance(selection);
     } catch (error) {

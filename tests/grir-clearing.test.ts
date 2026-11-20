@@ -10,11 +10,17 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import { createOrder } from '../src/modules/purchasing/orders';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
 import {
-  listGrIrResiduals,
-  postGrIrClearing,
-  previewGrIrClearing,
-  reverseGrIrClearing,
+  listGrIrResiduals as listGrIrResidualsService,
+  postGrIrClearing as postGrIrClearingService,
+  previewGrIrClearing as previewGrIrClearingService,
+  reverseGrIrClearing as reverseGrIrClearingService,
 } from '../src/modules/purchasing/grir-clearing';
+import { financeAuth, withFinanceAuth } from './helpers/finance-actor';
+
+const listGrIrResiduals = withFinanceAuth(listGrIrResidualsService);
+const postGrIrClearing = withFinanceAuth(postGrIrClearingService);
+const previewGrIrClearing = withFinanceAuth(previewGrIrClearingService);
+const reverseGrIrClearing = withFinanceAuth(reverseGrIrClearingService);
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR163_MR11_TEST';

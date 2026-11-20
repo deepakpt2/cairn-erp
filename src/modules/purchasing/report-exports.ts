@@ -11,7 +11,7 @@ const up = (q: URLSearchParams, name: string) => get(q, name).toUpperCase();
 
 export const purchaseOrderListExport: ReportAdapter = {
   code: 'purchase-order-list', route: '/purchasing/purchase-order-list', capability: PO_LIST_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const selection: PoListSelection = {
       perspective: up(q, 'perspective') || 'VENDOR', scope: up(q, 'scope') || 'ALL',
       vendorFrom: up(q, 'vendorFrom'), vendorTo: up(q, 'vendorTo'),
@@ -24,7 +24,7 @@ export const purchaseOrderListExport: ReportAdapter = {
       documentDateFrom: get(q, 'documentDateFrom'), documentDateTo: get(q, 'documentDateTo'),
       maxHits: Number(get(q, 'maxHits')) || DEFAULT_MAX_HITS,
     };
-    const r = await listPurchaseOrders({ client, selection });
+    const r = await listPurchaseOrders({ client, selection, authorization });
     return {
       title: 'Purchase order list',
       subtitle: [`Perspective ${r.perspective} · scope ${r.scope}`, `${r.rowCount} item(s)${r.truncated ? ` (truncated at ${r.maxHits})` : ''}`, ...r.warnings],
@@ -66,7 +66,7 @@ export const requisitionListExport: ReportAdapter = {
 
 export const invoiceOverviewExport: ReportAdapter = {
   code: 'invoice-overview', route: '/purchasing/invoice-overview', capability: INVOICE_OVERVIEW_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const selection: InvoiceOverviewSelection = {
       companyFrom: up(q, 'companyFrom'), companyTo: up(q, 'companyTo'), fiscalYear: get(q, 'fiscalYear'),
       vendorFrom: up(q, 'vendorFrom'), vendorTo: up(q, 'vendorTo'), orderFrom: up(q, 'orderFrom'), orderTo: up(q, 'orderTo'),
@@ -79,7 +79,7 @@ export const invoiceOverviewExport: ReportAdapter = {
       companyAuthorization: get(q, 'companyAuthorization'), purchasingAuthorization: get(q, 'purchasingAuthorization'),
       exchangeRate: get(q, 'exchangeRate'), post: '', release: '', clear: '',
     };
-    const r = await listInvoiceOverview({ client, selection });
+    const r = await listInvoiceOverview({ client, selection, authorization });
     return {
       title: 'Invoice overview',
       subtitle: [`Parked ${r.counts.parked} · posted ${r.counts.posted} · cancelled ${r.counts.cancelled}${r.truncated ? ` (truncated at ${r.maxHits})` : ''}`, ...r.warnings],

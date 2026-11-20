@@ -10,6 +10,8 @@
 import { getStoStatus, type StoOrderStatus } from '../inventory/stock-transport';
 import { sql } from 'drizzle-orm';
 
+import { readableCompaniesInTx, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import {
@@ -371,9 +373,12 @@ function selection(params: Record<string, string>) {
 
 const MISSING = 'Purchase order does not exist or is not available to this user.';
 
+const DISPLAY_CAPABILITIES = [PO_DISPLAY_CAPABILITY, `${PO_DISPLAY_CAPABILITY}.read`] as const;
+
 export async function displayPurchaseOrder(
-  client: string, orderNumber: string, viewerUserId?: string,
+  client: string, orderNumber: string, authorization: ServiceAuthorityContext | undefined,
 ): Promise<PurchaseOrderDisplayResult> {
+  const viewerUserId = authorization?.userId;
   const number = key(orderNumber);
   if (!number) return { found: false, message: MISSING };
   const loaded = await withTenant(client, async (tx) => {
@@ -386,6 +391,12 @@ export async function displayPurchaseOrder(
           on bp.client = po.client and bp.partner_number = po.supplier_number
        where po.client = ${client} and po.order_number = ${number}
     `) as unknown as Array<Record<string, unknown>>;
+    // A single-document read: judged after the header names its company, in the same transaction, before anything
+    // else of the order is read. An order of a company outside the session's scope is answered as one that does not
+    // stand (a plant limit does not refuse a document display).
+    const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, DISPLAY_CAPABILITIES);
+    if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
+    if (header && await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [text(header.company_code)], { allowPlantLimited: true })) return null;
     if (!header) return null;
 
     const items = await tx.execute(sql`
@@ -680,6 +691,7 @@ export async function displayPurchaseOrder(
 export async function searchPurchaseOrders(
   client: string,
   params: Record<string, string>,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<PurchaseOrderSearchResult> {
   refuseNamed(params);
   const chosen = selection(params);
@@ -687,6 +699,12 @@ export async function searchPurchaseOrders(
     && !chosen.itemState && !chosen.documentDateFrom && !chosen.documentDateTo;
   const limit = recent ? RECENT_LIMIT : SEARCH_LIMIT;
   return withTenant(client, async (tx) => {
+    // Not selected by company: limited to the companies the session may read; others are absent, never named.
+    const readable = await readableCompaniesInTx(tx, client, authorization, DISPLAY_CAPABILITIES, { allowPlantLimited: true });
+    if (!readable.ok) fail(readable.refusal.message, readable.refusal.remedy);
+    const companyFilter = readable.companies.length > 0
+      ? sql`po.company_code in (${sql.join(readable.companies.map((c) => sql`${c}`), sql`, `)})`
+      : sql`false`;
     if (chosen.supplier) {
       const [partner] = await tx.execute(sql`
         select 1 as hit from business_partner where client = ${client} and partner_number = ${chosen.supplier}
@@ -751,6 +769,7 @@ export async function searchPurchaseOrders(
           on bp.client = po.client and bp.partner_number = po.supplier_number
         left join header_state hs on hs.order_number = po.order_number
        where po.client = ${client}
+         and ${companyFilter}
          and (${chosen.supplier || null}::varchar is null or po.supplier_number = ${chosen.supplier || null})
          and (${chosen.purchasingOrg || null}::varchar is null or po.purchasing_org = ${chosen.purchasingOrg || null})
          and (${chosen.releaseStatus || null}::varchar is null or ${PO_RELEASE_STATUS_SQL} = ${chosen.releaseStatus || null})
@@ -782,7 +801,7 @@ export async function searchPurchaseOrders(
   });
 }
 
-export async function openPurchaseOrderDisplay(client: string, params: Record<string, string>, viewerUserId?: string): Promise<{
+export async function openPurchaseOrderDisplay(client: string, params: Record<string, string>, authorization: ServiceAuthorityContext | undefined): Promise<{
   refusal: { message: string; remedy?: string } | null;
   order: PurchaseOrderDisplayResult | null;
   search: PurchaseOrderSearchResult | null;
@@ -791,9 +810,9 @@ export async function openPurchaseOrderDisplay(client: string, params: Record<st
     refuseNamed(params);
     const chosen = selection(params);
     if (chosen.orderNumber) {
-      return { refusal: null, order: await displayPurchaseOrder(client, chosen.orderNumber, viewerUserId), search: null };
+      return { refusal: null, order: await displayPurchaseOrder(client, chosen.orderNumber, authorization), search: null };
     }
-    return { refusal: null, order: null, search: await searchPurchaseOrders(client, params) };
+    return { refusal: null, order: null, search: await searchPurchaseOrders(client, params, authorization) };
   } catch (error) {
     if (error instanceof PurchaseOrderDisplayError) {
       return { refusal: { message: error.message, remedy: error.remedy }, order: null, search: null };

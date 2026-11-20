@@ -5439,6 +5439,7 @@
     "modules/finance/document-reversal.ts",
     "modules/finance/gl-document.ts",
     "modules/finance/schema.ts",
+    "platform/auth/company-scope.ts",
     "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
@@ -5472,6 +5473,8 @@
   "modules/finance/asset-history.ts": [
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts"
   ],
@@ -5538,6 +5541,8 @@
   "modules/finance/close-cockpit.ts": [
     "modules/finance/accrual.ts",
     "modules/finance/fx-valuation.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/finance/consolidated-statements-vocabulary.ts": [],
@@ -5556,6 +5561,8 @@
     "modules/finance/ledger-journal.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/finance/consolidation-vocabulary.ts": [],
@@ -5563,6 +5570,8 @@
     "modules/finance/consolidation-vocabulary.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
@@ -5590,12 +5599,16 @@
   ],
   "modules/finance/customer-ageing.ts": [
     "modules/finance/ageing-derivation.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/finance/customer-balances.ts": [
     "modules/finance/ledger-journal.ts",
     "modules/finance/schema.ts",
     "modules/foundation/customer-company-schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts"
   ],
@@ -5668,12 +5681,16 @@
     "modules/finance/schema.ts",
     "modules/foundation/customer-company-schema.ts",
     "modules/foundation/supplier-company-schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
   "modules/finance/document-reversal.ts": [
     "modules/finance/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
@@ -5692,6 +5709,8 @@
   "modules/finance/fx-valuation.ts": [
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
     "platform/posting/index.ts"
@@ -5718,6 +5737,8 @@
   "modules/finance/gl-balances.ts": [
     "modules/finance/ledger-journal.ts",
     "modules/finance/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
     "platform/posting/decimal.ts"
@@ -5746,6 +5767,7 @@
   "modules/finance/grir-reclass.ts": [
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
     "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts",
@@ -5784,6 +5806,8 @@
     "platform/job/types.ts"
   ],
   "modules/finance/journal-items.ts": [
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
     "platform/posting/decimal.ts"
@@ -5885,6 +5909,8 @@
   ],
   "modules/finance/subledger-tie-out.ts": [
     "modules/finance/ledger-journal.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -5907,12 +5933,16 @@
   ],
   "modules/finance/vendor-ageing.ts": [
     "modules/finance/ageing-derivation.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/finance/vendor-balances.ts": [
     "modules/finance/ledger-journal.ts",
     "modules/finance/schema.ts",
     "modules/foundation/supplier-company-schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts"
   ],
@@ -8081,6 +8111,8 @@
     "platform/db/client.ts"
   ],
   "modules/purchasing/blocked-invoice.ts": [
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
@@ -8135,13 +8167,16 @@
     "modules/inventory/material-period-control.ts",
     "modules/inventory/valuation-class-definition.ts",
     "modules/purchasing/receipt-unit-basis.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
     "platform/posting/index.ts"
   ],
   "modules/purchasing/grir-reconciliation.ts": [
-    "modules/purchasing/grir-clearing.ts"
+    "modules/purchasing/grir-clearing.ts",
+    "platform/auth/service-authority.ts"
   ],
   "modules/purchasing/info-record.ts": [
     "modules/foundation/business-partner-schema.ts",
@@ -8157,6 +8192,8 @@
     "platform/tables/reference.ts"
   ],
   "modules/purchasing/invoice-overview.ts": [
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/purchasing/invoice-verification.ts": [
@@ -8232,6 +8269,8 @@
     "modules/purchasing/item-state.ts",
     "modules/purchasing/receipt-unit-basis.ts",
     "modules/purchasing/release.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -8239,6 +8278,8 @@
     "modules/purchasing/item-state.ts",
     "modules/purchasing/receipt-unit-basis.ts",
     "modules/purchasing/release.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],

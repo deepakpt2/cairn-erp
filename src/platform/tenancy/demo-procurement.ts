@@ -35,7 +35,7 @@ import {
 import { postGlDocument } from '../../modules/finance/gl-document';
 import { getPayables, postOutgoingPayment } from '../../modules/finance/outgoing-payment';
 import { createOrder } from '../../modules/purchasing/orders';
-import { listPurchaseOrders } from '../../modules/purchasing/purchase-order-list';
+import { listPurchaseOrdersForProvisioning as listPurchaseOrders } from '../../modules/purchasing/purchase-order-list';
 import { postSupplierInvoice } from '../../modules/purchasing/invoice-verification';
 import { postGoodsReceipt } from '../../modules/inventory/goods-receipt';
 import { postGoodsIssue } from '../../modules/inventory/goods-issue';

@@ -7,6 +7,8 @@ import {
   listPurchaseOrders,
   type PoListSelection,
 } from '../src/modules/purchasing/purchase-order-list';
+import { financeAuth, withFinanceAuth } from './helpers/finance-actor';
+
 import { createTenant, destroyTenant } from './helpers';
 
 /**
@@ -173,7 +175,7 @@ describe('SCR-124 purchase order list (ME2L suite)', () => {
   });
 
   async function list(selection: Partial<PoListSelection> = {}) {
-    return listPurchaseOrders({ client, selection: { maxHits: 100, ...selection } });
+    return listPurchaseOrders({ client, authorization: await financeAuth(client), selection: { maxHits: 100, ...selection } });
   }
 
   it('lists every order line with the vendor name and derived quantities', async () => {

@@ -16,6 +16,10 @@
  */
 import { sql } from 'drizzle-orm';
 
+import {
+  authorizeCompanyRangeInTx, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx,
+} from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
@@ -76,6 +80,36 @@ export function refuseNamed(named: Record<string, string | undefined> | undefine
   for (const [key, message] of Object.entries(REFUSED)) {
     if (named[key] !== undefined && named[key] !== '') fail(message);
   }
+}
+
+/** What a GR/IR read judges: the session, a capability and every company of the selected range. */
+export interface GrIrAuthorization {
+  authorization: ServiceAuthorityContext | undefined;
+  /** Capabilities that may read; defaults to the clearing screen's own. */
+  capabilities?: readonly string[];
+}
+
+const GRIR_READ_CAPABILITIES = [GRIR_CLEARING_CAPABILITY, `${GRIR_CLEARING_CAPABILITY}.read`] as const;
+
+/**
+ * Judge a change to one purchase order's GR/IR before anything of it is read: session, capability and the order
+ * company's explicit Company Code scope. An order of a company out of scope is answered as one that does not stand.
+ * Returns the verified user, the recorded actor.
+ */
+async function authorizeOrderInTx(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[], rawOrder: string,
+): Promise<string> {
+  const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, capabilities);
+  if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
+  const order = rawOrder.trim().toUpperCase();
+  const [row] = order
+    ? await tx.execute(sql`select company_code from purchase_order where client = ${client} and order_number = ${order}`) as unknown as Array<{ company_code: string }>
+    : [];
+  if (row && await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [row.company_code])) {
+    fail(`Purchase order ${order} does not stand.`);
+  }
+  return verdict.username;
 }
 
 export interface GrIrSelection {
@@ -495,14 +529,20 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
   return rows;
 }
 
-export async function listGrIrResiduals(input: { client: string } & GrIrSelection): Promise<GrIrResidual[]> {
-  const selection = selectionOf(input);
-  return withTenant(input.client, (tx) => loadResiduals(tx, input.client, selection));
+export async function listGrIrResiduals(input: { client: string } & GrIrSelection & GrIrAuthorization): Promise<GrIrResidual[]> {
+  return withTenant(input.client, async (tx) => {
+    // Judged on the range as typed, before the selection is validated, so a refusal discloses nothing about it.
+    const scope = await authorizeCompanyRangeInTx(tx, input.client, input.authorization, input.capabilities ?? GRIR_READ_CAPABILITIES, bound(input.companyFrom), bound(input.companyTo) || undefined, {});
+    if (!scope.ok) fail(scope.refusal.message, scope.refusal.remedy);
+    return loadResiduals(tx, input.client, selectionOf(input));
+  });
 }
 
-export async function listGrIrMaintenance(input: { client: string } & GrIrSelection): Promise<GrIrMaintenanceRow[]> {
-  const selection = selectionOf(input);
+export async function listGrIrMaintenance(input: { client: string } & GrIrSelection & GrIrAuthorization): Promise<GrIrMaintenanceRow[]> {
   return withTenant(input.client, async (tx) => {
+    const scope = await authorizeCompanyRangeInTx(tx, input.client, input.authorization, input.capabilities ?? GRIR_READ_CAPABILITIES, bound(input.companyFrom), bound(input.companyTo) || undefined, {});
+    if (!scope.ok) fail(scope.refusal.message, scope.refusal.remedy);
+    const selection = selectionOf(input);
     const rows = await tx.execute(sql`
       select l.document_number as "documentNumber", l.fiscal_year as "fiscalYear",
              l.order_number as "orderNumber", l.item_number as "itemNumber",
@@ -531,6 +571,7 @@ export interface GrIrPreview {
 
 export async function previewGrIrClearing(input: {
   client: string;
+  authorization: ServiceAuthorityContext | undefined;
   orderNumber: string;
   itemNumber: number;
   keyDate: string;
@@ -538,6 +579,7 @@ export async function previewGrIrClearing(input: {
 }): Promise<GrIrPreview> {
   refuseNamed(input.named);
   const found = await withTenant(input.client, async (tx) => {
+    await authorizeOrderInTx(tx, input.client, input.authorization, [GRIR_CLEARING_CAPABILITY, GRIR_CLEARING_POST_CAPABILITY], input.orderNumber);
     const [header] = await tx.execute(sql`
       select company_code from purchase_order
        where client = ${input.client} and order_number = ${input.orderNumber.trim().toUpperCase()}
@@ -547,6 +589,8 @@ export async function previewGrIrClearing(input: {
   if (!found) fail(`Purchase order ${input.orderNumber} does not stand.`);
   const listed = await listGrIrResiduals({
     client: input.client,
+    authorization: input.authorization,
+    capabilities: [GRIR_CLEARING_CAPABILITY, GRIR_CLEARING_POST_CAPABILITY],
     companyFrom: found,
     companyTo: found,
     orderFrom: input.orderNumber,
@@ -603,9 +647,11 @@ async function byRequestKey(tx: Tx, client: string, requestKey: string): Promise
   };
 }
 
-export async function postGrIrClearing(input: {
+export async function postGrIrClearing(raw: {
   client: string;
+  /** Ignored for recording: the actor is the verified session's user. */
   changedBy: string;
+  authorization: ServiceAuthorityContext | undefined;
   orderNumber: string;
   itemNumber: number;
   keyDate: string;
@@ -616,19 +662,21 @@ export async function postGrIrClearing(input: {
   acknowledgeFurtherActivity?: boolean;
   named?: Record<string, string | undefined>;
 }): Promise<GrIrPostResult> {
-  refuseNamed(input.named);
-  const orderNumber = bound(input.orderNumber);
-  const keyDate = date(input.keyDate, 'The key date');
-  const postingDate = date(input.postingDate, 'The posting date');
-  const comment = input.comment.trim();
-  const requestKey = input.requestKey.trim();
+  refuseNamed(raw.named);
+  const orderNumber = bound(raw.orderNumber);
+  const keyDate = date(raw.keyDate, 'The key date');
+  const postingDate = date(raw.postingDate, 'The posting date');
+  const comment = raw.comment.trim();
+  const requestKey = raw.requestKey.trim();
   if (!orderNumber) fail('A purchasing document is required.');
-  if (!Number.isInteger(input.itemNumber) || input.itemNumber <= 0) fail('The purchasing document item is required.');
-  if (!input.fingerprint.trim()) fail('The proposal is stale. List the residual again.');
+  if (!Number.isInteger(raw.itemNumber) || raw.itemNumber <= 0) fail('The purchasing document item is required.');
+  if (!raw.fingerprint.trim()) fail('The proposal is stale. List the residual again.');
   if (!comment || comment.length > 100) fail('A reason is required.');
   if (!requestKey) fail('A request key is required.');
 
-  return withTenant(input.client, async (tx) => {
+  return withTenant(raw.client, async (tx) => {
+    const actor = await authorizeOrderInTx(tx, raw.client, raw.authorization, [GRIR_CLEARING_POST_CAPABILITY], orderNumber);
+    const input = { ...raw, changedBy: actor };
     const replay = await byRequestKey(tx, input.client, requestKey);
     if (replay) return replay;
 
@@ -744,9 +792,11 @@ export async function postGrIrClearing(input: {
   });
 }
 
-export async function reverseGrIrClearing(input: {
+export async function reverseGrIrClearing(raw: {
   client: string;
+  /** Ignored for recording: the actor is the verified session's user. */
   changedBy: string;
+  authorization: ServiceAuthorityContext | undefined;
   documentNumber: string;
   fiscalYear: number;
   reversalDate: string;
@@ -754,17 +804,27 @@ export async function reverseGrIrClearing(input: {
   requestKey: string;
   named?: Record<string, string | undefined>;
 }): Promise<GrIrPostResult> {
-  refuseNamed(input.named);
-  const documentNumber = input.documentNumber.trim();
-  const reversalDate = date(input.reversalDate, 'The reversal date');
-  const comment = input.comment.trim();
-  const requestKey = input.requestKey.trim();
+  refuseNamed(raw.named);
+  const documentNumber = raw.documentNumber.trim();
+  const reversalDate = date(raw.reversalDate, 'The reversal date');
+  const comment = raw.comment.trim();
+  const requestKey = raw.requestKey.trim();
   if (!documentNumber) fail('An accounting document is required.');
-  if (!Number.isInteger(input.fiscalYear)) fail('A fiscal year is required.');
+  if (!Number.isInteger(raw.fiscalYear)) fail('A fiscal year is required.');
   if (!comment || comment.length > 100) fail('A reason is required.');
   if (!requestKey) fail('A request key is required.');
 
-  return withTenant(input.client, async (tx) => {
+  return withTenant(raw.client, async (tx) => {
+    const verdict = await verifyCompanyAuthorityAnyInTx(tx, raw.client, raw.authorization, [GRIR_CLEARING_REVERSE_CAPABILITY]);
+    if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
+    const [owner] = await tx.execute(sql`
+      select company_code from gr_ir_maintenance_link
+       where client = ${raw.client} and document_number = ${documentNumber} and fiscal_year = ${raw.fiscalYear}
+    `) as unknown as Array<{ company_code: string }>;
+    if (owner && await refuseCompaniesOutsideScopeInTx(tx, raw.client, verdict, [owner.company_code])) {
+      fail(`Maintenance document ${documentNumber} does not stand.`);
+    }
+    const input = { ...raw, changedBy: verdict.username };
     const replay = await byRequestKey(tx, input.client, requestKey);
     if (replay) return replay;
     const [link] = await tx.execute(sql`

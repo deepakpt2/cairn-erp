@@ -7,15 +7,19 @@ import { defineRange } from '../src/platform/numbering';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { cancelSupplierInvoice, postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
+import { financeAuth, withFinanceAuth } from './helpers/finance-actor';
 import {
   InvoiceOverviewError,
-  listInvoiceOverview,
-  readInvoiceOverviewDocument,
+  listInvoiceOverview as listInvoiceOverviewService,
+  readInvoiceOverviewDocument as readInvoiceOverviewDocumentService,
 } from '../src/modules/purchasing/invoice-overview';
 import { parkSupplierInvoice } from '../src/modules/purchasing/parked-invoice';
 import { createOrder } from '../src/modules/purchasing/orders';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
+const listInvoiceOverview = withFinanceAuth(listInvoiceOverviewService);
+const readInvoiceOverviewDocument = async (c: string, number: string) =>
+  readInvoiceOverviewDocumentService(c, number, await financeAuth(c));
 const ACTOR = 'SCR161_LIST';
 const DATES = { invoiceDate: '2026-10-22', postingDate: '2026-10-22' };
 

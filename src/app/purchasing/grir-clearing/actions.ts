@@ -64,6 +64,7 @@ export async function checkGrIrClearingAction(_state: GrIrClearingActionState, f
   try {
     const preview = await previewGrIrClearing({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       orderNumber: text(form, 'orderNumber'),
       itemNumber: Number(text(form, 'itemNumber')),
       keyDate: text(form, 'keyDate'),
@@ -89,6 +90,7 @@ export async function postGrIrClearingAction(_state: GrIrClearingActionState, fo
     });
     const result = await postGrIrClearing({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       orderNumber: text(form, 'orderNumber'),
       itemNumber: Number(text(form, 'itemNumber')),
@@ -123,6 +125,7 @@ export async function reverseGrIrClearingAction(_state: GrIrClearingActionState,
     });
     const result = await reverseGrIrClearing({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       documentNumber: text(form, 'documentNumber'),
       fiscalYear: Number(text(form, 'fiscalYear')),

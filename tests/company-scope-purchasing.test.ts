@@ -1,0 +1,271 @@
+/**
+ * Company-scope authorization for the purchasing money-figure services (adversarial): the PO list and display,
+ * the invoice overview, payment blocks and the GR/IR worklist/clearing. Two companies (A 1000, B 2000) in one
+ * tenant, a second tenant, and actors who hold the capability but not the company, no scope, no capability, or a
+ * plant limit. A capability alone must never reach another company's figures.
+ */
+import { sql } from 'drizzle-orm';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { withTenant } from '../src/platform/db/client';
+import { displayPurchaseOrder, openPurchaseOrderDisplay, searchPurchaseOrders } from '../src/modules/purchasing/purchase-order-display';
+import { listPurchaseOrders } from '../src/modules/purchasing/purchase-order-list';
+import { listInvoiceOverview, readInvoiceOverviewDocument } from '../src/modules/purchasing/invoice-overview';
+import { listBlockEvents, listBlockedInvoices, placePaymentBlock, previewPaymentBlock } from '../src/modules/purchasing/blocked-invoice';
+import { listGrIrExceptions } from '../src/modules/purchasing/grir-reconciliation';
+import { listGrIrMaintenance, listGrIrResiduals, postGrIrClearing, previewGrIrClearing, reverseGrIrClearing } from '../src/modules/purchasing/grir-clearing';
+import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { FINANCE_ACTOR_CAPABILITIES, createFinanceActor, type FinanceActor } from './helpers/finance-actor';
+
+const A = '1000';
+const B = '2000';
+const SEED = 'SCOPE_PURCH_SEED';
+const ORDER_A = '4500000001';
+const ORDER_B = '4500000002';
+const INV_A = '5100000001';
+const INV_B = '5100000002';
+
+let tenant: TestTenant;
+let other: TestTenant;
+let client = '';
+let onlyA: FinanceActor;
+let onlyB: FinanceActor;
+let both: FinanceActor;
+let noCapability: FinanceActor;
+let noScope: FinanceActor;
+let plantLimited: FinanceActor;
+let otherTenantActor: FinanceActor;
+
+/** The refusal is thrown and does not disclose existence of anything in another company. */
+async function refused(p: Promise<unknown>, pattern: RegExp = /scope|Company Code|includes a company|capabilit|authori|session|signed-in|not hold|No company/i) {
+  let thrown: unknown;
+  try { await p; } catch (error) { thrown = error; }
+  expect(thrown, 'a refusal was expected').toBeInstanceOf(Error);
+  expect((thrown as Error).message).toMatch(pattern);
+  expect((thrown as Error).message).not.toMatch(/does not stand/);
+}
+
+async function count(table: string): Promise<number> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql.raw(`select count(*)::int as n from ${table} where client = '${client}'`));
+    return Number((rows as unknown as Array<{ n: number }>)[0]!.n);
+  });
+}
+
+const rangeSel = (companyFrom: string, companyTo?: string) => ({
+  companyFrom, ...(companyTo ? { companyTo } : {}), fiscalYear: '2026',
+});
+
+beforeAll(async () => {
+  tenant = await createTenant('scope-purchasing');
+  client = tenant.client;
+  other = await createTenant('scope-purchasing-2');
+  await withTenant(client, async (tx) => {
+    await tx.execute(sql`
+      insert into company_code (client, company_code, name, chart_of_accounts, fiscal_year_variant, posting_period_variant,
+        currency, country, intercompany_clearing_account, created_by)
+      select client, ${B}, 'B company', chart_of_accounts, fiscal_year_variant, posting_period_variant,
+             currency, country, intercompany_clearing_account, ${SEED}
+        from company_code where client = ${client} and company_code = ${A} on conflict do nothing`);
+    const country = ((await tx.execute(sql`select country from company_code where client = ${client} and company_code = ${A}`)) as unknown as Array<{ country: string }>)[0]!.country;
+    await tx.execute(sql`
+      insert into plant (client, plant, name, country, company_code, created_by) values
+        (${client}, 'PLA1', 'Plant A1', ${country}, ${A}, ${SEED}), (${client}, 'PLA2', 'Plant A2', ${country}, ${A}, ${SEED}),
+        (${client}, 'PLB1', 'Plant B1', ${country}, ${B}, ${SEED}), (${client}, 'PLB2', 'Plant B2', ${country}, ${B}, ${SEED})
+      on conflict do nothing`);
+    await tx.execute(sql`insert into business_partner (client, partner_number, name, created_by) values (${client}, 'V10000', 'Vendor', ${SEED}) on conflict do nothing`);
+    await tx.execute(sql`insert into purchasing_org (client, purchasing_org, name, created_by) values (${client}, 'O100', 'Org', ${SEED}) on conflict do nothing`);
+    await tx.execute(sql`insert into purchasing_group (client, purchasing_group, name, created_by) values (${client}, 'G01', 'Group', ${SEED}) on conflict do nothing`);
+    await tx.execute(sql`insert into material (client, material_number, description, material_type, base_unit, created_by) values (${client}, 'M100', 'Material', 'RAW', 'PC', ${SEED}) on conflict do nothing`);
+    await tx.execute(sql`
+      insert into purchase_order (client, order_number, document_type, supplier_number, purchasing_org, purchasing_group,
+        company_code, currency, document_date, release_status, created_by) values
+        (${client}, ${ORDER_A}, 'STANDARD', 'V10000', 'O100', 'G01', ${A}, 'USD', '2026-02-01', 'RELEASED', ${SEED}),
+        (${client}, ${ORDER_B}, 'STANDARD', 'V10000', 'O100', 'G01', ${B}, 'USD', '2026-02-02', 'RELEASED', ${SEED})`);
+    await tx.execute(sql`
+      insert into purchase_order_item (client, order_number, item_number, item_category, material_number, short_text,
+        quantity, unit, net_price, price_unit, net_value, plant, created_by) values
+        (${client}, ${ORDER_A}, 10, 'STANDARD', 'M100', 'Line A', 10, 'PC', 10, 1, 100, 'PLA1', ${SEED}),
+        (${client}, ${ORDER_B}, 10, 'STANDARD', 'M100', 'Line B', 20, 'PC', 10, 1, 200, 'PLB1', ${SEED})`);
+    for (const [number, company, order] of [[INV_A, A, ORDER_A], [INV_B, B, ORDER_B]] as const) {
+      await tx.execute(sql`
+        insert into supplier_invoice (client, invoice_number, fiscal_year, supplier_number, company_code, purchase_order_number,
+          invoice_date, posting_date, supplier_reference, currency, gross_amount, status, created_by)
+        values (${client}, ${number}, 2026, 'V10000', ${company}, ${order}, '2026-03-01', '2026-03-01', ${`REF-${number}`}, 'USD', 100, 'POSTED', ${SEED})`);
+    }
+  });
+  const caps = FINANCE_ACTOR_CAPABILITIES;
+  onlyA = await createFinanceActor(client, { capabilities: caps, companyScopes: [A] });
+  onlyB = await createFinanceActor(client, { capabilities: caps, companyScopes: [B] });
+  both = await createFinanceActor(client, { capabilities: caps, companyScopes: [A, B] });
+  noCapability = await createFinanceActor(client, { capabilities: ['FIN.JOURNAL.DISPLAY'], companyScopes: [A, B] });
+  noScope = await createFinanceActor(client, { capabilities: caps, companyScopes: [] });
+  plantLimited = await createFinanceActor(client, { capabilities: caps, companyScopes: [A, B], plantScopes: ['PLA1', 'PLB1'] });
+  otherTenantActor = await createFinanceActor(other.client, { capabilities: caps });
+}, 240_000);
+
+afterAll(async () => {
+  if (client) await destroyTenant(client);
+  if (other) await destroyTenant(other.client);
+  await closeDb();
+}, 240_000);
+
+describe('purchase order list and display', () => {
+  const orders = (r: { rows: Array<{ orderNumber: string }> }) => [...new Set(r.rows.map((x) => x.orderNumber))].sort();
+  const list = (authorization: FinanceActor['authorization'] | undefined) =>
+    listPurchaseOrders({ client, authorization, selection: { perspective: 'ORDER', maxHits: 100 } });
+
+  it('lists only the orders of the companies the session may read', async () => {
+    expect(orders(await list(onlyA.authorization))).toEqual([ORDER_A]);
+    expect(orders(await list(onlyB.authorization))).toEqual([ORDER_B]);
+    expect(orders(await list(both.authorization))).toEqual([ORDER_A, ORDER_B]);
+    // A plant limit does not refuse a list of documents.
+    expect(orders(await list(plantLimited.authorization))).toEqual([ORDER_A, ORDER_B]);
+  });
+
+  it('hides an out-of-scope order even when it is asked for by its number', async () => {
+    const ask = (order: string) => listPurchaseOrders({ client, authorization: onlyA.authorization, selection: { perspective: 'ORDER', orderFrom: order, orderTo: order } })
+      .then(() => 'listed', (e: Error) => e.message.replace(order, '#'));
+    // Another company's order answers exactly as a number that does not exist.
+    expect(await ask(ORDER_B)).toBe(await ask('4599999999'));
+    expect(await ask(ORDER_B)).toMatch(/does not stand/);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant', async () => {
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      await refused(list(bad));
+    }
+  });
+
+  it('displays a single order only inside the scope, and answers another as not found', async () => {
+    expect((await displayPurchaseOrder(client, ORDER_A, onlyA.authorization)).found).toBe(true);
+    const hidden = await displayPurchaseOrder(client, ORDER_B, onlyA.authorization);
+    const missing = await displayPurchaseOrder(client, '4599999999', onlyA.authorization);
+    expect(hidden).toEqual({ ...missing, message: expect.any(String) });
+    expect(hidden.found).toBe(false);
+    expect((await displayPurchaseOrder(client, ORDER_B, both.authorization)).found).toBe(true);
+    expect((await displayPurchaseOrder(client, ORDER_B, plantLimited.authorization)).found).toBe(true);
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      await refused(displayPurchaseOrder(client, ORDER_A, bad));
+    }
+  });
+
+  it('searches only the readable companies, and the open entry point refuses an out-of-scope number as not found', async () => {
+    const found = await searchPurchaseOrders(client, {}, onlyA.authorization);
+    expect(found.rows.map((r) => r.orderNumber)).toEqual([ORDER_A]);
+    expect((await searchPurchaseOrders(client, {}, both.authorization)).rows.map((r) => r.orderNumber).sort()).toEqual([ORDER_A, ORDER_B]);
+    await refused(searchPurchaseOrders(client, {}, noScope.authorization));
+    const opened = await openPurchaseOrderDisplay(client, { order: ORDER_B }, onlyA.authorization);
+    expect(opened.order?.found).toBe(false);
+  });
+});
+
+describe('invoice overview', () => {
+  const overview = (authorization: FinanceActor['authorization'] | undefined, from: string, to?: string) =>
+    listInvoiceOverview({ client, authorization, selection: rangeSel(from, to) });
+
+  it('lists a company only to a session whose scope holds it', async () => {
+    expect((await overview(onlyA.authorization, A)).rows.map((r) => r.documentNumber)).toEqual([INV_A]);
+    expect((await overview(onlyB.authorization, B)).rows.map((r) => r.documentNumber)).toEqual([INV_B]);
+    await refused(overview(onlyA.authorization, B));
+  });
+
+  it('refuses a range as a whole when one company is outside the scope, naming no derived company', async () => {
+    await refused(overview(onlyA.authorization, A, B), /includes a company/i);
+    await refused(overview(onlyB.authorization, A, B), /includes a company/i);
+    expect((await overview(both.authorization, A, B)).rows.map((r) => r.documentNumber).sort()).toEqual([INV_A, INV_B]);
+  });
+
+  it('refuses no session, no capability, no scope, another tenant, and a plant-limited user a company-wide aggregate', async () => {
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization, plantLimited.authorization]) {
+      await refused(overview(bad, A));
+    }
+  });
+
+  it('reads one document only inside the scope; another company\'s is null, like a missing one', async () => {
+    expect(await readInvoiceOverviewDocument(client, INV_A, onlyA.authorization)).not.toBeNull();
+    expect(await readInvoiceOverviewDocument(client, INV_B, onlyA.authorization)).toBeNull();
+    expect(await readInvoiceOverviewDocument(client, '5199999999', onlyA.authorization)).toBeNull();
+    expect(await readInvoiceOverviewDocument(client, INV_B, both.authorization)).not.toBeNull();
+    await refused(readInvoiceOverviewDocument(client, INV_A, noScope.authorization));
+  });
+});
+
+describe('payment blocks', () => {
+  const place = (authorization: FinanceActor['authorization'] | undefined, invoiceNumber: string) =>
+    placePaymentBlock({ client, changedBy: 'SPOOFED_NAME', authorization, invoiceNumber, comment: 'hold', requestKey: `k-${invoiceNumber}-${Math.random()}` });
+
+  it('refuses a hold, a preview and the history for an invoice of another company, writing nothing', async () => {
+    const before = [await count('supplier_invoice_payment_block'), await count('supplier_invoice_payment_block_event')];
+    await expect(place(onlyA.authorization, INV_B)).rejects.toThrow(/Invoice 5100000002 does not stand/);
+    await expect(place(onlyA.authorization, '5199999999')).rejects.toThrow(/Invoice 5199999999 does not stand/);
+    await expect(previewPaymentBlock({ client, changedBy: 'X', authorization: onlyA.authorization, invoiceNumber: INV_B, comment: 'hold', action: 'place' }))
+      .rejects.toThrow(/does not stand/);
+    expect(await listBlockEvents(client, INV_B, onlyA.authorization).then((r) => r.length, () => -1)).toBe(-1);
+    expect([await count('supplier_invoice_payment_block'), await count('supplier_invoice_payment_block_event')]).toEqual(before);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant before any invoice is read', async () => {
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      await refused(place(bad, INV_A));
+    }
+  });
+
+  it('refuses the blocked-invoice list for a range with an out-of-scope company, and for a plant-limited user', async () => {
+    const list = (authorization: FinanceActor['authorization'] | undefined, from: string, to?: string) =>
+      listBlockedInvoices({ client, authorization, companyFrom: from, ...(to ? { companyTo: to } : {}), fiscalYear: '2026' });
+    await refused(list(onlyA.authorization, A, B), /includes a company/i);
+    await refused(list(onlyA.authorization, B));
+    expect(await list(onlyA.authorization, A)).toEqual([]);
+    expect(await list(both.authorization, A, B)).toEqual([]);
+    await refused(list(noScope.authorization, A));
+  });
+});
+
+describe('GR/IR worklist and clearing', () => {
+  const key = '2026-06-30';
+
+  it('refuses a residual list or worklist whose range holds an out-of-scope company, as a whole', async () => {
+    await refused(listGrIrResiduals({ client, authorization: onlyA.authorization, companyFrom: A, companyTo: B, keyDate: key }), /includes a company/i);
+    await refused(listGrIrExceptions({ client, authorization: onlyA.authorization, companyFrom: A, companyTo: B, keyDate: key }), /includes a company/i);
+    await refused(listGrIrMaintenance({ client, authorization: onlyA.authorization, companyFrom: B, keyDate: key }));
+    await listGrIrResiduals({ client, authorization: onlyA.authorization, companyFrom: A, keyDate: key });
+    await listGrIrResiduals({ client, authorization: both.authorization, companyFrom: A, companyTo: B, keyDate: key });
+  });
+
+  it('refuses no session, no capability, no scope, another tenant and a plant-limited user', async () => {
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization, plantLimited.authorization]) {
+      await refused(listGrIrResiduals({ client, authorization: bad, companyFrom: A, keyDate: key }));
+      await refused(listGrIrExceptions({ client, authorization: bad, companyFrom: A, keyDate: key }));
+    }
+  });
+
+  it('answers a clearing preview, post or reversal for another company as not found, writing nothing', async () => {
+    const before = await count('gr_ir_maintenance_link');
+    await expect(previewGrIrClearing({ client, authorization: onlyA.authorization, orderNumber: ORDER_B, itemNumber: 10, keyDate: key }))
+      .rejects.toThrow(/Purchase order 4500000002 does not stand/);
+    await expect(postGrIrClearing({
+      client, changedBy: 'SPOOFED_NAME', authorization: onlyA.authorization, orderNumber: ORDER_B, itemNumber: 10, keyDate: key,
+      postingDate: key, fingerprint: 'x', comment: 'clear', requestKey: 'scope-grir-post',
+    })).rejects.toThrow(/does not stand/);
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      await refused(postGrIrClearing({
+        client, changedBy: 'X', authorization: bad, orderNumber: ORDER_A, itemNumber: 10, keyDate: key,
+        postingDate: key, fingerprint: 'x', comment: 'clear', requestKey: 'scope-grir-post-2',
+      }));
+      await refused(reverseGrIrClearing({
+        client, changedBy: 'X', authorization: bad, documentNumber: '1', fiscalYear: 2026, reversalDate: key, comment: 'r', requestKey: 'scope-grir-rev',
+      }));
+    }
+    expect(await count('gr_ir_maintenance_link')).toBe(before);
+  });
+});
+
+describe('provisioning-only read', () => {
+  it('is not reachable from any page, action or route', async () => {
+    const { execFileSync } = await import('node:child_process');
+    let hits = '';
+    try { hits = execFileSync('grep', ['-rl', 'listPurchaseOrdersForProvisioning', 'src/app'], { encoding: 'utf8' }); } catch { /* grep exits 1 when nothing matches */ }
+    expect(hits.trim()).toBe('');
+  });
+});

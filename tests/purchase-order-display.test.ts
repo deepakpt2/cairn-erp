@@ -4,9 +4,13 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import {
   assignedShare,
-  displayPurchaseOrder,
-  searchPurchaseOrders,
+  displayPurchaseOrder as displayPurchaseOrderService,
+  searchPurchaseOrders as searchPurchaseOrdersService,
 } from '../src/modules/purchasing/purchase-order-display';
+import { financeAuth, withFinanceAuth } from './helpers/finance-actor';
+
+const displayPurchaseOrder = async (c: string, n: string) => displayPurchaseOrderService(c, n, await financeAuth(c));
+const searchPurchaseOrders = async (c: string, p: Record<string, string>) => searchPurchaseOrdersService(c, p, await financeAuth(c));
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR164_DISP';

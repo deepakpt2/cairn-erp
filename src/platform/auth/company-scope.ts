@@ -153,3 +153,54 @@ export async function authorizeCompaniesAnyInTx(
   const refusal = await refuseCompaniesOutsideScopeInTx(tx, client, verdict, companyCodes, options);
   return refusal ? { ok: false, refusal } : verdict;
 }
+
+/**
+ * A request that names a company-code range (from..to, an open `to` meaning the single company). Every company the
+ * tenant holds inside the range must be in the caller's explicit Company Code scope, else the whole request is refused
+ * (the refusal names no derived company when the range spans more than one). A range that holds no company only
+ * verifies the session and capability, so the service's own "does not stand" answer still applies.
+ */
+export async function authorizeCompanyRangeInTx(
+  tx: Tx,
+  client: string,
+  authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[],
+  from: string,
+  to: string | undefined,
+  options: { allowPlantLimited?: boolean } = {},
+): Promise<CompanyAuthorityVerdict> {
+  const low = from.trim().toUpperCase();
+  const high = (to ?? '').trim().toUpperCase() || low;
+  const rows = (await tx.execute(sql`
+    select company_code from company_code
+     where client = ${client} and company_code >= ${low} and company_code <= ${high}
+  `)) as unknown as Array<{ company_code: string }>;
+  const companies = rows.map((r) => r.company_code);
+  if (companies.length === 0) return verifyCompanyAuthorityAnyInTx(tx, client, authorization, capabilities);
+  return authorizeCompaniesAnyInTx(tx, client, authorization, capabilities, companies, {
+    derivedFrom: companies.length > 1 ? 'The company code range' : undefined,
+    allowPlantLimited: options.allowPlantLimited,
+  });
+}
+
+/**
+ * For lists that are not selected by company (by supplier, purchasing organisation, plant ...): the capability must
+ * stand, and the answer is limited to the companies inside the caller's explicit scope. Companies outside it are
+ * simply absent, never named. A refused caller (no session, capability or scope) gets `ok: false`.
+ */
+export async function readableCompaniesInTx(
+  tx: Tx,
+  client: string,
+  authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[],
+  options: { allowPlantLimited?: boolean } = {},
+): Promise<{ ok: true; companies: string[] } | { ok: false; refusal: { message: string; remedy: string } }> {
+  const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, capabilities);
+  if (!verdict.ok) return { ok: false, refusal: verdict.refusal };
+  const rows = (await tx.execute(sql`select company_code from company_code where client = ${client} order by company_code`)) as unknown as Array<{ company_code: string }>;
+  const companies: string[] = [];
+  for (const { company_code: code } of rows) {
+    if (!(await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [code], options))) companies.push(code);
+  }
+  return { ok: true, companies };
+}

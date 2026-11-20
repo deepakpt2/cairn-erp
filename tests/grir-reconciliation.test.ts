@@ -5,7 +5,10 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createOrder } from '../src/modules/purchasing/orders';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
-import { listGrIrExceptions } from '../src/modules/purchasing/grir-reconciliation';
+import { listGrIrExceptions as listGrIrExceptionsService } from '../src/modules/purchasing/grir-reconciliation';
+import { withFinanceAuth } from './helpers/finance-actor';
+
+const listGrIrExceptions = withFinanceAuth(listGrIrExceptionsService);
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';

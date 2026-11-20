@@ -12,6 +12,10 @@
 import { sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import {
+  authorizeCompaniesAnyInTx, authorizeCompanyRangeInTx, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx,
+} from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant, type Tx } from '../../platform/db/client';
 
 export const BLOCKED_INVOICE_CAPABILITY = 'PROC.INV.BLOCK.RELEASE';
@@ -40,7 +44,10 @@ function named(value: string | undefined): string {
 
 export interface BlockedInvoiceInput {
   client: string;
+  /** Ignored for recording: the actor is the verified session's user. Kept so callers need not change shape. */
   changedBy: string;
+  /** The verified session. A hold or release is made by somebody, with the capability, for a company in scope. */
+  authorization: ServiceAuthorityContext | undefined;
   invoiceNumber: string;
   comment?: string;
   requestKey?: string;
@@ -308,6 +315,29 @@ async function resolveInvoice(tx: Tx, client: string, rawNumber: string): Promis
   return invoice;
 }
 
+const BLOCK_READ_CAPABILITIES = [BLOCKED_INVOICE_CAPABILITY, BLOCKED_INVOICE_HOLD_CAPABILITY, `${BLOCKED_INVOICE_CAPABILITY}.read`] as const;
+
+/**
+ * Judge a change or read of one invoice before anything of it is returned: session, capability and the invoice
+ * company's explicit Company Code scope. An invoice of a company outside the scope is answered exactly as one that
+ * does not stand. Returns the verified user, who is the recorded actor.
+ */
+async function authorizeInvoiceInTx(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[], rawNumber: string,
+): Promise<string> {
+  const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, capabilities);
+  if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
+  const number = named(rawNumber).toUpperCase();
+  const [row] = number
+    ? await tx.execute(sql`select company_code from supplier_invoice where client = ${client} and invoice_number = ${number}`) as unknown as Array<{ company_code: string }>
+    : [];
+  if (row && await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [row.company_code], { allowPlantLimited: true })) {
+    fail(`Invoice ${number} does not stand.`);
+  }
+  return verdict.username;
+}
+
 function requireComment(input: BlockedInvoiceInput): string {
   const comment = named(input.comment);
   if (!comment || comment.length > 100) {
@@ -355,6 +385,7 @@ export async function activeBlockedInvoiceNumbers(tx: Tx, client: string): Promi
 
 export async function listBlockedInvoices(input: {
   client: string;
+  authorization: ServiceAuthorityContext | undefined;
   companyFrom: string;
   companyTo?: string;
   fiscalYear: string;
@@ -373,6 +404,8 @@ export async function listBlockedInvoices(input: {
   }
   if (companyTo < companyFrom) fail(`Company code ${companyTo} is before ${companyFrom}.`);
   return withTenant(input.client, async (tx) => {
+    const scope = await authorizeCompanyRangeInTx(tx, input.client, input.authorization, BLOCK_READ_CAPABILITIES, companyFrom, companyTo, { allowPlantLimited: true });
+    if (!scope.ok) fail(scope.refusal.message, scope.refusal.remedy);
     const companies = await tx.execute(sql`
       select company_code from company_code
        where client = ${input.client} and is_active
@@ -454,10 +487,13 @@ export async function listBlockedInvoices(input: {
   });
 }
 
-export async function listBlockEvents(client: string, invoiceNumber: string): Promise<BlockEventRow[]> {
+export async function listBlockEvents(
+  client: string, invoiceNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<BlockEventRow[]> {
   const number = named(invoiceNumber).toUpperCase();
   if (!number) return [];
   return withTenant(client, async (tx) => {
+    await authorizeInvoiceInTx(tx, client, authorization, BLOCK_READ_CAPABILITIES, number);
     const rows = await tx.execute(sql`
       select event_id, invoice_number, reason, action, outcome, actor, comment,
              previous_active, resulting_active, created_at::text
@@ -487,6 +523,8 @@ export async function previewPaymentBlock(input: BlockedInvoiceInput & { action:
   refuseAbsent(input);
   requireComment(input);
   return withTenant(input.client, async (tx) => {
+    await authorizeInvoiceInTx(tx, input.client, input.authorization,
+      [input.action === 'place' ? BLOCKED_INVOICE_HOLD_CAPABILITY : BLOCKED_INVOICE_CAPABILITY], input.invoiceNumber);
     const invoice = await resolveInvoice(tx, input.client, input.invoiceNumber);
     const block = await loadBlock(tx, input.client, invoice.invoice_number);
     const state = await paymentState(tx, input.client, invoice);
@@ -539,11 +577,13 @@ export async function previewPaymentBlock(input: BlockedInvoiceInput & { action:
   });
 }
 
-export async function placePaymentBlock(input: BlockedInvoiceInput): Promise<BlockedInvoiceResult> {
-  refuseAbsent(input);
-  const comment = requireComment(input);
-  const requestKey = requireKey(input);
-  return withTenant(input.client, async (tx) => {
+export async function placePaymentBlock(raw: BlockedInvoiceInput): Promise<BlockedInvoiceResult> {
+  refuseAbsent(raw);
+  const comment = requireComment(raw);
+  const requestKey = requireKey(raw);
+  return withTenant(raw.client, async (tx) => {
+    const actor = await authorizeInvoiceInTx(tx, raw.client, raw.authorization, [BLOCKED_INVOICE_HOLD_CAPABILITY], raw.invoiceNumber);
+    const input = { ...raw, changedBy: actor };
     const again = await replay(tx, input.client, requestKey);
     if (again) return again;
     const invoice = await resolveInvoice(tx, input.client, input.invoiceNumber);
@@ -599,11 +639,13 @@ export async function placePaymentBlock(input: BlockedInvoiceInput): Promise<Blo
   });
 }
 
-export async function releasePaymentBlock(input: BlockedInvoiceInput): Promise<BlockedInvoiceResult> {
-  refuseAbsent(input);
-  const comment = requireComment(input);
-  const requestKey = requireKey(input);
-  return withTenant(input.client, async (tx) => {
+export async function releasePaymentBlock(raw: BlockedInvoiceInput): Promise<BlockedInvoiceResult> {
+  refuseAbsent(raw);
+  const comment = requireComment(raw);
+  const requestKey = requireKey(raw);
+  return withTenant(raw.client, async (tx) => {
+    const actor = await authorizeInvoiceInTx(tx, raw.client, raw.authorization, [BLOCKED_INVOICE_CAPABILITY], raw.invoiceNumber);
+    const input = { ...raw, changedBy: actor };
     const again = await replay(tx, input.client, requestKey);
     if (again) return again;
     const invoice = await resolveInvoice(tx, input.client, input.invoiceNumber);

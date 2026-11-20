@@ -52,7 +52,7 @@ import { withTenant } from '../../platform/db/client';
 import { postOutgoingPayment, getPayables } from '../../modules/finance/outgoing-payment';
 import { postGoodsReceipt } from '../../modules/inventory/goods-receipt';
 import { createOrder } from '../../modules/purchasing/orders';
-import { listPurchaseOrders } from '../../modules/purchasing/purchase-order-list';
+import { listPurchaseOrdersForProvisioning as listPurchaseOrders } from '../../modules/purchasing/purchase-order-list';
 import { postSupplierInvoice } from '../../modules/purchasing/invoice-verification';
 import { saveCharacteristic, recordInspectionResult } from '../../modules/quality/inspection-results';
 import { openLot } from '../../modules/quality/lot';
