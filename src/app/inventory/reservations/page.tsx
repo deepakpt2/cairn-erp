@@ -30,7 +30,7 @@ export default async function ReservationsPage({ searchParams }: {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const reservation = params.reservation
-    ? await getReservation(session.user.client, params.reservation)
+    ? await getReservation(session.user.client, params.reservation, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null)
     : null;
   const canPost = can(session, RESERVATION_CREATE_CAPABILITY);
   const reservationKey = reservation?.reservationNumber.trim() ?? '';

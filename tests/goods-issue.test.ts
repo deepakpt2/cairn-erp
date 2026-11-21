@@ -20,7 +20,7 @@ import {
 import { createSession, encodeSessionCookie } from '../src/platform/auth/session';
 import { hashPassword } from '../src/platform/auth/password';
 import { AuthzError } from '../src/platform/auth/current';
-import { createReservation, getReservation } from '../src/modules/inventory/reservations';
+import { createReservation, getReservation } from './helpers/material-document-authorized';
 import {
   GOODS_ISSUE_CAPABILITY,
   GoodsIssueError,

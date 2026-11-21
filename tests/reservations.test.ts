@@ -3,14 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import {
-  ReservationError,
-  completeReservationItem,
-  createReservation,
-  getReservation,
-  withdrawReservation,
-  type CreateReservationInput,
-} from '../src/modules/inventory/reservations';
+import { ReservationError, type CreateReservationInput } from '../src/modules/inventory/reservations';
+import { completeReservationItem, createReservation, getReservation, withdrawReservation } from './helpers/material-document-authorized';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
@@ -32,7 +26,7 @@ describe('SCR-133 reservations (MB21)', () => {
   let key = 0;
   const nextKey = () => `scr133-${++key}`;
 
-  const input = (overrides: Partial<CreateReservationInput> = {}): CreateReservationInput => ({
+  const input = (overrides: Partial<CreateReservationInput> = {}): Omit<CreateReservationInput, "authorization"> & { authorization?: CreateReservationInput["authorization"] } => ({
     client,
     changedBy: ACTOR,
     movementTypeCode: '201',

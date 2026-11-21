@@ -15,6 +15,9 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { CompanyAuthority } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { allocateNumber } from '../../platform/numbering';
 import { getCompanyCode } from '../../platform/periods';
 import { costCenter, plant as plantTable } from '../foundation/schema';
@@ -143,12 +146,27 @@ async function toView(tx: Tx, client: string, header: typeof reservationHeader.$
   };
 }
 
-export async function getReservation(client: string, number: string): Promise<ReservationView | null> {
+const reservationActor = (tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined) =>
+  purchasingActor(tx, client, authorization, [RESERVATION_CREATE_CAPABILITY], (m, r) => new ReservationError(m, r));
+
+/** A reservation is reachable when it has items and every item's plant is in the caller's reach. */
+async function reservationReachable(tx: Tx, client: string, actor: CompanyAuthority, number: string): Promise<boolean> {
+  const reachable = new Set(await reachablePlantsInTx(tx, client, actor));
+  const items = await tx.select({ plant: reservationItem.plant }).from(reservationItem).where(and(
+    eq(reservationItem.client, client), eq(reservationItem.reservationNumber, number),
+  ));
+  return items.length > 0 && items.every((item) => reachable.has(item.plant));
+}
+
+export async function getReservation(
+  client: string, number: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<ReservationView | null> {
   return withTenant(client, async (tx) => {
+    const actor = await reservationActor(tx, client, authorization);
     const [header] = await tx.select().from(reservationHeader).where(and(
       eq(reservationHeader.client, client), eq(reservationHeader.reservationNumber, number),
     ));
-    if (!header) return null;
+    if (!header || !(await reservationReachable(tx, client, actor, header.reservationNumber))) return null;
     return toView(tx, client, header);
   });
 }
@@ -163,7 +181,10 @@ export interface CreateReservationItemInput {
 
 export interface CreateReservationInput {
   client: string;
+  /** Recorded as the verified session user; the caller's value is not trusted. */
   changedBy: string;
+  /** The verified session. Every item's plant must be in the caller's Company Code (and Plant) scope. */
+  authorization: ServiceAuthorityContext | undefined;
   movementTypeCode: string;
   baseDate: string;
   costCenter?: string;
@@ -210,8 +231,16 @@ export async function createReservation(input: CreateReservationInput): Promise<
   }
 
   return withTenant(input.client, async (tx) => {
+    const actor = await reservationActor(tx, input.client, input.authorization);
+    input = { ...input, changedBy: actor.username };
+    const reachablePlants = new Set(await reachablePlantsInTx(tx, input.client, actor));
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
+    if (replay) {
+      if (!replay.items.every((item) => reachablePlants.has(item.plant))) {
+        throw new ReservationError('This request key is already in use.', 'Submit the reservation again with a new request key.');
+      }
+      return replay;
+    }
 
     await ensureMovements(tx, input.client, input.changedBy);
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/reservation`}, 0))`);
@@ -247,7 +276,8 @@ export async function createReservation(input: CreateReservationInput): Promise<
       const [plantRow] = await tx.select().from(plantTable).where(and(
         eq(plantTable.client, input.client), eq(plantTable.plant, item.plant),
       ));
-      if (!plantRow) throw new ReservationError(`Plant ${item.plant} does not exist.`);
+      // A plant outside the caller's reach answers as a plant that does not exist.
+      if (!plantRow || !reachablePlants.has(item.plant)) throw new ReservationError(`Plant ${item.plant} does not exist.`);
       if (!plantRow.companyCode) {
         throw new ReservationError(
           `Plant ${item.plant} carries no company code.`,
@@ -411,8 +441,16 @@ export interface WithdrawReservationInput {
  * It posts nothing itself — the issue document is the posting, and MB1A/MIGO does
  * not exist in this canon yet.
  */
-export async function withdrawReservation(input: WithdrawReservationInput): Promise<ReservationView> {
-  return withTenant(input.client, (tx) => withdrawReservationInTx(tx, input));
+export async function withdrawReservation(
+  input: WithdrawReservationInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<ReservationView> {
+  return withTenant(input.client, async (tx) => {
+    const actor = await reservationActor(tx, input.client, input.authorization);
+    if (!(await reservationReachable(tx, input.client, actor, input.reservationNumber))) {
+      throw new ReservationError(`Reservation ${input.reservationNumber} does not exist.`);
+    }
+    return withdrawReservationInTx(tx, { ...input, changedBy: actor.username });
+  });
 }
 
 /**
@@ -493,15 +531,20 @@ export async function withdrawReservationInTx(
 export async function completeReservationItem(input: {
   client: string;
   changedBy: string;
+  authorization: ServiceAuthorityContext | undefined;
   reservationNumber: string;
   itemNumber: number;
 }): Promise<ReservationView> {
   return withTenant(input.client, async (tx) => {
+    const actor = await reservationActor(tx, input.client, input.authorization);
+    input = { ...input, changedBy: actor.username };
     const [header] = await tx.select().from(reservationHeader).where(and(
       eq(reservationHeader.client, input.client),
       eq(reservationHeader.reservationNumber, input.reservationNumber),
     ));
-    if (!header) throw new ReservationError(`Reservation ${input.reservationNumber} does not exist.`);
+    if (!header || !(await reservationReachable(tx, input.client, actor, input.reservationNumber))) {
+      throw new ReservationError(`Reservation ${input.reservationNumber} does not exist.`);
+    }
     const [item] = await tx.select().from(reservationItem).where(and(
       eq(reservationItem.client, input.client),
       eq(reservationItem.reservationNumber, input.reservationNumber),

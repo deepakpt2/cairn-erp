@@ -40,3 +40,29 @@ export async function listWarehouseStocks(input: Opt<typeof warehouse>) {
 }
 export { StockOverviewError } from '../../src/modules/inventory/stock-overview';
 export { WarehouseStockError } from '../../src/modules/inventory/warehouse-stocks';
+
+import { refreshFinanceActorScopes } from './finance-actor';
+import {
+  completeReservationItem as completeItem, createReservation as createRes, getReservation as getRes, withdrawReservation as withdrawRes,
+} from '../../src/modules/inventory/reservations';
+
+async function reservationActor(client: string): Promise<FinanceActor> {
+  const key = `rsv:${client}`;
+  let a = actors.get(key);
+  if (!a) { a = createFinanceActor(client, { capabilities: ['INV.RESERVATION.CREATE'] }); actors.set(key, a); }
+  const resolved = await a;
+  await refreshFinanceActorScopes(client, resolved);
+  return resolved;
+}
+export async function createReservation(input: Opt<typeof createRes>) {
+  return createRes({ ...input, authorization: input.authorization ?? (await reservationActor(input.client)).authorization } as Parameters<typeof createRes>[0]);
+}
+export async function withdrawReservation(input: Opt<typeof withdrawRes>) {
+  return withdrawRes({ ...input, authorization: input.authorization ?? (await reservationActor(input.client)).authorization } as Parameters<typeof withdrawRes>[0]);
+}
+export async function completeReservationItem(input: Opt<typeof completeItem>) {
+  return completeItem({ ...input, authorization: input.authorization ?? (await reservationActor(input.client)).authorization } as Parameters<typeof completeItem>[0]);
+}
+export async function getReservation(client: string, number: string) {
+  return getRes(client, number, (await reservationActor(client)).authorization);
+}

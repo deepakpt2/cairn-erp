@@ -52,6 +52,7 @@ export async function createReservationAction(
     const created = await createReservation({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       movementTypeCode: text(form, 'movementTypeCode'),
       baseDate: text(form, 'baseDate'),
       costCenter: text(form, 'costCenter') || undefined,
@@ -83,6 +84,7 @@ export async function withdrawReservationAction(
     const view = await withdrawReservation({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       reservationNumber: text(form, 'reservationNumber'),
       itemNumber: Number(text(form, 'itemNumber')),
       quantity: Number(text(form, 'quantity')),
@@ -112,6 +114,7 @@ export async function completeItemAction(
     const view = await completeReservationItem({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       reservationNumber: text(form, 'reservationNumber'),
       itemNumber: Number(text(form, 'itemNumber')),
     });

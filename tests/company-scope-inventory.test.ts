@@ -11,6 +11,7 @@ import { withTenant } from '../src/platform/db/client';
 import { displayMaterialDocument } from '../src/modules/inventory/material-document-display';
 import { listMaterialDocuments } from '../src/modules/inventory/material-document-list';
 import { changeMaterialPrice, listFuturePrices } from '../src/modules/inventory/price-change';
+import { completeReservationItem, createReservation, getReservation, withdrawReservation } from '../src/modules/inventory/reservations';
 import { stockOverview } from '../src/modules/inventory/stock-overview';
 import { listWarehouseStocks } from '../src/modules/inventory/warehouse-stocks';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -80,6 +81,16 @@ beforeAll(async () => {
         select ${client}, 'SCM1', ${plant}, null, 'STANDARD', 5, c.currency, ${SEED}
           from company_code c where c.client = ${client} and c.company_code = ${A}`);
     }
+    await tx.execute(sql`insert into movement_type (client, movement_type, description, direction, reference_category, created_by)
+      values (${client}, 'RSV_ISSUE', 'Reservation issue', 'ISSUE', 'RESERVATION', ${SEED}) on conflict do nothing`);
+    for (const [number, plant] of [['RSV00000A', 'PLA1'], ['RSV00000B', 'PLB1'], ['RSV00000X', 'PLA1']] as const) {
+      await tx.execute(sql`insert into reservation_header (client, reservation_number, movement_type, base_date, created_by)
+        values (${client}, ${number}, 'RSV_ISSUE', '2026-04-05', ${SEED})`);
+      await tx.execute(sql`insert into reservation_item (client, reservation_number, item_number, material_number, plant, required_quantity, unit_of_measure, created_by)
+        values (${client}, ${number}, 1, 'SCM1', ${plant}, 10, 'PC', ${SEED})`);
+    }
+    await tx.execute(sql`insert into reservation_item (client, reservation_number, item_number, material_number, plant, required_quantity, unit_of_measure, created_by)
+      values (${client}, 'RSV00000X', 2, 'SCM1', 'PLB1', 10, 'PC', ${SEED})`);
     await line(DOC_A, 1, 'PLA1');
     await line(DOC_B, 1, 'PLB1');
     await line(DOC_X, 1, 'PLA1');
@@ -251,5 +262,73 @@ describe('price change', () => {
     expect(await plants(pricePlantA.authorization)).toEqual(['PLA1']);
     expect(await ask(listFuturePrices(client, undefined))).not.toBe('done');
     expect(await ask(listFuturePrices(client, priceNoScope.authorization))).not.toBe('done');
+  });
+});
+
+describe('reservations', () => {
+  let rA: FinanceActor;
+  let rB: FinanceActor;
+  let rBoth: FinanceActor;
+  let rNoScope: FinanceActor;
+  let rNoCap: FinanceActor;
+  let rOther: FinanceActor;
+  let rPlantA: FinanceActor;
+  const RSV = ['INV.RESERVATION.CREATE'];
+  const withdrawn = async (n: string) => withTenant(client, async (tx) => ((await tx.execute(sql`
+    select coalesce(sum(withdrawn_quantity), 0)::text as w from reservation_item where client = ${client} and reservation_number = ${n}`)) as unknown as Array<{ w: string }>)[0]!.w);
+  const withdraw = (a: FinanceActor['authorization'] | undefined, n: string) => withdrawReservation({
+    client, changedBy: 'FORGED', authorization: a, reservationNumber: n, itemNumber: 1, quantity: 1 });
+
+  beforeAll(async () => {
+    rA = await createFinanceActor(client, { capabilities: RSV, companyScopes: [A] });
+    rB = await createFinanceActor(client, { capabilities: RSV, companyScopes: [B] });
+    rBoth = await createFinanceActor(client, { capabilities: RSV, companyScopes: [A, B] });
+    rNoScope = await createFinanceActor(client, { capabilities: RSV, companyScopes: [] });
+    rNoCap = await createFinanceActor(client, { capabilities: ['FIN.JOURNAL.DISPLAY'], companyScopes: [A, B] });
+    rOther = await createFinanceActor(other.client, { capabilities: RSV });
+    rPlantA = await createFinanceActor(client, { capabilities: RSV, companyScopes: [A, B], plantScopes: ['PLA1'] });
+  });
+
+  it("shows a reservation only when every item's plant is reachable; others answer as missing", async () => {
+    expect((await getReservation(client, 'RSV00000A', rA.authorization))?.items).toHaveLength(1);
+    expect(await getReservation(client, 'RSV00000B', rA.authorization)).toBeNull();
+    expect(await getReservation(client, 'RSV00000X', rA.authorization)).toBeNull();
+    expect((await getReservation(client, 'RSV00000X', rBoth.authorization))?.items).toHaveLength(2);
+    expect(await getReservation(client, 'RSV00000B', rPlantA.authorization)).toBeNull();
+    expect(await getReservation(client, 'RSV99999', rA.authorization)).toBeNull();
+    for (const a of [undefined, rNoCap.authorization, rNoScope.authorization, rOther.authorization]) {
+      expect(await ask(getReservation(client, 'RSV00000A', a))).not.toBe('done');
+    }
+  });
+
+  it('withdraws and completes only inside the reach, recording the session user', async () => {
+    await withdraw(rA.authorization, 'RSV00000A');
+    expect(await withdrawn('RSV00000A')).toBe('1.000');
+    const by = await withTenant(client, async (tx) => ((await tx.execute(sql`select changed_by from reservation_item where client = ${client} and reservation_number = 'RSV00000A'`)) as unknown as Array<{ changed_by: string }>)[0]!.changed_by);
+    expect(by).toBe(rA.username);
+    const miss = await ask(withdraw(rA.authorization, 'RSV99999'));
+    for (const n of ['RSV00000B', 'RSV00000X']) expect((await ask(withdraw(rA.authorization, n))).replaceAll(n, '#')).toBe(miss.replaceAll('RSV99999', '#'));
+    expect(await ask(withdraw(rPlantA.authorization, 'RSV00000B'))).toMatch(/does not exist/);
+    expect(await withdrawn('RSV00000B')).toBe('0.000');
+    expect(await ask(completeReservationItem({ client, changedBy: 'x', authorization: rA.authorization, reservationNumber: 'RSV00000B', itemNumber: 1 }))).toMatch(/does not exist/);
+    for (const a of [undefined, rNoCap.authorization, rNoScope.authorization, rOther.authorization]) {
+      expect(await ask(withdraw(a, 'RSV00000A'))).not.toMatch(/^done$|does not exist/);
+    }
+    expect(await withdrawn('RSV00000A')).toBe('1.000');
+  });
+
+  it("refuses to create a reservation for another company's plant, as a plant that does not exist", async () => {
+    const create = (a: FinanceActor['authorization'] | undefined, plant: string) => createReservation({
+      client, changedBy: 'FORGED', authorization: a, movementTypeCode: '201', baseDate: '2026-04-05', costCenter: 'CC1000',
+      items: [{ materialNumber: 'SCM1', plant, requiredQuantity: 1 }], requestKey: `K-${plant}-${Math.random()}`,
+    });
+    const miss = await ask(create(rA.authorization, 'PLZ9'));
+    expect(miss).toMatch(/does not exist/);
+    expect((await ask(create(rA.authorization, 'PLB1'))).replaceAll('PLB1', '#')).toBe(miss.replaceAll('PLZ9', '#'));
+    expect((await ask(create(rPlantA.authorization, 'PLB1'))).replaceAll('PLB1', '#')).toBe(miss.replaceAll('PLZ9', '#'));
+    for (const a of [undefined, rNoCap.authorization, rNoScope.authorization, rOther.authorization]) {
+      expect(await ask(create(a, 'PLA1'))).not.toMatch(/^done$|does not exist/);
+    }
+    expect(await withTenant(client, async (tx) => Number(((await tx.execute(sql`select count(*)::int as n from reservation_header where client = ${client}`)) as unknown as Array<{ n: number }>)[0]!.n))).toBe(3);
   });
 });

@@ -92,3 +92,11 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Covered:** both writes and `listFuturePrices` need `INV.MATERIAL.PRICECHANGE` and a session; the named company must be in the Company Code scope; every line's plant must be reachable and belong to that company (otherwise "Plant X does not belong to company C", the same answer for a missing plant); `changed_by` is the session user; the check runs before the replay lookup. The future-price list shows reachable plants only. Tests: 5 more in `tests/company-scope-inventory.test.ts` (FUTURE path only; the CURRENT/PREVIOUS posting path is gated by the same function but not exercised adversarially).
 
 **Still not covered in inventory:** physical inventory, reservations, stock ageing/reconcile/shelf-life lists, batch reads, serial numbers, MIGO, return delivery.
+
+## Phase 5f — inventory: reservations
+
+**Found:** `createReservation`, `getReservation`, `withdrawReservation` and `completeReservationItem` had no session or scope check; `changedBy` came from the caller; the screen only checked the capability.
+
+**Covered:** all four need `INV.RESERVATION.CREATE` and a session. A reservation is reachable only if it has items and every item's plant is reachable; anything else answers as a missing reservation (`getReservation` returns null). Create refuses an unreachable plant as "does not exist"; a replayed request key whose reservation is not fully reachable is refused. The recorded user is the session user. `withdrawReservationInTx` is unchanged: it is only called by the goods issue, which verifies its own authority. Tests: 3 more in `tests/company-scope-inventory.test.ts` (reads and withdraw/complete on direct-insert fixtures; create covers the refusals only, the success path stays in `reservations.test.ts`).
+
+**Still not covered in inventory:** physical inventory, stock ageing/reconcile/shelf-life lists, batch reads, serial numbers, MIGO, return delivery.
