@@ -29,6 +29,7 @@ import { plant as plantTable, salesArea } from '../foundation/schema';
 import { material } from '../inventory/schema';
 import { billingDueList } from './billing';
 import { listDeliverableOrderLines } from './delivery';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import {
   billingDocument, delivery, salesDocumentType, salesOrder, salesOrderLine,
   salesReturnsConfiguration,
@@ -493,6 +494,7 @@ export async function listDocumentRegister(
 export async function listDueRegister(
   client: string,
   input: { kind: 'DELIVERY' | 'BILLING'; filter?: RegisterFilter },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<{
   kind: 'DELIVERY' | 'BILLING';
   rows: Array<Record<string, string | number | null>>;
@@ -505,7 +507,7 @@ export async function listDueRegister(
     // order's.
     const rows = await listDeliverableOrderLines(client, {
       ...filter, orderNumber: filter.orderNumber ?? filter.documentNumber,
-    });
+    }, authorization);
     return {
       kind: 'DELIVERY',
       rows: rows as unknown as Array<Record<string, string | number | null>>,

@@ -6,15 +6,14 @@ import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { listSerialNumbers, saveSerialNumber, serialsOfPick } from '../src/modules/inventory/serial-number';
-import {
-  confirmDeliveryPicks, createDelivery, listDeliverableOrderLines,
-} from '../src/modules/sales/delivery';
+import { createDelivery } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
   assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
+import { confirmDeliveryPicks, listDeliverableOrderLines } from './helpers/sales-authorized';
 
 /**
  * §5.5b — serial numbers.

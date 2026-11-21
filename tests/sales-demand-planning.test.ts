@@ -1,14 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { cancelSalesOrder, changeSalesOrder, getSalesOrder } from './helpers/sales-authorized';
+import { cancelSalesOrder, changeSalesOrder, getSalesOrder, cancelDelivery, confirmDeliveryPicks, getDelivery } from './helpers/sales-authorized';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
-import {
-  cancelDelivery, confirmDeliveryPicks, createDelivery, getDelivery, postDeliveryGoodsIssue,
-} from '../src/modules/sales/delivery';
+import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { planMaterials } from '../src/modules/production/mrp-run';

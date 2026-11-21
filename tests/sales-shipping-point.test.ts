@@ -46,14 +46,13 @@ import {
 } from '../src/modules/sales/shipping-point-maintenance';
 import { ShippingPointError, shippingPointFor } from '../src/modules/sales/shipping-point';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
-import {
-  createDelivery, getDelivery, listDeliverableOrderLines,
-} from '../src/modules/sales/delivery';
+import { createDelivery } from '../src/modules/sales/delivery';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
+import { getDelivery, listDeliverableOrderLines } from './helpers/sales-authorized';
 
 const ACTOR = 'SD9245_DOCK';
 const AREA = 'CA45';

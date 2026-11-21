@@ -42,7 +42,7 @@ import { saveAccountDetermination } from '../../modules/foundation/account-deter
 import { getReceivables, postIncomingPayment } from '../../modules/finance/incoming-payment';
 import { postBillingDocument } from '../../modules/sales/billing';
 import {
-  confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines,
+  confirmDeliveryPicks, createDelivery, getDeliveryForProvisioning as getDelivery, listDeliverableOrderLinesForProvisioning as listDeliverableOrderLines,
   postDeliveryGoodsIssue,
 } from '../../modules/sales/delivery';
 import { createSalesOrder } from '../../modules/sales/sales-order';
@@ -423,7 +423,7 @@ async function ensurePicks(
     .filter((line) => Number(line.quantity) > 0);
   if (remaining.length === 0) return false;
 
-  await withActingUser(client, clerk, () => (
+  await withActingUser(client, clerk, (actor) => (
     confirmDeliveryPicks({
       client,
       changedBy: clerk,
@@ -434,6 +434,7 @@ async function ensurePicks(
         ...line,
         storageLocation: STORAGE_LOCATION,
       })),
+      authorization: actor,
     })
   ));
   return true;

@@ -59,7 +59,7 @@ export default async function SalesDocumentsPage({ searchParams }: {
 
   const choices = await listRegisterChoices(client);
   const due = mode === 'due' && KINDS_WITH_A_DUE_LIST.includes(kind)
-    ? await listDueRegister(client, { kind: kind as 'DELIVERY' | 'BILLING', filter })
+    ? await listDueRegister(client, { kind: kind as 'DELIVERY' | 'BILLING', filter }, { userId: session.user.userId, sessionId: session.sessionId ?? '' })
     : null;
   const register = due ? null : await listDocumentRegister(client, { kind, filter });
 

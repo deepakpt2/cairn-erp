@@ -13,7 +13,7 @@ import {
 } from '@/modules/sales/credit-memo';
 import {
   DELIVERY_CAPABILITY, DELIVERY_GOODS_ISSUE_CAPABILITY, DELIVERY_PICK_CAPABILITY,
-  DELIVERY_ROUTE, listDeliverableOrderLines, listDeliveries,
+  DELIVERY_ROUTE, listDeliverableOrderLinesForAttention, listDeliveriesForAttention,
 } from '@/modules/sales/delivery';
 import {
   INCOMPLETION_PROCESS_CAPABILITY, INCOMPLETION_WORKLIST_ROUTE, listIncompleteDocuments,
@@ -304,7 +304,7 @@ const deliveriesToPick: AttentionSource = {
   code: DELIVERY_PICK_CAPABILITY,
   label: 'attention.source.pick',
   async due(who) {
-    const rows = await listDeliveries(who.client, { status: 'OPEN' });
+    const rows = await listDeliveriesForAttention(who.client, { status: 'OPEN' });
     return rows
       // A delivery credit has blocked is not waiting on the picker; it is waiting
       // on the credit controller, and it has its own queue below.
@@ -315,7 +315,7 @@ const deliveriesToPick: AttentionSource = {
         detail: t('attention.pickDetail', { customer: row.customerNumber, order: row.orderNumber }),
         href: deliveryHref(row.deliveryNumber),
         waitingSince: row.deliveryDate,
-        orgs: [{ plant: row.plant }],
+        orgs: [{ plant: row.plant, companyCode: row.companyCode, salesOrg: row.salesOrg, distributionChannel: row.distributionChannel, division: row.division }],
       }));
   },
 };
@@ -324,7 +324,7 @@ const deliveriesToIssue: AttentionSource = {
   code: DELIVERY_GOODS_ISSUE_CAPABILITY,
   label: 'attention.source.goodsIssue',
   async due(who) {
-    const rows = await listDeliveries(who.client, { status: 'PICKED' });
+    const rows = await listDeliveriesForAttention(who.client, { status: 'PICKED' });
     return rows
       .filter((row) => !row.blockedForCredit)
       .map((row) => ({
@@ -333,7 +333,7 @@ const deliveriesToIssue: AttentionSource = {
         detail: t('attention.issueDetail', { customer: row.customerNumber }),
         href: deliveryHref(row.deliveryNumber),
         waitingSince: row.deliveryDate,
-        orgs: [{ plant: row.plant }],
+        orgs: [{ plant: row.plant, companyCode: row.companyCode, salesOrg: row.salesOrg, distributionChannel: row.distributionChannel, division: row.division }],
       }));
   },
 };
@@ -343,8 +343,8 @@ const deliveriesHeldForCredit: AttentionSource = {
   label: 'attention.source.creditHeld',
   async due(who) {
     const [open, picked] = await Promise.all([
-      listDeliveries(who.client, { status: 'OPEN' }),
-      listDeliveries(who.client, { status: 'PICKED' }),
+      listDeliveriesForAttention(who.client, { status: 'OPEN' }),
+      listDeliveriesForAttention(who.client, { status: 'PICKED' }),
     ]);
     return [...open, ...picked]
       .filter((row) => row.blockedForCredit)
@@ -374,7 +374,7 @@ const deliveryDueList: AttentionSource = {
   code: DELIVERY_CAPABILITY,
   label: 'attention.source.deliver',
   async due(who) {
-    const rows = await listDeliverableOrderLines(who.client);
+    const rows = await listDeliverableOrderLinesForAttention(who.client);
     return rows.map((row) => ({
       source: DELIVERY_CAPABILITY,
       title: t('attention.noun.salesOrder', { number: row.orderNumber }),
@@ -385,7 +385,7 @@ const deliveryDueList: AttentionSource = {
       }),
       href: `${DELIVERY_ROUTE}?order=${encodeURIComponent(row.orderNumber)}`,
       waitingSince: row.requestedDeliveryDate ?? row.orderDate,
-      orgs: [{ plant: row.plant }],
+      orgs: [{ plant: row.plant, companyCode: row.companyCode, salesOrg: row.salesOrg, distributionChannel: row.distributionChannel, division: row.division }],
     }));
   },
 };

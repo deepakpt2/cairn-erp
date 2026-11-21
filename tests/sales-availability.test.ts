@@ -26,7 +26,7 @@
  * Every material here carries its own stock and its own promises, so a test is never a test of the
  * orders the tests before it left behind.
  */
-import { changeSalesOrder, getSalesOrder } from './helpers/sales-authorized';
+import { changeSalesOrder, getSalesOrder, confirmDeliveryPicks, getDelivery, listDeliverableOrderLines } from './helpers/sales-authorized';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -45,9 +45,7 @@ import { changeSalesDocumentType } from '../src/modules/sales/document-type-main
 import {
   SalesAvailabilityError, checkSalesOrderAvailability, simulateSalesOrderAvailability,
 } from '../src/modules/sales/availability-check';
-import {
-  confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, postDeliveryGoodsIssue,
-} from '../src/modules/sales/delivery';
+import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,

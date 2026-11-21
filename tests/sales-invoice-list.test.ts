@@ -24,19 +24,14 @@ const listInvoiceLists = async (client: string, selection: Parameters<typeof lis
   listInvoiceListsRaw(client, selection, await financeAuth(client));
 const getInvoiceList = async (client: string, number: string) => getInvoiceListRaw(client, number, await financeAuth(client));
 import { saveSalesCondition } from '../src/modules/sales/conditions';
-import {
-  confirmDeliveryPicks,
-  createDelivery,
-  getDelivery,
-  listDeliverableOrderLines,
-  postDeliveryGoodsIssue,
-} from '../src/modules/sales/delivery';
+import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
+import { confirmDeliveryPicks, getDelivery, listDeliverableOrderLines } from './helpers/sales-authorized';
 
 /**
  * §4.6 — the customer's invoice: invoice lists (audit gap G2, second half).

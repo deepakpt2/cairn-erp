@@ -12,6 +12,9 @@ import {
   changeQuotation, createOrderFromQuotation, getQuotation, listQuotations, rejectQuotation,
 } from '../src/modules/sales/quotation';
 import {
+  cancelDelivery, confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, listDeliveries,
+} from '../src/modules/sales/delivery';
+import {
   cancelSalesOrder, changeSalesOrder, getSalesOrder, listSalesOrderDocuments, releaseSalesOrderCredit, salesOrderChoices,
 } from '../src/modules/sales/sales-order';
 import { assignSalesAreaDimensions, closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -20,7 +23,7 @@ import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 const A = '1000';
 const B = '2000';
 const SEED = 'SCOPE_SALES_SEED';
-const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE'];
+const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST'];
 const SO_A = 'SOA0000001';
 const SO_B = 'SOB0000001';
 const SO_D2 = 'SOD0000002';
@@ -29,6 +32,10 @@ const QA = 'QTA0000001';
 const QB = 'QTB0000001';
 const QD2 = 'QTD0000002';
 const QGONE = 'QTZ9999999';
+const DA = 'DLA0000001';
+const DB = 'DLB0000001';
+const DD2 = 'DLD0000002';
+const DGONE = 'DLZ9999999';
 
 let tenant: TestTenant;
 let other: TestTenant;
@@ -84,6 +91,8 @@ beforeAll(async () => {
         values (${client}, ${no}, ${org}, '10', ${div}, 'CUSTSC1', ${company}, 'USD', '2026-04-05', ${SEED})`);
       await tx.execute(sql`insert into sales_order_line (client, order_number, line_number, material_number, plant, order_quantity, quantity_unit, base_quantity, condition_number, created_by)
         values (${client}, ${no}, 10, 'SCSM1', ${plant}, 1, 'UNT', 1, 'COND', ${SEED})`);
+      await tx.execute(sql`insert into sales_order_line (client, order_number, line_number, material_number, plant, order_quantity, quantity_unit, base_quantity, condition_number, created_by)
+        values (${client}, ${no}, 20, 'SCSM1', ${plant}, 1, 'UNT', 1, 'COND', ${SEED})`);
     }
   });
   await withTenant(client, async (tx) => {
@@ -97,11 +106,24 @@ beforeAll(async () => {
         values (${client}, ${no}, 10, 'SCSM1', ${plant}, 1, 'UNT', 1, 'COND', ${SEED})`);
     }
   });
+  await withTenant(client, async (tx) => {
+    const deliveries: Array<[string, string, string, string, string, string]> = [
+      [DA, SO_A, '1000', '01', A, 'PSA1'], [DB, SO_B, '2000', '01', B, 'PSB1'], [DD2, SO_D2, '1000', '02', A, 'PSA1'],
+    ];
+    for (const [no, order, org, div, company, plant] of deliveries) {
+      await tx.execute(sql`insert into delivery (client, delivery_number, order_number, sales_org, distribution_channel, division, customer_number, company_code, plant, delivery_date, created_by)
+        values (${client}, ${no}, ${order}, ${org}, '10', ${div}, 'CUSTSC1', ${company}, ${plant}, '2026-04-06', ${SEED})`);
+      await tx.execute(sql`insert into delivery_line (client, delivery_number, line_number, order_number, order_line_number, material_number, plant, quantity_unit, ordered_quantity, delivery_quantity, remaining_quantity, created_by)
+        values (${client}, ${no}, 10, ${order}, 10, 'SCSM1', ${plant}, 'UNT', 1, 1, 0, ${SEED})`);
+    }
+  });
   actors.A = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A], plantScopes: [] });
   actors.B = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [B], plantScopes: [] });
   actors.both = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B], plantScopes: [] });
   actors.org1000 = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B], plantScopes: [] });
   await addScopes(actors.org1000, [['SALES_ORG', '1000']]);
+  actors.org1000p = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B], plantScopes: ['PSA1', 'PSB1'] });
+  await addScopes(actors.org1000p, [['SALES_ORG', '1000']]);
   actors.div01 = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B], plantScopes: [] });
   await addScopes(actors.div01, [['DIVISION', '01']]);
   actors.plantA = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B], plantScopes: ['PSA1'] });
@@ -180,8 +202,14 @@ describe('sales orders', () => {
   });
 
   it('cancels an order inside the reach and records the session user, not the supplied name', async () => {
-    await cancelSalesOrder({ client, changedBy: 'FORGED', orderNumber: SO_D2, expectedVersion: 1, authorization: auth('A') });
-    const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from sales_order where client = ${client} and order_number = ${SO_D2}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`insert into sales_order (client, order_number, sales_org, distribution_channel, division, customer_number, company_code, currency, order_date, created_by)
+        values (${client}, 'SOE0000005', '1000', '10', '01', 'CUSTSC1', ${A}, 'USD', '2026-04-05', ${SEED})`);
+      await tx.execute(sql`insert into sales_order_line (client, order_number, line_number, material_number, plant, order_quantity, quantity_unit, base_quantity, condition_number, created_by)
+        values (${client}, 'SOE0000005', 10, 'SCSM1', 'PSA1', 1, 'UNT', 1, 'COND', ${SEED})`);
+    });
+    await cancelSalesOrder({ client, changedBy: 'FORGED', orderNumber: 'SOE0000005', expectedVersion: 1, authorization: auth('A') });
+    const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from sales_order where client = ${client} and order_number = 'SOE0000005'`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
     expect(row.status).toBe('CANCELLED');
     expect(row.changed_by).toBe(actors.A!.username);
   });
@@ -232,13 +260,77 @@ describe('sales quotations', () => {
     const state = await withTenant(client, async (tx) => (await tx.execute(sql`select status, version from sales_quotation where client = ${client}`)) as unknown as Array<{ status: string; version: number }>);
     expect(state.every((r) => r.status === 'OPEN' && r.version === 1)).toBe(true);
     const orders = await withTenant(client, async (tx) => (await tx.execute(sql`select count(*)::int as n from sales_order where client = ${client}`)) as unknown as Array<{ n: number }>);
-    expect(orders[0]!.n).toBe(3);
+    expect(orders[0]!.n).toBe(4); // the three fixtures and the one the order-cancel test inserted
   });
 
   it('rejects a quotation inside the reach and records the session user, not the supplied name', async () => {
     await reject(auth('A'), QD2);
     const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from sales_quotation where client = ${client} and quotation_number = ${QD2}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
     expect(row.status).toBe('REJECTED');
+    expect(row.changed_by).toBe(actors.A!.username);
+  });
+});
+
+describe('deliveries', () => {
+  const numbers = (rows: Array<{ deliveryNumber: string }>) => rows.map((r) => r.deliveryNumber).sort();
+  const pick = (a: FinanceActor['authorization'] | undefined, n: string) => confirmDeliveryPicks({
+    client, changedBy: 'FORGED', deliveryNumber: n, expectedVersion: 1,
+    items: [{ lineNumber: 10, quantity: '1', storageLocation: 'SL01' }], authorization: a } as never);
+  const cancel = (a: FinanceActor['authorization'] | undefined, n: string) => cancelDelivery({
+    client, changedBy: 'FORGED', deliveryNumber: n, expectedVersion: 1, authorization: a });
+
+  it('reads and lists a delivery only inside company, sales area and plant reach', async () => {
+    expect((await getDelivery(client, DA, auth('A')))?.deliveryNumber).toBe(DA);
+    expect(await getDelivery(client, DB, auth('A'))).toBeNull();
+    expect(await getDelivery(client, DGONE, auth('A'))).toBeNull();
+    expect(await getDelivery(client, DD2, auth('div01'))).toBeNull();
+    expect(await getDelivery(client, DB, auth('org1000'))).toBeNull();
+    expect(await getDelivery(client, DB, auth('plantA'))).toBeNull();
+    expect(numbers(await listDeliveries(client, {}, auth('A')))).toEqual([DA, DD2].sort());
+    expect(numbers(await listDeliveries(client, {}, auth('both')))).toEqual([DA, DB, DD2].sort());
+    expect(numbers(await listDeliveries(client, {}, auth('div01')))).toEqual([DA, DB].sort());
+    expect(numbers(await listDeliveries(client, {}, auth('plantA')))).toEqual([DA, DD2].sort());
+    const lines = (a: string) => listDeliverableOrderLines(client, {}, auth(a)).then((r) => r.map((l) => l.orderNumber).sort());
+    expect(await lines('A')).toEqual([SO_A, SO_D2].sort());
+    expect(await lines('org1000')).toEqual([SO_A, SO_D2].sort());
+    expect(await lines('div01')).toEqual([SO_A, SO_B].sort());
+    expect(await lines('plantA')).toEqual([SO_A, SO_D2].sort());
+  });
+
+  it('refuses no session, no capability, no scope and another tenant', async () => {
+    expect(await ask(getDelivery(client, DA, undefined))).not.toBe('done');
+    expect(await ask(listDeliveries(client, {}, undefined))).not.toBe('done');
+    expect(await ask(listDeliverableOrderLines(client, {}, undefined))).not.toBe('done');
+    for (const k of denied) {
+      expect(await ask(getDelivery(client, DA, auth(k)))).not.toBe('done');
+      expect(await ask(listDeliveries(client, {}, auth(k)))).not.toBe('done');
+      expect(await ask(listDeliverableOrderLines(client, {}, auth(k)))).not.toBe('done');
+      expect(await ask(pick(auth(k), DA))).not.toMatch(/^done$|does not exist/);
+      expect(await ask(cancel(auth(k), DA))).not.toMatch(/^done$|does not exist/);
+    }
+  });
+
+  it('answers pick, cancel and creation against an out-of-reach delivery or order as a missing one and writes nothing', async () => {
+    const miss = await ask(cancel(auth('A'), DGONE));
+    expect(miss).toMatch(/does not exist/);
+    for (const [who, n] of [['A', DB], ['div01', DD2], ['plantA', DB], ['org1000', DB]] as const) {
+      expect((await ask(cancel(auth(who), n))).replaceAll(n, '#')).toBe(miss.replaceAll(DGONE, '#'));
+      expect((await ask(pick(auth(who), n))).replaceAll(n, '#')).toBe(miss.replaceAll(DGONE, '#'));
+    }
+    expect(await ask(createDelivery({
+      client, changedBy: 'FORGED', orderNumber: SO_B, deliveryDate: '2026-04-07', goodsMovementDate: '2026-04-07',
+      items: [{ orderLineNumber: 10, quantity: '1' }], requestKey: 'SCOPE-DB',
+    } as never, { authorization: auth('org1000p') }))).toMatch(/does not exist/);
+    const state = await withTenant(client, async (tx) => (await tx.execute(sql`select status, version from delivery where client = ${client}`)) as unknown as Array<{ status: string; version: number }>);
+    expect(state.every((r) => r.status === 'OPEN' && r.version === 1)).toBe(true);
+    const count = await withTenant(client, async (tx) => (await tx.execute(sql`select count(*)::int as n from delivery where client = ${client}`)) as unknown as Array<{ n: number }>);
+    expect(count[0]!.n).toBe(3);
+  });
+
+  it('cancels a delivery inside the reach and records the session user, not the supplied name', async () => {
+    await cancel(auth('A'), DD2);
+    const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from delivery where client = ${client} and delivery_number = ${DD2}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
+    expect(row.status).toBe('CANCELLED');
     expect(row.changed_by).toBe(actors.A!.username);
   });
 });

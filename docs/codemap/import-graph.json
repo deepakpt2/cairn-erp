@@ -8673,8 +8673,10 @@
     "modules/sales/partners.ts",
     "modules/sales/sales-demand.ts",
     "modules/sales/sales-order.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
     "modules/sales/shipping-point.ts",
+    "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
@@ -8837,6 +8839,7 @@
     "modules/sales/billing.ts",
     "modules/sales/delivery.ts",
     "modules/sales/schema.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/sales/report-exports.ts": [

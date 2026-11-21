@@ -141,3 +141,14 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** `createQuotation` still records the caller-supplied `changedBy` (the screen passes the session user); not browser-tested. `createOrderFromQuotation` creates the order through `createSalesOrder`, whose own gate applies.
 
 **Still not covered in sales:** deliveries (reads, picks, cancel), billing remainder, returns, rebates, down payments, conditions, analysis/registers, shipping point, credit-control area.
+
+## Phase 6c — sales area: deliveries (VL01N/VL02N/VL03N, picking, goods issue)
+
+**Found:** `getDelivery`, `listDeliveries`, `listDeliverableOrderLines`, `confirmDeliveryPicks` and `cancelDelivery` checked no session, capability or scope, and recorded a caller-supplied `changedBy`. `createDelivery` and `postDeliveryGoodsIssue` held company and plant authority only: sales org, channel and division were not checked, and creation did not hide an order outside the reach. `registers.listDueRegister` (delivery due list) read the same unscoped list. The attention panel listed every company's deliveries.
+
+**Covered:** reads, lists, pick, cancel and goods issue judge inside their own transaction before any read (session, a live delivery capability, explicit Company Code scope). A delivery is reachable when its company, sales area and every plant (header and items) are inside the actor's reach; otherwise it answers as a missing delivery, with the same message as a nonexistent number. `createDelivery` answers an out-of-reach order, in any item, as a missing order. Pick and cancel record the session user. `listDueRegister` takes the session. The attention panel keeps an unscoped feed (`listDeliveriesForAttention`, `listDeliverableOrderLinesForAttention`) whose rows now carry company, sales area and plant, so its existing filter by the viewer's scope covers all of them. Demo and walkthrough seeding use `*ForProvisioning` readers.
+- Tests: 4 more in `tests/company-scope-sales.test.ts`; the delivery-related suites use `tests/helpers/sales-authorized.ts`.
+
+**Limits:** the attention filter applies the viewer's *grant* scope and `auth_org_restriction`; I did not test it with a restricted viewer. `standingDetermination` and billing's use of it are unchanged. Returns deliveries are readable through `getDelivery` with the returns capability but are not otherwise reviewed here. Not browser-tested.
+
+**Still not covered in sales:** billing remainder, returns, rebates, down payments, conditions, analysis/registers (document register), shipping point, credit-control area.

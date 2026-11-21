@@ -63,6 +63,8 @@ export const DELIVERY_GOODS_ISSUE_MOVEMENT = '601';
 import {
   type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
 } from '../../platform/auth/service-authority';
+import { plantsAllow } from '../../platform/auth/scope-actor';
+import { salesActor, salesAreaReachable, salesDocumentReachable } from './sales-scope';
 
 export class DeliveryError extends Error {
   remedy?: string;
@@ -144,9 +146,9 @@ export const deliveryCancelInput = z.object({
 });
 
 export type DeliveryCreateInput = z.infer<typeof deliveryCreateInput>;
-export type DeliveryPickInput = z.infer<typeof deliveryPickInput>;
+export type DeliveryPickInput = z.infer<typeof deliveryPickInput> & { authorization: ServiceAuthorityContext | undefined };
 export type DeliveryIssueInput = z.infer<typeof deliveryIssueInput>;
-export type DeliveryCancelInput = z.infer<typeof deliveryCancelInput>;
+export type DeliveryCancelInput = z.infer<typeof deliveryCancelInput> & { authorization: ServiceAuthorityContext | undefined };
 
 const round3 = (value: number) => (Math.round((value + Number.EPSILON) * 1000) / 1000).toFixed(3);
 const round2 = (value: number) => (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
@@ -396,7 +398,60 @@ async function loadDelivery(tx: Tx, client: string, deliveryNumber: string): Pro
   };
 }
 
-export async function getDelivery(client: string, deliveryNumber: string): Promise<DeliveryView | null> {
+/** Any of the delivery capabilities opens the read: the picker, the shipper and the clerk work the same documents. */
+const DELIVERY_ACCESS_CAPABILITIES = [
+  DELIVERY_CAPABILITY, DELIVERY_PICK_CAPABILITY, DELIVERY_GOODS_ISSUE_CAPABILITY,
+  'SALES.RETURNS.DELIVERY.CREATE', // a returns delivery is read through the same document
+] as const;
+
+function deliveryActor(tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined) {
+  return salesActor(tx, client, authorization, DELIVERY_ACCESS_CAPABILITIES, (m, r) => new DeliveryError(m, r));
+}
+
+/** The delivery's company, sales area and every plant it ships from are inside the actor's reach. */
+async function deliveryInReach(
+  tx: Tx, client: string, actor: Awaited<ReturnType<typeof deliveryActor>>, deliveryNumber: string,
+): Promise<boolean> {
+  const [header] = await tx.select({
+    companyCode: delivery.companyCode, salesOrg: delivery.salesOrg, distributionChannel: delivery.distributionChannel,
+    division: delivery.division, plant: delivery.plant,
+  }).from(delivery).where(and(eq(delivery.client, client), eq(delivery.deliveryNumber, deliveryNumber))).limit(1);
+  if (!header) return false;
+  const lines = await tx.select({ plant: deliveryLine.plant }).from(deliveryLine)
+    .where(and(eq(deliveryLine.client, client), eq(deliveryLine.deliveryNumber, deliveryNumber)));
+  return salesDocumentReachable(actor, { ...header, plants: [header.plant, ...lines.map((l) => l.plant)] });
+}
+
+function deliveryMissing(deliveryNumber: string) {
+  return new DeliveryError(`Delivery ${deliveryNumber} does not exist.`);
+}
+
+/** Session, the named capability, explicit Company Code scope, then the reach of this delivery; a missing or out-of-reach one is the same refusal. */
+async function requireDeliveryInReach(
+  client: string, deliveryNumber: string, authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[],
+): Promise<string> {
+  return withTenant(client, async (tx) => {
+    const actor = await salesActor(tx, client, authorization, capabilities, (m, r) => new DeliveryError(m, r));
+    if (!(await deliveryInReach(tx, client, actor, deliveryNumber))) throw deliveryMissing(deliveryNumber);
+    return actor.username;
+  });
+}
+
+/** Read one delivery. Outside the actor's company, sales area or plant reach it is absent, as a missing one. */
+export async function getDelivery(
+  client: string, deliveryNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<DeliveryView | null> {
+  const trimmed = deliveryNumber.trim().toUpperCase();
+  const reachable = await withTenant(client, async (tx) => {
+    const actor = await deliveryActor(tx, client, authorization);
+    return deliveryInReach(tx, client, actor, trimmed);
+  });
+  return reachable ? getDeliveryForProvisioning(client, trimmed) : null;
+}
+
+/** Seeding, walkthroughs and the service's own read-back: no session, no scope. Never imported from `src/app`. */
+export async function getDeliveryForProvisioning(client: string, deliveryNumber: string): Promise<DeliveryView | null> {
   const trimmed = deliveryNumber.trim().toUpperCase();
   const document = await withTenant(client, (tx) => loadDelivery(tx, client, trimmed));
   if (!document) return null;
@@ -408,13 +463,11 @@ export async function getDelivery(client: string, deliveryNumber: string): Promi
  * gone out and what is left. A cancelled order, a rejected item and a fully delivered line are absent, because
  * none of them can answer a delivery.
  */
-export async function listDeliverableOrderLines(
-  client: string,
-  filter: {
-    orderNumber?: string; customerNumber?: string; materialNumber?: string;
-    salesOrg?: string; plant?: string; dateFrom?: string; dateTo?: string;
-  } = {},
-): Promise<Array<{
+type DeliverableFilter = {
+  orderNumber?: string; customerNumber?: string; materialNumber?: string;
+  salesOrg?: string; plant?: string; dateFrom?: string; dateTo?: string;
+};
+export interface DeliverableLine {
   orderNumber: string;
   lineNumber: number;
   customerNumber: string;
@@ -428,10 +481,35 @@ export async function listDeliverableOrderLines(
   remainingQuantity: string;
   /** What the check confirmed against the line; null on a line that was never checked. */
   confirmedQuantity: string | null;
-}>> {
+  companyCode: string; salesOrg: string; distributionChannel: string; division: string;
+}
+
+export async function listDeliverableOrderLines(
+  client: string, filter: DeliverableFilter = {}, authorization: ServiceAuthorityContext | undefined,
+): Promise<DeliverableLine[]> {
+  return deliverableLines(client, filter, { authorization });
+}
+
+/** The attention panel's read: no session; rows carry company, sales area and plant and the panel filters by the viewer's scope. Never import from `src/app`. */
+export async function listDeliverableOrderLinesForAttention(client: string): Promise<DeliverableLine[]> {
+  return deliverableLines(client, {}, 'ALL');
+}
+
+/** Seeding and walkthroughs only: no session, no scope. Never imported from `src/app`. */
+export async function listDeliverableOrderLinesForProvisioning(
+  client: string, filter: DeliverableFilter = {},
+): Promise<DeliverableLine[]> {
+  return deliverableLines(client, filter, 'ALL');
+}
+
+async function deliverableLines(
+  client: string, filter: DeliverableFilter, scope: 'ALL' | { authorization: ServiceAuthorityContext | undefined },
+): Promise<DeliverableLine[]> {
   return withTenant(client, async (tx) => {
+    const actor = scope === 'ALL' ? null : await deliveryActor(tx, client, scope.authorization);
     const rows = await tx.execute(sql`
-      select o.order_number, o.customer_number, o.order_date, l.line_number, l.material_number, l.plant,
+      select o.company_code, o.sales_org, o.distribution_channel, o.division,
+             o.order_number, o.customer_number, o.order_date, l.line_number, l.material_number, l.plant,
              l.quantity_unit, l.requested_delivery_date, l.order_quantity, l.confirmed_quantity,
              coalesce(d.delivered, 0)::text as delivered
         from sales_order_line l
@@ -485,13 +563,16 @@ export async function listDeliverableOrderLines(
          and (${filter.dateFrom || null}::text is null or o.order_date >= ${filter.dateFrom || null})
          and (${filter.dateTo || null}::text is null or o.order_date <= ${filter.dateTo || null})
        order by o.order_number, l.line_number
-       limit 200
     `) as unknown as Array<{
+      company_code: string; sales_org: string; distribution_channel: string; division: string;
       order_number: string; customer_number: string; order_date: string; line_number: number;
       material_number: string; plant: string; quantity_unit: string; requested_delivery_date: string | null;
       order_quantity: string; confirmed_quantity: string | null; delivered: string;
     }>;
-    return rows.map((row) => {
+    return rows.filter((row) => !actor || salesDocumentReachable(actor, {
+      companyCode: row.company_code, salesOrg: row.sales_org, distributionChannel: row.distribution_channel,
+      division: row.division, plants: [row.plant],
+    })).slice(0, 200).map((row) => {
       const ordered = Number(row.order_quantity);
       const delivered = Number(row.delivered);
       const confirmed = row.confirmed_quantity === null ? null : Number(row.confirmed_quantity);
@@ -508,26 +589,52 @@ export async function listDeliverableOrderLines(
         deliveredQuantity: round3(delivered),
         remainingQuantity: round3(Math.max(0, Math.min(ordered, confirmed ?? ordered) - delivered)),
         confirmedQuantity: row.confirmed_quantity,
+        companyCode: row.company_code, salesOrg: row.sales_org,
+        distributionChannel: row.distribution_channel, division: row.division,
       };
     });
   });
 }
 
-export async function listDeliveries(
-  client: string,
-  filter: { orderNumber?: string; status?: string; deliveryNumber?: string } = {},
-): Promise<Array<{
+export interface DeliveryListRow {
   deliveryNumber: string; orderNumber: string; customerNumber: string; plant: string;
   deliveryDate: string; status: string; materialDocumentNumber: string | null; value: string; version: number;
   blockedForCredit: boolean;
-}>> {
+  companyCode: string; salesOrg: string; distributionChannel: string; division: string;
+}
+type DeliveryFilter = { orderNumber?: string; status?: string; deliveryNumber?: string };
+
+export async function listDeliveries(
+  client: string,
+  filter: DeliveryFilter = {},
+  authorization: ServiceAuthorityContext | undefined,
+): Promise<DeliveryListRow[]> {
+  return listDeliveriesIn(client, filter, { authorization });
+}
+
+/** The attention panel's read: no session; rows carry company, sales area and plant and the panel filters by the viewer's scope. Never import from `src/app`. */
+export async function listDeliveriesForAttention(client: string, filter: DeliveryFilter = {}): Promise<DeliveryListRow[]> {
+  return listDeliveriesIn(client, filter, 'ALL');
+}
+
+async function listDeliveriesIn(
+  client: string, filter: DeliveryFilter, scope: 'ALL' | { authorization: ServiceAuthorityContext | undefined },
+): Promise<DeliveryListRow[]> {
   return withTenant(client, async (tx) => {
-    const rows = await tx.select().from(delivery).where(and(
+    const actor = scope === 'ALL' ? null : await deliveryActor(tx, client, scope.authorization);
+    const candidates = await tx.select().from(delivery).where(and(
       eq(delivery.client, client),
       filter.orderNumber ? eq(delivery.orderNumber, filter.orderNumber) : undefined,
       filter.deliveryNumber ? eq(delivery.deliveryNumber, filter.deliveryNumber) : undefined,
       filter.status ? eq(delivery.status, filter.status) : undefined,
-    )).orderBy(asc(delivery.deliveryNumber)).limit(200);
+    )).orderBy(asc(delivery.deliveryNumber));
+    const plantRows = await tx.select({ n: deliveryLine.deliveryNumber, plant: deliveryLine.plant })
+      .from(deliveryLine).where(eq(deliveryLine.client, client));
+    const plantsOf = new Map<string, string[]>();
+    for (const r of plantRows) plantsOf.set(r.n, [...(plantsOf.get(r.n) ?? []), r.plant]);
+    const rows = candidates.filter((d) => !actor || salesDocumentReachable(actor, {
+      ...d, plants: [d.plant, ...(plantsOf.get(d.deliveryNumber) ?? [])],
+    })).slice(0, 200);
     const blocked = new Set<string>();
     if (rows.length) {
       const determinations = await tx.execute(sql`
@@ -542,11 +649,7 @@ export async function listDeliveries(
       `);
       for (const row of determinations as unknown as Array<{ sales_document: string }>) blocked.add(row.sales_document);
     }
-    const out: Array<{
-      deliveryNumber: string; orderNumber: string; customerNumber: string; plant: string;
-      deliveryDate: string; status: string; materialDocumentNumber: string | null; value: string; version: number;
-      blockedForCredit: boolean;
-    }> = [];
+    const out: DeliveryListRow[] = [];
     for (const row of rows) {
       out.push({
         deliveryNumber: row.deliveryNumber,
@@ -559,6 +662,8 @@ export async function listDeliveries(
         value: await deliveryValue(tx, client, row.deliveryNumber),
         version: row.version,
         blockedForCredit: blocked.has(row.deliveryNumber),
+        companyCode: row.companyCode, salesOrg: row.salesOrg,
+        distributionChannel: row.distributionChannel, division: row.division,
       });
     }
     return out;
@@ -621,6 +726,12 @@ export async function createDelivery(
         'Create the order at /sales/orders first.',
       );
     }
+    if (!salesDocumentReachable(authority, order)) {
+      throw new DeliveryError(
+        `Sales order ${parsed.orderNumber} does not exist in this tenant.`,
+        'Create the order at /sales/orders first.',
+      );
+    }
     if (order.status !== 'OPEN') {
       throw new DeliveryError(
         `Sales order ${parsed.orderNumber} stands ${order.status}; a ${order.status.toLowerCase()} order delivers nothing.`,
@@ -645,6 +756,12 @@ export async function createDelivery(
         eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, orderNumber),
       )).limit(1);
       if (!row) {
+        throw new DeliveryError(
+          `Sales order ${orderNumber} does not exist in this tenant.`,
+          'Create the order at /sales/orders first.',
+        );
+      }
+      if (!salesDocumentReachable(authority, row)) {
         throw new DeliveryError(
           `Sales order ${orderNumber} does not exist in this tenant.`,
           'Create the order at /sales/orders first.',
@@ -1069,7 +1186,7 @@ export async function createDelivery(
     return { deliveryNumber: number, replayed: false, order, creditArea, value: round2(value) };
   });
 
-  const view = await getDelivery(parsed.client, created.deliveryNumber);
+  const view = await getDeliveryForProvisioning(parsed.client, created.deliveryNumber);
   if (!view) throw new DeliveryError(`Delivery ${created.deliveryNumber} could not be read back.`);
 
   // The delivery is its own credit-relevant document: it enters the blocked worklist under its own number,
@@ -1097,6 +1214,7 @@ export async function createDelivery(
  */
 export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<DeliveryView> {
   const parsed = deliveryPickInput.parse(input);
+  parsed.changedBy = await requireDeliveryInReach(parsed.client, parsed.deliveryNumber, input.authorization, [DELIVERY_PICK_CAPABILITY]);
   // The pick is the act that readies a posting, so a block standing against the delivery stops it here and not
   // only at the movement: §14.8 counts picking among the points a blocked document must not pass.
   await refuseStandingBlock(parsed.client, parsed.deliveryNumber, `Delivery ${parsed.deliveryNumber}`, 'picked');
@@ -1352,7 +1470,7 @@ export async function confirmDeliveryPicks(input: DeliveryPickInput): Promise<De
     });
   });
 
-  const view = await getDelivery(parsed.client, parsed.deliveryNumber);
+  const view = await getDeliveryForProvisioning(parsed.client, parsed.deliveryNumber);
   if (!view) throw new DeliveryError(`Delivery ${parsed.deliveryNumber} could not be read back.`);
   return view;
 }
@@ -1415,6 +1533,7 @@ export async function postDeliveryGoodsIssue(
   options: { authorization?: ServiceAuthorityContext } = {},
 ): Promise<DeliveryGoodsIssueResult> {
   const parsed = deliveryIssueInput.parse(input);
+  await requireDeliveryInReach(parsed.client, parsed.deliveryNumber, options.authorization, [DELIVERY_GOODS_ISSUE_CAPABILITY]);
   await refuseStandingBlock(parsed.client, parsed.deliveryNumber, `Delivery ${parsed.deliveryNumber}`, 'issued');
   const posted = await withTenant(parsed.client, async (tx) => {
     const [header] = await tx.select().from(delivery).where(and(
@@ -1611,7 +1730,7 @@ export async function postDeliveryGoodsIssue(
     return { issue, header };
   });
 
-  const view = await getDelivery(parsed.client, parsed.deliveryNumber);
+  const view = await getDeliveryForProvisioning(parsed.client, parsed.deliveryNumber);
   if (!view) throw new DeliveryError(`Delivery ${parsed.deliveryNumber} could not be read back.`);
 
   // The goods issue is the second check point §14.8 names. A breach it causes blocks the *receivable*: the
@@ -1654,6 +1773,7 @@ export async function postDeliveryGoodsIssue(
  */
 export async function cancelDelivery(input: DeliveryCancelInput): Promise<DeliveryView> {
   const parsed = deliveryCancelInput.parse(input);
+  parsed.changedBy = await requireDeliveryInReach(parsed.client, parsed.deliveryNumber, input.authorization, [DELIVERY_CAPABILITY]);
   await withTenant(parsed.client, async (tx) => {
     const [header] = await tx.select().from(delivery).where(and(
       eq(delivery.client, parsed.client), eq(delivery.deliveryNumber, parsed.deliveryNumber),
@@ -1699,7 +1819,7 @@ export async function cancelDelivery(input: DeliveryCancelInput): Promise<Delive
       fieldLabels: { reason: 'Cancellation reason' },
     });
   });
-  const view = await getDelivery(parsed.client, parsed.deliveryNumber);
+  const view = await getDeliveryForProvisioning(parsed.client, parsed.deliveryNumber);
   if (!view) throw new DeliveryError(`Delivery ${parsed.deliveryNumber} could not be read back.`);
   return view;
 }

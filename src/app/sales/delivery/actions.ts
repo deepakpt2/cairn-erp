@@ -152,6 +152,7 @@ export async function confirmPicksAction(
       expectedVersion: Number(text(form, 'expectedVersion') || '0'),
       items,
       requestKey: text(form, 'pickRequestKey') || `PK-${session.user.username}-${Date.now()}`,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {
@@ -219,6 +220,7 @@ export async function cancelDeliveryAction(
       deliveryNumber,
       expectedVersion: Number(text(form, 'expectedVersion') || '0'),
       reason: optional(form, 'cancelReason'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {

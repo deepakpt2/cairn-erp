@@ -18,19 +18,14 @@ import {
 } from '../src/modules/sales/billing';
 import { writeDocumentPartners } from '../src/modules/sales/partners';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
-import {
-  confirmDeliveryPicks,
-  createDelivery,
-  getDelivery,
-  listDeliverableOrderLines,
-  postDeliveryGoodsIssue,
-} from '../src/modules/sales/delivery';
+import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
+import { confirmDeliveryPicks, getDelivery, listDeliverableOrderLines } from './helpers/sales-authorized';
 
 /**
  * §4.5 — billing the month: the collective run over the billing due list (audit gap G2).

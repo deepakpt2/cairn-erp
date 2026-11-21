@@ -12,7 +12,7 @@
  * credit memo are raised by the services that own them, and the condition rows asserted are the ones
  * those services wrote.
  */
-import { changeSalesOrder, getSalesOrder } from './helpers/sales-authorized';
+import { changeSalesOrder, getSalesOrder, confirmDeliveryPicks, getDelivery, listDeliverableOrderLines } from './helpers/sales-authorized';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -22,9 +22,7 @@ import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { salesDocumentConditionsOf } from '../src/modules/sales/pricing-procedure';
-import {
-  confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, postDeliveryGoodsIssue,
-} from '../src/modules/sales/delivery';
+import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { postBillingDocument } from '../src/modules/sales/billing';
 import { createCreditMemoForProvisioning as createCreditMemo } from '../src/modules/sales/credit-memo';
 import {

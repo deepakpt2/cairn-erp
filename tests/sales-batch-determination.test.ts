@@ -8,15 +8,14 @@ import { saveSalesCondition } from '../src/modules/sales/conditions';
 import {
   determineBatches, listBatchDeterminationRules, saveBatchDeterminationRule,
 } from '../src/modules/sales/batch-determination';
-import {
-  confirmDeliveryPicks, createDelivery, listDeliverableOrderLines,
-} from '../src/modules/sales/delivery';
+import { createDelivery } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
   assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
+import { confirmDeliveryPicks, listDeliverableOrderLines } from './helpers/sales-authorized';
 
 /**
  * §5.5a — batch determination for sales.

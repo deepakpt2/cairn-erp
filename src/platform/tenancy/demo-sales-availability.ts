@@ -21,7 +21,7 @@ import {
   assignCheckingGroup, saveCheckingGroup, saveCheckingRule, saveScopeOfCheck,
 } from '../../modules/production/availability-check';
 import { simulateSalesOrderAvailability, type SalesAvailabilityLineResult } from '../../modules/sales/availability-check';
-import { createDelivery, listDeliverableOrderLines } from '../../modules/sales/delivery';
+import { createDelivery, listDeliverableOrderLinesForProvisioning as listDeliverableOrderLines } from '../../modules/sales/delivery';
 import { createSalesOrder } from '../../modules/sales/sales-order';
 import { DEMO_ACTOR, DEMO_STRUCTURE } from './demo-organisation';
 import { withActingUser } from './demo-people';

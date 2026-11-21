@@ -6,11 +6,16 @@ import {
 import {
   changeQuotation as changeQ, getQuotation as getQ, listQuotations as listQ, rejectQuotation as rejectQ,
 } from '../../src/modules/sales/quotation';
+import {
+  cancelDelivery as cancelD, confirmDeliveryPicks as pickD, getDelivery as getD,
+  listDeliverableOrderLines as listLines, listDeliveries as listD,
+} from '../../src/modules/sales/delivery';
+import { listDueRegister as dueR } from '../../src/modules/sales/registers';
 import { createFinanceActor, refreshFinanceActorScopes, type FinanceActor } from './finance-actor';
 
 export const SALES_TEST_CAPABILITIES = [
   'SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE',
-  'SALES.ORDER.AVAILABILITY.CHECK', 'CFG.SALES.CONDITION.MAINTAIN',
+  'SALES.ORDER.AVAILABILITY.CHECK', 'CFG.SALES.CONDITION.MAINTAIN', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
 ];
 
 const actors = new Map<string, Promise<FinanceActor>>();
@@ -49,4 +54,21 @@ export async function changeQuotation(input: Opt<typeof changeQ>) {
 }
 export async function rejectQuotation(input: Opt<typeof rejectQ>) {
   return rejectQ({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof rejectQ>[0]);
+}
+
+export async function getDelivery(client: string, deliveryNumber: string) { return getD(client, deliveryNumber, await salesTestAuth(client)); }
+export async function listDeliveries(client: string, filter: NonNullable<Parameters<typeof listD>[1]> = {}) {
+  return listD(client, filter, await salesTestAuth(client));
+}
+export async function listDeliverableOrderLines(client: string, filter: NonNullable<Parameters<typeof listLines>[1]> = {}) {
+  return listLines(client, filter, await salesTestAuth(client));
+}
+export async function confirmDeliveryPicks(input: Opt<typeof pickD>) {
+  return pickD({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof pickD>[0]);
+}
+export async function cancelDelivery(input: Opt<typeof cancelD>) {
+  return cancelD({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof cancelD>[0]);
+}
+export async function listDueRegister(client: string, input: Parameters<typeof dueR>[1]) {
+  return dueR(client, input, await salesTestAuth(client));
 }

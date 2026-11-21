@@ -37,9 +37,7 @@ import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { outputMessage } from '../src/modules/foundation/output-schema';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
-import {
-  confirmDeliveryPicks, createDelivery, getDelivery, postDeliveryGoodsIssue,
-} from '../src/modules/sales/delivery';
+import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createBillingFromPlanDate } from '../src/modules/sales/billing';
 import { saveBillingPlan } from '../src/modules/sales/billing-plan';
 import {
@@ -70,6 +68,7 @@ import { fanoutJob, FANOUT_JOB } from '../src/platform/notification/jobs/fanout'
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
 import { runOutputDispatch } from './helpers/output-dispatch';
 import { saveMailConfig } from '../src/platform/mail/service';
+import { confirmDeliveryPicks, getDelivery } from './helpers/sales-authorized';
 
 const ACTOR = 'SD9252_OUTPUT';
 const AREA = 'CCA1';

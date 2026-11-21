@@ -57,7 +57,7 @@ import { listCharacteristics, listInspectionResults, recordInspectionResult, sav
 import { getUsageDecisionView, postUsageDecisionWithStock } from '../modules/quality/usage-decision';
 
 import { createSalesOrder, getSalesOrderForProvisioning } from '../modules/sales/sales-order';
-import { confirmDeliveryPicks, createDelivery, getDelivery, postDeliveryGoodsIssue } from '../modules/sales/delivery';
+import { confirmDeliveryPicks, createDelivery, getDeliveryForProvisioning as getDelivery, postDeliveryGoodsIssue } from '../modules/sales/delivery';
 import { createBillingFromDelivery } from '../modules/sales/billing';
 import { getReceivables, postIncomingPayment } from '../modules/finance/incoming-payment';
 import { getCustomerClearing } from '../modules/finance/customer-clearing';
@@ -773,7 +773,7 @@ async function runSales(
           delivery = await confirmDeliveryPicks({ client: ctx.tenant, changedBy: ctx.actor, deliveryNumber,
             expectedVersion: delivery.version, requestKey: key(`pick-${saleIndex}`),
             items: [{ lineNumber: delivery.lines[0].lineNumber, quantity: delivery.lines[0].deliveryQuantity,
-              storageLocation: ctx.storage }] });
+              storageLocation: ctx.storage }], authorization: ctx.authorization });
         }
         await postDeliveryGoodsIssue({ client: ctx.tenant, changedBy: ctx.actor, deliveryNumber,
           expectedVersion: delivery.version, postingDate: ctx.dates.delivery, documentDate: ctx.dates.delivery });

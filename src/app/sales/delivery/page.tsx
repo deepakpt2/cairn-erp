@@ -31,13 +31,12 @@ export default async function SalesDeliveryPage({ searchParams }: {
   const client = session.user.client;
   const orderNumber = (params.order ?? '').trim().toUpperCase();
   const deliveryNumber = (params.delivery ?? '').trim().toUpperCase();
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const [documents, openLines, selected, choices] = await Promise.all([
-    listDeliveries(client, orderNumber ? { orderNumber } : {}),
-    orderNumber
-      ? listDeliverableOrderLines(client, { orderNumber })
-      : listDeliverableOrderLines(client, {}),
-    deliveryNumber ? getDelivery(client, deliveryNumber) : Promise.resolve(null),
-    salesOrderChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => NO_SALES_CHOICES),
+    listDeliveries(client, orderNumber ? { orderNumber } : {}, authorization).catch(() => []),
+    listDeliverableOrderLines(client, orderNumber ? { orderNumber } : {}, authorization).catch(() => []),
+    deliveryNumber ? getDelivery(client, deliveryNumber, authorization).catch(() => null) : Promise.resolve(null),
+    salesOrderChoices(client, authorization).catch(() => NO_SALES_CHOICES),
   ]);
 
   return (
