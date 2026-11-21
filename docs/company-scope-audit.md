@@ -84,3 +84,11 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Covered:** `stockOverview` (needs `INV.STOCK.VIEW`) and `listWarehouseStocks` (needs `INV.STOCK.WAREHOUSE`), including the stock-overview report export. Both require a session, judge inside the transaction, and read only plants that are reachable (company in the explicit Company Code scope; Plant scope honoured; a plant with no company never). Transit quantities and the STO transit ledger are filtered by receiving plant. A plant selection outside reach answers as a plant that does not stand. Totals are computed from the reachable rows only. Tests: 4 more in `tests/company-scope-inventory.test.ts`.
 
 **Still not covered in inventory:** physical inventory, price change, reservations, stock ageing/reconcile/shelf-life lists, batch reads, serial numbers, MIGO, return delivery. The drill-down links from these lists lead to the material document list, which is scoped.
+
+## Phase 5e — inventory: price change (MR21-style) and future prices
+
+**Found:** `changeMaterialPrice` and `releaseFuturePrices` had no session or scope check at all, took `changedBy` from the caller, and the FUTURE branch never verified that a line's plant belonged to the named company — so a caller could store a future price for another company's plant by naming a company of their own.
+
+**Covered:** both writes and `listFuturePrices` need `INV.MATERIAL.PRICECHANGE` and a session; the named company must be in the Company Code scope; every line's plant must be reachable and belong to that company (otherwise "Plant X does not belong to company C", the same answer for a missing plant); `changed_by` is the session user; the check runs before the replay lookup. The future-price list shows reachable plants only. Tests: 5 more in `tests/company-scope-inventory.test.ts` (FUTURE path only; the CURRENT/PREVIOUS posting path is gated by the same function but not exercised adversarially).
+
+**Still not covered in inventory:** physical inventory, reservations, stock ageing/reconcile/shelf-life lists, batch reads, serial numbers, MIGO, return delivery.

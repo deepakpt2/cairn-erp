@@ -61,6 +61,7 @@ export async function savePriceChangeAction(
     const result = await changeMaterialPrice({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       companyCode: text(form, 'companyCode'),
       postingDate: text(form, 'postingDate'),
       when: whenOf(text(form, 'when')),
@@ -94,6 +95,7 @@ export async function releaseFuturePriceAction(
     const result = await releaseFuturePrices({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       companyCode: text(form, 'companyCode'),
       postingDate: text(form, 'postingDate'),
       reason: text(form, 'reason') || 'Release future price',

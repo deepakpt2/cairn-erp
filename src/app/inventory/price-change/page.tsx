@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function PriceChangePage() {
   const session = await requireSession(PRICE_CHANGE_ROUTE);
-  const future = await listFuturePrices(session.user.client);
+  const future = await listFuturePrices(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []);
   const today = new Date().toISOString().slice(0, 10);
   return (
     <Page

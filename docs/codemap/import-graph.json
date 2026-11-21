@@ -7156,6 +7156,8 @@
     "modules/inventory/goods-issue.ts",
     "modules/inventory/material-period-control.ts",
     "modules/inventory/schema.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",

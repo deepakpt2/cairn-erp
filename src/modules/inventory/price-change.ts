@@ -11,6 +11,8 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx, requireCompanyInScope } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry } from '../../platform/posting';
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
@@ -45,7 +47,10 @@ export interface PriceChangeLine {
 
 export interface PriceChangeInput {
   client: string;
+  /** Recorded as the verified session user by the public services; the caller's value is not trusted. */
   changedBy: string;
+  /** The verified session. The company must be in the Company Code scope and every plant reachable. */
+  authorization: ServiceAuthorityContext | undefined;
   companyCode: string;
   postingDate: string;
   when: PriceWhen;
@@ -104,6 +109,30 @@ async function stockAt(
   return Number((rows as unknown as Array<{ qty: string }>)[0]?.qty ?? 0);
 }
 
+/**
+ * Session, capability, Company Code scope for the named company, and every plant on the lines reachable and in that
+ * company. Judged before any replay lookup. A plant outside the caller's reach or company answers as one that does
+ * not belong to the company, so existence is not disclosed.
+ */
+async function priceChangeGate(
+  tx: Tx, input: { client: string; companyCode: string; authorization: ServiceAuthorityContext | undefined },
+  plants: readonly string[],
+): Promise<string> {
+  const fail = (message: string, remedy?: string) => new PriceChangeError(message, remedy);
+  const actor = await purchasingActor(tx, input.client, input.authorization, [PRICE_CHANGE_CAPABILITY], fail);
+  await requireCompanyInScope(tx, input.client, actor, input.companyCode.trim(), fail);
+  const reachable = new Set(await reachablePlantsInTx(tx, input.client, actor));
+  for (const plant of plants) {
+    const [row] = await tx.select({ companyCode: plantTable.companyCode }).from(plantTable).where(and(
+      eq(plantTable.client, input.client), eq(plantTable.plant, plant),
+    ));
+    if (!reachable.has(plant) || row?.companyCode !== input.companyCode.trim()) {
+      throw new PriceChangeError(`Plant ${plant} does not belong to company ${input.companyCode}.`);
+    }
+  }
+  return actor.username;
+}
+
 export async function changeMaterialPrice(input: PriceChangeInput): Promise<PriceChangeResult> {
   if (!input.reason.trim()) {
     throw new PriceChangeError('A reason is required.', 'Say why the price is changing.');
@@ -112,7 +141,10 @@ export async function changeMaterialPrice(input: PriceChangeInput): Promise<Pric
     throw new PriceChangeError('A posting date is required.');
   }
   if (input.lines.length === 0) throw new PriceChangeError('Name at least one material.');
-  return withTenant(input.client, (tx) => applyPriceChange(tx, input, false));
+  return withTenant(input.client, async (tx) => {
+    const changedBy = await priceChangeGate(tx, input, input.lines.map((line) => line.plant));
+    return applyPriceChange(tx, { ...input, changedBy }, false);
+  });
 }
 
 async function applyPriceChange(tx: Tx, input: PriceChangeInput, clearFuture: boolean): Promise<PriceChangeResult> {
@@ -387,6 +419,7 @@ async function storeFuture(tx: Tx, input: PriceChangeInput, currency: string): P
 export async function releaseFuturePrices(input: {
   client: string;
   changedBy: string;
+  authorization: ServiceAuthorityContext | undefined;
   companyCode: string;
   postingDate: string;
   reason: string;
@@ -395,6 +428,7 @@ export async function releaseFuturePrices(input: {
 }): Promise<PriceChangeResult> {
   if (!input.reason.trim()) throw new PriceChangeError('A reason is required.', 'Say why the future price is being released.');
   return withTenant(input.client, async (tx) => {
+    const changedBy = await priceChangeGate(tx, input, input.materials.map((row) => row.plant));
     const lines: PriceChangeLine[] = [];
     for (const row of input.materials) {
       const [valuation] = await tx.select().from(materialValuation).where(and(
@@ -419,7 +453,8 @@ export async function releaseFuturePrices(input: {
     }
     return applyPriceChange(tx, {
       client: input.client,
-      changedBy: input.changedBy,
+      authorization: input.authorization,
+      changedBy,
       companyCode: input.companyCode,
       postingDate: input.postingDate,
       when: 'CURRENT',
@@ -430,7 +465,7 @@ export async function releaseFuturePrices(input: {
   });
 }
 
-export async function listFuturePrices(client: string): Promise<Array<{
+export async function listFuturePrices(client: string, authorization: ServiceAuthorityContext | undefined): Promise<Array<{
   materialNumber: string;
   plant: string;
   futurePrice: string;
@@ -439,8 +474,10 @@ export async function listFuturePrices(client: string): Promise<Array<{
   currency: string;
 }>> {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [PRICE_CHANGE_CAPABILITY], (m, r) => new PriceChangeError(m, r));
+    const reachable = new Set(await reachablePlantsInTx(tx, client, actor));
     const rows = await tx.select().from(materialValuation).where(eq(materialValuation.client, client));
-    return rows.filter((row) => row.futurePrice != null && row.futureValidFrom != null).map((row) => ({
+    return rows.filter((row) => row.futurePrice != null && row.futureValidFrom != null && reachable.has(row.valuationArea)).map((row) => ({
       materialNumber: row.materialNumber,
       plant: row.valuationArea,
       futurePrice: row.futurePrice!,

@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { displayMaterialDocument } from '../src/modules/inventory/material-document-display';
 import { listMaterialDocuments } from '../src/modules/inventory/material-document-list';
+import { changeMaterialPrice, listFuturePrices } from '../src/modules/inventory/price-change';
 import { stockOverview } from '../src/modules/inventory/stock-overview';
 import { listWarehouseStocks } from '../src/modules/inventory/warehouse-stocks';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -73,6 +74,11 @@ beforeAll(async () => {
     for (const [plant, quantity] of [['PLA1', 11], ['PLB1', 22], ['PLN1', 33]] as const) {
       await tx.execute(sql`insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
         values (${client}, 'SCM1', ${plant}, 'SL01', 'UNRESTRICTED', ${quantity}, ${SEED})`);
+    }
+    for (const plant of ['PLA1', 'PLB1']) {
+      await tx.execute(sql`insert into material_valuation (client, material_number, valuation_area, valuation_class, price_control, standard_price, currency, created_by)
+        select ${client}, 'SCM1', ${plant}, null, 'STANDARD', 5, c.currency, ${SEED}
+          from company_code c where c.client = ${client} and c.company_code = ${A}`);
     }
     await line(DOC_A, 1, 'PLA1');
     await line(DOC_B, 1, 'PLB1');
@@ -183,5 +189,67 @@ describe('stock overview and warehouse stocks', () => {
       expect(await ask(overview(a))).not.toBe('done');
       expect(await ask(warehouse(a))).not.toBe('done');
     }
+  });
+});
+
+describe('price change', () => {
+  let priceA: FinanceActor;
+  let priceB: FinanceActor;
+  let pricePlantA: FinanceActor;
+  let priceNoScope: FinanceActor;
+  let priceNoCap: FinanceActor;
+  let priceOtherTenant: FinanceActor;
+  const PRICE = ['INV.MATERIAL.PRICECHANGE'];
+  const future = (a: FinanceActor['authorization'] | undefined, company: string, plant: string) => changeMaterialPrice({
+    client, changedBy: 'FORGED', authorization: a, companyCode: company, postingDate: '2099-01-01', when: 'FUTURE',
+    reason: 'Scope test', requestKey: `K-${company}-${plant}-${Math.random()}`, lines: [{ materialNumber: 'SCM1', plant, price: 9, priceUnit: 1 }],
+  });
+  const stored = async (plant: string) => withTenant(client, async (tx) => ((await tx.execute(sql`
+    select future_price::text as p, changed_by from material_valuation where client = ${client} and material_number = 'SCM1' and valuation_area = ${plant}`)) as unknown as Array<{ p: string | null; changed_by: string | null }>)[0]!);
+
+  beforeAll(async () => {
+    priceA = await createFinanceActor(client, { capabilities: PRICE, companyScopes: [A] });
+    priceB = await createFinanceActor(client, { capabilities: PRICE, companyScopes: [B] });
+    pricePlantA = await createFinanceActor(client, { capabilities: PRICE, companyScopes: [A, B], plantScopes: ['PLA1'] });
+    priceNoScope = await createFinanceActor(client, { capabilities: PRICE, companyScopes: [] });
+    priceNoCap = await createFinanceActor(client, { capabilities: ['FIN.JOURNAL.DISPLAY'], companyScopes: [A, B] });
+    priceOtherTenant = await createFinanceActor(other.client, { capabilities: PRICE });
+  });
+
+  it('stores a future price for its own company and records the session user, not the supplied name', async () => {
+    expect((await future(priceA.authorization, A, 'PLA1')).posted).toBe(false);
+    const row = await stored('PLA1');
+    expect(row.p).toBe('9.0000');
+    expect(row.changed_by).toBe(priceA.username);
+  });
+
+  it("refuses another company's code and another company's plant under an in-scope code", async () => {
+    expect(await ask(future(priceA.authorization, B, 'PLB1'))).toMatch(/scope|Company Code/i);
+    expect(await ask(future(priceA.authorization, A, 'PLB1'))).toMatch(/does not belong to company/);
+    expect(await ask(future(priceB.authorization, A, 'PLA1'))).toMatch(/scope|Company Code/i);
+    expect((await stored('PLB1')).p).toBeNull();
+  });
+
+  it('refuses a plant outside the Plant scope, and answers it as a plant that does not belong', async () => {
+    const message = await ask(future(pricePlantA.authorization, B, 'PLB1'));
+    expect(message).toMatch(/does not belong to company/);
+    expect((await stored('PLB1')).p).toBeNull();
+  });
+
+  it('refuses no session, no capability, no scope and another tenant', async () => {
+    for (const a of [undefined, priceNoCap.authorization, priceNoScope.authorization, priceOtherTenant.authorization]) {
+      expect(await ask(future(a, A, 'PLA1'))).not.toMatch(/^done$|does not belong/);
+    }
+  });
+
+  it('lists future prices only for reachable plants', async () => {
+    await withTenant(client, (tx) => tx.execute(sql`update material_valuation set future_price = 7, future_price_unit = 1, future_valid_from = '2099-01-01'
+      where client = ${client} and material_number = 'SCM1' and valuation_area = 'PLB1'`));
+    const plants = async (a: FinanceActor['authorization']) => (await listFuturePrices(client, a)).map((r) => r.plant).sort();
+    expect(await plants(priceA.authorization)).toEqual(['PLA1']);
+    expect(await plants(priceB.authorization)).toEqual(['PLB1']);
+    expect(await plants(pricePlantA.authorization)).toEqual(['PLA1']);
+    expect(await ask(listFuturePrices(client, undefined))).not.toBe('done');
+    expect(await ask(listFuturePrices(client, priceNoScope.authorization))).not.toBe('done');
   });
 });
