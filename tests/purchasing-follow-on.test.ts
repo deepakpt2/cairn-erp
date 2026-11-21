@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { orderDraftFromRequisition } from '../src/modules/purchasing/follow-on';
+import { orderDraftFromRequisitionForProvisioning as orderDraftFromRequisition } from '../src/modules/purchasing/follow-on';
 import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { createQuotationForProvisioning as createQuotation } from '../src/modules/purchasing/quotation';
 import { createRequestForQuotationForProvisioning as createRequestForQuotation, getRequestForQuotationForProvisioning as getRequestForQuotation } from '../src/modules/purchasing/rfq';

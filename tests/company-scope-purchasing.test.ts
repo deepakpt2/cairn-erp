@@ -46,6 +46,9 @@ import {
   changeQuotaArrangement, createQuotaArrangement, getQuotaArrangement, listQuotaArrangements, listRecentQuotaArrangements,
   previewQuotaArrangement, previewQuotaSelection,
 } from '../src/modules/purchasing/quota-arrangement';
+import { checkVendorEvaluation, listVendorEvaluation, saveManualScore } from '../src/modules/purchasing/vendor-evaluation';
+import { orderDraftFromQuotation, orderDraftFromRequisition } from '../src/modules/purchasing/follow-on';
+import { listDeliveryCompletionPolicy, setDeliveryCompletionPlantPolicy, setDeliveryCompletionPolicy } from '../src/modules/purchasing/delivery-completion';
 import { openPurchaseContractDisplay } from '../src/modules/purchasing/contract-display';
 import {
   changeSchedulingAgreement, createSchedulingAgreement, getSchedulingAgreement, listSchedulingAgreements, schedulingAgreementChoices,
@@ -562,6 +565,28 @@ describe('purchasing org and group scope', () => {
     expect((await getOrder(client, orderOrg2000, both.authorization))?.orderNumber).toBe(orderOrg2000);
   });
 
+  it('judges invoices, parked invoices and their orders by the order\'s purchasing org and group', async () => {
+    const ask = (p: Promise<unknown>, needle: string) => p.then(() => 'done', (e: Error) => e.message.replace(needle, '#'));
+    // The seeded orders sit in organisation O100 and group G01: neither held level names them.
+    expect((await getSupplierInvoice(client, INV_A, both.authorization))?.invoiceNumber).toBe(INV_A);
+    for (const actor of [orgA, groupOther]) {
+      expect(await getSupplierInvoice(client, INV_A, actor.authorization)).toBeNull();
+      expect(await getInvoiceOrder(client, ORDER_A, actor.authorization)).toBeNull();
+      expect(await openOrderForPark(client, ORDER_A, actor.authorization)).toBeNull();
+    }
+    expect((await openOrderForPark(client, ORDER_A, both.authorization))?.orderNumber).toBe(ORDER_A);
+    const before = [await count('supplier_invoice'), await count('parked_supplier_invoice'), await count('journal_entry')];
+    const post = (a: FinanceActor, order: string, key: string) => ({
+      client, authorization: a.authorization, changedBy: 'X', orderNumber: order, supplierReference: `R-${key}`,
+      invoiceDate: '2026-03-02', postingDate: '2026-03-02', grossAmount: 100, requestKey: key, lines: [{ itemNumber: 10, quantity: 1, netAmount: 10 }],
+    });
+    expect(await ask(postSupplierInvoice(post(orgA, ORDER_A, 'scope-lv-1')), ORDER_A)).toBe(await ask(postSupplierInvoice(post(orgA, '4599999999', 'scope-lv-2')), '4599999999'));
+    expect(await ask(postSupplierInvoice(post(orgA, ORDER_A, 'scope-lv-1')), ORDER_A)).toMatch(/does not exist/);
+    expect(await ask(parkSupplierInvoice(post(groupOther, ORDER_A, 'scope-lv-3')), ORDER_A)).toMatch(/does not stand/);
+    expect(await ask(cancelSupplierInvoice({ client, authorization: groupOther.authorization, changedBy: 'X', invoiceNumber: INV_A, postingDate: '2026-03-02', requestKey: 'scope-lv-4' }), INV_A)).toMatch(/does not exist/);
+    expect([await count('supplier_invoice'), await count('parked_supplier_invoice'), await count('journal_entry')]).toEqual(before);
+  });
+
   it('lists, searches and displays orders only inside the held levels', async () => {
     expect(await orderNumbers(orgA)).toContain(orderOrg1000);
     expect(await orderNumbers(orgA)).not.toContain(orderOrg2000);
@@ -1011,6 +1036,99 @@ describe('info records, source lists and quota arrangements', () => {
     expect((await getSourceListEntry(client, sourceA, orgOnly.authorization))?.sourceNumber).toBe(sourceA);
     expect(await getQuotaArrangement(client, quotaB, orgOnly.authorization)).toBeNull();
     expect((await getQuotaArrangement(client, quotaA, orgOnly.authorization))?.quotaNumber).toBe(quotaA);
+  });
+});
+
+describe('vendor evaluation, order drafts and stock transport orders', () => {
+  const R = 'Scope follow-up setup';
+  const bad = () => [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization];
+  const PERIOD = { periodFrom: '2026-01-01', periodTo: '2026-06-30' };
+  const evalParams = (org: string) => ({ supplier: 'V10000', purchasingOrg: org, ...PERIOD });
+  const reqItem = (plant: string) => ({
+    materialNumber: '', shortText: 'Steel plate', quantity: 10, unit: 'PC', deliveryDate: '2026-11-15', plant,
+    storageLocation: '', purchasingGroup: '001', estimatedPrice: 150, priceUnit: 1, currency: 'USD',
+    markedForDeletion: false, assignments: [] as never[],
+  });
+  const sto = (supplying: string, receiving: string) => ({
+    documentType: 'STOCK_TRANSPORT', supplyingPlant: supplying, purchasingOrg: '1000', purchasingGroup: '001', companyCode: A,
+    items: [{ materialNumber: 'M100', quantity: 5, unit: 'PC', plant: receiving, storageLocation: '', scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 5 }] }],
+  });
+  let reqA = '';
+  let reqB = '';
+
+  beforeAll(async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`insert into purchasing_org (client, purchasing_org, name, company_code, created_by) values (${client}, '1000', 'Org 1000', ${A}, ${R}), (${client}, '2000', 'Org 2000', ${B}, ${R}) on conflict do nothing`);
+      await defineRange(tx, { client, objectCode: 'PURCHREQ', subObject: 'NB', prefix: 'PR', numberLength: 7, createdBy: R });
+      await tx.execute(sql`insert into purchasing_group (client, purchasing_group, name, created_by) values (${client}, '001', 'Group 001', ${R}) on conflict do nothing`);
+    });
+    reqA = (await createRequisition({ client, authorization: onlyA.authorization, changedBy: 'X', items: [reqItem('PLA1')] })).requisitionNumber;
+    reqB = (await createRequisition({ client, authorization: onlyB.authorization, changedBy: 'X', items: [reqItem('PLB1')] })).requisitionNumber;
+  }, 120_000);
+
+  it('refuses vendor evaluation with no session, capability or scope, and for another company\'s organisation as one that does not stand', async () => {
+    for (const authorization of bad()) {
+      await refused(listVendorEvaluation(client, evalParams('1000'), authorization));
+      await refused(checkVendorEvaluation(client, evalParams('1000'), authorization));
+    }
+    const hidden = (org: string) => listVendorEvaluation(client, evalParams(org), onlyA.authorization).then(() => 'done', (e: Error) => e.message);
+    expect((await hidden('2000')).replace('2000', 'X')).toBe((await hidden('9999')).replace('9999', 'X'));
+    expect(await hidden('2000')).toMatch(/does not stand/);
+    expect(await hidden('1000')).not.toMatch(/does not stand/);
+  });
+
+  it('refuses a manual score for another company\'s organisation and a plant-limited user a company-wide evaluation, writing nothing', async () => {
+    const before = await count('vendor_evaluation_assessment');
+    await expect(saveManualScore({
+      client, changedBy: 'X', authorization: onlyA.authorization, ...evalParams('2000'), criterionCode: 'QUALITY', score: '80',
+      reason: 'Scope probe', requestKey: 'scope-eval-1', expectedVersion: null,
+    })).rejects.toThrow(/does not stand/);
+    await expect(listVendorEvaluation(client, evalParams('1000'), plantLimited.authorization)).rejects.toThrow(/Plant scope|plant-limited/i);
+    expect(await count('vendor_evaluation_assessment')).toBe(before);
+  });
+
+  it('drafts an order from a requisition only inside the reach; another company\'s answers as a missing one', async () => {
+    for (const authorization of bad()) await refused(orderDraftFromRequisition(client, reqA, authorization));
+    expect((await orderDraftFromRequisition(client, reqA, onlyA.authorization))?.items.length).toBeGreaterThan(0);
+    const foreign = await orderDraftFromRequisition(client, reqB, onlyA.authorization);
+    expect(foreign?.items).toEqual([]);
+    expect(foreign?.warning).toBe(`Requisition ${reqB} does not exist.`);
+    const missing = await orderDraftFromRequisition(client, 'PR-NOPE', onlyA.authorization);
+    expect(missing?.warning).toBe('Requisition PR-NOPE does not exist.');
+    for (const authorization of bad()) await refused(orderDraftFromQuotation(client, 'QT-0000001', authorization));
+    expect(await orderDraftFromQuotation(client, 'QT-9999999', onlyA.authorization)).toBeNull();
+    // A quotation of company A's request is a draft for A and absent for B.
+    const draft = await orderDraftFromQuotation(client, 'QT-0000001', onlyA.authorization);
+    if (draft) expect(await orderDraftFromQuotation(client, 'QT-0000001', onlyB.authorization)).toBeNull();
+  });
+
+  it('keeps a delivery-completion rule inside the reach: another company or plant answers as not there, a Plant limit is refused a company default', async () => {
+    const before = await count('purchase_delivery_completion_policy') + await count('purchase_delivery_completion_plant');
+    for (const authorization of bad()) {
+      await refused(listDeliveryCompletionPolicy(client, authorization));
+      await refused(setDeliveryCompletionPolicy({ client, changedBy: 'X', authorization, companyCode: A, autoClose: true }));
+      await refused(setDeliveryCompletionPlantPolicy({ client, changedBy: 'X', authorization, plant: 'PLA1', autoClose: true }));
+    }
+    const listed = await listDeliveryCompletionPolicy(client, onlyA.authorization);
+    expect(listed.companies.map((c) => c.companyCode)).toEqual([A]);
+    expect(listed.plants.every((p) => p.companyCode === A)).toBe(true);
+    await refused(setDeliveryCompletionPolicy({ client, changedBy: 'X', authorization: onlyA.authorization, companyCode: B, autoClose: true }));
+    await expect(setDeliveryCompletionPlantPolicy({ client, changedBy: 'X', authorization: onlyA.authorization, plant: 'PLB1', autoClose: true })).rejects.toThrow(/does not exist/);
+    await expect(setDeliveryCompletionPolicy({ client, changedBy: 'X', authorization: plantLimited.authorization, companyCode: A, autoClose: true })).rejects.toThrow(/Plant scope|plant-limited/i);
+    expect(await count('purchase_delivery_completion_policy') + await count('purchase_delivery_completion_plant')).toBe(before);
+    const standing = listed.companies.find((c) => c.companyCode === A)!.autoClose;
+    await setDeliveryCompletionPolicy({ client, changedBy: 'SPOOFED_NAME', authorization: onlyA.authorization, companyCode: A, autoClose: !standing });
+    const by = await withTenant(client, async (tx) =>
+      ((await tx.execute(sql`select changed_by from purchase_delivery_completion_policy where client = ${client} and company_code = ${A}`)) as unknown as Array<{ changed_by: string }>)[0]?.changed_by);
+    expect(by).toBe(onlyA.username);
+  });
+
+  it('refuses a stock transport order whose supplying or receiving plant is outside the reach, writing nothing', async () => {
+    const before = await count('purchase_order');
+    await refused(createOrder({ client, authorization: onlyA.authorization, changedBy: 'X', ...sto('PLA1', 'PLB1') } as never), /outside your access/);
+    await refused(createOrder({ client, authorization: onlyA.authorization, changedBy: 'X', ...sto('PLB1', 'PLA1') } as never), /outside your access/);
+    await refused(createOrder({ client, authorization: onlyA.authorization, changedBy: 'X', ...sto('PLA1', 'PLB1'), purchasingOrg: '1000' } as never), /outside your access/);
+    expect(await count('purchase_order')).toBe(before);
   });
 });
 

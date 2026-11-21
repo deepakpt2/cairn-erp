@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { can, requireSession } from '@/platform/auth/current';
 import {
   ACTIVITY,
+  DeliveryCompletionScopeError,
   setDeliveryCompletionPlantPolicy,
   setDeliveryCompletionPolicy,
 } from '@/modules/purchasing/delivery-completion';
@@ -31,12 +32,19 @@ export async function setDeliveryCompletionPolicyAction(
   }
   const companyCode = read(form, 'companyCode');
   const autoClose = read(form, 'autoClose') === 'true';
-  const result = await setDeliveryCompletionPolicy({
-    client: session.user.client,
-    changedBy: session.user.username,
-    companyCode,
-    autoClose,
-  });
+  let result: { changed: boolean };
+  try {
+    result = await setDeliveryCompletionPolicy({
+      client: session.user.client,
+      changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+      companyCode,
+      autoClose,
+    });
+  } catch (caught) {
+    if (caught instanceof DeliveryCompletionScopeError) return { ok: false, message: `${caught.message}${caught.remedy ? ` ${caught.remedy}` : ''}` };
+    throw caught;
+  }
   revalidatePath(ROUTE);
   return {
     ok: true,
@@ -59,12 +67,19 @@ export async function setDeliveryCompletionPlantAction(
   // A blank choice is not "no": it is the plant keeping no row of its own, which returns it
   // to the company it belongs to.
   const autoClose = choice === '' ? null : choice === 'true';
-  const result = await setDeliveryCompletionPlantPolicy({
-    client: session.user.client,
-    changedBy: session.user.username,
-    plant: plantCode,
-    autoClose,
-  });
+  let result: { changed: boolean };
+  try {
+    result = await setDeliveryCompletionPlantPolicy({
+      client: session.user.client,
+      changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+      plant: plantCode,
+      autoClose,
+    });
+  } catch (caught) {
+    if (caught instanceof DeliveryCompletionScopeError) return { ok: false, message: `${caught.message}${caught.remedy ? ` ${caught.remedy}` : ''}` };
+    throw caught;
+  }
   revalidatePath(ROUTE);
   if (!result.changed) {
     return { ok: true, message: `Plant ${plantCode} already holds that rule; nothing was changed.` };

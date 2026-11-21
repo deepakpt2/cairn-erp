@@ -215,7 +215,7 @@
 | profit_center | foundation | finance, platform/tenancy |
 | profit_center_hierarchy | foundation | platform/tenancy |
 | purchase_contract | purchasing | platform/attention, platform/tenancy |
-| purchase_order | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, platform/attention, platform/tenancy, production |
+| purchase_order | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, foundation, inventory, platform/attention, platform/auth, platform/tenancy, production |
 | purchase_order_item | purchasing | dev/walkthrough-asset.ts, dev/walkthrough-volume.ts, finance, inventory, production |
 | purchase_order_schedule_line | purchasing | production |
 | purchase_requisition_item | purchasing | platform/attention, platform/tenancy, production |

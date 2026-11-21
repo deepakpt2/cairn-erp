@@ -20,6 +20,8 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { companyCode, plant } from '../foundation/schema';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { companyInScope, plantDocumentInReach, purchasingActor, requireCompanyInScope } from '../../platform/auth/scope-actor';
 import { purchaseDeliveryCompletionPlant, purchaseDeliveryCompletionPolicy } from './schema';
 
 /** The capability that names this screen. */
@@ -111,7 +113,7 @@ export interface DeliveryCompletionPolicyView {
   plants: Array<{ plant: string; name: string; companyCode: string | null; autoClose: boolean | null }>;
 }
 
-export async function listDeliveryCompletionPolicy(client: string): Promise<DeliveryCompletionPolicyView> {
+export async function listDeliveryCompletionPolicyForProvisioning(client: string): Promise<DeliveryCompletionPolicyView> {
   return withTenant(client, async (tx) => {
     const companies = await tx.select().from(companyCode)
       .where(eq(companyCode.client, client)).orderBy(asc(companyCode.companyCode));
@@ -138,94 +140,161 @@ export async function listDeliveryCompletionPolicy(client: string): Promise<Deli
 }
 
 /** The company-code default. A plant with no row of its own inherits it. */
-export async function setDeliveryCompletionPolicy(input: {
+export async function setDeliveryCompletionPolicyForProvisioning(input: {
   client: string;
   changedBy: string;
   companyCode: string;
   autoClose: boolean;
 }): Promise<{ changed: boolean }> {
-  return withTenant(input.client, async (tx) => {
-    const [standing] = await tx.select().from(purchaseDeliveryCompletionPolicy).where(and(
-      eq(purchaseDeliveryCompletionPolicy.client, input.client),
-      eq(purchaseDeliveryCompletionPolicy.companyCode, input.companyCode),
-    ));
-    if (standing && standing.autoClose === input.autoClose) return { changed: false };
-    await tx.insert(purchaseDeliveryCompletionPolicy).values({
-      client: input.client,
-      companyCode: input.companyCode,
+  return withTenant(input.client, (tx) => setDeliveryCompletionPolicyTx(tx, input));
+}
+
+async function setDeliveryCompletionPolicyTx(tx: Tx, input: {
+  client: string;
+  changedBy: string;
+  companyCode: string;
+  autoClose: boolean;
+}): Promise<{ changed: boolean }> {
+  const [standing] = await tx.select().from(purchaseDeliveryCompletionPolicy).where(and(
+    eq(purchaseDeliveryCompletionPolicy.client, input.client),
+    eq(purchaseDeliveryCompletionPolicy.companyCode, input.companyCode),
+  ));
+  if (standing && standing.autoClose === input.autoClose) return { changed: false };
+  await tx.insert(purchaseDeliveryCompletionPolicy).values({
+    client: input.client,
+    companyCode: input.companyCode,
+    autoClose: input.autoClose,
+    createdBy: input.changedBy,
+    changedBy: input.changedBy,
+  }).onConflictDoUpdate({
+    target: [purchaseDeliveryCompletionPolicy.client, purchaseDeliveryCompletionPolicy.companyCode],
+    set: {
       autoClose: input.autoClose,
-      createdBy: input.changedBy,
+      version: sql`${purchaseDeliveryCompletionPolicy.version} + 1`,
       changedBy: input.changedBy,
-    }).onConflictDoUpdate({
-      target: [purchaseDeliveryCompletionPolicy.client, purchaseDeliveryCompletionPolicy.companyCode],
-      set: {
-        autoClose: input.autoClose,
-        version: sql`${purchaseDeliveryCompletionPolicy.version} + 1`,
-        changedBy: input.changedBy,
-        changedAt: new Date(),
-      },
-    });
-    await recordChange(tx, {
-      client: input.client,
-      objectClass: 'purchase_delivery_completion_policy',
-      objectKey: input.companyCode,
-      changeType: standing ? 'CHANGE' : 'CREATE',
-      changedBy: input.changedBy,
-      before: standing ? { autoClose: standing.autoClose } : undefined,
-      after: { autoClose: input.autoClose },
-    });
-    return { changed: true };
+      changedAt: new Date(),
+    },
   });
+  await recordChange(tx, {
+    client: input.client,
+    objectClass: 'purchase_delivery_completion_policy',
+    objectKey: input.companyCode,
+    changeType: standing ? 'CHANGE' : 'CREATE',
+    changedBy: input.changedBy,
+    before: standing ? { autoClose: standing.autoClose } : undefined,
+    after: { autoClose: input.autoClose },
+  });
+  return { changed: true };
 }
 
 /**
  * A plant's own answer. Passing null removes the plant's row, which returns the plant to
  * inheriting its company code.
  */
-export async function setDeliveryCompletionPlantPolicy(input: {
+export async function setDeliveryCompletionPlantPolicyForProvisioning(input: {
   client: string;
   changedBy: string;
   plant: string;
   autoClose: boolean | null;
 }): Promise<{ changed: boolean }> {
-  return withTenant(input.client, async (tx) => {
-    const [standing] = await tx.select().from(purchaseDeliveryCompletionPlant).where(and(
+  return withTenant(input.client, (tx) => setDeliveryCompletionPlantPolicyTx(tx, input));
+}
+
+async function setDeliveryCompletionPlantPolicyTx(tx: Tx, input: {
+  client: string;
+  changedBy: string;
+  plant: string;
+  autoClose: boolean | null;
+}): Promise<{ changed: boolean }> {
+  const [standing] = await tx.select().from(purchaseDeliveryCompletionPlant).where(and(
+    eq(purchaseDeliveryCompletionPlant.client, input.client),
+    eq(purchaseDeliveryCompletionPlant.plant, input.plant),
+  ));
+  if (!standing && input.autoClose == null) return { changed: false };
+  if (standing && standing.autoClose === input.autoClose) return { changed: false };
+  if (input.autoClose == null) {
+    await tx.delete(purchaseDeliveryCompletionPlant).where(and(
       eq(purchaseDeliveryCompletionPlant.client, input.client),
       eq(purchaseDeliveryCompletionPlant.plant, input.plant),
     ));
-    if (!standing && input.autoClose == null) return { changed: false };
-    if (standing && standing.autoClose === input.autoClose) return { changed: false };
-    if (input.autoClose == null) {
-      await tx.delete(purchaseDeliveryCompletionPlant).where(and(
-        eq(purchaseDeliveryCompletionPlant.client, input.client),
-        eq(purchaseDeliveryCompletionPlant.plant, input.plant),
-      ));
-    } else {
-      await tx.insert(purchaseDeliveryCompletionPlant).values({
-        client: input.client,
-        plant: input.plant,
-        autoClose: input.autoClose,
-        createdBy: input.changedBy,
-        changedBy: input.changedBy,
-      }).onConflictDoUpdate({
-        target: [purchaseDeliveryCompletionPlant.client, purchaseDeliveryCompletionPlant.plant],
-        set: {
-          autoClose: input.autoClose,
-          version: sql`${purchaseDeliveryCompletionPlant.version} + 1`,
-          changedBy: input.changedBy,
-          changedAt: new Date(),
-        },
-      });
-    }
-    await recordChange(tx, {
+  } else {
+    await tx.insert(purchaseDeliveryCompletionPlant).values({
       client: input.client,
-      objectClass: 'purchase_delivery_completion_plant',
-      objectKey: input.plant,
-      changeType: input.autoClose == null ? 'DELETE' : standing ? 'CHANGE' : 'CREATE',
+      plant: input.plant,
+      autoClose: input.autoClose,
+      createdBy: input.changedBy,
       changedBy: input.changedBy,
-      before: standing ? { autoClose: standing.autoClose } : undefined,
-      after: input.autoClose == null ? undefined : { autoClose: input.autoClose },
+    }).onConflictDoUpdate({
+      target: [purchaseDeliveryCompletionPlant.client, purchaseDeliveryCompletionPlant.plant],
+      set: {
+        autoClose: input.autoClose,
+        version: sql`${purchaseDeliveryCompletionPlant.version} + 1`,
+        changedBy: input.changedBy,
+        changedAt: new Date(),
+      },
     });
-    return { changed: true };
+  }
+  await recordChange(tx, {
+    client: input.client,
+    objectClass: 'purchase_delivery_completion_plant',
+    objectKey: input.plant,
+    changeType: input.autoClose == null ? 'DELETE' : standing ? 'CHANGE' : 'CREATE',
+    changedBy: input.changedBy,
+    before: standing ? { autoClose: standing.autoClose } : undefined,
+    after: input.autoClose == null ? undefined : { autoClose: input.autoClose },
+  });
+  return { changed: true };
+}
+
+
+// ---- Scoped entry points: session, capability, and the reach of the company or plant the rule is kept for ----
+
+export class DeliveryCompletionScopeError extends Error {
+  constructor(message: string, readonly remedy?: string) {
+    super(message);
+    this.name = 'DeliveryCompletionScopeError';
+  }
+}
+const refuseRule = (message: string, remedy?: string) => new DeliveryCompletionScopeError(message, remedy);
+
+/** Only the companies and plants inside the reach are listed. */
+export async function listDeliveryCompletionPolicy(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<DeliveryCompletionPolicyView> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [ACTIVITY], refuseRule);
+    const all = await listDeliveryCompletionPolicyForProvisioning(client);
+    const companies: DeliveryCompletionPolicyView['companies'] = [];
+    for (const row of all.companies) if (await companyInScope(tx, client, actor, row.companyCode)) companies.push(row);
+    const plants: DeliveryCompletionPolicyView['plants'] = [];
+    for (const row of all.plants) if (await plantDocumentInReach(tx, client, actor, { plants: [row.plant] })) plants.push(row);
+    return { companies, plants };
+  });
+}
+
+/** The company-code default reaches every plant of the company, so a Plant-limited user is refused it. */
+export async function setDeliveryCompletionPolicy(input: {
+  client: string; changedBy: string; companyCode: string; autoClose: boolean;
+  authorization: ServiceAuthorityContext | undefined;
+}): Promise<{ changed: boolean }> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [ACTIVITY], refuseRule);
+    await requireCompanyInScope(tx, rest.client, actor, rest.companyCode, refuseRule, { allowPlantLimited: false });
+    return setDeliveryCompletionPolicyTx(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function setDeliveryCompletionPlantPolicy(input: {
+  client: string; changedBy: string; plant: string; autoClose: boolean | null;
+  authorization: ServiceAuthorityContext | undefined;
+}): Promise<{ changed: boolean }> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [ACTIVITY], refuseRule);
+    if (!(await plantDocumentInReach(tx, rest.client, actor, { plants: [rest.plant] }))) {
+      throw refuseRule(`Plant ${rest.plant.trim()} does not exist.`);
+    }
+    return setDeliveryCompletionPlantPolicyTx(tx, { ...rest, changedBy: actor.username });
   });
 }

@@ -73,6 +73,7 @@ export async function saveManualScoreAction(
       argument: `${text(form, 'supplier')}/${text(form, 'purchasingOrg')}/${text(form, 'periodFrom')}/${text(form, 'periodTo')}`,
     });
     const saved = await saveManualScore({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       supplier: text(form, 'supplier'),

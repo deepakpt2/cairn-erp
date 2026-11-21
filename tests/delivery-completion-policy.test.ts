@@ -3,9 +3,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { sql } from 'drizzle-orm';
 import {
-  listDeliveryCompletionPolicy,
-  setDeliveryCompletionPlantPolicy,
-  setDeliveryCompletionPolicy,
+  listDeliveryCompletionPolicyForProvisioning as listDeliveryCompletionPolicy,
+  setDeliveryCompletionPlantPolicyForProvisioning as setDeliveryCompletionPlantPolicy,
+  setDeliveryCompletionPolicyForProvisioning as setDeliveryCompletionPolicy,
 } from '../src/modules/purchasing/delivery-completion';
 import { createTenant, destroyTenant } from './helpers';
 

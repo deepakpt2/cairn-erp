@@ -15,7 +15,7 @@ import { STO_ORDER_TYPE, stoRefusal } from './sto-guard';
 import { and, eq, sql } from 'drizzle-orm';
 
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
-import { companyInScope, purchasingActor, requireCompanyInScope } from './scope';
+import { companyInScope, orderLevelsInReach, purchasingActor, requireCompanyInScope } from './scope';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
@@ -255,7 +255,8 @@ export async function getInvoiceOrder(
   const view = await withTenant(client, async (tx) => {
     const actor = await purchasingActor(tx, client, authorization, INVOICE_READ_CAPABILITIES, refuse);
     const found = await orderViewInTx(tx, client, orderNumber);
-    return found && await companyInScope(tx, client, actor, found.companyCode) ? found : null;
+    return found && await companyInScope(tx, client, actor, found.companyCode)
+      && await orderLevelsInReach(tx, client, actor, found.orderNumber) ? found : null;
   });
   if (!view) return null;
   // An order with no advance raises no question, so nothing is looked up for one: an order
@@ -414,7 +415,8 @@ export async function getSupplierInvoice(
   return withTenant(client, async (tx) => {
     const actor = await purchasingActor(tx, client, authorization, INVOICE_READ_CAPABILITIES, refuse);
     const view = await loadView(tx, client, number);
-    return view && await companyInScope(tx, client, actor, view.companyCode) ? view : null;
+    return view && await companyInScope(tx, client, actor, view.companyCode)
+      && await orderLevelsInReach(tx, client, actor, view.purchaseOrderNumber) ? view : null;
   });
 }
 
@@ -690,9 +692,11 @@ async function postSupplierInvoiceImpl(raw: PostInvoiceInput, provisioning: bool
       const company = await orderCompanyInTx(tx, raw.client, raw.orderNumber);
       if (company) {
         await requireCompanyInScope(tx, raw.client, actor, company, refuse, { hidden: `Purchase order ${raw.orderNumber} does not exist.` });
+        if (!(await orderLevelsInReach(tx, raw.client, actor, raw.orderNumber))) throw refuse(`Purchase order ${raw.orderNumber} does not exist.`);
       }
       const standing = await byRequestKey(tx, raw.client, raw.requestKey);
-      if (standing && !(await companyInScope(tx, raw.client, actor, standing.companyCode))) {
+      if (standing && (!(await companyInScope(tx, raw.client, actor, standing.companyCode))
+        || !(await orderLevelsInReach(tx, raw.client, actor, standing.purchaseOrderNumber)))) {
         throw refuse(`Purchase order ${raw.orderNumber} does not exist.`);
       }
     }
@@ -1103,9 +1107,13 @@ async function cancelSupplierInvoiceImpl(raw: CancelInvoiceInput, provisioning: 
       input = { ...raw, changedBy: actor.username };
       const hidden = `Invoice ${raw.invoiceNumber} does not exist.`;
       const target = await loadView(tx, raw.client, raw.invoiceNumber);
-      if (target) await requireCompanyInScope(tx, raw.client, actor, target.companyCode, refuse, { hidden });
+      if (target) {
+        await requireCompanyInScope(tx, raw.client, actor, target.companyCode, refuse, { hidden });
+        if (!(await orderLevelsInReach(tx, raw.client, actor, target.purchaseOrderNumber))) throw refuse(hidden);
+      }
       const standing = await byRequestKey(tx, raw.client, raw.requestKey);
-      if (standing && !(await companyInScope(tx, raw.client, actor, standing.companyCode))) throw refuse(hidden);
+      if (standing && (!(await companyInScope(tx, raw.client, actor, standing.companyCode))
+        || !(await orderLevelsInReach(tx, raw.client, actor, standing.purchaseOrderNumber)))) throw refuse(hidden);
     }
     const replay = await byRequestKey(tx, input.client, input.requestKey);
     if (replay) return replay;

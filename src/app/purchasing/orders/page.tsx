@@ -28,9 +28,9 @@ export default async function PurchaseOrdersPage({ searchParams }: {
   const draft = params.order
     ? null
     : params.requisition
-      ? await orderDraftFromRequisition(client, params.requisition.trim())
+      ? await orderDraftFromRequisition(client, params.requisition.trim(), { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null)
       : params.quotation
-        ? await orderDraftFromQuotation(client, params.quotation.trim())
+        ? await orderDraftFromQuotation(client, params.quotation.trim(), { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null)
         : null;
   const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   // A caller without the authority or the company scope sees nothing, as for a document that does not exist.

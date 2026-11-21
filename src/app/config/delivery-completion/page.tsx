@@ -22,7 +22,8 @@ const ROUTE = '/config/delivery-completion';
 export default async function DeliveryCompletionPage() {
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, ACTIVITY);
-  const rows = await listDeliveryCompletionPolicy(session.user.client);
+  const rows = await listDeliveryCompletionPolicy(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' })
+    .catch(() => ({ companies: [], plants: [] }));
 
   return (
     <Page

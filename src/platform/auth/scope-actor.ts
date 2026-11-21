@@ -177,3 +177,22 @@ export async function orgSegmentInReach(
   const company = rows[0]?.company_code.trim();
   return !!company && companyInScope(tx, client, actor, company);
 }
+
+/**
+ * A document that carries no purchasing org or group of its own (an invoice, a parked invoice) takes both from its
+ * purchase order. When the actor holds neither level nothing is read; otherwise an order that names none of the held
+ * values, or that does not exist, is outside the reach.
+ */
+export async function orderLevelsInReach(
+  tx: Tx, client: string, actor: CompanyAuthority, orderNumber: string | null | undefined,
+): Promise<boolean> {
+  const held = actor.restrictions.some((r) => r.scopeType === 'PURCHASING_ORG' || r.scopeType === 'PURCHASING_GROUP');
+  if (!held) return true;
+  const number = (orderNumber ?? '').trim();
+  if (!number) return false;
+  const rows = (await tx.execute(sql`
+    select purchasing_org, purchasing_group from purchase_order where client = ${client} and order_number = ${number}
+  `)) as unknown as Array<{ purchasing_org: string | null; purchasing_group: string | null }>;
+  const row = rows[0];
+  return !!row && purchasingLevelsAllow(actor, { purchasingOrg: row.purchasing_org, purchasingGroup: row.purchasing_group });
+}

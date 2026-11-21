@@ -9,7 +9,7 @@
  */
 import { stoRefusal } from './sto-guard';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
-import { companyInScope, purchasingActor, requireCompanyInScope } from './scope';
+import { companyInScope, orderLevelsInReach, purchasingActor, purchasingLevelsAllow, requireCompanyInScope } from './scope';
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import { changeHistory, recordChange } from '../../platform/change';
@@ -698,15 +698,17 @@ async function judgePark(
     `) as unknown as Array<{ company_code: string }>;
     if (row) {
       await requireCompanyInScope(tx, raw.client, actor, row.company_code, refuse, { hidden: `Purchase order ${order} does not stand.` });
+      if (!(await orderLevelsInReach(tx, raw.client, actor, order))) throw refuse(`Purchase order ${order} does not stand.`);
     }
   }
   const park = named(where.parkedNumber ?? '').toUpperCase();
   if (park) {
     const [row] = await tx.execute(sql`
-      select company_code from parked_supplier_invoice where client = ${raw.client} and parked_number = ${park}
-    `) as unknown as Array<{ company_code: string }>;
+      select company_code, purchase_order_number from parked_supplier_invoice where client = ${raw.client} and parked_number = ${park}
+    `) as unknown as Array<{ company_code: string; purchase_order_number: string }>;
     if (row) {
       await requireCompanyInScope(tx, raw.client, actor, row.company_code, refuse, { hidden: `Parked invoice ${park} does not stand.` });
+      if (!(await orderLevelsInReach(tx, raw.client, actor, row.purchase_order_number))) throw refuse(`Parked invoice ${park} does not stand.`);
     }
   }
   return actor.username;
@@ -1020,9 +1022,10 @@ export async function getParkedInvoice(
     const actor = await purchasingActor(tx, client, authorization, PARK_READ_CAPABILITIES, refuse);
     if (!number) return null;
     const [row] = await tx.execute(sql`
-      select company_code from parked_supplier_invoice where client = ${client} and parked_number = ${number}
-    `) as unknown as Array<{ company_code: string }>;
+      select company_code, purchase_order_number from parked_supplier_invoice where client = ${client} and parked_number = ${number}
+    `) as unknown as Array<{ company_code: string; purchase_order_number: string }>;
     if (row && !(await companyInScope(tx, client, actor, row.company_code))) return null;
+    if (row && !(await orderLevelsInReach(tx, client, actor, row.purchase_order_number))) return null;
     return loadView(tx, client, number);
   });
 }
@@ -1038,6 +1041,7 @@ export async function openOrderForPark(
       eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, number),
     ));
     if (!header || !(await companyInScope(tx, client, actor, header.companyCode))) return null;
+    if (!purchasingLevelsAllow(actor, { purchasingOrg: header.purchasingOrg, purchasingGroup: header.purchasingGroup })) return null;
     const stoRefused = await stoRefusal(tx, client, number, 'parked supplier invoice');
     if (stoRefused) throw new ParkedInvoiceError(stoRefused.message, stoRefused.remedy);
     const items = await tx.select().from(purchaseOrderItem).where(and(
@@ -1112,7 +1116,12 @@ export async function listRecentParkedInvoices(
       eq(parkedSupplierInvoice.client, client), inArray(parkedSupplierInvoice.companyCode, readable),
     ))
       .orderBy(desc(parkedSupplierInvoice.createdAt))
-      .limit(8);
-    return rows;
+      .limit(200);
+    const shown: typeof rows = [];
+    for (const row of rows) {
+      if (shown.length >= 8) break;
+      if (await orderLevelsInReach(tx, client, actor, row.purchaseOrderNumber)) shown.push(row);
+    }
+    return shown;
   });
 }

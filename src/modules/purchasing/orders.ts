@@ -25,7 +25,7 @@ import {
   STO_ORDER_TYPE, StoOrderError, changeStockTransportOrder, createStockTransportOrder,
 } from './stock-transport-order';
 import { z } from 'zod';
-import { companyInScope, purchasingActor, purchasingLevelsAllow, requireCompanyInScope } from './scope';
+import { companyInScope, plantDocumentInReach, purchasingActor, purchasingLevelsAllow, requireCompanyInScope } from './scope';
 
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
@@ -180,6 +180,7 @@ async function judgeOrderWrite(
   tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
   requestedCompany: string, storedOrder?: string,
   requestedLevels: { purchasingOrg?: string; purchasingGroup?: string } = {},
+  stoPlants: readonly string[] = [],
 ): Promise<string> {
   const actor = await purchasingActor(tx, client, authorization, [PO_CREATE_CAPABILITY], refuseOrder);
   if (storedOrder) {
@@ -197,6 +198,10 @@ async function judgeOrderWrite(
   if (company) await requireCompanyInScope(tx, client, actor, company, refuseOrder);
   if (!purchasingLevelsAllow(actor, requestedLevels)) {
     throw refuseOrder('The purchasing organisation or purchasing group is outside your access.', 'Name a purchasing organisation and group inside your access.');
+  }
+  // A stock transport order moves stock between plants: both sides (supplying and receiving) must be inside the reach.
+  if (stoPlants.length > 0 && !(await plantDocumentInReach(tx, client, actor, { plants: stoPlants }))) {
+    throw refuseOrder('A plant of the stock transport order is outside your access.', 'Name plants inside your access, on both sides of the transfer.');
   }
   return actor.username;
 }
@@ -1065,6 +1070,13 @@ export async function createOrderForProvisioning(
   return createOrderImpl({ ...raw, authorization: undefined } as CreateOrderInput, true);
 }
 
+/** The supplying plant and every receiving plant a stock transport payload names. */
+function stoPlantsOf(raw: unknown): string[] {
+  const r = raw as { supplyingPlant?: unknown; items?: Array<{ plant?: unknown }> };
+  const plants = [r.supplyingPlant, ...(Array.isArray(r.items) ? r.items.map((i) => i?.plant) : [])];
+  return plants.map((p) => String(p ?? '').trim()).filter(Boolean);
+}
+
 async function createOrderImpl(
   rawWithAuthority: CreateOrderInput, provisioning: boolean,
 ): Promise<{ orderNumber: string; warnings: string[] }> {
@@ -1074,7 +1086,7 @@ async function createOrderImpl(
     // transaction of this service, so the strict payload carries only the verified user.
     const actor = provisioning
       ? raw.changedBy
-      : await withTenant(raw.client, (tx) => judgeOrderWrite(tx, raw.client, authorization, raw.companyCode, undefined, { purchasingOrg: raw.purchasingOrg, purchasingGroup: raw.purchasingGroup }));
+      : await withTenant(raw.client, (tx) => judgeOrderWrite(tx, raw.client, authorization, raw.companyCode, undefined, { purchasingOrg: raw.purchasingOrg, purchasingGroup: raw.purchasingGroup }, stoPlantsOf(raw)));
     return createStockTransportOrder({ ...raw, changedBy: actor }).catch(stoError);
   }
   refuseStoFieldsOnSupplierOrder(raw);
@@ -1261,7 +1273,7 @@ async function changeOrderImpl(
   let actor = raw.changedBy;
   // An order never changes type: the stored type decides which service may edit it.
   const stored = await withTenant(raw.client, async (tx) => {
-    if (!provisioning) actor = await judgeOrderWrite(tx, raw.client, authorization, raw.companyCode, raw.orderNumber, { purchasingOrg: raw.purchasingOrg, purchasingGroup: raw.purchasingGroup });
+    if (!provisioning) actor = await judgeOrderWrite(tx, raw.client, authorization, raw.companyCode, raw.orderNumber, { purchasingOrg: raw.purchasingOrg, purchasingGroup: raw.purchasingGroup }, isStoPayload(raw) ? stoPlantsOf(raw) : []);
     const [row] = await tx.select({ documentType: purchaseOrder.documentType }).from(purchaseOrder).where(and(
       eq(purchaseOrder.client, raw.client), eq(purchaseOrder.orderNumber, raw.orderNumber),
     ));

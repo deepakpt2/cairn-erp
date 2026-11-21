@@ -123,7 +123,7 @@ export default async function VendorEvaluationPage({ searchParams }: {
   let refusal = '';
   if (canEvaluate && Object.keys(params).length > 0) {
     try {
-      evaluation = await checkVendorEvaluation(session.user.client, params);
+      evaluation = await checkVendorEvaluation(session.user.client, params, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       refusal = error instanceof VendorEvaluationError
         ? `${error.message}${error.remedy ? ` ${error.remedy}` : ''}`

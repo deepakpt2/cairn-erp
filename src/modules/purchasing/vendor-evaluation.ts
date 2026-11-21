@@ -11,6 +11,9 @@ import { sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import type { Tx } from '../../platform/db/client';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { companyInScope, purchasingActor, purchasingLevelsAllow, requireCompanyInScope } from '../../platform/auth/scope-actor';
 
 export const VENDOR_EVALUATION_CAPABILITY = 'PROC.VENDOR.EVALUATE';
 export const VENDOR_EVALUATION_ROUTE = '/purchasing/vendor-evaluation';
@@ -183,8 +186,11 @@ function overall(criteria: EvaluationCriterion[]): { score: string | null; weigh
   return { score: halfUp(weighted, weightTotal * 100n, 2), weightTotal: fromScaled(weightTotal, 2) };
 }
 
-async function load(client: string, chosen: ReturnType<typeof selection>): Promise<VendorEvaluation> {
+type Guard = (tx: Tx, org: string) => Promise<void>;
+
+async function load(client: string, chosen: ReturnType<typeof selection>, guard?: Guard): Promise<VendorEvaluation> {
   return withTenant(client, async (tx) => {
+    if (guard) await guard(tx, chosen.purchasingOrg);
     const [org] = await tx.execute(sql`
       select 1 as hit from purchasing_org where client = ${client} and purchasing_org = ${chosen.purchasingOrg}
     `) as unknown as Array<{ hit: number }>;
@@ -358,17 +364,21 @@ async function load(client: string, chosen: ReturnType<typeof selection>): Promi
   });
 }
 
-export async function listVendorEvaluation(client: string, params: Record<string, string>): Promise<VendorEvaluation> {
+export async function listVendorEvaluationForProvisioning(client: string, params: Record<string, string>): Promise<VendorEvaluation> {
   return load(client, selection(params));
 }
 
 /** The same read as the list. It writes nothing. */
-export async function checkVendorEvaluation(client: string, params: Record<string, string>): Promise<VendorEvaluation> {
-  const evaluation = await listVendorEvaluation(client, params);
+export async function checkVendorEvaluationForProvisioning(client: string, params: Record<string, string>): Promise<VendorEvaluation> {
+  const evaluation = await listVendorEvaluationForProvisioning(client, params);
   return { ...evaluation, message: `${evaluation.message} Nothing was written.` };
 }
 
-export async function saveManualScore(input: {
+export async function saveManualScoreForProvisioning(input: ManualScoreInput): Promise<ManualScoreResult> {
+  return saveManualScoreWith(input);
+}
+
+interface ManualScoreInput {
   client: string;
   changedBy: string;
   supplier: string;
@@ -381,7 +391,9 @@ export async function saveManualScore(input: {
   requestKey: string;
   expectedVersion?: number | null;
   named?: Record<string, string>;
-}): Promise<ManualScoreResult> {
+}
+
+async function saveManualScoreWith(input: ManualScoreInput, guard?: Guard): Promise<ManualScoreResult> {
   refuseNamed(input.named ?? {});
   const chosen = selection({
     supplier: input.supplier,
@@ -395,6 +407,7 @@ export async function saveManualScore(input: {
   if (!requestKey || requestKey.length > 64) fail('The request key does not stand.');
   if (!reason || reason.length > 100) fail('A reason is required.', 'Say why this score stands.');
   return withTenant(input.client, async (tx) => {
+    if (guard) await guard(tx, chosen.purchasingOrg);
     const [segment] = await tx.execute(sql`
       select is_blocked, purchasing_status
         from supplier_purchasing_org
@@ -497,5 +510,54 @@ export async function saveManualScore(input: {
       after: { score, reason },
     });
     return { wrote: true, criterionCode, score, version };
+  });
+}
+
+
+// ---- Scoped entry points: session, capability, and the reach of the purchasing organisation ----
+
+const refuseEvaluation = (message: string, remedy?: string) => new VendorEvaluationError(message, remedy);
+
+/**
+ * An evaluation reads every purchasing document of one organisation over a period: a company-wide figure. The
+ * organisation's company must be inside the Company Code scope and the actor must not be Plant-limited; a held
+ * Purchasing Org level must name the organisation. Out of reach answers as an organisation that does not stand.
+ */
+function guardFor(client: string, authorization: ServiceAuthorityContext | undefined): Guard {
+  return async (tx, org) => {
+    const actor = await purchasingActor(tx, client, authorization, [VENDOR_EVALUATION_CAPABILITY], refuseEvaluation);
+    const [row] = (await tx.execute(sql`
+      select coalesce(company_code, '') as company_code from purchasing_org where client = ${client} and purchasing_org = ${org}
+    `)) as unknown as Array<{ company_code: string }>;
+    const company = row?.company_code.trim();
+    const hidden = new VendorEvaluationError(`Purchasing organisation ${org} does not stand.`);
+    if (!company || !purchasingLevelsAllow(actor, { purchasingOrg: org })) throw hidden;
+    if (!(await companyInScope(tx, client, actor, company))) throw hidden;
+    // The company is the actor's own: a Plant limit is refused with its reason, not hidden.
+    await requireCompanyInScope(tx, client, actor, company, refuseEvaluation, { allowPlantLimited: false });
+  };
+}
+
+export async function listVendorEvaluation(
+  client: string, params: Record<string, string>, authorization: ServiceAuthorityContext | undefined,
+): Promise<VendorEvaluation> {
+  return load(client, selection(params), guardFor(client, authorization));
+}
+
+export async function checkVendorEvaluation(
+  client: string, params: Record<string, string>, authorization: ServiceAuthorityContext | undefined,
+): Promise<VendorEvaluation> {
+  const evaluation = await listVendorEvaluation(client, params, authorization);
+  return { ...evaluation, message: `${evaluation.message} Nothing was written.` };
+}
+
+export async function saveManualScore(input: ManualScoreInput & { authorization: ServiceAuthorityContext | undefined }): Promise<ManualScoreResult> {
+  const { authorization, ...rest } = input;
+  const guard = guardFor(rest.client, authorization);
+  // The verified session user is the recorded actor.
+  return saveManualScoreWith(rest, async (tx, org) => {
+    await guard(tx, org);
+    const actor = await purchasingActor(tx, rest.client, authorization, [VENDOR_EVALUATION_CAPABILITY], refuseEvaluation);
+    rest.changedBy = actor.username;
   });
 }

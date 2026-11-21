@@ -8177,6 +8177,8 @@
   "modules/purchasing/delivery-completion.ts": [
     "modules/foundation/schema.ts",
     "modules/purchasing/schema.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
@@ -8195,6 +8197,8 @@
     "modules/inventory/unit-conversion.ts",
     "modules/purchasing/info-record.ts",
     "modules/purchasing/schema.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/purchasing/grir-clearing.ts": [
@@ -8550,6 +8554,8 @@
     "platform/posting/decimal.ts"
   ],
   "modules/purchasing/vendor-evaluation.ts": [
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"

@@ -4,9 +4,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import {
   VendorEvaluationError,
-  checkVendorEvaluation,
-  listVendorEvaluation,
-  saveManualScore,
+  checkVendorEvaluationForProvisioning as checkVendorEvaluation,
+  listVendorEvaluationForProvisioning as listVendorEvaluation,
+  saveManualScoreForProvisioning as saveManualScore,
 } from '../src/modules/purchasing/vendor-evaluation';
 import { createTenant, destroyTenant } from './helpers';
 

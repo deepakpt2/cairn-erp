@@ -14,7 +14,9 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 
-import { type Tx } from '../../platform/db/client';
+import { type Tx, withTenant as withTenantScoped } from '../../platform/db/client';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { plantDocumentInReach, purchasingActor } from '../../platform/auth/scope-actor';
 import { exchangeRate } from '../foundation/schema';
 import { companyCode, plant, purchasingOrgPlant } from '../foundation/schema';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
@@ -594,7 +596,7 @@ export interface OrderDraft {
 }
 
 /** What the order screen shows when it is opened from a quotation. Nothing is written. */
-export async function orderDraftFromQuotation(client: string, quotationNumber: string): Promise<OrderDraft | null> {
+export async function orderDraftFromQuotationForProvisioning(client: string, quotationNumber: string): Promise<OrderDraft | null> {
   const { withTenant } = await import('../../platform/db/client');
   return withTenant(client, async (tx) => {
     const [quotation] = await tx.select().from(purchasingQuotation).where(and(
@@ -688,7 +690,7 @@ async function orderedAgainstRequisition(
  * What the order screen shows when it is opened from a requisition.
  * A request and a quotation are not required. Nothing is written.
  */
-export async function orderDraftFromRequisition(client: string, requisitionNumber: string): Promise<OrderDraft | null> {
+export async function orderDraftFromRequisitionForProvisioning(client: string, requisitionNumber: string): Promise<OrderDraft | null> {
   const number = requisitionNumber.trim();
   if (!number) return null;
   const { withTenant } = await import('../../platform/db/client');
@@ -812,4 +814,61 @@ export async function orderDraftFromRequisition(client: string, requisitionNumbe
       warning: warnings.join(' '),
     };
   });
+}
+
+
+// ---- Scoped order drafts: the order screen's capability, and the reach of the source document's plants ----
+
+const DRAFT_CAPABILITY = 'PROC.PO.CREATE';
+const refuseDraft = (message: string, remedy?: string) => new FollowOnError(message, remedy);
+
+/**
+ * A draft copies a requisition or a quotation into the order screen. The actor needs the order capability, and every
+ * plant of the source document (and its purchasing group, when a group level is held) must be inside the reach;
+ * otherwise the source answers as one that does not exist.
+ */
+export async function orderDraftFromRequisition(
+  client: string, requisitionNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<OrderDraft | null> {
+  const number = requisitionNumber.trim();
+  const reachable = await withTenantScoped(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [DRAFT_CAPABILITY], refuseDraft);
+    const lines = await tx.select().from(purchaseRequisitionItem).where(and(
+      eq(purchaseRequisitionItem.client, client), eq(purchaseRequisitionItem.requisitionNumber, number),
+    ));
+    for (const line of lines) {
+      if (!(await plantDocumentInReach(tx, client, actor, { plants: [line.plant], purchasingGroup: line.purchasingGroup }))) return false;
+    }
+    return true;
+  });
+  if (!reachable) {
+    return {
+      supplierNumber: '', purchasingOrg: '', purchasingGroup: '', companyCode: '', currency: '', quotationNumber: '', items: [],
+      warning: `Requisition ${number} does not exist.`,
+    };
+  }
+  return orderDraftFromRequisitionForProvisioning(client, number);
+}
+
+export async function orderDraftFromQuotation(
+  client: string, quotationNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<OrderDraft | null> {
+  const reachable = await withTenantScoped(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [DRAFT_CAPABILITY], refuseDraft);
+    const [quotation] = await tx.select().from(purchasingQuotation).where(and(
+      eq(purchasingQuotation.client, client), eq(purchasingQuotation.quotationNumber, quotationNumber),
+    ));
+    if (!quotation) return true;
+    const [event] = await tx.select({ plant: purchasingRfqItem.plant, org: purchasingRfqEvent.purchasingOrg, group: purchasingRfqEvent.purchasingGroup })
+      .from(purchasingRfqItem)
+      .innerJoin(purchasingRfq, and(eq(purchasingRfq.client, purchasingRfqItem.client), eq(purchasingRfq.rfqNumber, purchasingRfqItem.rfqNumber)))
+      .innerJoin(purchasingRfqEvent, and(eq(purchasingRfqEvent.client, purchasingRfq.client), eq(purchasingRfqEvent.eventNumber, purchasingRfq.eventNumber)))
+      .where(and(eq(purchasingRfqItem.client, client), eq(purchasingRfqItem.rfqNumber, quotation.rfqNumber))).limit(1);
+    if (!event) return true;
+    const plants = (await tx.select({ plant: purchasingRfqItem.plant }).from(purchasingRfqItem).where(and(
+      eq(purchasingRfqItem.client, client), eq(purchasingRfqItem.rfqNumber, quotation.rfqNumber),
+    ))).map((row) => row.plant);
+    return plantDocumentInReach(tx, client, actor, { plants, purchasingOrg: event.org, purchasingGroup: event.group });
+  });
+  return reachable ? orderDraftFromQuotationForProvisioning(client, quotationNumber) : null;
 }
