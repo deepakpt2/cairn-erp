@@ -8,8 +8,8 @@ import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createRequisitionForProvisioning as createRequisition } from '../src/modules/purchasing/requisitions';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { planSingleItemForProvisioning as planSingleItem, planSingleLevelForProvisioning as planSingleLevel, singleLevelRefusal } from '../src/modules/production/mrp-run';
-import { createProductionVersion } from '../src/modules/production/production-version';
-import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 

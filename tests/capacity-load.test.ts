@@ -10,9 +10,9 @@ import {
   bucketKey, checkWindow, CAPACITY_LOAD_CAPABILITY, CAPACITY_LOAD_LIMIT_CEILING, CapacityLoadError, drillDownFor, effectiveDailyMinutes,
   isoWeekKey, loadCapacityReport, requirementOf, type CapacityLoadQuery, type CapacityLoadReport,
 } from '../src/modules/production/capacity-load';
-import { createProductionVersion } from '../src/modules/production/production-version';
+import { createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';
-import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { changeWorkCenterForProvisioning as changeWorkCenter, createWorkCenterForProvisioning as createWorkCenter, getWorkCenterForProvisioning as getWorkCenter, saveWorkCenterCategory, WorkCenterError, type WorkCenterCapacityInput } from '../src/modules/production/work-center';
 import { saveCalendarPeriod, saveHolidayCalendar, addHolidayDay } from '../src/modules/foundation/factory-calendar';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';

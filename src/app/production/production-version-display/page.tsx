@@ -39,7 +39,7 @@ export default async function ProductionVersionDisplayPage({ searchParams }: {
   let listed: Awaited<ReturnType<typeof listProductionVersions>> = { rows: [], total: 0, limit: 25, offset: 0 };
   if (plant && !productionVersion) {
     try {
-      listed = await listProductionVersions(session.user.client, { plant, materialNumber, includeLocked: true, includeExpired: true });
+      listed = await listProductionVersions(session.user.client, { plant, materialNumber, includeLocked: true, includeExpired: true }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof ProductionVersionError ? error.message : 'The production version could not be displayed.';
     }
@@ -47,7 +47,7 @@ export default async function ProductionVersionDisplayPage({ searchParams }: {
   let document = null;
   if (materialNumber && plant && productionVersion) {
     try {
-      document = await getProductionVersion(session.user.client, materialNumber, plant, productionVersion);
+      document = await getProductionVersion(session.user.client, materialNumber, plant, productionVersion, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof ProductionVersionError ? error.message : 'The production version could not be displayed.';
     }

@@ -6,10 +6,10 @@ import type { Page } from '@playwright/test';
 import { withTenant } from '../../src/platform/db/client';
 import { saveMaterialView } from '../../src/modules/inventory/materials';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../../src/modules/production/material-bom';
-import { checkProductionVersion, createProductionVersion } from '../../src/modules/production/production-version';
+import { checkProductionVersionForProvisioning as checkProductionVersion, createProductionVersionForProvisioning as createProductionVersion } from '../../src/modules/production/production-version';
 import { saveOrderTypeParameter } from '../../src/modules/production/order-type-parameters';
 import {
-  createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage,
+  createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage,
 } from '../../src/modules/production/routing';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
 import type { BrowserTarget } from './targets';

@@ -3,5 +3,7 @@
  */
 export {
   getProductionVersion as displayProductionVersion,
+  getProductionVersionForProvisioning as displayProductionVersionForProvisioning,
   listProductionVersions as listProductionVersionsForDisplay,
+  listProductionVersionsForProvisioning as listProductionVersionsForDisplayForProvisioning,
 } from './production-version';

@@ -69,7 +69,7 @@ export default async function ProductionVersionsPage({ searchParams }: {
         includeLocked: last(raw.locked) === '1',
         includeExpired: last(raw.expired) === '1',
         offset: Number(last(raw.page) || 0) * 25,
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof ProductionVersionError ? error.message : 'The production versions could not be listed.';
     }
@@ -77,7 +77,7 @@ export default async function ProductionVersionsPage({ searchParams }: {
   let document = null;
   if (!creating && materialNumber && plant && productionVersion) {
     try {
-      document = await getProductionVersion(session.user.client, materialNumber, plant, productionVersion);
+      document = await getProductionVersion(session.user.client, materialNumber, plant, productionVersion, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof ProductionVersionError ? error.message : 'The production version could not be opened.';
     }

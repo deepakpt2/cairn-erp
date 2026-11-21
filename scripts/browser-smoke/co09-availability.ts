@@ -12,12 +12,12 @@ import {
 } from '../../src/modules/production/availability-check';
 import { listCheckingControls, saveCheckingControl } from '../../src/modules/production/checking-control';
 import { changeMaterialBomForProvisioning as changeMaterialBom, createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../../src/modules/production/material-bom';
-import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../../src/modules/production/routing';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../../src/modules/production/routing';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
 import { planSingleItemForProvisioning as planSingleItem } from '../../src/modules/production/mrp-run';
 import { convertPlannedOrder } from '../../src/modules/production/planned-order-conversion';
 import { saveOrderTypeParameter } from '../../src/modules/production/order-type-parameters';
-import { checkProductionVersion, createProductionVersion } from '../../src/modules/production/production-version';
+import { checkProductionVersionForProvisioning as checkProductionVersion, createProductionVersionForProvisioning as createProductionVersion } from '../../src/modules/production/production-version';
 import type { BrowserTarget } from './targets';
 import { createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
 

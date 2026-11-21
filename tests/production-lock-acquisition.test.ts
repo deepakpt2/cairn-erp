@@ -45,13 +45,14 @@ vi.mock('@/platform/auth/current', async (original) => {
   };
 });
 
+import { createFinanceActor } from './helpers/finance-actor';
 import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 import { releaseChangeLock } from '@/platform/lock/enqueue';
 import { saveMaterialView } from '@/modules/inventory/materials';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '@/modules/production/material-bom';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '@/modules/production/work-center';
-import { ROUTING_LOCK, createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '@/modules/production/routing';
-import { PRODUCTION_VERSION_LOCK, createProductionVersion } from '@/modules/production/production-version';
+import { ROUTING_LOCK, createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '@/modules/production/routing';
+import { PRODUCTION_VERSION_LOCK, createProductionVersionForProvisioning as createProductionVersion } from '@/modules/production/production-version';
 import { copyVersionAction, saveVersionAction } from '@/app/production/production-versions/actions';
 import { saveRoutingAction } from '@/app/production/routings/actions';
 import ProductionVersionsPage from '@/app/production/production-versions/page';
@@ -85,29 +86,25 @@ const PEOPLE = {
 
 type Person = keyof typeof PEOPLE;
 
+/** Real identities: an enforced routing service reads the authority and the reach from the database. */
+const IDS: Record<string, { userId: string; sessionId: string }> = {};
+
 async function seed(): Promise<void> {
-  for (const person of Object.values(PEOPLE)) {
-    await withTenant(tenant.client, (tx) => tx.execute(sql`
-      insert into app_user
-        (id, client, username, full_name, email, password_hash, is_active, is_locked, created_by)
-      values (${`user-${person.username}`}, ${tenant.client}, ${person.username}, ${person.username},
-              null, 'test-hash', true, false, 'TEST')
-    `));
-    // A live `user_session` row, because a lock is only honoured while its session is alive.
-    await withTenant(tenant.client, (tx) => tx.execute(sql`
-      insert into user_session (id, client, user_id, token_hash, issued_at, expires_at)
-      values (${person.sessionId}, ${tenant.client}, ${`user-${person.username}`}, ${`token-${person.sessionId}`},
-              now(), now() + interval '8 hours')
-    `));
+  for (const [key, person] of Object.entries(PEOPLE)) {
+    const actor = await createFinanceActor(tenant.client, {
+      username: person.username, capabilities: [...person.capabilities],
+    });
+    IDS[key] = { userId: actor.userId, sessionId: actor.sessionId };
   }
 }
 
 function actingAs(person: Person, extra: string[] = []): void {
-  const { username, sessionId, capabilities } = PEOPLE[person];
+  const { username, capabilities } = PEOPLE[person];
+  const { sessionId, userId } = IDS[person]!;
   request.session = {
     sessionId,
     user: {
-      client: tenant.client, userId: `user-${username}`, username, fullName: username,
+      client: tenant.client, userId, username, fullName: username,
       email: null, mustChangePassword: false, capabilities: [...capabilities, ...extra],
     },
     expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
@@ -135,7 +132,7 @@ async function enqueueRow(lockObject: string, argument: string) {
 }
 
 async function release(person: Person, lockObject: string, argument: string): Promise<void> {
-  await releaseChangeLock({ client: tenant.client, sessionId: PEOPLE[person].sessionId, lockObject, argument });
+  await releaseChangeLock({ client: tenant.client, sessionId: IDS[person]!.sessionId, lockObject, argument });
 }
 
 type AnyElement = ReactElement<{ children?: ReactNode }>;
@@ -295,7 +292,7 @@ describe('a create-only session takes no change lock on a standing row', () => {
     try {
       const standing = await enqueueRow(PRODUCTION_VERSION_LOCK, VERSION_ARGUMENT);
       expect(standing).toMatchObject({
-        owner_session_id: PEOPLE.editor.sessionId,
+        owner_session_id: IDS.editor!.sessionId,
         owner_user: PEOPLE.editor.username,
         transaction_code: 'CFG.PROD.VERSION.DEFINE',
         mode: 'EXCLUSIVE',
@@ -320,7 +317,7 @@ describe('a create-only session takes no change lock on a standing row', () => {
     await RoutingsPage({ searchParams: routingParams() });
     try {
       expect(await enqueueRow(ROUTING_LOCK, ROUTING_ARGUMENT)).toMatchObject({
-        owner_session_id: PEOPLE.editor.sessionId,
+        owner_session_id: IDS.editor!.sessionId,
         owner_user: PEOPLE.editor.username,
       });
       const result = await saveRoutingAction({ ok: false }, form({
@@ -362,7 +359,7 @@ describe('an entitled session still gets the lock, and keeps what it means', () 
       actingAs('second');
       const contention = await ProductionVersionsPage({ searchParams: versionParams() });
       expect(await enqueueRow(PRODUCTION_VERSION_LOCK, VERSION_ARGUMENT)).toMatchObject({
-        owner_session_id: PEOPLE.editor.sessionId,
+        owner_session_id: IDS.editor!.sessionId,
       });
       expect(propsOf(contention, VersionForm)).toMatchObject({ locked: true });
 

@@ -38,8 +38,8 @@ import { getCustomerCredit, saveCustomerCredit } from '../modules/finance/credit
 import { listSalesConditionsForProvisioning as listSalesConditions, saveSalesConditionForProvisioning as saveSalesCondition } from '../modules/sales/conditions';
 
 import { createMaterialBomForProvisioning as createMaterialBom, getMaterialBomForProvisioning as getMaterialBom } from '../modules/production/material-bom';
-import { createRouting, getRouting } from '../modules/production/routing';
-import { createProductionVersion, getProductionVersion } from '../modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, getRoutingForProvisioning as getRouting } from '../modules/production/routing';
+import { createProductionVersionForProvisioning as createProductionVersion, getProductionVersionForProvisioning as getProductionVersion } from '../modules/production/production-version';
 import { createPlannedOrderForProvisioning as createPlannedOrder } from '../modules/production/planned-order-create';
 import { CONVERSION_LIMIT, convertPlannedOrders } from '../modules/production/planned-order-conversion';
 import { getProductionOrder, releaseProductionOrder } from '../modules/inventory/production-orders';

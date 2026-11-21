@@ -7,8 +7,8 @@ import { defineRange } from '../src/platform/numbering';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { structuralBomLevels, type StructuralBomLevels } from '../src/modules/production/mrp-structure';
-import { createProductionVersion, deleteProductionVersion, lockProductionVersion, selectProductionVersion } from '../src/modules/production/production-version';
-import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { createProductionVersionForProvisioning as createProductionVersion, deleteProductionVersionForProvisioning as deleteProductionVersion, lockProductionVersionForProvisioning as lockProductionVersion, selectProductionVersion } from '../src/modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 

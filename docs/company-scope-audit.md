@@ -330,3 +330,12 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - `...ForProvisioning` variants for tests, seeds, scripts. `saveWorkCenterCategory` and `listWorkCenterCategories` (client-wide customizing) stay unscoped.
 - Residual: a cost-center assignment on a work center is not checked against the actor's Controlling Area scope (that gate is a later phase).
 - Tests: `tests/company-scope-production.test.ts` (21 now); about 30 suites, scripts and seeds repointed.
+
+## Phase 9h — Production: routing (CA01 / CA02 / CA03) and production version (C223 / C202 / C203)
+
+- Routing: `createRouting`, `changeRouting`, `getRouting`, `listRoutings`, `resolveRouting` (and the display aliases) now need a session, the routing capability and the routing's plant in reach. A plant out of reach answers as "Plant X does not exist"; a routing there reads as missing, drops from the list, and a named plant out of reach is refused as nonexistent. A copy-from reference at a plant out of reach answers "The reference routing does not exist." The recorded user is the session user.
+- Production version: `createProductionVersion`, `changeProductionVersion`, `copyProductionVersion`, `getProductionVersion`, `listProductionVersions`, `checkProductionVersion`, `lockProductionVersion`, `deleteProductionVersion` now need a session, their own capability (create / change / display / check / lock / delete) and the plant in reach. Writes at a plant out of reach answer as "not extended to plant"; check, lock and delete answer "The production version does not exist."; a list of a plant out of reach is empty. The recorded user is the session user.
+- `...ForProvisioning` variants for tests, seeds, scripts. Left unscoped on purpose: `selectEffectiveRouting`, `selectProductionVersion`, `listProductionVersionChoices` (internal downstream reads with no actor) and the routing / version configuration masters (client-wide customizing).
+- Residuals: a create request-key replay returns the stored row without a plant-reach check on the earlier request (routing, production version, material BOM, same pattern); a production version names a BOM and routing only at its own plant, so no cross-plant read happens.
+- Tests: `tests/company-scope-production.test.ts` (25 now); the lock-acquisition, master-lock and change-lock suites now sign their people in as real persisted actors.
+- Still unscoped in production: availability check and commitment, capacity load, stock-requirements, STO planning, cost estimate, order-cost and other production reports.

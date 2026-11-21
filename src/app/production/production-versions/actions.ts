@@ -83,8 +83,8 @@ export async function saveVersionAction(_previous: VersionActionState, formData:
       await assertChangeForSession(session, versionLockInput(formData));
     }
     const version = mode === 'CHANGE'
-      ? await changeProductionVersion(inputOf(session, formData))
-      : await createProductionVersion(inputOf(session, formData));
+      ? await changeProductionVersion(inputOf(session, formData), { userId: session.user.userId, sessionId: session.sessionId ?? '' })
+      : await createProductionVersion(inputOf(session, formData), { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     const check = version.checkStatus === '1' ? 'The consistency check has no findings.' : 'The consistency check has findings. An error is not treated as valid.';
     return { ok: true, version, message: `Production version ${version.productionVersion} was saved. ${check} A production order was not rewritten.` };
   } catch (error) {
@@ -95,7 +95,7 @@ export async function saveVersionAction(_previous: VersionActionState, formData:
 export async function copyVersionAction(_previous: VersionActionState, formData: FormData): Promise<VersionActionState> {
   const session = await requireCapability(PRODUCTION_VERSION_CREATE_CAPABILITY);
   try {
-    const version = await copyProductionVersion({ ...inputOf(session, formData), newProductionVersion: String(formData.get('newProductionVersion') ?? '') });
+    const version = await copyProductionVersion({ ...inputOf(session, formData), newProductionVersion: String(formData.get('newProductionVersion') ?? '') }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return { ok: true, version, message: `Production version ${version.productionVersion} was copied. The source identity and its earlier check were not copied.` };
   } catch (error) {
     return fail(error);
@@ -120,6 +120,7 @@ export async function checkVersionAction(formData: FormData): Promise<void> {
       String(formData.get('plant') ?? ''),
       String(formData.get('productionVersion') ?? ''),
       session.user.username,
+      { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     );
     back(formData, `The check is ${version.checkStatus}. A previous result was not reused.`);
   } catch (error) {
@@ -139,6 +140,7 @@ export async function lockVersionAction(formData: FormData): Promise<void> {
       session.user.username,
       String(formData.get('locked') ?? '') === '1',
       Number(formData.get('version') ?? 0),
+      { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     );
     back(formData, version.lockIndicator === '1' ? 'The version is locked. It will not be selected.' : 'The version is unlocked.');
   } catch (error) {
@@ -157,6 +159,7 @@ export async function deleteVersionAction(formData: FormData): Promise<void> {
       String(formData.get('productionVersion') ?? ''),
       session.user.username,
       Number(formData.get('version') ?? 0),
+      { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     );
     back(formData, result.mode === 'DELETED'
       ? 'The unused production version was deleted. The change document remains.'

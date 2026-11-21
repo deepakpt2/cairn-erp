@@ -18,6 +18,8 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { unitOfMeasure } from '../../platform/tables/reference';
@@ -479,7 +481,27 @@ async function assertNoProhibitedOverlap(tx: Tx, client: string, input: {
   if (hit) fail('OVERLAP', `Production version ${hit.productionVersion} already covers this date and lot-size range.`, 'Change the dates or the lot range, or allow overlap and choose the version at selection.');
 }
 
-async function writeVersion(input: ProductionVersionInput, mode: 'CREATE' | 'CHANGE'): Promise<ProductionVersionView> {
+type VersionScope = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type VersionReach = { reachable: string[]; username: string } | null;
+
+/** Session, live capability and company scope, judged in the caller's own transaction. */
+async function versionReach(tx: Tx, client: string, scope: VersionScope, capabilities: readonly string[]): Promise<VersionReach> {
+  if (scope === 'unscoped') return null;
+  const actor = await purchasingActor(tx, client, scope.authorization, capabilities, (m, r) => new ProductionVersionError('AUTHORITY', m, r));
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
+}
+
+/** A plant out of reach answers exactly as a production version that does not stand. */
+function requireVersionInReach(reach: VersionReach, plant: string): void {
+  if (reach && !reach.reachable.includes(plant)) fail('MISSING', 'The production version does not exist.');
+}
+
+const VERSION_READERS = [
+  PRODUCTION_VERSION_DISPLAY_CAPABILITY, PRODUCTION_VERSION_CHANGE_CAPABILITY, PRODUCTION_VERSION_CREATE_CAPABILITY,
+] as const;
+
+async function writeVersion(rawInput: ProductionVersionInput, mode: 'CREATE' | 'CHANGE', scope: VersionScope): Promise<ProductionVersionView> {
+  let input = rawInput;
   if ((input.changeNumber ?? '').trim()) {
     fail('CHANGE_NUMBER', 'Engineering change management is not implemented. A change number is not stored.', 'Save without a change number. Validity is the from and to dates.');
   }
@@ -488,6 +510,11 @@ async function writeVersion(input: ProductionVersionInput, mode: 'CREATE' | 'CHA
   if (!materialNumber || !plant) fail('MATERIAL_PLANT', 'Material and plant are required.');
   const requestKey = textOf(input.requestKey, 'Request key', 64);
   return withTenant(input.client, async (tx) => {
+    const reach = await versionReach(tx, input.client, scope, [mode === 'CREATE' ? PRODUCTION_VERSION_CREATE_CAPABILITY : PRODUCTION_VERSION_CHANGE_CAPABILITY]);
+    // A plant out of reach answers as a plant the material is not extended to.
+    if (reach && !reach.reachable.includes(plant)) fail('MATERIAL_PLANT', `Material ${materialNumber} is not extended to plant ${plant}.`);
+    // The recorded user is the session user, never the caller's name.
+    if (reach) input = { ...rawInput, changedBy: reach.username };
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/production-version/${plant}/${materialNumber}`}, 0))`);
     if (mode === 'CREATE' && requestKey) {
       const [prior] = await tx.select().from(productionVersion).where(and(eq(productionVersion.client, input.client), eq(productionVersion.requestKey, requestKey)));
@@ -605,18 +632,23 @@ async function writeVersion(input: ProductionVersionInput, mode: 'CREATE' | 'CHA
   });
 }
 
-export function createProductionVersion(input: ProductionVersionInput): Promise<ProductionVersionView> {
-  return writeVersion(input, 'CREATE');
+export function createProductionVersion(input: ProductionVersionInput, authorization: ServiceAuthorityContext | undefined) {
+  return writeVersion(input, 'CREATE', { authorization });
+}
+export function changeProductionVersion(input: ProductionVersionInput, authorization: ServiceAuthorityContext | undefined) {
+  return writeVersion(input, 'CHANGE', { authorization });
+}
+export function createProductionVersionForProvisioning(input: ProductionVersionInput) {
+  return writeVersion(input, 'CREATE', 'unscoped');
+}
+export function changeProductionVersionForProvisioning(input: ProductionVersionInput) {
+  return writeVersion(input, 'CHANGE', 'unscoped');
 }
 
-export function changeProductionVersion(input: ProductionVersionInput): Promise<ProductionVersionView> {
-  return writeVersion(input, 'CHANGE');
-}
-
-export async function copyProductionVersion(input: ProductionVersionInput & { newProductionVersion: string }): Promise<ProductionVersionView> {
-  const source = await getProductionVersion(input.client, input.materialNumber, input.plant, input.productionVersion ?? '');
+async function copyWith(input: ProductionVersionInput & { newProductionVersion: string }, scope: VersionScope): Promise<ProductionVersionView> {
+  const source = await getWith(input.client, input.materialNumber, input.plant, input.productionVersion ?? '', scope);
   if (!source) fail('MISSING', 'The production version to copy does not exist.');
-  return createProductionVersion({
+  return writeVersion({
     ...input,
     productionVersion: input.newProductionVersion,
     description: input.description === undefined ? source.description : input.description,
@@ -632,15 +664,31 @@ export async function copyProductionVersion(input: ProductionVersionInput & { ne
     groupCounter: input.groupCounter === undefined ? source.groupCounter : input.groupCounter,
     receivingStorageLocation: input.receivingStorageLocation === undefined ? source.receivingStorageLocation : input.receivingStorageLocation,
     requestKey: input.requestKey,
+  }, 'CREATE', scope);
+}
+export function copyProductionVersion(input: ProductionVersionInput & { newProductionVersion: string }, authorization: ServiceAuthorityContext | undefined) {
+  return copyWith(input, { authorization });
+}
+export function copyProductionVersionForProvisioning(input: ProductionVersionInput & { newProductionVersion: string }) {
+  return copyWith(input, 'unscoped');
+}
+
+async function getWith(client: string, materialNumber: string, plant: string, productionVersionCode: string, scope: VersionScope): Promise<ProductionVersionView | null> {
+  if (!materialNumber.trim() || !plant.trim() || !productionVersionCode.trim()) return null;
+  return withTenant(client, async (tx) => {
+    const reach = await versionReach(tx, client, scope, VERSION_READERS);
+    if (reach && !reach.reachable.includes(plant.trim())) return null;
+    return readInTx(tx, client, materialNumber.trim(), plant.trim(), versionCodeOf(productionVersionCode));
   });
 }
-
-export async function getProductionVersion(client: string, materialNumber: string, plant: string, productionVersionCode: string): Promise<ProductionVersionView | null> {
-  if (!materialNumber.trim() || !plant.trim() || !productionVersionCode.trim()) return null;
-  return withTenant(client, (tx) => readInTx(tx, client, materialNumber.trim(), plant.trim(), versionCodeOf(productionVersionCode)));
+export function getProductionVersion(client: string, materialNumber: string, plant: string, productionVersionCode: string, authorization: ServiceAuthorityContext | undefined) {
+  return getWith(client, materialNumber, plant, productionVersionCode, { authorization });
+}
+export function getProductionVersionForProvisioning(client: string, materialNumber: string, plant: string, productionVersionCode: string) {
+  return getWith(client, materialNumber, plant, productionVersionCode, 'unscoped');
 }
 
-export async function listProductionVersions(client: string, filter: {
+type VersionFilter = {
   plant: string;
   materialNumber?: string;
   productionVersion?: string;
@@ -652,13 +700,18 @@ export async function listProductionVersions(client: string, filter: {
   includeDeleted?: boolean;
   limit?: number;
   offset?: number;
-}) {
+};
+
+async function listWith(client: string, filter: VersionFilter, scope: VersionScope) {
   const plant = filter.plant.trim();
   if (!plant) fail('MATERIAL_PLANT', 'Plant is required to search.');
   const keyDate = filter.keyDate?.trim() ? dateOf(filter.keyDate, 'Key date') : null;
   const limit = Math.min(Math.max(filter.limit ?? 25, 1), 100);
   const offset = Math.max(filter.offset ?? 0, 0);
   return withTenant(client, async (tx) => {
+    const reach = await versionReach(tx, client, scope, VERSION_READERS);
+    // A plant out of reach lists as a plant with no production version.
+    if (reach && !reach.reachable.includes(plant)) return { rows: [], total: 0, limit, offset };
     const rows = await tx.select().from(productionVersion).where(eq(productionVersion.client, client)).orderBy(
       asc(productionVersion.materialNumber), asc(productionVersion.productionVersion),
     );
@@ -698,9 +751,19 @@ export async function listProductionVersions(client: string, filter: {
   });
 }
 
-export async function checkProductionVersion(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string): Promise<ProductionVersionView> {
+export function listProductionVersions(client: string, filter: VersionFilter, authorization: ServiceAuthorityContext | undefined) {
+  return listWith(client, filter, { authorization });
+}
+export function listProductionVersionsForProvisioning(client: string, filter: VersionFilter) {
+  return listWith(client, filter, 'unscoped');
+}
+
+async function checkWith(client: string, materialNumber: string, plant: string, productionVersionCode: string, rawChangedBy: string, scope: VersionScope): Promise<ProductionVersionView> {
   const code = versionCodeOf(productionVersionCode);
   return withTenant(client, async (tx) => {
+    const reach = await versionReach(tx, client, scope, [PRODUCTION_VERSION_CHECK_CAPABILITY]);
+    requireVersionInReach(reach, plant.trim());
+    const changedBy = reach ? reach.username : rawChangedBy;
     const [header] = await tx.select().from(productionVersion).where(and(
       eq(productionVersion.client, client), eq(productionVersion.materialNumber, materialNumber.trim()),
       eq(productionVersion.plant, plant.trim()), eq(productionVersion.productionVersion, code),
@@ -734,9 +797,19 @@ export async function checkProductionVersion(client: string, materialNumber: str
   });
 }
 
-export async function lockProductionVersion(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string, locked: boolean, expectedVersion: number): Promise<ProductionVersionView> {
+export function checkProductionVersion(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string, authorization: ServiceAuthorityContext | undefined) {
+  return checkWith(client, materialNumber, plant, productionVersionCode, changedBy, { authorization });
+}
+export function checkProductionVersionForProvisioning(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string) {
+  return checkWith(client, materialNumber, plant, productionVersionCode, changedBy, 'unscoped');
+}
+
+async function lockWith(client: string, materialNumber: string, plant: string, productionVersionCode: string, rawChangedBy: string, locked: boolean, expectedVersion: number, scope: VersionScope): Promise<ProductionVersionView> {
   const code = versionCodeOf(productionVersionCode);
   return withTenant(client, async (tx) => {
+    const reach = await versionReach(tx, client, scope, [PRODUCTION_VERSION_LOCK_CAPABILITY]);
+    requireVersionInReach(reach, plant.trim());
+    const changedBy = reach ? reach.username : rawChangedBy;
     const [header] = await tx.select().from(productionVersion).where(and(
       eq(productionVersion.client, client), eq(productionVersion.materialNumber, materialNumber.trim()),
       eq(productionVersion.plant, plant.trim()), eq(productionVersion.productionVersion, code),
@@ -761,9 +834,19 @@ export async function lockProductionVersion(client: string, materialNumber: stri
   });
 }
 
-export async function deleteProductionVersion(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string, expectedVersion: number): Promise<{ mode: 'DELETED' | 'DEACTIVATED' }> {
+export function lockProductionVersion(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string, locked: boolean, expectedVersion: number, authorization: ServiceAuthorityContext | undefined) {
+  return lockWith(client, materialNumber, plant, productionVersionCode, changedBy, locked, expectedVersion, { authorization });
+}
+export function lockProductionVersionForProvisioning(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string, locked: boolean, expectedVersion: number) {
+  return lockWith(client, materialNumber, plant, productionVersionCode, changedBy, locked, expectedVersion, 'unscoped');
+}
+
+async function deleteWith(client: string, materialNumber: string, plant: string, productionVersionCode: string, rawChangedBy: string, expectedVersion: number, scope: VersionScope): Promise<{ mode: 'DELETED' | 'DEACTIVATED' }> {
   const code = versionCodeOf(productionVersionCode);
   return withTenant(client, async (tx) => {
+    const reach = await versionReach(tx, client, scope, [PRODUCTION_VERSION_DELETE_CAPABILITY]);
+    requireVersionInReach(reach, plant.trim());
+    const changedBy = reach ? reach.username : rawChangedBy;
     const [header] = await tx.select().from(productionVersion).where(and(
       eq(productionVersion.client, client), eq(productionVersion.materialNumber, materialNumber.trim()),
       eq(productionVersion.plant, plant.trim()), eq(productionVersion.productionVersion, code),
@@ -804,6 +887,13 @@ export async function deleteProductionVersion(client: string, materialNumber: st
 }
 
 /** Shared selector. Does not write. The plant run calls this through the shared explosion. CO01 calls this when the screen derives the component snapshot. Single-item planning and conversion may call it inside their own transaction. The standard cost estimate (CK11N) calls it with `context: 'COSTING'`; the context selects nothing differently — the lot-size range, the validity and the consistency check apply as for every other use. */
+export function deleteProductionVersion(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string, expectedVersion: number, authorization: ServiceAuthorityContext | undefined) {
+  return deleteWith(client, materialNumber, plant, productionVersionCode, changedBy, expectedVersion, { authorization });
+}
+export function deleteProductionVersionForProvisioning(client: string, materialNumber: string, plant: string, productionVersionCode: string, changedBy: string, expectedVersion: number) {
+  return deleteWith(client, materialNumber, plant, productionVersionCode, changedBy, expectedVersion, 'unscoped');
+}
+
 export async function selectProductionVersion(client: string, input: {
   materialNumber: string;
   plant: string;

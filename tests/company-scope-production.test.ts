@@ -23,11 +23,19 @@ import {
 import { getMrpRunProgress, submitMrpBackgroundRun } from '../src/modules/production/mrp-background';
 import {
   saveBomItemCategory, saveBomStatus, saveBomUsage,
-  changeMaterialBom, createMaterialBom, getMaterialBom, listMaterialBoms, resolveMaterialBom,
+  changeMaterialBom, createMaterialBom, createMaterialBomForProvisioning, getMaterialBom, listMaterialBoms, resolveMaterialBom,
 } from '../src/modules/production/material-bom';
 import {
   changeWorkCenter, createWorkCenter, getWorkCenter, listWorkCenters, saveWorkCenterCategory,
 } from '../src/modules/production/work-center';
+import {
+  changeRouting, createRouting, createRoutingForProvisioning, getRouting, listRoutings, resolveRouting,
+  saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage,
+} from '../src/modules/production/routing';
+import {
+  changeProductionVersion, checkProductionVersion, copyProductionVersion, createProductionVersion,
+  deleteProductionVersion, getProductionVersion, listProductionVersions, lockProductionVersion,
+} from '../src/modules/production/production-version';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -190,7 +198,7 @@ beforeAll(async () => {
     materialEntry: '+', quantityEntry: '+', allowFixedQuantity: 'X', allowBulk: 'X', allowPhantom: 'X',
   });
   await saveBomStatus({ client, changedBy: SEED, status: '1', description: 'Active', releasedForCosting: 'X', releasedForOrders: 'X' });
-  const BCAPS = ['PROD.BOM.DISPLAY', 'PROD.BOM.CREATE', 'PROD.BOM.CHANGE', 'PROD.WORKCENTER.DISPLAY', 'PROD.WORKCENTER.CREATE', 'PROD.WORKCENTER.CHANGE'];
+  const BCAPS = ['PROD.BOM.DISPLAY', 'PROD.BOM.CREATE', 'PROD.BOM.CHANGE', 'PROD.WORKCENTER.DISPLAY', 'PROD.WORKCENTER.CREATE', 'PROD.WORKCENTER.CHANGE', 'PROD.ROUTING.DISPLAY', 'PROD.ROUTING.CREATE', 'PROD.ROUTING.CHANGE', 'PROD.VERSION.DISPLAY', 'PROD.VERSION.CREATE', 'PROD.VERSION.CHANGE', 'PROD.VERSION.CHECK', 'PROD.VERSION.LOCK', 'PROD.VERSION.DELETE'];
   bA = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [A] });
   bB = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [B] });
   bPlantA = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [A, B], plantScopes: ['PLA1'] });
@@ -568,5 +576,112 @@ describe('work center', () => {
       }
     }
     expect(await exists('WCQ')).toHaveLength(0);
+  });
+});
+
+describe('routing', () => {
+  const rt = (plant: string, group: string, extra: Record<string, unknown> = {}) => ({
+    client, changedBy: 'someone-else', taskListType: 'N', routingGroup: group, groupCounter: '1', plant,
+    description: 'Standard', usage: '1', status: '4', baseQuantity: '1', baseUnit: 'PC', validFrom: '2026-01-01',
+    operations: [], ...extra,
+  });
+  const rows = (group: string) => withTenant(client, async (tx) => (await tx.execute(sql`
+    select plant, created_by from routing where client = ${client} and routing_group = ${group}`)) as unknown as Array<{ plant: string; created_by: string }>);
+
+  it('creates, changes, reads, lists and resolves only inside reach, and refuses a plant out of reach as a missing plant', async () => {
+    await saveRoutingTaskListType({ client, changedBy: 'SETUP', taskListType: 'N', description: 'Routing' });
+    await saveRoutingUsage({ client, changedBy: 'SETUP', usage: '1', description: 'Production' });
+    await saveRoutingStatus({ client, changedBy: 'SETUP', status: '4', description: 'Released', releasedForScheduling: 'X', releasedForCosting: 'X', releasedForOrders: 'X' });
+    expect(await ask(createRouting(rt('PLA1', 'RA'), bA.authorization))).toBe('done');
+    expect(await ask(createRouting(rt('PLB1', 'RB'), bB.authorization))).toBe('done');
+    expect((await rows('RA'))[0]?.created_by).toBe(bA.username);
+
+    const missing = mask(await ask(createRouting(rt('PLZZ', 'RX'), bA.authorization)), 'PLZZ');
+    for (const p of ['PLB1', 'PLN1']) expect(mask(await ask(createRouting(rt(p, 'RX'), bA.authorization)), p)).toBe(missing);
+    expect(await rows('RX')).toHaveLength(0);
+
+    expect((await getRouting(client, 'N', 'RA', '1', null, bA.authorization))?.plant).toBe('PLA1');
+    expect(await getRouting(client, 'N', 'RB', '1', null, bA.authorization)).toBeNull();
+    expect((await listRoutings(client, {}, bA.authorization)).map((r) => r.routingGroup)).toEqual(['RA']);
+    expect(await ask(listRoutings(client, { plant: 'PLB1' }, bA.authorization))).toContain('does not exist');
+    expect(await resolveRouting(client, { taskListType: 'N', routingGroup: 'RB', groupCounter: '1' }, bA.authorization)).toBeNull();
+
+    const standing = await getRouting(client, 'N', 'RB', '1', null, bB.authorization);
+    expect(await ask(changeRouting(rt('PLB1', 'RB', { description: 'Hijack', version: standing!.version }), bA.authorization))).not.toBe('done');
+    expect((await getRouting(client, 'N', 'RB', '1', null, bB.authorization))?.description).toBe('Standard');
+    expect(await ask(createRouting(rt('PLA1', 'RC', { copyFrom: { taskListType: 'N', routingGroup: 'RB', groupCounter: '1' } }), bA.authorization))).not.toBe('done');
+  });
+
+  it('refuses a missing session, a missing capability, no scope, a plant scope that excludes the plant, and another tenant', async () => {
+    for (const bad of [undefined, { userId: 'nobody', sessionId: 'nothing' }, bNoCap.authorization, bNoScope.authorization, bOther.authorization]) {
+      expect(await ask(createRouting(rt('PLA1', 'RQ'), bad))).not.toBe('done');
+      expect(await ask(listRoutings(client, {}, bad))).not.toBe('done');
+    }
+    expect(await ask(createRouting(rt('PLB1', 'RQ'), bPlantA.authorization))).not.toBe('done');
+    expect(await rows('RQ')).toHaveLength(0);
+  });
+});
+
+describe('production version', () => {
+  const pv = (plant: string, code: string, extra: Record<string, unknown> = {}) => ({
+    client, changedBy: 'someone-else', materialNumber: 'SCMK', plant, productionVersion: code, description: 'Standard',
+    validFrom: '2026-01-01', lotFrom: '0', lotTo: '100', lotUnit: 'PC', bomUsage: 'P', bomAlternative: '02', taskListType: 'N',
+    routingGroup: plant === 'PLA1' ? 'VA' : 'VB', groupCounter: '01', ...extra,
+  });
+  const rows = (code: string) => withTenant(client, async (tx) => (await tx.execute(sql`
+    select plant, created_by from production_version where client = ${client} and production_version = ${code}`)) as unknown as Array<{ plant: string; created_by: string }>);
+
+  it('creates, copies, reads, lists, checks, locks and deletes only inside reach, and refuses a plant out of reach as a missing one', async () => {
+    await saveRoutingTaskListType({ client, changedBy: 'SETUP', taskListType: 'N', description: 'Routing' });
+    await saveRoutingUsage({ client, changedBy: 'SETUP', usage: '1', description: 'Production' });
+    await saveRoutingStatus({ client, changedBy: 'SETUP', status: '4', description: 'Released', releasedForScheduling: 'X', releasedForCosting: 'X', releasedForOrders: 'X' });
+    for (const [plant, group] of [['PLA1', 'VA'], ['PLB1', 'VB']] as const) {
+      await createMaterialBomForProvisioning({
+        client, changedBy: 'SETUP', materialNumber: 'SCMK', plant, usage: 'P', alternative: '02', baseQuantity: '1', baseUnit: 'PC', validFrom: '2020-01-01',
+        items: [{ itemNumber: '0010', itemCategory: 'S', componentMaterial: 'SCMC', quantity: '1', unit: 'PC' }],
+      });
+      await createRoutingForProvisioning({
+        client, changedBy: 'SETUP', taskListType: 'N', routingGroup: group, groupCounter: '01', plant, description: 'Std', usage: '1', status: '4',
+        baseQuantity: '1', baseUnit: 'PC', validFrom: '2026-01-01', assignments: [{ materialNumber: 'SCMK' }], operations: [],
+      });
+    }
+    expect(await ask(createProductionVersion(pv('PLA1', '0001'), bA.authorization))).toBe('done');
+    expect(await ask(createProductionVersion(pv('PLB1', '0001'), bB.authorization))).toBe('done');
+    expect((await rows('0001')).find((r) => r.plant === 'PLA1')?.created_by).toBe(bA.username);
+
+    const missing = mask(await ask(createProductionVersion(pv('PLZZ', '0009'), bA.authorization)), 'PLZZ');
+    for (const p of ['PLB1', 'PLN1']) expect(mask(await ask(createProductionVersion(pv(p, '0009'), bA.authorization)), p)).toBe(missing);
+    expect(await rows('0009')).toHaveLength(0);
+
+    expect((await getProductionVersion(client, 'SCMK', 'PLA1', '0001', bA.authorization))?.plant).toBe('PLA1');
+    expect(await getProductionVersion(client, 'SCMK', 'PLB1', '0001', bA.authorization)).toBeNull();
+    expect((await listProductionVersions(client, { plant: 'PLA1' }, bA.authorization)).total).toBe(1);
+    expect((await listProductionVersions(client, { plant: 'PLB1' }, bA.authorization)).total).toBe(0);
+
+    const absent = mask(await ask(checkProductionVersion(client, 'SCMK', 'PLZZ', '0001', 'x', bA.authorization)), 'PLZZ');
+    expect(mask(await ask(checkProductionVersion(client, 'SCMK', 'PLB1', '0001', 'x', bA.authorization)), 'PLB1')).toBe(absent);
+    expect(await ask(lockProductionVersion(client, 'SCMK', 'PLB1', '0001', 'x', true, 1, bA.authorization))).toBe(absent.replace('PLZZ', 'PLB1'));
+    expect(await ask(deleteProductionVersion(client, 'SCMK', 'PLB1', '0001', 'x', 1, bA.authorization))).toBe(absent.replace('PLZZ', 'PLB1'));
+    expect(await ask(copyProductionVersion({ ...pv('PLB1', '0001'), newProductionVersion: '0002' }, bA.authorization))).not.toBe('done');
+    const standing = await getProductionVersion(client, 'SCMK', 'PLB1', '0001', bB.authorization);
+    expect(standing?.lockIndicator).not.toBe('1');
+    expect(await ask(changeProductionVersion({ ...pv('PLB1', '0001', { description: 'Hijack' }), version: standing!.version }, bA.authorization))).not.toBe('done');
+    expect((await getProductionVersion(client, 'SCMK', 'PLB1', '0001', bB.authorization))?.description).toBe('Standard');
+
+    // Inside reach the same calls work and record the session user.
+    expect(await ask(checkProductionVersion(client, 'SCMK', 'PLA1', '0001', 'x', bA.authorization))).toBe('done');
+    expect(await ask(copyProductionVersion({ ...pv('PLA1', '0001'), newProductionVersion: '0002' }, bA.authorization))).toBe('done');
+    const own = await getProductionVersion(client, 'SCMK', 'PLA1', '0001', bA.authorization);
+    expect(await ask(lockProductionVersion(client, 'SCMK', 'PLA1', '0001', 'x', true, own!.version, bA.authorization))).toBe('done');
+  });
+
+  it('refuses a missing session, a missing capability, no scope, a plant scope that excludes the plant, and another tenant', async () => {
+    for (const bad of [undefined, { userId: 'nobody', sessionId: 'nothing' }, bNoCap.authorization, bNoScope.authorization, bOther.authorization]) {
+      expect(await ask(createProductionVersion(pv('PLA1', '0077'), bad))).not.toBe('done');
+      expect(await ask(listProductionVersions(client, { plant: 'PLA1' }, bad))).not.toBe('done');
+      expect(await ask(checkProductionVersion(client, 'SCMK', 'PLA1', '0001', 'x', bad))).not.toBe('done');
+    }
+    expect(await ask(createProductionVersion(pv('PLB1', '0077'), bPlantA.authorization))).not.toBe('done');
+    expect(await rows('0077')).toHaveLength(0);
   });
 });

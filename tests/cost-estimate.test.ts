@@ -23,8 +23,8 @@ import {
 } from '../src/modules/production/cost-estimate';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';
 import { componentRequirementQuantity, SCALE } from '../src/modules/production/mrp-explosion';
-import { createProductionVersion, selectProductionVersion } from '../src/modules/production/production-version';
-import { createRouting, saveRoutingControlKey, saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { createProductionVersionForProvisioning as createProductionVersion, selectProductionVersion } from '../src/modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
 import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';

@@ -44,14 +44,14 @@ import {
   saveBomUsage,
 } from '../../modules/production/material-bom';
 import {
-  createRouting,
-  resolveRouting,
+  createRoutingForProvisioning as createRouting,
+  resolveRoutingForProvisioning as resolveRouting,
   saveRoutingControlKey,
   saveRoutingStatus,
   saveRoutingTaskListType,
   saveRoutingUsage,
 } from '../../modules/production/routing';
-import { createProductionVersion, getProductionVersion } from '../../modules/production/production-version';
+import { createProductionVersionForProvisioning as createProductionVersion, getProductionVersionForProvisioning as getProductionVersion } from '../../modules/production/production-version';
 import { withTenant } from '../db/client';
 import { seedMrpController } from '../../modules/inventory/mrp-controller-maintenance';
 import { DEMO_ACTOR, DEMO_IDENTITY, DEMO_STRUCTURE } from './demo-organisation';

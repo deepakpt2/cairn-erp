@@ -65,7 +65,7 @@ export default async function RoutingsPage({ searchParams }: {
   ]);
   if (materialNumber || plant || taskListType) {
     try {
-      listed = await listRoutings(session.user.client, { materialNumber, plant, taskListType });
+      listed = await listRoutings(session.user.client, { materialNumber, plant, taskListType }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof RoutingError ? error.message : 'The routing could not be opened.';
     }
@@ -80,7 +80,7 @@ export default async function RoutingsPage({ searchParams }: {
         materialNumber,
         plant,
         keyDate: validOn || null,
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof RoutingError ? error.message : 'The routing could not be opened.';
     }

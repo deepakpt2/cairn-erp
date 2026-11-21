@@ -8,24 +8,24 @@ import { saveMaterialView } from '../src/modules/inventory/materials';
 import { productionOrder, productionOrderComponent } from '../src/modules/inventory/schema';
 import { changeMaterialBomForProvisioning as changeMaterialBom, createMaterialBomForProvisioning as createMaterialBom, getMaterialBomForProvisioning as getMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
-import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { productionOrderType, productionVersion } from '../src/modules/production/schema';
 import {
   PRODUCTION_VERSION_CREATE_CAPABILITY,
   PRODUCTION_VERSION_DISPLAY_CAPABILITY,
   ProductionVersionError,
-  changeProductionVersion,
-  checkProductionVersion,
-  copyProductionVersion,
-  createProductionVersion,
-  deleteProductionVersion,
-  getProductionVersion,
+  changeProductionVersionForProvisioning as changeProductionVersion,
+  checkProductionVersionForProvisioning as checkProductionVersion,
+  copyProductionVersionForProvisioning as copyProductionVersion,
+  createProductionVersionForProvisioning as createProductionVersion,
+  deleteProductionVersionForProvisioning as deleteProductionVersion,
+  getProductionVersionForProvisioning as getProductionVersion,
   holdsProductionVersionAuthority,
-  lockProductionVersion,
+  lockProductionVersionForProvisioning as lockProductionVersion,
   saveProductionVersionRule,
   selectProductionVersion,
 } from '../src/modules/production/production-version';
-import { displayProductionVersion } from '../src/modules/production/production-version-display';
+import { displayProductionVersionForProvisioning as displayProductionVersion } from '../src/modules/production/production-version-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'C223_TEST';

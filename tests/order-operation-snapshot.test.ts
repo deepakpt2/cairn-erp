@@ -8,8 +8,8 @@ import { createProductionOrder, getProductionOrder } from '../src/modules/invent
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
-import { createProductionVersion } from '../src/modules/production/production-version';
-import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { enterTimeTicketForProvisioning as enterTimeTicket, loadTimeTicketForProvisioning as loadTimeTicket } from '../src/modules/production/time-ticket';
 import { releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';

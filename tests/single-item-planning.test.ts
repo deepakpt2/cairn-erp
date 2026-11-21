@@ -9,8 +9,8 @@ import { createRequisitionForProvisioning as createRequisition } from '../src/mo
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { componentRequirementQuantity } from '../src/modules/production/mrp-explosion';
 import { planMaterialsForProvisioning as planMaterials, planSingleItemForProvisioning as planSingleItem } from '../src/modules/production/mrp-run';
-import { createProductionVersion } from '../src/modules/production/production-version';
-import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';

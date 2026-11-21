@@ -19,8 +19,8 @@ import { getMaterialDetail, saveMaterialView } from '../../modules/inventory/mat
 import { seedMrpController } from '../../modules/inventory/mrp-controller-maintenance';
 import { withTenant } from '../db/client';
 import { createMaterialBomForProvisioning as createMaterialBom, getMaterialBomForProvisioning as getMaterialBom, saveBomItemCategory } from '../../modules/production/material-bom';
-import { createProductionVersion, getProductionVersion } from '../../modules/production/production-version';
-import { createRouting, resolveRouting } from '../../modules/production/routing';
+import { createProductionVersionForProvisioning as createProductionVersion, getProductionVersionForProvisioning as getProductionVersion } from '../../modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, resolveRoutingForProvisioning as resolveRouting } from '../../modules/production/routing';
 import { DEMO_ACTOR, DEMO_IDENTITY, DEMO_STRUCTURE } from './demo-organisation';
 import type { DemoTimeline } from './demo-provisioning';
 

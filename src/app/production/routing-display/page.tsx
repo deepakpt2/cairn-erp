@@ -41,7 +41,7 @@ export default async function RoutingDisplayPage({ searchParams }: {
   let listed: Awaited<ReturnType<typeof listRoutings>> = [];
   if (materialNumber || plant || taskListType) {
     try {
-      listed = await listRoutings(session.user.client, { materialNumber, plant, taskListType });
+      listed = await listRoutings(session.user.client, { materialNumber, plant, taskListType }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof RoutingError ? error.message : 'The routing could not be displayed.';
     }
@@ -55,7 +55,7 @@ export default async function RoutingDisplayPage({ searchParams }: {
         groupCounter: groupCounter || listed[0]?.groupCounter,
         materialNumber,
         plant,
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof RoutingError ? error.message : 'The routing could not be displayed.';
     }

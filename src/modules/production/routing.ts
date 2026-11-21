@@ -17,6 +17,8 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { unitOfMeasure } from '../../platform/tables/reference';
@@ -595,7 +597,25 @@ type PreparedRoutingOperation = {
   allocations: RoutingAllocationInput[];
 };
 
-async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Promise<RoutingView> {
+type RoutingMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type RoutingReach = { reachable: string[]; username: string } | null;
+
+/** Session, live capability and company scope, judged in the caller's own transaction. */
+async function routingReach(tx: Tx, client: string, mode: RoutingMode, capabilities: readonly string[]): Promise<RoutingReach> {
+  if (mode === 'unscoped') return null;
+  const actor = await purchasingActor(tx, client, mode.authorization, capabilities, (m, r) => new RoutingError(m, r));
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
+}
+
+/** A routing is a plant document; a plant out of reach answers as a plant that does not exist. */
+function requirePlantReach(reach: RoutingReach, plant: string): void {
+  if (reach && !reach.reachable.includes(plant)) fail(`Plant ${plant} does not exist.`);
+}
+
+const ROUTING_READERS = [ROUTING_DISPLAY_CAPABILITY, ROUTING_CHANGE_CAPABILITY, ROUTING_CREATE_CAPABILITY] as const;
+
+async function writeRouting(rawInput: RoutingInput, mode: 'CREATE' | 'CHANGE', scope: RoutingMode): Promise<RoutingView> {
+  let input = rawInput;
   if ((input.changeNumber ?? '').trim()) {
     fail('Engineering change management is not implemented. A change number is not stored.', 'Save without a change number. Validity is the from and to dates.');
   }
@@ -624,6 +644,10 @@ async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Pro
   const requestKey = textOf(input.requestKey, 'Request key', 64);
 
   return withTenant(input.client, async (tx) => {
+    const reach = await routingReach(tx, input.client, scope, [mode === 'CREATE' ? ROUTING_CREATE_CAPABILITY : ROUTING_CHANGE_CAPABILITY]);
+    requirePlantReach(reach, plant);
+    // The recorded user is the session user, never the caller's name.
+    if (reach) input = { ...rawInput, changedBy: reach.username };
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/routing/${taskListType}`}, 0))`);
     if (mode === 'CREATE' && requestKey) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/routing-request/${requestKey}`}, 0))`);
@@ -686,7 +710,7 @@ async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Pro
     let sourceOperations = input.operations;
     if (mode === 'CREATE' && input.copyFrom && input.copyFrom.copyOperations !== false && (!sourceOperations || sourceOperations.length === 0)) {
       const copied = await readInTx(tx, input.client, codeOf(input.copyFrom.taskListType, 'Task list type', /^[A-Z0-9]$/), codeOf(input.copyFrom.routingGroup, 'Routing group', /^[A-Z0-9]{1,8}$/), counterOf(input.copyFrom.groupCounter), null);
-      if (!copied) fail('The reference routing does not exist.');
+      if (!copied || (reach && !reach.reachable.includes(copied.plant))) fail('The reference routing does not exist.');
       sourceOperations = copied.operations.filter((operation) => operation.deletionFlag !== 'X').map((operation) => ({
         ...operation,
         deletionFlag: ' ',
@@ -982,25 +1006,43 @@ async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Pro
   });
 }
 
-export function createRouting(input: RoutingInput): Promise<RoutingView> {
-  return writeRouting(input, 'CREATE');
+export function createRouting(input: RoutingInput, authorization: ServiceAuthorityContext | undefined): Promise<RoutingView> {
+  return writeRouting(input, 'CREATE', { authorization });
+}
+export function changeRouting(input: RoutingInput, authorization: ServiceAuthorityContext | undefined): Promise<RoutingView> {
+  return writeRouting(input, 'CHANGE', { authorization });
+}
+export function createRoutingForProvisioning(input: RoutingInput): Promise<RoutingView> {
+  return writeRouting(input, 'CREATE', 'unscoped');
+}
+export function changeRoutingForProvisioning(input: RoutingInput): Promise<RoutingView> {
+  return writeRouting(input, 'CHANGE', 'unscoped');
 }
 
-export function changeRouting(input: RoutingInput): Promise<RoutingView> {
-  return writeRouting(input, 'CHANGE');
-}
-
-export async function getRouting(client: string, taskListType: string, routingGroup: string, groupCounter: string, keyDate?: string | null): Promise<RoutingView | null> {
-  return withTenant(client, (tx) => readInTx(
-    tx, client, codeOf(taskListType, 'Task list type', /^[A-Z0-9]$/), codeOf(routingGroup, 'Routing group', /^[A-Z0-9]{1,8}$/), counterOf(groupCounter), keyDate?.trim() ? dateOf(keyDate, 'Key date') : null,
-  ));
-}
-
-export async function listRoutings(client: string, filter: { materialNumber?: string; plant?: string; taskListType?: string } = {}) {
+async function getWith(
+  client: string, taskListType: string, routingGroup: string, groupCounter: string, keyDate: string | null | undefined, mode: RoutingMode,
+): Promise<RoutingView | null> {
+  const type = codeOf(taskListType, 'Task list type', /^[A-Z0-9]$/);
+  const group = codeOf(routingGroup, 'Routing group', /^[A-Z0-9]{1,8}$/);
+  const counter = counterOf(groupCounter);
+  const date = keyDate?.trim() ? dateOf(keyDate, 'Key date') : null;
   return withTenant(client, async (tx) => {
+    const reach = await routingReach(tx, client, mode, ROUTING_READERS);
+    const view = await readInTx(tx, client, type, group, counter, date);
+    // A routing at a plant out of reach answers exactly as a missing one.
+    if (view && reach && !reach.reachable.includes(view.plant)) return null;
+    return view;
+  });
+}
+
+async function listWith(client: string, filter: { materialNumber?: string; plant?: string; taskListType?: string }, mode: RoutingMode) {
+  return withTenant(client, async (tx) => {
+    const reach = await routingReach(tx, client, mode, ROUTING_READERS);
+    if (filter.plant?.trim()) requirePlantReach(reach, filter.plant.trim());
     const rows = await tx.select().from(routing).where(eq(routing.client, client)).orderBy(asc(routing.routingGroup), asc(routing.groupCounter));
     const assignments = await tx.select().from(routingMaterialAssignment).where(eq(routingMaterialAssignment.client, client));
     return rows.filter((row) => {
+      if (reach && !reach.reachable.includes(row.plant)) return false;
       if (filter.plant && row.plant !== filter.plant.trim()) return false;
       if (filter.taskListType && row.taskListType !== codeOf(filter.taskListType, 'Task list type', /^[A-Z0-9]$/)) return false;
       if (filter.materialNumber) {
@@ -1022,11 +1064,13 @@ export async function listRoutings(client: string, filter: { materialNumber?: st
   });
 }
 
-export async function resolveRouting(client: string, filter: { taskListType?: string; routingGroup?: string; groupCounter?: string; materialNumber?: string; plant?: string; keyDate?: string | null }): Promise<RoutingView | null> {
+type RoutingFilter = { taskListType?: string; routingGroup?: string; groupCounter?: string; materialNumber?: string; plant?: string; keyDate?: string | null };
+
+async function resolveWith(client: string, filter: RoutingFilter, mode: RoutingMode): Promise<RoutingView | null> {
   if (filter.taskListType && filter.routingGroup && filter.groupCounter) {
-    return getRouting(client, filter.taskListType, filter.routingGroup, filter.groupCounter, filter.keyDate);
+    return getWith(client, filter.taskListType, filter.routingGroup, filter.groupCounter, filter.keyDate, mode);
   }
-  const rows = await listRoutings(client, filter);
+  const rows = await listWith(client, filter, mode);
   const dated = filter.keyDate?.trim()
     ? rows.filter((row) => row.deletionFlag !== 'X' && filter.keyDate! >= row.validFrom && filter.keyDate! <= row.validTo)
     : rows;
@@ -1034,7 +1078,26 @@ export async function resolveRouting(client: string, filter: { taskListType?: st
   if (dated.length > 1) {
     fail(`More than one routing matches. Choose a group and counter: ${dated.map((row) => `${row.routingGroup}/${row.groupCounter}`).join(', ')}.`, 'The first row was not opened.');
   }
-  return getRouting(client, dated[0].taskListType, dated[0].routingGroup, dated[0].groupCounter, filter.keyDate);
+  return getWith(client, dated[0].taskListType, dated[0].routingGroup, dated[0].groupCounter, filter.keyDate, mode);
+}
+
+export function getRouting(client: string, taskListType: string, routingGroup: string, groupCounter: string, keyDate: string | null | undefined, authorization: ServiceAuthorityContext | undefined) {
+  return getWith(client, taskListType, routingGroup, groupCounter, keyDate, { authorization });
+}
+export function getRoutingForProvisioning(client: string, taskListType: string, routingGroup: string, groupCounter: string, keyDate?: string | null) {
+  return getWith(client, taskListType, routingGroup, groupCounter, keyDate, 'unscoped');
+}
+export function listRoutings(client: string, filter: { materialNumber?: string; plant?: string; taskListType?: string }, authorization: ServiceAuthorityContext | undefined) {
+  return listWith(client, filter, { authorization });
+}
+export function listRoutingsForProvisioning(client: string, filter: { materialNumber?: string; plant?: string; taskListType?: string } = {}) {
+  return listWith(client, filter, 'unscoped');
+}
+export function resolveRouting(client: string, filter: RoutingFilter, authorization: ServiceAuthorityContext | undefined) {
+  return resolveWith(client, filter, { authorization });
+}
+export function resolveRoutingForProvisioning(client: string, filter: RoutingFilter) {
+  return resolveWith(client, filter, 'unscoped');
 }
 
 /** Downstream selection. Does not write. CO01 and costing do not call this. */

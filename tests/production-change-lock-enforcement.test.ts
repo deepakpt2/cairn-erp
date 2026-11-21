@@ -43,13 +43,14 @@ vi.mock('@/platform/auth/current', async (original) => {
   };
 });
 
+import { createFinanceActor } from './helpers/finance-actor';
 import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 import { openForChange, releaseChangeLock } from '@/platform/lock/enqueue';
 import { saveMaterialView } from '@/modules/inventory/materials';
 import { saveBomItemCategory, saveBomUsage, createMaterialBomForProvisioning as createMaterialBom } from '@/modules/production/material-bom';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '@/modules/production/work-center';
-import { ROUTING_LOCK, createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '@/modules/production/routing';
-import { PRODUCTION_VERSION_LOCK, createProductionVersion } from '@/modules/production/production-version';
+import { ROUTING_LOCK, createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '@/modules/production/routing';
+import { PRODUCTION_VERSION_LOCK, createProductionVersionForProvisioning as createProductionVersion } from '@/modules/production/production-version';
 import { checkVersionAction, deleteVersionAction, lockVersionAction, saveVersionAction } from '@/app/production/production-versions/actions';
 import { saveRoutingAction } from '@/app/production/routings/actions';
 
@@ -71,30 +72,20 @@ const PEOPLE = {
   bidder: { username: 'lock.bidder', sessionId: 'pcl-bidder-session' },
 } as const;
 
-async function addPerson(username: string): Promise<void> {
-  await withTenant(tenant.client, (tx) => tx.execute(sql`
-    insert into app_user
-      (id, client, username, full_name, email, password_hash, is_active, is_locked, created_by)
-    values (${`user-${username}`}, ${tenant.client}, ${username}, ${username},
-            null, 'test-hash', true, false, 'TEST')
-  `));
-}
-
-/** A session row, because `purgeStale` judges a lock by the liveness of the session that owns it. */
-async function addSession(username: string, sessionId: string): Promise<void> {
-  await withTenant(tenant.client, (tx) => tx.execute(sql`
-    insert into user_session (id, client, user_id, token_hash, issued_at, expires_at)
-    values (${sessionId}, ${tenant.client}, ${`user-${username}`}, ${`token-${sessionId}`},
-            now(), now() + interval '8 hours')
-  `));
-}
+/** Real identities: an enforced production service reads the authority and the reach from the database. */
+const IDS: Record<string, { userId: string; sessionId: string }> = {};
+const GRANTS = [
+  'PROD.VERSION.CREATE', 'PROD.VERSION.CHANGE', 'PROD.VERSION.DISPLAY', 'PROD.VERSION.CHECK', 'PROD.VERSION.LOCK', 'PROD.VERSION.DELETE',
+  'PROD.ROUTING.CREATE', 'PROD.ROUTING.CHANGE', 'PROD.ROUTING.DISPLAY',
+];
 
 function actingAs(person: keyof typeof PEOPLE, capabilities: string[] = ['*']): void {
-  const { username, sessionId } = PEOPLE[person];
+  const { username } = PEOPLE[person];
+  const { sessionId, userId } = IDS[person]!;
   request.session = {
     sessionId,
     user: {
-      client: tenant.client, userId: `user-${username}`, username, fullName: username,
+      client: tenant.client, userId, username, fullName: username,
       email: null, mustChangePassword: false, capabilities,
     },
     expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
@@ -103,7 +94,7 @@ function actingAs(person: keyof typeof PEOPLE, capabilities: string[] = ['*']): 
 }
 
 function sessionIdOf(person: keyof typeof PEOPLE): string {
-  return PEOPLE[person].sessionId;
+  return IDS[person]!.sessionId;
 }
 
 /** The opening the screen performs, taken from the platform rather than written by hand. */
@@ -193,10 +184,10 @@ async function noticeOf(action: Promise<unknown>): Promise<string> {
 
 beforeAll(async () => {
   tenant = await createTenant('production-change-lock-0');
-  await addPerson(PEOPLE.holder.username);
-  await addPerson(PEOPLE.bidder.username);
-  await addSession(PEOPLE.holder.username, PEOPLE.holder.sessionId);
-  await addSession(PEOPLE.bidder.username, PEOPLE.bidder.sessionId);
+  for (const [key, person] of Object.entries(PEOPLE)) {
+    const actor = await createFinanceActor(tenant.client, { username: person.username, capabilities: GRANTS });
+    IDS[key] = { userId: actor.userId, sessionId: actor.sessionId };
+  }
 
   await saveMaterialView({
     client: tenant.client, materialNumber: MATERIAL, changedBy: ACTOR, expectedVersion: 0,

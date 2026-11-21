@@ -191,7 +191,7 @@ export async function saveRoutingAction(_previous: RoutingActionState, formData:
       version: formData.get('version') ? Number(formData.get('version')) : undefined,
       requestKey: String(formData.get('requestKey') ?? '') || null,
     };
-    const routing = mode === 'CHANGE' ? await changeRouting(input) : await createRouting(input);
+    const routing = mode === 'CHANGE' ? await changeRouting(input, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : await createRouting(input, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return {
       ok: true,
       routing,

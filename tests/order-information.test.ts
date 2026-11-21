@@ -16,8 +16,8 @@ import { enterOrderConfirmationForProvisioning as enterOrderConfirmation } from 
 import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
-import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
-import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { checkProductionVersionForProvisioning as checkProductionVersion, createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { enterTimeTicketForProvisioning as enterTimeTicket } from '../src/modules/production/time-ticket';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';

@@ -11,8 +11,8 @@ import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay }
 import { getProductionConfirmationDisplay, searchProductionConfirmations } from '../src/modules/production/confirmation-display';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
-import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
-import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { checkProductionVersionForProvisioning as checkProductionVersion, createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
+import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import {
   enterOrderConfirmationForProvisioning as enterOrderConfirmation,
   loadOrderConfirmationForProvisioning as loadOrderConfirmation,

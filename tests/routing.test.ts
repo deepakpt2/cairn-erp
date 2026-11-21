@@ -14,13 +14,13 @@ import {
   ROUTING_CREATE_CAPABILITY,
   ROUTING_DISPLAY_CAPABILITY,
   RoutingError,
-  changeRouting,
-  createRouting,
-  getRouting,
+  changeRoutingForProvisioning as changeRouting,
+  createRoutingForProvisioning as createRouting,
+  getRoutingForProvisioning as getRouting,
   holdsRoutingAuthority,
   listRoutingConfiguration,
-  listRoutings,
-  resolveRouting,
+  listRoutingsForProvisioning as listRoutings,
+  resolveRoutingForProvisioning as resolveRouting,
   saveRoutingControlKey,
   saveRoutingStandardValueKey,
   saveRoutingStatus,
@@ -28,7 +28,7 @@ import {
   saveRoutingUsage,
   selectEffectiveRouting,
 } from '../src/modules/production/routing';
-import { displayRouting } from '../src/modules/production/routing-display';
+import { displayRoutingForProvisioning as displayRouting } from '../src/modules/production/routing-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'CA01_TEST';
