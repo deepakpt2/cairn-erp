@@ -46,6 +46,7 @@ export async function releaseRequisitionAction(
   const code = form.get('releaseCode');
   try {
     const state = await releaseDocument({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       documentCategory: 'PURCHASE_REQUISITION',
@@ -76,6 +77,7 @@ export async function cancelRequisitionReleaseAction(
   const number = form.get('requisitionNumber');
   try {
     await cancelDocumentRelease({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       documentCategory: 'PURCHASE_REQUISITION',
@@ -107,6 +109,7 @@ export async function saveRequisitionAction(
     };
     const base = {
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       documentType: input.documentType ?? 'STANDARD',
       requestedBy: input.requestedBy,

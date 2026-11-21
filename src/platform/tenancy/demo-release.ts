@@ -32,14 +32,14 @@ import {
   saveReleaseGroup, saveReleaseStrategy, setReleaseStrategyStatus,
 } from '../../modules/foundation/release-strategy-definition';
 import { createPurchaseContract } from '../../modules/purchasing/contract';
-import { createRequisition } from '../../modules/purchasing/requisitions';
+import { createRequisitionForProvisioning as createRequisition } from '../../modules/purchasing/requisitions';
 import { createSchedulingAgreement } from '../../modules/purchasing/scheduling-agreement';
 import { documentRelease, purchaseContract, purchaseOrder, purchaseRequisitionItem, schedulingAgreement } from '../../modules/purchasing/schema';
 import {
-  getDocumentRelease, orderAttributes, releaseDocument, syncDocumentRelease,
+  getDocumentRelease, orderAttributes, releaseDocumentForProvisioning as releaseDocument, syncDocumentRelease,
 } from '../../modules/purchasing/release';
 import { parkJournal, completeParkedJournal } from '../../modules/finance/parked-journal';
-import { releaseParkedJournal } from '../../modules/finance/parked-journal-release';
+import { releaseParkedJournalForProvisioning as releaseParkedJournal } from '../../modules/finance/parked-journal-release';
 import { createPaymentRun, generateProposal } from '../../modules/finance/payment-run';
 import { paymentRun } from '../../modules/finance/schema';
 import { DEMO_ACTOR, DEMO_STRUCTURE } from './demo-organisation';

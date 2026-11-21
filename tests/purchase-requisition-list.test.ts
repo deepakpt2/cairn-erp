@@ -8,6 +8,7 @@ import {
   type RequisitionListSelection,
 } from '../src/modules/purchasing/requisition-list';
 import { createTenant, destroyTenant } from './helpers';
+import { financeAuth } from './helpers/finance-actor';
 
 /**
  * SCR-123 / ME5A acceptance for PROC.REQ.LIST.
@@ -32,10 +33,10 @@ describe('SCR-123 purchase requisition list (ME5A)', () => {
       // Masters: three plants (P230 deliberately carries no purchasing org),
       // two organisations, two groups, two materials, one supplier.
       await tx.execute(sql`
-        insert into plant (client, plant, name, country, created_by) values
-          (${client}, 'P210', 'Plant 210', 'KW', ${ACTOR}),
-          (${client}, 'P220', 'Plant 220', 'KW', ${ACTOR}),
-          (${client}, 'P230', 'Plant 230', 'KW', ${ACTOR})
+        insert into plant (client, plant, name, country, company_code, created_by) values
+          (${client}, 'P210', 'Plant 210', 'KW', '1000', ${ACTOR}),
+          (${client}, 'P220', 'Plant 220', 'KW', '1000', ${ACTOR}),
+          (${client}, 'P230', 'Plant 230', 'KW', '1000', ${ACTOR})
         on conflict do nothing
       `);
       await tx.execute(sql`
@@ -126,7 +127,7 @@ describe('SCR-123 purchase requisition list (ME5A)', () => {
   });
 
   async function list(selection: Partial<RequisitionListSelection>) {
-    return listPurchaseRequisitions({ client, selection: { displayClosed: false, maxHits: 100, ...selection } });
+    return listPurchaseRequisitions({ client, authorization: await financeAuth(client), selection: { displayClosed: false, maxHits: 100, ...selection } });
   }
 
   it('hides closed requisitions by default and reports why', async () => {

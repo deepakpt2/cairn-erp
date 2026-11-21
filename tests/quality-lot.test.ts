@@ -9,7 +9,7 @@ import {
   getMaterialDocument } from '../src/modules/inventory/goods-receipt';
 import { postGoodsReceipt, reverseGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import {
   InspectionLotError,
   getLot,

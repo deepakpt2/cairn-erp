@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { changeOrder, createOrder, getOrder } from '../src/modules/purchasing/orders';
+import { changeOrderForProvisioning as changeOrder, createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../src/modules/purchasing/orders';
 import {
   changeSourceListEntry, createSourceListEntry, getSourceListEntry, previewSourceListChange,
   previewSourceListEntry, resolveSourceList, writeSourceListChange, writeSourceListEntry,

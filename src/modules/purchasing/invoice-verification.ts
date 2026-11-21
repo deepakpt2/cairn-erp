@@ -14,6 +14,9 @@
 import { STO_ORDER_TYPE, stoRefusal } from './sto-guard';
 import { and, eq, sql } from 'drizzle-orm';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { companyInScope, purchasingActor, requireCompanyInScope } from './scope';
+
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { linkDocuments } from '../../platform/document';
@@ -246,18 +249,34 @@ async function orderViewInTx(
   };
 }
 
-export async function getInvoiceOrder(client: string, orderNumber: string): Promise<InvoiceOrderView | null> {
-  const view = await withTenant(client, (tx) => orderViewInTx(tx, client, orderNumber));
+export async function getInvoiceOrder(
+  client: string, orderNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<InvoiceOrderView | null> {
+  const view = await withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, INVOICE_READ_CAPABILITIES, refuse);
+    const found = await orderViewInTx(tx, client, orderNumber);
+    return found && await companyInScope(tx, client, actor, found.companyCode) ? found : null;
+  });
   if (!view) return null;
   // An order with no advance raises no question, so nothing is looked up for one: an order
   // that does carry money already paid is the only one that needs the answer.
   return { ...view, advances: await getOrderAdvances(client, orderNumber) };
 }
 
+/** Walkthrough fixtures only: the order as the invoice would judge it, with no session to judge. */
+export async function getInvoiceOrderForProvisioning(client: string, orderNumber: string): Promise<InvoiceOrderView | null> {
+  const view = await withTenant(client, (tx) => orderViewInTx(tx, client, orderNumber));
+  return view ? { ...view, advances: await getOrderAdvances(client, orderNumber) } : null;
+}
+
 export interface TaxCodeChoice { code: string; ratePercent: string; name: string }
 
-export async function listInvoiceTaxCodes(client: string, companyCode: string): Promise<TaxCodeChoice[]> {
+export async function listInvoiceTaxCodes(
+  client: string, companyCode: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<TaxCodeChoice[]> {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, INVOICE_READ_CAPABILITIES, refuse);
+    if (!(await companyInScope(tx, client, actor, companyCode))) return [];
     const company = await getCompanyCode(tx, client, companyCode);
     if (!company?.country) return [];
     const rows = await tx.select().from(taxCode).where(and(
@@ -389,8 +408,14 @@ async function loadView(tx: Tx, client: string, number: string): Promise<Supplie
   return toView(await currencyScale(tx, header.currency), header, items, await loadSettlements(tx, client, number));
 }
 
-export async function getSupplierInvoice(client: string, number: string): Promise<SupplierInvoiceView | null> {
-  return withTenant(client, (tx) => loadView(tx, client, number));
+export async function getSupplierInvoice(
+  client: string, number: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<SupplierInvoiceView | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, INVOICE_READ_CAPABILITIES, refuse);
+    const view = await loadView(tx, client, number);
+    return view && await companyInScope(tx, client, actor, view.companyCode) ? view : null;
+  });
 }
 
 async function byRequestKey(tx: Tx, client: string, requestKey: string) {
@@ -440,6 +465,8 @@ async function valuationClassFor(tx: Tx, client: string, materialNumber: string,
 
 export interface PostInvoiceInput {
   client: string;
+  /** The verified session. The recorded poster is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   orderNumber: string;
   supplierReference: string;
@@ -630,8 +657,45 @@ async function settleAdvances(
   return settlements;
 }
 
-export async function postSupplierInvoice(input: PostInvoiceInput): Promise<SupplierInvoiceView> {
-  return withTenant(input.client, async (tx) => {
+const refuse = (message: string, remedy?: string) => new InvoiceVerificationError(message, remedy);
+
+/** Read capabilities for the invoice screens: recording, parking or the overview. */
+const INVOICE_READ_CAPABILITIES = [INVOICE_CAPABILITY, 'PROC.INV.PARK', 'PROC.INV.OVERVIEW'] as const;
+
+async function orderCompanyInTx(tx: Tx, client: string, orderNumber: string): Promise<string | null> {
+  const [row] = await tx.execute(sql`
+    select company_code from purchase_order where client = ${client} and order_number = ${orderNumber}
+  `) as unknown as Array<{ company_code: string }>;
+  return row?.company_code ?? null;
+}
+
+export async function postSupplierInvoice(raw: PostInvoiceInput): Promise<SupplierInvoiceView> {
+  return postSupplierInvoiceImpl(raw, false);
+}
+
+/**
+ * Seeding and walkthrough fixtures only: no session exists there, so nothing is judged and `changedBy` is the
+ * recorded poster. Never import this from `src/app` (tests/company-scope-purchasing.test.ts guards that).
+ */
+export async function postSupplierInvoiceForProvisioning(raw: Omit<PostInvoiceInput, 'authorization'>): Promise<SupplierInvoiceView> {
+  return postSupplierInvoiceImpl({ ...raw, authorization: undefined }, true);
+}
+
+async function postSupplierInvoiceImpl(raw: PostInvoiceInput, provisioning: boolean): Promise<SupplierInvoiceView> {
+  return withTenant(raw.client, async (tx) => {
+    let input = raw;
+    if (!provisioning) {
+      const actor = await purchasingActor(tx, raw.client, raw.authorization, [INVOICE_CAPABILITY], refuse);
+      input = { ...raw, changedBy: actor.username };
+      const company = await orderCompanyInTx(tx, raw.client, raw.orderNumber);
+      if (company) {
+        await requireCompanyInScope(tx, raw.client, actor, company, refuse, { hidden: `Purchase order ${raw.orderNumber} does not exist.` });
+      }
+      const standing = await byRequestKey(tx, raw.client, raw.requestKey);
+      if (standing && !(await companyInScope(tx, raw.client, actor, standing.companyCode))) {
+        throw refuse(`Purchase order ${raw.orderNumber} does not exist.`);
+      }
+    }
     const replay = await byRequestKey(tx, input.client, input.requestKey);
     if (replay) return replay;
 
@@ -1015,14 +1079,34 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
 
 export interface CancelInvoiceInput {
   client: string;
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   invoiceNumber: string;
   postingDate: string;
   requestKey: string;
 }
 
-export async function cancelSupplierInvoice(input: CancelInvoiceInput): Promise<SupplierInvoiceView> {
-  return withTenant(input.client, async (tx) => {
+export async function cancelSupplierInvoice(raw: CancelInvoiceInput): Promise<SupplierInvoiceView> {
+  return cancelSupplierInvoiceImpl(raw, false);
+}
+
+/** Seeding and fixtures only, as `postSupplierInvoiceForProvisioning`. */
+export async function cancelSupplierInvoiceForProvisioning(raw: Omit<CancelInvoiceInput, 'authorization'>): Promise<SupplierInvoiceView> {
+  return cancelSupplierInvoiceImpl({ ...raw, authorization: undefined }, true);
+}
+
+async function cancelSupplierInvoiceImpl(raw: CancelInvoiceInput, provisioning: boolean): Promise<SupplierInvoiceView> {
+  return withTenant(raw.client, async (tx) => {
+    let input = raw;
+    if (!provisioning) {
+      const actor = await purchasingActor(tx, raw.client, raw.authorization, [INVOICE_CAPABILITY], refuse);
+      input = { ...raw, changedBy: actor.username };
+      const hidden = `Invoice ${raw.invoiceNumber} does not exist.`;
+      const target = await loadView(tx, raw.client, raw.invoiceNumber);
+      if (target) await requireCompanyInScope(tx, raw.client, actor, target.companyCode, refuse, { hidden });
+      const standing = await byRequestKey(tx, raw.client, raw.requestKey);
+      if (standing && !(await companyInScope(tx, raw.client, actor, standing.companyCode))) throw refuse(hidden);
+    }
     const replay = await byRequestKey(tx, input.client, input.requestKey);
     if (replay) return replay;
 

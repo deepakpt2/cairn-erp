@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { displayPurchaseOrder } from '../src/modules/purchasing/purchase-order-display';
 import { listPurchaseOrders } from '../src/modules/purchasing/purchase-order-list';
 import { displayMaterialDocument } from '../src/modules/inventory/material-document-display';
@@ -57,7 +57,7 @@ beforeAll(async () => {
   const tenant = await createTenant('item22-reports');
   client = tenant.client;
   await buildStoFixture(client, ACTOR);
-  all = await makeStoActor(client, 'all', { plants: ['1000', '1100', '2000', '3000'], capabilities: [...STO_CAPABILITIES, 'PROC.PO.DISPLAY', 'PROC.PO.LIST'] });
+  all = await makeStoActor(client, 'all', { plants: ['1000', '1100', '2000', '3000'], capabilities: [...STO_CAPABILITIES, 'PROC.PO.DISPLAY', 'PROC.PO.LIST', 'PROC.INV.RECORD'] });
 }, 240_000);
 
 afterAll(async () => {
@@ -351,7 +351,7 @@ describe('ITEM-22 history, display and the existing reversal screen path', () =>
     const { postGoodsReceipt } = await import('../src/modules/inventory/goods-receipt');
     await expect(postSupplierInvoice({
       client, changedBy: ACTOR, orderNumber: order, supplierReference: 'X-1', invoiceDate: DAY, postingDate: DAY,
-      lines: [{ itemNumber: 10, quantity: 1, netAmount: 1 }], requestKey: nextKey(),
+      lines: [{ itemNumber: 10, quantity: 1, netAmount: 1 }], requestKey: nextKey(), authorization: all,
     } as never)).rejects.toThrow(/is a stock transport order, which carries no supplier, no price and no invoice/);
     await expect(postGoodsReceipt({
       client, changedBy: ACTOR, orderNumber: order, postingDate: DAY, documentDate: DAY, requestKey: nextKey(),

@@ -3,10 +3,11 @@ import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
-import { listInvoiceTaxCodes } from '@/modules/purchasing/invoice-verification';
+import { InvoiceVerificationError, listInvoiceTaxCodes } from '@/modules/purchasing/invoice-verification';
 import {
   PARKED_INVOICE_CAPABILITY,
   PARKED_INVOICE_ROUTE,
+  ParkedInvoiceError,
   getParkedInvoice,
   listRecentParkedInvoices,
   openOrderForPark,
@@ -34,13 +35,19 @@ export default async function ParkedInvoicePage({ searchParams }: {
 }) {
   const session = await requireSession(PARKED_INVOICE_ROUTE);
   const params = await searchParams;
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const requestedOrder = last(params.order).toUpperCase();
   const requestedPark = last(params.parked).toUpperCase();
-  const standing = requestedPark ? await getParkedInvoice(session.user.client, requestedPark) : null;
+  // A caller without the authority or the company scope sees nothing, as for a document that does not exist.
+  const unseen = <T,>(fallback: T) => (error: unknown): T => {
+    if (error instanceof ParkedInvoiceError || error instanceof InvoiceVerificationError) return fallback;
+    throw error;
+  };
+  const standing = requestedPark ? await getParkedInvoice(session.user.client, requestedPark, authorization).catch(unseen(null)) : null;
   const orderNumber = standing?.orderNumber ?? requestedOrder;
-  const opened = orderNumber ? await openOrderForPark(session.user.client, orderNumber) : null;
-  const taxCodes = opened ? await listInvoiceTaxCodes(session.user.client, opened.companyCode) : [];
-  const recent = await listRecentParkedInvoices(session.user.client);
+  const opened = orderNumber ? await openOrderForPark(session.user.client, orderNumber, authorization).catch(unseen(null)) : null;
+  const taxCodes = opened ? await listInvoiceTaxCodes(session.user.client, opened.companyCode, authorization).catch(unseen([])) : [];
+  const recent = await listRecentParkedInvoices(session.user.client, authorization).catch(unseen([]));
   const today = new Date().toISOString().slice(0, 10);
   const canPark = can(session, PARKED_INVOICE_CAPABILITY);
   const changeLock = standing && canPark

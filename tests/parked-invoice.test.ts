@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { withFinanceAuth, financeAuth } from './helpers/finance-actor';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
@@ -7,19 +8,16 @@ import { suggestConstrainedValues } from '../src/modules/foundation/constrained-
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { createOrder } from '../src/modules/purchasing/orders';
-import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
-import {
-  ParkedInvoiceError,
-  type ParkedInvoiceLineInput,
-  changeParkedInvoice,
-  deleteParkedInvoice,
-  getParkedInvoice,
-  parkSupplierInvoice,
-  postParkedInvoice,
-  previewParkedInvoice,
-} from '../src/modules/purchasing/parked-invoice';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
+import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
+import { ParkedInvoiceError, type ParkedInvoiceLineInput, changeParkedInvoice as changeParkedInvoiceRaw, deleteParkedInvoice, getParkedInvoice as getParkedInvoiceRaw, parkSupplierInvoice as parkSupplierInvoiceRaw, postParkedInvoice, previewParkedInvoice as previewParkedInvoiceRaw } from '../src/modules/purchasing/parked-invoice';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
+const changeParkedInvoice = withFinanceAuth(changeParkedInvoiceRaw);
+const getParkedInvoice = async (client: string, key: string) => getParkedInvoiceRaw(client, key, await financeAuth(client));
+const parkSupplierInvoice = withFinanceAuth(parkSupplierInvoiceRaw);
+const previewParkedInvoice = withFinanceAuth(previewParkedInvoiceRaw);
 
 const ACTOR = 'SCR160_PARK';
 const DATES = { invoiceDate: '2026-10-22', postingDate: '2026-10-22' };

@@ -30,7 +30,7 @@ import { derivePosition } from '../src/platform/periods';
 import { createTenant, destroyTenant, defineTestRanges, dateFromToday } from './helpers';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { postTransfer as postTransferService } from '../src/modules/inventory/transfer-posting';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { openLot as openLotService } from '../src/modules/quality/lot';
 import {

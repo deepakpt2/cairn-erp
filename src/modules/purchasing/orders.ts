@@ -25,7 +25,9 @@ import {
   STO_ORDER_TYPE, StoOrderError, changeStockTransportOrder, createStockTransportOrder,
 } from './stock-transport-order';
 import { z } from 'zod';
+import { companyInScope, purchasingActor, requireCompanyInScope } from './scope';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
@@ -160,7 +162,37 @@ const documentInput = z.object({
   items: z.array(itemInput).min(1, 'a purchase order needs at least one item'),
 });
 
-export type CreateOrderInput = z.input<typeof documentInput>;
+type OrderDocumentInput = z.input<typeof documentInput>;
+export type CreateOrderInput = OrderDocumentInput & {
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
+};
+
+const refuseOrder = (message: string, remedy?: string) => new PurchaseOrderError(message, remedy);
+const ORDER_READ_CAPABILITIES = [PO_CREATE_CAPABILITY, 'PROC.PO.DISPLAY', 'PROC.PO.LIST', 'PROC.PO.RELEASE'] as const;
+
+/**
+ * Judge an order write inside the service's own transaction, before anything is read or written: session, live
+ * capability, and the Company Code scope over the company being written and over the stored order's company. A
+ * stored order of another company answers as one that does not exist. Returns the verified user, the recorded actor.
+ */
+async function judgeOrderWrite(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
+  requestedCompany: string, storedOrder?: string,
+): Promise<string> {
+  const actor = await purchasingActor(tx, client, authorization, [PO_CREATE_CAPABILITY], refuseOrder);
+  if (storedOrder) {
+    const [row] = await tx.execute(sql`
+      select company_code from purchase_order where client = ${client} and order_number = ${storedOrder}
+    `) as unknown as Array<{ company_code: string }>;
+    // A missing order answers before the requested company is judged, so a probe cannot tell it from another company's.
+    if (!row) throw refuseOrder(`Purchase order ${storedOrder} does not exist.`);
+    await requireCompanyInScope(tx, client, actor, row.company_code, refuseOrder, { hidden: `Purchase order ${storedOrder} does not exist.` });
+  }
+  const company = String(requestedCompany ?? '').trim();
+  if (company) await requireCompanyInScope(tx, client, actor, company, refuseOrder);
+  return actor.username;
+}
 
 export interface OrderItemRow {
   itemNumber: number;
@@ -817,7 +849,18 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
   };
 }
 
-export async function getOrder(client: string, orderNumber: string): Promise<OrderDocument | null> {
+export async function getOrder(
+  client: string, orderNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<OrderDocument | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, ORDER_READ_CAPABILITIES, refuseOrder);
+    const document = await loadDocument(tx, client, orderNumber);
+    return document && await companyInScope(tx, client, actor, document.companyCode) ? document : null;
+  });
+}
+
+/** Walkthrough fixtures only: the order with no session to judge. Never import this from `src/app`. */
+export async function getOrderForProvisioning(client: string, orderNumber: string): Promise<OrderDocument | null> {
   return withTenant(client, (tx) => loadDocument(tx, client, orderNumber));
 }
 
@@ -1001,8 +1044,30 @@ function refuseStoFieldsOnSupplierOrder(raw: unknown): void {
 export async function createOrder(
   raw: CreateOrderInput,
 ): Promise<{ orderNumber: string; warnings: string[] }> {
+  return createOrderImpl(raw, false);
+}
+
+/**
+ * Seeding and fixtures only: no session exists there, so nothing is judged and `changedBy` is the recorded
+ * creator. Never import this from `src/app` (tests/company-scope-purchasing.test.ts checks that).
+ */
+export async function createOrderForProvisioning(
+  raw: Omit<CreateOrderInput, 'authorization'>,
+): Promise<{ orderNumber: string; warnings: string[] }> {
+  return createOrderImpl({ ...raw, authorization: undefined } as CreateOrderInput, true);
+}
+
+async function createOrderImpl(
+  rawWithAuthority: CreateOrderInput, provisioning: boolean,
+): Promise<{ orderNumber: string; warnings: string[] }> {
+  const { authorization, ...raw } = rawWithAuthority;
   if (isStoPayload(raw)) {
-    return createStockTransportOrder(raw).catch(stoError);
+    // A stock transport order has its own strict service; the company and the actor are judged first, in a
+    // transaction of this service, so the strict payload carries only the verified user.
+    const actor = provisioning
+      ? raw.changedBy
+      : await withTenant(raw.client, (tx) => judgeOrderWrite(tx, raw.client, authorization, raw.companyCode));
+    return createStockTransportOrder({ ...raw, changedBy: actor }).catch(stoError);
   }
   refuseStoFieldsOnSupplierOrder(raw);
   const parsed = documentInput.safeParse(raw);
@@ -1010,13 +1075,15 @@ export async function createOrder(
     const issue = parsed.error.issues[0];
     throw new PurchaseOrderError(`${issue.path.join('.')}: ${issue.message}`);
   }
-  const input = parsed.data;
-  const type = ORDER_TYPES.find((t) => t.code === input.documentType);
-  if (!type) throw new PurchaseOrderError(`Document type ${input.documentType} does not stand.`);
+  const type = ORDER_TYPES.find((t) => t.code === parsed.data.documentType);
+  if (!type) throw new PurchaseOrderError(`Document type ${parsed.data.documentType} does not stand.`);
   const warnings: string[] = [];
   const documentDate = today();
 
-  const orderNumber = await withTenant(input.client, async (tx) => {
+  const orderNumber = await withTenant(parsed.data.client, async (tx) => {
+    const input = provisioning
+      ? parsed.data
+      : { ...parsed.data, changedBy: await judgeOrderWrite(tx, parsed.data.client, authorization, parsed.data.companyCode) };
     const { currency, paymentTermsCode, incotermsCode, incotermsLocation } = await judgeHeader(tx, input.client, input);
     let drawn: Awaited<ReturnType<typeof allocateNumber>>;
     try {
@@ -1169,8 +1236,24 @@ async function assertReleaseImpact(
 export async function changeOrder(
   raw: CreateOrderInput & { orderNumber: string },
 ): Promise<{ orderNumber: string; warnings: string[] }> {
+  return changeOrderImpl(raw, false);
+}
+
+/** Fixtures only, as `createOrderForProvisioning`. Never import this from `src/app`. */
+export async function changeOrderForProvisioning(
+  raw: Omit<CreateOrderInput, 'authorization'> & { orderNumber: string },
+): Promise<{ orderNumber: string; warnings: string[] }> {
+  return changeOrderImpl({ ...raw, authorization: undefined } as CreateOrderInput & { orderNumber: string }, true);
+}
+
+async function changeOrderImpl(
+  rawWithAuthority: CreateOrderInput & { orderNumber: string }, provisioning: boolean,
+): Promise<{ orderNumber: string; warnings: string[] }> {
+  const { authorization, ...raw } = rawWithAuthority;
+  let actor = raw.changedBy;
   // An order never changes type: the stored type decides which service may edit it.
   const stored = await withTenant(raw.client, async (tx) => {
+    if (!provisioning) actor = await judgeOrderWrite(tx, raw.client, authorization, raw.companyCode, raw.orderNumber);
     const [row] = await tx.select({ documentType: purchaseOrder.documentType }).from(purchaseOrder).where(and(
       eq(purchaseOrder.client, raw.client), eq(purchaseOrder.orderNumber, raw.orderNumber),
     ));
@@ -1184,7 +1267,7 @@ export async function changeOrder(
       );
     }
     const { orderNumber, ...rest } = raw as unknown as { orderNumber: string } & Record<string, unknown>;
-    return changeStockTransportOrder(rest, orderNumber).catch(stoError);
+    return changeStockTransportOrder({ ...rest, changedBy: actor }, orderNumber).catch(stoError);
   }
   refuseStoFieldsOnSupplierOrder(raw);
   const parsed = documentInput.safeParse(raw);
@@ -1192,10 +1275,12 @@ export async function changeOrder(
     const issue = parsed.error.issues[0];
     throw new PurchaseOrderError(`${issue.path.join('.')}: ${issue.message}`);
   }
-  const input = parsed.data;
   const warnings: string[] = [];
 
-  await withTenant(input.client, async (tx) => {
+  await withTenant(parsed.data.client, async (tx) => {
+    const input = provisioning
+      ? parsed.data
+      : { ...parsed.data, changedBy: await judgeOrderWrite(tx, parsed.data.client, authorization, parsed.data.companyCode, raw.orderNumber) };
     const before = await loadDocument(tx, input.client, raw.orderNumber);
     if (!before) throw new PurchaseOrderError(`Purchase order ${raw.orderNumber} does not exist.`);
     await assertReleaseImpact(tx, input.client, raw.orderNumber, before, input.items);
@@ -1273,8 +1358,15 @@ export interface OrderChoices {
   incoterms: string[];
 }
 
-export async function orderChoices(client: string): Promise<OrderChoices> {
+export async function orderChoices(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<OrderChoices> {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, ORDER_READ_CAPABILITIES, refuseOrder);
+    const readable = new Set<string>();
+    for (const row of await tx.select({ code: companyCode.companyCode }).from(companyCode).where(eq(companyCode.client, client))) {
+      if (await companyInScope(tx, client, actor, row.code)) readable.add(row.code);
+    }
     const supplierRows = await tx.select().from(supplierPurchasing).where(eq(supplierPurchasing.client, client));
     const partners = await tx.select().from(businessPartner).where(eq(businessPartner.client, client));
     const orgRows = await tx.select().from(purchasingOrg).where(eq(purchasingOrg.client, client));
@@ -1300,9 +1392,9 @@ export async function orderChoices(client: string): Promise<OrderChoices> {
       purchasingGroups: groupRows.filter((g) => g.isActive).map((g) => ({
         purchasingGroup: g.purchasingGroup, name: g.name,
       })),
-      companies: companyRows.map((c) => ({ companyCode: c.companyCode, name: c.name, currency: c.currency })),
-      plants: plantRows.map((p) => ({ plant: p.plant, name: p.name, companyCode: p.companyCode })),
-      storageLocations: slRows.filter((s) => s.isActive).map((s) => ({
+      companies: companyRows.filter((c) => readable.has(c.companyCode)).map((c) => ({ companyCode: c.companyCode, name: c.name, currency: c.currency })),
+      plants: plantRows.filter((p) => p.companyCode && readable.has(p.companyCode)).map((p) => ({ plant: p.plant, name: p.name, companyCode: p.companyCode })),
+      storageLocations: slRows.filter((s) => s.isActive && plantRows.some((p) => p.plant === s.plant && p.companyCode && readable.has(p.companyCode))).map((s) => ({
         plant: s.plant, storageLocation: s.storageLocation, name: s.name,
       })),
       units: unitRows.map((u) => u.code),

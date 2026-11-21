@@ -51,7 +51,10 @@ export default async function RequisitionListPage({
   let listError: string | null = null;
   if (can(session, PR_LIST_CAPABILITY)) {
     try {
-      result = await listPurchaseRequisitions({ client: session.user.client, selection: initialSelection });
+      result = await listPurchaseRequisitions({
+        client: session.user.client, selection: initialSelection,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+      });
     } catch (error) {
       listError = error instanceof RequisitionListError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

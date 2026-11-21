@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { releaseDocument } from '../src/modules/purchasing/release';
+import { releaseDocumentForProvisioning as releaseDocument } from '../src/modules/purchasing/release';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 import { createSchedulingAgreement, getSchedulingAgreement } from '../src/modules/purchasing/scheduling-agreement';
 import {

@@ -7,8 +7,8 @@ import { checkPostingAllowed, derivePosition, getCompanyCode } from '../src/plat
 
 import { reverseGoodsReceipt, postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { createOrder } from '../src/modules/purchasing/orders';
-import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
+import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
 import {
   listGrIrResiduals as listGrIrResidualsService,
   postGrIrClearing as postGrIrClearingService,
@@ -22,6 +22,8 @@ const postGrIrClearing = withFinanceAuth(postGrIrClearingService);
 const previewGrIrClearing = withFinanceAuth(previewGrIrClearingService);
 const reverseGrIrClearing = withFinanceAuth(reverseGrIrClearingService);
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 const ACTOR = 'SCR163_MR11_TEST';
 

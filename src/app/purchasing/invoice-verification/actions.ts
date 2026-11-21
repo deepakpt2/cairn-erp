@@ -58,6 +58,7 @@ export async function postInvoiceAction(
   try {
     const doc = await postSupplierInvoice({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       orderNumber: text(form, 'orderNumber'),
       supplierReference: text(form, 'supplierReference'),
@@ -96,6 +97,7 @@ export async function cancelInvoiceAction(
   try {
     const doc = await cancelSupplierInvoice({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       invoiceNumber: text(form, 'invoiceNumber'),
       postingDate: text(form, 'postingDate'),

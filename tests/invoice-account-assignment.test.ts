@@ -3,10 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createOrder } from '../src/modules/purchasing/orders';
-import {
-  cancelSupplierInvoice, getInvoiceOrder, postSupplierInvoice,
-} from '../src/modules/purchasing/invoice-verification';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
+import { cancelSupplierInvoice as cancelSupplierInvoiceRaw, getInvoiceOrder as getInvoiceOrderRaw, postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
 import { createAsset, deactivateAsset, getAsset } from '../src/modules/finance/asset-master';
 import { getAssetTransactions } from '../src/modules/finance/asset-acquisition';
 import { createInternalOrder as createInternalOrderService } from '../src/modules/foundation/internal-order';
@@ -15,7 +13,11 @@ import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { costCenter } from '../src/modules/foundation/schema';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
-import { financePoster, financeInputPoster } from './helpers/finance-actor';
+import { financePoster, financeInputPoster, withFinanceAuth, financeAuth } from './helpers/finance-actor';
+
+const cancelSupplierInvoice = withFinanceAuth(cancelSupplierInvoiceRaw);
+const getInvoiceOrder = async (client: string, key: string) => getInvoiceOrderRaw(client, key, await financeAuth(client));
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 // The finance services ask who is acting. These wrappers hand them the finance
 // test actor, created the first time one of them is called.

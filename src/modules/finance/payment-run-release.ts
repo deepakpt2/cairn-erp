@@ -8,10 +8,12 @@
  */
 import { and, eq } from 'drizzle-orm';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+
 import { type Tx, withTenant } from '../../platform/db/client';
 import type { ReleaseAttributes } from '../foundation/release-strategy-definition';
 import {
-  RELEASE_CAPABILITIES, assertDocumentReleased, cancelDocumentRelease, getDocumentRelease,
+  RELEASE_CAPABILITIES, assertDocumentReleased, assertReleaseAuthority, releaseDocumentForProvisioning, cancelDocumentReleaseForProvisioning, cancelDocumentRelease, getDocumentRelease,
   releaseDocument, syncDocumentRelease, ReleaseError, type DocumentReleaseState,
 } from '../purchasing/release';
 import { paymentRun } from './schema';
@@ -72,25 +74,51 @@ async function proposedRun(client: string, runDate: string, runId: string) {
 }
 
 export async function releasePaymentRun(input: {
-  client: string; changedBy: string; runDate: string; runId: string; releaseCode: string;
+  client: string; authorization: ServiceAuthorityContext | undefined; changedBy: string; runDate: string; runId: string; releaseCode: string;
 }): Promise<DocumentReleaseState> {
-  const run = await proposedRun(input.client, input.runDate, input.runId);
   const key = paymentRunReleaseKey(input.runDate, input.runId);
+  await assertReleaseAuthority({ client: input.client, authorization: input.authorization, documentCategory: PAYMENT_RUN_RELEASE_CATEGORY, documentNumber: key });
+  const run = await proposedRun(input.client, input.runDate, input.runId);
   return releaseDocument({
-    client: input.client, changedBy: input.changedBy, documentCategory: PAYMENT_RUN_RELEASE_CATEGORY,
+    client: input.client, authorization: input.authorization, changedBy: input.changedBy, documentCategory: PAYMENT_RUN_RELEASE_CATEGORY,
     documentNumber: key, releaseCode: input.releaseCode,
     // Whoever last generated the proposal prepared what is being released.
     preparedBy: run.changedBy ?? run.createdBy, objectKey: key,
   });
 }
 
-export async function cancelPaymentRunRelease(input: {
+/** Fixtures only: no session is judged. Never import this from `src/app`. */
+export async function releasePaymentRunForProvisioning(input: {
+  client: string; changedBy: string; runDate: string; runId: string; releaseCode: string;
+}): Promise<DocumentReleaseState> {
+  const run = await proposedRun(input.client, input.runDate, input.runId);
+  const key = paymentRunReleaseKey(input.runDate, input.runId);
+  return releaseDocumentForProvisioning({
+    client: input.client, changedBy: input.changedBy, documentCategory: PAYMENT_RUN_RELEASE_CATEGORY,
+    documentNumber: key, releaseCode: input.releaseCode, preparedBy: run.changedBy ?? run.createdBy, objectKey: key,
+  });
+}
+
+/** Fixtures only, as `releasePaymentRunForProvisioning`. */
+export async function cancelPaymentRunReleaseForProvisioning(input: {
   client: string; changedBy: string; runDate: string; runId: string;
 }): Promise<DocumentReleaseState> {
   await proposedRun(input.client, input.runDate, input.runId);
   const key = paymentRunReleaseKey(input.runDate, input.runId);
-  return cancelDocumentRelease({
+  return cancelDocumentReleaseForProvisioning({
     client: input.client, changedBy: input.changedBy, documentCategory: PAYMENT_RUN_RELEASE_CATEGORY,
+    documentNumber: key, objectKey: key,
+  });
+}
+
+export async function cancelPaymentRunRelease(input: {
+  client: string; authorization: ServiceAuthorityContext | undefined; changedBy: string; runDate: string; runId: string;
+}): Promise<DocumentReleaseState> {
+  const key = paymentRunReleaseKey(input.runDate, input.runId);
+  await assertReleaseAuthority({ client: input.client, authorization: input.authorization, documentCategory: PAYMENT_RUN_RELEASE_CATEGORY, documentNumber: key });
+  await proposedRun(input.client, input.runDate, input.runId);
+  return cancelDocumentRelease({
+    client: input.client, authorization: input.authorization, changedBy: input.changedBy, documentCategory: PAYMENT_RUN_RELEASE_CATEGORY,
     documentNumber: key, objectKey: key,
   });
 }

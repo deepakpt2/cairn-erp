@@ -6,9 +6,7 @@ import {
   completeParkedJournal, deleteParkedJournal, editParkedJournal, parkJournal, postParkedJournal,
   ParkedJournalError,
 } from '../src/modules/finance/parked-journal';
-import {
-  cancelParkedJournalRelease, getParkedJournalRelease, releaseParkedJournal,
-} from '../src/modules/finance/parked-journal-release';
+import { cancelParkedJournalReleaseForProvisioning as cancelParkedJournalRelease, getParkedJournalRelease, releaseParkedJournalForProvisioning as releaseParkedJournal } from '../src/modules/finance/parked-journal-release';
 import { saveReleaseGroup } from '../src/modules/foundation/release-strategy-definition';
 import { ReleaseError } from '../src/modules/purchasing/release';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';

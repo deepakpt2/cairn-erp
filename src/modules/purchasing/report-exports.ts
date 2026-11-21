@@ -39,7 +39,7 @@ export const purchaseOrderListExport: ReportAdapter = {
 
 export const requisitionListExport: ReportAdapter = {
   code: 'requisition-list', route: '/purchasing/requisition-list', capability: PR_LIST_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const selection: RequisitionListSelection = {
       purchasingGroupFrom: up(q, 'purchasingGroupFrom'), purchasingGroupTo: up(q, 'purchasingGroupTo'),
       plantFrom: up(q, 'plantFrom'), plantTo: up(q, 'plantTo'),
@@ -51,7 +51,7 @@ export const requisitionListExport: ReportAdapter = {
       displayClosed: get(q, 'displayClosed') === 'on' || get(q, 'displayClosed') === '1',
       maxHits: Number(get(q, 'maxHits')) || DEFAULT_MAX_HITS,
     };
-    const r = await listPurchaseRequisitions({ client, selection });
+    const r = await listPurchaseRequisitions({ client, selection, authorization });
     return {
       title: 'Purchase requisition list',
       subtitle: [`${r.rowCount} item(s)${r.truncated ? ` (truncated at ${r.maxHits})` : ''}`, ...r.warnings],

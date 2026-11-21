@@ -8,7 +8,7 @@ import {
   getPurchasingInfoRecord, previewPurchasingInfoRecord, previewPurchasingInfoRecordChange,
   resolvePurchasingInfoRecord, writePurchasingInfoRecord, writePurchasingInfoRecordChange,
 } from '../src/modules/purchasing/info-record';
-import { changeOrder, createOrder, getOrder } from '../src/modules/purchasing/orders';
+import { changeOrderForProvisioning as changeOrder, createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../src/modules/purchasing/orders';
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR151_INFO_RECORD';

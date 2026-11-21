@@ -39,6 +39,7 @@ export async function releaseOrderAction(
   const code = form.get('releaseCode');
   try {
     const state = await releaseDocument({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       documentCategory: 'PURCHASE_ORDER',
@@ -69,6 +70,7 @@ export async function cancelOrderReleaseAction(
   const number = form.get('orderNumberValue');
   try {
     await cancelDocumentRelease({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       documentCategory: 'PURCHASE_ORDER',
@@ -108,7 +110,10 @@ export async function saveOrderAction(
     // A stock transport order passes through whole: the service refuses a field it does not carry by name,
     // which it cannot do for a field this action quietly dropped.
     if (input.documentType === 'STOCK_TRANSPORT') {
-      const stoBase = { ...(input as Record<string, unknown>), client: session.user.client, changedBy: session.user.username };
+      const stoBase = {
+        ...(input as Record<string, unknown>), client: session.user.client, changedBy: session.user.username,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+      };
       const editingSto = typeof orderNumber === 'string' && orderNumber;
       if (editingSto) {
         await assertChangeForSession(session, { lockObject: 'PURCHASE_ORDER', argument: orderNumber });
@@ -128,6 +133,7 @@ export async function saveOrderAction(
     }
     const base = {
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       documentType: input.documentType ?? 'STANDARD',
       supplierNumber: input.supplierNumber ?? '',

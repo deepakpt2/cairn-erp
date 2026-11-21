@@ -6,9 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { createTenant, destroyTenant, defineTestRanges, dateFromToday } from './helpers';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { derivePosition } from '../src/platform/periods';
-import {
-  createOrder,
-} from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { openLot } from './helpers/quality-authorized';

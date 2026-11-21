@@ -5,15 +5,17 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { derivePosition, getCompanyCode } from '../src/platform/periods';
 import { postJournalEntry } from '../src/platform/posting';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
+import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
 import { getVendorAgeing as getVendorAgeingService } from '../src/modules/finance/vendor-ageing';
 import { clearVendorItems, getVendorClearing } from '../src/modules/finance/vendor-clearing';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
-import { withClientAuth } from './helpers/finance-actor';
+import { withClientAuth, withFinanceAuth } from './helpers/finance-actor';
+
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 const getVendorAgeing = withClientAuth(getVendorAgeingService);
 

@@ -4,11 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { changeHistory } from '../src/platform/change';
 import { defineRange } from '../src/platform/numbering';
-import {
-  changeRequisition,
-  createRequisition,
-  getRequisition,
-} from '../src/modules/purchasing/requisitions';
+import { changeRequisitionForProvisioning as changeRequisition, createRequisitionForProvisioning as createRequisition, getRequisitionForProvisioning as getRequisition } from '../src/modules/purchasing/requisitions';
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR055_ME51N_TEST';

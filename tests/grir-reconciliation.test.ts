@@ -3,8 +3,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createOrder } from '../src/modules/purchasing/orders';
-import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
+import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
 import { listGrIrExceptions as listGrIrExceptionsService } from '../src/modules/purchasing/grir-reconciliation';
 import { withFinanceAuth } from './helpers/finance-actor';
 
@@ -13,6 +13,8 @@ const listGrIrExceptions = withFinanceAuth(listGrIrExceptionsService);
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 const ACTOR = 'GRIR_RECON_TEST';
 const DATES = { documentDate: '2026-10-18', postingDate: '2026-10-18' };

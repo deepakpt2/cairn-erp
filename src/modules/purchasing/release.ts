@@ -20,6 +20,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { KEY_OF_LEVEL, type OrgLevel, type OrgScope } from '../../platform/auth/authority';
 import { type Tx, withTenant } from '../../platform/db/client';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { enqueue } from '../../platform/job/queue';
 import { creatorOf } from '../../platform/notification/creator';
 import { notifyOn } from '../../platform/notification/notify';
@@ -29,6 +30,7 @@ import {
   characteristic, releaseGroup, releaseStrategy, releaseStrategyCriterion, releaseStrategyStep,
 } from '../foundation/characteristic-schema';
 import { plant } from '../foundation/schema';
+import { purchasingActor, requireCompanyInScope } from './scope';
 import {
   documentRelease, purchaseOrder, purchaseOrderItem, purchaseRequisitionItem,
 } from './schema';
@@ -434,6 +436,8 @@ export async function assertDocumentReleased(
 
 export interface ReleaseActInput {
   client: string;
+  /** The verified session. The releasing user is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   documentCategory: string;
   documentNumber: string;
@@ -460,8 +464,91 @@ async function syncOrderHeader(tx: Tx, client: string, number: string, released:
   }).where(and(eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, number)));
 }
 
-export async function releaseDocument(input: ReleaseActInput): Promise<DocumentReleaseState> {
-  return withTenant(input.client, async (tx) => {
+const releaseRefusal = (message: string, remedy?: string) => new ReleaseError(message, remedy);
+
+/**
+ * The company codes a document of this category belongs to, or null when no such document stands. A requisition,
+ * a payment run and a journal may span more than one: every one must be in the actor's scope.
+ */
+async function releaseCompaniesInTx(tx: Tx, client: string, category: string, number: string): Promise<string[] | null> {
+  const column = async (query: ReturnType<typeof sql>) =>
+    (await tx.execute(query) as unknown as Array<{ company_code: string | null }>).map((r) => r.company_code).filter((c): c is string => Boolean(c));
+  let companies: string[];
+  switch (category) {
+    case 'PURCHASE_ORDER':
+      companies = await column(sql`select company_code from purchase_order where client = ${client} and order_number = ${number}`);
+      break;
+    case 'PURCHASE_CONTRACT':
+      companies = await column(sql`select company_code from purchase_contract where client = ${client} and contract_number = ${number}`);
+      break;
+    case 'SCHED_AGREEMENT':
+      companies = await column(sql`select company_code from scheduling_agreement where client = ${client} and agreement_number = ${number}`);
+      break;
+    case 'PURCHASE_REQUISITION':
+      companies = await column(sql`
+        select distinct p.company_code from purchase_requisition_item i
+          join plant p on p.client = i.client and p.plant = i.plant
+         where i.client = ${client} and i.requisition_number = ${number}`);
+      break;
+    case 'JOURNAL_ENTRY':
+      companies = await column(sql`select company_code from parked_journal_header where client = ${client} and parked_number = ${number}`);
+      break;
+    case 'PAYMENT_RUN': {
+      const [runDate, runId] = number.split('/');
+      companies = (await tx.execute(sql`
+        select company_code, paying_company_code from payment_run_company
+         where client = ${client} and run_date = ${runDate ?? ''} and run_id = ${runId ?? ''}`) as unknown as Array<{ company_code: string; paying_company_code: string | null }>)
+        .flatMap((r) => [r.company_code, r.paying_company_code]).filter((c): c is string => Boolean(c));
+      break;
+    }
+    default:
+      return null;
+  }
+  return companies.length > 0 ? [...new Set(companies)] : null;
+}
+
+/**
+ * Judge a release act inside its own transaction before anything of the document is read: the live session, the
+ * category's release capability, and an explicit Company Code scope over every company the document belongs to.
+ * A document outside the scope answers exactly as one that needs no release. Returns the verified releasing user.
+ */
+async function authorizeReleaseInTx(
+  tx: Tx, input: { client: string; authorization: ServiceAuthorityContext | undefined; documentCategory: string; documentNumber: string },
+): Promise<string> {
+  const capability = RELEASE_CAPABILITIES[input.documentCategory];
+  if (!capability) throw releaseRefusal(`Document category ${input.documentCategory} is not released here.`);
+  const actor = await purchasingActor(tx, input.client, input.authorization, [capability], releaseRefusal);
+  const companies = await releaseCompaniesInTx(tx, input.client, input.documentCategory, input.documentNumber);
+  for (const company of companies ?? []) {
+    await requireCompanyInScope(tx, input.client, actor, company, releaseRefusal, {
+      hidden: `Document ${input.documentNumber} needs no release — no strategy claims it.`,
+    });
+  }
+  return actor.username;
+}
+
+/**
+ * A caller that must read the document before it acts (to name a refusal kindly) judges first, so those reads
+ * never disclose a document outside the scope. The act itself judges again in its own transaction.
+ */
+export async function assertReleaseAuthority(
+  input: { client: string; authorization: ServiceAuthorityContext | undefined; documentCategory: string; documentNumber: string },
+): Promise<string> {
+  return withTenant(input.client, (tx) => authorizeReleaseInTx(tx, input));
+}
+
+export async function releaseDocument(raw: ReleaseActInput): Promise<DocumentReleaseState> {
+  return releaseDocumentImpl(raw, false);
+}
+
+/** Seeding and fixtures only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function releaseDocumentForProvisioning(raw: Omit<ReleaseActInput, 'authorization'>): Promise<DocumentReleaseState> {
+  return releaseDocumentImpl({ ...raw, authorization: undefined }, true);
+}
+
+async function releaseDocumentImpl(raw: ReleaseActInput, provisioning: boolean): Promise<DocumentReleaseState> {
+  return withTenant(raw.client, async (tx) => {
+    const input = provisioning ? raw : { ...raw, changedBy: await authorizeReleaseInTx(tx, raw) };
     // Serialize release acts on this document.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/release/${input.documentNumber}`}, 0))`);
     const state = await loadState(tx, input.client, input.documentCategory, input.documentNumber);
@@ -533,8 +620,22 @@ export async function releaseDocument(input: ReleaseActInput): Promise<DocumentR
   });
 }
 
-export async function cancelDocumentRelease(input: Omit<ReleaseActInput, 'releaseCode' | 'preparedBy'>): Promise<DocumentReleaseState> {
-  return withTenant(input.client, async (tx) => {
+export async function cancelDocumentRelease(raw: Omit<ReleaseActInput, 'releaseCode' | 'preparedBy'>): Promise<DocumentReleaseState> {
+  return cancelDocumentReleaseImpl(raw, false);
+}
+
+/** Seeding and fixtures only, as `releaseDocumentForProvisioning`. */
+export async function cancelDocumentReleaseForProvisioning(
+  raw: Omit<ReleaseActInput, 'releaseCode' | 'preparedBy' | 'authorization'>,
+): Promise<DocumentReleaseState> {
+  return cancelDocumentReleaseImpl({ ...raw, authorization: undefined }, true);
+}
+
+async function cancelDocumentReleaseImpl(
+  raw: Omit<ReleaseActInput, 'releaseCode' | 'preparedBy'>, provisioning: boolean,
+): Promise<DocumentReleaseState> {
+  return withTenant(raw.client, async (tx) => {
+    const input = provisioning ? raw : { ...raw, changedBy: await authorizeReleaseInTx(tx, raw) };
     const state = await loadState(tx, input.client, input.documentCategory, input.documentNumber);
     if (state.status === 'NOT_REQUIRED') {
       throw new ReleaseError(`Document ${input.documentNumber} needs no release — nothing to cancel.`);

@@ -34,9 +34,9 @@ import {
 } from '../../modules/foundation/account-determination';
 import { postGlDocument } from '../../modules/finance/gl-document';
 import { getPayables, postOutgoingPayment } from '../../modules/finance/outgoing-payment';
-import { createOrder } from '../../modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../../modules/purchasing/orders';
 import { listPurchaseOrdersForProvisioning as listPurchaseOrders } from '../../modules/purchasing/purchase-order-list';
-import { postSupplierInvoice } from '../../modules/purchasing/invoice-verification';
+import { postSupplierInvoiceForProvisioning as postSupplierInvoice } from '../../modules/purchasing/invoice-verification';
 import { postGoodsReceipt } from '../../modules/inventory/goods-receipt';
 import { postGoodsIssue } from '../../modules/inventory/goods-issue';
 import { postInitialStock } from '../../modules/inventory/initial-stock';

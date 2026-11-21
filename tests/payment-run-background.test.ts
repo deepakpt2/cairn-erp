@@ -15,22 +15,24 @@ import { reapOrphans, requestCancel, retryRun } from '../src/platform/job/queue'
 import { clearJobRegistry, registerJob } from '../src/platform/job/registry';
 import { defineRange } from '../src/platform/numbering';
 import { appUser } from '../src/platform/tables/security';
-import { createOrder } from '../src/modules/purchasing/orders';
-import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
+import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { cancelDocumentRelease } from '../src/modules/purchasing/release';
+import { cancelDocumentReleaseForProvisioning as cancelDocumentRelease } from '../src/modules/purchasing/release';
 import {
   PAYMENT_RUN_CAPABILITY, cancelPaymentRun, createPaymentRun, executePaymentRun, generateProposal, getPaymentRun, PaymentRunError,
 } from '../src/modules/finance/payment-run';
-import { cancelPaymentRunRelease, getPaymentRunRelease, releasePaymentRun } from '../src/modules/finance/payment-run-release';
+import { cancelPaymentRunReleaseForProvisioning as cancelPaymentRunRelease, getPaymentRunRelease, releasePaymentRunForProvisioning as releasePaymentRun } from '../src/modules/finance/payment-run-release';
 import {
   PAYMENT_EXECUTE_JOB, PAYMENT_PROPOSAL_JOB, cancelPaymentOperation, getPaymentOperation, runPaymentExecuteChunk,
   runPaymentProposalChunk, submitPaymentExecution, submitPaymentProposal,
 } from '../src/modules/finance/payment-run-background';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
-import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
+import { createFinanceActor, type FinanceActor, withFinanceAuth } from './helpers/finance-actor';
 import { defineReleaseStrategy } from './helpers/release-config';
 import { closeDb, createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 const ACTOR = 'PAYRUN_BG_TEST';
 const APPROVER = 'RUN-APPROVER';

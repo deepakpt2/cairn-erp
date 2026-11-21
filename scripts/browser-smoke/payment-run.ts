@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'; // eslint-disable-line @typescript-eslint/no-unused-vars
+import { withFinanceAuth } from '../../tests/helpers/finance-actor';
 import { strict as assert } from 'node:assert';
 import { sql } from 'drizzle-orm';
 
@@ -6,8 +7,10 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { initializeMaterialPeriodControl } from '../../src/modules/inventory/material-period-control';
 import { postGoodsReceipt } from '../../src/modules/inventory/goods-receipt';
-import { postSupplierInvoice } from '../../src/modules/purchasing/invoice-verification';
+import { postSupplierInvoice as postSupplierInvoiceRaw } from '../../src/modules/purchasing/invoice-verification';
 import type { BrowserTarget } from './targets';
+
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 

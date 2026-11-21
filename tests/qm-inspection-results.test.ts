@@ -5,9 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createTenant, destroyTenant, defineTestRanges } from './helpers';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import {
-  createOrder,
-} from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import {

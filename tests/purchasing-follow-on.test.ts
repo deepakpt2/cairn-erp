@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { orderDraftFromRequisition } from '../src/modules/purchasing/follow-on';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { createQuotation } from '../src/modules/purchasing/quotation';
 import { createRequestForQuotation, getRequestForQuotation } from '../src/modules/purchasing/rfq';
 import { createTenant, destroyTenant } from './helpers';

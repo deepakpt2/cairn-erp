@@ -1,4 +1,5 @@
 import { strict as assert } from 'node:assert';
+import { withFinanceAuth } from '../../tests/helpers/finance-actor';
 import { sql } from 'drizzle-orm';
 
 import type { Page } from '@playwright/test';
@@ -6,10 +7,12 @@ import type { Page } from '@playwright/test';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { postGoodsReceipt } from '../../src/modules/inventory/goods-receipt';
-import { createOrder } from '../../src/modules/purchasing/orders';
-import { postSupplierInvoice } from '../../src/modules/purchasing/invoice-verification';
+import { createOrderForProvisioning as createOrder } from '../../src/modules/purchasing/orders';
+import { postSupplierInvoice as postSupplierInvoiceRaw } from '../../src/modules/purchasing/invoice-verification';
 import { activeBlockedInvoiceNumbers } from '../../src/modules/purchasing/blocked-invoice';
 import type { BrowserTarget } from './targets';
+
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 

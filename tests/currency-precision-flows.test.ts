@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { withFinanceAuth, financeAuth } from './helpers/finance-actor';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
@@ -8,12 +9,16 @@ import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { createBillingFromPlanDate } from '../src/modules/sales/billing';
 import { saveBillingPlan } from '../src/modules/sales/billing-plan';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { cancelSupplierInvoice, getSupplierInvoice, postSupplierInvoice, InvoiceVerificationError } from '../src/modules/purchasing/invoice-verification';
+import { cancelSupplierInvoice as cancelSupplierInvoiceRaw, getSupplierInvoice as getSupplierInvoiceRaw, postSupplierInvoice as postSupplierInvoiceRaw, InvoiceVerificationError } from '../src/modules/purchasing/invoice-verification';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';
 import { createSalesActor, refreshSalesActor } from './helpers/sales-actor';
+
+const cancelSupplierInvoice = withFinanceAuth(cancelSupplierInvoiceRaw);
+const getSupplierInvoice = async (client: string, key: string) => getSupplierInvoiceRaw(client, key, await financeAuth(client));
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 /**
  * The real callers upstream of finance, in a three-decimal currency: purchase order → goods receipt → invoice

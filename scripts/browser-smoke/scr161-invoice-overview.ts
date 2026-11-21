@@ -1,13 +1,16 @@
 import { strict as assert } from 'node:assert';
+import { withFinanceAuth } from '../../tests/helpers/finance-actor';
 import { sql } from 'drizzle-orm';
 
 import type { Page } from '@playwright/test';
 
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
-import { parkSupplierInvoice } from '../../src/modules/purchasing/parked-invoice';
-import { createOrder } from '../../src/modules/purchasing/orders';
+import { parkSupplierInvoice as parkSupplierInvoiceRaw } from '../../src/modules/purchasing/parked-invoice';
+import { createOrderForProvisioning as createOrder } from '../../src/modules/purchasing/orders';
 import type { BrowserTarget } from './targets';
+
+const parkSupplierInvoice = withFinanceAuth(parkSupplierInvoiceRaw);
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 

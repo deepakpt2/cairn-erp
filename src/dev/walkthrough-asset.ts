@@ -26,8 +26,10 @@ import { withTenant, type Tx } from '../platform/db/client';
 import { createAsset } from '../modules/finance/asset-master';
 import { getPayables, postOutgoingPayment } from '../modules/finance/outgoing-payment';
 import { getVendorClearing } from '../modules/finance/vendor-clearing';
-import { createOrder, getOrder } from '../modules/purchasing/orders';
-import { getInvoiceOrder, postSupplierInvoice } from '../modules/purchasing/invoice-verification';
+import { createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../modules/purchasing/orders';
+import {
+  getInvoiceOrderForProvisioning as getInvoiceOrder, postSupplierInvoiceForProvisioning as postSupplierInvoice,
+} from '../modules/purchasing/invoice-verification';
 
 export interface AssetContext {
   tenant: string;

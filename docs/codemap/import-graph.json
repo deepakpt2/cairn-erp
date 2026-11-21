@@ -5831,6 +5831,7 @@
     "modules/finance/schema.ts",
     "modules/foundation/release-strategy-definition.ts",
     "modules/purchasing/release.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/finance/parked-journal.ts": [
@@ -5861,6 +5862,7 @@
     "modules/finance/schema.ts",
     "modules/foundation/release-strategy-definition.ts",
     "modules/purchasing/release.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/finance/payment-run.ts": [
@@ -8208,7 +8210,9 @@
     "modules/inventory/valuation-class-definition.ts",
     "modules/purchasing/account-assignment.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
     "modules/purchasing/sto-guard.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/document/index.ts",
@@ -8236,8 +8240,10 @@
     "modules/purchasing/info-record.ts",
     "modules/purchasing/release.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
     "modules/purchasing/source-list.ts",
     "modules/purchasing/stock-transport-order.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8251,7 +8257,9 @@
     "modules/foundation/supplier-company-schema.ts",
     "modules/inventory/schema.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
     "modules/purchasing/sto-guard.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8338,7 +8346,9 @@
     "modules/foundation/release-strategy-definition.ts",
     "modules/foundation/schema.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
     "platform/auth/authority.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/job/queue.ts",
@@ -8353,6 +8363,8 @@
     "modules/purchasing/requisition-list.ts"
   ],
   "modules/purchasing/requisition-list.ts": [
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -8364,6 +8376,8 @@
     "modules/people/schema.ts",
     "modules/purchasing/release.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8438,6 +8452,11 @@
     "modules/inventory/schema.ts",
     "platform/tables/reference.ts",
     "platform/tables/tenancy.ts"
+  ],
+  "modules/purchasing/scope.ts": [
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
+    "platform/db/client.ts"
   ],
   "modules/purchasing/source-list.ts": [
     "modules/foundation/business-partner-schema.ts",

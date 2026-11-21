@@ -5,7 +5,7 @@ import type { Page } from '@playwright/test';
 
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
-import { createOrder } from '../../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../../src/modules/purchasing/orders';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };

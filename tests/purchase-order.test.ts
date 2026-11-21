@@ -4,8 +4,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { changeHistory } from '../src/platform/change';
 import { defineRange } from '../src/platform/numbering';
-import { createRequisition } from '../src/modules/purchasing/requisitions';
-import { changeOrder, createOrder, getOrder } from '../src/modules/purchasing/orders';
+import { createRequisitionForProvisioning as createRequisition } from '../src/modules/purchasing/requisitions';
+import { changeOrderForProvisioning as changeOrder, createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../src/modules/purchasing/orders';
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR056_ME21N_TEST';

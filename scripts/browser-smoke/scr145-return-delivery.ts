@@ -108,7 +108,7 @@ export async function scr145ReturnDelivery(ctx: Context) {
   });
 
   // ── 1 · a purchase order and its receipt, through the purchasing and MIGO screens ────
-  const { createOrder } = await import('../../src/modules/purchasing/orders');
+  const { createOrderForProvisioning: createOrder } = await import('../../src/modules/purchasing/orders');
   const order = await createOrder({
     client, changedBy: 'browser.admin',
     supplierNumber: 'V50000', purchasingOrg: '1000', purchasingGroup: '001', companyCode: company, currency: '',

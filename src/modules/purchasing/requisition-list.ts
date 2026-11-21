@@ -16,6 +16,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { readableCompaniesInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 
@@ -124,6 +126,7 @@ function bound(value: string | undefined): string | undefined {
 export async function listPurchaseRequisitions(input: {
   client: string;
   selection: RequisitionListSelection;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<RequisitionListResult> {
   const { client } = input;
   const raw = input.selection;
@@ -176,6 +179,10 @@ export async function listPurchaseRequisitions(input: {
   const calculatedAt = new Date().toISOString();
 
   return withTenant(client, async (tx) => {
+    // The capability must stand and the list is limited to the plants of the companies the session may read;
+    // a plant of another company is simply absent. A plant limit does not refuse a list of documents.
+    const readable = await readableCompaniesInTx(tx, client, input.authorization, [PR_LIST_CAPABILITY, `${PR_LIST_CAPABILITY}.read`], { allowPlantLimited: true });
+    if (!readable.ok) fail(readable.refusal.message, readable.refusal.remedy);
     // Every supplied range endpoint is judged against its master: a key that
     // does not stand refuses by name instead of answering an empty list that
     // would read as "no demand".
@@ -225,6 +232,9 @@ export async function listPurchaseRequisitions(input: {
     }
 
     const filters = [sql`r.client = ${client}`];
+    filters.push(readable.companies.length === 0
+      ? sql`false`
+      : sql`r.plant in (select plant from plant where client = ${client} and company_code in ${readable.companies})`);
     if (s.purchasingGroupFrom || s.purchasingGroupTo) {
       filters.push(sql`r.purchasing_group between ${s.purchasingGroupFrom ?? ''} and ${s.purchasingGroupTo ?? '￿'}`);
     }

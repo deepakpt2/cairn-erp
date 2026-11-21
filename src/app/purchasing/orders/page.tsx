@@ -1,7 +1,7 @@
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
-import { PO_CREATE_CAPABILITY, getOrder, orderChoices } from '@/modules/purchasing/orders';
+import { PO_CREATE_CAPABILITY, PurchaseOrderError, getOrder, orderChoices } from '@/modules/purchasing/orders';
 import { orderDraftFromQuotation, orderDraftFromRequisition } from '@/modules/purchasing/follow-on';
 import {
   RELEASE_CAPABILITIES,
@@ -32,8 +32,17 @@ export default async function PurchaseOrdersPage({ searchParams }: {
       : params.quotation
         ? await orderDraftFromQuotation(client, params.quotation.trim())
         : null;
-  const choices = await orderChoices(client);
-  const selected = params.order ? await getOrder(client, params.order) : null;
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  // A caller without the authority or the company scope sees nothing, as for a document that does not exist.
+  const unseen = <T,>(fallback: T) => (error: unknown): T => {
+    if (error instanceof PurchaseOrderError) return fallback;
+    throw error;
+  };
+  const choices = await orderChoices(client, authorization).catch(unseen({
+    suppliers: [], purchasingOrgs: [], purchasingGroups: [], companies: [], plants: [],
+    storageLocations: [], units: [], paymentTerms: [], incoterms: [],
+  }));
+  const selected = params.order ? await getOrder(client, params.order, authorization).catch(unseen(null)) : null;
   const selectedRelease = selected
     ? await getDocumentRelease(client, 'PURCHASE_ORDER', selected.orderNumber)
     : null;

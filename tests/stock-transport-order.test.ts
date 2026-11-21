@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { createOrder, changeOrder, getOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder, changeOrderForProvisioning as changeOrder, getOrderForProvisioning as getOrder } from '../src/modules/purchasing/orders';
 import {
   StockTransportError, getStoStatus, postStoIssue, postStoReceipt, reconcileStoItem, reverseStoDocument,
 } from '../src/modules/inventory/stock-transport';

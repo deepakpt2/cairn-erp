@@ -9,10 +9,12 @@
  */
 import { and, eq } from 'drizzle-orm';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+
 import { type Tx } from '../../platform/db/client';
 import type { ReleaseAttributes } from '../foundation/release-strategy-definition';
 import {
-  RELEASE_CAPABILITIES, assertDocumentReleased, cancelDocumentRelease, getDocumentRelease,
+  RELEASE_CAPABILITIES, assertDocumentReleased, assertReleaseAuthority, releaseDocumentForProvisioning, cancelDocumentReleaseForProvisioning, cancelDocumentRelease, getDocumentRelease,
   releaseDocument, syncDocumentRelease, ReleaseError, type DocumentReleaseState,
 } from '../purchasing/release';
 import { parkedJournalHeader, parkedJournalLine } from './schema';
@@ -68,22 +70,47 @@ async function openHeader(client: string, parkedNumber: string) {
 }
 
 export async function releaseParkedJournal(input: {
+  client: string; authorization: ServiceAuthorityContext | undefined; changedBy: string; parkedNumber: string; releaseCode: string;
+}): Promise<DocumentReleaseState> {
+  await assertReleaseAuthority({ client: input.client, authorization: input.authorization, documentCategory: JOURNAL_RELEASE_CATEGORY, documentNumber: input.parkedNumber });
+  const header = await openHeader(input.client, input.parkedNumber);
+  return releaseDocument({
+    client: input.client, authorization: input.authorization, changedBy: input.changedBy, documentCategory: JOURNAL_RELEASE_CATEGORY,
+    documentNumber: input.parkedNumber, releaseCode: input.releaseCode,
+    preparedBy: header.createdBy, objectKey: `${header.companyCode}/${input.parkedNumber}`,
+  });
+}
+
+/** Demo seeding only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function releaseParkedJournalForProvisioning(input: {
   client: string; changedBy: string; parkedNumber: string; releaseCode: string;
 }): Promise<DocumentReleaseState> {
   const header = await openHeader(input.client, input.parkedNumber);
-  return releaseDocument({
+  return releaseDocumentForProvisioning({
     client: input.client, changedBy: input.changedBy, documentCategory: JOURNAL_RELEASE_CATEGORY,
     documentNumber: input.parkedNumber, releaseCode: input.releaseCode,
     preparedBy: header.createdBy, objectKey: `${header.companyCode}/${input.parkedNumber}`,
   });
 }
 
-export async function cancelParkedJournalRelease(input: {
+/** Demo seeding and fixtures only, as `releaseParkedJournalForProvisioning`. Never import this from `src/app`. */
+export async function cancelParkedJournalReleaseForProvisioning(input: {
   client: string; changedBy: string; parkedNumber: string;
 }): Promise<DocumentReleaseState> {
   const header = await openHeader(input.client, input.parkedNumber);
-  return cancelDocumentRelease({
+  return cancelDocumentReleaseForProvisioning({
     client: input.client, changedBy: input.changedBy, documentCategory: JOURNAL_RELEASE_CATEGORY,
+    documentNumber: input.parkedNumber, objectKey: `${header.companyCode}/${input.parkedNumber}`,
+  });
+}
+
+export async function cancelParkedJournalRelease(input: {
+  client: string; authorization: ServiceAuthorityContext | undefined; changedBy: string; parkedNumber: string;
+}): Promise<DocumentReleaseState> {
+  await assertReleaseAuthority({ client: input.client, authorization: input.authorization, documentCategory: JOURNAL_RELEASE_CATEGORY, documentNumber: input.parkedNumber });
+  const header = await openHeader(input.client, input.parkedNumber);
+  return cancelDocumentRelease({
+    client: input.client, authorization: input.authorization, changedBy: input.changedBy, documentCategory: JOURNAL_RELEASE_CATEGORY,
     documentNumber: input.parkedNumber, objectKey: `${header.companyCode}/${input.parkedNumber}`,
   });
 }

@@ -9,11 +9,9 @@ import { saveClass, setClassStatus } from '../src/modules/foundation/class-defin
 import {
   saveReleaseGroup, saveReleaseStrategy, setReleaseStrategyStatus,
 } from '../src/modules/foundation/release-strategy-definition';
-import { changeRequisition, createRequisition } from '../src/modules/purchasing/requisitions';
-import { changeOrder, createOrder, getOrder } from '../src/modules/purchasing/orders';
-import {
-  cancelDocumentRelease, getDocumentRelease, releaseDocument,
-} from '../src/modules/purchasing/release';
+import { changeRequisitionForProvisioning as changeRequisition, createRequisitionForProvisioning as createRequisition } from '../src/modules/purchasing/requisitions';
+import { changeOrderForProvisioning as changeOrder, createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../src/modules/purchasing/orders';
+import { cancelDocumentReleaseForProvisioning as cancelDocumentRelease, getDocumentRelease, releaseDocumentForProvisioning as releaseDocument } from '../src/modules/purchasing/release';
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR060_RELEASE_ACT_TEST';

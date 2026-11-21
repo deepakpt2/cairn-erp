@@ -24,7 +24,9 @@ import { withTenant, type Tx } from '../../platform/db/client';
 import { requestCancel } from '../../platform/job/queue';
 import { allocateNumber } from '../../platform/numbering';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
-import { createRequisition, changeRequisition } from '../purchasing/requisitions';
+import {
+  createRequisitionForProvisioning as createRequisition, changeRequisitionForProvisioning as changeRequisition,
+} from '../purchasing/requisitions';
 import { explodePlannedSupply } from './mrp-explosion';
 import { stoPlanningElements } from './sto-planning';
 import { salesDemandElements } from '../sales/sales-demand';

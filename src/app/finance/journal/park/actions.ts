@@ -184,6 +184,7 @@ export async function releaseJournalAction(
   try {
     const parkedNumber = text(form, 'parkedNumber');
     const state = await releaseParkedJournal({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client, changedBy: session.user.username,
       parkedNumber, releaseCode: text(form, 'releaseCode'),
     });
@@ -210,6 +211,7 @@ export async function cancelJournalReleaseAction(
   try {
     const parkedNumber = text(form, 'parkedNumber');
     await cancelParkedJournalRelease({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client, changedBy: session.user.username, parkedNumber,
     });
     revalidatePath(ROUTE);

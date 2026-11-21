@@ -37,7 +37,7 @@ import { saveClass, setClassStatus } from '../src/modules/foundation/class-defin
 import {
   saveReleaseGroup, saveReleaseStrategy, setReleaseStrategyStatus,
 } from '../src/modules/foundation/release-strategy-definition';
-import { changeRequisition, createRequisition } from '../src/modules/purchasing/requisitions';
+import { changeRequisitionForProvisioning as changeRequisition, createRequisitionForProvisioning as createRequisition } from '../src/modules/purchasing/requisitions';
 import { getDocumentRelease } from '../src/modules/purchasing/release';
 import { listInbox } from '../src/platform/notification/notify';
 import { handlerFor, registerJob } from '../src/platform/job/registry';

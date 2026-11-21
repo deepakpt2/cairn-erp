@@ -1,16 +1,17 @@
 import { sql } from 'drizzle-orm';
+import { withFinanceAuth } from './helpers/finance-actor';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createOrder } from '../src/modules/purchasing/orders';
-import { releaseDocument } from '../src/modules/purchasing/release';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
+import { releaseDocumentForProvisioning as releaseDocument } from '../src/modules/purchasing/release';
 import { createRequestForQuotation, getRequestForQuotation } from '../src/modules/purchasing/rfq';
 import { createQuotation, getQuotation } from '../src/modules/purchasing/quotation';
 import { createPurchasingInfoRecord } from '../src/modules/purchasing/info-record';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
-import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
+import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { defineTestRanges } from './helpers';
 import {
@@ -21,6 +22,8 @@ import {
 } from '../src/modules/purchasing/contract';
 import { openPurchaseContractDisplay } from '../src/modules/purchasing/contract-display';
 import { closeDb, createTenant, destroyTenant } from './helpers';
+
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 const ACTOR = 'CONTRACT_TEST';
 const clients: string[] = [];

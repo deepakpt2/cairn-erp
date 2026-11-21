@@ -8,7 +8,9 @@
  * It is not a stored status.
  */
 import { stoRefusal } from './sto-guard';
-import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { companyInScope, purchasingActor, requireCompanyInScope } from './scope';
+import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import { changeHistory, recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
@@ -52,6 +54,8 @@ export interface ParkedInvoiceLineInput {
 
 export interface ParkedInvoiceInput {
   client: string;
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   orderNumber: string;
   supplierReference: string;
@@ -675,23 +679,64 @@ async function byRequestKey(tx: Tx, client: string, requestKey: string): Promise
   return row?.parkedNumber ?? null;
 }
 
-export async function previewParkedInvoice(input: ParkedInvoiceInput): Promise<ParkedInvoicePreview> {
-  refuseNamed(input, true);
-  return withTenant(input.client, async (tx) => (await prepare(tx, input, null, null)).preview);
+const refuse = (message: string, remedy?: string) => new ParkedInvoiceError(message, remedy);
+const PARK_READ_CAPABILITIES = [PARKED_INVOICE_CAPABILITY, 'PROC.INV.RECORD', 'PROC.INV.OVERVIEW'] as const;
+
+/**
+ * Judge a park request inside its own transaction, before anything is read or replayed: session, live capability,
+ * and the Company Code scope over the order's company and over the standing park's company. A document of another
+ * company answers exactly as one that does not stand. Returns the verified user, who is the recorded actor.
+ */
+async function judgePark(
+  tx: Tx, raw: ParkedInvoiceInput, where: { orderNumber?: string; parkedNumber?: string },
+): Promise<string> {
+  const actor = await purchasingActor(tx, raw.client, raw.authorization, [PARKED_INVOICE_CAPABILITY], refuse);
+  const order = named(where.orderNumber ?? '').toUpperCase();
+  if (order) {
+    const [row] = await tx.execute(sql`
+      select company_code from purchase_order where client = ${raw.client} and order_number = ${order}
+    `) as unknown as Array<{ company_code: string }>;
+    if (row) {
+      await requireCompanyInScope(tx, raw.client, actor, row.company_code, refuse, { hidden: `Purchase order ${order} does not stand.` });
+    }
+  }
+  const park = named(where.parkedNumber ?? '').toUpperCase();
+  if (park) {
+    const [row] = await tx.execute(sql`
+      select company_code from parked_supplier_invoice where client = ${raw.client} and parked_number = ${park}
+    `) as unknown as Array<{ company_code: string }>;
+    if (row) {
+      await requireCompanyInScope(tx, raw.client, actor, row.company_code, refuse, { hidden: `Parked invoice ${park} does not stand.` });
+    }
+  }
+  return actor.username;
 }
 
-export async function parkSupplierInvoice(input: ParkedInvoiceInput): Promise<ParkedInvoiceView> {
-  refuseNamed(input, false);
-  const requestKey = named(input.requestKey);
+export async function previewParkedInvoice(raw: ParkedInvoiceInput): Promise<ParkedInvoicePreview> {
+  refuseNamed(raw, true);
+  return withTenant(raw.client, async (tx) => {
+    const input = { ...raw, changedBy: await judgePark(tx, raw, { orderNumber: raw.orderNumber }) };
+    return (await prepare(tx, input, null, null)).preview;
+  });
+}
+
+export async function parkSupplierInvoice(raw: ParkedInvoiceInput): Promise<ParkedInvoiceView> {
+  refuseNamed(raw, false);
+  const requestKey = named(raw.requestKey);
   if (!requestKey) {
     throw new ParkedInvoiceError('The save has no request key.', 'Save again. A check does not draw a number.');
   }
   if (requestKey.length > 64) {
     throw new ParkedInvoiceError('The request key is longer than 64 characters.');
   }
-  return withTenant(input.client, async (tx) => {
+  return withTenant(raw.client, async (tx) => {
+    const actor = await judgePark(tx, raw, { orderNumber: raw.orderNumber });
+    const input = { ...raw, changedBy: actor };
     const replay = await byRequestKey(tx, input.client, requestKey);
-    if (replay) return (await loadView(tx, input.client, replay))!;
+    if (replay) {
+      await judgePark(tx, raw, { parkedNumber: replay });
+      return (await loadView(tx, input.client, replay))!;
+    }
     const prepared = await prepare(tx, input, null, null);
     const allocated = await allocateNumber(tx, {
       client: input.client, objectCode: 'PARKINV', allocatedBy: input.changedBy,
@@ -734,11 +779,12 @@ export async function parkSupplierInvoice(input: ParkedInvoiceInput): Promise<Pa
   });
 }
 
-export async function previewParkedInvoiceChange(input: ParkedInvoiceInput & {
+export async function previewParkedInvoiceChange(raw: ParkedInvoiceInput & {
   parkedNumber: string;
 }): Promise<ParkedInvoicePreview> {
-  refuseNamed(input, true);
-  return withTenant(input.client, async (tx) => {
+  refuseNamed(raw, true);
+  return withTenant(raw.client, async (tx) => {
+    const input = { ...raw, changedBy: await judgePark(tx, raw, { parkedNumber: raw.parkedNumber }) };
     const standing = await standingLines(tx, input.client, named(input.parkedNumber).toUpperCase());
     const prepared = await prepare(tx, { ...input, orderNumber: standing.orderNumber }, standing.lines, standing.parkedNumber);
     prepared.preview.parkedNumber = standing.parkedNumber;
@@ -746,16 +792,17 @@ export async function previewParkedInvoiceChange(input: ParkedInvoiceInput & {
   });
 }
 
-export async function changeParkedInvoice(input: ParkedInvoiceInput & {
+export async function changeParkedInvoice(raw: ParkedInvoiceInput & {
   parkedNumber: string;
   expectedChangedAt: string;
 }): Promise<ParkedInvoiceView> {
-  refuseNamed(input, false);
-  const parkedNumber = named(input.parkedNumber).toUpperCase();
-  if (!named(input.expectedChangedAt)) {
+  refuseNamed(raw, false);
+  const parkedNumber = named(raw.parkedNumber).toUpperCase();
+  if (!named(raw.expectedChangedAt)) {
     throw new ParkedInvoiceError('The parked invoice was loaded without its change token.', 'Reload it, then apply the change.');
   }
-  return withTenant(input.client, async (tx) => {
+  return withTenant(raw.client, async (tx) => {
+    const input = { ...raw, changedBy: await judgePark(tx, raw, { parkedNumber }) };
     await tx.execute(sql`
       select parked_number from parked_supplier_invoice
        where client = ${input.client} and parked_number = ${parkedNumber}
@@ -965,20 +1012,32 @@ async function loadView(tx: Tx, client: string, parkedNumber: string): Promise<P
   };
 }
 
-export async function getParkedInvoice(client: string, parkedNumber: string): Promise<ParkedInvoiceView | null> {
+export async function getParkedInvoice(
+  client: string, parkedNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<ParkedInvoiceView | null> {
   const number = named(parkedNumber).toUpperCase();
-  if (!number) return null;
-  return withTenant(client, (tx) => loadView(tx, client, number));
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, PARK_READ_CAPABILITIES, refuse);
+    if (!number) return null;
+    const [row] = await tx.execute(sql`
+      select company_code from parked_supplier_invoice where client = ${client} and parked_number = ${number}
+    `) as unknown as Array<{ company_code: string }>;
+    if (row && !(await companyInScope(tx, client, actor, row.company_code))) return null;
+    return loadView(tx, client, number);
+  });
 }
 
-export async function openOrderForPark(client: string, orderNumber: string): Promise<OpenedPark | null> {
+export async function openOrderForPark(
+  client: string, orderNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<OpenedPark | null> {
   const number = named(orderNumber).toUpperCase();
-  if (!number) return null;
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, PARK_READ_CAPABILITIES, refuse);
+    if (!number) return null;
     const [header] = await tx.select().from(purchaseOrder).where(and(
       eq(purchaseOrder.client, client), eq(purchaseOrder.orderNumber, number),
     ));
-    if (!header) return null;
+    if (!header || !(await companyInScope(tx, client, actor, header.companyCode))) return null;
     const stoRefused = await stoRefusal(tx, client, number, 'parked supplier invoice');
     if (stoRefused) throw new ParkedInvoiceError(stoRefused.message, stoRefused.remedy);
     const items = await tx.select().from(purchaseOrderItem).where(and(
@@ -1031,17 +1090,27 @@ export async function openOrderForPark(client: string, orderNumber: string): Pro
   });
 }
 
-export async function listRecentParkedInvoices(client: string): Promise<Array<{
+export async function listRecentParkedInvoices(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<Array<{
   parkedNumber: string;
   purchaseOrderNumber: string;
   supplierReference: string;
 }>> {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, PARK_READ_CAPABILITIES, refuse);
+    const readable: string[] = [];
+    for (const company of (await tx.execute(sql`select company_code from company_code where client = ${client}`)) as unknown as Array<{ company_code: string }>) {
+      if (await companyInScope(tx, client, actor, company.company_code)) readable.push(company.company_code);
+    }
+    if (readable.length === 0) return [];
     const rows = await tx.select({
       parkedNumber: parkedSupplierInvoice.parkedNumber,
       purchaseOrderNumber: parkedSupplierInvoice.purchaseOrderNumber,
       supplierReference: parkedSupplierInvoice.supplierReference,
-    }).from(parkedSupplierInvoice).where(eq(parkedSupplierInvoice.client, client))
+    }).from(parkedSupplierInvoice).where(and(
+      eq(parkedSupplierInvoice.client, client), inArray(parkedSupplierInvoice.companyCode, readable),
+    ))
       .orderBy(desc(parkedSupplierInvoice.createdAt))
       .limit(8);
     return rows;

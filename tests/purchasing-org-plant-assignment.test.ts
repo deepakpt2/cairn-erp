@@ -5,8 +5,8 @@ import { changeHistory } from '../src/platform/change';
 import { withTenant } from '../src/platform/db/client';
 import { companyCode, plant, purchasingOrg } from '../src/modules/foundation/schema';
 import { assertPurchasingOrgForPlant, PURCH_ORG_PLANT_NOT_AUTHORIZED } from '../src/modules/foundation/purchasing-org-plant';
-import { createRequisition } from '../src/modules/purchasing/requisitions';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createRequisitionForProvisioning as createRequisition } from '../src/modules/purchasing/requisitions';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { defineRange } from '../src/platform/numbering';
 import {
   assignPurchasingOrgPlant,

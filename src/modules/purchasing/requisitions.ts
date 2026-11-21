@@ -11,9 +11,10 @@
  * item mark, never physical deletion; release, conversion links and
  * ordered quantities belong to later rounds, each named in R-103.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
@@ -29,6 +30,7 @@ import { glAccount } from '../finance/schema';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
 import { employee } from '../people/schema';
 import { purchaseRequisitionAssignment, purchaseRequisitionItem } from './schema';
+import { companyInScope, purchasingActor, requireCompanyInScope } from './scope';
 import {
   ReleaseError, assertDocumentNotReleased, requisitionAttributes, syncDocumentRelease,
 } from './release';
@@ -91,7 +93,30 @@ const documentInput = z.object({
 });
 
 export type RequisitionItemInput = z.input<typeof itemInput>;
-export type CreateRequisitionInput = z.input<typeof documentInput>;
+type RequisitionDocumentInput = z.input<typeof documentInput>;
+export type CreateRequisitionInput = RequisitionDocumentInput & {
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
+};
+
+const refuse = (message: string, remedy?: string) => new PurchaseRequisitionError(message, remedy);
+const REQUISITION_READ_CAPABILITIES = [PR_CREATE_CAPABILITY, 'PROC.REQ.LIST', 'PROC.PR.DISPLAY', 'PROC.PR.RELEASE'] as const;
+
+/** The companies a requisition spans: those of the plants its items name (and, for a change, of the stored items). */
+async function requisitionCompaniesInTx(tx: Tx, client: string, plants: readonly string[]): Promise<string[]> {
+  const wanted = [...new Set(plants.map((p) => String(p ?? '').trim()).filter(Boolean))];
+  if (wanted.length === 0) return [];
+  const rows = await tx.select({ company: plant.companyCode }).from(plant)
+    .where(and(eq(plant.client, client), inArray(plant.plant, wanted)));
+  return [...new Set(rows.map((r) => r.company).filter((c): c is string => Boolean(c)))];
+}
+
+async function storedRequisitionPlants(tx: Tx, client: string, number: string): Promise<string[]> {
+  const rows = await tx.select({ plant: purchaseRequisitionItem.plant }).from(purchaseRequisitionItem).where(and(
+    eq(purchaseRequisitionItem.client, client), eq(purchaseRequisitionItem.requisitionNumber, number),
+  ));
+  return rows.map((r) => r.plant);
+}
 
 export interface RequisitionItemRow {
   itemNumber: number;
@@ -321,7 +346,22 @@ async function loadDocument(tx: Tx, client: string, requisitionNumber: string): 
   };
 }
 
-export async function getRequisition(client: string, requisitionNumber: string): Promise<RequisitionDocument | null> {
+export async function getRequisition(
+  client: string, requisitionNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<RequisitionDocument | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, REQUISITION_READ_CAPABILITIES, refuse);
+    const document = await loadDocument(tx, client, requisitionNumber);
+    if (!document) return null;
+    for (const company of await requisitionCompaniesInTx(tx, client, document.items.map((i) => i.plant))) {
+      if (!(await companyInScope(tx, client, actor, company))) return null;
+    }
+    return document;
+  });
+}
+
+/** Fixtures only: the requisition with no session to judge. Never import this from `src/app`. */
+export async function getRequisitionForProvisioning(client: string, requisitionNumber: string): Promise<RequisitionDocument | null> {
   return withTenant(client, (tx) => loadDocument(tx, client, requisitionNumber));
 }
 
@@ -329,18 +369,43 @@ export async function createRequisition(
   raw: CreateRequisitionInput,
   externalTx?: Tx,
 ): Promise<{ requisitionNumber: string; warnings: string[] }> {
+  return createRequisitionImpl(raw, externalTx, false);
+}
+
+/**
+ * Seeding and the MRP run only: no session is judged here. The MRP run has no authorization of its own yet
+ * (production phase), so what it creates is not company-scoped. Never import this from `src/app`.
+ */
+export async function createRequisitionForProvisioning(
+  raw: Omit<CreateRequisitionInput, 'authorization'>, externalTx?: Tx,
+): Promise<{ requisitionNumber: string; warnings: string[] }> {
+  return createRequisitionImpl({ ...raw, authorization: undefined }, externalTx, true);
+}
+
+async function createRequisitionImpl(
+  raw: CreateRequisitionInput,
+  externalTx: Tx | undefined,
+  provisioning: boolean,
+): Promise<{ requisitionNumber: string; warnings: string[] }> {
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new PurchaseRequisitionError(`${issue.path.join('.')}: ${issue.message}`);
   }
-  const input = parsed.data;
-  const type = REQUISITION_TYPES.find((t) => t.code === input.documentType);
-  if (!type) throw new PurchaseRequisitionError(`Document type ${input.documentType} does not stand.`);
+  const type = REQUISITION_TYPES.find((t) => t.code === parsed.data.documentType);
+  if (!type) throw new PurchaseRequisitionError(`Document type ${parsed.data.documentType} does not stand.`);
   const warnings: string[] = [];
   const requisitionDate = today();
 
   const run = async (tx: Tx) => {
+    let input = parsed.data;
+    if (!provisioning) {
+      const actor = await purchasingActor(tx, input.client, raw.authorization, [PR_CREATE_CAPABILITY], refuse);
+      for (const company of await requisitionCompaniesInTx(tx, input.client, input.items.map((i) => i.plant))) {
+        await requireCompanyInScope(tx, input.client, actor, company, refuse);
+      }
+      input = { ...input, changedBy: actor.username };
+    }
     if (input.planningRunNumber && input.items[0]?.materialNumber && input.items[0]?.plant) {
       const already = await tx.execute(sql`
         select requisition_number
@@ -413,7 +478,7 @@ export async function createRequisition(
     return number;
   };
   // A supplied handle is the caller's transaction. It is not nested and its tenant scope is not changed.
-  const requisitionNumber = externalTx ? await run(externalTx) : await withTenant(input.client, run);
+  const requisitionNumber = externalTx ? await run(externalTx) : await withTenant(parsed.data.client, run);
   return { requisitionNumber, warnings };
 }
 
@@ -421,15 +486,44 @@ export async function changeRequisition(
   raw: CreateRequisitionInput & { requisitionNumber: string },
   externalTx?: Tx,
 ): Promise<{ requisitionNumber: string; warnings: string[] }> {
+  return changeRequisitionImpl(raw, externalTx, false);
+}
+
+/** Seeding and the MRP run only, as `createRequisitionForProvisioning`. Never import this from `src/app`. */
+export async function changeRequisitionForProvisioning(
+  raw: Omit<CreateRequisitionInput, 'authorization'> & { requisitionNumber: string }, externalTx?: Tx,
+): Promise<{ requisitionNumber: string; warnings: string[] }> {
+  return changeRequisitionImpl({ ...raw, authorization: undefined }, externalTx, true);
+}
+
+async function changeRequisitionImpl(
+  raw: CreateRequisitionInput & { requisitionNumber: string },
+  externalTx: Tx | undefined,
+  provisioning: boolean,
+): Promise<{ requisitionNumber: string; warnings: string[] }> {
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new PurchaseRequisitionError(`${issue.path.join('.')}: ${issue.message}`);
   }
-  const input = parsed.data;
   const warnings: string[] = [];
 
   const run = async (tx: Tx) => {
+    let input = parsed.data;
+    if (!provisioning) {
+      const actor = await purchasingActor(tx, input.client, raw.authorization, [PR_CREATE_CAPABILITY], refuse);
+      const hidden = `Requisition ${raw.requisitionNumber} does not exist.`;
+      const plants = [...await storedRequisitionPlants(tx, input.client, raw.requisitionNumber)];
+      // A missing requisition answers before the requested plants are judged, so a probe cannot tell it from another company's.
+      if (plants.length === 0) throw new PurchaseRequisitionError(hidden);
+      for (const company of await requisitionCompaniesInTx(tx, input.client, plants)) {
+        await requireCompanyInScope(tx, input.client, actor, company, refuse, { hidden });
+      }
+      for (const company of await requisitionCompaniesInTx(tx, input.client, input.items.map((i) => i.plant))) {
+        await requireCompanyInScope(tx, input.client, actor, company, refuse);
+      }
+      input = { ...input, changedBy: actor.username };
+    }
     const before = await loadDocument(tx, input.client, raw.requisitionNumber);
     if (!before) throw new PurchaseRequisitionError(`Requisition ${raw.requisitionNumber} does not exist.`);
     try {
@@ -508,7 +602,7 @@ export async function changeRequisition(
   };
   // A supplied handle is the caller's transaction. It is not nested and its tenant scope is not changed.
   if (externalTx) await run(externalTx);
-  else await withTenant(input.client, run);
+  else await withTenant(parsed.data.client, run);
   return { requisitionNumber: raw.requisitionNumber, warnings };
 }
 
@@ -520,9 +614,16 @@ export interface RequisitionChoices {
   employees: Array<{ personnelNumber: string; fullName: string }>;
 }
 
-export async function requisitionChoices(client: string): Promise<RequisitionChoices> {
+export async function requisitionChoices(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<RequisitionChoices> {
   return withTenant(client, async (tx) => {
-    const plantRows = await tx.select().from(plant).where(eq(plant.client, client)).orderBy(asc(plant.plant));
+    const actor = await purchasingActor(tx, client, authorization, REQUISITION_READ_CAPABILITIES, refuse);
+    const allPlants = await tx.select().from(plant).where(eq(plant.client, client)).orderBy(asc(plant.plant));
+    const plantRows: typeof allPlants = [];
+    for (const row of allPlants) {
+      if (row.companyCode && await companyInScope(tx, client, actor, row.companyCode)) plantRows.push(row);
+    }
     const slRows = await tx.select().from(storageLocation).where(eq(storageLocation.client, client));
     const groupRows = await tx.select().from(purchasingGroup).where(eq(purchasingGroup.client, client));
     const unitRows = await tx.select().from(unitOfMeasure).orderBy(asc(unitOfMeasure.code));
@@ -533,7 +634,7 @@ export async function requisitionChoices(client: string): Promise<RequisitionCho
       .orderBy(asc(employee.fullName));
     return {
       plants: plantRows.map((p) => ({ plant: p.plant, name: p.name, companyCode: p.companyCode })),
-      storageLocations: slRows.filter((s) => s.isActive).map((s) => ({
+      storageLocations: slRows.filter((s) => s.isActive && plantRows.some((p) => p.plant === s.plant)).map((s) => ({
         plant: s.plant, storageLocation: s.storageLocation, name: s.name,
       })),
       purchasingGroups: groupRows.filter((g) => g.isActive).map((g) => ({

@@ -189,7 +189,7 @@
 | output_condition_record | foundation | sales |
 | output_message | foundation | inventory, output, sales |
 | output_type | foundation | inventory, sales |
-| parked_journal_header | finance | platform/attention |
+| parked_journal_header | finance | platform/attention, purchasing |
 | parked_supplier_invoice | purchasing | foundation |
 | password_reset_token | platform/tables | platform |
 | pay_component | people | platform/tenancy |
@@ -198,7 +198,7 @@
 | payment_method | foundation | finance, platform/tenancy |
 | payment_proposal_item | finance | purchasing |
 | payment_run | finance | platform/tenancy, purchasing |
-| payment_run_company | finance | platform/attention |
+| payment_run_company | finance | platform/attention, purchasing |
 | payment_terms | foundation | finance, platform/tenancy, purchasing |
 | payroll_run_exception | people | platform/tenancy |
 | planning_file | inventory | production, purchasing, sales |

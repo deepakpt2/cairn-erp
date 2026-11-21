@@ -105,10 +105,11 @@ function lines(form: FormData): ParkedInvoiceLineInput[] {
   return parsed;
 }
 
-function input(sessionClient: string, username: string, form: FormData): ParkedInvoiceInput {
+function input(session: Awaited<ReturnType<typeof requireSession>>, form: FormData): ParkedInvoiceInput {
   return {
-    client: sessionClient,
-    changedBy: username,
+    client: session.user.client,
+    authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+    changedBy: session.user.username,
     orderNumber: text(form, 'orderNumber'),
     supplierReference: text(form, 'supplierReference'),
     invoiceDate: text(form, 'invoiceDate'),
@@ -132,8 +133,8 @@ export async function checkParkedInvoiceAction(
   const parkedNumber = text(form, 'parkedNumber');
   try {
     const preview = parkedNumber
-      ? await previewParkedInvoiceChange({ ...input(session.user.client, session.user.username, form), parkedNumber })
-      : await previewParkedInvoice(input(session.user.client, session.user.username, form));
+      ? await previewParkedInvoiceChange({ ...input(session, form), parkedNumber })
+      : await previewParkedInvoice(input(session, form));
     return {
       ok: true,
       wrote: false,
@@ -163,12 +164,12 @@ export async function saveParkedInvoiceAction(
     }
     const saved = parkedNumber
       ? await changeParkedInvoice({
-        ...input(session.user.client, session.user.username, form),
+        ...input(session, form),
         parkedNumber,
         expectedChangedAt: text(form, 'expectedChangedAt'),
       })
       : await parkSupplierInvoice({
-        ...input(session.user.client, session.user.username, form),
+        ...input(session, form),
         requestKey: text(form, 'requestKey'),
       });
     revalidatePath(PARKED_INVOICE_ROUTE);

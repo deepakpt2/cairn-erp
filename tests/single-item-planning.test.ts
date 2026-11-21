@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveMaterialView } from '../src/modules/inventory/materials';
-import { createRequisition } from '../src/modules/purchasing/requisitions';
+import { createRequisitionForProvisioning as createRequisition } from '../src/modules/purchasing/requisitions';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { componentRequirementQuantity } from '../src/modules/production/mrp-explosion';
 import { planMaterials, planSingleItem } from '../src/modules/production/mrp-run';

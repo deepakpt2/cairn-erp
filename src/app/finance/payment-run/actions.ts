@@ -203,6 +203,7 @@ export async function releaseRunAction(
     const runDate = text(form, 'runDate');
     const runId = text(form, 'runId');
     const state = await releasePaymentRun({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client, changedBy: session.user.username,
       runDate, runId, releaseCode: text(form, 'releaseCode'),
     });
@@ -229,7 +230,8 @@ export async function cancelRunReleaseAction(
   try {
     const runDate = text(form, 'runDate');
     const runId = text(form, 'runId');
-    await cancelPaymentRunRelease({ client: session.user.client, changedBy: session.user.username, runDate, runId });
+    await cancelPaymentRunRelease({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, client: session.user.client, changedBy: session.user.username, runDate, runId });
     revalidatePath(ROUTE);
     return { ok: true, message: `Release of payment run ${runDate}/${runId} cancelled; it stands at the first step again.` };
   } catch (error) {

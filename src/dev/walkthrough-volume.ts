@@ -46,9 +46,9 @@ import { getProductionOrder, releaseProductionOrder } from '../modules/inventory
 import { postGoodsIssue } from '../modules/inventory/goods-issue';
 import { postProductionReceipt } from '../modules/inventory/production-receipt';
 
-import { createOrder, getOrder } from '../modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../modules/purchasing/orders';
 import { postGoodsReceipt } from '../modules/inventory/goods-receipt';
-import { postSupplierInvoice } from '../modules/purchasing/invoice-verification';
+import { postSupplierInvoiceForProvisioning as postSupplierInvoice } from '../modules/purchasing/invoice-verification';
 import { getPayables, postOutgoingPayment } from '../modules/finance/outgoing-payment';
 import { getVendorClearing } from '../modules/finance/vendor-clearing';
 

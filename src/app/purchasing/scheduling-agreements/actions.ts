@@ -96,6 +96,7 @@ export async function releaseSchedulingAgreementAction(
   }
   try {
     const state = await releaseDocument({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       documentCategory: 'SCHED_AGREEMENT',
@@ -122,6 +123,7 @@ export async function cancelSchedulingAgreementReleaseAction(
   if (typeof number !== 'string') return { ok: false, message: 'An agreement number is required.' };
   try {
     await cancelDocumentRelease({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       documentCategory: 'SCHED_AGREEMENT',

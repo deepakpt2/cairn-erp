@@ -1,18 +1,21 @@
 import { sql } from 'drizzle-orm';
+import { withFinanceAuth, financeAuth } from './helpers/finance-actor';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { postVendorDownPayment } from '../src/modules/finance/vendor-down-payment';
 import { getOrderAdvances } from '../src/modules/finance/vendor-down-payment-clearing';
-import {
-  cancelSupplierInvoice, getSupplierInvoice, postSupplierInvoice,
-} from '../src/modules/purchasing/invoice-verification';
+import { cancelSupplierInvoice as cancelSupplierInvoiceRaw, getSupplierInvoice as getSupplierInvoiceRaw, postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+
+const cancelSupplierInvoice = withFinanceAuth(cancelSupplierInvoiceRaw);
+const getSupplierInvoice = async (client: string, key: string) => getSupplierInvoiceRaw(client, key, await financeAuth(client));
+const postSupplierInvoice = withFinanceAuth(postSupplierInvoiceRaw);
 
 const ACTOR = 'INV_ADVANCE_TEST';
 const DATES = { documentDate: '2026-10-18', postingDate: '2026-10-18' };

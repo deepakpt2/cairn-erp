@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createRequisition, changeRequisition, getRequisition } from '../src/modules/purchasing/requisitions';
+import { createRequisitionForProvisioning as createRequisition, changeRequisitionForProvisioning as changeRequisition, getRequisitionForProvisioning as getRequisition } from '../src/modules/purchasing/requisitions';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'PR_TX_STAGE1';
@@ -99,11 +99,11 @@ describe('requisition transaction ownership', () => {
     const service = readFileSync('src/modules/purchasing/requisitions.ts', 'utf8');
     const planning = readFileSync('src/modules/production/mrp-run.ts', 'utf8');
     const actions = readFileSync('src/app/purchasing/requisitions/actions.ts', 'utf8');
-    const create = service.slice(service.indexOf('export async function createRequisition'), service.indexOf('export async function changeRequisition'));
-    const change = service.slice(service.indexOf('export async function changeRequisition'), service.indexOf('export interface RequisitionChoices'));
-    expect(create).toContain('externalTx ? await run(externalTx) : await withTenant(input.client, run)');
+    const create = service.slice(service.indexOf('async function createRequisitionImpl'), service.indexOf('export async function changeRequisition'));
+    const change = service.slice(service.indexOf('async function changeRequisitionImpl'), service.indexOf('export interface RequisitionChoices'));
+    expect(create).toContain('externalTx ? await run(externalTx) : await withTenant(parsed.data.client, run)');
     expect(change).toContain('if (externalTx) await run(externalTx)');
-    expect(change).toContain('else await withTenant(input.client, run)');
+    expect(change).toContain('else await withTenant(parsed.data.client, run)');
     expect(create.slice(create.indexOf('const run = async'), create.indexOf('A supplied handle'))).not.toContain('withTenant');
     expect(change.slice(change.indexOf('const run = async'), change.indexOf('A supplied handle'))).not.toContain('withTenant');
     expect(change).toContain('pg_advisory_xact_lock');

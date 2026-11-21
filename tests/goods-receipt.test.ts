@@ -13,7 +13,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createOrder, getOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../src/modules/purchasing/orders';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import {
   getMaterialDocument, getReceiptOrder, postGoodsReceipt as postGoodsReceiptRaw,

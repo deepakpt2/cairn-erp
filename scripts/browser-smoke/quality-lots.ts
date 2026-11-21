@@ -9,7 +9,7 @@ import { defineRange } from '../../src/platform/numbering';
 import { createBatch } from '../../src/modules/inventory/batch-master';
 import { saveBatchLevel } from '../../src/modules/inventory/batch-level';
 import { initializeMaterialPeriodControl } from '../../src/modules/inventory/material-period-control';
-import { createOrder } from '../../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../../src/modules/purchasing/orders';
 import { openLot } from '../../src/modules/quality/lot';
 import type { BrowserTarget } from './targets';
 

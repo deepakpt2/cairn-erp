@@ -85,6 +85,7 @@ export async function releaseContractAction(
   }
   try {
     const state = await releaseDocument({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       documentCategory: 'PURCHASE_CONTRACT',
@@ -111,6 +112,7 @@ export async function cancelContractReleaseAction(
   if (typeof number !== 'string') return { ok: false, message: 'A contract number is required.' };
   try {
     await cancelDocumentRelease({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       documentCategory: 'PURCHASE_CONTRACT',

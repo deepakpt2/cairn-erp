@@ -5,6 +5,7 @@ import { ChangeLock } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   PR_CREATE_CAPABILITY,
+  PurchaseRequisitionError,
   getRequisition,
   requisitionChoices,
 } from '@/modules/purchasing/requisitions';
@@ -29,8 +30,16 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const client = session.user.client;
-  const choices = await requisitionChoices(client);
-  const selected = params.req ? await getRequisition(client, params.req) : null;
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  // A caller without the authority or the company scope sees nothing, as for a document that does not exist.
+  const unseen = <T,>(fallback: T) => (error: unknown): T => {
+    if (error instanceof PurchaseRequisitionError) return fallback;
+    throw error;
+  };
+  const choices = await requisitionChoices(client, authorization).catch(unseen({
+    plants: [], storageLocations: [], purchasingGroups: [], units: [], employees: [],
+  }));
+  const selected = params.req ? await getRequisition(client, params.req, authorization).catch(unseen(null)) : null;
   const selectedRelease = selected
     ? await getDocumentRelease(client, 'PURCHASE_REQUISITION', selected.requisitionNumber)
     : null;

@@ -8,7 +8,7 @@ import {
 import { GoodsReceiptError } from '../src/modules/inventory/goods-receipt';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { defineRange } from '../src/platform/numbering';
-import { createOrder } from '../src/modules/purchasing/orders';
+import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { GoodsIssueError } from '../src/modules/inventory/goods-issue';
 import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { saveMovementType } from '../src/modules/inventory/movement-type-configuration';
