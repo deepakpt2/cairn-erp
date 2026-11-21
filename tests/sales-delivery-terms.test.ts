@@ -34,7 +34,7 @@ import {
   getCustomerSalesArea, saveCustomerSalesArea, type CustomerSalesAreaInput,
 } from '../src/modules/foundation/customer-sales-areas';
 import { saveCustomerPartner } from '../src/modules/sales/partners';
-import { assignShippingPoint, defineShippingPoint } from '../src/modules/sales/shipping-point-maintenance';
+import { assignShippingPointForProvisioning as assignShippingPoint, defineShippingPointForProvisioning as defineShippingPoint } from '../src/modules/sales/shipping-point-maintenance';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { createDelivery } from '../src/modules/sales/delivery';
 import {

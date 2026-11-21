@@ -36,13 +36,13 @@ import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/
 import { saveCustomerPartner } from '../src/modules/sales/partners';
 import {
   ShippingPointMaintenanceError,
-  assignShippingPoint,
-  changeShippingPointAssignmentStatus,
-  changeShippingConditionStatus,
-  changeShippingPointStatus,
-  defineShippingCondition,
-  defineShippingPoint,
-  listShippingPointConfiguration,
+  assignShippingPointForProvisioning as assignShippingPoint,
+  changeShippingPointAssignmentStatusForProvisioning as changeShippingPointAssignmentStatus,
+  changeShippingConditionStatusForProvisioning as changeShippingConditionStatus,
+  changeShippingPointStatusForProvisioning as changeShippingPointStatus,
+  defineShippingConditionForProvisioning as defineShippingCondition,
+  defineShippingPointForProvisioning as defineShippingPoint,
+  listShippingPointConfigurationForProvisioning as listShippingPointConfiguration,
 } from '../src/modules/sales/shipping-point-maintenance';
 import { ShippingPointError, shippingPointFor } from '../src/modules/sales/shipping-point';
 import { createSalesOrder } from '../src/modules/sales/sales-order';

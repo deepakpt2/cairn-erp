@@ -199,3 +199,13 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** the register's customer and material choice lists are unscoped master data (later phase). A plant-limited register read is capped at 2000 judged candidates. Not browser-tested.
 
 **Still not covered in sales:** shipping point maintenance, credit-control area.
+
+## Phase 6g — sales area: shipping point maintenance
+
+**Found:** `defineShippingPoint`, `changeShippingPointStatus`, `defineShippingCondition`, `changeShippingConditionStatus`, `assignShippingPoint`, `changeShippingPointAssignmentStatus` and `listShippingPointConfiguration` checked no session, capability or scope; any caller could withdraw a dock that other companies' plants load through.
+
+**Covered:** every call takes a required `authorization` and judges the session and `CFG.SALES.SHIPPING_POINT.DEFINE` in its own tx. Assignments are plant-keyed: the plant must be inside the actor's reachable plants. Withdrawing or restoring a tenant-wide shipping point or condition requires reach over every plant assigned through it. The recorded actor is the session user. The list shows only assignments and plants in reach. Seeding, demo and tests use `*ForProvisioning` variants (never imported from `src/app`). Tests: 3 more in `tests/company-scope-sales.test.ts` (36).
+
+**Limits:** shipping points and conditions are tenant-wide masters with no company of their own; defining a new one needs only the capability. A user without the capability now gets an error page instead of a read-only view of `/config/shipping-points`. Not browser-tested.
+
+**Moved:** the credit-control area is finance-module configuration and is handled with the finance leftovers.

@@ -34,13 +34,17 @@ import {
 import { saveSalesCondition, listSalesConditions } from '../src/modules/sales/conditions';
 import { listAnalysis } from '../src/modules/sales/analysis';
 import { listDocumentRegister, listRegisterChoices } from '../src/modules/sales/registers';
+import {
+  assignShippingPoint, changeShippingPointAssignmentStatus, changeShippingPointStatus,
+  defineShippingPoint, listShippingPointConfiguration,
+} from '../src/modules/sales/shipping-point-maintenance';
 import { assignSalesAreaDimensions, closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 
 const A = '1000';
 const B = '2000';
 const SEED = 'SCOPE_SALES_SEED';
-const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST', 'SALES.REBATE.MAINTAIN', 'SALES.CREDIT.MEMO.POST', 'SALES.DOCUMENTS.LIST', 'SALES.ANALYSIS.LIST', 'CFG.SALES.CONDITION.MAINTAIN'];
+const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST', 'SALES.REBATE.MAINTAIN', 'SALES.CREDIT.MEMO.POST', 'SALES.DOCUMENTS.LIST', 'SALES.ANALYSIS.LIST', 'CFG.SALES.CONDITION.MAINTAIN', 'CFG.SALES.SHIPPING_POINT.DEFINE'];
 const SO_A = 'SOA0000001';
 const SO_B = 'SOB0000001';
 const SO_D2 = 'SOD0000002';
@@ -703,3 +707,54 @@ describe('conditions, registers and analysis', () => {
     for (const k of denied) expect(await ask(listAnalysis(client, { kind: 'BACKLOG' }, auth(k)))).not.toBe('done');
   });
 });
+
+describe('shipping points', () => {
+  const state = () => withTenant(client, async (tx) => (await tx.execute(sql`select
+      (select count(*)::int from shipping_point where client = ${client}) as points,
+      (select count(*)::int from shipping_point_determination where client = ${client}) as rows,
+      (select count(*)::int from shipping_point where client = ${client} and is_active) as active`)) as unknown as Array<Record<string, number>>);
+
+  beforeAll(async () => {
+    await withTenant(client, async (tx) => {
+      for (const [pt, pl] of [['SPA', 'PSA1'], ['SPB', 'PSB1']] as const) {
+        await tx.execute(sql`insert into shipping_point (client, shipping_point, name, created_by) values (${client}, ${pt}, ${pt}, ${SEED}) on conflict do nothing`);
+        await tx.execute(sql`insert into shipping_point_determination (client, delivering_plant, shipping_condition, loading_group, shipping_point, created_by) values (${client}, ${pl}, '', '', ${pt}, ${SEED}) on conflict do nothing`);
+      }
+    });
+  });
+
+  it('refuses every maintenance call without a session, the capability or the scope, and writes nothing', async () => {
+    const before = await state();
+    const calls = (a: FactorAuth) => [
+      () => defineShippingPoint({ client, changedBy: 'FORGED', shippingPoint: 'SPX', name: 'x', authorization: a }),
+      () => changeShippingPointStatus({ client, changedBy: 'FORGED', shippingPoint: 'SPA', isActive: false, authorization: a }),
+      () => assignShippingPoint({ client, changedBy: 'FORGED', deliveringPlant: 'PSA1', shippingPoint: 'SPA', shippingCondition: '', loadingGroup: 'ZZ', authorization: a }),
+      () => changeShippingPointAssignmentStatus({ client, changedBy: 'FORGED', deliveringPlant: 'PSA1', shippingCondition: '', loadingGroup: '', isActive: false, authorization: a }),
+    ];
+    for (const a of [undefined, auth('noCap'), auth('noScope'), auth('other')]) {
+      for (const c of calls(a)) expect(await ask(c())).not.toBe('done');
+    }
+    expect(await state()).toEqual(before);
+  });
+
+  it('refuses a plant outside the reach, including withdrawing a dock that loads through one', async () => {
+    const before = await state();
+    expect(await ask(assignShippingPoint({ client, changedBy: 'FORGED', deliveringPlant: 'PSB1', shippingPoint: 'SPA', loadingGroup: 'ZZ', authorization: auth('A') }))).toMatch(/outside your access/);
+    expect(await ask(changeShippingPointAssignmentStatus({ client, changedBy: 'FORGED', deliveringPlant: 'PSB1', shippingCondition: '', loadingGroup: '', isActive: false, authorization: auth('A') }))).toMatch(/outside your access/);
+    expect(await ask(changeShippingPointStatus({ client, changedBy: 'FORGED', shippingPoint: 'SPB', isActive: false, authorization: auth('A') }))).toMatch(/outside your access/);
+    expect(await ask(changeShippingPointStatus({ client, changedBy: 'FORGED', shippingPoint: 'SPA', isActive: false, authorization: auth('plantA') }))).toBe('done');
+    await changeShippingPointStatus({ client, changedBy: 'FORGED', shippingPoint: 'SPA', isActive: true, authorization: auth('plantA') });
+    expect(await state()).toEqual(before);
+  });
+
+  it('records the session user and lists only the assignments and plants in reach', async () => {
+    const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select changed_by from shipping_point where client = ${client} and shipping_point = 'SPA'`)) as unknown as Array<{ changed_by: string }>))[0]!;
+    expect(row.changed_by).toBe(actors.plantA!.username);
+    const cfg = await listShippingPointConfiguration(client, auth('plantA'));
+    expect(cfg.assignments.map((r) => r.deliveringPlant)).toEqual(['PSA1']);
+    expect(cfg.plants.map((p) => p.plant)).not.toContain('PSB1');
+    expect(await ask(listShippingPointConfiguration(client, undefined))).not.toBe('done');
+    for (const k of denied) expect(await ask(listShippingPointConfiguration(client, auth(k)))).not.toBe('done');
+  });
+});
+type FactorAuth = FinanceActor['authorization'] | undefined;

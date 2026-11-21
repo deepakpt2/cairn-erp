@@ -14,7 +14,10 @@
 import { and, asc, eq } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
-import { withTenant } from '../../platform/db/client';
+import { withTenant, type Tx } from '../../platform/db/client';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import { salesActor } from './sales-scope';
 import { customerSalesArea } from '../foundation/customer-sales-area-schema';
 import { plant } from '../foundation/schema';
 import { materialSales } from '../inventory/schema';
@@ -79,20 +82,69 @@ export interface ShippingPointConfiguration {
   customersWithoutCondition: number;
 }
 
+/** Scoped calls carry the session's authorization; provisioning calls (seeding, demo) carry none and are never imported from src/app. */
+type Mode = { scoped: true; authorization: ServiceAuthorityContext | undefined } | { scoped: false };
+type Scoped<I> = I & { authorization: ServiceAuthorityContext | undefined };
+
+/**
+ * Session, capability and plant reach inside the service's own tx. `plantsOf` names the plants the change touches;
+ * every one must be inside the actor's reach (a tenant-wide dock or condition is not withdrawn by someone who cannot
+ * reach the plants that load through it). The recorded actor is the session user.
+ */
+async function enter(
+  tx: Tx, client: string, mode: Mode, changedBy: string,
+  plantsOf: (tx: Tx) => Promise<string[]> = async () => [],
+): Promise<string> {
+  if (!mode.scoped) return changedBy;
+  const actor = await salesActor(
+    tx, client, mode.authorization, [SHIPPING_POINT_CAPABILITY], (m, r) => new ShippingPointMaintenanceError(m, r ?? ''),
+  );
+  const plants = await plantsOf(tx);
+  if (plants.length > 0) {
+    const reach = new Set(await reachablePlantsInTx(tx, client, actor));
+    if (plants.some((p) => !reach.has(p))) {
+      throw new ShippingPointMaintenanceError(
+        'The change reaches a plant outside your access.',
+        'Ask someone whose access covers every plant that loads through it.',
+      );
+    }
+  }
+  return actor.username;
+}
+
 /** The whole configuration as it stands, in the three pieces the screen shows. */
-export async function listShippingPointConfiguration(client: string): Promise<ShippingPointConfiguration> {
+export async function listShippingPointConfiguration(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<ShippingPointConfiguration> {
+  return listConfiguration(client, { scoped: true, authorization });
+}
+
+/** Unscoped read for seeding, demo and tests; never imported from src/app. */
+export async function listShippingPointConfigurationForProvisioning(client: string): Promise<ShippingPointConfiguration> {
+  return listConfiguration(client, { scoped: false });
+}
+
+async function listConfiguration(client: string, mode: Mode): Promise<ShippingPointConfiguration> {
   return withTenant(client, async (tx) => {
+    let reach: Set<string> | null = null;
+    if (mode.scoped) {
+      const actor = await salesActor(
+        tx, client, mode.authorization, [SHIPPING_POINT_CAPABILITY], (m, r) => new ShippingPointMaintenanceError(m, r ?? ''),
+      );
+      reach = new Set(await reachablePlantsInTx(tx, client, actor));
+    }
     const points = await tx.select().from(shippingPoint)
       .where(eq(shippingPoint.client, client)).orderBy(asc(shippingPoint.shippingPoint));
     const conditions = await tx.select().from(shippingCondition)
       .where(eq(shippingCondition.client, client)).orderBy(asc(shippingCondition.shippingCondition));
-    const assignments = await tx.select().from(shippingPointDetermination)
+    const allAssignments = await tx.select().from(shippingPointDetermination)
       .where(eq(shippingPointDetermination.client, client))
       .orderBy(
         asc(shippingPointDetermination.deliveringPlant),
         asc(shippingPointDetermination.shippingCondition),
         asc(shippingPointDetermination.loadingGroup),
       );
+    const assignments = allAssignments.filter((row) => !reach || reach.has(row.deliveringPlant));
     const pointNames = new Map(points.map((row) => [row.shippingPoint, row]));
     const views = await tx.select({ loadingGroup: materialSales.loadingGroup })
       .from(materialSales).where(eq(materialSales.client, client));
@@ -127,7 +179,7 @@ export async function listShippingPointConfiguration(client: string): Promise<Sh
       })),
       plants: (await tx.select({ plant: plant.plant, name: plant.name }).from(plant)
         .where(and(eq(plant.client, client), eq(plant.isActive, true)))
-        .orderBy(asc(plant.plant))),
+        .orderBy(asc(plant.plant))).filter((row) => !reach || reach.has(row.plant)),
       loadingGroups: [...new Set(views
         .map((row) => (row.loadingGroup ?? '').trim().toUpperCase())
         .filter((group) => group.length > 0))].sort(),
@@ -141,9 +193,9 @@ export async function listShippingPointConfiguration(client: string): Promise<Sh
  * Name a shipping point: the dock, the depot, the gate. It carries no plant of its own — which plant
  * it loads from is what the assignment below says, and a dock can serve more than one.
  */
-export async function defineShippingPoint(input: {
+async function defineShippingPointImpl(input: {
   client: string; changedBy: string; shippingPoint: string; name: string;
-}): Promise<void> {
+}, mode: Mode): Promise<void> {
   const point = input.shippingPoint.trim().toUpperCase();
   const name = input.name.trim();
   if (!POINT.test(point)) {
@@ -159,8 +211,9 @@ export async function defineShippingPoint(input: {
     );
   }
   return withTenant(input.client, async (tx) => {
+    const by = await enter(tx, input.client, mode, input.changedBy);
     const inserted = await tx.insert(shippingPoint).values({
-      client: input.client, shippingPoint: point, name, isActive: true, createdBy: input.changedBy,
+      client: input.client, shippingPoint: point, name, isActive: true, createdBy: by,
     }).onConflictDoNothing().returning({ shippingPoint: shippingPoint.shippingPoint });
     if (inserted.length === 0) {
       throw new ShippingPointMaintenanceError(
@@ -170,18 +223,19 @@ export async function defineShippingPoint(input: {
     }
     await recordChange(tx, {
       client: input.client, objectClass: SHIPPING_POINT_OBJECT_CLASS, objectKey: point,
-      changeType: 'CREATE', changedBy: input.changedBy, after: { name },
+      changeType: 'CREATE', changedBy: by, after: { name },
       securityRelevantFields: ['name'],
     });
   });
 }
 
 /** Withdraw a shipping point, or restore one. A withdrawn point stops loading. */
-export async function changeShippingPointStatus(input: {
+async function changeShippingPointStatusImpl(input: {
   client: string; changedBy: string; shippingPoint: string; isActive: boolean;
-}): Promise<void> {
+}, mode: Mode): Promise<void> {
   const point = input.shippingPoint.trim().toUpperCase();
   return withTenant(input.client, async (tx) => {
+    const by = await enter(tx, input.client, mode, input.changedBy, async (t) => (await t.select({ p: shippingPointDetermination.deliveringPlant }).from(shippingPointDetermination).where(and(eq(shippingPointDetermination.client, input.client), eq(shippingPointDetermination.shippingPoint, point)))).map((r) => r.p));
     const [standing] = await tx.select().from(shippingPoint).where(and(
       eq(shippingPoint.client, input.client), eq(shippingPoint.shippingPoint, point),
     )).limit(1);
@@ -192,11 +246,11 @@ export async function changeShippingPointStatus(input: {
       );
     }
     await tx.update(shippingPoint)
-      .set({ isActive: input.isActive, changedBy: input.changedBy, changedAt: new Date() })
+      .set({ isActive: input.isActive, changedBy: by, changedAt: new Date() })
       .where(and(eq(shippingPoint.client, input.client), eq(shippingPoint.shippingPoint, point)));
     await recordChange(tx, {
       client: input.client, objectClass: SHIPPING_POINT_OBJECT_CLASS, objectKey: point,
-      changeType: 'CHANGE', changedBy: input.changedBy,
+      changeType: 'CHANGE', changedBy: by,
       before: { isActive: standing.isActive }, after: { isActive: input.isActive },
       securityRelevantFields: ['isActive'],
     });
@@ -209,9 +263,9 @@ export async function changeShippingPointStatus(input: {
  * The description is the whole point of the master — a two-character code on a customer's sales area
  * tells a reader nothing, and the code is what determination matches on.
  */
-export async function defineShippingCondition(input: {
+async function defineShippingConditionImpl(input: {
   client: string; changedBy: string; shippingCondition: string; description: string;
-}): Promise<void> {
+}, mode: Mode): Promise<void> {
   const condition = input.shippingCondition.trim().toUpperCase();
   const description = input.description.trim();
   if (!CONDITION.test(condition)) {
@@ -227,9 +281,10 @@ export async function defineShippingCondition(input: {
     );
   }
   return withTenant(input.client, async (tx) => {
+    const by = await enter(tx, input.client, mode, input.changedBy);
     const inserted = await tx.insert(shippingCondition).values({
       client: input.client, shippingCondition: condition, description, isActive: true,
-      createdBy: input.changedBy,
+      createdBy: by,
     }).onConflictDoNothing().returning({ shippingCondition: shippingCondition.shippingCondition });
     if (inserted.length === 0) {
       throw new ShippingPointMaintenanceError(
@@ -239,18 +294,19 @@ export async function defineShippingCondition(input: {
     }
     await recordChange(tx, {
       client: input.client, objectClass: SHIPPING_CONDITION_OBJECT_CLASS, objectKey: condition,
-      changeType: 'CREATE', changedBy: input.changedBy, after: { description },
+      changeType: 'CREATE', changedBy: by, after: { description },
       securityRelevantFields: ['description'],
     });
   });
 }
 
 /** Withdraw a shipping condition, or restore one. */
-export async function changeShippingConditionStatus(input: {
+async function changeShippingConditionStatusImpl(input: {
   client: string; changedBy: string; shippingCondition: string; isActive: boolean;
-}): Promise<void> {
+}, mode: Mode): Promise<void> {
   const condition = input.shippingCondition.trim().toUpperCase();
   return withTenant(input.client, async (tx) => {
+    const by = await enter(tx, input.client, mode, input.changedBy, async (t) => (await t.select({ p: shippingPointDetermination.deliveringPlant }).from(shippingPointDetermination).where(and(eq(shippingPointDetermination.client, input.client), eq(shippingPointDetermination.shippingCondition, condition)))).map((r) => r.p));
     const [standing] = await tx.select().from(shippingCondition).where(and(
       eq(shippingCondition.client, input.client), eq(shippingCondition.shippingCondition, condition),
     )).limit(1);
@@ -261,14 +317,14 @@ export async function changeShippingConditionStatus(input: {
       );
     }
     await tx.update(shippingCondition)
-      .set({ isActive: input.isActive, changedBy: input.changedBy, changedAt: new Date() })
+      .set({ isActive: input.isActive, changedBy: by, changedAt: new Date() })
       .where(and(
         eq(shippingCondition.client, input.client),
         eq(shippingCondition.shippingCondition, condition),
       ));
     await recordChange(tx, {
       client: input.client, objectClass: SHIPPING_CONDITION_OBJECT_CLASS, objectKey: condition,
-      changeType: 'CHANGE', changedBy: input.changedBy,
+      changeType: 'CHANGE', changedBy: by,
       before: { isActive: standing.isActive }, after: { isActive: input.isActive },
       securityRelevantFields: ['isActive'],
     });
@@ -284,10 +340,10 @@ export async function changeShippingConditionStatus(input: {
  * never answer — and that two rows cannot answer for one combination, which would leave the engine to
  * choose between them.
  */
-export async function assignShippingPoint(input: {
+async function assignShippingPointImpl(input: {
   client: string; changedBy: string; deliveringPlant: string;
   shippingCondition?: string; loadingGroup?: string; shippingPoint: string;
-}): Promise<void> {
+}, mode: Mode): Promise<void> {
   const deliveringPlant = input.deliveringPlant.trim().toUpperCase();
   const condition = (input.shippingCondition ?? '').trim().toUpperCase();
   const group = (input.loadingGroup ?? '').trim().toUpperCase();
@@ -311,6 +367,7 @@ export async function assignShippingPoint(input: {
     );
   }
   return withTenant(input.client, async (tx) => {
+    const by = await enter(tx, input.client, mode, input.changedBy, async () => [deliveringPlant]);
     const [site] = await tx.select().from(plant).where(and(
       eq(plant.client, input.client), eq(plant.plant, deliveringPlant),
     )).limit(1);
@@ -342,7 +399,7 @@ export async function assignShippingPoint(input: {
     }
     const inserted = await tx.insert(shippingPointDetermination).values({
       client: input.client, deliveringPlant, shippingCondition: condition, loadingGroup: group,
-      shippingPoint: point, isActive: true, createdBy: input.changedBy,
+      shippingPoint: point, isActive: true, createdBy: by,
     }).onConflictDoNothing().returning({ shippingPoint: shippingPointDetermination.shippingPoint });
     if (inserted.length === 0) {
       throw new ShippingPointMaintenanceError(
@@ -353,17 +410,17 @@ export async function assignShippingPoint(input: {
     await recordChange(tx, {
       client: input.client, objectClass: SHIPPING_POINT_DETERMINATION_OBJECT_CLASS,
       objectKey: `${deliveringPlant}/${condition || '*'}/${group || '*'}`,
-      changeType: 'CREATE', changedBy: input.changedBy, after: { shippingPoint: point },
+      changeType: 'CREATE', changedBy: by, after: { shippingPoint: point },
       securityRelevantFields: ['shippingPoint'],
     });
   });
 }
 
 /** Withdraw an assignment, or restore one. */
-export async function changeShippingPointAssignmentStatus(input: {
+async function changeShippingPointAssignmentStatusImpl(input: {
   client: string; changedBy: string; deliveringPlant: string;
   shippingCondition: string; loadingGroup: string; isActive: boolean;
-}): Promise<void> {
+}, mode: Mode): Promise<void> {
   const where = and(
     eq(shippingPointDetermination.client, input.client),
     eq(shippingPointDetermination.deliveringPlant, input.deliveringPlant),
@@ -371,6 +428,7 @@ export async function changeShippingPointAssignmentStatus(input: {
     eq(shippingPointDetermination.loadingGroup, input.loadingGroup),
   );
   return withTenant(input.client, async (tx) => {
+    const by = await enter(tx, input.client, mode, input.changedBy, async () => [input.deliveringPlant]);
     const [standing] = await tx.select().from(shippingPointDetermination).where(where).limit(1);
     if (!standing) {
       throw new ShippingPointMaintenanceError(
@@ -379,14 +437,62 @@ export async function changeShippingPointAssignmentStatus(input: {
       );
     }
     await tx.update(shippingPointDetermination)
-      .set({ isActive: input.isActive, changedBy: input.changedBy, changedAt: new Date() })
+      .set({ isActive: input.isActive, changedBy: by, changedAt: new Date() })
       .where(where);
     await recordChange(tx, {
       client: input.client, objectClass: SHIPPING_POINT_DETERMINATION_OBJECT_CLASS,
       objectKey: `${input.deliveringPlant}/${input.shippingCondition || '*'}/${input.loadingGroup || '*'}`,
-      changeType: 'CHANGE', changedBy: input.changedBy,
+      changeType: 'CHANGE', changedBy: by,
       before: { isActive: standing.isActive }, after: { isActive: input.isActive },
       securityRelevantFields: ['isActive'],
     });
   });
+}
+
+export async function defineShippingPoint(input: Scoped<Parameters<typeof defineShippingPointImpl>[0]>): Promise<void> {
+  const { authorization, ...rest } = input;
+  return defineShippingPointImpl(rest, { scoped: true, authorization });
+}
+export async function defineShippingPointForProvisioning(input: Parameters<typeof defineShippingPointImpl>[0]): Promise<void> {
+  return defineShippingPointImpl(input, { scoped: false });
+}
+
+export async function changeShippingPointStatus(input: Scoped<Parameters<typeof changeShippingPointStatusImpl>[0]>): Promise<void> {
+  const { authorization, ...rest } = input;
+  return changeShippingPointStatusImpl(rest, { scoped: true, authorization });
+}
+export async function changeShippingPointStatusForProvisioning(input: Parameters<typeof changeShippingPointStatusImpl>[0]): Promise<void> {
+  return changeShippingPointStatusImpl(input, { scoped: false });
+}
+
+export async function defineShippingCondition(input: Scoped<Parameters<typeof defineShippingConditionImpl>[0]>): Promise<void> {
+  const { authorization, ...rest } = input;
+  return defineShippingConditionImpl(rest, { scoped: true, authorization });
+}
+export async function defineShippingConditionForProvisioning(input: Parameters<typeof defineShippingConditionImpl>[0]): Promise<void> {
+  return defineShippingConditionImpl(input, { scoped: false });
+}
+
+export async function changeShippingConditionStatus(input: Scoped<Parameters<typeof changeShippingConditionStatusImpl>[0]>): Promise<void> {
+  const { authorization, ...rest } = input;
+  return changeShippingConditionStatusImpl(rest, { scoped: true, authorization });
+}
+export async function changeShippingConditionStatusForProvisioning(input: Parameters<typeof changeShippingConditionStatusImpl>[0]): Promise<void> {
+  return changeShippingConditionStatusImpl(input, { scoped: false });
+}
+
+export async function assignShippingPoint(input: Scoped<Parameters<typeof assignShippingPointImpl>[0]>): Promise<void> {
+  const { authorization, ...rest } = input;
+  return assignShippingPointImpl(rest, { scoped: true, authorization });
+}
+export async function assignShippingPointForProvisioning(input: Parameters<typeof assignShippingPointImpl>[0]): Promise<void> {
+  return assignShippingPointImpl(input, { scoped: false });
+}
+
+export async function changeShippingPointAssignmentStatus(input: Scoped<Parameters<typeof changeShippingPointAssignmentStatusImpl>[0]>): Promise<void> {
+  const { authorization, ...rest } = input;
+  return changeShippingPointAssignmentStatusImpl(rest, { scoped: true, authorization });
+}
+export async function changeShippingPointAssignmentStatusForProvisioning(input: Parameters<typeof changeShippingPointAssignmentStatusImpl>[0]): Promise<void> {
+  return changeShippingPointAssignmentStatusImpl(input, { scoped: false });
 }

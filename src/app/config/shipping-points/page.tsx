@@ -15,7 +15,9 @@ const ROUTE = '/config/shipping-points';
 
 export default async function ShippingPointsPage() {
   const session = await requireSession(ROUTE);
-  const configuration = await listShippingPointConfiguration(session.user.client);
+  const configuration = await listShippingPointConfiguration(
+    session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+  );
   const canMaintain = can(session, SHIPPING_POINT_CAPABILITY);
   const unassigned = configuration.plants
     .filter((site) => !configuration.assignments

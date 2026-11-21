@@ -58,6 +58,7 @@ export async function defineShippingPointAction(
     await defineShippingPoint({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       shippingPoint: text(form, 'shippingPoint'),
       name: text(form, 'name'),
     });
@@ -80,6 +81,7 @@ export async function changeShippingPointAction(
     await changeShippingPointStatus({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       shippingPoint: text(form, 'shippingPoint'),
       isActive,
     });
@@ -106,6 +108,7 @@ export async function defineShippingConditionAction(
     await defineShippingCondition({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       shippingCondition: text(form, 'shippingCondition'),
       description: text(form, 'description'),
     });
@@ -128,6 +131,7 @@ export async function changeShippingConditionAction(
     await changeShippingConditionStatus({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       shippingCondition: text(form, 'shippingCondition'),
       isActive,
     });
@@ -154,6 +158,7 @@ export async function assignShippingPointAction(
     await assignShippingPoint({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       deliveringPlant: text(form, 'deliveringPlant'),
       shippingCondition: text(form, 'shippingCondition'),
       loadingGroup: text(form, 'loadingGroup'),
@@ -178,6 +183,7 @@ export async function changeShippingPointAssignmentAction(
     await changeShippingPointAssignmentStatus({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       deliveringPlant: text(form, 'deliveringPlant'),
       shippingCondition: text(form, 'shippingCondition'),
       loadingGroup: text(form, 'loadingGroup'),
