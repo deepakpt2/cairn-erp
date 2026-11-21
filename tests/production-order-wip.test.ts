@@ -21,7 +21,7 @@ import {
 } from '../src/modules/inventory/production-orders';
 import { saveProductionOrderType } from '../src/modules/production/production-order-type';
 import { settleProductionOrder } from '../src/modules/production/order-settlement';
-import { getProductionOrderCostReport } from '../src/modules/production/order-cost-report';
+import { getProductionOrderCostReport } from './helpers/cost-report-authorized';
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { calculateWip, postedWip, runWip, WIP_METHOD } from '../src/modules/production/order-wip';
 

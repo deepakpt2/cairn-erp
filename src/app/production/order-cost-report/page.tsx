@@ -45,6 +45,7 @@ export default async function ProductionOrderCostReportPage({ searchParams }: {
     try {
       report = await getProductionOrderCostReport({
         client: session.user.client,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
         orderNumber,
         fiscalYear,
         periodFrom,

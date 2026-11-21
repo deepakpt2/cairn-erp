@@ -7874,6 +7874,9 @@
     "modules/production/activity-costing.ts",
     "modules/production/order-wip.ts",
     "platform/auth/capability-policy.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"

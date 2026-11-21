@@ -7,7 +7,10 @@ import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
-import { hasCapability } from '../../platform/auth/session';
+import { hasCapability, hasOrgAccess } from '../../platform/auth/session';
+import { companyInScope, purchasingActor } from '../../platform/auth/scope-actor';
+import { refuseCompaniesOutsideScopeInTx } from '../../platform/auth/company-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { PRODUCTION_ORDER_COST_DISPLAY_CAPABILITY } from '../../platform/auth/capability-policy';
 
 export const PRODUCTION_ORDER_COST_REPORT_CAPABILITY = PRODUCTION_ORDER_COST_DISPLAY_CAPABILITY;
@@ -25,6 +28,8 @@ export class ProductionOrderCostReportError extends Error {
 
 export interface ProductionOrderCostReportInput {
   client: string;
+  /** The verified session. Capability and the order's Company Code (and Plant) scope are judged from it. */
+  authorization: ServiceAuthorityContext | undefined;
   orderNumber: string;
   fiscalYear?: number | string;
   periodFrom?: number | string;
@@ -93,6 +98,12 @@ export interface ProductionOrderCostReport {
   /** Financial WIP postings of the order (ledger). They carry no production_order, so they are not in the totals above. */
   wipPostings: ProductionOrderWipPostingRow[];
   gaps: string[];
+}
+
+/** No Plant scope means every plant of a reachable company; a Plant scope must name the plant. */
+function plantReachable(restrictions: Parameters<typeof hasOrgAccess>[0], plant: string): boolean {
+  const plants = (restrictions ?? []).filter((r) => r.scopeType === 'PLANT');
+  return plants.length === 0 || hasOrgAccess(plants, 'PLANT', plant);
 }
 
 export function holdsProductionOrderCostReportAuthority(held: readonly string[]): boolean {
@@ -194,6 +205,8 @@ export async function getProductionOrderCostReport(
   }
 
   return withTenant(input.client, async (tx) => {
+    const fail = (message: string, remedy?: string) => new ProductionOrderCostReportError(message, remedy);
+    const actor = await purchasingActor(tx, input.client, input.authorization, [PRODUCTION_ORDER_COST_REPORT_CAPABILITY], fail);
     const [order] = await tx.execute(sql`
       select o.order_number, o.material_number, o.plant, o.order_type, o.status,
              coalesce(p.company_code, '') as company_code, o.controlling_area, o.currency
@@ -211,7 +224,13 @@ export async function getProductionOrderCostReport(
       controlling_area: string | null;
       currency: string | null;
     }>;
-    if (!order) {
+    // An order outside the caller's reach answers exactly as one that does not exist: the order's plant must lie in
+    // the caller's Company Code scope, and in their Plant scope when they hold one. An order whose plant names no
+    // company cannot be placed in any company's scope, so it is not shown either.
+    const reachable = order && order.company_code?.trim()
+      && await companyInScope(tx, input.client, actor, order.company_code.trim())
+      && plantReachable(actor.restrictions, order.plant.trim());
+    if (!order || !reachable) {
       throw new ProductionOrderCostReportError(
         `Production order ${orderNumber} does not stand in this tenant.`,
         'Choose an order from this tenant; no other tenant was searched.',
@@ -294,6 +313,18 @@ export async function getProductionOrderCostReport(
         lineText: row.line_text,
       };
     });
+
+    // The postings may sit in more than the order's company. The figures are never trimmed to the part the caller
+    // may see: one company outside the scope refuses the whole report, without naming it.
+    const postedCompanies = [...new Set(lines.map((line) => line.companyCode).filter(Boolean))];
+    if (postedCompanies.length > 0) {
+      const refusal = await refuseCompaniesOutsideScopeInTx(tx, input.client, actor, postedCompanies, {
+        derivedFrom: 'This order\'s postings',
+        // The order itself was already judged against the Plant scope above; its postings are one order's, not a company-wide figure.
+        allowPlantLimited: true,
+      });
+      if (refusal) throw fail(refusal.message, refusal.remedy);
+    }
 
     const activityCosts = await activityCostsOfOrder(tx, input.client, orderNumber);
     const wipPostings = await wipPostingsOfOrder(tx, input.client, orderNumber, fiscalYear);

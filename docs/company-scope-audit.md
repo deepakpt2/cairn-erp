@@ -54,3 +54,16 @@ Not covered: **`postCustomerInvoice` and the whole finance AR/AP posting family 
 - Exports are generated synchronously per request; there are no saved export artifacts or download IDs to rebind. No background report job exists; job-lease authority is supported by the shared verifier but no report path uses it.
 - The consolidated export adapter reads area/workbench metadata before the service authorises; no figures.
 - Tax-group semantics (all active companies of the country) were left as is.
+
+## Phase 5b — production order cost report
+
+**Covered** (`src/modules/production/order-cost-report.ts`, `report-exports.ts`, `src/app/production/order-cost-report/page.tsx`):
+- `getProductionOrderCostReport` requires a session holding `PROD.ORDER.COST.DISPLAY` and an explicit Company Code scope.
+- An order is shown only if its plant's company is in the Company Code scope and, when the caller holds a Plant scope, the plant is in it. Otherwise it answers exactly as a missing order.
+- If the order carries postings of a company outside the scope, the whole report is refused (never trimmed).
+- Report-export adapters pass the verified session through.
+- Tests: `tests/company-scope-production.test.ts` (6 tests); existing suites use `tests/helpers/cost-report-authorized.ts`.
+
+**Behaviour change:** an order whose plant names no company is no longer shown to anyone.
+
+**Not covered in production:** the MRP run still uses unscoped requisition variants; order create/change/release/confirmation plant scope is not re-audited here; nothing is browser-tested.

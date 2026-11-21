@@ -8,11 +8,11 @@ const R = (label: string): ReportColumn => ({ label, align: 'right' });
 
 export const productionOrderCostExport: ReportAdapter = {
   code: 'production-order-cost', route: '/production/order-cost-report', capability: PRODUCTION_ORDER_COST_REPORT_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const orderNumber = (q.get('order') ?? '').trim();
     if (!orderNumber) throw new ReportExportError('An order number is required for this export.', 'Run the report on screen first; the export uses the same selection.');
     const r = await getProductionOrderCostReport({
-      client, orderNumber, fiscalYear: q.get('fiscalYear') ?? '', periodFrom: q.get('periodFrom') ?? '', periodTo: q.get('periodTo') ?? '',
+      client, authorization, orderNumber, fiscalYear: q.get('fiscalYear') ?? '', periodFrom: q.get('periodFrom') ?? '', periodTo: q.get('periodTo') ?? '',
     });
     return {
       title: 'Production order cost report',

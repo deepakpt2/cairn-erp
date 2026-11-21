@@ -24,7 +24,7 @@ import {
   settleProductionOrder,
   productionOrderSettlementPosting,
 } from '../src/modules/production/order-settlement';
-import { getProductionOrderCostReport } from '../src/modules/production/order-cost-report';
+import { getProductionOrderCostReport } from './helpers/cost-report-authorized';
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 
 const ACTOR = 'PROD_SETTLE_TEST';

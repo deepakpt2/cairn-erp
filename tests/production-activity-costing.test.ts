@@ -19,7 +19,7 @@ import { cancelConfirmation } from '../src/modules/production/confirmation-cance
 import {
   costConfirmation, listUncostedConfirmations, previewConfirmationCost, processUncostedConfirmations,
 } from '../src/modules/production/activity-costing';
-import { getProductionOrderCostReport } from '../src/modules/production/order-cost-report';
+import { getProductionOrderCostReport } from './helpers/cost-report-authorized';
 import { saveAccountDetermination, AccountDeterminationError } from '../src/modules/foundation/account-determination';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
