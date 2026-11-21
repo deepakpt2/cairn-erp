@@ -298,7 +298,7 @@ async function standingActor(client: string, current?: FinanceActor): Promise<Fi
 export const FINANCE_REPORT_CAPABILITIES: readonly string[] = [
   'FIN.RPT.TRIALBALANCE', 'FIN.RPT.BALANCESHEET', 'FIN.RPT.PROFITLOSS', 'FIN.RPT.CASHFLOW', 'FIN.RPT.CONSOLIDATE.STMT',
   'FIN.TAX.REPORT', 'FIN.IC.POST', 'CFG.FIN.IC.DEFINE',
-  'PROC.PO.LIST', 'PROC.INV.OVERVIEW',
+  'PROC.PO.LIST', 'PROC.REQ.LIST', 'PROC.INV.OVERVIEW', 'INV.MATERIALDOC.LIST', 'INV.DISPLAY',
 ];
 const reportActors = new Map<string, Promise<FinanceActor>>();
 
