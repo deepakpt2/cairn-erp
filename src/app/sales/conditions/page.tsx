@@ -28,7 +28,7 @@ export default async function SalesConditionsPage({ searchParams }: {
     listSalesConditions(client, {
       ...(params.customer ? { customerNumber: params.customer } : {}),
       ...(params.material ? { materialNumber: params.material } : {}),
-    }),
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
     salesOrderChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => NO_SALES_CHOICES),
   ]);
 

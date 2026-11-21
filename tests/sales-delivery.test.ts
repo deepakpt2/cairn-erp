@@ -24,7 +24,7 @@ import {
 } from '../src/modules/sales/credit-memo';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from './helpers/transfer-authorized';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { listBillablePlanDates, saveBillingPlan } from '../src/modules/sales/billing-plan';
 import { assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';

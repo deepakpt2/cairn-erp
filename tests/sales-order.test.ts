@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { SalesOrderError, createSalesOrder } from '../src/modules/sales/sales-order';
 import { assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
@@ -455,7 +455,7 @@ describe('sales order and its pricing', () => {
   });
 
   it('closes the standing price when a replacement is confirmed, and refuses it when it is not', async () => {
-    const standing = (await import('../src/modules/sales/conditions')).listSalesConditions;
+    const standing = (await import('../src/modules/sales/conditions')).listSalesConditionsForProvisioning;
     const before = await standing(tenant.client, { customerNumber: CUSTOMER, materialNumber: MATERIAL });
     expect(before[0].validityTo).toBe('2026-12-31');
 

@@ -25,10 +25,14 @@ import { and, asc, desc, eq, exists, gte, lte, sql } from 'drizzle-orm';
 
 import { type Tx, withTenant } from '../../platform/db/client';
 import { businessPartner } from '../foundation/business-partner-schema';
-import { plant as plantTable, salesArea } from '../foundation/schema';
+import { plant as plantTable, salesArea, salesOrg as salesOrgTable } from '../foundation/schema';
+import { reachablePlantsInTx } from '../../platform/auth/scope-actor';
 import { material } from '../inventory/schema';
-import { billingDueList } from './billing';
-import { listDeliverableOrderLines } from './delivery';
+import { billingDueList, billingInReach } from './billing';
+import { deliveryInReach, listDeliverableOrderLines } from './delivery';
+import { orderInReach } from './sales-order';
+import { plantLimited, salesActor, salesDocumentReachable, salesReachSql } from './sales-scope';
+import type { CompanyAuthority } from '../../platform/auth/company-scope';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import {
   billingDocument, delivery, salesDocumentType, salesOrder, salesOrderLine,
@@ -132,11 +136,19 @@ function orderLineMatches(tx: Tx, client: string, filter: RegisterFilter) {
 }
 
 async function orderRegister(
-  tx: Tx, client: string, filter: RegisterFilter, limit: number,
+  tx: Tx, client: string, filter: RegisterFilter, limit: number, actor: CompanyAuthority,
+): Promise<{ rows: RegisterRow[]; count: number }> {
+  return reachable(actor, limit, (take) => orderRegisterRaw(tx, client, filter, take, actor),
+    (number) => orderInReach(tx, client, actor, number));
+}
+
+async function orderRegisterRaw(
+  tx: Tx, client: string, filter: RegisterFilter, limit: number, actor: CompanyAuthority,
 ): Promise<{ rows: RegisterRow[]; count: number }> {
   const byLine = filter.materialNumber || filter.plant ? orderLineMatches(tx, client, filter) : undefined;
   const where = and(
     eq(salesOrder.client, client),
+    salesReachSql(actor, { companyCode: salesOrder.companyCode, salesOrg: salesOrder.salesOrg, distributionChannel: salesOrder.distributionChannel, division: salesOrder.division }),
     filter.documentNumber ? eq(salesOrder.orderNumber, filter.documentNumber) : undefined,
     filter.customerNumber ? eq(salesOrder.customerNumber, filter.customerNumber) : undefined,
     filter.salesOrg ? eq(salesOrder.salesOrg, filter.salesOrg) : undefined,
@@ -190,10 +202,18 @@ async function orderRegister(
 }
 
 async function deliveryRegister(
-  tx: Tx, client: string, filter: RegisterFilter, limit: number,
+  tx: Tx, client: string, filter: RegisterFilter, limit: number, actor: CompanyAuthority,
+): Promise<{ rows: RegisterRow[]; count: number }> {
+  return reachable(actor, limit, (take) => deliveryRegisterRaw(tx, client, filter, take, actor),
+    (number) => deliveryInReach(tx, client, actor, number));
+}
+
+async function deliveryRegisterRaw(
+  tx: Tx, client: string, filter: RegisterFilter, limit: number, actor: CompanyAuthority,
 ): Promise<{ rows: RegisterRow[]; count: number }> {
   const where = and(
     eq(delivery.client, client),
+    salesReachSql(actor, { companyCode: delivery.companyCode, salesOrg: delivery.salesOrg, distributionChannel: delivery.distributionChannel, division: delivery.division }),
     filter.documentNumber ? eq(delivery.deliveryNumber, filter.documentNumber) : undefined,
     filter.customerNumber ? eq(delivery.customerNumber, filter.customerNumber) : undefined,
     filter.salesOrg ? eq(delivery.salesOrg, filter.salesOrg) : undefined,
@@ -250,10 +270,18 @@ async function deliveryRegister(
 }
 
 async function billingRegister(
-  tx: Tx, client: string, filter: RegisterFilter, limit: number,
+  tx: Tx, client: string, filter: RegisterFilter, limit: number, actor: CompanyAuthority,
+): Promise<{ rows: RegisterRow[]; count: number }> {
+  return reachable(actor, limit, (take) => billingRegisterRaw(tx, client, filter, take, actor),
+    (number) => billingInReach(tx, client, actor, number));
+}
+
+async function billingRegisterRaw(
+  tx: Tx, client: string, filter: RegisterFilter, limit: number, actor: CompanyAuthority,
 ): Promise<{ rows: RegisterRow[]; count: number }> {
   const where = and(
     eq(billingDocument.client, client),
+    salesReachSql(actor, { companyCode: billingDocument.companyCode, salesOrg: billingDocument.salesOrg, distributionChannel: billingDocument.distributionChannel, division: billingDocument.division }),
     filter.documentNumber ? eq(billingDocument.billingNumber, filter.documentNumber) : undefined,
     filter.customerNumber ? eq(billingDocument.customerNumber, filter.customerNumber) : undefined,
     filter.salesOrg ? eq(billingDocument.salesOrg, filter.salesOrg) : undefined,
@@ -325,7 +353,7 @@ async function billingRegister(
  * from this customer — and not what table the answer happens to live in.
  */
 async function returnsRegister(
-  tx: Tx, client: string, filter: RegisterFilter, limit: number,
+  tx: Tx, client: string, filter: RegisterFilter, limit: number, actor: CompanyAuthority,
 ): Promise<{ rows: RegisterRow[]; count: number }> {
   // What a returns document is, is configuration: the two types this tenant named (9237).
   const [chain] = await tx.select({
@@ -338,11 +366,11 @@ async function returnsRegister(
   const orders = await orderRegister(tx, client, {
     ...filter,
     documentType: filter.documentType ?? chain.returnsOrderType,
-  }, limit);
+  }, limit, actor);
   const deliveries = await deliveryRegister(tx, client, {
     ...filter,
     documentType: filter.documentType ?? chain.returnsDeliveryType,
-  }, limit);
+  }, limit, actor);
   const rows = [...orders.rows.map((row) => ({ ...row, kind: 'RETURNS' as const })),
     ...deliveries.rows.map((row) => ({ ...row, kind: 'RETURNS' as const }))]
     .sort((a, b) => (
@@ -362,14 +390,14 @@ async function returnsRegister(
  * question: what did we take back.
  */
 async function cancellationRegister(
-  tx: Tx, client: string, filter: RegisterFilter, limit: number,
+  tx: Tx, client: string, filter: RegisterFilter, limit: number, actor: CompanyAuthority,
 ): Promise<{ rows: RegisterRow[]; count: number }> {
   const cancelledOrders = await orderRegister(tx, client, {
     ...filter, status: filter.status ?? 'CANCELLED',
-  }, limit);
+  }, limit, actor);
   const cancelledDeliveries = await deliveryRegister(tx, client, {
     ...filter, status: filter.status ?? 'CANCELLED',
-  }, limit);
+  }, limit, actor);
   // A cancellation names the document it cancels; a credit memo names the invoice it credits. Both
   // are the answer to "what was undone", and neither is a status on a billing document.
   const money = await tx.select({
@@ -392,6 +420,10 @@ async function cancellationRegister(
     ))
     .where(and(
       eq(billingDocument.client, client),
+      salesReachSql(actor, {
+        companyCode: billingDocument.companyCode, salesOrg: billingDocument.salesOrg,
+        distributionChannel: billingDocument.distributionChannel, division: billingDocument.division,
+      }),
       sql`(${billingDocument.cancellationOf} is not null or ${billingDocument.creditOf} is not null)`,
       filter.documentNumber ? eq(billingDocument.billingNumber, filter.documentNumber) : undefined,
       filter.customerNumber ? eq(billingDocument.customerNumber, filter.customerNumber) : undefined,
@@ -402,7 +434,12 @@ async function cancellationRegister(
       filter.dateTo ? lte(billingDocument.billingDate, filter.dateTo) : undefined,
     ))
     .orderBy(desc(billingDocument.billingDate), desc(billingDocument.billingNumber))
-    .limit(limit);
+    .limit(plantLimited(actor) ? PLANT_JUDGED_CANDIDATES : limit);
+  if (plantLimited(actor)) {
+    for (let i = money.length - 1; i >= 0; i -= 1) {
+      if (!(await billingInReach(tx, client, actor, money[i]!.documentNumber))) money.splice(i, 1);
+    }
+  }
   const rows: RegisterRow[] = [
     ...cancelledOrders.rows.map((row) => ({ ...row, kind: 'CANCELLATION' as const })),
     ...cancelledDeliveries.rows.map((row) => ({ ...row, kind: 'CANCELLATION' as const })),
@@ -443,19 +480,41 @@ async function cancellationRegister(
  * The totals are read off what the register answered and not off the whole of the table: a register
  * that says 200 documents in the list and a total for 4,000 is two answers to one question.
  */
+/** How many candidate documents a plant-limited register judges one by one before it stops. */
+const PLANT_JUDGED_CANDIDATES = 2000;
+
+/**
+ * A reader's fetch size and how it finishes: for an actor with no Plant restriction the SQL condition is the whole
+ * reach and the database limit and count stand; for a plant-limited actor the candidates inside company and sales-area
+ * reach are judged one by one, and the limit and count are those of what survives.
+ */
+async function reachable<T extends { documentNumber: string }>(
+  actor: CompanyAuthority, limit: number,
+  fetch: (take: number) => Promise<{ rows: T[]; count: number }>,
+  inReach: (documentNumber: string) => Promise<boolean>,
+): Promise<{ rows: T[]; count: number }> {
+  if (!plantLimited(actor)) return fetch(limit);
+  const candidates = await fetch(PLANT_JUDGED_CANDIDATES);
+  const kept: T[] = [];
+  for (const row of candidates.rows) if (await inReach(row.documentNumber)) kept.push(row);
+  return { rows: kept.slice(0, limit), count: kept.length };
+}
+
 export async function listDocumentRegister(
   client: string,
   input: { kind: RegisterKind; filter?: RegisterFilter; limit?: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<DocumentRegister> {
   const filter = clean(input.filter ?? {});
   const limit = Math.min(Math.max(input.limit ?? REGISTER_LIMIT, 1), 1000);
   return withTenant(client, async (tx) => {
+    const actor = await salesActor(tx, client, authorization, ['SALES.DOCUMENTS.LIST'], (m, r) => new Error(r ? `${m} ${r}` : m));
     const read = input.kind === 'ORDER' ? orderRegister
       : input.kind === 'DELIVERY' ? deliveryRegister
         : input.kind === 'BILLING' ? billingRegister
           : input.kind === 'RETURNS' ? returnsRegister
             : cancellationRegister;
-    const { rows, count } = await read(tx, client, filter, limit);
+    const { rows, count } = await read(tx, client, filter, limit, actor);
     let net = 0;
     let gross = 0;
     let valued = 0;
@@ -540,8 +599,15 @@ export interface RegisterChoices {
 }
 
 /** What a filter box may be filled with, so a register is not typed from memory. */
-export async function listRegisterChoices(client: string): Promise<RegisterChoices> {
+export async function listRegisterChoices(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<RegisterChoices> {
   return withTenant(client, async (tx) => {
+    const actor = await salesActor(tx, client, authorization, ['SALES.DOCUMENTS.LIST', 'SALES.ANALYSIS.LIST'],
+      (m, r) => new Error(r ? `${m} ${r}` : m));
+    const reachablePlants = new Set(await reachablePlantsInTx(tx, client, actor));
+    const companyOf = new Map((await tx.select({ salesOrg: salesOrgTable.salesOrg, companyCode: salesOrgTable.companyCode })
+      .from(salesOrgTable).where(eq(salesOrgTable.client, client))).map((r) => [r.salesOrg, r.companyCode]));
     const customers = await tx.select({
       partnerNumber: businessPartner.partnerNumber, name: businessPartner.name,
     }).from(businessPartner).where(eq(businessPartner.client, client))
@@ -552,7 +618,10 @@ export async function listRegisterChoices(client: string): Promise<RegisterChoic
       .orderBy(asc(material.materialNumber)).limit(500);
     const plants = await tx.select({ plant: plantTable.plant, name: plantTable.name })
       .from(plantTable).where(eq(plantTable.client, client)).orderBy(asc(plantTable.plant));
-    const areas = await tx.select({ salesOrg: salesArea.salesOrg, name: salesArea.name })
+    const areas = await tx.select({
+      salesOrg: salesArea.salesOrg, name: salesArea.name,
+      distributionChannel: salesArea.distributionChannel, division: salesArea.division,
+    })
       .from(salesArea).where(eq(salesArea.client, client)).orderBy(asc(salesArea.salesOrg));
     const types = await tx.select({
       documentType: salesDocumentType.documentType, name: salesDocumentType.name,
@@ -560,11 +629,15 @@ export async function listRegisterChoices(client: string): Promise<RegisterChoic
       .orderBy(asc(salesDocumentType.documentType));
     const seen = new Set<string>();
     for (const row of areas) seen.add(row.salesOrg);
+    const inReachAreas = areas.filter((row) => {
+      const company = companyOf.get(row.salesOrg);
+      return Boolean(company) && salesDocumentReachable(actor, { companyCode: company!, ...row });
+    });
     return {
       customers,
       materials,
-      plants,
-      salesOrgs: [...new Map(areas.map((row) => [row.salesOrg, row])).values()],
+      plants: plants.filter((row) => reachablePlants.has(row.plant)),
+      salesOrgs: [...new Map(inReachAreas.map((row) => [row.salesOrg, row])).values()],
       documentTypes: types,
       statuses: ['OPEN', 'PICKED', 'GOODS_ISSUED', 'POSTED', 'CANCELLED', 'REJECTED'],
     };

@@ -57,11 +57,11 @@ export default async function SalesDocumentsPage({ searchParams }: {
     dateTo: one(params.dateTo),
   };
 
-  const choices = await listRegisterChoices(client);
+  const choices = await listRegisterChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
   const due = mode === 'due' && KINDS_WITH_A_DUE_LIST.includes(kind)
     ? await listDueRegister(client, { kind: kind as 'DELIVERY' | 'BILLING', filter }, { userId: session.user.userId, sessionId: session.sessionId ?? '' })
     : null;
-  const register = due ? null : await listDocumentRegister(client, { kind, filter });
+  const register = due ? null : await listDocumentRegister(client, { kind, filter }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
 
   const query = (next: Record<string, string>) => {
     const search = new URLSearchParams();

@@ -30,7 +30,9 @@
  *
  * Nothing here posts, and nothing here decides. An analysis reads.
  */
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { plantLimited, salesActor, salesReachSql } from './sales-scope';
 
 import { type Tx, withTenant } from '../../platform/db/client';
 import { businessPartner } from '../foundation/business-partner-schema';
@@ -73,6 +75,16 @@ export const PERIODS = ['TOTAL', 'MONTH', 'QUARTER', 'YEAR'] as const;
 export type Period = (typeof PERIODS)[number];
 
 export const ANALYSIS_LIMIT = 200;
+export const ANALYSIS_CAPABILITY = 'SALES.ANALYSIS.LIST';
+
+export class AnalysisError extends Error {
+  remedy?: string;
+  constructor(message: string, remedy?: string) {
+    super(message);
+    this.name = 'AnalysisError';
+    this.remedy = remedy;
+  }
+}
 
 export interface AnalysisFilter {
   documentNumber?: string;
@@ -265,7 +277,7 @@ function dateWindow(filter: AnalysisFilter, kind: AnalysisKind): ReturnType<type
  * its own right and reduces what was sold, which is what a credit memo is for.
  */
 async function salesRows(
-  tx: Tx, client: string, filter: AnalysisFilter, groupBy: GroupBy, period: Period, limit: number,
+  tx: Tx, client: string, filter: AnalysisFilter, groupBy: GroupBy, period: Period, limit: number, reach: SQL,
 ): Promise<RawRow[]> {
   const dimension = sql.raw(DIMENSION_COLUMN['SALES'][groupBy]);
   const bucket = periodExpression(period, 'SALES');
@@ -299,6 +311,7 @@ async function salesRows(
     ) cl on cl.client = bd.client and cl.document_number = bd.billing_number
         and cl.line_number = bl.line_number
     where bd.client = ${client}
+      and ${reach}
       and bd.status <> 'CANCELLED'
       ${filter.documentNumber ? sql`and bd.billing_number = ${filter.documentNumber}` : sql``}
       ${filter.orderNumber ? sql`and coalesce(bl.order_number, bd.order_number) = ${filter.orderNumber}` : sql``}
@@ -339,7 +352,7 @@ async function salesRows(
  * today. A backlog valued at today's price is a forecast; this is a report about what was promised.
  */
 async function backlogRows(
-  tx: Tx, client: string, filter: AnalysisFilter, groupBy: GroupBy, period: Period, limit: number,
+  tx: Tx, client: string, filter: AnalysisFilter, groupBy: GroupBy, period: Period, limit: number, reach: SQL,
 ): Promise<RawRow[]> {
   const dimension = sql.raw(DIMENSION_COLUMN['BACKLOG'][groupBy]);
   const bucket = periodExpression(period, 'BACKLOG');
@@ -370,6 +383,7 @@ async function backlogRows(
     ) d on d.client = ol.client and d.order_number = ol.order_number
        and d.order_line_number = ol.line_number
     where o.client = ${client}
+      and ${reach}
       and o.status = 'OPEN'
       and ol.status <> 'REJECTED'
       -- A returns order asks for goods to come back. It is not an open commitment to ship.
@@ -417,7 +431,7 @@ async function backlogRows(
  * way that is very hard to notice.
  */
 async function returnsRows(
-  tx: Tx, client: string, filter: AnalysisFilter, groupBy: GroupBy, period: Period, limit: number,
+  tx: Tx, client: string, filter: AnalysisFilter, groupBy: GroupBy, period: Period, limit: number, reach: SQL,
 ): Promise<RawRow[]> {
   const dimension = sql.raw(DIMENSION_COLUMN['RETURNS'][groupBy]);
   const bucket = periodExpression(period, 'RETURNS');
@@ -442,6 +456,7 @@ async function returnsRows(
       on ol.client = dl.client and ol.order_number = dl.order_number
      and ol.line_number = dl.order_line_number
     where dv.client = ${client}
+      and ${reach}
       and dv.status <> 'CANCELLED'
       and dv.document_type in (
         select rc.returns_delivery_type from sales_returns_configuration rc where rc.client = ${client}
@@ -510,6 +525,7 @@ const money = (value: number) => value.toFixed(2);
 export async function listAnalysis(
   client: string,
   input: { kind: AnalysisKind; filter?: AnalysisFilter; groupBy?: GroupBy; period?: Period; limit?: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<Analysis> {
   const filter = clean(input.filter ?? {});
   const groupBy: GroupBy = (GROUP_BY as readonly string[]).includes(input.groupBy ?? '')
@@ -519,11 +535,24 @@ export async function listAnalysis(
   const limit = Math.min(Math.max(input.limit ?? ANALYSIS_LIMIT, 1), 1000);
 
   return withTenant(client, async (tx) => {
+    const actor = await salesActor(tx, client, authorization, [ANALYSIS_CAPABILITY], (m, r) => new AnalysisError(m, r));
+    // An analysis adds up many documents, which a plant-limited user's reach cannot be applied to document by
+    // document: they are refused the aggregate, as they are every company-wide total.
+    if (plantLimited(actor)) {
+      throw new AnalysisError(
+        'A sales analysis totals documents across plants, and your access is limited to plants.',
+        'Use the document register, which lists only the documents inside your plants.',
+      );
+    }
+    const doc = (a: string) => salesReachSql(actor, {
+      companyCode: sql.raw(`${a}.company_code`), salesOrg: sql.raw(`${a}.sales_org`),
+      distributionChannel: sql.raw(`${a}.distribution_channel`), division: sql.raw(`${a}.division`),
+    });
     const raw = input.kind === 'BACKLOG'
-      ? await backlogRows(tx, client, filter, groupBy, period, limit)
+      ? await backlogRows(tx, client, filter, groupBy, period, limit, doc('o'))
       : input.kind === 'RETURNS'
-        ? await returnsRows(tx, client, filter, groupBy, period, limit)
-        : await salesRows(tx, client, filter, groupBy, period, limit);
+        ? await returnsRows(tx, client, filter, groupBy, period, limit, doc('dv'))
+        : await salesRows(tx, client, filter, groupBy, period, limit, doc('bd'));
 
     const names = await keyNames(tx, client, groupBy, raw.map((row) => row.key_value ?? ''));
 

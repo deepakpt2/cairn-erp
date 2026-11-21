@@ -33,7 +33,7 @@ import { derivePosition } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { salesOrg as salesOrgTable } from '../foundation/schema';
-import { salesActor, salesDocumentReachable } from './sales-scope';
+import { salesActor, salesAreaInReach, salesDocumentReachable } from './sales-scope';
 import { CustomerCreditMemoError, postCustomerCreditMemo } from '../finance/customer-credit-memo';
 import { bpRole, businessPartner } from '../foundation/business-partner-schema';
 import { customerSalesArea } from '../foundation/customer-sales-area-schema';
@@ -253,16 +253,11 @@ function rebateActor(
   return salesActor(tx, client, authorization, capabilities, (m, r) => new RebateError(m, r));
 }
 
-/** The agreement's sales area is inside the actor's reach, and its sales organisation's company is inside the Company Code scope. */
 async function areaInReach(
   tx: Tx, client: string, actor: RebateActor,
   area: { salesOrg: string; distributionChannel: string; division: string },
 ): Promise<boolean> {
-  const [org] = await tx.select({ companyCode: salesOrgTable.companyCode }).from(salesOrgTable).where(and(
-    eq(salesOrgTable.client, client), eq(salesOrgTable.salesOrg, area.salesOrg),
-  )).limit(1);
-  if (!org?.companyCode) return false;
-  return salesDocumentReachable(actor, { companyCode: org.companyCode, ...area });
+  return salesAreaInReach(tx, client, actor, area);
 }
 
 /** Read one agreement inside the reach; one outside it answers exactly as a missing one. */

@@ -8,7 +8,7 @@ import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { billDueList, groupDueList, listSplitCriteria, saveSplitCriterion, type BillingDueRow } from '../src/modules/sales/billing';
 import { billingDueList, cancelBillingDocument, getBilling, salesDocumentFlow } from './helpers/sales-authorized';
 import { writeDocumentPartners } from '../src/modules/sales/partners';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {

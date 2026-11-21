@@ -35,7 +35,7 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { outputMessage } from '../src/modules/foundation/output-schema';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createBillingFromPlanDate } from '../src/modules/sales/billing';

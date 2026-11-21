@@ -12,7 +12,7 @@ const pick = <T extends string>(list: readonly string[], value: string, fallback
 
 export const salesAnalysisExport: ReportAdapter = {
   code: 'sales-analysis', route: '/sales/analysis', capability: 'SALES.ANALYSIS.LIST',
-  async build(client, q) {
+  async build(client, q, authorization) {
     const kind = pick<AnalysisKind>(ANALYSIS_KINDS, one(q, 'kind'), 'SALES');
     const groupBy = pick<GroupBy>(GROUP_BY, one(q, 'groupBy'), 'CUSTOMER');
     const period = pick<Period>(PERIODS, one(q, 'period'), 'TOTAL');
@@ -21,7 +21,7 @@ export const salesAnalysisExport: ReportAdapter = {
       plant: one(q, 'plant'), documentType: one(q, 'documentType'), currency: one(q, 'currency'),
       dateFrom: one(q, 'dateFrom'), dateTo: one(q, 'dateTo'),
     };
-    const a = await listAnalysis(client, { kind, filter, groupBy, period });
+    const a = await listAnalysis(client, { kind, filter, groupBy, period }, authorization);
     const margin = a.kind === 'MARGIN';
     const columns = [C('Group'), C('Name'), C('Period'), C('Cur'), R('Documents'), R('Lines'), R('Quantity'), R('Net value'), ...(margin ? [R('Cost'), R('Margin'), R('Margin %')] : [])];
     const rows = a.rows.map((r) => [r.key, r.keyName ?? '', r.period, r.currency, String(r.documents), String(r.lines), fmt(r.quantity, 3), fmt(r.netValue),

@@ -6,7 +6,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { releaseDocument, saveCustomerCredit } from '../../src/modules/finance/credit';
 import { initializeMaterialPeriodControl } from '../../src/modules/inventory/material-period-control';
-import { saveSalesCondition } from '../../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../../src/modules/sales/conditions';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };

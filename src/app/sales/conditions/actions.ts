@@ -43,6 +43,7 @@ export async function saveConditionAction(
     const saved = await saveSalesCondition({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       salesOrg: text(form, 'salesOrg'),
       distributionChannel: text(form, 'distributionChannel'),
       division: text(form, 'division'),

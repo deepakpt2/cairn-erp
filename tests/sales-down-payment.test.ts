@@ -33,7 +33,7 @@ import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { postCustomerDownPayment } from '../src/modules/finance/customer-down-payment';
 import { getCustomerDownPaymentClearing } from '../src/modules/finance/customer-down-payment-clearing';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { createBillingFromPlanDate } from '../src/modules/sales/billing';
 import {

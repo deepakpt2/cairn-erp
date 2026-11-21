@@ -185,3 +185,17 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** the settlement's credit memo is posted by `postCustomerCreditMemo`, whose own finance gate is outside this phase. A rebate agreement's customer is not checked against any customer-level scope (none exists). `rebateConditionTypes` is a master-data list gated by session and capability only. Not browser-tested.
 
 **Still not covered in sales:** conditions, analysis/registers (document register), shipping point, credit-control area.
+
+## Phase 6f — sales area: condition records, document register, analysis
+
+**Found:** `saveSalesCondition` and `listSalesConditions` checked no session, capability or scope; `listDocumentRegister`, `listRegisterChoices` and `listAnalysis` (and the report export built on it) read every company's documents and totals.
+
+**Covered:**
+- Conditions: `saveSalesCondition` takes a required `authorization`, judges `CFG.SALES.CONDITION.MAINTAIN` and the sales area's reach (company via the sales org, plus held Sales Org / Channel / Division restrictions) in its own tx, answers an out-of-reach area as a missing one, and records the session user. `listSalesConditions` filters rows by area reach. Seeding, demo and the browser-smoke script use `*ForProvisioning` variants (never imported from `src/app`). A scoped call with `authorization: undefined` is refused (a test caught an early version that fell through to the unscoped path).
+- Register: `SALES.DOCUMENTS.LIST`; each reader adds a company/area predicate in SQL; a plant-limited actor is judged per row through `orderInReach` / `deliveryInReach` / `billingInReach` over at most 2000 candidates. `listRegisterChoices` offers only reachable plants and sales orgs.
+- Analysis: `SALES.ANALYSIS.LIST`; totals are filtered by company and held area levels in SQL. A plant-limited actor is refused the aggregate (a company-wide total cannot be cut by plant).
+- Tests: 6 more in `tests/company-scope-sales.test.ts` (33 in the file).
+
+**Limits:** the register's customer and material choice lists are unscoped master data (later phase). A plant-limited register read is capped at 2000 judged candidates. Not browser-tested.
+
+**Still not covered in sales:** shipping point maintenance, credit-control area.

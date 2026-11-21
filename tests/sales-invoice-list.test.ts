@@ -24,7 +24,7 @@ const invoiceListDueDocuments = async (client: string, selection: Parameters<typ
 const listInvoiceLists = async (client: string, selection: Parameters<typeof listInvoiceListsRaw>[1] = {}) =>
   listInvoiceListsRaw(client, selection, await financeAuth(client));
 const getInvoiceList = async (client: string, number: string) => getInvoiceListRaw(client, number, await financeAuth(client));
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {

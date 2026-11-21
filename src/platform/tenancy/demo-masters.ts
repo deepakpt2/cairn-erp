@@ -35,7 +35,7 @@ import { saveCustomerCredit } from '../../modules/finance/credit';
 import { getCustomerSalesArea, saveCustomerSalesArea } from '../../modules/foundation/customer-sales-areas';
 import { saveTaxCode } from '../../modules/foundation/tax-code-definition';
 import { createPurchasingInfoRecord } from '../../modules/purchasing/info-record';
-import { listSalesConditions, saveSalesCondition } from '../../modules/sales/conditions';
+import { listSalesConditionsForProvisioning as listSalesConditions, saveSalesConditionForProvisioning as saveSalesCondition } from '../../modules/sales/conditions';
 import {
   createMaterialBom,
   getMaterialBom,

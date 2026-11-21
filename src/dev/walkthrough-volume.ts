@@ -35,7 +35,7 @@ import { getSupplierCompany, saveSupplierCompany } from '../modules/foundation/s
 import { getSupplierPurchasing, saveSupplierPurchasing } from '../modules/foundation/supplier-purchasing';
 import { getCustomerSalesArea, saveCustomerSalesArea } from '../modules/foundation/customer-sales-areas';
 import { getCustomerCredit, saveCustomerCredit } from '../modules/finance/credit';
-import { listSalesConditions, saveSalesCondition } from '../modules/sales/conditions';
+import { listSalesConditionsForProvisioning as listSalesConditions, saveSalesConditionForProvisioning as saveSalesCondition } from '../modules/sales/conditions';
 
 import { createMaterialBom, getMaterialBom } from '../modules/production/material-bom';
 import { createRouting, getRouting } from '../modules/production/routing';

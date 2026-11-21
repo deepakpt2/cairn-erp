@@ -8,7 +8,7 @@ import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { planMaterials } from '../src/modules/production/mrp-run';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales, type TestTenant } from './helpers';

@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { listAnalysis } from './helpers/sales-authorized';
 import { changeSalesOrder, getSalesOrder, confirmDeliveryPicks, getDelivery, listDeliverableOrderLines } from './helpers/sales-authorized';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -6,9 +7,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 
 import { saveCustomerCredit } from '../src/modules/finance/credit';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 
-import { listAnalysis } from '../src/modules/sales/analysis';
 import { billDueList } from '../src/modules/sales/billing';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';

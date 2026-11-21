@@ -93,8 +93,8 @@ export default async function SalesAnalysisPage({ searchParams }: {
     dateTo: one(params.dateTo),
   };
 
-  const choices = await listRegisterChoices(client);
-  const analysis = await listAnalysis(client, { kind, filter, groupBy, period });
+  const choices = await listRegisterChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
+  const analysis = await listAnalysis(client, { kind, filter, groupBy, period }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
 
   const query = (next: Record<string, string>) => {
     const search = new URLSearchParams();

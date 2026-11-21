@@ -1,19 +1,18 @@
 import { sql } from 'drizzle-orm';
+import { listAnalysis, listDocumentRegister } from './helpers/sales-authorized';
 import { changeSalesOrder, getSalesOrder, confirmDeliveryPicks, getDelivery, listDeliverableOrderLines } from './helpers/sales-authorized';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import {
   addPricingProcedureStep, definePricingProcedure, defineProcedureDetermination,
 } from '../src/modules/sales/pricing-procedure-maintenance';
 import { billDueList } from '../src/modules/sales/billing';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
-import { listAnalysis } from '../src/modules/sales/analysis';
-import { listDocumentRegister } from '../src/modules/sales/registers';
 import {
   assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales,
   type TestTenant,

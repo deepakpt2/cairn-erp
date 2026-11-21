@@ -31,13 +31,16 @@ import {
 import {
   cancelSalesOrder, changeSalesOrder, getSalesOrder, listSalesOrderDocuments, releaseSalesOrderCredit, salesOrderChoices,
 } from '../src/modules/sales/sales-order';
+import { saveSalesCondition, listSalesConditions } from '../src/modules/sales/conditions';
+import { listAnalysis } from '../src/modules/sales/analysis';
+import { listDocumentRegister, listRegisterChoices } from '../src/modules/sales/registers';
 import { assignSalesAreaDimensions, closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 
 const A = '1000';
 const B = '2000';
 const SEED = 'SCOPE_SALES_SEED';
-const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST', 'SALES.REBATE.MAINTAIN', 'SALES.CREDIT.MEMO.POST'];
+const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST', 'SALES.REBATE.MAINTAIN', 'SALES.CREDIT.MEMO.POST', 'SALES.DOCUMENTS.LIST', 'SALES.ANALYSIS.LIST', 'CFG.SALES.CONDITION.MAINTAIN'];
 const SO_A = 'SOA0000001';
 const SO_B = 'SOB0000001';
 const SO_D2 = 'SOD0000002';
@@ -631,5 +634,72 @@ describe('rebates and down payments', () => {
       expect(await ask(cancelDownPaymentRequest({ client, authorization: auth(k), changedBy: 'FORGED', billingNumber: BA }))).not.toMatch(/^done$|not a down payment/);
     }
     expect((await counts())[0]!.billings).toBe(3);
+  });
+});
+
+describe('conditions, registers and analysis', () => {
+  const cond = (org: string, div = '01') => ({
+    client, changedBy: 'FORGED', salesOrg: org, distributionChannel: '10', division: div, customerNumber: 'CUSTSC1',
+    currency: 'USD', amount: 7, validityFrom: '2027-01-01', validityTo: '2027-12-31',
+  });
+  const count = () => withTenant(client, async (tx) => (await tx.execute(sql`select count(*)::int as n from sales_condition_record where client = ${client}`)) as unknown as Array<{ n: number }>);
+
+  it('refuses a condition in an out-of-reach sales area as a missing one, and writes nothing', async () => {
+    const before = await count();
+    const miss = await ask(saveSalesCondition({ ...cond('9999'), authorization: auth('A') }));
+    expect(miss).toMatch(/does not stand/);
+    expect(await ask(saveSalesCondition({ ...cond('2000'), authorization: auth('A') }))).toBe(miss.replace('9999', '2000'));
+    expect(await ask(saveSalesCondition({ ...cond('2000'), authorization: auth('org1000') }))).toMatch(/does not stand/);
+    expect(await ask(saveSalesCondition({ ...cond('1000', '02'), authorization: auth('div01') }))).toMatch(/does not stand/);
+    expect(await ask(saveSalesCondition({ ...cond('1000'), authorization: undefined }))).not.toBe('done');
+    for (const k of denied) expect(await ask(saveSalesCondition({ ...cond('1000'), authorization: auth(k) }))).not.toBe('done');
+    expect(await count()).toEqual(before);
+  });
+
+  it('saves a condition inside the reach and records the session user, not the caller', async () => {
+    const saved = await saveSalesCondition({ ...cond('1000'), authorization: auth('A') });
+    const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select created_by from sales_condition_record where client = ${client} and condition_number = ${saved.condition.conditionNumber}`)) as unknown as Array<{ created_by: string }>))[0]!;
+    expect(row.created_by).toBe(actors.A!.username);
+  });
+
+  it('lists conditions only for the sales areas in reach', async () => {
+    expect((await listSalesConditions(client, undefined, auth('A'))).every((c) => c.salesOrg === '1000')).toBe(true);
+    expect(await listSalesConditions(client, undefined, auth('B'))).toEqual([]);
+    expect(await ask(listSalesConditions(client, undefined, undefined))).not.toBe('done');
+    for (const k of denied) expect(await ask(listSalesConditions(client, undefined, auth(k)))).not.toBe('done');
+  });
+
+  it('lists the document register only inside the reach', async () => {
+    const nums = async (a: string, kind: 'ORDER' | 'DELIVERY' | 'BILLING') =>
+      (await listDocumentRegister(client, { kind }, auth(a))).rows.map((r) => r.documentNumber).sort();
+    const seeded = (rows: string[]) => rows.filter((n) => [SO_A, SO_B, SO_D2, DA, DB, DD2, BA, BB, BD2].includes(n));
+    expect(seeded(await nums('A', 'ORDER'))).toEqual([SO_A, SO_D2]);
+    expect(seeded(await nums('B', 'ORDER'))).toEqual([SO_B]);
+    expect(seeded(await nums('both', 'ORDER'))).toEqual([SO_A, SO_B, SO_D2]);
+    expect(seeded(await nums('org1000', 'DELIVERY'))).toEqual([DA, DD2]);
+    expect(seeded(await nums('div01', 'BILLING'))).toEqual([BA, BB]);
+    expect(seeded(await nums('plantA', 'ORDER'))).toEqual([SO_A, SO_D2]);
+    expect(await nums('noScope', 'ORDER').catch(() => 'refused')).toBe('refused');
+    expect(await ask(listDocumentRegister(client, { kind: 'ORDER' }, undefined))).not.toBe('done');
+    for (const k of ['noCap', 'other'] as const) expect(await ask(listDocumentRegister(client, { kind: 'ORDER' }, auth(k)))).not.toBe('done');
+  });
+
+  it('offers register choices only for the plants and sales orgs in reach', async () => {
+    const choices = await listRegisterChoices(client, auth('A'));
+    expect(JSON.stringify(choices)).not.toMatch(/PSB1|2000/);
+    expect(await ask(listRegisterChoices(client, undefined))).not.toBe('done');
+  });
+
+  it('totals the analysis only over documents in reach and refuses a plant-limited actor', async () => {
+    const orgs = async (a: string) =>
+      (await listAnalysis(client, { kind: 'BACKLOG', groupBy: 'SALES_ORG' }, auth(a))).rows.map((r) => r.key).sort();
+    expect(await orgs('A')).toEqual(['1000']);
+    expect(await orgs('B')).toEqual(['2000']);
+    expect(await orgs('both')).toEqual(['1000', '2000']);
+    expect(await orgs('org1000')).toEqual(['1000']);
+    expect(await ask(listAnalysis(client, { kind: 'BACKLOG' }, auth('plantA')))).toMatch(/across plants/);
+    expect(await ask(listAnalysis(client, { kind: 'BACKLOG' }, auth('org1000p')))).toMatch(/across plants/);
+    expect(await ask(listAnalysis(client, { kind: 'BACKLOG' }, undefined))).not.toBe('done');
+    for (const k of denied) expect(await ask(listAnalysis(client, { kind: 'BACKLOG' }, auth(k)))).not.toBe('done');
   });
 });

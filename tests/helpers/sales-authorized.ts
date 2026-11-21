@@ -25,7 +25,12 @@ import {
 import {
   cancelDownPaymentRequest as cancelDP, orderDownPayments as ordersDP, requestDownPaymentFromPlanDate as requestDP,
 } from '../../src/modules/sales/down-payment';
-import { listDueRegister as dueR } from '../../src/modules/sales/registers';
+import {
+  listDocumentRegister as listDR, listDueRegister as dueR, listRegisterChoices as choicesR,
+} from '../../src/modules/sales/registers';
+import { listAnalysis as listAn } from '../../src/modules/sales/analysis';
+import { sql } from 'drizzle-orm';
+import { withTenant } from '../../src/platform/db/client';
 import { createFinanceActor, refreshFinanceActorScopes, type FinanceActor } from './finance-actor';
 
 export const SALES_TEST_CAPABILITIES = [
@@ -33,7 +38,7 @@ export const SALES_TEST_CAPABILITIES = [
   'SALES.ORDER.AVAILABILITY.CHECK', 'CFG.SALES.CONDITION.MAINTAIN', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
   'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.CREDIT.REQUEST.CREATE',
   'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST',
-  'SALES.REBATE.MAINTAIN', 'SALES.CREDIT.MEMO.POST',
+  'SALES.REBATE.MAINTAIN', 'SALES.CREDIT.MEMO.POST', 'SALES.DOCUMENTS.LIST', 'SALES.ANALYSIS.LIST',
 ];
 
 const actors = new Map<string, Promise<FinanceActor>>();
@@ -150,4 +155,20 @@ export async function cancelDownPaymentRequest(input: Opt<typeof cancelDP>) {
 }
 export async function orderDownPayments(client: string, orderNumber: string) {
   return ordersDP(client, orderNumber, await salesTestAuth(client));
+}
+
+export async function listDocumentRegister(client: string, input: Parameters<typeof listDR>[1]) {
+  return listDR(client, input, await salesTestAuth(client));
+}
+export async function listRegisterChoices(client: string) { return choicesR(client, await salesTestAuth(client)); }
+/** The analysis refuses a plant-limited actor, so its test actor holds company reach and no plant restriction. */
+const analysisActors = new Map<string, Promise<FinanceActor>>();
+export async function listAnalysis(client: string, input: Parameters<typeof listAn>[1]) {
+  let a = analysisActors.get(client);
+  if (!a) { a = createFinanceActor(client, { capabilities: SALES_TEST_CAPABILITIES }); analysisActors.set(client, a); }
+  const resolved = await a;
+  await refreshFinanceActorScopes(client, resolved);
+  await withTenant(client, (tx) => tx.execute(sql`delete from auth_org_restriction
+    where client = ${client} and user_id = ${resolved.userId} and scope_type = 'PLANT'`));
+  return listAn(client, input, resolved.authorization);
 }

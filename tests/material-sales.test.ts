@@ -18,7 +18,7 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { changeHistory } from '../src/platform/change';
-import { saveSalesCondition } from '../src/modules/sales/conditions';
+import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { SalesOrderError, createSalesOrder } from '../src/modules/sales/sales-order';
 import { MaterialSalesError, assertMaterialSalesArea } from '../src/modules/sales/material-sales';
 import { saveMaterialView } from '../src/modules/inventory/materials';

@@ -11,12 +11,14 @@ import { z } from 'zod';
 import { and, desc, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
-import { withTenant } from '../../platform/db/client';
+import { withTenant, type Tx } from '../../platform/db/client';
 import { bpRole, businessPartner } from '../foundation/business-partner-schema';
 import { currency } from '../../platform/tables/reference';
 import { material } from '../inventory/schema';
 import { salesArea } from '../foundation/schema';
 import { salesConditionRecord, salesConditionType } from './schema';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { salesActor, salesAreaInReach } from './sales-scope';
 import { PRICING_PROCEDURE_ROUTE } from './pricing-procedure';
 
 export const CONDITION_CAPABILITY = 'CFG.SALES.CONDITION.MAINTAIN';
@@ -135,11 +137,29 @@ function mapRecord(row: typeof salesConditionRecord.$inferSelect): ConditionView
  * overwritten, and the change is written to the order items that read the old price as nothing at all:
  * an order keeps the condition number it was priced from.
  */
-export async function saveSalesCondition(input: ConditionInput): Promise<{
+type SaveResult = {
   condition: ConditionView;
   closedConditionNumber: string | null;
   superseded: boolean;
-}> {
+};
+
+/** Scoped save: the session's capability and the sales area's company/area reach are checked in the service's own tx. */
+export async function saveSalesCondition(
+  input: ConditionInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<SaveResult> {
+  const { authorization, ...rest } = input;
+  return saveCondition(rest, { scoped: true, authorization });
+}
+
+/** Seeding, demo and internal callers only; never imported from src/app. */
+export async function saveSalesConditionForProvisioning(input: ConditionInput): Promise<SaveResult> {
+  return saveCondition(input, { scoped: false });
+}
+
+async function saveCondition(
+  input: ConditionInput,
+  mode: { scoped: true; authorization: ServiceAuthorityContext | undefined } | { scoped: false },
+): Promise<SaveResult> {
   const parsed = conditionInput.parse(input);
   if (!parsed.customerNumber && !parsed.materialNumber) {
     throw new ConditionError(
@@ -154,6 +174,19 @@ export async function saveSalesCondition(input: ConditionInput): Promise<{
     );
   }
   return withTenant(parsed.client, async (tx) => {
+    let recordedBy = parsed.changedBy;
+    if (mode.scoped) {
+      const actor = await salesActor(
+        tx, parsed.client, mode.authorization, [CONDITION_CAPABILITY], (m, r) => new ConditionError(m, r ?? ''),
+      );
+      if (!(await salesAreaInReach(tx, parsed.client, actor, parsed))) {
+        throw new ConditionError(
+          `Sales area ${parsed.salesOrg}/${parsed.distributionChannel}/${parsed.division} does not stand.`,
+          'Define the sales area before pricing into it.',
+        );
+      }
+      recordedBy = actor.username;
+    }
     const [area] = await tx.select().from(salesArea).where(and(
       eq(salesArea.client, parsed.client),
       eq(salesArea.salesOrg, parsed.salesOrg),
@@ -251,7 +284,7 @@ export async function saveSalesCondition(input: ConditionInput): Promise<{
       ? await tx.update(salesConditionRecord)
         .set({
           validityTo: addDays(parsed.validityFrom, -1),
-          changedBy: parsed.changedBy,
+          changedBy: recordedBy,
           changedAt: new Date(),
         })
         .where(and(
@@ -293,7 +326,7 @@ export async function saveSalesCondition(input: ConditionInput): Promise<{
       priceUnit: parsed.priceUnit,
       validityFrom: parsed.validityFrom,
       validityTo: parsed.validityTo,
-      createdBy: parsed.changedBy,
+      createdBy: recordedBy,
     }).onConflictDoNothing({
       target: [
         salesConditionRecord.client, salesConditionRecord.conditionType, salesConditionRecord.salesOrg,
@@ -310,7 +343,7 @@ export async function saveSalesCondition(input: ConditionInput): Promise<{
 
     await recordChange(tx, {
       client: parsed.client, objectClass: CONDITION_OBJECT_CLASS, objectKey: conditionNumber,
-      changeType: overlaps.length ? 'CHANGE' : 'CREATE', changedBy: parsed.changedBy,
+      changeType: overlaps.length ? 'CHANGE' : 'CREATE', changedBy: recordedBy,
       before: overlaps.length
         ? { conditionNumber: overlaps[0].conditionNumber, validityTo: overlaps[0].validityTo, amount: overlaps[0].amount }
         : undefined,
@@ -326,20 +359,45 @@ export async function saveSalesCondition(input: ConditionInput): Promise<{
 
 export async function listSalesConditions(
   client: string,
-  filter: { customerNumber?: string; materialNumber?: string; validOn?: string } = {},
+  filter: { customerNumber?: string; materialNumber?: string; validOn?: string } | undefined,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<ConditionView[]> {
   return withTenant(client, async (tx) => {
-    const conditions = [eq(salesConditionRecord.client, client)];
-    if (filter.customerNumber) conditions.push(eq(salesConditionRecord.customerNumber, filter.customerNumber.trim().toUpperCase()));
-    if (filter.materialNumber) conditions.push(eq(salesConditionRecord.materialNumber, filter.materialNumber.trim().toUpperCase()));
-    if (filter.validOn) {
-      conditions.push(sql`${salesConditionRecord.validityFrom} <= ${filter.validOn}`);
-      conditions.push(sql`${salesConditionRecord.validityTo} >= ${filter.validOn}`);
+    const actor = await salesActor(
+      tx, client, authorization, [CONDITION_CAPABILITY], (m, r) => new ConditionError(m, r ?? ''),
+    );
+    const rows = await readConditions(tx, client, filter ?? {});
+    const kept: ConditionView[] = [];
+    const areas = new Map<string, boolean>();
+    for (const row of rows) {
+      const k = `${row.salesOrg}|${row.distributionChannel}|${row.division}`;
+      if (!areas.has(k)) areas.set(k, await salesAreaInReach(tx, client, actor, row));
+      if (areas.get(k)) kept.push(row);
     }
-    const rows = await tx.select().from(salesConditionRecord).where(and(...conditions))
-      .orderBy(desc(salesConditionRecord.validityFrom), desc(salesConditionRecord.conditionNumber)).limit(200);
-    return rows.map(mapRecord);
+    return kept;
   });
 }
 
+/** Unscoped read for seeding, demo and tests of the pricing engine; never imported from src/app. */
+export async function listSalesConditionsForProvisioning(
+  client: string,
+  filter: { customerNumber?: string; materialNumber?: string; validOn?: string } = {},
+): Promise<ConditionView[]> {
+  return withTenant(client, (tx) => readConditions(tx, client, filter));
+}
 
+async function readConditions(
+  tx: Tx, client: string,
+  filter: { customerNumber?: string; materialNumber?: string; validOn?: string },
+): Promise<ConditionView[]> {
+  const conditions = [eq(salesConditionRecord.client, client)];
+  if (filter.customerNumber) conditions.push(eq(salesConditionRecord.customerNumber, filter.customerNumber.trim().toUpperCase()));
+  if (filter.materialNumber) conditions.push(eq(salesConditionRecord.materialNumber, filter.materialNumber.trim().toUpperCase()));
+  if (filter.validOn) {
+    conditions.push(sql`${salesConditionRecord.validityFrom} <= ${filter.validOn}`);
+    conditions.push(sql`${salesConditionRecord.validityTo} >= ${filter.validOn}`);
+  }
+  const rows = await tx.select().from(salesConditionRecord).where(and(...conditions))
+    .orderBy(desc(salesConditionRecord.validityFrom), desc(salesConditionRecord.conditionNumber)).limit(200);
+  return rows.map(mapRecord);
+}
