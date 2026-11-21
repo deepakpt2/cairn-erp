@@ -14,6 +14,7 @@ import {
   enterOrderConfirmation, loadOrderConfirmation, previewOrderConfirmation,
 } from '../src/modules/production/order-confirmation';
 import { enterTimeTicket, getTimeTicket, loadTimeTicket, previewTimeTicket } from '../src/modules/production/time-ticket';
+import { settleProductionOrder, settleProductionOrdersCollective } from '../src/modules/production/order-settlement';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -46,6 +47,12 @@ let tickPlantA: FinanceActor;
 let tickNoCap: FinanceActor;
 let tickNoScope: FinanceActor;
 let tickOther: FinanceActor;
+let setA: FinanceActor;
+let setB: FinanceActor;
+let setPlantA: FinanceActor;
+let setNoCap: FinanceActor;
+let setNoScope: FinanceActor;
+let setOther: FinanceActor;
 
 type Auth = FinanceActor['authorization'] | undefined;
 const ask = (p: Promise<unknown>) => p.then(() => 'done', (e: Error) => e.message);
@@ -110,6 +117,13 @@ beforeAll(async () => {
   tickNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
   tickNoScope = await createFinanceActor(client, { capabilities: TCAPS, companyScopes: [] });
   tickOther = await createFinanceActor(other.client, { capabilities: TCAPS });
+  const SCAPS = ['PROD.ORDER.SETTLE'];
+  setA = await createFinanceActor(client, { capabilities: SCAPS, companyScopes: [A] });
+  setB = await createFinanceActor(client, { capabilities: SCAPS, companyScopes: [B] });
+  setPlantA = await createFinanceActor(client, { capabilities: SCAPS, companyScopes: [A, B], plantScopes: ['PLA1'] });
+  setNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
+  setNoScope = await createFinanceActor(client, { capabilities: SCAPS, companyScopes: [] });
+  setOther = await createFinanceActor(other.client, { capabilities: SCAPS });
   otherTenantActor = await createFinanceActor(other.client, { capabilities: CAPS });
 }, 240_000);
 
@@ -257,5 +271,36 @@ describe('time ticket (CO11N)', () => {
       expect(await ask(enter(bad, 'PO-A'))).not.toBe('done');
     }
     expect(await tickets()).toBe(before);
+  });
+});
+
+describe('production order settlement', () => {
+  const base = { fiscalYear: 2026, settlementPeriod: 10, testRun: true };
+  const one = (a: Auth, n: string) => settleProductionOrder({ client, changedBy: 'someone-else', orderNumber: n, ...base }, a);
+  const many = (a: Auth) => settleProductionOrdersCollective({ client, changedBy: 'someone-else', orderFrom: 'PO-A', orderTo: 'PO-N', ...base }, a);
+
+  it('answers an order out of reach as a missing order and leaves it out of a collective selection', async () => {
+    const missing = await one(setA.authorization, 'PO-GONE');
+    expect(missing.outcome).toBe('INVALID_SELECTION');
+    const norm = (r: { message: string }, n: string) => r.message.replaceAll(n, '#');
+    for (const n of ['PO-B', 'PO-N']) {
+      const r = await one(setA.authorization, n);
+      expect(r.outcome).toBe('INVALID_SELECTION');
+      expect(norm(r, n)).toBe(norm(missing, 'PO-GONE'));
+    }
+    expect((await one(setPlantA.authorization, 'PO-B')).outcome).toBe('INVALID_SELECTION');
+    expect((await one(setB.authorization, 'PO-A')).outcome).toBe('INVALID_SELECTION');
+    expect((await one(setA.authorization, 'PO-A')).outcome).not.toBe('INVALID_SELECTION');
+    const listed = (r: { orders: Array<{ orderNumber: string }> }) => r.orders.map((o) => o.orderNumber).sort();
+    expect(listed(await many(setA.authorization))).toEqual(['PO-A']);
+    expect(listed(await many(setB.authorization))).toEqual(['PO-B']);
+    expect(listed(await many(setPlantA.authorization))).toEqual(['PO-A']);
+  });
+
+  it('refuses no session, capability, scope or tenant', async () => {
+    for (const bad of [undefined, setNoCap.authorization, setNoScope.authorization, setOther.authorization]) {
+      expect(await ask(one(bad, 'PO-A'))).not.toBe('done');
+      expect(await ask(many(bad))).not.toBe('done');
+    }
   });
 });

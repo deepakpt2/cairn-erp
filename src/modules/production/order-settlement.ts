@@ -19,6 +19,8 @@
  * a percentage, and an account are not assumed. Production orders are selected here;
  * internal orders are not.
  */
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { type Tx, withTenant } from '../../platform/db/client';
@@ -905,7 +907,24 @@ async function settleRows(
   return finish(mode, run, outcome, orders, documents, runMessage(run, outcome, orders), eligible);
 }
 
-export async function settleProductionOrder(input: ProductionOrderSettlementInput): Promise<ProductionOrderSettlementRunResult> {
+type SettleMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type SettleReach = { reachable: string[]; username: string } | null;
+
+/** Session, `PROD.ORDER.SETTLE` and company scope, judged in the run's own transaction. */
+async function settleReach(client: string, mode: SettleMode): Promise<SettleReach> {
+  if (mode === 'unscoped') return null;
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(
+      tx, client, mode.authorization, [PROD_ORDER_SETTLEMENT_CAPABILITY], (m, r) => new ProductionOrderSettlementError(m, r),
+    );
+    return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
+  });
+}
+
+async function settleOneOrderWith(rawInput: ProductionOrderSettlementInput, mode: SettleMode): Promise<ProductionOrderSettlementRunResult> {
+  const reach = await settleReach(rawInput.client, mode);
+  // The recorded user is the session user, never the caller's name.
+  const input = reach ? { ...rawInput, changedBy: reach.username } : rawInput;
   const run = requireRun(input);
   const orderNumber = text(input.orderNumber);
   if (!orderNumber) throw new ProductionOrderSettlementError('PROD.ORDER.SETTLE requires one order number.');
@@ -918,7 +937,7 @@ export async function settleProductionOrder(input: ProductionOrderSettlementInpu
       eq(productionOrder.client, input.client),
       eq(productionOrder.orderNumber, orderNumber),
     ));
-    if (!row) {
+    if (!row || (reach && !reach.reachable.includes(row.plant))) {
       return finish('INDIVIDUAL', run, 'INVALID_SELECTION', [], [], `Production order ${orderNumber} does not exist. Nothing was posted.`, 0);
     }
     const currentArea = row.controllingArea?.trim();
@@ -936,7 +955,9 @@ export async function settleProductionOrder(input: ProductionOrderSettlementInpu
   });
 }
 
-export async function settleProductionOrdersCollective(input: ProductionOrderSettlementInput): Promise<ProductionOrderSettlementRunResult> {
+async function settleCollectiveWith(rawInput: ProductionOrderSettlementInput, mode: SettleMode): Promise<ProductionOrderSettlementRunResult> {
+  const reach = await settleReach(rawInput.client, mode);
+  const input = reach ? { ...rawInput, changedBy: reach.username } : rawInput;
   const run = requireRun(input);
   const orderNumber = text(input.orderNumber);
   const orderFrom = text(input.orderFrom);
@@ -971,6 +992,8 @@ export async function settleProductionOrdersCollective(input: ProductionOrderSet
       orderType ? eq(productionOrder.orderType, orderType) : undefined,
     )).orderBy(asc(productionOrder.orderNumber));
     return selected.filter((row) => {
+      // An order at a plant out of reach is not part of the selection, exactly as if it did not exist.
+      if (reach && !reach.reachable.includes(row.plant)) return false;
       if (orderNumber && row.orderNumber !== orderNumber) return false;
       if (orderFrom && row.orderNumber < orderFrom) return false;
       if (orderTo && row.orderNumber > orderTo) return false;
@@ -982,3 +1005,16 @@ export async function settleProductionOrdersCollective(input: ProductionOrderSet
   }
   return settleRows(input, run, 'COLLECTIVE', rows);
 }
+
+/** Session, `PROD.ORDER.SETTLE` and company scope; an order at a plant out of reach answers as a missing order. */
+export async function settleProductionOrder(input: ProductionOrderSettlementInput, authorization: ServiceAuthorityContext | undefined) {
+  return settleOneOrderWith(input, { authorization });
+}
+/** The selection holds only orders at plants in reach; the recorded user is the session user. */
+export async function settleProductionOrdersCollective(input: ProductionOrderSettlementInput, authorization: ServiceAuthorityContext | undefined) {
+  return settleCollectiveWith(input, { authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function settleProductionOrderForProvisioning(input: ProductionOrderSettlementInput) { return settleOneOrderWith(input, 'unscoped'); }
+export async function settleProductionOrdersCollectiveForProvisioning(input: ProductionOrderSettlementInput) { return settleCollectiveWith(input, 'unscoped'); }

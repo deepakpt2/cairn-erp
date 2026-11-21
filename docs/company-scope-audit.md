@@ -291,3 +291,9 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - `...ForProvisioning` variants run unscoped for tests, seeds and scripts.
 - Tests: `tests/company-scope-production.test.ts` (10 now). Existing time-ticket tests repointed.
 - Already scoped by its own check, not changed: confirmation cancel (CO13) requires an explicit Company Code and Plant scope. Residual: it answers an out-of-reach order with "not authorised" rather than as a missing one, so it discloses that the order exists.
+
+## Phase 9c — Production: order settlement
+
+- `settleProductionOrder` and `settleProductionOrdersCollective` now need a session, `PROD.ORDER.SETTLE` and Company Code scope, judged before any order is read. An individual order at a plant out of reach answers as a missing order (`INVALID_SELECTION`); a collective selection simply excludes such orders. The recorded user is the session user. `...ForProvisioning` variants run unscoped.
+- Tests: `tests/company-scope-production.test.ts` (12 now, including test-run settlement refusals and selection filtering). Settlement and WIP tests repointed.
+- Residual: only test runs are exercised by the adversarial tests (an update run goes through the same reach check but is not separately tested adversarially). The settlement posts a journal under the company ledger without a separate check of the actor's finance capability; the authority is `PROD.ORDER.SETTLE` plus scope. `order-wip` already took the session and was not changed. Still unscoped: MRP run, routing, work centre, BOM, availability, production-order types.

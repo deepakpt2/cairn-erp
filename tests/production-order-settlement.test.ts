@@ -21,7 +21,7 @@ import {
 } from '../src/modules/inventory/production-orders';
 import {
   ProductionOrderSettlementError,
-  settleProductionOrder,
+  settleProductionOrderForProvisioning as settleProductionOrder,
   productionOrderSettlementPosting,
 } from '../src/modules/production/order-settlement';
 import { getProductionOrderCostReport } from './helpers/cost-report-authorized';

@@ -103,7 +103,7 @@ export async function settleProductionOrderAction(
       settlementPeriod: Number(input.settlementPeriod),
       testRun: input.testRun === true,
       checkTransactionData: input.checkTransactionData === true,
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return {
       ok: result.posted || result.outcome === 'SIMULATED' || result.outcome === 'NOTHING_TO_SETTLE',
       result,
