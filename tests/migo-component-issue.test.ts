@@ -22,7 +22,7 @@ import {
   releaseProductionOrder,
 } from '../src/modules/inventory/production-orders';
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
-import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';

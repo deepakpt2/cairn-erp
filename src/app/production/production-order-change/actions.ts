@@ -77,7 +77,7 @@ export async function changeProductionOrderAction(
         status: text(form, 'status'),
         post: text(form, 'post'),
       },
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     revalidatePath(PRODUCTION_ORDER_CHANGE_ROUTE);
     revalidatePath(PRODUCTION_ORDER_DISPLAY_ROUTE);
     return {

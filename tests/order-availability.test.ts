@@ -34,7 +34,7 @@ import {
   commitOrderComponentAvailability,
   resetOrderComponentAvailability,
 } from '../src/modules/production/order-availability-commitment';
-import { changeProductionOrder } from '../src/modules/production/production-order-change';
+import { changeProductionOrderForProvisioning as changeProductionOrder } from '../src/modules/production/production-order-change';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 

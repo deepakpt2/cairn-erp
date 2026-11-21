@@ -11,7 +11,7 @@ import { runOrderInformation } from '../src/modules/production/order-information
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { convertPlannedOrder } from '../src/modules/production/planned-order-conversion';
-import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { changeRouting, createRouting, getRouting, RoutingError, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { loadTimeTicketForProvisioning as loadTimeTicket } from '../src/modules/production/time-ticket';

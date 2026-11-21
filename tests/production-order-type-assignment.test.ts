@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createProductionOrder, getProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
-import { changeProductionOrder } from '../src/modules/production/production-order-change';
+import { changeProductionOrderForProvisioning as changeProductionOrder } from '../src/modules/production/production-order-change';
 import { saveProductionOrderType } from '../src/modules/production/production-order-type';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';

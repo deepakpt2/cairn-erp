@@ -58,14 +58,14 @@ export default async function ProductionOrderChangePage({
   let listed = null;
   if (!refusal && orderNumber) {
     try {
-      document = await getProductionOrderDisplay(session.user.client, orderNumber);
+      document = await getProductionOrderDisplay(session.user.client, orderNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
       if (!document) openError = `Production order ${orderNumber} does not stand.`;
     } catch (error) {
       openError = error instanceof ProductionOrderDisplayError ? error.message : 'The production order could not be opened.';
     }
   } else if (!refusal && (plant || materialNumber)) {
     try {
-      listed = await listProductionOrders(session.user.client, { plant, materialNumber });
+      listed = await listProductionOrders(session.user.client, { plant, materialNumber }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof ProductionOrderDisplayError ? error.message : 'The production orders could not be listed.';
     }

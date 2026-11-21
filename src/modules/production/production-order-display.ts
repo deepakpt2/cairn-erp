@@ -17,6 +17,8 @@
  * are read from material documents. Confirmations are listed when they
  * stand. This display does not enter or cancel one.
  */
+import { plantReachFilter, purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { sql } from 'drizzle-orm';
 
 import { JOURNAL_ACCOUNTING_NOTE } from '../inventory/material-document-accounting';
@@ -377,9 +379,24 @@ function gapsOf(versionRecorded: boolean, undatedComponents: number, operationCo
   ];
 }
 
-export async function getProductionOrderDisplay(client: string, orderNumber: string): Promise<ProductionOrderDisplay | null> {
+/** The order screens that look an order up (change, both confirmations) read it under their own capability. */
+const DISPLAY_READERS = [PRODUCTION_ORDER_DISPLAY_CAPABILITY, 'PROD.ORDER.CHANGE', 'PROD.CONFIRM.ORDER', 'PROD.CONFIRM.ENTER'] as const;
+
+type DisplayMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+
+/** Session, `PROD.ORDER.DISPLAY` and company scope; null when unscoped. */
+async function displayReach(tx: Tx, client: string, mode: DisplayMode): Promise<string[] | null> {
+  if (mode === 'unscoped') return null;
+  const actor = await purchasingActor(
+    tx, client, mode.authorization, DISPLAY_READERS, (m, r) => new ProductionOrderDisplayError(m, r),
+  );
+  return reachablePlantsInTx(tx, client, actor);
+}
+
+async function getWith(client: string, orderNumber: string, mode: DisplayMode): Promise<ProductionOrderDisplay | null> {
   const number = orderNumberOf(orderNumber);
   return withTenant(client, async (tx) => {
+    const reachable = await displayReach(tx, client, mode);
     const found = await rows(tx, sql`
       select o.order_number, o.material_number, m.description as material_description, o.plant, p.name as plant_name,
              coalesce(p.company_code, '') as company_code, o.order_quantity::text as quantity, o.unit_of_measure,
@@ -394,7 +411,8 @@ export async function getProductionOrderDisplay(client: string, orderNumber: str
        where o.client = ${client} and o.order_number = ${number}
     `);
     const header = found[0];
-    if (!header) return null;
+    // An order at a plant out of reach answers exactly as a missing one.
+    if (!header || (reachable && !reachable.includes(String(header.plant)))) return null;
     const components = await rows(tx, sql`
       select c.item_number, c.bom_item, c.source_material, c.material_number, coalesce(m.description, '') as description, c.plant,
              c.storage_location, c.required_quantity::text as required_quantity, c.unit_of_measure,
@@ -567,12 +585,12 @@ export async function getProductionOrderDisplay(client: string, orderNumber: str
   });
 }
 
-export async function listProductionOrders(client: string, filter: {
+async function listWith(client: string, filter: {
   plant?: string | null;
   materialNumber?: string | null;
   status?: string | null;
   offset?: number | null;
-}): Promise<{ rows: ProductionOrderListRow[]; total: number; truncated: boolean }> {
+}, mode: DisplayMode): Promise<{ rows: ProductionOrderListRow[]; total: number; truncated: boolean }> {
   const plant = clean(filter.plant).toUpperCase();
   const materialNumber = clean(filter.materialNumber).toUpperCase();
   const status = clean(filter.status).toUpperCase();
@@ -583,6 +601,10 @@ export async function listProductionOrders(client: string, filter: {
   const offset = filter.offset ?? 0;
   if (!Number.isInteger(offset) || offset < 0) fail('The list offset is not valid.');
   return withTenant(client, async (tx) => {
+    const reachable = await displayReach(tx, client, mode);
+    if (reachable && plant && !reachable.includes(plant)) fail(`The plant ${plant} does not stand.`, 'Enter a plant in this tenant.');
+    const reach = reachable ? plantReachFilter('o.plant', reachable) : sql``;
+    const reachTotal = reachable ? plantReachFilter('plant', reachable) : sql``;
     const found = await rows(tx, sql`
       select o.order_number, o.material_number, m.description as material_description, o.plant, o.order_type,
              o.order_quantity::text as quantity, o.unit_of_measure, o.scheduled_finish, o.status
@@ -592,6 +614,7 @@ export async function listProductionOrders(client: string, filter: {
          and (${plant} = '' or o.plant = ${plant})
          and (${materialNumber} = '' or o.material_number = ${materialNumber})
          and (${status} = '' or o.status = ${status})
+         ${reach}
        order by o.order_number
        limit ${PRODUCTION_ORDER_LIST_LIMIT + 1}
        offset ${offset}
@@ -603,6 +626,7 @@ export async function listProductionOrders(client: string, filter: {
          and (${plant} = '' or plant = ${plant})
          and (${materialNumber} = '' or material_number = ${materialNumber})
          and (${status} = '' or status = ${status})
+         ${reachTotal}
     `);
     return {
       total: Number(totalRows[0]?.total ?? 0),
@@ -621,3 +645,15 @@ export async function listProductionOrders(client: string, filter: {
     };
   });
 }
+
+/** Session, `PROD.ORDER.DISPLAY` and company scope: an order at a plant out of reach answers as a missing one. */
+export async function getProductionOrderDisplay(client: string, orderNumber: string, authorization: ServiceAuthorityContext | undefined) {
+  return getWith(client, orderNumber, { authorization });
+}
+export async function listProductionOrders(client: string, filter: Parameters<typeof listWith>[1], authorization: ServiceAuthorityContext | undefined) {
+  return listWith(client, filter, { authorization });
+}
+
+/** Seeding, demo, tests, scripts and the service's own post-write reads only; never imported from `src/app`. */
+export async function getProductionOrderDisplayForProvisioning(client: string, orderNumber: string) { return getWith(client, orderNumber, 'unscoped'); }
+export async function listProductionOrdersForProvisioning(client: string, filter: Parameters<typeof listWith>[1]) { return listWith(client, filter, 'unscoped'); }

@@ -7,7 +7,7 @@ import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createProductionOrder, getProductionOrder } from '../src/modules/inventory/production-orders';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
-import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { enterTimeTicketForProvisioning as enterTimeTicket, loadTimeTicketForProvisioning as loadTimeTicket } from '../src/modules/production/time-ticket';

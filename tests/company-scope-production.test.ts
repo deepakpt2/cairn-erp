@@ -15,6 +15,8 @@ import {
 } from '../src/modules/production/order-confirmation';
 import { enterTimeTicket, getTimeTicket, loadTimeTicket, previewTimeTicket } from '../src/modules/production/time-ticket';
 import { settleProductionOrder, settleProductionOrdersCollective } from '../src/modules/production/order-settlement';
+import { getProductionOrderDisplay, listProductionOrders } from '../src/modules/production/production-order-display';
+import { changeProductionOrder } from '../src/modules/production/production-order-change';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -53,6 +55,12 @@ let setPlantA: FinanceActor;
 let setNoCap: FinanceActor;
 let setNoScope: FinanceActor;
 let setOther: FinanceActor;
+let poA: FinanceActor;
+let poB: FinanceActor;
+let poPlantA: FinanceActor;
+let poNoCap: FinanceActor;
+let poNoScope: FinanceActor;
+let poOther: FinanceActor;
 
 type Auth = FinanceActor['authorization'] | undefined;
 const ask = (p: Promise<unknown>) => p.then(() => 'done', (e: Error) => e.message);
@@ -95,6 +103,8 @@ beforeAll(async () => {
       await tx.execute(sql`insert into production_order (client, order_number, material_number, plant, order_quantity, unit_of_measure, scheduled_start, scheduled_finish, created_by)
         values (${client}, ${n}, 'SCMK', ${plant}, 5, 'PC', '2026-10-23', '2026-10-24', ${SEED})`);
     }
+    await tx.execute(sql`insert into production_order_component (client, order_number, item_number, material_number, plant, required_quantity, unit_of_measure, created_by)
+      values (${client}, 'PO-A', 10, 'SCMK', 'PLA1', 1, 'PC', ${SEED})`);
     await defineRange(tx, { client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: SEED });
   });
   onlyA = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A] });
@@ -124,6 +134,13 @@ beforeAll(async () => {
   setNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
   setNoScope = await createFinanceActor(client, { capabilities: SCAPS, companyScopes: [] });
   setOther = await createFinanceActor(other.client, { capabilities: SCAPS });
+  const PCAPS = ['PROD.ORDER.DISPLAY', 'PROD.ORDER.CHANGE'];
+  poA = await createFinanceActor(client, { capabilities: PCAPS, companyScopes: [A] });
+  poB = await createFinanceActor(client, { capabilities: PCAPS, companyScopes: [B] });
+  poPlantA = await createFinanceActor(client, { capabilities: PCAPS, companyScopes: [A, B], plantScopes: ['PLA1'] });
+  poNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
+  poNoScope = await createFinanceActor(client, { capabilities: PCAPS, companyScopes: [] });
+  poOther = await createFinanceActor(other.client, { capabilities: PCAPS });
   otherTenantActor = await createFinanceActor(other.client, { capabilities: CAPS });
 }, 240_000);
 
@@ -302,5 +319,45 @@ describe('production order settlement', () => {
       expect(await ask(one(bad, 'PO-A'))).not.toBe('done');
       expect(await ask(many(bad))).not.toBe('done');
     }
+  });
+});
+
+describe('production order display and change', () => {
+  const show = (a: Auth, n: string) => getProductionOrderDisplay(client, n, a);
+  const list = (a: Auth, plant: string) => listProductionOrders(client, { plant }, a);
+  const chg = (a: Auth, n: string) => changeProductionOrder({
+    client, changedBy: 'someone-else', orderNumber: n, expectedVersion: 1, quantity: '7',
+  }, a);
+
+  it('shows and lists only orders at plants in reach; a named plant out of reach does not stand', async () => {
+    expect((await show(poA.authorization, 'PO-A'))?.orderNumber).toBe('PO-A');
+    for (const n of ['PO-B', 'PO-N', 'PO-GONE']) expect(await show(poA.authorization, n)).toBeNull();
+    expect(await show(poPlantA.authorization, 'PO-B')).toBeNull();
+    expect(await show(poB.authorization, 'PO-A')).toBeNull();
+    expect((await list(poA.authorization, 'PLA1')).rows.map((r) => r.orderNumber)).toEqual(['PO-A']);
+    expect((await list(poB.authorization, 'PLB1')).total).toBe(1);
+    const missing = mask(await ask(list(poA.authorization, 'PLZZ')), 'PLZZ');
+    for (const p of ['PLB1', 'PLN1']) expect(mask(await ask(list(poA.authorization, p)), p)).toBe(missing);
+    expect(await ask(list(poPlantA.authorization, 'PLB1'))).not.toBe('done');
+    for (const bad of [undefined, poNoCap.authorization, poNoScope.authorization, poOther.authorization]) {
+      expect(await ask(show(bad, 'PO-A'))).not.toBe('done');
+      expect(await ask(list(bad, 'PLA1'))).not.toBe('done');
+    }
+  });
+
+  it('refuses a change out of reach as a missing order, changes nothing, records the session user', async () => {
+    const missing = mask(await ask(chg(poA.authorization, 'PO-GONE')), 'PO-GONE');
+    for (const n of ['PO-B', 'PO-N']) expect(mask(await ask(chg(poA.authorization, n)), n)).toBe(missing);
+    expect(mask(await ask(chg(poPlantA.authorization, 'PO-B')), 'PO-B')).toBe(missing);
+    for (const bad of [undefined, poNoCap.authorization, poNoScope.authorization, poOther.authorization]) {
+      expect(await ask(chg(bad, 'PO-A'))).not.toBe('done');
+    }
+    const read = (n: string) => withTenant(client, async (tx) => ((await tx.execute(sql`
+      select order_quantity::text as q, changed_by from production_order where client = ${client} and order_number = ${n}`)) as unknown as Array<{ q: string; changed_by: string | null }>)[0]!);
+    expect((await read('PO-B')).q).toBe('5.000');
+    expect(await ask(chg(poA.authorization, 'PO-A'))).toBe('done');
+    const row = await read('PO-A');
+    expect(row.q).toBe('7.000');
+    expect(row.changed_by).toBe(poA.username);
   });
 });

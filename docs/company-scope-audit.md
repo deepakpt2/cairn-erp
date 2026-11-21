@@ -297,3 +297,12 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - `settleProductionOrder` and `settleProductionOrdersCollective` now need a session, `PROD.ORDER.SETTLE` and Company Code scope, judged before any order is read. An individual order at a plant out of reach answers as a missing order (`INVALID_SELECTION`); a collective selection simply excludes such orders. The recorded user is the session user. `...ForProvisioning` variants run unscoped.
 - Tests: `tests/company-scope-production.test.ts` (12 now, including test-run settlement refusals and selection filtering). Settlement and WIP tests repointed.
 - Residual: only test runs are exercised by the adversarial tests (an update run goes through the same reach check but is not separately tested adversarially). The settlement posts a journal under the company ledger without a separate check of the actor's finance capability; the authority is `PROD.ORDER.SETTLE` plus scope. `order-wip` already took the session and was not changed. Still unscoped: MRP run, routing, work centre, BOM, availability, production-order types.
+
+## Phase 9d — Production: production-order display, list and change (CO02/CO03)
+
+- `getProductionOrderDisplay`, `listProductionOrders`, `changeProductionOrder` now need a session and Company Code scope (plus a Plant scope where held). Display and list accept `PROD.ORDER.DISPLAY` or the capability of the screen that looks an order up (`PROD.ORDER.CHANGE`, `PROD.CONFIRM.ORDER`, `PROD.CONFIRM.ENTER`); change needs `PROD.ORDER.CHANGE`.
+- An order at another company's plant, a no-company plant or outside the Plant scope answers as a missing order. A listed plant out of reach "does not stand"; list and total count only orders in reach. A change records the session user.
+- `...ForProvisioning` variants for tests, seeds, scripts and the services' own post-write reads (technical completion).
+- Already scoped, unchanged: technical completion and its revocation (own authority + plant scope). Residual: they answer an out-of-reach order with a scope refusal rather than as a missing one.
+- Tests: `tests/company-scope-production.test.ts` (14 now); 14 existing suites repointed.
+- Still unscoped in production: MRP run, routing, BOM, work centre, production version, availability, capacity load, stock-requirements, STO planning, cost estimate, other reports.

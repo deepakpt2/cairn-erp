@@ -7,7 +7,7 @@ import { defineRange } from '../src/platform/numbering';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
-import { changeProductionOrder, technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
+import { changeProductionOrderForProvisioning as changeProductionOrder, technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import {
   cancelConfirmation,
   holdsConfirmationCancelAuthority,
@@ -16,7 +16,7 @@ import {
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 import { enterOrderConfirmationForProvisioning as enterOrderConfirmation } from '../src/modules/production/order-confirmation';
-import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { getProductionConfirmationDisplay, searchProductionConfirmations } from '../src/modules/production/confirmation-display';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';

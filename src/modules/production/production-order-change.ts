@@ -30,6 +30,7 @@
  * screen. They are not fields of the quantity save. A technically completed
  * order cannot be edited until that completion is revoked.
  */
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
@@ -40,7 +41,7 @@ import { unitOfMeasure } from '../../platform/tables/reference';
 import { material, materialPlant, productionOrder, productionOrderComponent } from '../inventory/schema';
 import { resolveStorageLocation, StorageLocationError } from '../inventory/storage-location';
 import {
-  getProductionOrderDisplay,
+  getProductionOrderDisplayForProvisioning as getProductionOrderDisplay,
   type ProductionOrderDisplay,
 } from './production-order-display';
 import { parseProductionOrderStatus, priorStatusFromRelease } from './production-order-status';
@@ -209,7 +210,7 @@ function componentFingerprint(row: StandingComponent): string {
   ].join(':');
 }
 
-export async function changeProductionOrder(input: ProductionOrderChangeInput): Promise<ProductionOrderChangeResult> {
+async function changeWith(input: ProductionOrderChangeInput, mode: 'unscoped' | { authorization: ServiceAuthorityContext | undefined }): Promise<ProductionOrderChangeResult> {
   const refusal = productionOrderChangeRefusal(input.named);
   if (refusal) fail(refusal);
   const orderNumber = clean(input.orderNumber);
@@ -217,7 +218,7 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
   if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
     fail('Open the order again. The record version is required.', 'Display the order, then change it.');
   }
-  const actor = clean(input.changedBy);
+  let actor = clean(input.changedBy);
   if (!actor || actor.length > 60) fail('The user who changed the order is required.');
 
   const warnings = [
@@ -228,6 +229,15 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
   ];
 
   await withTenant(input.client, async (tx) => {
+    let reachable: string[] | null = null;
+    if (mode !== 'unscoped') {
+      const scoped = await purchasingActor(
+        tx, input.client, mode.authorization, [PRODUCTION_ORDER_CHANGE_CAPABILITY], (m, r) => new ProductionOrderChangeError(m, r),
+      );
+      reachable = await reachablePlantsInTx(tx, input.client, scoped);
+      // The recorded user is the session user, never the caller's name.
+      actor = scoped.username;
+    }
     const found = await rows(tx, sql`
       select order_number, material_number, plant, order_quantity::text as quantity, unit_of_measure,
              scheduled_start, scheduled_finish, status, version
@@ -236,7 +246,7 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
        for update
     `);
     const header = found[0];
-    if (!header) fail(`Production order ${orderNumber} does not stand.`, 'Choose an order that stands in this tenant.');
+    if (!header || (reachable && !reachable.includes(String(header.plant)))) fail(`Production order ${orderNumber} does not stand.`, 'Choose an order that stands in this tenant.');
     if (Number(header.version) !== input.expectedVersion) {
       fail('The production order was changed by someone else. Nothing was saved.', 'Open it again, then save.');
     }
@@ -776,3 +786,11 @@ export async function revokeTechnicalCompletion(
     warnings: ['The component snapshot was not restored, because technical completion did not delete it.'],
   };
 }
+
+/** Session, `PROD.ORDER.CHANGE` and company scope: an order at a plant out of reach answers as a missing one. */
+export async function changeProductionOrder(input: ProductionOrderChangeInput, authorization: ServiceAuthorityContext | undefined) {
+  return changeWith(input, { authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function changeProductionOrderForProvisioning(input: ProductionOrderChangeInput) { return changeWith(input, 'unscoped'); }

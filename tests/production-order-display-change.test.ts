@@ -8,13 +8,13 @@ import { changeDocument } from '../src/platform/tables/audit-trail';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import {
   ProductionOrderDisplayError,
-  getProductionOrderDisplay,
-  listProductionOrders,
+  getProductionOrderDisplayForProvisioning as getProductionOrderDisplay,
+  listProductionOrdersForProvisioning as listProductionOrders,
   productionOrderDisplayRefusal,
 } from '../src/modules/production/production-order-display';
 import {
   ProductionOrderChangeError,
-  changeProductionOrder,
+  changeProductionOrderForProvisioning as changeProductionOrder,
   productionOrderChangeRefusal,
 } from '../src/modules/production/production-order-change';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';

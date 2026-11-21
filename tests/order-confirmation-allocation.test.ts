@@ -10,8 +10,8 @@ import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/mod
 import { enterOrderConfirmationForProvisioning as enterOrderConfirmation, scaledEffectWithinLimit } from '../src/modules/production/order-confirmation';
 import { runOrderInformation } from '../src/modules/production/order-information';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
-import { changeProductionOrder } from '../src/modules/production/production-order-change';
-import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { changeProductionOrderForProvisioning as changeProductionOrder } from '../src/modules/production/production-order-change';
+import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { changeRouting, createRouting, getRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { enterTimeTicketForProvisioning as enterTimeTicket, loadTimeTicketForProvisioning as loadTimeTicket } from '../src/modules/production/time-ticket';

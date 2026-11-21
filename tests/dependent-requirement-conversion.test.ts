@@ -14,12 +14,12 @@ import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/
 import { convertPlannedOrder, convertPlannedOrders, previewPlannedOrderConversion } from '../src/modules/production/planned-order-conversion';
 import {
   PRODUCTION_ORDER_CHANGE_CAPABILITY,
-  changeProductionOrder,
+  changeProductionOrderForProvisioning as changeProductionOrder,
   productionOrderChangeRefusal,
   revokeTechnicalCompletion,
   technicallyCompleteProductionOrder,
 } from '../src/modules/production/production-order-change';
-import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';

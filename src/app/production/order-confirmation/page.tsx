@@ -68,7 +68,7 @@ export default async function OrderConfirmationPage({
           plant,
           materialNumber,
           status: one(params.status) || null,
-        });
+        }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
       } catch (error) {
         openError = error instanceof ProductionOrderDisplayError ? error.message : 'The production orders could not be listed.';
       }

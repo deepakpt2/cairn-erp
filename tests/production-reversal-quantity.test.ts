@@ -8,7 +8,7 @@ import { MaterialReversalError, reverseMaterialDocument } from '../src/modules/i
 import { postProductionReceipt, receivedQuantityFor } from '../src/modules/inventory/production-receipt';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
-import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { planSingleItem } from '../src/modules/production/mrp-run';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant } from './helpers';

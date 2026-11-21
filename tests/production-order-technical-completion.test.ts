@@ -8,14 +8,14 @@ import { defineRange } from '../src/platform/numbering';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import {
   PRODUCTION_ORDER_CHANGE_CAPABILITY,
-  changeProductionOrder,
+  changeProductionOrderForProvisioning as changeProductionOrder,
   productionOrderChangeRefusal,
   revokeTechnicalCompletion,
   technicallyCompleteProductionOrder,
 } from '../src/modules/production/production-order-change';
 import {
-  getProductionOrderDisplay,
-  listProductionOrders,
+  getProductionOrderDisplayForProvisioning as getProductionOrderDisplay,
+  listProductionOrdersForProvisioning as listProductionOrders,
   productionOrderDisplayRefusal,
 } from '../src/modules/production/production-order-display';
 import { runOrderInformation } from '../src/modules/production/order-information';
