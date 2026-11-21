@@ -2,6 +2,7 @@
 import { can, requireSession } from '@/platform/auth/current';
 import {
   SHIPPING_POINT_CAPABILITY,
+  ShippingPointMaintenanceError,
   listShippingPointConfiguration,
 } from '@/modules/sales/shipping-point-maintenance';
 import { ShippingConditionSetup } from './ShippingConditionSetup';
@@ -15,9 +16,19 @@ const ROUTE = '/config/shipping-points';
 
 export default async function ShippingPointsPage() {
   const session = await requireSession(ROUTE);
-  const configuration = await listShippingPointConfiguration(
-    session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' },
-  );
+  let configuration: Awaited<ReturnType<typeof listShippingPointConfiguration>>;
+  try {
+    configuration = await listShippingPointConfiguration(
+      session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+    );
+  } catch (error) {
+    if (!(error instanceof ShippingPointMaintenanceError)) throw error;
+    return (
+      <Page title="Shipping points" code={<>{SHIPPING_POINT_CAPABILITY} · SD</>}>
+        <p role="status" className="text-sm text-signal-error">{error.message}</p>
+      </Page>
+    );
+  }
   const canMaintain = can(session, SHIPPING_POINT_CAPABILITY);
   const unassigned = configuration.plants
     .filter((site) => !configuration.assignments

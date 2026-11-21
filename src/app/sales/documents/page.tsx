@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { requireSession } from '@/platform/auth/current';
 import {
   type RegisterFilter, type RegisterKind, REGISTER_KINDS, REGISTER_KIND_MEANING,
-  REGISTER_LIMIT, listDocumentRegister, listDueRegister, listRegisterChoices,
+  REGISTER_LIMIT, RegisterRefusal, listDocumentRegister, listDueRegister, listRegisterChoices,
 } from '@/modules/sales/registers';
 import { Page } from '@/ui/kit';
 
@@ -57,12 +57,29 @@ export default async function SalesDocumentsPage({ searchParams }: {
     dateTo: one(params.dateTo),
   };
 
-  const choices = await listRegisterChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
-  const due = mode === 'due' && KINDS_WITH_A_DUE_LIST.includes(kind)
+  let denied = '';
+  let choices: Awaited<ReturnType<typeof listRegisterChoices>> | null = null;
+  let due: Awaited<ReturnType<typeof listDueRegister>> | null = null;
+  let register: Awaited<ReturnType<typeof listDocumentRegister>> | null = null;
+  try {
+  choices = await listRegisterChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
+  due = mode === 'due' && KINDS_WITH_A_DUE_LIST.includes(kind)
     ? await listDueRegister(client, { kind: kind as 'DELIVERY' | 'BILLING', filter }, { userId: session.user.userId, sessionId: session.sessionId ?? '' })
     : null;
-  const register = due ? null : await listDocumentRegister(client, { kind, filter }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
+  register = due ? null : await listDocumentRegister(client, { kind, filter }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
 
+  } catch (error) {
+    if (!(error instanceof RegisterRefusal)) throw error;
+    denied = error.message;
+  }
+  if (denied) {
+    return (
+      <Page title="Document register" code={<>SALES.DOCUMENTS.LIST</>} width="7xl">
+        <p role="status" className="text-sm text-signal-error">{denied}</p>
+      </Page>
+    );
+  }
+  if (!choices) throw new Error('unreachable');
   const query = (next: Record<string, string>) => {
     const search = new URLSearchParams();
     for (const [key, value] of Object.entries({ kind, mode, ...filter, ...next })) {

@@ -58,10 +58,21 @@ export default async function PeopleAssignmentsPage({ searchParams }: {
   const query = (params.q ?? '').trim();
   const openOnly = params.open === '1';
 
-  const [rows, positions] = await Promise.all([
-    listAssignments({ client, query, positionCode: positionCode || undefined, openOnly }, access),
-    listPositions(client),
-  ]);
+  let rows: AssignmentView[];
+  let positions: Awaited<ReturnType<typeof listPositions>>;
+  try {
+    [rows, positions] = await Promise.all([
+      listAssignments({ client, query, positionCode: positionCode || undefined, openOnly }, access),
+      listPositions(client),
+    ]);
+  } catch (error) {
+    if (!(error instanceof AssignmentError)) throw error;
+    return (
+      <main className="p-6">
+        <p role="status" className="text-sm text-signal-error">{error.message}</p>
+      </main>
+    );
+  }
 
   // An unknown personnel number is a refusal, not an empty history: read it as the screen's own message, so a
   // stale link says what is missing instead of dying on the service's error.

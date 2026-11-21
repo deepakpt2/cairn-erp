@@ -4,9 +4,9 @@ import { requireSession } from '@/platform/auth/current';
 import {
   type AnalysisFilter, type AnalysisKind, type GroupBy, type Period,
   ANALYSIS_KIND_MEANING, ANALYSIS_KINDS, ANALYSIS_LIMIT, GROUP_BY, GROUP_BY_MEANING,
-  PERIODS, listAnalysis,
+  AnalysisError, PERIODS, listAnalysis,
 } from '@/modules/sales/analysis';
-import { listRegisterChoices } from '@/modules/sales/registers';
+import { RegisterRefusal, listRegisterChoices } from '@/modules/sales/registers';
 import { ReportExport } from '@/ui/output/ReportExport';
 import { Page } from '@/ui/kit';
 
@@ -93,9 +93,24 @@ export default async function SalesAnalysisPage({ searchParams }: {
     dateTo: one(params.dateTo),
   };
 
-  const choices = await listRegisterChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
-  const analysis = await listAnalysis(client, { kind, filter, groupBy, period }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
-
+  let denied = '';
+  let choices: Awaited<ReturnType<typeof listRegisterChoices>> | null = null;
+  let analysis: Awaited<ReturnType<typeof listAnalysis>> | null = null;
+  try {
+    choices = await listRegisterChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
+    analysis = await listAnalysis(client, { kind, filter, groupBy, period }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
+  } catch (error) {
+    if (!(error instanceof RegisterRefusal) && !(error instanceof AnalysisError)) throw error;
+    denied = error.message;
+  }
+  if (denied) {
+    return (
+      <Page title="Sales analysis" code={<>SALES.ANALYSIS.LIST</>} width="7xl">
+        <p role="status" className="text-sm text-signal-error">{denied}</p>
+      </Page>
+    );
+  }
+  if (!choices || !analysis) throw new Error('unreachable');
   const query = (next: Record<string, string>) => {
     const search = new URLSearchParams();
     for (const [key, value] of Object.entries({ kind, groupBy, period, ...filter, ...next })) {

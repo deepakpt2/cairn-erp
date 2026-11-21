@@ -6,6 +6,7 @@ import { t } from '@/platform/i18n';
 import {
   INFO_RECORD_CAPABILITY,
   INFO_RECORD_ROUTE,
+  InfoRecordError,
   findPurchasingInfoRecord,
   getPurchasingInfoRecord,
   infoRecordChoices,
@@ -43,7 +44,17 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
     : null;
   const number = requestedNumber || found || '';
   const record = number ? await getPurchasingInfoRecord(session.user.client, number, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : null;
-  const choices = await infoRecordChoices(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
+  let choices: Awaited<ReturnType<typeof infoRecordChoices>>;
+  try {
+    choices = await infoRecordChoices(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
+  } catch (error) {
+    if (!(error instanceof InfoRecordError)) throw error;
+    return (
+      <main className="p-6">
+        <p role="status" className="text-sm text-signal-error">{error.message}</p>
+      </main>
+    );
+  }
   const canMaintain = can(session, INFO_RECORD_CAPABILITY);
   const changeLock = record && canMaintain
     ? await openChangeForSession(session, {

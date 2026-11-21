@@ -6,6 +6,7 @@ import {
   MRP_REGENERATE_CAPABILITY,
   MRP_RUN_CAPABILITY,
   MRP_RUN_ROUTE,
+  MrpRunError,
   getMrpRun,
   listMrpRuns,
   mrpNamedRefusal,
@@ -34,8 +35,18 @@ export default async function MrpRunPage({
     scheduleLine: one(params.scheduleLine),
   });
   const runNumber = one(params.run);
-  const run = !refusal && runNumber ? await getMrpRun(session.user.client, runNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
-  const runs = await listMrpRuns(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  // A user without the capability or the scope gets an empty workbench, not an error page.
+  let run: Awaited<ReturnType<typeof getMrpRun>> | null = null;
+  let runs: Awaited<ReturnType<typeof listMrpRuns>> = [];
+  let denied = '';
+  try {
+    run = !refusal && runNumber ? await getMrpRun(session.user.client, runNumber, authorization) : null;
+    runs = await listMrpRuns(session.user.client, authorization);
+  } catch (error) {
+    if (!(error instanceof MrpRunError)) throw error;
+    denied = error.message;
+  }
 
   return (
     <Page
@@ -47,6 +58,7 @@ export default async function MrpRunPage({
         </>
       }
     >
+      {denied && <p role="status" className="text-sm text-signal-error">{denied}</p>}
       {refusal && <p role="status" data-mrp-refused className="text-sm text-signal-error">{refusal}</p>}
       <MrpRunWorkbench
         canPlan={can(session, MRP_RUN_CAPABILITY)}

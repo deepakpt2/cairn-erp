@@ -39,6 +39,9 @@ import {
   salesReturnsConfiguration,
 } from './schema';
 
+/** The session lacks the capability or the scope: a screen shows the refusal, it is not a fault. */
+export class RegisterRefusal extends Error {}
+
 export const REGISTER_KINDS = [
   'ORDER', 'DELIVERY', 'BILLING', 'RETURNS', 'CANCELLATION',
 ] as const;
@@ -508,7 +511,7 @@ export async function listDocumentRegister(
   const filter = clean(input.filter ?? {});
   const limit = Math.min(Math.max(input.limit ?? REGISTER_LIMIT, 1), 1000);
   return withTenant(client, async (tx) => {
-    const actor = await salesActor(tx, client, authorization, ['SALES.DOCUMENTS.LIST'], (m, r) => new Error(r ? `${m} ${r}` : m));
+    const actor = await salesActor(tx, client, authorization, ['SALES.DOCUMENTS.LIST'], (m, r) => new RegisterRefusal(r ? `${m} ${r}` : m));
     const read = input.kind === 'ORDER' ? orderRegister
       : input.kind === 'DELIVERY' ? deliveryRegister
         : input.kind === 'BILLING' ? billingRegister
@@ -604,7 +607,7 @@ export async function listRegisterChoices(
 ): Promise<RegisterChoices> {
   return withTenant(client, async (tx) => {
     const actor = await salesActor(tx, client, authorization, ['SALES.DOCUMENTS.LIST', 'SALES.ANALYSIS.LIST'],
-      (m, r) => new Error(r ? `${m} ${r}` : m));
+      (m, r) => new RegisterRefusal(r ? `${m} ${r}` : m));
     const reachablePlants = new Set(await reachablePlantsInTx(tx, client, actor));
     const companyOf = new Map((await tx.select({ salesOrg: salesOrgTable.salesOrg, companyCode: salesOrgTable.companyCode })
       .from(salesOrgTable).where(eq(salesOrgTable.client, client))).map((r) => [r.salesOrg, r.companyCode]));
