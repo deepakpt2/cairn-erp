@@ -40,7 +40,7 @@ import {
 } from '../../modules/inventory/production-orders';
 import { postProductionReceipt } from '../../modules/inventory/production-receipt';
 import { postGoodsIssue } from '../../modules/inventory/goods-issue';
-import { enterOrderConfirmation } from '../../modules/production/order-confirmation';
+import { enterOrderConfirmationForProvisioning as enterOrderConfirmation } from '../../modules/production/order-confirmation';
 import { technicallyCompleteProductionOrder } from '../../modules/production/production-order-change';
 import { saveOrderTypeParameter } from '../../modules/production/order-type-parameters';
 import { saveProductionOrderType } from '../../modules/production/production-order-type';

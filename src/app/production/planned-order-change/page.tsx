@@ -48,14 +48,14 @@ export default async function PlannedOrderChangePage({
   let listed: Awaited<ReturnType<typeof listPlannedOrders>> | null = null;
   if (orderNumber) {
     try {
-      document = await getPlannedOrder(session.user.client, orderNumber);
+      document = await getPlannedOrder(session.user.client, orderNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
       if (!document) openError = `Planned order ${orderNumber} does not stand.`;
     } catch (error) {
       openError = error instanceof PlannedOrderDisplayError ? error.message : 'The planned order could not be opened.';
     }
   } else if (plant || materialNumber) {
     try {
-      listed = await listPlannedOrders(session.user.client, { plant, materialNumber });
+      listed = await listPlannedOrders(session.user.client, { plant, materialNumber }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof PlannedOrderDisplayError ? error.message : 'The planned orders could not be listed.';
     }

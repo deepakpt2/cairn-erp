@@ -19,10 +19,12 @@ import { sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { toScaled } from '../../platform/posting/decimal';
 import { unitOfMeasure } from '../../platform/tables/reference';
-import { getPlannedOrder, type PlannedOrderView } from './planned-order-display';
+import { getPlannedOrderForProvisioning, type PlannedOrderView } from './planned-order-display';
 
 export const PLANNED_ORDER_CHANGE_CAPABILITY = 'PROD.PLANNEDORDER.CHANGE';
 export const PLANNED_ORDER_CHANGE_ROUTE = '/production/planned-order-change';
@@ -159,17 +161,39 @@ async function rows(tx: Tx, query: ReturnType<typeof sql>): Promise<Array<Record
   return await tx.execute(query) as unknown as Array<Record<string, unknown>>;
 }
 
-export async function changePlannedOrder(input: PlannedOrderChangeInput): Promise<PlannedOrderChangeResult> {
+type ChangeMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+
+/** Session, `PROD.PLANNEDORDER.CHANGE` and company scope: an order at a plant out of reach answers as a missing one; the recorded user is the session user. */
+export async function changePlannedOrder(
+  input: PlannedOrderChangeInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<PlannedOrderChangeResult> {
+  return changeWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function changePlannedOrderForProvisioning(input: PlannedOrderChangeInput): Promise<PlannedOrderChangeResult> {
+  return changeWith(input, 'unscoped');
+}
+
+async function changeWith(input: PlannedOrderChangeInput, mode: ChangeMode): Promise<PlannedOrderChangeResult> {
   const refusal = plannedOrderChangeRefusal(input.named);
   if (refusal) fail(refusal);
   const orderNumber = orderNumberOf(input.orderNumber);
   if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
     fail('Open the order again. The record version is required.', 'Display the order, then change it.');
   }
-  const actor = clean(input.changedBy);
+  let actor = clean(input.changedBy);
   if (!actor || actor.length > 60) fail('The user who changed the order is required.');
 
   const saved = await withTenant(input.client, async (tx) => {
+    let reachable: string[] | null = null;
+    if (mode !== 'unscoped') {
+      const verified = await purchasingActor(
+        tx, input.client, mode.authorization, [PLANNED_ORDER_CHANGE_CAPABILITY], (m, r) => new PlannedOrderChangeError(m, r),
+      );
+      reachable = await reachablePlantsInTx(tx, input.client, verified);
+      actor = verified.username;
+    }
     const found = await rows(tx, sql`
       select order_number, material_number, plant, quantity::text as quantity, unit,
              start_date::text as start_date, finish_date::text as finish_date,
@@ -179,7 +203,9 @@ export async function changePlannedOrder(input: PlannedOrderChangeInput): Promis
        for update
     `);
     const row = found[0];
-    if (!row) fail(`Planned order ${orderNumber} does not stand.`, 'Choose an order that stands in this tenant.');
+    if (!row || (reachable && !reachable.includes(String(row.plant)))) {
+      fail(`Planned order ${orderNumber} does not stand.`, 'Choose an order that stands in this tenant.');
+    }
     const standing: Standing = {
       orderNumber: String(row.order_number),
       materialNumber: String(row.material_number),
@@ -295,7 +321,7 @@ export async function changePlannedOrder(input: PlannedOrderChangeInput): Promis
     return { changed: true, firmedByChange: planningChanged && standing.firmingStatus !== 'FIRMED', warnings };
   });
 
-  const order = await getPlannedOrder(input.client, orderNumber);
+  const order = await getPlannedOrderForProvisioning(input.client, orderNumber);
   if (!order) fail(`Planned order ${orderNumber} does not stand.`);
   return { order, ...saved };
 }

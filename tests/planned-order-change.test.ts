@@ -11,7 +11,7 @@ import { planMaterials } from '../src/modules/production/mrp-run';
 import { mrpDependentRequirement, plannedOrder, productionOrderType } from '../src/modules/production/schema';
 import {
   PlannedOrderChangeError,
-  changePlannedOrder,
+  changePlannedOrderForProvisioning as changePlannedOrder,
   holdsPlannedOrderChangeAuthority,
   plannedOrderChangeRefusal,
 } from '../src/modules/production/planned-order-change';

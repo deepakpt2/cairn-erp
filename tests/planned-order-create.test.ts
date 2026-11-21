@@ -11,7 +11,7 @@ import { planMaterials } from '../src/modules/production/mrp-run';
 import { plannedOrder } from '../src/modules/production/schema';
 import {
   PlannedOrderCreateError,
-  createPlannedOrder,
+  createPlannedOrderForProvisioning as createPlannedOrder,
   holdsPlannedOrderCreateAuthority,
   plannedOrderCreateRefusal,
 } from '../src/modules/production/planned-order-create';

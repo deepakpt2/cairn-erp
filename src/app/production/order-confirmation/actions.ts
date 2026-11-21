@@ -86,12 +86,12 @@ export async function enterOrderConfirmationAction(
   const check = text(form, 'intent') === 'check';
   try {
     const confirmation = check
-      ? await previewOrderConfirmation(session.user.client, input)
+      ? await previewOrderConfirmation(session.user.client, input, { userId: session.user.userId, sessionId: session.sessionId ?? '' })
       : await enterOrderConfirmation(session.user.client, {
         ...input,
         requestedBy: session.user.username,
         requestKey: text(form, 'requestKey'),
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     const failed = !check && !confirmation.written;
     return {
       ok: check || confirmation.written,

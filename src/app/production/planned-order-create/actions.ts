@@ -34,6 +34,7 @@ export async function createPlannedOrderAction(
     const result = await createPlannedOrder({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       requestKey: text(form, 'requestKey'),
       materialNumber: text(form, 'materialNumber'),
       plant: text(form, 'plant'),

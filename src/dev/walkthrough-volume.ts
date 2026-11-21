@@ -40,7 +40,7 @@ import { listSalesConditionsForProvisioning as listSalesConditions, saveSalesCon
 import { createMaterialBom, getMaterialBom } from '../modules/production/material-bom';
 import { createRouting, getRouting } from '../modules/production/routing';
 import { createProductionVersion, getProductionVersion } from '../modules/production/production-version';
-import { createPlannedOrder } from '../modules/production/planned-order-create';
+import { createPlannedOrderForProvisioning as createPlannedOrder } from '../modules/production/planned-order-create';
 import { CONVERSION_LIMIT, convertPlannedOrders } from '../modules/production/planned-order-conversion';
 import { getProductionOrder, releaseProductionOrder } from '../modules/inventory/production-orders';
 import { postGoodsIssue } from '../modules/inventory/goods-issue';

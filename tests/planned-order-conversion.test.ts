@@ -12,9 +12,9 @@ import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/mod
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { createProductionVersion } from '../src/modules/production/production-version';
-import { createPlannedOrder } from '../src/modules/production/planned-order-create';
-import { PlannedOrderChangeError, changePlannedOrder } from '../src/modules/production/planned-order-change';
-import { getPlannedOrder } from '../src/modules/production/planned-order-display';
+import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
+import { PlannedOrderChangeError, changePlannedOrderForProvisioning as changePlannedOrder } from '../src/modules/production/planned-order-change';
+import { getPlannedOrderForProvisioning as getPlannedOrder } from '../src/modules/production/planned-order-display';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import {
   PlannedOrderConversionError,

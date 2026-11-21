@@ -10,7 +10,7 @@ import { mrpController } from '../src/modules/inventory/schema';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { planMaterials, planSingleItem } from '../src/modules/production/mrp-run';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
-import { createPlannedOrder } from '../src/modules/production/planned-order-create';
+import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { convertPlannedOrder, convertPlannedOrders, previewPlannedOrderConversion } from '../src/modules/production/planned-order-conversion';
 import {
   PRODUCTION_ORDER_CHANGE_CAPABILITY,

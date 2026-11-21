@@ -18,7 +18,7 @@ import { createProductionVersion } from '../src/modules/production/production-ve
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { saveProductionOrderType } from '../src/modules/production/production-order-type';
 import { savePlantDefinition } from '../src/modules/foundation/plant-maintenance';
-import { createPlannedOrder } from '../src/modules/production/planned-order-create';
+import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { convertPlannedOrder } from '../src/modules/production/planned-order-conversion';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';

@@ -36,6 +36,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
@@ -107,6 +109,27 @@ export class OrderConfirmationError extends Error {
   constructor(message: string, readonly remedy?: string) {
     super(message);
     this.name = 'OrderConfirmationError';
+  }
+}
+
+type ConfirmMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type ConfirmReach = { reachable: string[]; username: string } | null;
+
+/** Session, `PROD.CONFIRM.ORDER` and company scope, judged in the caller's own transaction. */
+async function confirmReach(tx: Tx, client: string, mode: ConfirmMode): Promise<ConfirmReach> {
+  if (mode === 'unscoped') return null;
+  const actor = await purchasingActor(
+    tx, client, mode.authorization, [ORDER_CONFIRMATION_CAPABILITY], (m, r) => new OrderConfirmationError(m, r),
+  );
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
+}
+
+/** An order at a plant out of reach answers exactly as a missing order. */
+async function assertOrderInReach(tx: Tx, client: string, reach: ConfirmReach, orderNumber: string): Promise<void> {
+  if (!reach) return;
+  const found = await rows(tx, sql`select plant from production_order where client = ${client} and order_number = ${orderNumber}`);
+  if (!found[0] || !reach.reachable.includes(String(found[0].plant))) {
+    fail(`Production order ${orderNumber} does not stand.`, 'Enter an order in this tenant.');
   }
 }
 
@@ -608,16 +631,17 @@ async function sameRequest(tx: Tx, client: string, stored: OrderConfirmationView
   return true;
 }
 
-export async function loadOrderConfirmation(client: string, input: {
+async function loadWith(client: string, input: {
   orderNumber: string;
   productionVersion?: string | null;
   postingDate?: string | null;
-}): Promise<OrderConfirmationLoad> {
+}, mode: ConfirmMode): Promise<OrderConfirmationLoad> {
   const orderNumber = clean(input.orderNumber).toUpperCase();
   if (!orderNumber) fail('A production order is required.', 'Enter the order to confirm.');
   const askedDate = clean(input.postingDate);
   if (askedDate) dateOf(askedDate, 'The posting date');
   return withTenant(client, async (tx) => {
+    await assertOrderInReach(tx, client, await confirmReach(tx, client, mode), orderNumber);
     let header;
     try {
       header = await headerOf(tx, client, orderNumber);
@@ -657,7 +681,7 @@ export async function loadOrderConfirmation(client: string, input: {
   });
 }
 
-export async function previewOrderConfirmation(client: string, input: {
+async function previewWith(client: string, input: {
   orderNumber: string;
   productionVersion?: string | null;
   confirmationType: string;
@@ -673,10 +697,11 @@ export async function previewOrderConfirmation(client: string, input: {
   note?: string | null;
   expectedVersion: number;
   named?: Record<string, string | null | undefined>;
-}): Promise<OrderConfirmationView> {
+}, mode: ConfirmMode): Promise<OrderConfirmationView> {
   const refused = orderConfirmationRefusal(input.named);
   if (refused) fail(refused, 'Confirm the order. A check writes nothing.');
   return withTenant(client, async (tx) => {
+    await assertOrderInReach(tx, client, await confirmReach(tx, client, mode), clean(input.orderNumber).toUpperCase());
     const prepared = await prepare(tx, client, {
       ...input,
       orderNumber: clean(input.orderNumber).toUpperCase(),
@@ -686,7 +711,7 @@ export async function previewOrderConfirmation(client: string, input: {
   });
 }
 
-export async function enterOrderConfirmation(client: string, input: {
+async function enterWith(client: string, raw: {
   requestedBy: string;
   requestKey: string;
   orderNumber: string;
@@ -705,14 +730,17 @@ export async function enterOrderConfirmation(client: string, input: {
   expectedVersion: number;
   confirmFinal?: boolean;
   named?: Record<string, string | null | undefined>;
-}): Promise<OrderConfirmationView> {
-  const refused = orderConfirmationRefusal(input.named);
+}, mode: ConfirmMode): Promise<OrderConfirmationView> {
+  const refused = orderConfirmationRefusal(raw.named);
   if (refused) fail(refused, 'Confirm the order. Nothing was saved.');
-  const requestKey = clean(input.requestKey);
+  const requestKey = clean(raw.requestKey);
   if (!requestKey || requestKey.length > 64) fail('A request key is required.');
-  const orderNumber = clean(input.orderNumber).toUpperCase();
-  const namedVersion = clean(input.productionVersion).toUpperCase();
+  const orderNumber = clean(raw.orderNumber).toUpperCase();
+  const namedVersion = clean(raw.productionVersion).toUpperCase();
   return withTenant(client, async (tx) => {
+    const reach = await confirmReach(tx, client, mode);
+    await assertOrderInReach(tx, client, reach, orderNumber);
+    const input = reach ? { ...raw, requestedBy: reach.username } : raw;
     await acquireLock(tx, { objectCode: TIME_TICKET_LOCK, keys: [client, orderNumber] }, {
       client, requestedBy: input.requestedBy, transactionCode: ORDER_CONFIRMATION_ALIAS,
     });
@@ -794,8 +822,38 @@ export async function enterOrderConfirmation(client: string, input: {
   });
 }
 
-export async function getOrderConfirmation(client: string, confirmationNumber: string): Promise<OrderConfirmationView | null> {
+async function getWith(client: string, confirmationNumber: string, mode: ConfirmMode): Promise<OrderConfirmationView | null> {
   const number = clean(confirmationNumber).toUpperCase();
   if (!number) return null;
-  return withTenant(client, (tx) => storedView(tx, client, number));
+  return withTenant(client, async (tx) => {
+    const reach = await confirmReach(tx, client, mode);
+    const stored = await storedView(tx, client, number);
+    if (!stored) return null;
+    if (reach) {
+      const found = await rows(tx, sql`select plant from production_order where client = ${client} and order_number = ${stored.orderNumber}`);
+      if (!found[0] || !reach.reachable.includes(String(found[0].plant))) return null;
+    }
+    return stored;
+  });
 }
+
+/** Session, `PROD.CONFIRM.ORDER` and company scope: an order at a plant out of reach answers as a missing one. */
+export async function loadOrderConfirmation(
+  client: string, input: Parameters<typeof loadWith>[1], authorization: ServiceAuthorityContext | undefined,
+) { return loadWith(client, input, { authorization }); }
+export async function previewOrderConfirmation(
+  client: string, input: Parameters<typeof previewWith>[1], authorization: ServiceAuthorityContext | undefined,
+) { return previewWith(client, input, { authorization }); }
+/** The recorded user is the session user, never `requestedBy`. */
+export async function enterOrderConfirmation(
+  client: string, input: Parameters<typeof enterWith>[1], authorization: ServiceAuthorityContext | undefined,
+) { return enterWith(client, input, { authorization }); }
+export async function getOrderConfirmation(
+  client: string, confirmationNumber: string, authorization: ServiceAuthorityContext | undefined,
+) { return getWith(client, confirmationNumber, { authorization }); }
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function loadOrderConfirmationForProvisioning(client: string, input: Parameters<typeof loadWith>[1]) { return loadWith(client, input, 'unscoped'); }
+export async function previewOrderConfirmationForProvisioning(client: string, input: Parameters<typeof previewWith>[1]) { return previewWith(client, input, 'unscoped'); }
+export async function enterOrderConfirmationForProvisioning(client: string, input: Parameters<typeof enterWith>[1]) { return enterWith(client, input, 'unscoped'); }
+export async function getOrderConfirmationForProvisioning(client: string, confirmationNumber: string) { return getWith(client, confirmationNumber, 'unscoped'); }

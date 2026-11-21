@@ -13,6 +13,8 @@
 import { sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant, type Tx } from '../../platform/db/client';
 
 export const PLANNED_ORDER_DISPLAY_CAPABILITY = 'PROD.PLANNEDORDER.DISPLAY';
@@ -169,14 +171,39 @@ const ORDER_SQL = sql`
     left join production_order conv on conv.client = o.client and conv.planned_order_number = o.order_number
 `;
 
-export async function getPlannedOrder(client: string, orderNumber: string): Promise<PlannedOrderView | null> {
+export type PlannedOrderMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+
+async function plannedOrderReach(tx: Tx, client: string, mode: PlannedOrderMode): Promise<string[] | null> {
+  if (mode === 'unscoped') return null;
+  const actor = await purchasingActor(
+    tx, client, mode.authorization, [PLANNED_ORDER_DISPLAY_CAPABILITY],
+    (m, r) => new PlannedOrderDisplayError(m, r),
+  );
+  return reachablePlantsInTx(tx, client, actor);
+}
+
+/** Session, `PROD.PLANNEDORDER.DISPLAY` and company scope: an order at a plant out of reach answers as a missing one. */
+export async function getPlannedOrder(
+  client: string, orderNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<PlannedOrderView | null> {
+  return getPlannedOrderWith(client, orderNumber, { authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function getPlannedOrderForProvisioning(client: string, orderNumber: string): Promise<PlannedOrderView | null> {
+  return getPlannedOrderWith(client, orderNumber, 'unscoped');
+}
+
+async function getPlannedOrderWith(client: string, orderNumber: string, mode: PlannedOrderMode): Promise<PlannedOrderView | null> {
   const number = orderNumberOf(orderNumber);
   return withTenant(client, async (tx) => {
+    const reachable = await plannedOrderReach(tx, client, mode);
     const found = await rows(tx, sql`
       ${ORDER_SQL}
      where o.client = ${client} and o.order_number = ${number}
     `);
     if (!found[0]) return null;
+    if (reachable && !reachable.includes(String(found[0].plant))) return null;
     const dependents = await rows(tx, sql`
       select d.item_number, d.material_number, coalesce(m.description, '') as description,
              d.quantity::text as quantity, d.unit, d.requirement_date::text as requirement_date, d.status
@@ -197,11 +224,22 @@ export async function getPlannedOrder(client: string, orderNumber: string): Prom
   });
 }
 
-export async function listPlannedOrders(client: string, filter: {
-  plant?: string | null;
-  materialNumber?: string | null;
-  offset?: number;
-}): Promise<{ rows: PlannedOrderListRow[]; total: number; limit: number }> {
+type PlannedOrderFilter = { plant?: string | null; materialNumber?: string | null; offset?: number };
+type PlannedOrderList = { rows: PlannedOrderListRow[]; total: number; limit: number };
+
+/** Session, `PROD.PLANNEDORDER.DISPLAY` and company scope: only orders at reachable plants are listed. */
+export async function listPlannedOrders(
+  client: string, filter: PlannedOrderFilter, authorization: ServiceAuthorityContext | undefined,
+): Promise<PlannedOrderList> {
+  return listPlannedOrdersWith(client, filter, { authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function listPlannedOrdersForProvisioning(client: string, filter: PlannedOrderFilter): Promise<PlannedOrderList> {
+  return listPlannedOrdersWith(client, filter, 'unscoped');
+}
+
+async function listPlannedOrdersWith(client: string, filter: PlannedOrderFilter, mode: PlannedOrderMode): Promise<PlannedOrderList> {
   const plant = clean(filter.plant).toUpperCase();
   const materialNumber = clean(filter.materialNumber).toUpperCase();
   if (!plant && !materialNumber) fail('A plant or a material is required to list planned orders.', 'Enter the order number, or name a plant.');
@@ -209,10 +247,14 @@ export async function listPlannedOrders(client: string, filter: {
   if (materialNumber.length > 40) fail('The material is too long.');
   const offset = Math.max(0, filter.offset ?? 0);
   return withTenant(client, async (tx) => {
+    const reachable = await plannedOrderReach(tx, client, mode);
+    if (plant && reachable && !reachable.includes(plant)) fail(`The plant ${plant} does not stand.`, 'Name a plant that stands in this tenant.');
+    const reach = reachable ? plantReachFilter('plant', reachable) : sql``;
+    const reachO = reachable ? plantReachFilter('o.plant', reachable) : sql``;
     const count = await rows(tx, sql`
       select count(*)::int as total
         from planned_order
-       where client = ${client}
+       where client = ${client} ${reach}
          and (${plant}::text = '' or plant = ${plant})
          and (${materialNumber}::text = '' or material_number = ${materialNumber})
     `);
@@ -221,7 +263,7 @@ export async function listPlannedOrders(client: string, filter: {
              o.quantity::text as quantity, o.unit, o.finish_date::text as finish_date, o.firming_status
         from planned_order o
         join material m on m.client = o.client and m.material_number = o.material_number
-       where o.client = ${client}
+       where o.client = ${client} ${reachO}
          and (${plant}::text = '' or o.plant = ${plant})
          and (${materialNumber}::text = '' or o.material_number = ${materialNumber})
        order by o.finish_date, o.order_number

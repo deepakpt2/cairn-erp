@@ -7,7 +7,7 @@ import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { cancelConfirmation } from '../src/modules/production/confirmation-cancel';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
-import { enterOrderConfirmation, scaledEffectWithinLimit } from '../src/modules/production/order-confirmation';
+import { enterOrderConfirmationForProvisioning as enterOrderConfirmation, scaledEffectWithinLimit } from '../src/modules/production/order-confirmation';
 import { runOrderInformation } from '../src/modules/production/order-information';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { changeProductionOrder } from '../src/modules/production/production-order-change';

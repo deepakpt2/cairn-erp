@@ -8,9 +8,9 @@ import { mrpController, productionOrder } from '../src/modules/inventory/schema'
 import { mrpDependentRequirement, plannedOrder, productionOrderType } from '../src/modules/production/schema';
 import {
   PlannedOrderDisplayError,
-  getPlannedOrder,
+  getPlannedOrderForProvisioning as getPlannedOrder,
   holdsPlannedOrderDisplayAuthority,
-  listPlannedOrders,
+  listPlannedOrdersForProvisioning as listPlannedOrders,
   plannedOrderDisplayRefusal,
 } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';

@@ -15,7 +15,7 @@ import {
 } from '../src/modules/production/confirmation-cancel';
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
-import { enterOrderConfirmation } from '../src/modules/production/order-confirmation';
+import { enterOrderConfirmationForProvisioning as enterOrderConfirmation } from '../src/modules/production/order-confirmation';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { getProductionConfirmationDisplay, searchProductionConfirmations } from '../src/modules/production/confirmation-display';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';

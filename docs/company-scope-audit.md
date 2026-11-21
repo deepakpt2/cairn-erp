@@ -275,3 +275,12 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - The output job's per-message processing (`processMaterialOutputMessage`) runs as the job and is unchanged.
 - Storage-location, material-type, valuation-class and other configuration lists carry no company data and were left.
 - Not demonstrated at runtime; nothing browser-tested.
+
+## Phase 9a — Production: planned orders and order confirmation
+
+- Scoped (session, capability, Company Code scope, Plant scope; plant must name a company in reach): planned-order display/list (`PROD.PLANNEDORDER.DISPLAY`), create, change, and order confirmation load/preview/enter/get (`PROD.CONFIRM.ORDER`).
+- An order at another company's plant, a no-company plant or a plant outside the Plant scope answers exactly as a missing order ("does not stand"). Create at an unreachable plant, or by copying an unreachable order, is refused; nothing is written.
+- The recorded user is the session user (overrides `changedBy` / `requestedBy`).
+- `...ForProvisioning` variants (tests, demo seed, scripts) run unscoped and are not imported from `src/app`.
+- Tests: `tests/company-scope-production.test.ts` (8). Existing production tests repointed to the provisioning variants.
+- Residual, not yet scoped: time ticket, order settlement (single and collective), MRP run, routing, work centre, BOM, availability, production-order types. Production-order display shims used by the confirmation page were not separately reviewed. Not browser-tested; full suite not run.

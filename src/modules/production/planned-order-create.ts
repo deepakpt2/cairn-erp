@@ -19,10 +19,12 @@ import { sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { allocateNumber, NumberRangeError } from '../../platform/numbering';
 import { unitOfMeasure } from '../../platform/tables/reference';
-import { getPlannedOrder, type PlannedOrderView } from './planned-order-display';
+import { getPlannedOrderForProvisioning, type PlannedOrderView } from './planned-order-display';
 
 export const PLANNED_ORDER_CREATE_CAPABILITY = 'PROD.PLANNEDORDER.CREATE';
 export const PLANNED_ORDER_CREATE_ROUTE = '/production/planned-order-create';
@@ -147,17 +149,39 @@ function sameRequest(
     && Number(standing.quantity) === Number(quantity);
 }
 
-export async function createPlannedOrder(input: PlannedOrderCreateInput): Promise<PlannedOrderCreateResult> {
+type CreateMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+
+/** Session, `PROD.PLANNEDORDER.CREATE` and company scope: the plant (own or the reference's) must be reachable; the recorded user is the session user. */
+export async function createPlannedOrder(
+  input: PlannedOrderCreateInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<PlannedOrderCreateResult> {
+  return createWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function createPlannedOrderForProvisioning(input: PlannedOrderCreateInput): Promise<PlannedOrderCreateResult> {
+  return createWith(input, 'unscoped');
+}
+
+async function createWith(input: PlannedOrderCreateInput, mode: CreateMode): Promise<PlannedOrderCreateResult> {
   const refusal = plannedOrderCreateRefusal(input.named);
   if (refusal) fail(refusal);
   const requestKey = clean(input.requestKey);
   if (!requestKey || requestKey.length > 64) fail('A request key is required.', 'Save again from the screen. The key keeps a repeated save from creating a second order.');
-  const actor = clean(input.changedBy);
+  let actor = clean(input.changedBy);
   if (!actor || actor.length > 60) fail('The user who created the order is required.');
   const referenceOrder = clean(input.referenceOrder);
   if (referenceOrder.length > 12) fail('The reference planned order number is too long.');
 
   const saved = await withTenant(input.client, async (tx) => {
+    let reachable: string[] | null = null;
+    if (mode !== 'unscoped') {
+      const verified = await purchasingActor(
+        tx, input.client, mode.authorization, [PLANNED_ORDER_CREATE_CAPABILITY], (m, r) => new PlannedOrderCreateError(m, r),
+      );
+      reachable = await reachablePlantsInTx(tx, input.client, verified);
+      actor = verified.username;
+    }
     const reference = referenceOrder
       ? (await rows(tx, sql`
           select order_number, material_number, plant, quantity::text as quantity, unit,
@@ -166,11 +190,15 @@ export async function createPlannedOrder(input: PlannedOrderCreateInput): Promis
            where client = ${input.client} and order_number = ${referenceOrder}
         `))[0]
       : undefined;
+    if (reference && reachable && !reachable.includes(String(reference.plant))) {
+      fail(`Planned order ${referenceOrder} does not stand.`, 'Choose a reference in this tenant. The original is not changed.');
+    }
     if (referenceOrder && !reference) fail(`Planned order ${referenceOrder} does not stand.`, 'Choose a reference in this tenant. The original is not changed.');
     const materialNumber = clean(input.materialNumber).toUpperCase() || String(reference?.material_number ?? '');
     const plant = clean(input.plant).toUpperCase() || String(reference?.plant ?? '');
     if (!materialNumber || materialNumber.length > 40) fail('A material is required.');
     if (!plant || plant.length > 10) fail('A plant is required.');
+    if (reachable && !reachable.includes(plant)) fail(`The plant ${plant} does not stand.`, 'Name a plant that stands in this tenant.');
     const material = (await rows(tx, sql`
       select m.material_number, m.base_unit, m.is_blocked, m.marked_for_deletion,
              mp.procurement_type, mp.in_house_production_days
@@ -316,7 +344,7 @@ export async function createPlannedOrder(input: PlannedOrderCreateInput): Promis
     return { orderNumber, created: true, copied: Boolean(reference), warnings };
   });
 
-  const order = await getPlannedOrder(input.client, saved.orderNumber);
+  const order = await getPlannedOrderForProvisioning(input.client, saved.orderNumber);
   if (!order) fail('The planned order was not created.');
   return { order, created: saved.created, copied: saved.copied, warnings: saved.warnings };
 }

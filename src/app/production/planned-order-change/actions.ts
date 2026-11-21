@@ -38,6 +38,7 @@ export async function changePlannedOrderAction(
     const result = await changePlannedOrder({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       orderNumber,
       expectedVersion: Number(text(form, 'version')),
       quantity: text(form, 'quantity'),

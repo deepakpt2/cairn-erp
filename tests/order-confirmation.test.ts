@@ -14,11 +14,11 @@ import { saveOrderTypeParameter } from '../src/modules/production/order-type-par
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import {
-  enterOrderConfirmation,
-  loadOrderConfirmation,
+  enterOrderConfirmationForProvisioning as enterOrderConfirmation,
+  loadOrderConfirmationForProvisioning as loadOrderConfirmation,
   operationEffectQuantity,
   orderConfirmationRefusal,
-  previewOrderConfirmation,
+  previewOrderConfirmationForProvisioning as previewOrderConfirmation,
 } from '../src/modules/production/order-confirmation';
 import { enterTimeTicket, getTimeTicket, loadTimeTicket } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';

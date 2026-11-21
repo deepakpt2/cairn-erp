@@ -58,7 +58,7 @@ export default async function OrderConfirmationPage({
           orderNumber,
           productionVersion: one(params.version),
           postingDate: one(params.postingDate),
-        });
+        }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
       } catch (error) {
         openError = error instanceof OrderConfirmationError ? error.message : 'The order could not be read.';
       }

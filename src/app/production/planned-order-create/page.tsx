@@ -58,14 +58,14 @@ export default async function PlannedOrderCreatePage({
   let listed: Awaited<ReturnType<typeof listPlannedOrders>> | null = null;
   if (!refusal && referenceOrder) {
     try {
-      reference = await getPlannedOrder(session.user.client, referenceOrder);
+      reference = await getPlannedOrder(session.user.client, referenceOrder, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
       if (!reference) openError = `Planned order ${referenceOrder} does not stand.`;
     } catch (error) {
       openError = error instanceof PlannedOrderDisplayError ? error.message : 'The reference order could not be read.';
     }
   } else if (!refusal && (plant || materialNumber)) {
     try {
-      listed = await listPlannedOrders(session.user.client, { plant, materialNumber });
+      listed = await listPlannedOrders(session.user.client, { plant, materialNumber }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof PlannedOrderDisplayError ? error.message : 'The planned orders could not be listed.';
     }

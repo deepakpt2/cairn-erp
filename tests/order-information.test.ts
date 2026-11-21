@@ -12,8 +12,8 @@ import {
   runOrderInformation,
   saveOrderInformationLayout,
 } from '../src/modules/production/order-information';
-import { enterOrderConfirmation } from '../src/modules/production/order-confirmation';
-import { createPlannedOrder } from '../src/modules/production/planned-order-create';
+import { enterOrderConfirmationForProvisioning as enterOrderConfirmation } from '../src/modules/production/order-confirmation';
+import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
