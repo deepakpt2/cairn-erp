@@ -7,6 +7,7 @@ import {
   BILLING_ROUTE,
   BILLING_SPLIT_ROUTE,
   billingDueList,
+  billingRebateAccruals,
   getBilling,
   groupDueList,
   listBillings,
@@ -15,7 +16,6 @@ import {
 } from '@/modules/sales/billing';
 import { listBillablePlanDates } from '@/modules/sales/billing-plan';
 import { orderDownPayments } from '@/modules/sales/down-payment';
-import { rebateAccrualsForBilling } from '@/modules/sales/rebate';
 import Billing from './Billing';
 import { LinkButton, Page } from '@/ui/kit';
 
@@ -76,12 +76,12 @@ export default async function SalesBillingPage({ searchParams }: {
   // What the customer was asked to pay in advance on this order, and what of it arrived: the register
   // beside the document that will consume it.
   const advances = selected?.orderNumber
-    ? await orderDownPayments(client, selected.orderNumber)
+    ? await orderDownPayments(client, selected.orderNumber, auth).catch(() => [])
     : [];
   // The rebate this document earned: a provision posted beside the receivable and settled later, on a
   // credit memo of its own. It changed nothing the customer was charged here.
   const rebates = selected
-    ? await rebateAccrualsForBilling(client, selected.billingNumber)
+    ? await billingRebateAccruals(client, selected.billingNumber, auth).catch(() => [])
     : [];
   // What the customer was sent from this document. An invoice is not finished when it is posted; it is
   // finished when the customer has it, and the message is where that stands recorded.

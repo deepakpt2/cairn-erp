@@ -41,7 +41,7 @@ import {
 } from '../src/modules/sales/billing-plan';
 import {
   cancelDownPaymentRequest, orderDownPayments, requestDownPaymentFromPlanDate,
-} from '../src/modules/sales/down-payment';
+} from './helpers/sales-authorized';
 import { journalEntry } from '../src/modules/finance/schema';
 import {
   assignSalesAreaDimensions,

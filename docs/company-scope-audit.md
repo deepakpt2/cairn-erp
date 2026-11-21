@@ -174,3 +174,14 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** the generic goods-movement reversal (`reverseMaterialDocument`) of a 651 is not scoped here. Not browser-tested.
 
 **Still not covered in sales:** rebates, down payments, conditions, analysis/registers (document register), shipping point, credit-control area.
+
+## Phase 6e-2 — sales area: rebate agreements and down payments
+
+**Found:** `saveRebateAgreement`, `releaseRebateAgreement`, `settleRebateAgreement`, `listRebateAgreements`, `rebateRegister`, `rebateConditionTypes` and `rebateAccrualsForBilling` checked no session, capability or scope and recorded a caller-supplied `changedBy`; settlement pays money out. `requestDownPaymentFromPlanDate`, `cancelDownPaymentRequest` and `orderDownPayments` had the same gap, and a request could be raised against any company's order.
+
+**Covered:** rebate maintenance, release, settlement, list and register judge session, the rebate capability (settlement: `SALES.CREDIT.MEMO.POST`) and explicit Company Code scope inside their own transaction. An agreement is reachable when its sales organisation's company is inside the Company Code scope and its sales area (org, channel, division) is inside any such restriction the actor holds; a sales organisation with no company, or a blank level where the actor holds a restriction for it, is outside the reach. Save judges the sales area it names, and an existing agreement it changes. An out-of-reach agreement answers as a missing one. A billing document's provisions are read through `billingRebateAccruals`, which judges the billing document's reach first; the unscoped reader is `rebateAccrualsForBillingForProvisioning`. Down payments judge the order's reach (company, sales area, plants) through the same order check: request and withdrawal answer an out-of-reach order as a missing one (`Order X does not exist.` / not a down payment request); the register returns nothing for one. Recorded actor is the session user. `accrueRebatesForBilling`, `reverseRebateAccrualsForBilling` and `clearDownPaymentsForInvoice` stay internal, reached only from billing's already-scoped posting paths.
+- Tests: 6 more in `tests/company-scope-sales.test.ts` (27 in the file); `sales-rebate` and `sales-down-payment` use the `sales-authorized` wrappers.
+
+**Limits:** the settlement's credit memo is posted by `postCustomerCreditMemo`, whose own finance gate is outside this phase. A rebate agreement's customer is not checked against any customer-level scope (none exists). `rebateConditionTypes` is a master-data list gated by session and capability only. Not browser-tested.
+
+**Still not covered in sales:** conditions, analysis/registers (document register), shipping point, credit-control area.

@@ -32,7 +32,7 @@ interface Props {
   /** The advances of the selected document's order: what was asked, what arrived, what was cleared. */
   advances: Awaited<ReturnType<typeof import('@/modules/sales/down-payment').orderDownPayments>>;
   /** What this document earned against the rebate agreements it fell inside. */
-  rebates: Awaited<ReturnType<typeof import('@/modules/sales/rebate').rebateAccrualsForBilling>>;
+  rebates: Awaited<ReturnType<typeof import('@/modules/sales/billing').billingRebateAccruals>>;
   /** What was sent from this document, and the state each issue reached. */
   outputs: Awaited<ReturnType<typeof import('@/modules/sales/output').listSalesOutput>>['rows'];
   deliveryNumber: string;

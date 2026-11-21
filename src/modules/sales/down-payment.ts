@@ -54,9 +54,19 @@ import {
 } from './schema';
 import { DOCUMENT_TYPE_REMEDY, STANDARD_DOWN_PAYMENT_REQUEST_TYPE, salesDocumentTypeFor } from './document-type';
 import { loadBillablePlanDate, markPlanDateBilled, releasePlanDateForBilling } from './billing-plan';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { orderInReach } from './sales-order';
+import { salesActor } from './sales-scope';
 import { documentPartners, writeDocumentPartners } from './partners';
 
 export const DOWN_PAYMENT_OBJECT_CLASS = 'sales_down_payment_request';
+
+/** The down-payment screens sit on billing: its creator, its canceller, or both may ask and read. */
+const DOWN_PAYMENT_ACCESS_CAPABILITIES = ['SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL'] as const;
+
+function downPaymentActor(tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined, capabilities: readonly string[]) {
+  return salesActor(tx, client, authorization, capabilities, (m, r) => new DownPaymentError(m, r));
+}
 
 export class DownPaymentError extends Error {
   remedy?: string;
@@ -170,12 +180,17 @@ async function requestIndicators(
  * money cannot move until the receipt, which is accounting's own act under its own authority.
  */
 export async function requestDownPaymentFromPlanDate(
-  raw: DownPaymentRequestInput,
+  raw: DownPaymentRequestInput & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<DownPaymentRequestResult> {
   const parsed = downPaymentRequestInput.parse(raw);
-  const { client, orderNumber, orderLineNumber, dateNumber, changedBy } = parsed;
+  const { client, orderNumber, orderLineNumber, dateNumber } = parsed;
   const postingDate = (parsed.postingDate || '') || parsed.billingDate;
   return withTenant(client, async (tx) => {
+    const actor = await downPaymentActor(tx, client, raw.authorization, ['SALES.BILLING.CREATE']);
+    const changedBy = actor.username;
+    if (!(await orderInReach(tx, client, actor, orderNumber))) {
+      throw new DownPaymentError(`Order ${orderNumber} does not exist.`, 'Name an order that stands.');
+    }
     // One date, one request. Two clerks asking for the same date at the same moment is the whole
     // reason the lock is taken before the date is read rather than after it.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/plan/${orderNumber}/${orderLineNumber}/${dateNumber}`}, 0))`);
@@ -190,6 +205,9 @@ export async function requestDownPaymentFromPlanDate(
           eq(salesDownPaymentRequest.billingNumber, existing.billingNumber),
         )).limit(1);
         if (raised) {
+          if (!(await orderInReach(tx, client, actor, raised.orderNumber))) {
+            throw new DownPaymentError('This request key was used for another document.', 'Use a new request key.');
+          }
           const [request] = await tx.select().from(customerDownPaymentRequest).where(and(
             eq(customerDownPaymentRequest.client, client),
             eq(customerDownPaymentRequest.requestNumber, raised.requestNumber),
@@ -435,16 +453,18 @@ export async function requestDownPaymentFromPlanDate(
  * against what is owed.
  */
 export async function cancelDownPaymentRequest(
-  raw: DownPaymentCancelInput,
+  raw: DownPaymentCancelInput & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<{ billingNumber: string; requestNumber: string; releasedDate: number | null }> {
   const parsed = downPaymentCancelInput.parse(raw);
-  const { client, billingNumber, changedBy } = parsed;
+  const { client, billingNumber } = parsed;
   return withTenant(client, async (tx) => {
+    const actor = await downPaymentActor(tx, client, raw.authorization, ['SALES.BILLING.CANCEL']);
+    const changedBy = actor.username;
     const [raised] = await tx.select().from(salesDownPaymentRequest).where(and(
       eq(salesDownPaymentRequest.client, client),
       eq(salesDownPaymentRequest.billingNumber, billingNumber),
     )).limit(1);
-    if (!raised) {
+    if (!raised || !(await orderInReach(tx, client, actor, raised.orderNumber))) {
       throw new DownPaymentError(
         `Billing document ${billingNumber} is not a down payment request in this tenant.`,
         'Cancel a request document — one raised from a plan date maintained as a down payment.',
@@ -540,8 +560,12 @@ export interface OrderDownPayment {
  * the accounting engine says was allocated to the request — the receipts themselves are accounting's
  * own documents and are not restated here.
  */
-export async function orderDownPayments(client: string, orderNumber: string): Promise<OrderDownPayment[]> {
+export async function orderDownPayments(
+  client: string, orderNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<OrderDownPayment[]> {
   return withTenant(client, async (tx) => {
+    const actor = await downPaymentActor(tx, client, authorization, DOWN_PAYMENT_ACCESS_CAPABILITIES);
+    if (!(await orderInReach(tx, client, actor, orderNumber))) return [];
     const rows = await tx.select().from(salesDownPaymentRequest).where(and(
       eq(salesDownPaymentRequest.client, client),
       eq(salesDownPaymentRequest.orderNumber, orderNumber),

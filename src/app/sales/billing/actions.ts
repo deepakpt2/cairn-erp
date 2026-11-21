@@ -268,6 +268,7 @@ export async function requestDownPaymentAction(
   const dateNumber = Number(text(form, 'dateNumber') || '0');
   try {
     const result = await requestDownPaymentFromPlanDate({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       orderNumber,
@@ -311,6 +312,7 @@ export async function cancelDownPaymentAction(
   const billingNumber = text(form, 'billingNumber');
   try {
     const result = await cancelDownPaymentRequest({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       billingNumber,

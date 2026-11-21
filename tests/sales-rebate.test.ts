@@ -37,7 +37,7 @@ import {
   releaseRebateAgreement,
   saveRebateAgreement,
   settleRebateAgreement,
-} from '../src/modules/sales/rebate';
+} from './helpers/sales-authorized';
 import { billingDocument, salesDocumentCondition } from '../src/modules/sales/schema';
 import {
   assignSalesAreaDimensions,
@@ -152,7 +152,7 @@ describe('money given back: the rebate (9251)', () => {
       `);
       await tx.execute(sql`
         insert into sales_org (client, sales_org, company_code, currency, created_by)
-        values (${tenant.client}, '1000', '1000', 'USD', ${ACTOR}) on conflict do nothing
+        values (${tenant.client}, '1000', '1000', 'USD', ${ACTOR}), (${tenant.client}, '2000', '1000', 'USD', ${ACTOR}) on conflict do nothing
       `);
       await tx.execute(sql`
         insert into sales_area (client, sales_org, distribution_channel, division, name, created_by)

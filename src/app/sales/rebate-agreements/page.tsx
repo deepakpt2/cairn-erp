@@ -38,9 +38,9 @@ export default async function SalesRebateAgreementsPage({ searchParams }: {
   const agreementNumber = (params.agreement ?? '').trim().toUpperCase();
   const customerNumber = (params.customer ?? '').trim().toUpperCase();
   const [agreements, types, register] = await Promise.all([
-    listRebateAgreements(client, customerNumber ? { customerNumber } : {}),
-    rebateConditionTypes(client),
-    agreementNumber ? rebateRegister(client, agreementNumber) : Promise.resolve(null),
+    listRebateAgreements(client, customerNumber ? { customerNumber } : {}, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
+    rebateConditionTypes(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
+    agreementNumber ? rebateRegister(client, agreementNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : Promise.resolve(null),
   ]);
 
   return (

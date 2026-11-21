@@ -18,6 +18,13 @@ import {
   createReturnsDelivery as createRD, createReturnsOrder as createRO, listReturnsDeliveries as listRD,
   listReturnsOrders as listRO, postReturnsDelivery as postRD, postReturnsReceipt as postRR,
 } from '../../src/modules/sales/returns';
+import {
+  listRebateAgreements as listRA, rebateAccrualsForBillingForProvisioning, rebateRegister as regRA,
+  releaseRebateAgreement as releaseRA, saveRebateAgreement as saveRA, settleRebateAgreement as settleRA,
+} from '../../src/modules/sales/rebate';
+import {
+  cancelDownPaymentRequest as cancelDP, orderDownPayments as ordersDP, requestDownPaymentFromPlanDate as requestDP,
+} from '../../src/modules/sales/down-payment';
 import { listDueRegister as dueR } from '../../src/modules/sales/registers';
 import { createFinanceActor, refreshFinanceActorScopes, type FinanceActor } from './finance-actor';
 
@@ -26,6 +33,7 @@ export const SALES_TEST_CAPABILITIES = [
   'SALES.ORDER.AVAILABILITY.CHECK', 'CFG.SALES.CONDITION.MAINTAIN', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
   'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.CREDIT.REQUEST.CREATE',
   'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST',
+  'SALES.REBATE.MAINTAIN', 'SALES.CREDIT.MEMO.POST',
 ];
 
 const actors = new Map<string, Promise<FinanceActor>>();
@@ -116,4 +124,30 @@ export async function listReturnsOrders(client: string, filter: NonNullable<Para
 }
 export async function listReturnsDeliveries(client: string, filter: NonNullable<Parameters<typeof listRD>[1]> = {}) {
   return listRD(client, filter, await salesTestAuth(client));
+}
+
+export const rebateAccrualsForBilling = rebateAccrualsForBillingForProvisioning;
+export async function saveRebateAgreement(input: Opt<typeof saveRA>) {
+  return saveRA({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof saveRA>[0]);
+}
+export async function releaseRebateAgreement(input: Opt<typeof releaseRA>) {
+  return releaseRA({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof releaseRA>[0]);
+}
+export async function settleRebateAgreement(input: Opt<typeof settleRA>) {
+  return settleRA({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof settleRA>[0]);
+}
+export async function listRebateAgreements(client: string, filter?: Parameters<typeof listRA>[1]) {
+  return listRA(client, filter, await salesTestAuth(client));
+}
+export async function rebateRegister(client: string, agreementNumber: string) {
+  return regRA(client, agreementNumber, await salesTestAuth(client));
+}
+export async function requestDownPaymentFromPlanDate(input: Opt<typeof requestDP>) {
+  return requestDP({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof requestDP>[0]);
+}
+export async function cancelDownPaymentRequest(input: Opt<typeof cancelDP>) {
+  return cancelDP({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof cancelDP>[0]);
+}
+export async function orderDownPayments(client: string, orderNumber: string) {
+  return ordersDP(client, orderNumber, await salesTestAuth(client));
 }

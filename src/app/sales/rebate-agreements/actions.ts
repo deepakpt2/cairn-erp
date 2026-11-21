@@ -59,6 +59,7 @@ export async function saveRebateAgreementAction(
   }
   try {
     const agreement = await saveRebateAgreement({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       agreementNumber: optional(form, 'agreementNumber')?.toUpperCase(),
@@ -109,6 +110,7 @@ export async function releaseRebateAgreementAction(
   }
   try {
     const agreement = await releaseRebateAgreement({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       agreementNumber,
@@ -156,6 +158,7 @@ export async function settleRebateAgreementAction(
   const amount = optional(form, 'amount');
   try {
     const settlement = await settleRebateAgreement({
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       client: session.user.client,
       changedBy: session.user.username,
       agreementNumber,

@@ -67,7 +67,7 @@ import {
 } from './billing-plan';
 import { type DownPaymentClearing, clearDownPaymentsForInvoice } from './down-payment';
 import {
-  type RebateAccrualPosted, accrueRebatesForBilling, reverseRebateAccrualsForBilling,
+  type RebateAccrualPosted, accrueRebatesForBilling, rebateAccrualsForBillingForProvisioning, reverseRebateAccrualsForBilling, type RebateAccrualView,
 } from './rebate';
 import { deliveryInReach, standingDetermination } from './delivery';
 import { blockingEntries, describeBlocked } from './incompletion';
@@ -2905,4 +2905,15 @@ export async function goodsIssueStands(
     )).limit(1);
     return row?.stands ?? false;
   });
+}
+
+/** The rebate provisions a billing document earned, read only for a document inside the actor's reach. */
+export async function billingRebateAccruals(
+  client: string, billingNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<RebateAccrualView[]> {
+  const reachable = await withTenant(client, async (tx) => {
+    const actor = await billingActor(tx, client, authorization);
+    return billingInReach(tx, client, actor, billingNumber);
+  });
+  return reachable ? rebateAccrualsForBillingForProvisioning(client, billingNumber) : [];
 }

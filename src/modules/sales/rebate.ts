@@ -31,6 +31,9 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { salesOrg as salesOrgTable } from '../foundation/schema';
+import { salesActor, salesDocumentReachable } from './sales-scope';
 import { CustomerCreditMemoError, postCustomerCreditMemo } from '../finance/customer-credit-memo';
 import { bpRole, businessPartner } from '../foundation/business-partner-schema';
 import { customerSalesArea } from '../foundation/customer-sales-area-schema';
@@ -239,6 +242,41 @@ function agreementView(
   };
 }
 
+type RebateActor = Awaited<ReturnType<typeof salesActor>>;
+
+/** The maintainer, the releaser and the settler; any of them may read the agreements. */
+const REBATE_ACCESS_CAPABILITIES = [REBATE_CAPABILITY, REBATE_SETTLEMENT_CAPABILITY] as const;
+
+function rebateActor(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined, capabilities: readonly string[],
+) {
+  return salesActor(tx, client, authorization, capabilities, (m, r) => new RebateError(m, r));
+}
+
+/** The agreement's sales area is inside the actor's reach, and its sales organisation's company is inside the Company Code scope. */
+async function areaInReach(
+  tx: Tx, client: string, actor: RebateActor,
+  area: { salesOrg: string; distributionChannel: string; division: string },
+): Promise<boolean> {
+  const [org] = await tx.select({ companyCode: salesOrgTable.companyCode }).from(salesOrgTable).where(and(
+    eq(salesOrgTable.client, client), eq(salesOrgTable.salesOrg, area.salesOrg),
+  )).limit(1);
+  if (!org?.companyCode) return false;
+  return salesDocumentReachable(actor, { companyCode: org.companyCode, ...area });
+}
+
+/** Read one agreement inside the reach; one outside it answers exactly as a missing one. */
+async function readAgreementInReach(tx: Tx, client: string, actor: RebateActor, agreementNumber: string) {
+  const row = await readAgreement(tx, client, agreementNumber);
+  if (!(await areaInReach(tx, client, actor, row))) {
+    throw new RebateError(
+      `Rebate agreement ${agreementNumber} does not stand for this tenant.`,
+      'Read the agreements that stand, then name one of them.',
+    );
+  }
+  return row;
+}
+
 async function readAgreement(tx: Tx, client: string, agreementNumber: string) {
   const [row] = await tx.select().from(salesRebateAgreement).where(and(
     eq(salesRebateAgreement.client, client),
@@ -272,10 +310,20 @@ async function accrualsOf(tx: Tx, client: string, agreementNumber: string) {
  * rewritten underneath money that has already been provided for. The period it runs to can.
  */
 export async function saveRebateAgreement(
-  input: SaveRebateAgreementInput,
+  input: SaveRebateAgreementInput & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<RebateAgreementView> {
   const parsed = agreementInput.parse(input);
   return withTenant(parsed.client, async (tx) => {
+    const actor = await rebateActor(tx, parsed.client, input.authorization, [REBATE_CAPABILITY]);
+    parsed.changedBy = actor.username;
+    if (!(await areaInReach(tx, parsed.client, actor, {
+      salesOrg: parsed.salesOrg, distributionChannel: parsed.distributionChannel, division: parsed.division,
+    }))) {
+      throw new RebateError(
+        `Sales organisation ${parsed.salesOrg} does not stand for this tenant, so no rebate can be promised in it.`,
+        'Name a sales organisation that stands.',
+      );
+    }
     if (parsed.validTo < parsed.validFrom) {
       throw new RebateError(
         `An agreement that ends on ${parsed.validTo} before it begins on ${parsed.validFrom} covers no days at all.`,
@@ -321,7 +369,7 @@ export async function saveRebateAgreement(
     }
 
     const existing = parsed.agreementNumber
-      ? await readAgreement(tx, parsed.client, parsed.agreementNumber)
+      ? await readAgreementInReach(tx, parsed.client, actor, parsed.agreementNumber)
       : null;
 
     if (existing) {
@@ -437,11 +485,14 @@ export async function saveRebateAgreement(
  */
 export async function releaseRebateAgreement(input: {
   client: string;
+  authorization: ServiceAuthorityContext | undefined;
   agreementNumber: string;
   changedBy: string;
 }): Promise<RebateAgreementView> {
   return withTenant(input.client, async (tx) => {
-    const agreement = await readAgreement(tx, input.client, input.agreementNumber);
+    const actor = await rebateActor(tx, input.client, input.authorization, [REBATE_CAPABILITY]);
+    input = { ...input, changedBy: actor.username };
+    const agreement = await readAgreementInReach(tx, input.client, actor, input.agreementNumber);
     if (agreement.status === 'SETTLED' || agreement.status === 'CLOSED') {
       throw new RebateError(
         `Rebate agreement ${agreement.agreementNumber} stands ${agreement.status.toLowerCase()}, and what is paid out or abandoned is not released again.`,
@@ -474,9 +525,11 @@ export async function releaseRebateAgreement(input: {
 /** The agreements that stand, with what each has cost so far. */
 export async function listRebateAgreements(
   client: string,
-  filter?: { customerNumber?: string; status?: string },
+  filter: { customerNumber?: string; status?: string } | undefined,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<RebateAgreementView[]> {
   return withTenant(client, async (tx) => {
+    const actor = await rebateActor(tx, client, authorization, REBATE_ACCESS_CAPABILITIES);
     const rows = await tx.select().from(salesRebateAgreement).where(and(
       eq(salesRebateAgreement.client, client),
       filter?.customerNumber ? eq(salesRebateAgreement.customerNumber, filter.customerNumber) : undefined,
@@ -484,6 +537,7 @@ export async function listRebateAgreements(
     )).orderBy(asc(salesRebateAgreement.customerNumber), asc(salesRebateAgreement.agreementNumber));
     const out: RebateAgreementView[] = [];
     for (const row of rows) {
+      if (!(await areaInReach(tx, client, actor, row))) continue;
       out.push(agreementView(row, totalsOf(await accrualsOf(tx, client, row.agreementNumber))));
     }
     return out;
@@ -494,7 +548,7 @@ export async function listRebateAgreements(
  * What one billing document accrued. Read for the document itself, so a reader of an invoice can see
  * the provision it earned without going looking for the agreement behind it.
  */
-export async function rebateAccrualsForBilling(
+export async function rebateAccrualsForBillingForProvisioning(
   client: string,
   billingNumber: string,
 ): Promise<RebateAccrualView[]> {
@@ -511,9 +565,11 @@ export async function rebateAccrualsForBilling(
 export async function rebateRegister(
   client: string,
   agreementNumber: string,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<RebateRegister> {
   return withTenant(client, async (tx) => {
-    const agreement = await readAgreement(tx, client, agreementNumber);
+    const actor = await rebateActor(tx, client, authorization, REBATE_ACCESS_CAPABILITIES);
+    const agreement = await readAgreementInReach(tx, client, actor, agreementNumber);
     const accruals = await accrualsOf(tx, client, agreementNumber);
     return { agreement: agreementView(agreement, totalsOf(accruals)), accruals };
   });
@@ -592,13 +648,17 @@ async function accountsForMaterials(tx: Tx, input: {
  * agreement uses is what lets a tenant keep a volume rebate and a listing fee apart, priced by
  * different records and determined to different accounts.
  */
-export async function rebateConditionTypes(client: string): Promise<Array<{
+export async function rebateConditionTypes(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<Array<{
   conditionType: string;
   name: string;
   calculationType: string;
   accountKey: string | null;
 }>> {
-  return withTenant(client, (tx) => tx.select({
+  return withTenant(client, async (tx) => {
+    await rebateActor(tx, client, authorization, REBATE_ACCESS_CAPABILITIES);
+    return tx.select({
     conditionType: salesConditionType.conditionType,
     name: salesConditionType.name,
     calculationType: salesConditionType.calculationType,
@@ -607,7 +667,8 @@ export async function rebateConditionTypes(client: string): Promise<Array<{
     eq(salesConditionType.client, client),
     eq(salesConditionType.conditionClass, 'REBATE'),
     eq(salesConditionType.isActive, true),
-  )).orderBy(asc(salesConditionType.conditionType)));
+  )).orderBy(asc(salesConditionType.conditionType));
+  });
 }
 
 /* ─── The accrual ────────────────────────────────────────────────────────────────────────────── */
@@ -1165,11 +1226,13 @@ export interface RebateSettlement {
  * Settling more than accrued is refused: a promise is not a blank cheque.
  */
 export async function settleRebateAgreement(
-  input: SettleRebateAgreementInput,
+  input: SettleRebateAgreementInput & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<RebateSettlement> {
   const parsed = settlementInput.parse(input);
   return withTenant(parsed.client, async (tx) => {
-    const agreement = await readAgreement(tx, parsed.client, parsed.agreementNumber);
+    const actor = await rebateActor(tx, parsed.client, input.authorization, [REBATE_SETTLEMENT_CAPABILITY]);
+    parsed.changedBy = actor.username;
+    const agreement = await readAgreementInReach(tx, parsed.client, actor, parsed.agreementNumber);
     if (agreement.status === 'CLOSED') {
       throw new RebateError(
         `Rebate agreement ${agreement.agreementNumber} stands closed, and an abandoned promise pays nothing out.`,

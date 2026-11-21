@@ -15,6 +15,12 @@ import {
   billingDueList, cancelBillingDocument, createBillingFromDelivery, getBilling, goodsIssueStands, listBillableDeliveries,
   listBillings, postBillingDocument, salesDocumentFlow,
 } from '../src/modules/sales/billing';
+import {
+  listRebateAgreements, rebateAccrualsForBillingForProvisioning, rebateConditionTypes, rebateRegister, releaseRebateAgreement,
+  saveRebateAgreement, settleRebateAgreement,
+} from '../src/modules/sales/rebate';
+import { billingRebateAccruals } from '../src/modules/sales/billing';
+import { cancelDownPaymentRequest, orderDownPayments, requestDownPaymentFromPlanDate } from '../src/modules/sales/down-payment';
 import { returnsChain } from '../src/modules/sales/returns-configuration';
 import {
   createReturnsDelivery, createReturnsOrder, listReturnsDeliveries, listReturnsOrders, postReturnsDelivery, postReturnsReceipt,
@@ -31,7 +37,7 @@ import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 const A = '1000';
 const B = '2000';
 const SEED = 'SCOPE_SALES_SEED';
-const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST'];
+const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST', 'SALES.REBATE.MAINTAIN', 'SALES.CREDIT.MEMO.POST'];
 const SO_A = 'SOA0000001';
 const SO_B = 'SOB0000001';
 const SO_D2 = 'SOD0000002';
@@ -438,7 +444,7 @@ describe('returns', () => {
   const XA = 'RXA0000001';
   const XB = 'RXB0000001';
   const GONE_R = 'RTZ9999999';
-  const nums = (rows: Array<{ orderNumber?: string; deliveryNumber?: string }>) => rows.map((r) => r.deliveryNumber ?? r.orderNumber).sort();
+  const nums = (rows: Array<{ orderNumber?: string | null; deliveryNumber?: string }>) => rows.map((r) => r.deliveryNumber ?? r.orderNumber).sort();
   const counts = () => withTenant(client, async (tx) => (await tx.execute(sql`select
       (select count(*)::int from sales_order where client = ${client}) as orders,
       (select count(*)::int from delivery where client = ${client}) as deliveries,
@@ -525,5 +531,105 @@ describe('returns', () => {
     expect(missRc).toMatch(/does not stand/);
     expect((await receipt('A', DB)).replaceAll(DB, '#')).toBe(missRc.replaceAll(DGONE, '#'));
     expect(await counts()).toEqual(before);
+  });
+});
+
+describe('rebates and down payments', () => {
+  const GA = 'RBA0000001';
+  const GB = 'RBB0000001';
+  const GGONE = 'RBZ9999999';
+  const names = (rows: Array<{ agreementNumber: string }>) => rows.map((r) => r.agreementNumber).sort();
+  const promise = (org: string) => ({
+    client, changedBy: 'FORGED', customerNumber: 'CUSTSC1', salesOrg: org, distributionChannel: '10', division: '01', currency: 'USD',
+    validFrom: '2026-01-01', validTo: '2026-12-31', conditionType: 'BO01',
+  });
+  const counts = () => withTenant(client, async (tx) => (await tx.execute(sql`select
+      (select count(*)::int from sales_rebate_agreement where client = ${client}) as agreements,
+      (select count(*)::int from billing_document where client = ${client}) as billings`)) as unknown as Array<{ agreements: number; billings: number }>);
+
+  beforeAll(async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`insert into sales_condition_type (client, condition_type, name, condition_class, calculation_type, created_by)
+        values (${client}, 'BO01', 'Rebate', 'REBATE', 'PERCENTAGE', ${SEED}) on conflict do nothing`);
+      await tx.execute(sql`insert into bp_role (client, partner_number, role_code, created_by) values (${client}, 'CUSTSC1', 'CUSTOMER', ${SEED}) on conflict do nothing`);
+      for (const [no, org] of [[GA, '1000'], [GB, '2000']] as const) {
+        await tx.execute(sql`insert into sales_rebate_agreement (client, agreement_number, customer_number, sales_org, distribution_channel, division, currency, valid_from, valid_to, condition_type, status, created_by)
+          values (${client}, ${no}, 'CUSTSC1', ${org}, '10', '01', 'USD', '2026-01-01', '2026-12-31', 'BO01', 'OPEN', ${SEED})`);
+      }
+    });
+  });
+
+  it('reads and lists a rebate agreement only inside company and sales-area reach', async () => {
+    expect(names(await listRebateAgreements(client, undefined, auth('A')))).toEqual([GA]);
+    expect(names(await listRebateAgreements(client, undefined, auth('both')))).toEqual([GA, GB]);
+    expect(names(await listRebateAgreements(client, undefined, auth('org1000')))).toEqual([GA]);
+    expect((await rebateRegister(client, GA, auth('A'))).agreement.agreementNumber).toBe(GA);
+    const miss = await ask(rebateRegister(client, GGONE, auth('A')));
+    expect(miss).toMatch(/does not stand/);
+    for (const who of ['A', 'org1000'] as const) {
+      expect((await ask(rebateRegister(client, GB, auth(who)))).replaceAll(GB, '#')).toBe(miss.replaceAll(GGONE, '#'));
+    }
+  });
+
+  it('refuses no session, no capability, no scope and another tenant', async () => {
+    expect(await ask(listRebateAgreements(client, undefined, undefined))).not.toBe('done');
+    expect(await ask(rebateRegister(client, GA, undefined))).not.toBe('done');
+    expect(await ask(rebateConditionTypes(client, undefined))).not.toBe('done');
+    for (const k of denied) {
+      expect(await ask(listRebateAgreements(client, undefined, auth(k)))).not.toBe('done');
+      expect(await ask(rebateRegister(client, GA, auth(k)))).not.toBe('done');
+      expect(await ask(rebateConditionTypes(client, auth(k)))).not.toBe('done');
+      expect(await ask(releaseRebateAgreement({ client, authorization: auth(k), changedBy: 'FORGED', agreementNumber: GA }))).not.toBe('done');
+    }
+  });
+
+  it('answers release, settlement and promising in an out-of-reach sales area as a missing one and writes nothing', async () => {
+    const before = await counts();
+    const release = (a: string, n: string) => ask(releaseRebateAgreement({ client, authorization: auth(a), changedBy: 'FORGED', agreementNumber: n }));
+    const miss = await release('A', GGONE);
+    expect(miss).toMatch(/does not stand/);
+    expect((await release('A', GB)).replaceAll(GB, '#')).toBe(miss.replaceAll(GGONE, '#'));
+    expect((await release('org1000', GB)).replaceAll(GB, '#')).toBe(miss.replaceAll(GGONE, '#'));
+    const settle = (a: string, n: string) => ask(settleRebateAgreement({
+      client, authorization: auth(a), changedBy: 'FORGED', agreementNumber: n, settlementDate: '2026-04-10' }));
+    const missSettle = await settle('A', GGONE);
+    expect((await settle('A', GB)).replaceAll(GB, '#')).toBe(missSettle.replaceAll(GGONE, '#'));
+    expect(await ask(saveRebateAgreement({ ...promise('2000'), authorization: auth('A') }))).toMatch(/does not stand/);
+    expect(await ask(saveRebateAgreement({ ...promise('1000'), agreementNumber: GB, authorization: auth('A') }))).toMatch(/does not stand/);
+    const state = await withTenant(client, async (tx) => (await tx.execute(sql`select status from sales_rebate_agreement where client = ${client}`)) as unknown as Array<{ status: string }>);
+    expect(state.every((r) => r.status === 'OPEN')).toBe(true);
+    expect(await counts()).toEqual(before);
+  });
+
+  it('releases an agreement inside the reach and records the session user', async () => {
+    await releaseRebateAgreement({ client, authorization: auth('A'), changedBy: 'FORGED', agreementNumber: GA });
+    const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from sales_rebate_agreement where client = ${client} and agreement_number = ${GA}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
+    expect(row.status).toBe('RELEASED');
+    expect(row.changed_by).toBe(actors.A!.username);
+  });
+
+  it('shows a billing document\'s rebate provisions and an order\'s advances only inside reach', async () => {
+    expect(await billingRebateAccruals(client, BB, auth('A'))).toEqual([]);
+    expect(await rebateAccrualsForBillingForProvisioning(client, BB)).toEqual([]);
+    expect(await orderDownPayments(client, SO_B, auth('A'))).toEqual([]);
+    expect(await ask(billingRebateAccruals(client, BA, undefined))).not.toBe('done');
+    expect(await ask(orderDownPayments(client, SO_A, undefined))).not.toBe('done');
+    for (const k of denied) expect(await ask(orderDownPayments(client, SO_A, auth(k)))).not.toBe('done');
+  });
+
+  it('answers a down payment request or withdrawal against an out-of-reach order as a missing one', async () => {
+    const ask1 = (a: FinanceActor['authorization'] | undefined, order: string) => ask(requestDownPaymentFromPlanDate({
+      client, authorization: a, changedBy: 'FORGED', orderNumber: order, orderLineNumber: 10, dateNumber: 1,
+      billingDate: '2026-04-10', requestKey: randomUUID() }));
+    const miss = await ask1(auth('A'), GONE);
+    expect(miss).toMatch(/does not exist/);
+    expect((await ask1(auth('A'), SO_B)).replaceAll(SO_B, '#')).toBe(miss.replaceAll(GONE, '#'));
+    expect((await ask1(auth('org1000'), SO_B)).replaceAll(SO_B, '#')).toBe(miss.replaceAll(GONE, '#'));
+    expect(await ask1(undefined, SO_A)).not.toBe('done');
+    for (const k of denied) expect(await ask1(auth(k), SO_A)).not.toBe('done');
+    for (const k of denied) {
+      expect(await ask(cancelDownPaymentRequest({ client, authorization: auth(k), changedBy: 'FORGED', billingNumber: BA }))).not.toMatch(/^done$|not a down payment/);
+    }
+    expect((await counts())[0]!.billings).toBe(3);
   });
 });
