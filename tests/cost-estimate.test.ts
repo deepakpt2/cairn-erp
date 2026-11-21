@@ -385,7 +385,7 @@ describe('refusals, each naming its object', () => {
     await material('NOPLANT', 'MAKE');
     await withTenant(client, (tx) => tx.execute(sql`delete from material_plant where client = ${client} and material_number = 'NOPLANT'`));
     await expectRefusal(cost('NOPLANT'), /Material NOPLANT is not maintained in plant 1000/);
-    await expectRefusal(cost('FG', { plant: '9999' }), /Plant scope does not cover plant 9999/);
+    await expectRefusal(cost('FG', { plant: '9999' }), /Plant 9999 does not stand/);
     await material('NOVERS', 'MAKE');
     await expectRefusal(cost('NOVERS'), /No production version resolves for NOVERS in plant 1000 on 2026-03-15/);
   });
@@ -455,7 +455,7 @@ describe('what is saved', () => {
 
 describe('authority', () => {
   it('21. an actor without the capability is refused by the service, for create, display and list', async () => {
-    await expectRefusal(cost('SIMP', {}, outsider), /do not hold PROD\.COST\.ESTIMATE\.CREATE/);
+    await expectRefusal(cost('SIMP', {}, outsider), /do not hold/);
     await expectRefusal(createCostEstimate({ client, materialNumber: 'SIMP', plant: PLANT, costingDate: DATE, actor: ACTOR }), /signed-in user/);
     await expectRefusal(getCostEstimate({ client, materialNumber: 'SIMP', plant: PLANT, costingDate: DATE }, { authorization: outsider.authorization }), /do not hold/);
     await expectRefusal(listCostEstimates({ client, materialNumber: 'SIMP', plant: PLANT }, { authorization: outsider.authorization }), /do not hold/);

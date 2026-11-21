@@ -33,8 +33,8 @@
  */
 import { sql } from 'drizzle-orm';
 
-import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
-import { hasOrgAccess } from '../../platform/auth/session';
+import { type ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { planningContext } from '../foundation/activity-rate-definition';
@@ -545,12 +545,11 @@ async function readInTx(tx: Tx, client: string, key: { materialNumber: string; p
 }
 
 async function judge(tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined, plant: string): Promise<string> {
-  const verdict = await verifyServiceAuthorityInTx(tx, client, authorization, COST_ESTIMATE_CAPABILITY, { requirePlantScope: true });
-  if (!verdict.ok) {
-    fail(verdict.refusal.message.startsWith('You do not hold the authority') ? `You do not hold ${COST_ESTIMATE_CAPABILITY}.` : verdict.refusal.message, verdict.refusal.remedy);
-  }
-  if (!hasOrgAccess(verdict.restrictions, 'PLANT', plant)) fail(`Your Plant scope does not cover plant ${plant}.`, 'Ask an administrator to extend your Plant scope, then repeat the costing.');
-  return verdict.username;
+  const actor = await purchasingActor(tx, client, authorization, [COST_ESTIMATE_CAPABILITY], (m, r) => new CostEstimateError(m, r ?? ''));
+  const reachable = await reachablePlantsInTx(tx, client, actor);
+  // A plant out of reach answers exactly as one that does not stand.
+  if (!reachable.includes(plant)) fail(`Plant ${plant} does not stand.`, 'Choose a plant that exists.');
+  return actor.username;
 }
 
 function dateOf(value: string | undefined): string {

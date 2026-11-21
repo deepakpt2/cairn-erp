@@ -346,3 +346,9 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - `...ForProvisioning` variants run unscoped (tests, seeds, internal reads) and are not imported from `src/app`.
 - The MRP exception monitor gained the Company/Plant gate.
 - Residuals: sales ATP (`sales/availability.ts`) uses the ForProvisioning stock-requirements read and relies on sales-side scope; the STO planning helper inside stock-requirements stays unscoped; a plant-limited user is not specially refused company-wide aggregates here beyond plant reach. Tests: `tests/company-scope-production.test.ts` (28 pass). Not browser-tested; full suite not run.
+
+## Phase 9j — cost estimate (CK11N / CK13N)
+
+- `createCostEstimate`, `getCostEstimate`, `listCostEstimates` already judged the session and a Plant scope; they did not judge the Company. `judge` now uses `purchasingActor` + `reachablePlantsInTx`: a Plant scope is optional, the plant's company must be in the explicit Company Code scope, and an out-of-reach plant answers "Plant X does not stand." like a missing one. The recorded user is the session username.
+- Tests: `tests/company-scope-production.test.ts` (cost estimate describe), `tests/cost-estimate.test.ts` (two message assertions updated).
+- Residual: the demo provisioning (`demo-cost-estimate.ts`) runs as the demo admin's real session; its Company scope was not re-verified by a fresh provisioning run (erp_dev is non-empty). A create request-key replay is judged before the replay, so it does not bypass reach.

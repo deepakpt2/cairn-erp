@@ -7810,8 +7810,8 @@
     "modules/inventory/unit-conversion.ts",
     "modules/production/mrp-explosion.ts",
     "modules/production/production-version.ts",
+    "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
-    "platform/auth/session.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],

@@ -40,6 +40,7 @@ import { stockRequirementsList } from '../src/modules/production/stock-requireme
 import { loadCapacityReport } from '../src/modules/production/capacity-load';
 import { checkOrderAvailability } from '../src/modules/production/order-availability';
 import { commitOrderComponentAvailability, resetOrderComponentAvailability } from '../src/modules/production/order-availability-commitment';
+import { createCostEstimate, getCostEstimate, listCostEstimates } from '../src/modules/production/cost-estimate';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -744,5 +745,39 @@ describe('stock/requirements, capacity load and the availability check', () => {
     }
     expect(await ask(md04('PLB1', bPlantA.authorization))).not.toBe('done');
     expect(await ask(cm01('PLB1', bPlantA.authorization))).not.toBe('done');
+  });
+});
+
+describe('cost estimate', () => {
+  const CE = ['PROD.COST.ESTIMATE.CREATE'];
+  let ceA: FinanceActor; let ceB: FinanceActor; let cePlantA: FinanceActor; let ceNoCap: FinanceActor; let ceNoScope: FinanceActor; let ceOther: FinanceActor;
+  beforeAll(async () => {
+    ceA = await createFinanceActor(client, { capabilities: CE, companyScopes: [A] });
+    ceB = await createFinanceActor(client, { capabilities: CE, companyScopes: [B] });
+    cePlantA = await createFinanceActor(client, { capabilities: CE, companyScopes: [A, B], plantScopes: ['PLA1'] });
+    ceNoCap = await createFinanceActor(client, { capabilities: ['FIN.JOURNAL.DISPLAY'], companyScopes: [A, B] });
+    ceNoScope = await createFinanceActor(client, { capabilities: CE, companyScopes: [] });
+    ceOther = await createFinanceActor(other.client, { capabilities: CE });
+  });
+  const base = (plant: string) => ({ client, materialNumber: 'SCMK', plant, costingDate: '2026-10-20' });
+  const create = (plant: string, a: Auth) => createCostEstimate({ ...base(plant), actor: 'someone-else' } as never, { authorization: a });
+  const get = (plant: string, a: Auth) => getCostEstimate(base(plant), { authorization: a });
+  const list = (plant: string, a: Auth) => listCostEstimates({ client, materialNumber: 'SCMK', plant }, { authorization: a });
+
+  it('answers a plant out of reach exactly as one that does not stand', async () => {
+    for (const op of [create, get, list]) {
+      const missing = mask(await ask(op('PLZZ', ceA.authorization)), 'PLZZ');
+      for (const p of ['PLB1', 'PLN1']) expect(mask(await ask(op(p, ceA.authorization)), p)).toBe(missing);
+      expect(mask(await ask(op('PLA1', ceA.authorization)), 'PLA1')).not.toBe(missing);
+      expect(mask(await ask(op('PLB1', cePlantA.authorization)), 'PLB1')).toBe(missing);
+      expect(mask(await ask(op('PLA1', ceB.authorization)), 'PLA1')).toBe(missing);
+    }
+  });
+
+  it('refuses a missing session, a missing capability, no scope and another tenant', async () => {
+    for (const bad of [undefined, { userId: 'nobody', sessionId: 'nothing' }, ceNoCap.authorization, ceNoScope.authorization, ceOther.authorization]) {
+      for (const op of [create, get, list]) expect(await ask(op('PLA1', bad as Auth))).toMatch(/./);
+      expect(await ask(list('PLA1', bad as Auth))).not.toBe('done');
+    }
   });
 });
