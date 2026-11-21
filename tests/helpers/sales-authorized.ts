@@ -3,6 +3,9 @@ import {
   cancelSalesOrder as cancelSo, changeSalesOrder as changeSo, getSalesOrder as getSo,
   listSalesOrderDocuments as listSo, releaseSalesOrderCredit as releaseSo, salesOrderChoices as choicesSo,
 } from '../../src/modules/sales/sales-order';
+import {
+  changeQuotation as changeQ, getQuotation as getQ, listQuotations as listQ, rejectQuotation as rejectQ,
+} from '../../src/modules/sales/quotation';
 import { createFinanceActor, refreshFinanceActorScopes, type FinanceActor } from './finance-actor';
 
 export const SALES_TEST_CAPABILITIES = [
@@ -33,4 +36,17 @@ export async function cancelSalesOrder(input: Opt<typeof cancelSo>) {
 }
 export async function releaseSalesOrderCredit(input: Opt<typeof releaseSo>) {
   return releaseSo({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof releaseSo>[0]);
+}
+
+export async function getQuotation(client: string, quotationNumber: string, today?: string) {
+  return getQ(client, quotationNumber, await salesTestAuth(client), today);
+}
+export async function listQuotations(client: string, filter: NonNullable<Parameters<typeof listQ>[1]> = {}) {
+  return listQ(client, filter, await salesTestAuth(client));
+}
+export async function changeQuotation(input: Opt<typeof changeQ>) {
+  return changeQ({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof changeQ>[0]);
+}
+export async function rejectQuotation(input: Opt<typeof rejectQ>) {
+  return rejectQ({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof rejectQ>[0]);
 }

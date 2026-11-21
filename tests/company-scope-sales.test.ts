@@ -9,6 +9,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { authOrgRestriction } from '../src/platform/tables/security';
 import {
+  changeQuotation, createOrderFromQuotation, getQuotation, listQuotations, rejectQuotation,
+} from '../src/modules/sales/quotation';
+import {
   cancelSalesOrder, changeSalesOrder, getSalesOrder, listSalesOrderDocuments, releaseSalesOrderCredit, salesOrderChoices,
 } from '../src/modules/sales/sales-order';
 import { assignSalesAreaDimensions, closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -17,11 +20,15 @@ import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 const A = '1000';
 const B = '2000';
 const SEED = 'SCOPE_SALES_SEED';
-const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE'];
+const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE'];
 const SO_A = 'SOA0000001';
 const SO_B = 'SOB0000001';
 const SO_D2 = 'SOD0000002';
 const GONE = 'SOZ9999999';
+const QA = 'QTA0000001';
+const QB = 'QTB0000001';
+const QD2 = 'QTD0000002';
+const QGONE = 'QTZ9999999';
 
 let tenant: TestTenant;
 let other: TestTenant;
@@ -76,6 +83,17 @@ beforeAll(async () => {
       await tx.execute(sql`insert into sales_order (client, order_number, sales_org, distribution_channel, division, customer_number, company_code, currency, order_date, created_by)
         values (${client}, ${no}, ${org}, '10', ${div}, 'CUSTSC1', ${company}, 'USD', '2026-04-05', ${SEED})`);
       await tx.execute(sql`insert into sales_order_line (client, order_number, line_number, material_number, plant, order_quantity, quantity_unit, base_quantity, condition_number, created_by)
+        values (${client}, ${no}, 10, 'SCSM1', ${plant}, 1, 'UNT', 1, 'COND', ${SEED})`);
+    }
+  });
+  await withTenant(client, async (tx) => {
+    const quotes: Array<[string, string, string, string, string]> = [
+      [QA, '1000', '01', A, 'PSA1'], [QB, '2000', '01', B, 'PSB1'], [QD2, '1000', '02', A, 'PSA1'],
+    ];
+    for (const [no, org, div, company, plant] of quotes) {
+      await tx.execute(sql`insert into sales_quotation (client, quotation_number, sales_org, distribution_channel, division, customer_number, company_code, currency, quotation_date, valid_to, created_by)
+        values (${client}, ${no}, ${org}, '10', ${div}, 'CUSTSC1', ${company}, 'USD', '2026-04-05', '2026-12-31', ${SEED})`);
+      await tx.execute(sql`insert into sales_quotation_line (client, quotation_number, line_number, material_number, plant, quotation_quantity, quantity_unit, base_quantity, condition_number, created_by)
         values (${client}, ${no}, 10, 'SCSM1', ${plant}, 1, 'UNT', 1, 'COND', ${SEED})`);
     }
   });
@@ -165,6 +183,62 @@ describe('sales orders', () => {
     await cancelSalesOrder({ client, changedBy: 'FORGED', orderNumber: SO_D2, expectedVersion: 1, authorization: auth('A') });
     const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from sales_order where client = ${client} and order_number = ${SO_D2}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
     expect(row.status).toBe('CANCELLED');
+    expect(row.changed_by).toBe(actors.A!.username);
+  });
+});
+
+describe('sales quotations', () => {
+  const quoteNumbers = (rows: Array<{ quotationNumber: string }>) => rows.map((r) => r.quotationNumber).sort();
+  const reject = (a: FinanceActor['authorization'] | undefined, n: string) => rejectQuotation({
+    client, changedBy: 'FORGED', quotationNumber: n, expectedVersion: 1, reason: 'LOST', authorization: a });
+
+  it('reads and lists a quotation only inside company, sales area and plant reach', async () => {
+    expect((await getQuotation(client, QA, auth('A')))?.quotationNumber).toBe(QA);
+    expect(await getQuotation(client, QB, auth('A'))).toBeNull();
+    expect(await getQuotation(client, QGONE, auth('A'))).toBeNull();
+    expect(await getQuotation(client, QD2, auth('div01'))).toBeNull();
+    expect(await getQuotation(client, QB, auth('org1000'))).toBeNull();
+    expect(await getQuotation(client, QB, auth('plantA'))).toBeNull();
+    expect(quoteNumbers(await listQuotations(client, {}, auth('A')))).toEqual([QA, QD2].sort());
+    expect(quoteNumbers(await listQuotations(client, {}, auth('both')))).toEqual([QA, QB, QD2].sort());
+    expect(quoteNumbers(await listQuotations(client, {}, auth('div01')))).toEqual([QA, QB].sort());
+    expect(quoteNumbers(await listQuotations(client, {}, auth('plantA')))).toEqual([QA, QD2].sort());
+  });
+
+  it('refuses no session, no capability, no scope and another tenant', async () => {
+    expect(await ask(getQuotation(client, QA, undefined))).not.toBe('done');
+    expect(await ask(listQuotations(client, {}, undefined))).not.toBe('done');
+    for (const k of denied) {
+      expect(await ask(getQuotation(client, QA, auth(k)))).not.toBe('done');
+      expect(await ask(listQuotations(client, {}, auth(k)))).not.toBe('done');
+      expect(await ask(reject(auth(k), QA))).not.toMatch(/^done$|does not exist/);
+    }
+  });
+
+  it('answers reject, change and order-raising of an out-of-reach quotation as a missing one and writes nothing', async () => {
+    const miss = await ask(reject(auth('A'), QGONE));
+    expect(miss).toMatch(/does not exist/);
+    expect((await ask(reject(auth('A'), QB))).replaceAll(QB, '#')).toBe(miss.replaceAll(QGONE, '#'));
+    expect((await ask(reject(auth('div01'), QD2))).replaceAll(QD2, '#')).toBe(miss.replaceAll(QGONE, '#'));
+    expect((await ask(reject(auth('plantA'), QB))).replaceAll(QB, '#')).toBe(miss.replaceAll(QGONE, '#'));
+    expect(await ask(changeQuotation({
+      client, changedBy: 'FORGED', quotationNumber: QB, expectedVersion: 1, salesOrg: '2000', distributionChannel: '10', division: '01',
+      customerNumber: 'CUSTSC1', companyCode: B, currency: 'USD', quotationDate: '2026-04-05', validTo: '2026-12-31',
+      lines: [{ lineNumber: 10, materialNumber: 'SCSM1', plant: 'PSB1', orderQuantity: 1, quantityUnit: 'UNT' }],
+      authorization: auth('A') } as never))).toMatch(/does not exist/);
+    expect(await ask(createOrderFromQuotation({
+      client, changedBy: 'FORGED', quotationNumber: QB, expectedVersion: 1, orderDate: '2026-04-06', requestKey: 'SCOPE-QB',
+    }, { authorization: auth('A') }))).toMatch(/does not exist/);
+    const state = await withTenant(client, async (tx) => (await tx.execute(sql`select status, version from sales_quotation where client = ${client}`)) as unknown as Array<{ status: string; version: number }>);
+    expect(state.every((r) => r.status === 'OPEN' && r.version === 1)).toBe(true);
+    const orders = await withTenant(client, async (tx) => (await tx.execute(sql`select count(*)::int as n from sales_order where client = ${client}`)) as unknown as Array<{ n: number }>);
+    expect(orders[0]!.n).toBe(3);
+  });
+
+  it('rejects a quotation inside the reach and records the session user, not the supplied name', async () => {
+    await reject(auth('A'), QD2);
+    const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from sales_quotation where client = ${client} and quotation_number = ${QD2}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
+    expect(row.status).toBe('REJECTED');
     expect(row.changed_by).toBe(actors.A!.username);
   });
 });

@@ -20,14 +20,14 @@ import { DELIVERY_CHECKING_RULE, ORDER_CHECKING_RULE } from '../src/modules/sale
 import { saveCheckingGroup, saveCheckingRule, saveScopeOfCheck } from '../src/modules/production/availability-check';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
-  SalesQuotationError, changeQuotation, createOrderFromQuotation, createQuotation, getQuotation,
-  listQuotations, quotationCreateInput, rejectQuotation,
+  SalesQuotationError, createOrderFromQuotation, createQuotation, quotationCreateInput,
 } from '../src/modules/sales/quotation';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,
 } from './helpers';
 import { createSalesActor, refreshSalesActor } from './helpers/sales-actor';
+import { changeQuotation, getQuotation, listQuotations, rejectQuotation } from './helpers/sales-authorized';
 
 const ACTOR = 'SD16_QUOTE';
 const AREA = 'CA16';

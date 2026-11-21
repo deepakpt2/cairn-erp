@@ -144,6 +144,7 @@ export async function changeQuotationAction(_previous: QuotationActionState, for
       ...headerFrom(form),
       lines: linesFrom(form, true),
       rejectLines: rejectLinesFrom(form),
+      authorization: authorizationOf(session),
     });
     revalidatePath(ROUTE);
     return { ok: true, quotationNumber: result.quotationNumber, message: `Quotation ${result.quotationNumber} changed (version ${result.version}).` };
@@ -162,6 +163,7 @@ export async function rejectQuotationAction(_previous: QuotationActionState, for
       quotationNumber: text(form, 'quotationNumber'),
       expectedVersion: Number(text(form, 'expectedVersion') || '0'),
       reason: text(form, 'rejectReason'),
+      authorization: authorizationOf(session),
     });
     revalidatePath(ROUTE);
     return { ok: true, quotationNumber: result.quotationNumber, message: `Quotation ${result.quotationNumber} rejected (${result.rejectionReason}).` };

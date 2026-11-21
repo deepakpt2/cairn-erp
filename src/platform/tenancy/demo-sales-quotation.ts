@@ -14,7 +14,7 @@ import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../db/client';
 import {
-  changeQuotation, createOrderFromQuotation, createQuotation, getQuotation, rejectQuotation, type QuotationView,
+  changeQuotation, createOrderFromQuotation, createQuotation, getQuotationForProvisioning as getQuotation, rejectQuotation, type QuotationView,
 } from '../../modules/sales/quotation';
 import { DEMO_STRUCTURE } from './demo-organisation';
 import { withActingUser } from './demo-people';
@@ -73,6 +73,7 @@ export async function buildDemoSalesQuotation(input: { client: string; timeline:
         requestedDate: open.requestedDate ?? undefined, headerText: 'Demo quotation',
         lines: [item('FG-CHOC', '1000', 300, 'PC', 10), item('TRAD-JUICE', '2000', 20, 'BOX', 30)],
         rejectLines: [{ lineNumber: 20, reason: 'STCK' }],
+        authorization: actor,
       });
     }
     const raised = await createOrderFromQuotation({
@@ -87,7 +88,7 @@ export async function buildDemoSalesQuotation(input: { client: string; timeline:
       lines: [item('FG-WAFER', '1000', 400, 'PC')],
     }, { authorization: actor });
     const rejected = second.status === 'OPEN'
-      ? await rejectQuotation({ client, changedBy: SALES_CLERK, quotationNumber: second.quotationNumber, expectedVersion: second.version, reason: 'PRCE' })
+      ? await rejectQuotation({ client, changedBy: SALES_CLERK, quotationNumber: second.quotationNumber, expectedVersion: second.version, reason: 'PRCE', authorization: actor })
       : second;
 
     // 3. The expired quotation: given in the past, valid to a date that has passed, status still OPEN.

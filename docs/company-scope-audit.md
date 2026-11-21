@@ -130,3 +130,14 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** a secondary level only narrows when the actor holds a restriction of that level; Company Code stays the mandatory gate. Not browser-tested.
 
 **Still not covered in sales:** quotations, deliveries (reads, picks, cancel), billing remainder, returns, rebates, down payments, conditions, analysis/registers, shipping point, credit-control area.
+
+## Phase 6b — sales area: quotations
+
+**Found:** `getQuotation`, `changeQuotation`, `listQuotations`, `rejectQuotation` checked no session or scope, took `changedBy` from the caller and read any company's quotation; `createOrderFromQuotation` read the quotation before judging reach; `createQuotation` did not check the Sales Org / Channel / Division or Plant scope.
+
+**Covered:** every service judges inside its own transaction (session, live `SALES.QUOTATION.CREATE`, explicit Company Code scope) before reading the quotation. A quotation is reachable when its company, sales area and every item plant are inside the actor's reach (same rule as orders, `sales-scope.ts`); anything else answers as a missing quotation, with the same message as a nonexistent number. `listQuotations` filters the same way. `createQuotation` refuses an area or plant outside the scope. Change and reject record the session user. Pages and actions pass the session; `getQuotationForProvisioning` serves demo seeding only.
+- Tests: 4 more in `tests/company-scope-sales.test.ts`; `tests/sales-quotation.test.ts` uses the wrappers in `tests/helpers/sales-authorized.ts`.
+
+**Limits:** `createQuotation` still records the caller-supplied `changedBy` (the screen passes the session user); not browser-tested. `createOrderFromQuotation` creates the order through `createSalesOrder`, whose own gate applies.
+
+**Still not covered in sales:** deliveries (reads, picks, cancel), billing remainder, returns, rebates, down payments, conditions, analysis/registers, shipping point, credit-control area.

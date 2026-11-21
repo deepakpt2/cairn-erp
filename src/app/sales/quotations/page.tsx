@@ -25,10 +25,11 @@ export default async function SalesQuotationsPage({ searchParams }: {
   const session = await requireSession(SALES_QUOTATION_ROUTE);
   const params = await searchParams;
   const client = session.user.client;
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const [documents, choices, selected] = await Promise.all([
-    listQuotations(client, params.customer ? { customerNumber: params.customer } : {}),
-    quotationChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => NO_SALES_CHOICES),
-    params.quotation ? getQuotation(client, params.quotation.trim()) : Promise.resolve(null),
+    listQuotations(client, params.customer ? { customerNumber: params.customer } : {}, authorization).catch(() => []),
+    quotationChoices(client, authorization).catch(() => NO_SALES_CHOICES),
+    params.quotation ? getQuotation(client, params.quotation.trim(), authorization).catch(() => null) : Promise.resolve(null),
   ]);
 
   return (

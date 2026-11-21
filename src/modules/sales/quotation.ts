@@ -35,6 +35,8 @@ import {
   type CreateSalesOrderResult, SALES_ORDER_CREATE_CAPABILITY, SalesOrderError, createSalesOrder,
   isoDate, key, optionalKey, orderLineInput, priceLines, round2, salesOrderChoices,
 } from './sales-order';
+import { plantsAllow } from '../../platform/auth/scope-actor';
+import { salesActor, salesAreaReachable, salesDocumentReachable } from './sales-scope';
 import { salesOrder, salesQuotation, salesQuotationLine, salesQuotationSchedule } from './schema';
 
 export const SALES_QUOTATION_CAPABILITY = 'SALES.QUOTATION.CREATE';
@@ -87,7 +89,7 @@ export const quotationChangeInput = z.object({
 });
 
 export type QuotationCreateInput = z.input<typeof quotationCreateInput>;
-export type QuotationChangeInput = z.input<typeof quotationChangeInput>;
+export type QuotationChangeInput = z.input<typeof quotationChangeInput> & { authorization: ServiceAuthorityContext | undefined };
 
 const todayOf = () => new Date().toISOString().slice(0, 10);
 
@@ -244,8 +246,45 @@ async function loadQuotation(tx: Tx, client: string, quotationNumber: string, to
   };
 }
 
-/** Read one quotation. `today` is injectable because expiry is a date comparison the tests must be able to move. */
-export async function getQuotation(client: string, quotationNumber: string, today?: string): Promise<QuotationView | null> {
+/** The session actor for a quotation read or write: live quotation capability and an explicit Company Code scope. */
+function quotationActor(tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined) {
+  return salesActor(tx, client, authorization, [SALES_QUOTATION_CAPABILITY], (m, r) => new SalesQuotationError(m, r));
+}
+
+/** Company, sales area and every plant of the quotation are inside the actor's reach. A missing quotation is not. */
+async function quotationInReach(
+  tx: Tx, client: string, actor: Awaited<ReturnType<typeof quotationActor>>, quotationNumber: string,
+): Promise<boolean> {
+  const [header] = await tx.select({
+    companyCode: salesQuotation.companyCode, salesOrg: salesQuotation.salesOrg,
+    distributionChannel: salesQuotation.distributionChannel, division: salesQuotation.division,
+  }).from(salesQuotation).where(and(eq(salesQuotation.client, client), eq(salesQuotation.quotationNumber, quotationNumber))).limit(1);
+  if (!header) return false;
+  const lines = await tx.select({ plant: salesQuotationLine.plant }).from(salesQuotationLine)
+    .where(and(eq(salesQuotationLine.client, client), eq(salesQuotationLine.quotationNumber, quotationNumber)));
+  return salesDocumentReachable(actor, { ...header, plants: lines.map((l) => l.plant) });
+}
+
+function quotationMissing(quotationNumber: string, remedy: string) {
+  return new SalesQuotationError(`Quotation ${quotationNumber} does not exist.`, remedy);
+}
+
+/**
+ * Read one quotation. Outside the actor's company, sales area or plant reach it is absent, as a missing one.
+ * `today` is injectable because expiry is a date comparison the tests must be able to move.
+ */
+export async function getQuotation(
+  client: string, quotationNumber: string, authorization: ServiceAuthorityContext | undefined, today?: string,
+): Promise<QuotationView | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await quotationActor(tx, client, authorization);
+    if (!(await quotationInReach(tx, client, actor, quotationNumber))) return null;
+    return loadQuotation(tx, client, quotationNumber, today ?? todayOf());
+  });
+}
+
+/** Seeding and walkthroughs only: no session, no scope. Never imported from `src/app`. */
+export async function getQuotationForProvisioning(client: string, quotationNumber: string, today?: string): Promise<QuotationView | null> {
   return withTenant(client, (tx) => loadQuotation(tx, client, quotationNumber, today ?? todayOf()));
 }
 
@@ -371,6 +410,12 @@ export async function createQuotation(
       throw new SalesQuotationError(
         `Your Company Code scope does not cover company code ${parsed.companyCode}.`,
         'Ask an administrator to extend your Company Code scope, then repeat the action.',
+      );
+    }
+    if (!salesAreaReachable(authority, parsed) || !plantsAllow(authority, parsed.lines.map((l) => l.plant))) {
+      throw new SalesQuotationError(
+        `Your sales area or plant scope does not cover sales area ${parsed.salesOrg}/${parsed.distributionChannel}/${parsed.division} and these plants.`,
+        'Ask an administrator to extend your scope, then repeat the action.',
       );
     }
     assertDates(parsed.quotationDate, parsed.validTo, parsed.requestedDate);
@@ -537,7 +582,7 @@ export async function createQuotation(
     // printed quotation is a separate increment.
     return { quotationNumber: number, replayed: false };
   });
-  const view = await getQuotation(parsed.client, created.quotationNumber);
+  const view = await getQuotationForProvisioning(parsed.client, created.quotationNumber);
   if (!view) throw new SalesQuotationError(`Quotation ${created.quotationNumber} could not be read back.`);
   return { ...view, replayed: created.replayed };
 }
@@ -551,6 +596,10 @@ export async function createQuotation(
 export async function changeQuotation(input: QuotationChangeInput): Promise<QuotationView> {
   const parsed = quotationChangeInput.parse(input);
   await withTenant(parsed.client, async (tx) => {
+    const actor = await quotationActor(tx, parsed.client, input.authorization);
+    if (!(await quotationInReach(tx, parsed.client, actor, parsed.quotationNumber))) {
+      throw quotationMissing(parsed.quotationNumber, 'Read the quotation before changing it.');
+    }
     const [before] = await tx.select().from(salesQuotation).where(and(
       eq(salesQuotation.client, parsed.client), eq(salesQuotation.quotationNumber, parsed.quotationNumber),
     )).limit(1);
@@ -583,6 +632,7 @@ export async function changeQuotation(input: QuotationChangeInput): Promise<Quot
       );
     }
     assertDates(before.quotationDate, parsed.validTo, parsed.requestedDate ?? before.requestedDate);
+    parsed.changedBy = actor.username;
 
     const customer = await resolveCustomerSalesData(tx, parsed.client, before.customerNumber,
       before.salesOrg, before.distributionChannel, before.division).catch((error: unknown) => {
@@ -713,7 +763,7 @@ export async function changeQuotation(input: QuotationChangeInput): Promise<Quot
       after: { netValue: net, grossValue: gross, validTo: parsed.validTo, submittedItems: lines.length, rejectedItems: rejected.size },
     });
   });
-  const view = await getQuotation(parsed.client, parsed.quotationNumber);
+  const view = await getQuotationForProvisioning(parsed.client, parsed.quotationNumber);
   if (!view) throw new SalesQuotationError(`Quotation ${parsed.quotationNumber} does not exist.`);
   return view;
 }
@@ -727,15 +777,22 @@ export interface QuotationListRow {
 export async function listQuotations(
   client: string,
   filter: { customerNumber?: string; status?: string; openOnly?: boolean; today?: string } = {},
+  authorization?: ServiceAuthorityContext,
 ): Promise<QuotationListRow[]> {
   return withTenant(client, async (tx) => {
+    const actor = await quotationActor(tx, client, authorization);
     const today = filter.today ?? todayOf();
     const conditions = [eq(salesQuotation.client, client)];
     if (filter.customerNumber) conditions.push(eq(salesQuotation.customerNumber, filter.customerNumber.trim().toUpperCase()));
     if (filter.status) conditions.push(eq(salesQuotation.status, filter.status));
     if (filter.openOnly) conditions.push(eq(salesQuotation.status, 'OPEN'));
-    const rows = await tx.select().from(salesQuotation).where(and(...conditions))
-      .orderBy(sql`${salesQuotation.createdAt} desc, ${salesQuotation.quotationNumber} desc`).limit(100);
+    const candidates = await tx.select().from(salesQuotation).where(and(...conditions))
+      .orderBy(sql`${salesQuotation.createdAt} desc, ${salesQuotation.quotationNumber} desc`);
+    const plantRows = await tx.select({ n: salesQuotationLine.quotationNumber, plant: salesQuotationLine.plant })
+      .from(salesQuotationLine).where(eq(salesQuotationLine.client, client));
+    const plantsOf = new Map<string, string[]>();
+    for (const r of plantRows) plantsOf.set(r.n, [...(plantsOf.get(r.n) ?? []), r.plant]);
+    const rows = candidates.filter((q) => salesDocumentReachable(actor, { ...q, plants: plantsOf.get(q.quotationNumber) ?? [] })).slice(0, 100);
     const orders = await ordersRaisedFrom(tx, client, rows.map((r) => r.quotationNumber));
     return rows.map((r) => ({
       quotationNumber: r.quotationNumber,
@@ -754,6 +811,7 @@ export async function listQuotations(
 /** End a quotation with a reason. A 4-character code with no master behind it, as an order item's. */
 export async function rejectQuotation(input: {
   client: string; changedBy: string; quotationNumber: string; expectedVersion: number; reason: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<QuotationView> {
   const parsed = z.object({
     client: key(4), changedBy: z.string().trim().min(1).max(60), quotationNumber: key(20),
@@ -768,6 +826,11 @@ export async function rejectQuotation(input: {
   }
   const data = parsed.data;
   await withTenant(data.client, async (tx) => {
+    const actor = await quotationActor(tx, data.client, input.authorization);
+    if (!(await quotationInReach(tx, data.client, actor, data.quotationNumber))) {
+      throw quotationMissing(data.quotationNumber, 'Read the quotation before rejecting it.');
+    }
+    data.changedBy = actor.username;
     const [before] = await tx.select().from(salesQuotation).where(and(
       eq(salesQuotation.client, data.client), eq(salesQuotation.quotationNumber, data.quotationNumber),
     )).limit(1);
@@ -799,7 +862,7 @@ export async function rejectQuotation(input: {
       after: { status: 'REJECTED', rejectionReason: data.reason },
     });
   });
-  const view = await getQuotation(data.client, data.quotationNumber);
+  const view = await getQuotationForProvisioning(data.client, data.quotationNumber);
   if (!view) throw new SalesQuotationError(`Quotation ${data.quotationNumber} does not exist.`);
   return view;
 }
@@ -837,6 +900,10 @@ export async function createOrderFromQuotation(
 
   // Both authorities: the screen that was reached, and the document about to be created.
   await withTenant(client, async (tx) => {
+    const actor = await quotationActor(tx, client, options.authorization);
+    if (!(await quotationInReach(tx, client, actor, quotationNumber))) {
+      throw quotationMissing(quotationNumber, 'Read the quotation before raising an order from it.');
+    }
     await requireAuthority(tx, client, options.authorization, SALES_QUOTATION_CAPABILITY);
     const orderAuthority = await verifyServiceAuthorityInTx(tx, client, options.authorization, SALES_ORDER_CREATE_CAPABILITY);
     if (!orderAuthority.ok) {
@@ -847,7 +914,7 @@ export async function createOrderFromQuotation(
     }
   });
 
-  const quotation = await getQuotation(client, quotationNumber, today);
+  const quotation = await getQuotationForProvisioning(client, quotationNumber, today);
   if (!quotation) {
     throw new SalesQuotationError(`Quotation ${quotationNumber} does not exist.`, 'Read the quotation before raising an order from it.');
   }
