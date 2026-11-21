@@ -36,7 +36,7 @@ export const productionOrderCostExport: ReportAdapter = {
 
 export const stockRequirementsExport: ReportAdapter = {
   code: 'stock-requirements', route: '/production/stock-requirements', capability: STOCK_REQUIREMENTS_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const get = (name: string) => (q.get(name) ?? '').trim();
     const r = await stockRequirementsList({
       client, today: new Date().toISOString().slice(0, 10),
@@ -48,7 +48,7 @@ export const stockRequirementsExport: ReportAdapter = {
         simulationVersion: get('simulationVersion'), horizonEnd: get('horizonEnd'),
         maxHits: Number(get('maxHits')) || DEFAULT_MAX_HITS,
       },
-    });
+    }, authorization);
     return {
       title: 'Stock/requirements list',
       subtitle: [

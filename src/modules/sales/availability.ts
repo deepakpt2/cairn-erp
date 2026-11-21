@@ -43,7 +43,7 @@ import {
   availabilityCheckScope, availabilityCheckingGroup, availabilityCheckingRule,
 } from '../production/schema';
 import { elementUnitKey, resolveElementUnits, scopeDocumentStates } from '../production/order-availability';
-import { StockRequirementsError, stockRequirementsList } from '../production/stock-requirements';
+import { StockRequirementsError, stockRequirementsListForProvisioning } from '../production/stock-requirements';
 import { salesOrderSchedule } from './schema';
 
 export const AVAILABILITY_ROUTE = '/config/availability-check';
@@ -338,7 +338,7 @@ async function countedSupply(
 
   let list;
   try {
-    list = await stockRequirementsList({
+    list = await stockRequirementsListForProvisioning({
       client, today: input.today,
       selection: { material: input.materialNumber, plant: input.plant, horizonEnd: input.horizonEnd, displayPastDue: true },
     });

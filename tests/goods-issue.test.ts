@@ -27,7 +27,7 @@ import {
   postGoodsIssue,
 } from '../src/modules/inventory/goods-issue';
 import { postGoodsIssueAction } from '../src/app/inventory/goods-issue/actions';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 
 /**
  * SCR-136 / MB1A — a goods issue is a material document: stock falls, the valuation

@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { checkOrderAvailability } from '../src/modules/production/order-availability';
+import { checkOrderAvailabilityForProvisioning as checkOrderAvailability } from '../src/modules/production/order-availability';
 import { co09AvailabilityFixture } from '../scripts/browser-smoke/co09-availability';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 

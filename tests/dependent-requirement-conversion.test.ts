@@ -22,7 +22,7 @@ import {
 import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
 import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';

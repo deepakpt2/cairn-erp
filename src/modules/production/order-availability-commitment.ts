@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import {
   PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY,
   PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY,
@@ -15,8 +16,12 @@ import {
 } from './schema';
 import {
   ORDER_AVAILABILITY_ORDER_CAPABILITY,
+  ORDER_AVAILABILITY_ELEMENTS_CAPABILITY,
   checkOrderAvailability,
+  checkOrderAvailabilityForProvisioning,
   holdsOrderAvailabilityAuthority,
+  orderAvailabilityReach,
+  type OrderAvailabilityMode,
   type ComponentAvailability,
   type OrderAvailabilityResult,
 } from './order-availability';
@@ -143,7 +148,7 @@ function unavailableOutcome(row: ComponentAvailability): boolean {
  * stored result; a new request rechecks current availability and replaces the
  * component's latest commitment with the full requirement or zero.
  */
-export async function commitOrderComponentAvailability(input: {
+type CommitInput = {
   client: string;
   changedBy: string;
   capabilities: readonly string[];
@@ -152,7 +157,35 @@ export async function commitOrderComponentAvailability(input: {
   itemNumber: string | number;
   today?: string;
   horizonEnd?: string | null;
-}): Promise<OrderAvailabilityCommitmentResult> {
+};
+type ResetInput = {
+  client: string;
+  changedBy: string;
+  capabilities: readonly string[];
+  requestKey: string;
+  orderNumber: string;
+  itemNumber: string | number;
+  reason: string;
+};
+
+/** Commit for an actor: the session, the live commit / display / element capabilities and the component's plant in reach. */
+export function commitOrderComponentAvailability(input: CommitInput, authorization: ServiceAuthorityContext | undefined) {
+  return commitWith(input, { authorization });
+}
+/** For tests, seeds and callers that judged the actor's reach themselves. Never import from `src/app`. */
+export function commitOrderComponentAvailabilityForProvisioning(input: CommitInput) {
+  return commitWith(input, 'unscoped');
+}
+/** Reset for an actor: the session, the live reset and display capabilities and the component's plant in reach. */
+export function resetOrderComponentAvailability(input: ResetInput, authorization: ServiceAuthorityContext | undefined) {
+  return resetWith(input, { authorization });
+}
+/** For tests, seeds and callers that judged the actor's reach themselves. Never import from `src/app`. */
+export function resetOrderComponentAvailabilityForProvisioning(input: ResetInput) {
+  return resetWith(input, 'unscoped');
+}
+
+async function commitWith(input: CommitInput, mode: OrderAvailabilityMode): Promise<OrderAvailabilityCommitmentResult> {
   if (!holdsOrderAvailabilityCommitAuthority(input.capabilities)) {
     fail(`The exact capability ${PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY} is required.`, 'Ask an administrator for this specific grant. A broader production or display grant is not enough.');
   }
@@ -175,6 +208,10 @@ export async function commitOrderComponentAvailability(input: {
       eq(productionOrderComponent.itemNumber, itemNumber),
     )).for('update');
     if (!component) fail(`Order ${orderNumber} has no component item ${itemNumber}.`, 'Open an existing component row on the CO09 result.');
+    const reach = await orderAvailabilityReach(tx, input.client, mode, [PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY, ORDER_AVAILABILITY_ORDER_CAPABILITY, ORDER_AVAILABILITY_ELEMENTS_CAPABILITY], (m, r) => new OrderAvailabilityCommitmentError(m, r));
+    // A component at a plant out of reach answers exactly as a missing one.
+    if (reach && !reach.reachable.includes(component.plant)) fail(`Order ${orderNumber} has no component item ${itemNumber}.`, 'Open an existing component row on the CO09 result.');
+    const changedBy = reach ? reach.username : input.changedBy;
     await lockMaterial(tx, { client: input.client, materialNumber: component.materialNumber, plant: component.plant });
 
     const replay = await assertRequestReplay<OrderAvailabilityCommitmentResult>(tx, {
@@ -185,13 +222,16 @@ export async function commitOrderComponentAvailability(input: {
     // The lock stays held while the availability service reads the stock/requirements
     // ledger in its own tenant transaction. Every other commit/reset for this
     // plant/material acquires the same lock before it can check or append an event.
-    const availability = await checkOrderAvailability({
+    const checkInput = {
       client: input.client,
       orderNumber,
       itemNumber: String(itemNumber),
       today,
       horizonEnd,
-    });
+    };
+    const availability = mode === 'unscoped'
+      ? await checkOrderAvailabilityForProvisioning(checkInput)
+      : await checkOrderAvailability(checkInput, mode.authorization);
     const row = availability.components.find((candidate) => Number(candidate.itemNumber) === itemNumber);
     if (!row || unavailableOutcome(row)) {
       fail(row?.message ?? `Component item ${itemNumber} has no availability result.`, row?.remedy ?? 'Resolve the refusal and run CO09 again. No commitment was changed.');
@@ -219,7 +259,7 @@ export async function commitOrderComponentAvailability(input: {
       action: 'COMMIT',
       requestFingerprint,
       resultSnapshot: result as unknown as Record<string, unknown>,
-      createdBy: input.changedBy,
+      createdBy: changedBy,
     });
     await tx.insert(productionOrderComponentCommitmentEvent).values({
       client: input.client,
@@ -236,14 +276,14 @@ export async function commitOrderComponentAvailability(input: {
       scopeKey: row.scopeKey,
       supersedesEventNumber: previous?.eventNumber ?? null,
       reason,
-      createdBy: input.changedBy,
+      createdBy: changedBy,
     });
     const recorded = await recordChange(tx, {
       client: input.client,
       objectClass: 'production_order_component_commitment',
       objectKey: `${orderNumber}/${itemNumber}`,
       changeType: 'CHANGE',
-      changedBy: input.changedBy,
+      changedBy,
       transactionCode: 'CO09',
       reason: reason ?? `Availability committed for order ${orderNumber}, component ${itemNumber}`,
       before: previous ? {
@@ -269,15 +309,7 @@ export async function commitOrderComponentAvailability(input: {
 }
 
 /** Append a reset event for one component. The reason and actor are retained even when it was already at zero. */
-export async function resetOrderComponentAvailability(input: {
-  client: string;
-  changedBy: string;
-  capabilities: readonly string[];
-  requestKey: string;
-  orderNumber: string;
-  itemNumber: string | number;
-  reason: string;
-}): Promise<OrderAvailabilityCommitmentResult> {
+async function resetWith(input: ResetInput, mode: OrderAvailabilityMode): Promise<OrderAvailabilityCommitmentResult> {
   if (!holdsOrderAvailabilityResetAuthority(input.capabilities)) {
     fail(`The exact capability ${PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY} is required.`, 'Ask an administrator for this specific grant. A broader production or display grant is not enough.');
   }
@@ -300,6 +332,9 @@ export async function resetOrderComponentAvailability(input: {
       eq(productionOrderComponent.itemNumber, itemNumber),
     )).for('update');
     if (!component) fail(`Order ${orderNumber} has no component item ${itemNumber}.`, 'Open an existing component row on the CO09 result.');
+    const reach = await orderAvailabilityReach(tx, input.client, mode, [PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY, ORDER_AVAILABILITY_ORDER_CAPABILITY], (m, r) => new OrderAvailabilityCommitmentError(m, r));
+    if (reach && !reach.reachable.includes(component.plant)) fail(`Order ${orderNumber} has no component item ${itemNumber}.`, 'Open an existing component row on the CO09 result.');
+    const changedBy = reach ? reach.username : input.changedBy;
     await lockMaterial(tx, { client: input.client, materialNumber: component.materialNumber, plant: component.plant });
 
     const replay = await assertRequestReplay<OrderAvailabilityCommitmentResult>(tx, {
@@ -330,7 +365,7 @@ export async function resetOrderComponentAvailability(input: {
       action: 'RESET',
       requestFingerprint,
       resultSnapshot: result as unknown as Record<string, unknown>,
-      createdBy: input.changedBy,
+      createdBy: changedBy,
     });
     await tx.insert(productionOrderComponentCommitmentEvent).values({
       client: input.client,
@@ -347,14 +382,14 @@ export async function resetOrderComponentAvailability(input: {
       scopeKey: previous?.scopeKey ?? null,
       supersedesEventNumber: previous?.eventNumber ?? null,
       reason,
-      createdBy: input.changedBy,
+      createdBy: changedBy,
     });
     const recorded = await recordChange(tx, {
       client: input.client,
       objectClass: 'production_order_component_commitment',
       objectKey: `${orderNumber}/${itemNumber}`,
       changeType: 'REVERSE',
-      changedBy: input.changedBy,
+      changedBy,
       transactionCode: 'CO09',
       reason,
       before: previous ? {

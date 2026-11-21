@@ -5,7 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { ReservationError, type CreateReservationInput } from '../src/modules/inventory/reservations';
 import { completeReservationItem, createReservation, getReservation, withdrawReservation } from './helpers/material-document-authorized';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 /**

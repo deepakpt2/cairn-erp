@@ -9,7 +9,7 @@ import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCateg
 import { getMrpRunForProvisioning as getMrpRun, planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
 import { createRoutingForProvisioning as createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 

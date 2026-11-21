@@ -20,7 +20,7 @@ import {
 } from '../src/modules/production/production-order-display';
 import { runOrderInformation } from '../src/modules/production/order-information';
 import { parseProductionOrderStatus } from '../src/modules/production/production-order-status';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 

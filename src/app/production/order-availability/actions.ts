@@ -52,7 +52,7 @@ export async function commitAvailabilityAction(formData: FormData): Promise<void
       itemNumber,
       today: formString(formData, 'today') || new Date().toISOString().slice(0, 10),
       horizonEnd: horizonEnd || null,
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     message = result.message;
     kind = 'success';
   } catch (error) {
@@ -81,7 +81,7 @@ export async function resetAvailabilityAction(formData: FormData): Promise<void>
       orderNumber,
       itemNumber,
       reason: formString(formData, 'reason'),
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     message = result.message;
     kind = 'success';
   } catch (error) {

@@ -15,7 +15,7 @@ import { createProductionVersionForProvisioning as createProductionVersion } fro
 import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { PlannedOrderChangeError, changePlannedOrderForProvisioning as changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrderForProvisioning as getPlannedOrder } from '../src/modules/production/planned-order-display';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import {
   PlannedOrderConversionError,
   convertPlannedOrder,

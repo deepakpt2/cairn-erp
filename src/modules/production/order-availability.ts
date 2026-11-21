@@ -54,6 +54,8 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 
 import { withTenant, type Tx } from '../../platform/db/client';
 import {
@@ -70,7 +72,7 @@ import {
 import { plannedOrder, productionCheckingControl, productionOrderComponentCommitmentEvent } from './schema';
 import { listAvailabilityCheck, type ScopeOfCheckRow } from './availability-check';
 import { parseProductionOrderStatus } from './production-order-status';
-import { StockRequirementsError, stockRequirementsList, type StockRequirementRow } from './stock-requirements';
+import { StockRequirementsError, stockRequirementsListForProvisioning, type StockRequirementRow } from './stock-requirements';
 
 /**
  * The authority to reach the screen and the authority over the numbers it shows.
@@ -641,13 +643,41 @@ interface ComponentPlan {
   scope: ScopeOfCheckRow | null;
 }
 
-export async function checkOrderAvailability(input: {
+export type OrderAvailabilityMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type OrderAvailabilityInput = {
   client: string;
   orderNumber: string;
   itemNumber?: string | null;
   today?: string;
   horizonEnd?: string | null;
-}): Promise<OrderAvailabilityResult> {
+};
+
+/**
+ * Session, each named capability live in the database (all of them, not any), and the plants the actor may reach.
+ * `null` for the unscoped provisioning mode.
+ */
+export async function orderAvailabilityReach(
+  tx: Tx, client: string, mode: OrderAvailabilityMode, capabilities: readonly string[],
+  failure: (message: string, remedy?: string) => Error,
+): Promise<{ reachable: string[]; username: string } | null> {
+  if (mode === 'unscoped') return null;
+  let actor;
+  for (const capability of capabilities) actor = await purchasingActor(tx, client, mode.authorization, [capability], failure);
+  if (!actor) throw failure('No capability was named for this check.');
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
+}
+
+/** CO09 for an actor: a session, PROD.ORDER.DISPLAY and PROD.MRP.STOCKREQ, and the order's plant inside the Company Code scope. */
+export function checkOrderAvailability(input: OrderAvailabilityInput, authorization: ServiceAuthorityContext | undefined): Promise<OrderAvailabilityResult> {
+  return checkWith(input, { authorization });
+}
+
+/** For tests, seeds and callers that judged the actor's reach themselves. Never import from `src/app`. */
+export function checkOrderAvailabilityForProvisioning(input: OrderAvailabilityInput): Promise<OrderAvailabilityResult> {
+  return checkWith(input, 'unscoped');
+}
+
+async function checkWith(input: OrderAvailabilityInput, mode: OrderAvailabilityMode): Promise<OrderAvailabilityResult> {
   const client = input.client;
   const orderNumber = input.orderNumber.trim().toUpperCase();
   if (!orderNumber) fail('An order number is required.', 'Open the check from an order, or type its number.');
@@ -670,8 +700,11 @@ export async function checkOrderAvailability(input: {
   const scopes = new Map(config.scopes.map((row) => [`${row.checkingGroup}/${row.checkingRule}`, row]));
 
   const plan = await withTenant(client, async (tx) => {
-    const [order] = await tx.select().from(productionOrder)
+    const reach = await orderAvailabilityReach(tx, client, mode, [ORDER_AVAILABILITY_ORDER_CAPABILITY, ORDER_AVAILABILITY_ELEMENTS_CAPABILITY], (m, r) => new OrderAvailabilityError(m, r));
+    const [found] = await tx.select().from(productionOrder)
       .where(and(eq(productionOrder.client, client), eq(productionOrder.orderNumber, orderNumber)));
+    // An order at a plant out of reach answers exactly as a missing one.
+    const order = found && reach && !reach.reachable.includes(found.plant) ? undefined : found;
     if (!order) {
       fail(`The production order ${orderNumber} does not stand in tenant ${client}.`, 'Open an order that exists, or correct the number.');
     }
@@ -1024,7 +1057,7 @@ export async function checkOrderAvailability(input: {
 
     let list;
     try {
-      list = await stockRequirementsList({
+      list = await stockRequirementsListForProvisioning({
         client,
         today,
         selection: {

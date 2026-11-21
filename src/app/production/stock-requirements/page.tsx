@@ -50,7 +50,7 @@ export default async function StockRequirementsPage({
         today: new Date().toISOString().slice(0, 10),
         selection: initialSelection,
         canDisplaySalesOrders: can(session, 'SALES.ORDER.CREATE'),
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       reportError = error instanceof StockRequirementsError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

@@ -19,6 +19,8 @@
  * header says that distribution is assumed. Every defaulted field raises its own warning. Nothing is written,
  * cached or stored.
  */
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
@@ -243,7 +245,19 @@ interface Operation {
   values: Array<{ parameter: string; quantity: number; unit: string }>;
 }
 
-export async function loadCapacityReport(input: CapacityLoadQuery, capabilities: string[]): Promise<CapacityLoadReport> {
+type CapacityMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+
+/** CM01 for an actor: a session, PROD.CAPACITY.LOAD live in the database, and the plant inside the Company Code scope. */
+export function loadCapacityReport(input: CapacityLoadQuery, capabilities: string[], authorization: ServiceAuthorityContext | undefined): Promise<CapacityLoadReport> {
+  return capacityWith(input, capabilities, { authorization });
+}
+
+/** For tests, seeds and callers that judged the actor's reach themselves. Never import from `src/app`. */
+export function loadCapacityReportForProvisioning(input: CapacityLoadQuery, capabilities: string[]): Promise<CapacityLoadReport> {
+  return capacityWith(input, capabilities, 'unscoped');
+}
+
+async function capacityWith(input: CapacityLoadQuery, capabilities: string[], mode: CapacityMode): Promise<CapacityLoadReport> {
   // 1. Authority, before any read.
   if (!hasCapability(capabilities, CAPACITY_LOAD_CAPABILITY)) {
     fail(`You do not hold ${CAPACITY_LOAD_CAPABILITY}.`, 'Ask an administrator for the authority to display capacity load.');
@@ -262,8 +276,14 @@ export async function loadCapacityReport(input: CapacityLoadQuery, capabilities:
   return withTenant(client, async (tx) => {
     // 2.–7. Validation, in the stated order.
     if (!plant) fail('A plant is required.', 'The report is of one plant.');
+    let reachable: string[] | null = null;
+    if (mode !== 'unscoped') {
+      const actor = await purchasingActor(tx, client, mode.authorization, [CAPACITY_LOAD_CAPABILITY], (m, r) => new CapacityLoadError(m, r ?? ''));
+      reachable = await reachablePlantsInTx(tx, client, actor);
+    }
     const [stands] = (await tx.execute(sql`select 1 as hit from plant where client = ${client} and plant = ${plant} limit 1`)) as unknown as Array<{ hit: number }>;
-    if (!stands) fail(`Plant ${plant} does not stand.`, 'Choose a plant that exists.');
+    // A plant out of reach answers exactly as a plant that does not stand.
+    if (!stands || (reachable && !reachable.includes(plant))) fail(`Plant ${plant} does not stand.`, 'Choose a plant that exists.');
     checkDate(input.dateFrom, 'The from date');
     checkDate(input.dateTo, 'The to date');
     if (input.dateTo < input.dateFrom) fail(`The to date ${input.dateTo} is before the from date ${input.dateFrom}.`, 'Put the earlier date first.');

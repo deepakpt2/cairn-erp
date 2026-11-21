@@ -15,7 +15,7 @@ import { withTenant } from '../src/platform/db/client';
 import {
   MRP_EXCEPTION_CAPABILITY, MRP_EXCEPTION_LIMIT_CEILING, MrpExceptionError, mrpExceptionMonitor, type MrpExceptionResult,
 } from '../src/modules/production/mrp-exception-monitor';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 
@@ -86,7 +86,7 @@ beforeAll(async () => {
   client = tenant.client;
   await withTenant(client, async (tx) => {
     for (const plant of [PLANT, QUIET]) {
-      await tx.execute(sql`insert into plant (client, plant, name, country, created_by) values (${client}, ${plant}, ${`Plant ${plant}`}, 'KW', ${ACTOR}) on conflict do nothing`);
+      await tx.execute(sql`insert into plant (client, plant, name, country, company_code, created_by) values (${client}, ${plant}, ${`Plant ${plant}`}, 'KW', (select company_code from company_code where client = ${client} order by company_code limit 1), ${ACTOR}) on conflict do nothing`);
       await tx.execute(sql`insert into mrp_controller (client, plant, controller, name, created_by) values (${client}, ${plant}, '001', 'Controller 001', ${ACTOR}) on conflict do nothing`);
       await tx.execute(sql`insert into storage_location (client, plant, storage_location, name, is_active, created_by) values (${client}, ${plant}, 'SL01', 'Store', true, ${ACTOR}) on conflict do nothing`);
     }
@@ -310,7 +310,7 @@ describe('registry and screen', () => {
     expect(source('src/ui/shell/screen-catalog.ts')).toMatch(/path: "\/production\/mrp-exception-monitor",[\s\S]*?code: "PROD\.MRP\.EXCEPTION",[\s\S]*?title: "MRP exception monitor",[\s\S]*?accepts: \["plant", "materialFrom", "materialTo", "mrpType", "horizonEnd", "exceptions"\]/);
     const service = source('src/modules/production/mrp-exception-monitor.ts');
     expect(service).not.toMatch(/\b(insert\s+into|update\s+\w+\s+set|delete\s+from)\b/i);
-    expect(service).toContain('stockRequirementsList(');
+    expect(service).toContain('stockRequirementsListForProvisioning(');
     expect(service).not.toMatch(/balanceNow|projectedBalance\s*<|SHORTAGE['\"]\s*\)?\s*;?\s*\n\s*(if|else)/);
   });
 

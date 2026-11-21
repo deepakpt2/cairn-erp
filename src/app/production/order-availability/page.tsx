@@ -84,7 +84,7 @@ export default async function OrderAvailabilityPage({
         itemNumber: itemNumber || null,
         today,
         horizonEnd: horizonEnd || null,
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       serviceError = error instanceof OrderAvailabilityError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

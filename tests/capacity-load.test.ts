@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import {
   bucketKey, checkWindow, CAPACITY_LOAD_CAPABILITY, CAPACITY_LOAD_LIMIT_CEILING, CapacityLoadError, drillDownFor, effectiveDailyMinutes,
-  isoWeekKey, loadCapacityReport, requirementOf, type CapacityLoadQuery, type CapacityLoadReport,
+  isoWeekKey, loadCapacityReportForProvisioning as loadCapacityReport, requirementOf, type CapacityLoadQuery, type CapacityLoadReport,
 } from '../src/modules/production/capacity-load';
 import { createProductionVersionForProvisioning as createProductionVersion } from '../src/modules/production/production-version';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';

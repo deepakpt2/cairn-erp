@@ -7766,6 +7766,8 @@
     "modules/inventory/unit-conversion.ts",
     "modules/production/production-version.ts",
     "modules/production/work-center.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts"
   ],
@@ -7846,6 +7848,7 @@
   ],
   "modules/production/mrp-exception-monitor.ts": [
     "modules/production/stock-requirements.ts",
+    "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts"
@@ -7880,6 +7883,7 @@
     "modules/production/order-availability.ts",
     "modules/production/schema.ts",
     "platform/auth/capability-policy.ts",
+    "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
@@ -7891,6 +7895,8 @@
     "modules/production/production-order-status.ts",
     "modules/production/schema.ts",
     "modules/production/stock-requirements.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/db/client.ts"
   ],
@@ -8136,6 +8142,8 @@
     "modules/production/sto-planning.ts",
     "modules/purchasing/receipt-unit-basis.ts",
     "modules/sales/sales-demand.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],

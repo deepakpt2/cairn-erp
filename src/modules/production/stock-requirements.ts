@@ -35,6 +35,8 @@ import { sql } from 'drizzle-orm';
 
 import { lineNotReversed, lineReversalDisagreement, OPEN_PRODUCTION_DOCUMENT, REVERSAL_QUANTITY_DISAGREEMENT } from '../inventory/production-document-quantity';
 import { withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { receiptMovementSign } from '../purchasing/receipt-unit-basis';
@@ -162,13 +164,27 @@ interface Element {
   drillDown: string | null;
 }
 
-export async function stockRequirementsList(input: {
+type StockRequirementsInput = {
   client: string;
   today: string;
   selection: StockRequirementsSelection;
   /** False masks the sales document identity and drill-down for a viewer without sales-order authority; the quantity and date still plan. */
   canDisplaySalesOrders?: boolean;
-}): Promise<StockRequirementsResult> {
+};
+
+/** MD04 for an actor: a session, PROD.MRP.STOCKREQ and the plant inside the Company Code scope (and Plant scope where held). */
+export function stockRequirementsList(input: StockRequirementsInput, authorization: ServiceAuthorityContext | undefined): Promise<StockRequirementsResult> {
+  return stockRequirementsWith(input, { authorization });
+}
+
+/** For tests, seeds and callers that judged the actor's reach themselves. Never import from `src/app`. */
+export function stockRequirementsListForProvisioning(input: StockRequirementsInput): Promise<StockRequirementsResult> {
+  return stockRequirementsWith(input, 'unscoped');
+}
+
+async function stockRequirementsWith(
+  input: StockRequirementsInput, mode: 'unscoped' | { authorization: ServiceAuthorityContext | undefined },
+): Promise<StockRequirementsResult> {
   const { client, today } = input;
   const raw = input.selection;
   const s: StockRequirementsSelection = {
@@ -210,6 +226,11 @@ export async function stockRequirementsList(input: {
   const calculatedAt = new Date().toISOString();
 
   return withTenant(client, async (tx) => {
+    let reachable: string[] | null = null;
+    if (mode !== 'unscoped') {
+      const actor = await purchasingActor(tx, client, mode.authorization, [STOCK_REQUIREMENTS_CAPABILITY], (m, r) => new StockRequirementsError(m, r));
+      reachable = await reachablePlantsInTx(tx, client, actor);
+    }
     const master = await tx.execute(sql`
       select m.material_number, m.description, m.base_unit,
              mp.mrp_type, mp.safety_stock::text as safety_stock, mp.reorder_point::text as reorder_point
@@ -219,7 +240,8 @@ export async function stockRequirementsList(input: {
     `) as unknown as Array<Record<string, unknown>>;
     if (master.length === 0) fail(`The material ${s.material} does not stand.`, 'Maintain the material before planning it.');
     const plant = await tx.execute(sql`select 1 as hit from plant where client = ${client} and plant = ${s.plant!} limit 1`) as unknown as Array<{ hit: number }>;
-    if (plant.length === 0) fail(`The plant ${s.plant} does not stand.`, 'Maintain the plant before planning in it.');
+    // A plant out of reach answers exactly as a plant that does not stand.
+    if (plant.length === 0 || (reachable && !reachable.includes(s.plant!))) fail(`The plant ${s.plant} does not stand.`, 'Maintain the plant before planning in it.');
 
     const num = (value: unknown, scale = 3) => (value === null || value === undefined
       ? 0

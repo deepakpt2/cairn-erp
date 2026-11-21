@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import {
   StockRequirementsError,
-  stockRequirementsList,
+  stockRequirementsListForProvisioning as stockRequirementsList,
   type StockRequirementsSelection,
 } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant } from './helpers';

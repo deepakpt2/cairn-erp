@@ -339,3 +339,10 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - Residuals: a create request-key replay returns the stored row without a plant-reach check on the earlier request (routing, production version, material BOM, same pattern); a production version names a BOM and routing only at its own plant, so no cross-plant read happens.
 - Tests: `tests/company-scope-production.test.ts` (25 now); the lock-acquisition, master-lock and change-lock suites now sign their people in as real persisted actors.
 - Still unscoped in production: availability check and commitment, capacity load, stock-requirements, STO planning, cost estimate, order-cost and other production reports.
+
+## Phase 9i — stock/requirements, capacity load, order availability, MRP exception monitor
+
+- `stockRequirementsList`, `loadCapacityReport`, `checkOrderAvailability`, `commitOrderComponentAvailability`, `resetOrderComponentAvailability` now take `authorization` last; the actor and tenant come from the session, and the recorded user is the session username. Out-of-reach plants, orders and components answer as missing ones.
+- `...ForProvisioning` variants run unscoped (tests, seeds, internal reads) and are not imported from `src/app`.
+- The MRP exception monitor gained the Company/Plant gate.
+- Residuals: sales ATP (`sales/availability.ts`) uses the ForProvisioning stock-requirements read and relies on sales-side scope; the STO planning helper inside stock-requirements stays unscoped; a plant-limited user is not specially refused company-wide aggregates here beyond plant reach. Tests: `tests/company-scope-production.test.ts` (28 pass). Not browser-tested; full suite not run.

@@ -25,9 +25,10 @@ import { sql } from 'drizzle-orm';
 
 import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../platform/auth/service-authority';
 import { hasOrgAccess } from '../../platform/auth/session';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
 import { withTenant } from '../../platform/db/client';
 import {
-  type ExceptionCode, StockRequirementsError, stockRequirementsList,
+  type ExceptionCode, StockRequirementsError, stockRequirementsListForProvisioning,
 } from './stock-requirements';
 
 export const MRP_EXCEPTION_CAPABILITY = 'PROD.MRP.EXCEPTION';
@@ -164,6 +165,11 @@ export async function mrpExceptionMonitor(
     if (!hasOrgAccess(verdict.restrictions, 'PLANT', plant)) {
       fail(`Your Plant scope does not cover plant ${plant}.`, 'Ask an administrator to extend your Plant scope, then run the monitor again.');
     }
+    // The plant's company must also be inside the explicit Company Code scope.
+    const companyActor = await purchasingActor(tx, input.client, options.authorization, [MRP_EXCEPTION_CAPABILITY], (m, r) => new MrpExceptionError(m, r));
+    if (!(await reachablePlantsInTx(tx, input.client, companyActor)).includes(plant)) {
+      fail(`Plant ${plant} does not stand.`, 'Choose a plant that exists.');
+    }
     if ((s.mrpArea ?? '').trim()) {
       fail(`The MRP area ${s.mrpArea!.trim()} does not stand.`, 'Decentralised planning is not carried; the plant is the planning scope.');
     }
@@ -218,7 +224,7 @@ export async function mrpExceptionMonitor(
   for (const materialNumber of toScan) {
     let list;
     try {
-      list = await stockRequirementsList({
+      list = await stockRequirementsListForProvisioning({
         client: input.client, today: input.today,
         selection: { material: materialNumber, plant, ...(horizonEnd ? { horizonEnd } : {}) },
       });

@@ -36,6 +36,10 @@ import {
   changeProductionVersion, checkProductionVersion, copyProductionVersion, createProductionVersion,
   deleteProductionVersion, getProductionVersion, listProductionVersions, lockProductionVersion,
 } from '../src/modules/production/production-version';
+import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { loadCapacityReport } from '../src/modules/production/capacity-load';
+import { checkOrderAvailability } from '../src/modules/production/order-availability';
+import { commitOrderComponentAvailability, resetOrderComponentAvailability } from '../src/modules/production/order-availability-commitment';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -198,7 +202,7 @@ beforeAll(async () => {
     materialEntry: '+', quantityEntry: '+', allowFixedQuantity: 'X', allowBulk: 'X', allowPhantom: 'X',
   });
   await saveBomStatus({ client, changedBy: SEED, status: '1', description: 'Active', releasedForCosting: 'X', releasedForOrders: 'X' });
-  const BCAPS = ['PROD.BOM.DISPLAY', 'PROD.BOM.CREATE', 'PROD.BOM.CHANGE', 'PROD.WORKCENTER.DISPLAY', 'PROD.WORKCENTER.CREATE', 'PROD.WORKCENTER.CHANGE', 'PROD.ROUTING.DISPLAY', 'PROD.ROUTING.CREATE', 'PROD.ROUTING.CHANGE', 'PROD.VERSION.DISPLAY', 'PROD.VERSION.CREATE', 'PROD.VERSION.CHANGE', 'PROD.VERSION.CHECK', 'PROD.VERSION.LOCK', 'PROD.VERSION.DELETE'];
+  const BCAPS = ['PROD.BOM.DISPLAY', 'PROD.BOM.CREATE', 'PROD.BOM.CHANGE', 'PROD.WORKCENTER.DISPLAY', 'PROD.WORKCENTER.CREATE', 'PROD.WORKCENTER.CHANGE', 'PROD.ROUTING.DISPLAY', 'PROD.ROUTING.CREATE', 'PROD.ROUTING.CHANGE', 'PROD.VERSION.DISPLAY', 'PROD.VERSION.CREATE', 'PROD.VERSION.CHANGE', 'PROD.VERSION.CHECK', 'PROD.VERSION.LOCK', 'PROD.VERSION.DELETE', 'PROD.MRP.STOCKREQ', 'PROD.CAPACITY.LOAD.DISPLAY', 'PROD.ORDER.DISPLAY', 'PROD.ORDER.AVAILABILITY.COMMIT', 'PROD.ORDER.AVAILABILITY.RESET'];
   bA = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [A] });
   bB = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [B] });
   bPlantA = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [A, B], plantScopes: ['PLA1'] });
@@ -683,5 +687,62 @@ describe('production version', () => {
     }
     expect(await ask(createProductionVersion(pv('PLB1', '0077'), bPlantA.authorization))).not.toBe('done');
     expect(await rows('0077')).toHaveLength(0);
+  });
+});
+
+describe('stock/requirements, capacity load and the availability check', () => {
+  const md04 = (plant: string, a: Auth) => stockRequirementsList({
+    client, today: '2026-10-20', selection: { material: 'SCMK', plant },
+  }, a);
+  const cm01 = (plant: string, a: Auth) => loadCapacityReport({
+    client, plant, dateFrom: '2026-10-01', dateTo: '2026-10-31', period: 'WEEK',
+  }, ['PROD.CAPACITY.LOAD.DISPLAY'], a);
+  const co09 = (order: string, a: Auth) => checkOrderAvailability({ client, orderNumber: order }, a);
+  const commit = (order: string, a: Auth, key: string) => commitOrderComponentAvailability({
+    client, changedBy: 'someone-else', capabilities: ['PROD.ORDER.AVAILABILITY.COMMIT', 'PROD.ORDER.DISPLAY', 'PROD.MRP.STOCKREQ'],
+    requestKey: key, orderNumber: order, itemNumber: 10,
+  }, a);
+  const reset = (order: string, a: Auth, key: string) => resetOrderComponentAvailability({
+    client, changedBy: 'someone-else', capabilities: ['PROD.ORDER.AVAILABILITY.RESET', 'PROD.ORDER.DISPLAY'],
+    requestKey: key, orderNumber: order, itemNumber: 10, reason: 'scope test',
+  }, a);
+
+  it('answers a plant or order out of reach exactly as one that does not stand', async () => {
+    const noPlant = mask(await ask(md04('PLZZ', bA.authorization)), 'PLZZ');
+    for (const p of ['PLB1', 'PLN1']) expect(mask(await ask(md04(p, bA.authorization)), p)).toBe(noPlant);
+    expect(await ask(md04('PLA1', bA.authorization))).toBe('done');
+
+    const noCap = mask(await ask(cm01('PLZZ', bA.authorization)), 'PLZZ');
+    for (const p of ['PLB1', 'PLN1']) expect(mask(await ask(cm01(p, bA.authorization)), p)).toBe(noCap);
+    expect(await ask(cm01('PLA1', bA.authorization))).toBe('done');
+
+    const noOrder = mask(await ask(co09('PO-ZZ', bA.authorization)), 'PO-ZZ');
+    for (const o of ['PO-B', 'PO-N']) expect(mask(await ask(co09(o, bA.authorization)), o)).toBe(noOrder);
+    expect(await ask(co09('PO-A', bA.authorization))).not.toBe(noOrder.replace('#', 'PO-A'));
+  });
+
+  it('refuses a commit or reset on a component out of reach as a missing component, and writes nothing', async () => {
+    const before = () => withTenant(client, async (tx) => Number(((await tx.execute(sql`
+      select count(*)::int as n from production_order_component_commitment_event where client = ${client}`)) as unknown as Array<{ n: number }>)[0]!.n));
+    const n = await before();
+    const missing = mask(await ask(commit('PO-ZZ', bA.authorization, 'k-miss')), 'PO-ZZ');
+    for (const o of ['PO-B', 'PO-N']) expect(mask(await ask(commit(o, bA.authorization, `k-${o}`)), o)).toBe(missing);
+    const resetMissing = mask(await ask(reset('PO-ZZ', bA.authorization, 'r-miss')), 'PO-ZZ');
+    for (const o of ['PO-B', 'PO-N']) expect(mask(await ask(reset(o, bA.authorization, `r-${o}`)), o)).toBe(resetMissing);
+    expect(await before()).toBe(n);
+    // Inside reach a reset goes through and records the session user.
+    expect(await ask(reset('PO-A', bA.authorization, 'r-in'))).toBe('done');
+    expect(await before()).toBe(n + 1);
+  });
+
+  it('refuses a missing session, a missing capability, no scope, a plant scope that excludes the plant, and another tenant', async () => {
+    for (const bad of [undefined, { userId: 'nobody', sessionId: 'nothing' }, bNoCap.authorization, bNoScope.authorization, bOther.authorization]) {
+      expect(await ask(md04('PLA1', bad))).not.toBe('done');
+      expect(await ask(cm01('PLA1', bad))).not.toBe('done');
+      expect(await ask(commit('PO-A', bad, 'k-bad'))).not.toBe('done');
+      expect(await ask(reset('PO-A', bad, 'r-bad'))).not.toBe('done');
+    }
+    expect(await ask(md04('PLB1', bPlantA.authorization))).not.toBe('done');
+    expect(await ask(cm01('PLB1', bPlantA.authorization))).not.toBe('done');
   });
 });

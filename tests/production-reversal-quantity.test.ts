@@ -10,7 +10,7 @@ import { createProductionOrder, releaseProductionOrder } from '../src/modules/in
 import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
 import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { planSingleItemForProvisioning as planSingleItem } from '../src/modules/production/mrp-run';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 

@@ -20,19 +20,19 @@ import {
   ORDER_AVAILABILITY_ELEMENTS_CAPABILITY,
   ORDER_AVAILABILITY_ORDER_CAPABILITY,
   OrderAvailabilityError,
-  checkOrderAvailability,
+  checkOrderAvailabilityForProvisioning as checkOrderAvailability,
   holdsOrderAvailabilityAuthority,
   orderAvailabilityRefusal,
   type OrderAvailabilityResult,
 } from '../src/modules/production/order-availability';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import {
   PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY,
   PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY,
 } from '../src/platform/auth/capability-policy';
 import {
-  commitOrderComponentAvailability,
-  resetOrderComponentAvailability,
+  commitOrderComponentAvailabilityForProvisioning as commitOrderComponentAvailability,
+  resetOrderComponentAvailabilityForProvisioning as resetOrderComponentAvailability,
 } from '../src/modules/production/order-availability-commitment';
 import { changeProductionOrderForProvisioning as changeProductionOrder } from '../src/modules/production/production-order-change';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';

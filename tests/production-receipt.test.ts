@@ -15,7 +15,7 @@ import { technicallyCompleteProductionOrder } from '../src/modules/production/pr
 import { getBatchLevel, saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
-import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { stockRequirementsListForProvisioning as stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 

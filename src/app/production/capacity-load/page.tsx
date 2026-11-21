@@ -69,7 +69,7 @@ export default async function CapacityLoadPage({ searchParams }: { searchParams:
         client, plant, workCenterFrom: last(params.workCenterFrom), workCenterTo: last(params.workCenterTo),
         capacityCategory: last(params.capacityCategory), dateFrom, dateTo, period, workingDaysPerWeek: wdpw,
         includePlannedOrders: includePlanned, statuses, limit,
-      }, session.user.capabilities);
+      }, session.user.capabilities, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       if (!(error instanceof CapacityLoadError)) throw error;
       problem = `${error.message} ${error.remedy}`;
