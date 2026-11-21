@@ -10,6 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { displayMaterialDocument } from '../src/modules/inventory/material-document-display';
 import { listMaterialDocuments } from '../src/modules/inventory/material-document-list';
+import { stockOverview } from '../src/modules/inventory/stock-overview';
+import { listWarehouseStocks } from '../src/modules/inventory/warehouse-stocks';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 
@@ -21,7 +23,7 @@ const DOC_B = '4900000002';
 const DOC_X = '4900000003';
 const DOC_N = '4900000004';
 const GONE = '4999999999';
-const CAPS = ['INV.DISPLAY', 'INV.MATERIALDOC.LIST'];
+const CAPS = ['INV.DISPLAY', 'INV.MATERIALDOC.LIST', 'INV.STOCK.VIEW', 'INV.STOCK.WAREHOUSE'];
 const WINDOW = { postingDateFrom: '2026-04-01', postingDateTo: '2026-04-30', maxHits: 100 };
 
 let tenant: TestTenant;
@@ -68,6 +70,10 @@ beforeAll(async () => {
           storage_location, stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, currency, value, created_by)
         values (${client}, ${doc}, ${no}, 'GOODS_RECEIPT_PO', 'SCM1', ${plant}, 'SL01', 'UNRESTRICTED', 1, 'PC', 1, 'PC', 10, 1, 'USD', 10, ${SEED})`);
     };
+    for (const [plant, quantity] of [['PLA1', 11], ['PLB1', 22], ['PLN1', 33]] as const) {
+      await tx.execute(sql`insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
+        values (${client}, 'SCM1', ${plant}, 'SL01', 'UNRESTRICTED', ${quantity}, ${SEED})`);
+    }
     await line(DOC_A, 1, 'PLA1');
     await line(DOC_B, 1, 'PLB1');
     await line(DOC_X, 1, 'PLA1');
@@ -136,6 +142,46 @@ describe('material document list', () => {
   it('refuses no session, no capability, no scope and another tenant', async () => {
     for (const a of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
       expect(await ask(list(a))).not.toBe('done');
+    }
+  });
+});
+
+describe('stock overview and warehouse stocks', () => {
+  const overview = (a: FinanceActor['authorization'] | undefined, selection = {}) =>
+    stockOverview({ client, selection: { material: 'SCM1', maxHits: 100, ...selection }, authorization: a });
+  const warehouse = (a: FinanceActor['authorization'] | undefined, selection = {}) =>
+    listWarehouseStocks({ client, localCurrency: 'USD', selection: { materialFrom: 'SCM1', materialTo: 'SCM1', maxHits: 100, ...selection }, authorization: a });
+  const plantsOf = (r: { plants: Array<{ plant: string }> }) => r.plants.map((p) => p.plant).sort();
+
+  it('shows only the stock of plants the session may reach', async () => {
+    expect(plantsOf(await overview(onlyA.authorization))).toEqual(['PLA1']);
+    expect(plantsOf(await overview(onlyB.authorization))).toEqual(['PLB1']);
+    expect(plantsOf(await overview(both.authorization))).toEqual(['PLA1', 'PLB1']);
+    expect(plantsOf(await overview(plantA.authorization))).toEqual(['PLA1']);
+    const rows = (a: FinanceActor['authorization']) => warehouse(a).then((r) => r.rows.map((x) => x.plant).sort());
+    expect(await rows(onlyA.authorization)).toEqual(['PLA1']);
+    expect(await rows(onlyB.authorization)).toEqual(['PLB1']);
+    expect(await rows(both.authorization)).toEqual(['PLA1', 'PLB1']);
+    expect(await rows(plantA.authorization)).toEqual(['PLA1']);
+  });
+
+  it('never counts the stock of a plant that names no company or of another company in totals', async () => {
+    const a = await warehouse(onlyA.authorization);
+    expect(a.rows.reduce((sum, r) => sum + r.unrestrictedQuantity, 0)).toBe(11);
+    expect(JSON.stringify(await overview(onlyA.authorization))).not.toContain('PLB1');
+  });
+
+  it('answers a plant selection outside the reach as a plant that does not stand', async () => {
+    const miss = await ask(overview(onlyA.authorization, { plantFrom: 'PLZ9', plantTo: 'PLZ9' }));
+    expect((await ask(overview(onlyA.authorization, { plantFrom: 'PLB1', plantTo: 'PLB1' }))).replaceAll('PLB1', '#')).toBe(miss.replaceAll('PLZ9', '#'));
+    const missW = await ask(warehouse(onlyA.authorization, { plantFrom: 'PLZ9', plantTo: 'PLZ9' }));
+    expect((await ask(warehouse(onlyA.authorization, { plantFrom: 'PLN1', plantTo: 'PLN1' }))).replaceAll('PLN1', '#')).toBe(missW.replaceAll('PLZ9', '#'));
+  });
+
+  it('refuses no session, no capability, no scope and another tenant', async () => {
+    for (const a of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      expect(await ask(overview(a))).not.toBe('done');
+      expect(await ask(warehouse(a))).not.toBe('done');
     }
   });
 });

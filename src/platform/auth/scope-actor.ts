@@ -63,3 +63,10 @@ export async function reachablePlantsInTx(tx: Tx, client: string, actor: Company
   }
   return out;
 }
+
+/** `and <column> in (reachable plants)`; with none reachable, `and false`. `column` is a trusted literal. */
+export function plantReachFilter(column: string, reachable: readonly string[]) {
+  return reachable.length > 0
+    ? sql`and ${sql.raw(column)} in (${sql.join(reachable.map((p) => sql`${p}`), sql`, `)})`
+    : sql`and false`;
+}

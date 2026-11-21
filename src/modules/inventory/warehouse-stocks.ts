@@ -21,6 +21,8 @@
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 
@@ -127,6 +129,8 @@ export async function listWarehouseStocks(input: {
   client: string;
   localCurrency: string;
   selection: WarehouseStockSelection;
+  /** The verified session. Only stock of plants in the caller's Company Code (and Plant) scope is listed. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<WarehouseStockResult> {
   const { client, localCurrency } = input;
   const raw = input.selection;
@@ -184,6 +188,8 @@ export async function listWarehouseStocks(input: {
   const calculatedAt = new Date().toISOString();
 
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, input.authorization, [WAREHOUSE_STOCK_CAPABILITY], (m, r) => new WarehouseStockError(m, r));
+    const reachable = await reachablePlantsInTx(tx, client, actor);
     for (const value of [s.materialFrom, s.materialTo]) {
       if (!value) continue;
       const rows = await tx.execute(sql`
@@ -196,7 +202,7 @@ export async function listWarehouseStocks(input: {
       const rows = await tx.execute(sql`
         select 1 as hit from plant where client = ${client} and plant = ${value} limit 1
       `) as unknown as Array<{ hit: number }>;
-      if (rows.length === 0) fail(`The plant ${value} does not stand.`, 'Maintain the plant before selecting it.');
+      if (rows.length === 0 || !reachable.includes(value)) fail(`The plant ${value} does not stand.`, 'Maintain the plant before selecting it.');
     }
     for (const value of [s.storageLocationFrom, s.storageLocationTo]) {
       if (!value) continue;
@@ -236,6 +242,7 @@ export async function listWarehouseStocks(input: {
     }
 
     const filters = [
+      plantReachFilter('s.plant', reachable),
       s.materialFrom ? sql`and s.material_number >= ${s.materialFrom}` : sql``,
       s.materialTo ? sql`and s.material_number <= ${s.materialTo}` : sql``,
       s.plantFrom ? sql`and s.plant >= ${s.plantFrom}` : sql``,

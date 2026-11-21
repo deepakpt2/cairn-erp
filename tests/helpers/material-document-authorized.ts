@@ -22,3 +22,21 @@ export { MaterialDocumentDisplayError, MATERIAL_DOC_DISPLAY_CAPABILITY, MATERIAL
 export type { DisplayedDocument, DisplayedDocumentLine } from '../../src/modules/inventory/material-document-display';
 export { MaterialDocListError, MATERIAL_DOC_LIST_CAPABILITY, MATERIAL_DOC_LIST_ALIAS, DEFAULT_MAX_HITS, MAX_HITS_CAP } from '../../src/modules/inventory/material-document-list';
 export type { MaterialDocListRow, MaterialDocListResult, MaterialDocListSelection } from '../../src/modules/inventory/material-document-list';
+
+import { stockOverview as overview } from '../../src/modules/inventory/stock-overview';
+import { listWarehouseStocks as warehouse } from '../../src/modules/inventory/warehouse-stocks';
+
+async function stockActor(client: string): Promise<FinanceActor> {
+  const key = `stock:${client}`;
+  let a = actors.get(key);
+  if (!a) { a = createFinanceActor(client, { capabilities: ['INV.STOCK.VIEW', 'INV.STOCK.WAREHOUSE'] }); actors.set(key, a); }
+  return a;
+}
+export async function stockOverview(input: Opt<typeof overview>) {
+  return overview({ ...input, authorization: input.authorization ?? (await stockActor(input.client)).authorization } as Parameters<typeof overview>[0]);
+}
+export async function listWarehouseStocks(input: Opt<typeof warehouse>) {
+  return warehouse({ ...input, authorization: input.authorization ?? (await stockActor(input.client)).authorization } as Parameters<typeof warehouse>[0]);
+}
+export { StockOverviewError } from '../../src/modules/inventory/stock-overview';
+export { WarehouseStockError } from '../../src/modules/inventory/warehouse-stocks';

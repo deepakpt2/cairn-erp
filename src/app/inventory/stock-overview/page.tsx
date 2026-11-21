@@ -45,7 +45,8 @@ export default async function StockOverviewPage({
   let reportError: string | null = null;
   if (can(session, STOCK_OVERVIEW_CAPABILITY)) {
     try {
-      result = await stockOverview({ client: session.user.client, selection: initialSelection });
+      result = await stockOverview({ client: session.user.client, selection: initialSelection,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     } catch (error) {
       reportError = error instanceof StockOverviewError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

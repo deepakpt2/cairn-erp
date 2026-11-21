@@ -11,7 +11,7 @@ const up = (q: URLSearchParams, name: string) => get(q, name).toUpperCase();
 
 export const stockOverviewExport: ReportAdapter = {
   code: 'stock-overview', route: '/inventory/stock-overview', capability: STOCK_OVERVIEW_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const selection: StockOverviewSelection = {
       material: up(q, 'material'), plantFrom: up(q, 'plantFrom'), plantTo: up(q, 'plantTo'),
       storageLocationFrom: up(q, 'storageLocationFrom'), storageLocationTo: up(q, 'storageLocationTo'),
@@ -20,7 +20,7 @@ export const stockOverviewExport: ReportAdapter = {
       expansionLevel: up(q, 'expansionLevel') || 'STORAGE_LOCATION',
       maxHits: Number(get(q, 'maxHits')) || DEFAULT_MAX_HITS,
     };
-    const r = await stockOverview({ client, selection });
+    const r = await stockOverview({ client, selection, authorization });
     const rows: string[][] = [];
     for (const p of r.plants) {
       if (p.storageLocations.length === 0) rows.push([p.plant, '', '', '', fmt(p.quantity, 3)]);

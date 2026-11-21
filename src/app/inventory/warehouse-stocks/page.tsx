@@ -60,6 +60,7 @@ export default async function WarehouseStocksPage({
         client: session.user.client,
         localCurrency: currencyRows[0]?.currency ?? 'KWD',
         selection: initialSelection,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       });
     } catch (error) {
       reportError = error instanceof WarehouseStockError

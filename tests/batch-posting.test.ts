@@ -9,8 +9,8 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import { reverseGoodsReceipt, postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { postTransfer, reverseTransfer } from './helpers/transfer-authorized';
-import { stockOverview } from '../src/modules/inventory/stock-overview';
-import { listWarehouseStocks } from '../src/modules/inventory/warehouse-stocks';
+import { stockOverview } from './helpers/material-document-authorized';
+import { listWarehouseStocks } from './helpers/material-document-authorized';
 import { stockOnPostingDate } from '../src/modules/inventory/stock-posting-date';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { saveBatchStatus } from '../src/modules/inventory/batch-status';

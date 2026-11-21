@@ -22,6 +22,8 @@
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { IN_TRANSIT } from './stock-types';
@@ -143,6 +145,8 @@ function bound(value: string | undefined): string | undefined {
 export async function stockOverview(input: {
   client: string;
   selection: StockOverviewSelection;
+  /** The verified session. Only stock of plants in the caller's Company Code (and Plant) scope is shown. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<StockOverviewResult> {
   const { client } = input;
   const raw = input.selection;
@@ -183,6 +187,8 @@ export async function stockOverview(input: {
   const calculatedAt = new Date().toISOString();
 
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, input.authorization, [STOCK_OVERVIEW_CAPABILITY], (m, r) => new StockOverviewError(m, r));
+    const reachable = await reachablePlantsInTx(tx, client, actor);
     const master = await tx.execute(sql`
       select material_number, description, base_unit from material
       where client = ${client} and material_number = ${s.material!}
@@ -192,7 +198,7 @@ export async function stockOverview(input: {
     for (const value of [s.plantFrom, s.plantTo]) {
       if (!value) continue;
       const rows = await tx.execute(sql`select 1 as hit from plant where client = ${client} and plant = ${value} limit 1`) as unknown as Array<{ hit: number }>;
-      if (rows.length === 0) fail(`The plant ${value} does not stand.`, 'Maintain the plant before selecting it.');
+      if (rows.length === 0 || !reachable.includes(value)) fail(`The plant ${value} does not stand.`, 'Maintain the plant before selecting it.');
     }
     for (const value of [s.storageLocationFrom, s.storageLocationTo]) {
       if (!value) continue;
@@ -224,6 +230,7 @@ export async function stockOverview(input: {
       }
     }
     const filters = [
+      plantReachFilter('plant', reachable),
       s.plantFrom ? sql`and plant >= ${s.plantFrom}` : sql``,
       s.plantTo ? sql`and plant <= ${s.plantTo}` : sql``,
       s.storageLocationFrom ? sql`and storage_location >= ${s.storageLocationFrom}` : sql``,
@@ -246,6 +253,7 @@ export async function stockOverview(input: {
       select plant, batch_number, quantity::text as quantity
       from stock_quantity
       where client = ${client} and material_number = ${s.material!} and stock_type = ${IN_TRANSIT}
+        ${plantReachFilter('plant', reachable)}
         ${s.plantFrom ? sql`and plant >= ${s.plantFrom}` : sql``}
         ${s.plantTo ? sql`and plant <= ${s.plantTo}` : sql``}
         ${batchFilter ? sql`and batch_number = ${batchFilter}` : sql``}
@@ -260,6 +268,7 @@ export async function stockOverview(input: {
         from sto_transit_allocation
        where client = ${client} and material_number = ${s.material!}
          and issued_quantity - reversed_quantity - received_quantity > 0
+         ${plantReachFilter('receiving_plant', reachable)}
        order by receiving_plant, order_number, item_number, posting_date
     `) as unknown as Array<{ plant: string; order_number: string; item_number: number; batch_number: string; in_transit: string }>;
 

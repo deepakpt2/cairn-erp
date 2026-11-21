@@ -78,3 +78,9 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 - Tests: `tests/company-scope-inventory.test.ts` (6 tests); existing suites use `tests/helpers/material-document-authorized.ts`.
 
 **Not covered yet in inventory:** physical inventory, price change, reservations, warehouse stocks, stock overview/ageing/reconcile/shelf-life lists, batch reads, serial numbers, goods-receipt posting (uses plant-level checks only where its own service already verifies), MIGO. Document list lines of a mixed-company document are trimmed per line rather than the document refused.
+
+## Phase 5d — inventory: stock overview (MMBE) and warehouse stocks (MB52)
+
+**Covered:** `stockOverview` (needs `INV.STOCK.VIEW`) and `listWarehouseStocks` (needs `INV.STOCK.WAREHOUSE`), including the stock-overview report export. Both require a session, judge inside the transaction, and read only plants that are reachable (company in the explicit Company Code scope; Plant scope honoured; a plant with no company never). Transit quantities and the STO transit ledger are filtered by receiving plant. A plant selection outside reach answers as a plant that does not stand. Totals are computed from the reachable rows only. Tests: 4 more in `tests/company-scope-inventory.test.ts`.
+
+**Still not covered in inventory:** physical inventory, price change, reservations, stock ageing/reconcile/shelf-life lists, batch reads, serial numbers, MIGO, return delivery. The drill-down links from these lists lead to the material document list, which is scoped.

@@ -7279,6 +7279,8 @@
   "modules/inventory/stock-overview.ts": [
     "modules/inventory/batch-posting.ts",
     "modules/inventory/stock-types.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -7365,6 +7367,8 @@
   "modules/inventory/warehouse-stocks.ts": [
     "modules/inventory/batch-posting.ts",
     "modules/inventory/stock-types.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],

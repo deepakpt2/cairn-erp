@@ -2,11 +2,8 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import {
-  StockOverviewError,
-  stockOverview,
-  type StockOverviewSelection,
-} from '../src/modules/inventory/stock-overview';
+import { StockOverviewError, type StockOverviewSelection } from '../src/modules/inventory/stock-overview';
+import { stockOverview } from './helpers/material-document-authorized';
 import { createTenant, destroyTenant } from './helpers';
 
 /**
@@ -26,9 +23,9 @@ describe('SCR-128 stock overview (MMBE)', () => {
     client = tenant.client;
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
-        insert into plant (client, plant, name, country, created_by) values
-          (${client}, 'QA01', 'Plant A', 'KW', ${ACTOR}),
-          (${client}, 'QA02', 'Plant B', 'KW', ${ACTOR}) on conflict do nothing
+        insert into plant (client, plant, name, country, company_code, created_by) values
+          (${client}, 'QA01', 'Plant A', 'KW', ${tenant.companyCode}, ${ACTOR}),
+          (${client}, 'QA02', 'Plant B', 'KW', ${tenant.companyCode}, ${ACTOR}) on conflict do nothing
       `);
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)

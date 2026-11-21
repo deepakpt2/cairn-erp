@@ -2,11 +2,8 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import {
-  WarehouseStockError,
-  listWarehouseStocks,
-  type WarehouseStockSelection,
-} from '../src/modules/inventory/warehouse-stocks';
+import { WarehouseStockError, type WarehouseStockSelection } from '../src/modules/inventory/warehouse-stocks';
+import { listWarehouseStocks } from './helpers/material-document-authorized';
 import { createTenant, destroyTenant } from './helpers';
 
 /**
@@ -27,8 +24,8 @@ describe('SCR-127 warehouse stocks on hand (MB52)', () => {
     client = tenant.client;
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
-        insert into plant (client, plant, name, country, created_by) values
-          (${client}, 'Q900', 'Plant 900', 'KW', ${ACTOR}) on conflict do nothing
+        insert into plant (client, plant, name, country, company_code, created_by) values
+          (${client}, 'Q900', 'Plant 900', 'KW', ${tenant.companyCode}, ${ACTOR}) on conflict do nothing
       `);
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
