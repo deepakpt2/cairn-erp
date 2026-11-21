@@ -28,6 +28,13 @@ import { listPurchaseRequisitions } from '../src/modules/purchasing/requisition-
 import { cancelDocumentRelease, getDocumentRelease, releaseDocument } from '../src/modules/purchasing/release';
 import { defineRange } from '../src/platform/numbering';
 import { changePurchaseContract, createPurchaseContract, contractChoices, getPurchaseContract, listPurchaseContracts } from '../src/modules/purchasing/contract';
+import {
+  changeRequestForQuotation, createRequestForQuotation, getRequestForQuotation, listRecentRequestsForQuotation,
+  previewRequestForQuotationChange, resolveRequestForQuotation,
+} from '../src/modules/purchasing/rfq';
+import { createQuotation, getQuotation, listRecentQuotationRequests, openQuotation, previewQuotation } from '../src/modules/purchasing/quotation';
+import { displayQuotation, displayQuotationForRequest } from '../src/modules/purchasing/quotation-display';
+import { compareQuotations } from '../src/modules/purchasing/quotation-comparison';
 import { openPurchaseContractDisplay } from '../src/modules/purchasing/contract-display';
 import {
   changeSchedulingAgreement, createSchedulingAgreement, getSchedulingAgreement, listSchedulingAgreements, schedulingAgreementChoices,
@@ -730,6 +737,111 @@ describe('contracts and scheduling agreements', () => {
     const skey = `scope-replay-${randomUUID()}`;
     await createSchedulingAgreement({ client, authorization: onlyB.authorization, changedBy: 'X', ...header(B, { documentType: 'LP' }), requestKey: skey, items: sItems('PLB1') });
     await refused(createSchedulingAgreement({ client, authorization: onlyA.authorization, changedBy: 'X', ...header(A, { documentType: 'LP' }), requestKey: skey, items: sItems('PLA1') }), /outside your access/);
+  });
+});
+
+describe('requests for quotation and quotations', () => {
+  const R = 'Scope rfq setup';
+  let orgOnly: FinanceActor;
+  const bad = () => [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization];
+  const header = (org: string, extra: Record<string, unknown> = {}) => ({
+    purchasingOrg: org, purchasingGroup: '001', rfqDate: '2026-10-22', quotationDeadline: '2026-12-31', ...extra,
+  });
+  const lines = (plant: string) => [{ materialNumber: 'M100', quantity: '5', plant, deliveryDate: '2026-12-01' }];
+  const suppliers = [{ partnerNumber: 'V10000' }];
+  let eventA = '';
+  let eventB = '';
+  let requestA = '';
+  let requestB = '';
+  const rfqCount = () => count('purchasing_rfq_event');
+
+  beforeAll(async () => {
+    await withTenant(client, async (tx) => {
+      await defineRange(tx, { client, objectCode: 'RFQEVENT', subObject: '*', prefix: 'EV', numberLength: 7, createdBy: R });
+      await defineRange(tx, { client, objectCode: 'RFQ', subObject: '*', prefix: 'RQ', numberLength: 7, createdBy: R });
+      await defineRange(tx, { client, objectCode: 'QUOTATION', subObject: '*', prefix: 'QT', numberLength: 7, createdBy: R });
+      await tx.execute(sql`insert into purchasing_org (client, purchasing_org, name, company_code, created_by) values (${client}, '1000', 'Org 1000', ${A}, ${R}), (${client}, '2000', 'Org 2000', ${B}, ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into purchasing_org_plant (client, purchasing_org, plant, created_by) values (${client}, '1000', 'PLA1', ${R}), (${client}, '2000', 'PLB1', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into bp_role (client, partner_number, role_code, created_by) values (${client}, 'V10000', 'SUPPLIER', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into supplier_purchasing_org (client, partner_number, role_code, purchasing_org, order_currency, purchasing_group, purchasing_status, created_by) values (${client}, 'V10000', 'SUPPLIER', '1000', 'USD', '001', 'CREATED', ${R}), (${client}, 'V10000', 'SUPPLIER', '2000', 'USD', '001', 'CREATED', ${R}) on conflict do nothing`);
+      await tx.execute(sql`update purchasing_group set purchasing_org = null where client = ${client} and purchasing_group = '001'`);
+      await tx.execute(sql`update supplier_purchasing_org set purchasing_status = 'CREATED', purchasing_group = '001' where client = ${client} and partner_number = 'V10000'`);
+      await tx.execute(sql`insert into purchasing_group (client, purchasing_group, name, created_by) values (${client}, '001', 'Group 001', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into material_plant (client, material_number, plant, procurement_type, created_by) values (${client}, 'M100', 'PLA1', 'BUY', ${R}), (${client}, 'M100', 'PLB1', 'BUY', ${R}) on conflict do nothing`);
+    });
+    orgOnly = await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: [A, B] });
+    await withTenant(client, async (tx) => {
+      await tx.insert(authOrgRestriction).values([{ id: randomUUID(), client, userId: orgOnly.userId, scopeType: 'PURCHASING_ORG', scopeValue: '1000', createdBy: R }]);
+    });
+    eventA = (await createRequestForQuotation({ client, authorization: onlyA.authorization, changedBy: 'SPOOFED_NAME', ...header('1000'), suppliers, lines: lines('PLA1') })).eventNumber;
+    eventB = (await createRequestForQuotation({ client, authorization: onlyB.authorization, changedBy: 'SPOOFED_NAME', ...header('2000'), suppliers, lines: lines('PLB1') })).eventNumber;
+    requestA = (await getRequestForQuotation(client, eventA, onlyA.authorization))!.requests[0]!.rfqNumber;
+    requestB = (await getRequestForQuotation(client, eventB, onlyB.authorization))!.requests[0]!.rfqNumber;
+  }, 240_000);
+
+  it('records the session user, never a supplied name', async () => {
+    const who = await withTenant(client, async (tx) =>
+      ((await tx.execute(sql`select created_by from purchasing_rfq_event where client = ${client} and event_number = ${eventA}`)) as unknown as Array<{ created_by: string }>)[0]?.created_by);
+    expect(who).toBe(onlyA.username);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant before anything is read or written', async () => {
+    const before = await rfqCount();
+    for (const authorization of bad()) {
+      await refused(createRequestForQuotation({ client, authorization, changedBy: 'X', ...header('1000'), suppliers, lines: lines('PLA1') }));
+      await refused(getRequestForQuotation(client, eventA, authorization));
+      await refused(listRecentRequestsForQuotation(client, authorization));
+      await refused(resolveRequestForQuotation(client, eventA, authorization));
+      await refused(openQuotation(client, requestA, authorization));
+      await refused(listRecentQuotationRequests(client, authorization));
+      await refused(displayQuotation(client, 'QT-0000001', authorization));
+      await refused(compareQuotations({ client, eventNumber: eventA, purchasingOrg: '1000' }, authorization));
+    }
+    expect(await rfqCount()).toBe(before);
+  });
+
+  it('refuses a request for another company\'s plant or organisation, and rolls back a derived one', async () => {
+    const before = await rfqCount();
+    await refused(createRequestForQuotation({ client, authorization: onlyA.authorization, changedBy: 'X', ...header('2000'), suppliers, lines: lines('PLB1') }), /outside your access/);
+    await refused(createRequestForQuotation({ client, authorization: onlyA.authorization, changedBy: 'X', ...header('1000'), suppliers, lines: lines('PLB1') }), /outside your access/);
+    await refused(createRequestForQuotation({ client, authorization: orgOnly.authorization, changedBy: 'X', ...header('2000'), suppliers, lines: lines('PLB1') }), /outside your access/);
+    expect(await rfqCount()).toBe(before);
+  });
+
+  it('reads, resolves, lists, opens and compares only inside the reach; another company answers as missing', async () => {
+    expect((await getRequestForQuotation(client, eventA, onlyA.authorization))?.eventNumber).toBe(eventA);
+    expect(await getRequestForQuotation(client, eventB, onlyA.authorization)).toBeNull();
+    expect(await resolveRequestForQuotation(client, requestB, onlyA.authorization)).toBeNull();
+    expect((await resolveRequestForQuotation(client, requestA, onlyA.authorization))?.eventNumber).toBe(eventA);
+    const listed = (await listRecentRequestsForQuotation(client, onlyA.authorization)).map((r) => r.eventNumber);
+    expect(listed).toContain(eventA);
+    expect(listed).not.toContain(eventB);
+    expect(await openQuotation(client, requestB, onlyA.authorization)).toBeNull();
+    expect((await listRecentQuotationRequests(client, onlyA.authorization)).map((r) => r.rfqNumber)).not.toContain(requestB);
+    expect((await displayQuotationForRequest(client, requestB, onlyA.authorization)).found).toBe(false);
+    await expect(compareQuotations({ client, eventNumber: eventB, purchasingOrg: '2000' }, onlyA.authorization)).rejects.toThrow(/does not stand/);
+    expect(await getRequestForQuotation(client, eventB, orgOnly.authorization)).toBeNull();
+    expect((await getRequestForQuotation(client, eventA, orgOnly.authorization))?.eventNumber).toBe(eventA);
+  });
+
+  it('answers a change or a quotation on another company\'s request as a request that does not stand', async () => {
+    const ask = (p: Promise<unknown>) => p.then(() => 'done', (e: Error) => e.message);
+    expect(await ask(changeRequestForQuotation({ client, authorization: onlyA.authorization, changedBy: 'X', rfqNumber: requestB, quotationDeadline: '2026-12-30' }))).toMatch(/does not stand/);
+    expect(await ask(previewRequestForQuotationChange({ client, authorization: onlyA.authorization, changedBy: 'X', rfqNumber: requestB, quotationDeadline: '2026-12-30' }))).toMatch(/does not stand/);
+    const offer = (rfqNumber: string) => ({
+      client, changedBy: 'X', rfqNumber, lines: [{ itemNumber: 10, quantity: '5', unit: 'PC', netPrice: '3', priceUnit: '1', deliveryDate: '2026-12-01' }],
+    });
+    expect(await ask(createQuotation({ ...offer(requestB), authorization: onlyA.authorization }))).toMatch(/does not stand/);
+    expect(await ask(previewQuotation({ ...offer(requestB), authorization: onlyA.authorization }))).toMatch(/does not stand/);
+    expect(await count('purchasing_quotation')).toBe(0);
+    const own = await createQuotation({ ...offer(requestA), changedBy: 'SPOOFED_NAME', authorization: onlyA.authorization });
+    const who = await withTenant(client, async (tx) =>
+      ((await tx.execute(sql`select created_by from purchasing_quotation where client = ${client} and quotation_number = ${own.quotationNumber}`)) as unknown as Array<{ created_by: string }>)[0]?.created_by);
+    expect(who).toBe(onlyA.username);
+    expect((await getQuotation(client, own.quotationNumber, onlyA.authorization))?.rfqNumber).toBe(requestA);
+    expect(await getQuotation(client, own.quotationNumber, onlyB.authorization)).toBeNull();
+    expect((await displayQuotation(client, own.quotationNumber, onlyB.authorization)).found).toBe(false);
+    expect((await displayQuotation(client, own.quotationNumber, onlyA.authorization)).found).toBe(true);
   });
 });
 

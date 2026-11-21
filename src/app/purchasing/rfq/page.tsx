@@ -35,13 +35,13 @@ export default async function PurchasingRfqPage({ searchParams }: {
   const params = await searchParams;
   const typed = last(params.event).toUpperCase();
   const requestedRequest = last(params.request).toUpperCase();
-  const resolved = typed ? await resolveRequestForQuotation(session.user.client, typed) : null;
+  const resolved = typed ? await resolveRequestForQuotation(session.user.client, typed, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : null;
   const requestedEvent = resolved?.eventNumber ?? (typed && !resolved ? typed : '');
   const opened = resolved
-    ? await getRequestForQuotation(session.user.client, resolved.eventNumber)
+    ? await getRequestForQuotation(session.user.client, resolved.eventNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null)
     : null;
   const selectedRequest = requestedRequest || resolved?.rfqNumber || '';
-  const recent = await listRecentRequestsForQuotation(session.user.client);
+  const recent = await listRecentRequestsForQuotation(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []);
   const canMaintain = can(session, RFQ_CAPABILITY);
   const changeLock = opened && canMaintain
     ? await openChangeForSession(session, {

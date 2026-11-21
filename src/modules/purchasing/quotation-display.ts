@@ -12,7 +12,10 @@ import { changeDocument, changeDocumentItem } from '../../platform/tables/audit-
 import { withTenant } from '../../platform/db/client';
 import { businessPartner } from '../foundation/business-partner-schema';
 import { plant } from '../foundation/schema';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { pricePerUnit } from './quotation';
+import { requestInReach } from './rfq';
+import { purchasingActor } from './scope';
 import {
   purchasingQuotation, purchasingQuotationItem, purchasingRfq, purchasingRfqEvent, purchasingRfqItem,
 } from './schema';
@@ -198,17 +201,26 @@ async function readQuotation(client: string, quotationNumber: string): Promise<D
 }
 
 /** The quotation number is the key. A request number is not accepted here. */
-export async function displayQuotation(client: string, quotationNumber: string): Promise<QuotationDisplayResult> {
+export async function displayQuotation(
+  client: string, quotationNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<QuotationDisplayResult> {
   const number = keyOf(quotationNumber);
+  await requireDisplayAuthority(client, authorization);
   if (!number) return { found: false, reason: 'quotation', number: '' };
-  const quotation = await readQuotation(client, number);
+  let quotation = await readQuotation(client, number);
+  if (quotation && !(await inReach(client, authorization, quotation.rfqNumber))) quotation = null;
   return quotation ? { found: true, quotation } : { found: false, reason: 'quotation', number };
 }
 
 /** The request number resolves the one quotation that stands for it. It is not the quotation number. */
-export async function displayQuotationForRequest(client: string, rfqNumber: string): Promise<QuotationDisplayResult> {
+export async function displayQuotationForRequest(
+  client: string, rfqNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<QuotationDisplayResult> {
   const number = keyOf(rfqNumber);
+  await requireDisplayAuthority(client, authorization);
   if (!number) return { found: false, reason: 'request', number: '' };
+  // A request outside the reach answers exactly as a request that does not stand.
+  if (!(await inReach(client, authorization, number))) return { found: false, reason: 'request', number };
   const quotationNumber = await withTenant(client, async (tx) => {
     const [request] = await tx.select({ rfqNumber: purchasingRfq.rfqNumber }).from(purchasingRfq).where(and(
       eq(purchasingRfq.client, client),
@@ -227,7 +239,7 @@ export async function displayQuotationForRequest(client: string, rfqNumber: stri
   return quotation ? { found: true, quotation } : { found: false, reason: 'no-offer', number };
 }
 
-export async function listRecentDisplayedQuotations(client: string): Promise<Array<{
+async function listRecentDisplayedUnscoped(client: string): Promise<Array<{
   quotationNumber: string;
   rfqNumber: string;
   partnerNumber: string;
@@ -250,4 +262,27 @@ export async function listRecentDisplayedQuotations(client: string): Promise<Arr
     .where(eq(purchasingQuotation.client, client))
     .orderBy(desc(purchasingQuotation.quotationNumber))
     .limit(20));
+}
+
+const refuseDisplay = (message: string) => new Error(message);
+
+async function requireDisplayAuthority(client: string, authorization: ServiceAuthorityContext | undefined): Promise<void> {
+  await withTenant(client, (tx) => purchasingActor(tx, client, authorization, [QUOTATION_DISPLAY_CAPABILITY], refuseDisplay));
+}
+
+async function inReach(client: string, authorization: ServiceAuthorityContext | undefined, rfqNumber: string): Promise<boolean> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [QUOTATION_DISPLAY_CAPABILITY], refuseDisplay);
+    return requestInReach(tx, client, actor, rfqNumber);
+  });
+}
+
+export async function listRecentDisplayedQuotations(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): ReturnType<typeof listRecentDisplayedUnscoped> {
+  await requireDisplayAuthority(client, authorization);
+  const rows = await listRecentDisplayedUnscoped(client);
+  const out: typeof rows = [];
+  for (const row of rows) if (await inReach(client, authorization, row.rfqNumber)) out.push(row);
+  return out;
 }

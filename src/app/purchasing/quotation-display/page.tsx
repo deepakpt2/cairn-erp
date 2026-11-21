@@ -167,11 +167,11 @@ export default async function PurchasingQuotationDisplayPage({ searchParams }: {
   const canDisplay = can(session, QUOTATION_DISPLAY_CAPABILITY);
   const canMaintain = can(session, QUOTATION_CAPABILITY);
   const result = canDisplay && quotationNumber
-    ? await displayQuotation(session.user.client, quotationNumber)
+    ? await displayQuotation(session.user.client, quotationNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' })
     : canDisplay && rfqNumber
-      ? await displayQuotationForRequest(session.user.client, rfqNumber)
+      ? await displayQuotationForRequest(session.user.client, rfqNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' })
       : null;
-  const recent = canDisplay ? await listRecentDisplayedQuotations(session.user.client) : [];
+  const recent = canDisplay ? await listRecentDisplayedQuotations(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []) : [];
   const opened = result?.found ? result.quotation : null;
 
   return (

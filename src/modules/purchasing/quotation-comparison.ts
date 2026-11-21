@@ -14,7 +14,10 @@ import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { businessPartner } from '../foundation/business-partner-schema';
 import { plant, purchasingOrg } from '../foundation/schema';
 import { material, materialUomConversion } from '../inventory/schema';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { pricePerUnit } from './quotation';
+import { eventInReach } from './rfq';
+import { purchasingActor } from './scope';
 import {
   purchasingQuotation, purchasingQuotationItem, purchasingRfq, purchasingRfqEvent, purchasingRfqEventItem, purchasingRfqItem,
 } from './schema';
@@ -200,7 +203,9 @@ function rankBids(bids: ComparisonBid[]): ComparisonBid[] {
   return [...eligible, ...rest];
 }
 
-export async function compareQuotations(input: ComparisonInput): Promise<QuotationComparison> {
+export async function compareQuotations(
+  input: ComparisonInput, authorization: ServiceAuthorityContext | undefined,
+): Promise<QuotationComparison> {
   refuseNamed(input);
   const purchasingOrgCode = keyOf(input.purchasingOrg);
   if (!purchasingOrgCode) throw new ComparisonError('A purchasing organisation is required.');
@@ -212,6 +217,7 @@ export async function compareQuotations(input: ComparisonInput): Promise<Quotati
   const materialNumber = keyOf(input.materialNumber);
 
   return withTenant(input.client, async (tx) => {
+    const actor = await purchasingActor(tx, input.client, authorization, [QUOTATION_COMPARISON_CAPABILITY], (message, remedy) => new ComparisonError(message, remedy));
     const [org] = await tx.select().from(purchasingOrg).where(and(
       eq(purchasingOrg.client, input.client),
       eq(purchasingOrg.purchasingOrg, purchasingOrgCode),
@@ -241,6 +247,10 @@ export async function compareQuotations(input: ComparisonInput): Promise<Quotati
       event = rows[0];
     }
     if (!event) throw new ComparisonError('An event number is required. A collective number is a label, not the key.');
+    // An event outside the reach answers as one that does not stand.
+    if (!(await eventInReach(tx, input.client, actor, event.eventNumber))) {
+      throw new ComparisonError(`Event ${event.eventNumber} does not stand.`);
+    }
     if (event.purchasingOrg !== purchasingOrgCode) {
       throw new ComparisonError(`Event ${event.eventNumber} is purchasing organisation ${event.purchasingOrg}, not ${purchasingOrgCode}.`);
     }

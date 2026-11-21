@@ -146,7 +146,7 @@ export default async function PurchasingQuotationComparisonPage({ searchParams }
         purchasingOrg,
         plant: plantCode,
         materialNumber,
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (caught) {
       if (caught instanceof ComparisonError) error = caught.message;
       else throw caught;

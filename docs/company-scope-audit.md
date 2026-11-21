@@ -227,3 +227,13 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** `saveReleaseProfile` and `assignReleaseProfile` have no screen and no caller outside tests; they are now provisioning-only (renamed) rather than scoped. Items' plants are not separately judged against the actor's Plant scope beyond the company gate. Nothing here was browser-tested.
 
 **Not covered (unchanged, no scope check of any kind):** `rfq`, `quotation`, `info-record`, `source-list`, `quota-arrangement`, `vendor-evaluation`, `delivery-completion`, `follow-on`, the non-create STO functions; parked invoice and invoice verification org/group.
+
+## Phase 7c — purchasing: requests for quotation and quotations
+
+**Found:** `createRequestForQuotation`, `previewRequestForQuotation`, `changeRequestForQuotation`, `previewRequestForQuotationChange`, `getRequestForQuotation`, `listRecentRequestsForQuotation`, `resolveRequestForQuotation`, `createQuotation`, `changeQuotation`, `previewQuotation`, `previewQuotationChange`, `openQuotation`, `getQuotation`, `listRecentQuotationRequests`, `displayQuotation`, `displayQuotationForRequest`, `listRecentDisplayedQuotations` and `compareQuotations` had no session, capability, company or level check.
+
+**Covered:** every call takes a required `authorization`; session and capability are judged in the service's own tx. An RFQ event has no company column, so its companies are those of its plants (`plantDocumentInReach` in `scope-actor.ts`): every plant must lie in the actor's Company Code scope and any held Plant scope, and the held purchasing org / group levels must allow the event. A quotation is judged through its request's event. Out-of-reach events, requests and quotations answer as missing ("does not stand", null, empty). Create and change judge the supplied plants/org/group first and the written event afterwards (plants copied from a requisition); an out-of-reach result rolls the whole write back. The recorded actor is the session user. `*ForProvisioning` variants serve tests, demo and browser-smoke scripts and are not imported from `src/app`.
+
+**Limits:** `writeRequestForQuotation`, `writeRequestForQuotationChange`, `writeQuotation` and `writeQuotationChange` stay exported as tx-level building blocks and carry no check of their own (used by tests only). Supplier master (V…) reads are not scoped. Nothing here was browser-tested.
+
+**Not covered (unchanged, no scope check):** `info-record`, `source-list`, `quota-arrangement`, `vendor-evaluation`, `delivery-completion`, `follow-on`, the non-create STO functions; parked invoice and invoice verification org/group.

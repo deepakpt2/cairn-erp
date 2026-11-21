@@ -3,10 +3,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createRequestForQuotation, getRequestForQuotation } from '../src/modules/purchasing/rfq';
-import {
-  changeQuotation, createQuotation, getQuotation, previewQuotation, previewQuotationChange, writeQuotationChange,
-} from '../src/modules/purchasing/quotation';
+import { createRequestForQuotationForProvisioning as createRequestForQuotation, getRequestForQuotationForProvisioning as getRequestForQuotation } from '../src/modules/purchasing/rfq';
+import { changeQuotationForProvisioning as changeQuotation, createQuotationForProvisioning as createQuotation, getQuotationForProvisioning as getQuotation, previewQuotationForProvisioning as previewQuotation, previewQuotationChangeForProvisioning as previewQuotationChange, writeQuotationChange } from '../src/modules/purchasing/quotation';
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR157_QT';

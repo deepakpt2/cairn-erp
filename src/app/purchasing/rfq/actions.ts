@@ -174,7 +174,7 @@ export async function checkRfqAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const preview = await previewRequestForQuotation(createInput(form, session.user.client, session.user.username));
+    const preview = await previewRequestForQuotation({ ...createInput(form, session.user.client, session.user.username), authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     return {
       ok: true,
       wrote: false,
@@ -199,7 +199,7 @@ export async function createRfqAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const created = await createRequestForQuotation(createInput(form, session.user.client, session.user.username));
+    const created = await createRequestForQuotation({ ...createInput(form, session.user.client, session.user.username), authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(RFQ_ROUTE);
     return {
       ok: true,
@@ -289,7 +289,7 @@ export async function checkChangeRfqAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const preview = await previewRequestForQuotationChange(changeInput(form, session.user.client, session.user.username));
+    const preview = await previewRequestForQuotationChange({ ...changeInput(form, session.user.client, session.user.username), authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     return {
       ok: true,
       wrote: false,
@@ -316,7 +316,7 @@ export async function changeRfqAction(
     if (eventNumber) {
       await assertChangeForSession(session, { lockObject: 'RFQ_EVENT', argument: eventNumber });
     }
-    const changed = await changeRequestForQuotation(changeInput(form, session.user.client, session.user.username));
+    const changed = await changeRequestForQuotation({ ...changeInput(form, session.user.client, session.user.username), authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(RFQ_ROUTE);
     return {
       ok: true,

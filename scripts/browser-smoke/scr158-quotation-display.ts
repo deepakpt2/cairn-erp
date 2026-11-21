@@ -5,8 +5,8 @@ import type { Page } from '@playwright/test';
 
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
-import { createRequestForQuotation } from '../../src/modules/purchasing/rfq';
-import { changeQuotation, createQuotation, getQuotation } from '../../src/modules/purchasing/quotation';
+import { createRequestForQuotationForProvisioning as createRequestForQuotation } from '../../src/modules/purchasing/rfq';
+import { changeQuotationForProvisioning as changeQuotation, createQuotationForProvisioning as createQuotation, getQuotationForProvisioning as getQuotation } from '../../src/modules/purchasing/quotation';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };

@@ -4,10 +4,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { suggestConstrainedValues } from '../src/modules/foundation/constrained-values';
-import { createRequestForQuotation } from '../src/modules/purchasing/rfq';
-import { createQuotation } from '../src/modules/purchasing/quotation';
-import { ComparisonError, compareQuotations } from '../src/modules/purchasing/quotation-comparison';
+import { createRequestForQuotationForProvisioning as createRequestForQuotation } from '../src/modules/purchasing/rfq';
+import { createQuotationForProvisioning as createQuotation } from '../src/modules/purchasing/quotation';
+import { ComparisonError, compareQuotations as compareScoped } from '../src/modules/purchasing/quotation-comparison';
 import { createTenant, destroyTenant } from './helpers';
+import { FINANCE_ACTOR_CAPABILITIES, createFinanceActor } from './helpers/finance-actor';
+const viewer = async (client: string) => (await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: ['1000', '2000'] })).authorization;
+const compareQuotations = async (input: Parameters<typeof compareScoped>[0]) => compareScoped(input, await viewer(input.client));
+
 
 const ACTOR = 'SCR159_CMP';
 

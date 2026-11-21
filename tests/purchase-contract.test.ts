@@ -6,8 +6,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { releaseDocumentForProvisioning as releaseDocument } from '../src/modules/purchasing/release';
-import { createRequestForQuotation, getRequestForQuotation } from '../src/modules/purchasing/rfq';
-import { createQuotation, getQuotation } from '../src/modules/purchasing/quotation';
+import { createRequestForQuotationForProvisioning as createRequestForQuotation, getRequestForQuotationForProvisioning as getRequestForQuotation } from '../src/modules/purchasing/rfq';
+import { createQuotationForProvisioning as createQuotation, getQuotationForProvisioning as getQuotation } from '../src/modules/purchasing/quotation';
 import { createPurchasingInfoRecord } from '../src/modules/purchasing/info-record';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';

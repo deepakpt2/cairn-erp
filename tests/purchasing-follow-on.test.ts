@@ -5,8 +5,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { orderDraftFromRequisition } from '../src/modules/purchasing/follow-on';
 import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
-import { createQuotation } from '../src/modules/purchasing/quotation';
-import { createRequestForQuotation, getRequestForQuotation } from '../src/modules/purchasing/rfq';
+import { createQuotationForProvisioning as createQuotation } from '../src/modules/purchasing/quotation';
+import { createRequestForQuotationForProvisioning as createRequestForQuotation, getRequestForQuotationForProvisioning as getRequestForQuotation } from '../src/modules/purchasing/rfq';
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'FOLLOW_ON';

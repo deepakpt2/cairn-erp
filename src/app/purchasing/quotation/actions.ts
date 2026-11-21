@@ -160,8 +160,8 @@ export async function checkQuotationAction(
   try {
     const input = inputOf(form, session.user.client, session.user.username);
     const preview = form.has('expectedChangedAt')
-      ? await previewQuotationChange(input)
-      : await previewQuotation(input);
+      ? await previewQuotationChange({ ...input, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } })
+      : await previewQuotation({ ...input, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     return {
       ok: true,
       wrote: false,
@@ -189,8 +189,8 @@ export async function saveQuotationAction(
       await assertChangeForSession(session, { lockObject: 'SUPPLIER_QUOTATION', argument: input.rfqNumber });
     }
     const saved = form.has('expectedChangedAt')
-      ? await changeQuotation(input)
-      : await createQuotation(input);
+      ? await changeQuotation({ ...input, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } })
+      : await createQuotation({ ...input, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(QUOTATION_ROUTE);
     return {
       ok: true,

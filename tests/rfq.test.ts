@@ -3,11 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import {
-  changeRequestForQuotation, createRequestForQuotation, getRequestForQuotation,
-  previewRequestForQuotation, previewRequestForQuotationChange, writeRequestForQuotation,
-  writeRequestForQuotationChange,
-} from '../src/modules/purchasing/rfq';
+import { changeRequestForQuotationForProvisioning as changeRequestForQuotation, createRequestForQuotationForProvisioning as createRequestForQuotation, getRequestForQuotationForProvisioning as getRequestForQuotation, previewRequestForQuotationForProvisioning as previewRequestForQuotation, previewRequestForQuotationChangeForProvisioning as previewRequestForQuotationChange, writeRequestForQuotation, writeRequestForQuotationChange } from '../src/modules/purchasing/rfq';
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR155_RFQ';

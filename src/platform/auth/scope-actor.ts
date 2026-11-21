@@ -134,3 +134,27 @@ export async function purchasingDocumentInReach(
 ): Promise<boolean> {
   return (await companyInScope(tx, client, actor, doc.companyCode)) && purchasingLevelsAllow(actor, doc);
 }
+
+/**
+ * A plant-carried document (an RFQ event, a quotation request, an info record…): it has no company column, so its
+ * companies are those of the plants it names. Every plant must exist, belong to a company inside the actor's scope and
+ * be inside a held Plant scope; the held Purchasing Org / Group levels must allow it. A document naming no plant
+ * has no company and is never reachable.
+ */
+export async function plantDocumentInReach(
+  tx: Tx, client: string, actor: CompanyAuthority,
+  doc: { plants: readonly string[]; purchasingOrg?: string | null; purchasingGroup?: string | null },
+): Promise<boolean> {
+  const plants = [...new Set(doc.plants.map((p) => p.trim()).filter(Boolean))];
+  if (plants.length === 0) return false;
+  if (!plantsAllow(actor, plants) || !purchasingLevelsAllow(actor, doc)) return false;
+  const rows = (await tx.execute(sql`
+    select plant, coalesce(company_code, '') as company_code from plant where client = ${client}
+  `)) as unknown as Array<{ plant: string; company_code: string }>;
+  const known = new Map(rows.map((r) => [r.plant.trim(), r.company_code.trim()]));
+  for (const plant of plants) {
+    const company = known.get(plant);
+    if (!company || !(await companyInScope(tx, client, actor, company))) return false;
+  }
+  return true;
+}

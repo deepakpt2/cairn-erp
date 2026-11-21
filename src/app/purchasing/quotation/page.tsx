@@ -34,8 +34,8 @@ export default async function PurchasingQuotationPage({ searchParams }: {
   const session = await requireSession(QUOTATION_ROUTE);
   const params = await searchParams;
   const requested = last(params.request).toUpperCase();
-  const opened = requested ? await openQuotation(session.user.client, requested) : null;
-  const recent = await listRecentQuotationRequests(session.user.client);
+  const opened = requested ? await openQuotation(session.user.client, requested, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : null;
+  const recent = await listRecentQuotationRequests(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []);
   const canMaintain = can(session, QUOTATION_CAPABILITY);
   const changeLock = opened && canMaintain
     ? await openChangeForSession(session, {

@@ -14,6 +14,9 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { plantDocumentInReach, purchasingLevelsAllow } from '../../platform/auth/scope-actor';
+import { purchasingActor } from './scope';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber, NumberRangeError } from '../../platform/numbering';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
@@ -459,7 +462,7 @@ function snapshot(eventNumber: string, prepared: PreparedRequest, requests: Stan
   };
 }
 
-export async function previewRequestForQuotation(input: RfqCreateInput): Promise<PreparedRequest & {
+export async function previewRequestForQuotationForProvisioning(input: RfqCreateInput): Promise<PreparedRequest & {
   eventNumber: null;
   requests: Array<{ rfqNumber: null; partnerNumber: string }>;
   nothingCreated: true;
@@ -477,7 +480,7 @@ export async function previewRequestForQuotation(input: RfqCreateInput): Promise
   });
 }
 
-export async function createRequestForQuotation(input: RfqCreateInput): Promise<{ eventNumber: string; rfqNumbers: string[] }> {
+export async function createRequestForQuotationForProvisioning(input: RfqCreateInput): Promise<{ eventNumber: string; rfqNumbers: string[] }> {
   return withTenant(input.client, (tx) => writeRequestForQuotation(tx, input));
 }
 
@@ -567,7 +570,7 @@ export async function writeRequestForQuotation(
   return { eventNumber, rfqNumbers: requests.map((request) => request.rfqNumber) };
 }
 
-export async function listRecentRequestsForQuotation(client: string): Promise<Array<{
+async function listRecentRequestsUnscoped(client: string): Promise<Array<{
   eventNumber: string;
   purchasingOrg: string;
   quotationDeadline: string;
@@ -583,7 +586,7 @@ export async function listRecentRequestsForQuotation(client: string): Promise<Ar
     .limit(40));
 }
 
-export async function getRequestForQuotation(client: string, eventNumber: string): Promise<StandingRfqEvent | null> {
+export async function getRequestForQuotationForProvisioning(client: string, eventNumber: string): Promise<StandingRfqEvent | null> {
   return withTenant(client, async (tx) => {
     const [event] = await tx.select().from(purchasingRfqEvent).where(and(
       eq(purchasingRfqEvent.client, client), eq(purchasingRfqEvent.eventNumber, eventNumber),
@@ -1050,11 +1053,11 @@ async function companyOfEvent(tx: Tx, client: string, eventNumber: string): Prom
   return [...companies][0];
 }
 
-export async function previewRequestForQuotationChange(input: RfqChangeInput): Promise<RfqChangePreview> {
+export async function previewRequestForQuotationChangeForProvisioning(input: RfqChangeInput): Promise<RfqChangePreview> {
   return withTenant(input.client, async (tx) => (await planChange(tx, input, false)).preview);
 }
 
-export async function changeRequestForQuotation(input: RfqChangeInput): Promise<RfqChangeResult> {
+export async function changeRequestForQuotationForProvisioning(input: RfqChangeInput): Promise<RfqChangeResult> {
   return withTenant(input.client, (tx) => writeRequestForQuotationChange(tx, input));
 }
 
@@ -1148,7 +1151,7 @@ export async function writeRequestForQuotationChange(tx: Tx, input: RfqChangeInp
 }
 
 /** An event number opens the event. A request number opens its event and names that request. */
-export async function resolveRequestForQuotation(
+async function resolveRequestUnscoped(
   client: string,
   number: string,
 ): Promise<{ eventNumber: string; rfqNumber: string | null } | null> {
@@ -1167,5 +1170,163 @@ export async function resolveRequestForQuotation(
     ));
     if (!request) return null;
     return { eventNumber: request.eventNumber, rfqNumber: request.rfqNumber };
+  });
+}
+
+
+// ---- Scoped entry points: session, capability, company (through the plants), purchasing org and group ----
+
+const refuseRfq = (message: string, remedy?: string) => new RfqError(message, remedy);
+const RFQ_READ_CAPABILITIES = [RFQ_CAPABILITY] as const;
+type RfqActor = Awaited<ReturnType<typeof purchasingActor>>;
+
+/** The event's own plants, purchasing org and group against the actor's reach. A missing event is out of reach. */
+export async function eventInReach(tx: Tx, client: string, actor: RfqActor, eventNumber: string): Promise<boolean> {
+  const [event] = await tx.select().from(purchasingRfqEvent).where(and(
+    eq(purchasingRfqEvent.client, client), eq(purchasingRfqEvent.eventNumber, eventNumber),
+  ));
+  if (!event) return false;
+  const items = await tx.select({ plant: purchasingRfqEventItem.plant }).from(purchasingRfqEventItem).where(and(
+    eq(purchasingRfqEventItem.client, client), eq(purchasingRfqEventItem.eventNumber, eventNumber),
+  ));
+  return plantDocumentInReach(tx, client, actor, {
+    plants: items.map((i) => i.plant), purchasingOrg: event.purchasingOrg, purchasingGroup: event.purchasingGroup,
+  });
+}
+
+/** The event a request number belongs to must be in reach, else the request answers as one that does not stand. */
+/** True when the request's event is in reach (a missing request is not). */
+export async function requestInReach(tx: Tx, client: string, actor: RfqActor, rfqNumber: string): Promise<boolean> {
+  const [request] = await tx.select({ eventNumber: purchasingRfq.eventNumber }).from(purchasingRfq).where(and(
+    eq(purchasingRfq.client, client), eq(purchasingRfq.rfqNumber, rfqNumber.trim()),
+  ));
+  return !!request && eventInReach(tx, client, actor, request.eventNumber);
+}
+
+async function requireRequestInReach(tx: Tx, client: string, actor: RfqActor, rfqNumber: string): Promise<void> {
+  const key = rfqNumber.trim();
+  const [request] = await tx.select({ eventNumber: purchasingRfq.eventNumber }).from(purchasingRfq).where(and(
+    eq(purchasingRfq.client, client), eq(purchasingRfq.rfqNumber, key),
+  ));
+  if (!request || !(await eventInReach(tx, client, actor, request.eventNumber))) {
+    throw new RfqError(`Request ${key} does not stand.`);
+  }
+}
+
+function suppliedReach(input: RfqCreateInput) {
+  return {
+    plants: (input.lines ?? []).map((l) => (l.plant ?? '').trim()).filter(Boolean),
+    purchasingOrg: input.purchasingOrg?.trim() || undefined,
+    purchasingGroup: input.purchasingGroup?.trim() || undefined,
+  };
+}
+
+async function requireSuppliedReach(tx: Tx, client: string, actor: RfqActor, input: RfqCreateInput): Promise<void> {
+  const reach = suppliedReach(input);
+  const outside = () => refuseRfq('The plant, purchasing organisation or purchasing group is outside your access.', 'Name one inside your access.');
+  if (reach.plants.length > 0 && !(await plantDocumentInReach(tx, client, actor, reach))) throw outside();
+  // Levels named without a plant (plants may come from a copied requisition) are judged now; the plants after the write.
+  if (reach.plants.length === 0) {
+    if (!purchasingLevelsAllow(actor, { purchasingOrg: reach.purchasingOrg, purchasingGroup: reach.purchasingGroup })) throw outside();
+  }
+}
+
+export async function previewRequestForQuotation(
+  input: RfqCreateInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<Awaited<ReturnType<typeof previewRequestForQuotationForProvisioning>>> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [RFQ_CAPABILITY], refuseRfq);
+    await requireSuppliedReach(tx, rest.client, actor, rest);
+    const prepared = await prepareCreate(tx, { ...rest, changedBy: actor.username });
+    if (!(await plantDocumentInReach(tx, rest.client, actor, { plants: prepared.lines.map((l) => l.plant), purchasingOrg: prepared.purchasingOrg, purchasingGroup: prepared.purchasingGroup }))) {
+      throw refuseRfq('The plant, purchasing organisation or purchasing group is outside your access.', 'Name one inside your access.');
+    }
+    return {
+      ...prepared, eventNumber: null,
+      requests: prepared.suppliers.map((partnerNumber) => ({ rfqNumber: null, partnerNumber })),
+      nothingCreated: true as const, message: 'Nothing has been created.',
+    };
+  });
+}
+
+export async function createRequestForQuotation(
+  input: RfqCreateInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<{ eventNumber: string; rfqNumbers: string[] }> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [RFQ_CAPABILITY], refuseRfq);
+    await requireSuppliedReach(tx, rest.client, actor, rest);
+    const written = await writeRequestForQuotation(tx, { ...rest, changedBy: actor.username });
+    // Plants drawn from a copied requisition are judged on what was written; a refusal rolls the whole write back.
+    if (!(await eventInReach(tx, rest.client, actor, written.eventNumber))) {
+      throw refuseRfq('The plant, purchasing organisation or purchasing group is outside your access.', 'Name one inside your access.');
+    }
+    return written;
+  });
+}
+
+export async function getRequestForQuotation(
+  client: string, eventNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<StandingRfqEvent | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, RFQ_READ_CAPABILITIES, refuseRfq);
+    if (!(await eventInReach(tx, client, actor, eventNumber))) return null;
+    return getRequestForQuotationForProvisioning(client, eventNumber);
+  });
+}
+
+export async function listRecentRequestsForQuotation(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): ReturnType<typeof listRecentRequestsUnscoped> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, RFQ_READ_CAPABILITIES, refuseRfq);
+    const rows = await tx.select({
+      eventNumber: purchasingRfqEvent.eventNumber, purchasingOrg: purchasingRfqEvent.purchasingOrg,
+      quotationDeadline: purchasingRfqEvent.quotationDeadline, collectiveNumber: purchasingRfqEvent.collectiveNumber,
+    }).from(purchasingRfqEvent).where(eq(purchasingRfqEvent.client, client)).orderBy(desc(purchasingRfqEvent.eventNumber)).limit(400);
+    const out: typeof rows = [];
+    for (const row of rows) {
+      if (out.length >= 40) break;
+      if (await eventInReach(tx, client, actor, row.eventNumber)) out.push(row);
+    }
+    return out;
+  });
+}
+
+export async function previewRequestForQuotationChange(
+  input: RfqChangeInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<RfqChangePreview> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [RFQ_CAPABILITY], refuseRfq);
+    await requireRequestInReach(tx, rest.client, actor, rest.rfqNumber);
+    return (await planChange(tx, { ...rest, changedBy: actor.username }, false)).preview;
+  });
+}
+
+export async function changeRequestForQuotation(
+  input: RfqChangeInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<RfqChangeResult> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [RFQ_CAPABILITY], refuseRfq);
+    await requireRequestInReach(tx, rest.client, actor, rest.rfqNumber);
+    const result = await writeRequestForQuotationChange(tx, { ...rest, changedBy: actor.username });
+    if (!(await eventInReach(tx, rest.client, actor, result.eventNumber))) {
+      throw refuseRfq('The plant, purchasing organisation or purchasing group is outside your access.', 'Name one inside your access.');
+    }
+    return result;
+  });
+}
+
+export async function resolveRequestForQuotation(
+  client: string, number: string, authorization: ServiceAuthorityContext | undefined,
+): ReturnType<typeof resolveRequestUnscoped> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, RFQ_READ_CAPABILITIES, refuseRfq);
+    const found = await resolveRequestUnscoped(client, number);
+    if (!found || !(await eventInReach(tx, client, actor, found.eventNumber))) return null;
+    return found;
   });
 }

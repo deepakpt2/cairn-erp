@@ -9,6 +9,9 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { purchasingActor } from './scope';
+import { eventInReach, requestInReach } from './rfq';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber, NumberRangeError } from '../../platform/numbering';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
@@ -527,15 +530,15 @@ async function plan(tx: Tx, input: QuotationInput, creating: boolean, lock: bool
   };
 }
 
-export async function previewQuotation(input: QuotationInput): Promise<QuotationPreview> {
+export async function previewQuotationForProvisioning(input: QuotationInput): Promise<QuotationPreview> {
   return withTenant(input.client, (tx) => plan(tx, input, true, false).then((row) => row.preview));
 }
 
-export async function previewQuotationChange(input: QuotationInput): Promise<QuotationPreview> {
+export async function previewQuotationChangeForProvisioning(input: QuotationInput): Promise<QuotationPreview> {
   return withTenant(input.client, (tx) => plan(tx, input, false, false).then((row) => row.preview));
 }
 
-export async function createQuotation(input: QuotationInput): Promise<QuotationResult> {
+export async function createQuotationForProvisioning(input: QuotationInput): Promise<QuotationResult> {
   return withTenant(input.client, (tx) => writeQuotation(tx, input));
 }
 
@@ -576,7 +579,7 @@ export async function writeQuotation(tx: Tx, input: QuotationInput): Promise<Quo
   return { quotationNumber, rfqNumber: planned.preview.rfqNumber, changedAt: null };
 }
 
-export async function changeQuotation(input: QuotationInput): Promise<QuotationResult> {
+export async function changeQuotationForProvisioning(input: QuotationInput): Promise<QuotationResult> {
   return withTenant(input.client, (tx) => writeQuotationChange(tx, input));
 }
 
@@ -663,7 +666,7 @@ export interface OpenedQuotation {
   } | null;
 }
 
-export async function openQuotation(client: string, rfqNumber: string): Promise<OpenedQuotation | null> {
+export async function openQuotationForProvisioning(client: string, rfqNumber: string): Promise<OpenedQuotation | null> {
   return withTenant(client, async (tx) => {
     const [request] = await tx.select().from(purchasingRfq).where(and(
       eq(purchasingRfq.client, client), eq(purchasingRfq.rfqNumber, rfqNumber),
@@ -722,7 +725,7 @@ export async function openQuotation(client: string, rfqNumber: string): Promise<
   });
 }
 
-export async function listRecentQuotationRequests(client: string): Promise<Array<{
+async function listRecentQuotationRequestsUnscoped(client: string): Promise<Array<{
   rfqNumber: string;
   partnerNumber: string;
   quotationDeadline: string;
@@ -747,7 +750,7 @@ export async function listRecentQuotationRequests(client: string): Promise<Array
     .limit(40));
 }
 
-export async function getQuotation(client: string, quotationNumber: string) {
+export async function getQuotationForProvisioning(client: string, quotationNumber: string) {
   return withTenant(client, async (tx) => {
     const [header] = await tx.select().from(purchasingQuotation).where(and(
       eq(purchasingQuotation.client, client), eq(purchasingQuotation.quotationNumber, quotationNumber),
@@ -772,5 +775,93 @@ export async function getQuotation(client: string, quotationNumber: string) {
         infoUpdate: row.infoUpdate,
       })),
     };
+  });
+}
+
+
+// ---- Scoped entry points: session, capability and the reach of the request's RFQ event ----
+
+const refuseQuotation = (message: string, remedy?: string) => new QuotationError(message, remedy);
+const QUOTATION_READ_CAPABILITIES = [QUOTATION_CAPABILITY] as const;
+type WithAuth<T> = T & { authorization: ServiceAuthorityContext | undefined };
+
+/** A request outside the reach answers exactly as one that does not stand (the message `plan` gives for a missing one). */
+async function requireRequest(tx: Tx, client: string, actor: Awaited<ReturnType<typeof purchasingActor>>, rfqNumber: string) {
+  if (!(await requestInReach(tx, client, actor, rfqNumber))) {
+    throw new QuotationError(`Request ${rfqNumber.trim()} does not stand.`);
+  }
+}
+
+export async function previewQuotation(input: WithAuth<QuotationInput>): Promise<QuotationPreview> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTATION_CAPABILITY], refuseQuotation);
+    await requireRequest(tx, rest.client, actor, rest.rfqNumber);
+    return (await plan(tx, { ...rest, changedBy: actor.username }, true, false)).preview;
+  });
+}
+
+export async function previewQuotationChange(input: WithAuth<QuotationInput>): Promise<QuotationPreview> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTATION_CAPABILITY], refuseQuotation);
+    await requireRequest(tx, rest.client, actor, rest.rfqNumber);
+    return (await plan(tx, { ...rest, changedBy: actor.username }, false, false)).preview;
+  });
+}
+
+export async function createQuotation(input: WithAuth<QuotationInput>): Promise<QuotationResult> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTATION_CAPABILITY], refuseQuotation);
+    await requireRequest(tx, rest.client, actor, rest.rfqNumber);
+    return writeQuotation(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function changeQuotation(input: WithAuth<QuotationInput>): Promise<QuotationResult> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTATION_CAPABILITY], refuseQuotation);
+    await requireRequest(tx, rest.client, actor, rest.rfqNumber);
+    return writeQuotationChange(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function openQuotation(
+  client: string, rfqNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<OpenedQuotation | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, QUOTATION_READ_CAPABILITIES, refuseQuotation);
+    if (!(await requestInReach(tx, client, actor, rfqNumber))) return null;
+    return openQuotationForProvisioning(client, rfqNumber);
+  });
+}
+
+export async function listRecentQuotationRequests(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): ReturnType<typeof listRecentQuotationRequestsUnscoped> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, QUOTATION_READ_CAPABILITIES, refuseQuotation);
+    const rows = await listRecentQuotationRequestsUnscoped(client);
+    const out: typeof rows = [];
+    const reach = new Map<string, boolean>();
+    for (const row of rows) {
+      let ok = reach.get(row.rfqNumber);
+      if (ok === undefined) { ok = await requestInReach(tx, client, actor, row.rfqNumber); reach.set(row.rfqNumber, ok); }
+      if (ok) out.push(row);
+    }
+    return out;
+  });
+}
+
+export async function getQuotation(
+  client: string, quotationNumber: string, authorization: ServiceAuthorityContext | undefined,
+) {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, QUOTATION_READ_CAPABILITIES, refuseQuotation);
+    const found = await getQuotationForProvisioning(client, quotationNumber);
+    if (!found || !(await requestInReach(tx, client, actor, found.rfqNumber))) return null;
+    return found;
   });
 }
