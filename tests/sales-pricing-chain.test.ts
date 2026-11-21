@@ -25,7 +25,7 @@ import {
   confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, postDeliveryGoodsIssue,
 } from '../src/modules/sales/delivery';
 import { postBillingDocument } from '../src/modules/sales/billing';
-import { createCreditMemo } from '../src/modules/sales/credit-memo';
+import { createCreditMemoForProvisioning as createCreditMemo } from '../src/modules/sales/credit-memo';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,

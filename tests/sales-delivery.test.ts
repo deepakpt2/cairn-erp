@@ -38,8 +38,9 @@ import {
 } from '../src/modules/sales/returns';
 import { openSalesCommitments } from '../src/modules/sales/exposure';
 import {
-  createCreditMemo, createCreditMemoRequest, listCreditMemoRequests,
-  postCreditMemo, releaseBillingBlock,
+  createCreditMemoForProvisioning as createCreditMemo, createCreditMemoRequestForProvisioning as createCreditMemoRequest,
+  listCreditMemoRequests as listCreditMemoRequestsRaw,
+  postCreditMemoForProvisioning as postCreditMemo, releaseBillingBlockForProvisioning as releaseBillingBlock,
 } from '../src/modules/sales/credit-memo';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from './helpers/transfer-authorized';
@@ -138,6 +139,12 @@ async function stateOf(client: string, materialDocumentNumber: string | null, jo
     return { stock: Number(stock[0]?.q ?? '0'), valuation: valuation[0], journalLines, movement };
   });
 }
+
+import { financeAuth } from './helpers/finance-actor';
+
+// The complaint list is read through a real session, so the scoped path is the one exercised.
+const listCreditMemoRequests = async (client: string, filter: { customerNumber?: string } = {}) =>
+  listCreditMemoRequestsRaw(client, filter, await financeAuth(client));
 
 describe('sales fulfillment and billing (DI-020)', () => {
   let tenant: TestTenant;

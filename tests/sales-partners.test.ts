@@ -32,7 +32,7 @@ import {
   confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, postDeliveryGoodsIssue,
 } from '../src/modules/sales/delivery';
 import { getBilling, postBillingDocument } from '../src/modules/sales/billing';
-import { createCreditMemo, postCreditMemo } from '../src/modules/sales/credit-memo';
+import { createCreditMemoForProvisioning as createCreditMemo, postCreditMemoForProvisioning as postCreditMemo } from '../src/modules/sales/credit-memo';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,
   type TestTenant,

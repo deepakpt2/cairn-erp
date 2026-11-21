@@ -27,9 +27,11 @@ const ROUTE = INVOICE_LIST_ROUTE;
 export default async function SalesInvoiceListsPage() {
   const session = await requireSession(ROUTE);
   const client = session.user.client;
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
+  // A caller without authority or Company Code scope sees nothing, not an error page.
   const [due, lists] = await Promise.all([
-    invoiceListDueDocuments(client),
-    listInvoiceLists(client),
+    invoiceListDueDocuments(client, {}, authorization).catch(() => []),
+    listInvoiceLists(client, {}, authorization).catch(() => []),
   ]);
   const canCreate = can(session, INVOICE_LIST_CREATE_CAPABILITY);
   const canRelease = can(session, INVOICE_LIST_RELEASE_CAPABILITY);

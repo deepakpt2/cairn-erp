@@ -24,6 +24,9 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
+import { readableCompaniesInTx } from '../../platform/auth/company-scope';
+import { companyInScope, purchasingActor } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import {
   CustomerCreditMemoError, postCustomerCreditMemo,
 } from '../finance/customer-credit-memo';
@@ -76,6 +79,12 @@ export class CreditMemoError extends Error {
   }
 }
 
+const refuseMemo = (message: string, remedy?: string) => new CreditMemoError(message, remedy);
+/** Every capability that lets a session see credit memos and their requests. */
+const MEMO_READ_CAPABILITIES = [
+  CREDIT_MEMO_TRANSACTION, CREDIT_MEMO_REQUEST_CAPABILITY, CREDIT_MEMO_RELEASE_CAPABILITY, CREDIT_MEMO_POST_CAPABILITY,
+] as const;
+
 /** What the user enters for one item: the invoiced line being credited, and how much of it. */
 export interface CreditMemoLineInput {
   /** The line of the invoice being credited. */
@@ -86,6 +95,8 @@ export interface CreditMemoLineInput {
 
 export interface CreateCreditMemoInput {
   client: string;
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   requestKey: string;
   /** The invoice being credited. It must stand posted: there is no crediting what was never charged. */
@@ -110,6 +121,8 @@ export interface CreditMemoRequestLineInput {
 
 export interface CreateCreditMemoRequestInput {
   client: string;
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   requestKey: string;
   /** The invoice the complaint is about. */
@@ -123,6 +136,8 @@ export interface CreateCreditMemoRequestInput {
 
 export interface ReleaseBillingBlockInput {
   client: string;
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   /** The document being released. */
   orderNumber: string;
@@ -131,6 +146,8 @@ export interface ReleaseBillingBlockInput {
 
 export interface PostCreditMemoInput {
   client: string;
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   /** The credit memo being posted. */
   billingNumber: string;
@@ -238,11 +255,13 @@ async function requireCreditableInvoice(
   client: string,
   billingNumber: string,
   refuse: (message: string, remedy: string) => never,
+  inScope?: (companyCode: string) => Promise<boolean>,
 ): Promise<typeof billingDocument.$inferSelect> {
   const [invoice] = await tx.select().from(billingDocument).where(and(
     eq(billingDocument.client, client), eq(billingDocument.billingNumber, billingNumber),
   )).limit(1);
-  if (!invoice) {
+  // An invoice of a company outside the scope answers exactly as one that does not exist.
+  if (!invoice || (inScope && !(await inScope(invoice.companyCode)))) {
     refuse(
       `Billing document ${billingNumber} does not stand for this tenant.`,
       'Raise the credit against an invoice that exists.',
@@ -382,8 +401,29 @@ async function requireReleasedRequest(
 export async function createCreditMemo(
   input: CreateCreditMemoInput,
 ): Promise<{ billingNumber: string; replayed: boolean; netValue: string; taxValue: string; grossValue: string }> {
+  return createCreditMemoImpl(input, false);
+}
+
+/** Seeding and fixtures only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function createCreditMemoForProvisioning(
+  input: Omit<CreateCreditMemoInput, 'authorization'>,
+): Promise<{ billingNumber: string; replayed: boolean; netValue: string; taxValue: string; grossValue: string }> {
+  return createCreditMemoImpl({ ...input, authorization: undefined }, true);
+}
+
+async function createCreditMemoImpl(
+  raw: CreateCreditMemoInput, provisioning: boolean,
+): Promise<{ billingNumber: string; replayed: boolean; netValue: string; taxValue: string; grossValue: string }> {
+  let input = raw;
   validateCreditMemoInput(input);
   return withTenant(input.client, async (tx) => {
+    let actor;
+    if (!provisioning) {
+      // The screen asks for the post authority to raise a credit memo, so either holds.
+      actor = await purchasingActor(tx, raw.client, raw.authorization, [CREDIT_MEMO_TRANSACTION, CREDIT_MEMO_POST_CAPABILITY], refuseMemo);
+      input = { ...raw, changedBy: actor.username };
+    }
+    const inScope = actor ? (company: string) => companyInScope(tx, raw.client, actor, company) : undefined;
     const { creditMemoType } = await returnsChain(tx, input.client);
     const type = await salesDocumentTypeFor(tx, input.client, creditMemoType);
     if (!type) {
@@ -400,6 +440,12 @@ export async function createCreditMemo(
       const [saved] = await tx.select().from(billingDocument).where(and(
         eq(billingDocument.client, input.client), eq(billingDocument.billingNumber, standing.number),
       ));
+      if (saved && inScope && !(await inScope(saved.companyCode))) {
+        throw new CreditMemoError(
+          `Billing document ${input.billingNumber} does not stand for this tenant.`,
+          'Raise the credit against an invoice that exists.',
+        );
+      }
       return {
         billingNumber: standing.number, replayed: true,
         netValue: saved ? await valueText(tx, saved.currency, saved.netValue) : '0.00',
@@ -409,7 +455,7 @@ export async function createCreditMemo(
     }
 
     const invoice = await requireCreditableInvoice(tx, input.client, input.billingNumber,
-      (message, remedy) => { throw new CreditMemoError(message, remedy); });
+      (message, remedy) => { throw new CreditMemoError(message, remedy); }, inScope);
     // Every credited amount is rounded at the invoice currency's decimals, not at a fixed two.
     const places = await currencyScale(tx, invoice.currency);
     const round2 = (value: number) => roundTo(value, places);
@@ -626,6 +672,25 @@ export async function postCreditMemo(input: PostCreditMemoInput): Promise<{
   invoiceNumber: string;
   journalDocumentNumber: string;
 }> {
+  return postCreditMemoImpl(input, false);
+}
+
+/** Seeding and fixtures only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function postCreditMemoForProvisioning(input: Omit<PostCreditMemoInput, 'authorization'>): Promise<{
+  billingNumber: string;
+  invoiceNumber: string;
+  journalDocumentNumber: string;
+}> {
+  return postCreditMemoImpl({ ...input, authorization: undefined }, true);
+}
+
+async function postCreditMemoImpl(raw: PostCreditMemoInput, provisioning: boolean): Promise<{
+  billingNumber: string;
+  invoiceNumber: string;
+  journalDocumentNumber: string;
+}> {
+  let input = raw;
+  let postActor: Awaited<ReturnType<typeof purchasingActor>> | undefined;
   if (!ISO_DATE.test(input.postingDate)) {
     throw new CreditMemoError(
       `A credit memo is posted on a date, and ${input.postingDate} is not one.`,
@@ -633,11 +698,17 @@ export async function postCreditMemo(input: PostCreditMemoInput): Promise<{
     );
   }
   return withTenant(input.client, async (tx) => {
+    if (!provisioning) {
+      const actor = await purchasingActor(tx, raw.client, raw.authorization, [CREDIT_MEMO_POST_CAPABILITY], refuseMemo);
+      input = { ...raw, changedBy: actor.username };
+      postActor = actor;
+    }
     const { creditMemoType } = await returnsChain(tx, input.client);
     const [memo] = await tx.select().from(billingDocument).where(and(
       eq(billingDocument.client, input.client), eq(billingDocument.billingNumber, input.billingNumber),
     )).limit(1);
-    if (!memo) {
+    // A credit memo of a company outside the scope answers exactly as one that does not exist.
+    if (!memo || (postActor && !(await companyInScope(tx, raw.client, postActor, memo.companyCode)))) {
       throw new CreditMemoError(
         `Billing document ${input.billingNumber} does not stand for this tenant.`,
         'Read the credit memo before posting it.',
@@ -763,6 +834,20 @@ export async function postCreditMemo(input: PostCreditMemoInput): Promise<{
 export async function createCreditMemoRequest(
   input: CreateCreditMemoRequestInput,
 ): Promise<{ orderNumber: string; replayed: boolean; billingBlock: string }> {
+  return createCreditMemoRequestImpl(input, false);
+}
+
+/** Seeding and fixtures only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function createCreditMemoRequestForProvisioning(
+  input: Omit<CreateCreditMemoRequestInput, 'authorization'>,
+): Promise<{ orderNumber: string; replayed: boolean; billingBlock: string }> {
+  return createCreditMemoRequestImpl({ ...input, authorization: undefined }, true);
+}
+
+async function createCreditMemoRequestImpl(
+  raw: CreateCreditMemoRequestInput, provisioning: boolean,
+): Promise<{ orderNumber: string; replayed: boolean; billingBlock: string }> {
+  let input = raw;
   if (!ISO_DATE.test(input.orderDate)) {
     throw new CreditMemoError(
       `A credit memo request is raised on a date, and ${input.orderDate} is not one.`,
@@ -776,6 +861,12 @@ export async function createCreditMemoRequest(
     );
   }
   return withTenant(input.client, async (tx) => {
+    let actor;
+    if (!provisioning) {
+      actor = await purchasingActor(tx, raw.client, raw.authorization, [CREDIT_MEMO_REQUEST_CAPABILITY], refuseMemo);
+      input = { ...raw, changedBy: actor.username };
+    }
+    const inScope = actor ? (company: string) => companyInScope(tx, raw.client, actor, company) : undefined;
     const { complaintType } = await returnsChain(tx, input.client);
     const type = await salesDocumentTypeFor(tx, input.client, complaintType);
     if (!type) {
@@ -792,6 +883,12 @@ export async function createCreditMemoRequest(
       const [saved] = await tx.select().from(salesOrder).where(and(
         eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, standing.orderNumber),
       ));
+      if (saved && inScope && !(await inScope(saved.companyCode))) {
+        throw new CreditMemoError(
+          `Billing document ${input.billingNumber} does not stand for this tenant.`,
+          'Raise the credit against an invoice that exists.',
+        );
+      }
       return {
         orderNumber: standing.orderNumber, replayed: true,
         billingBlock: saved?.billingBlock ?? '',
@@ -799,7 +896,7 @@ export async function createCreditMemoRequest(
     }
 
     const invoice = await requireCreditableInvoice(tx, input.client, input.billingNumber,
-      (message, remedy) => { throw new CreditMemoError(message, remedy); });
+      (message, remedy) => { throw new CreditMemoError(message, remedy); }, inScope);
     // Every credited amount is rounded at the invoice currency's decimals, not at a fixed two.
     const places = await currencyScale(tx, invoice.currency);
     const round2 = (value: number) => roundTo(value, places);
@@ -972,11 +1069,32 @@ export async function releaseBillingBlock(input: ReleaseBillingBlockInput): Prom
   orderNumber: string;
   version: number;
 }> {
+  return releaseBillingBlockImpl(input, false);
+}
+
+/** Seeding and fixtures only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function releaseBillingBlockForProvisioning(
+  input: Omit<ReleaseBillingBlockInput, 'authorization'>,
+): Promise<{ orderNumber: string; version: number }> {
+  return releaseBillingBlockImpl({ ...input, authorization: undefined }, true);
+}
+
+async function releaseBillingBlockImpl(raw: ReleaseBillingBlockInput, provisioning: boolean): Promise<{
+  orderNumber: string;
+  version: number;
+}> {
+  let input = raw;
   return withTenant(input.client, async (tx) => {
+    let actor;
+    if (!provisioning) {
+      actor = await purchasingActor(tx, raw.client, raw.authorization, [CREDIT_MEMO_RELEASE_CAPABILITY], refuseMemo);
+      input = { ...raw, changedBy: actor.username };
+    }
     const [order] = await tx.select().from(salesOrder).where(and(
       eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, input.orderNumber),
     )).limit(1);
-    if (!order) {
+    // A document of a company outside the scope answers exactly as one that does not exist.
+    if (!order || (actor && !(await companyInScope(tx, raw.client, actor, order.companyCode)))) {
       throw new CreditMemoError(
         `Sales order ${input.orderNumber} does not stand for this tenant.`,
         'Read the document before releasing it.',
@@ -1051,8 +1169,27 @@ export interface CreditMemoRequestSummary {
 export async function listCreditMemoRequests(
   client: string,
   filter: { customerNumber?: string } = {},
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<CreditMemoRequestSummary[]> {
   return withTenant(client, async (tx) => {
+    const readable = await readableCompaniesInTx(tx, client, authorization, MEMO_READ_CAPABILITIES, { allowPlantLimited: true });
+    if (!readable.ok) throw refuseMemo(readable.refusal.message, readable.refusal.remedy);
+    return listRequestsInTx(tx, client, filter, readable.companies);
+  });
+}
+
+/** The attention panel's read: it carries no session and filters every row by the viewer's scope afterwards. Never import from `src/app`. */
+export async function listCreditMemoRequestsForAttention(
+  client: string,
+  filter: { customerNumber?: string } = {},
+): Promise<CreditMemoRequestSummary[]> {
+  return withTenant(client, (tx) => listRequestsInTx(tx, client, filter, undefined));
+}
+
+async function listRequestsInTx(
+  tx: Tx, client: string, filter: { customerNumber?: string }, companies: string[] | undefined,
+): Promise<CreditMemoRequestSummary[]> {
+  {
     // Which document a complaint is, and which document credits it, are configuration (9237).
     const { complaintType, creditMemoType } = await returnsChain(tx, client);
     const rows = await tx.execute(sql`
@@ -1075,6 +1212,7 @@ export async function listCreditMemoRequests(
                on l.client = o.client and l.order_number = o.order_number and l.status = 'OPEN'
        where o.client = ${client}
          and o.document_type = ${complaintType}
+         and (${companies === undefined ? sql`true` : companies.length === 0 ? sql`false` : sql`o.company_code in ${companies}`})
          and (${filter.customerNumber ?? null}::varchar is null
               or o.customer_number = ${filter.customerNumber ?? null}::varchar)
        group by o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value,
@@ -1099,5 +1237,5 @@ export async function listCreditMemoRequests(
       requestedQuantity: fixed3(row.requested),
       creditedQuantity: fixed3(row.credited),
     }));
-  });
+  }
 }

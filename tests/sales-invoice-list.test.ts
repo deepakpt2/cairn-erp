@@ -8,13 +8,21 @@ import { getCustomerInvoice } from '../src/modules/finance/customer-invoice';
 import { billDueList, cancelBillingDocument, getBilling, postBillingDocument } from '../src/modules/sales/billing';
 import {
   INVOICE_LIST_TYPE,
-  cancelInvoiceList,
-  createInvoiceList,
-  getInvoiceList,
-  invoiceListDueDocuments,
-  listInvoiceLists,
-  releaseInvoiceList,
+  cancelInvoiceListForProvisioning as cancelInvoiceList,
+  createInvoiceListForProvisioning as createInvoiceList,
+  getInvoiceList as getInvoiceListRaw,
+  invoiceListDueDocuments as invoiceListDueDocumentsRaw,
+  listInvoiceLists as listInvoiceListsRaw,
+  releaseInvoiceListForProvisioning as releaseInvoiceList,
 } from '../src/modules/sales/invoice-list';
+import { financeAuth } from './helpers/finance-actor';
+
+// The reads go through a real session, so the scoped path is the one exercised.
+const invoiceListDueDocuments = async (client: string, selection: Parameters<typeof invoiceListDueDocumentsRaw>[1] = {}) =>
+  invoiceListDueDocumentsRaw(client, selection, await financeAuth(client));
+const listInvoiceLists = async (client: string, selection: Parameters<typeof listInvoiceListsRaw>[1] = {}) =>
+  listInvoiceListsRaw(client, selection, await financeAuth(client));
+const getInvoiceList = async (client: string, number: string) => getInvoiceListRaw(client, number, await financeAuth(client));
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import {
   confirmDeliveryPicks,

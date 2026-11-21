@@ -95,6 +95,13 @@ export const FINANCE_ACTOR_CAPABILITIES: readonly string[] = [
   'PROC.SCHEDAGREE.RELEASE',
   'FIN.JOURNAL.RELEASE',
   'FIN.AP.PAYMENTRUN.RELEASE',
+  // Sales billing figures (company-scope enforced)
+  'SALES.INVOICE_LIST.CREATE',
+  'SALES.INVOICE_LIST.RELEASE',
+  'SALES.CREDIT_MEMO.CREATE',
+  'SALES.CREDIT.REQUEST.CREATE',
+  'SALES.CREDIT.RELEASE',
+  'SALES.CREDIT.MEMO.POST',
 ];
 
 export interface FinanceActorOptions {

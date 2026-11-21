@@ -94,6 +94,7 @@ export async function createCreditMemoRequestAction(
   try {
     const result = await createCreditMemoRequest({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       requestKey: text(form, 'requestKey') || `CRQ-${session.user.username}-${Date.now()}`,
       billingNumber: text(form, 'billingNumber'),
@@ -141,6 +142,7 @@ export async function releaseBillingBlockAction(
   try {
     const result = await releaseBillingBlock({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       orderNumber,
       expectedVersion: Number(text(form, 'expectedVersion') || '0'),
@@ -187,6 +189,7 @@ export async function createCreditMemoAction(
   try {
     const result = await createCreditMemo({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       requestKey: text(form, 'requestKey') || `CM-${session.user.username}-${Date.now()}`,
       billingNumber: text(form, 'billingNumber'),
@@ -233,6 +236,7 @@ export async function postCreditMemoAction(
   try {
     const result = await postCreditMemo({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       billingNumber,
       expectedVersion: Number(text(form, 'expectedVersion') || '0'),

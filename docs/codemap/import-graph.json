@@ -8454,9 +8454,7 @@
     "platform/tables/tenancy.ts"
   ],
   "modules/purchasing/scope.ts": [
-    "platform/auth/company-scope.ts",
-    "platform/auth/service-authority.ts",
-    "platform/db/client.ts"
+    "platform/auth/scope-actor.ts"
   ],
   "modules/purchasing/source-list.ts": [
     "modules/foundation/business-partner-schema.ts",
@@ -8611,6 +8609,9 @@
     "modules/sales/pricing-procedure.ts",
     "modules/sales/returns-configuration.ts",
     "modules/sales/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8704,6 +8705,9 @@
     "modules/sales/partners.ts",
     "modules/sales/pricing-procedure.ts",
     "modules/sales/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts"
@@ -8956,6 +8960,11 @@
   "platform/auth/password.ts": [],
   "platform/auth/pattern.ts": [
     "platform/auth/capability-policy.ts"
+  ],
+  "platform/auth/scope-actor.ts": [
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
+    "platform/db/client.ts"
   ],
   "platform/auth/service-authority.ts": [
     "modules/audit/read-only.ts",

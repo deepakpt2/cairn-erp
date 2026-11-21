@@ -9,7 +9,7 @@ import {
   billingDueList, BILLING_CAPABILITY, BILLING_ROUTE,
 } from '@/modules/sales/billing';
 import {
-  listCreditMemoRequests, CREDIT_MEMO_RELEASE_CAPABILITY, CREDIT_MEMO_ROUTE,
+  listCreditMemoRequestsForAttention, CREDIT_MEMO_RELEASE_CAPABILITY, CREDIT_MEMO_ROUTE,
 } from '@/modules/sales/credit-memo';
 import {
   DELIVERY_CAPABILITY, DELIVERY_GOODS_ISSUE_CAPABILITY, DELIVERY_PICK_CAPABILITY,
@@ -19,7 +19,7 @@ import {
   INCOMPLETION_PROCESS_CAPABILITY, INCOMPLETION_WORKLIST_ROUTE, listIncompleteDocuments,
 } from '@/modules/sales/incompletion';
 import {
-  INVOICE_LIST_CREATE_CAPABILITY, INVOICE_LIST_ROUTE, invoiceListDueDocuments,
+  INVOICE_LIST_CREATE_CAPABILITY, INVOICE_LIST_ROUTE, invoiceListDueDocumentsForAttention,
 } from '@/modules/sales/invoice-list';
 
 import {
@@ -418,7 +418,7 @@ const invoiceListsToCreate: AttentionSource = {
   code: INVOICE_LIST_CREATE_CAPABILITY,
   label: 'attention.source.invoiceList',
   async due(who) {
-    const rows = await invoiceListDueDocuments(who.client);
+    const rows = await invoiceListDueDocumentsForAttention(who.client);
 
     // What a clerk creates is one list, for one payer, for one list date — not
     // one per document. Grouping here is what makes the row a unit of work
@@ -491,7 +491,7 @@ const creditMemosHeld: AttentionSource = {
   code: CREDIT_MEMO_RELEASE_CAPABILITY,
   label: 'attention.source.creditMemo',
   async due(who) {
-    const rows = await listCreditMemoRequests(who.client);
+    const rows = await listCreditMemoRequestsForAttention(who.client);
     return rows
       .filter((row) => row.billingBlock != null)
       .map((row) => ({

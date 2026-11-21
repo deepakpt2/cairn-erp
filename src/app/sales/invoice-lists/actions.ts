@@ -71,6 +71,7 @@ export async function createInvoiceListAction(
   try {
     const { list, listed } = await createInvoiceList({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       billingNumbers,
       referenceDocumentText: optional(form, 'referenceDocumentText'),
@@ -109,6 +110,7 @@ export async function releaseInvoiceListAction(
   try {
     const result = await releaseInvoiceList({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       invoiceListNumber: text(form, 'invoiceListNumber'),
       postingDate: optional(form, 'postingDate'),
@@ -152,6 +154,7 @@ export async function cancelInvoiceListAction(
   try {
     const list = await cancelInvoiceList({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       invoiceListNumber: text(form, 'invoiceListNumber'),
       reason: optional(form, 'reason'),

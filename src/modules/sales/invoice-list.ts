@@ -32,6 +32,9 @@ import { z } from 'zod';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
+import { readableCompaniesInTx } from '../../platform/auth/company-scope';
+import { companyInScope, purchasingActor } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { postCustomerInvoice, type CustomerInvoiceView } from '../finance/customer-invoice';
 import { companyCode as companyCodeTable, taxCode as taxCodeTable } from '../foundation/schema';
 import { customerSalesArea } from '../foundation/customer-sales-area-schema';
@@ -70,6 +73,19 @@ export class InvoiceListError extends Error {
     this.name = 'InvoiceListError';
     this.remedy = remedy;
   }
+}
+
+const refuseList = (message: string, remedy?: string) => new InvoiceListError(message, remedy);
+/** Every capability that lets a session see invoice lists. */
+const LIST_READ_CAPABILITIES = [INVOICE_LIST_CREATE_CAPABILITY, INVOICE_LIST_RELEASE_CAPABILITY] as const;
+
+/** The companies the session may read invoice lists of; a refusal (no session, capability or scope) throws. */
+async function readableListCompanies(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<Set<string>> {
+  const readable = await readableCompaniesInTx(tx, client, authorization, LIST_READ_CAPABILITIES, { allowPlantLimited: true });
+  if (!readable.ok) throw refuseList(readable.refusal.message, readable.refusal.remedy);
+  return new Set(readable.companies);
 }
 
 /* ------------------------------------------------------------------ *
@@ -113,6 +129,21 @@ export interface InvoiceListDueSelection {
  * released to the customer and not yet to accounting.
  */
 export async function invoiceListDueDocuments(
+  client: string,
+  selection: InvoiceListDueSelection = {},
+  authorization: ServiceAuthorityContext | undefined,
+): Promise<InvoiceListDueRow[]> {
+  return withTenant(client, async (tx) => {
+    const readable = await readableListCompanies(tx, client, authorization);
+    return (await dueRows(tx, client, selection)).filter((row) => readable.has(row.companyCode));
+  });
+}
+
+/**
+ * The attention panel's read. It carries no session of its own and filters every row by the viewer's
+ * authority and organisational scope afterwards (`platform/attention/panel`). Never import this from `src/app`.
+ */
+export async function invoiceListDueDocumentsForAttention(
   client: string,
   selection: InvoiceListDueSelection = {},
 ): Promise<InvoiceListDueRow[]> {
@@ -216,7 +247,20 @@ export interface InvoiceListView {
   items: InvoiceListItemView[];
 }
 
-export async function getInvoiceList(client: string, billingNumber: string): Promise<InvoiceListView | null> {
+export async function getInvoiceList(
+  client: string, billingNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<InvoiceListView | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, LIST_READ_CAPABILITIES, refuseList);
+    const view = await loadInvoiceList(tx, client, billingNumber.trim().toUpperCase());
+    // Another company's list answers exactly as one that does not exist.
+    if (view && !(await companyInScope(tx, client, actor, view.header.companyCode))) return null;
+    return view;
+  });
+}
+
+/** Seeding and fixtures only: no session exists there. Never import this from `src/app`. */
+export async function getInvoiceListForProvisioning(client: string, billingNumber: string): Promise<InvoiceListView | null> {
   return withTenant(client, async (tx) => loadInvoiceList(tx, client, billingNumber.trim().toUpperCase()));
 }
 
@@ -305,8 +349,10 @@ export interface InvoiceListRow {
 export async function listInvoiceLists(
   client: string,
   selection: { status?: string; payer?: string; companyCode?: string } = {},
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<InvoiceListRow[]> {
   return withTenant(client, async (tx) => {
+    const readable = await readableListCompanies(tx, client, authorization);
     const counts = await tx.select({
       invoiceListNumber: salesInvoiceListItem.invoiceListNumber,
       itemCount: sql<number>`count(*)::int`,
@@ -349,6 +395,7 @@ export async function listInvoiceLists(
         itemCount: size.get(row.billingNumber) ?? 0,
         customerInvoiceNumber: row.customerInvoiceNumber,
       }))
+      .filter((row) => readable.has(row.companyCode))
       .filter((row) => !selection.payer || row.payer === selection.payer);
   });
 }
@@ -359,6 +406,8 @@ export async function listInvoiceLists(
 
 export interface InvoiceListCreateInput {
   client: string;
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   /** Which documents to list. Omitted, every due document matching the selection is taken. */
   billingNumbers?: string[];
@@ -398,10 +447,30 @@ export const createInvoiceListInputSchema = z.object({
 });
 
 export async function createInvoiceList(input: InvoiceListCreateInput): Promise<InvoiceListCreateResult> {
-  const parsed = createInvoiceListInputSchema.parse(input);
+  return createInvoiceListImpl(input, false);
+}
+
+/** Seeding and fixtures only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function createInvoiceListForProvisioning(
+  input: Omit<InvoiceListCreateInput, 'authorization'>,
+): Promise<InvoiceListCreateResult> {
+  return createInvoiceListImpl({ ...input, authorization: undefined }, true);
+}
+
+async function createInvoiceListImpl(input: InvoiceListCreateInput, provisioning: boolean): Promise<InvoiceListCreateResult> {
+  const { authorization, ...rest } = input;
+  const parsed = createInvoiceListInputSchema.parse(rest);
   return withTenant(parsed.client, async (tx) => {
     const client = parsed.client;
-    const changedBy = parsed.changedBy;
+    // The creator is the verified session user. Documents of a company outside the scope are treated as ones
+    // that do not exist: they are never listed and never named.
+    let changedBy = parsed.changedBy;
+    let readable: Set<string> | undefined;
+    if (!provisioning) {
+      const actor = await purchasingActor(tx, client, authorization, [INVOICE_LIST_CREATE_CAPABILITY], refuseList);
+      changedBy = actor.username;
+      readable = await readableListCompanies(tx, client, authorization);
+    }
 
     // Idempotency: SAP's VF21 will not raise the same list twice, and neither will this. A submitted key
     // that has already produced a list returns that list rather than a second one for the same documents.
@@ -413,13 +482,15 @@ export async function createInvoiceList(input: InvoiceListCreateInput): Promise<
         )).limit(1);
       if (standing) {
         const view = await loadInvoiceList(tx, client, standing.billingNumber);
-        if (view) return { list: view, listed: view.items.map((item) => item.billingNumber) };
+        if (view && (!readable || readable.has(view.header.companyCode))) {
+          return { list: view, listed: view.items.map((item) => item.billingNumber) };
+        }
       }
     }
 
     const due = parsed.billingNumbers?.length
-      ? await dueByNumber(tx, client, parsed.billingNumbers)
-      : await dueRows(tx, client, parsed.selection ?? {});
+      ? await dueByNumber(tx, client, parsed.billingNumbers, readable)
+      : (await dueRows(tx, client, parsed.selection ?? {})).filter((row) => !readable || readable.has(row.companyCode));
     if (due.length === 0) {
       throw new InvoiceListError(
         'No billing document is waiting for an invoice list.',
@@ -573,12 +644,15 @@ export async function createInvoiceList(input: InvoiceListCreateInput): Promise<
   });
 }
 
-async function dueByNumber(tx: Tx, client: string, numbers: string[]): Promise<InvoiceListDueRow[]> {
+async function dueByNumber(
+  tx: Tx, client: string, numbers: string[], readable?: ReadonlySet<string>,
+): Promise<InvoiceListDueRow[]> {
   const wanted = numbers.map((value) => value.trim().toUpperCase());
-  const rows = await tx.select().from(billingDocument).where(and(
+  // A document of a company outside the scope is treated as one that does not exist.
+  const rows = (await tx.select().from(billingDocument).where(and(
     eq(billingDocument.client, client),
     inArray(billingDocument.billingNumber, wanted),
-  ));
+  ))).filter((row) => !readable || readable.has(row.companyCode));
   const payers = await tx.select({
     documentNumber: salesDocumentPartner.documentNumber,
     partnerNumber: salesDocumentPartner.partnerNumber,
@@ -644,6 +718,8 @@ async function dueByNumber(tx: Tx, client: string, numbers: string[]): Promise<I
 
 export interface InvoiceListReleaseInput {
   client: string;
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   invoiceListNumber: string;
   postingDate?: string;
@@ -662,9 +738,22 @@ export interface InvoiceListReleaseResult {
 }
 
 export async function releaseInvoiceList(input: InvoiceListReleaseInput): Promise<InvoiceListReleaseResult> {
+  return releaseInvoiceListImpl(input, false);
+}
+
+/** Seeding and fixtures only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function releaseInvoiceListForProvisioning(
+  input: Omit<InvoiceListReleaseInput, 'authorization'>,
+): Promise<InvoiceListReleaseResult> {
+  return releaseInvoiceListImpl({ ...input, authorization: undefined }, true);
+}
+
+async function releaseInvoiceListImpl(input: InvoiceListReleaseInput, provisioning: boolean): Promise<InvoiceListReleaseResult> {
   const client = input.client;
   const number = input.invoiceListNumber.trim().toUpperCase();
-  const changedBy = input.changedBy;
+  let changedBy = input.changedBy;
+  // The verified session user, decided in the first transaction before anything is read.
+  const judged: { username?: string } = {};
   // Deterministic, so a retry after a half-finished release resolves to the same receivable: the
   // accounting-invoice service replays its own key, and the list cannot raise a second one.
   const requestKey = `sd-il-${client}-${number}`;
@@ -674,8 +763,13 @@ export async function releaseInvoiceList(input: InvoiceListReleaseInput): Promis
   // own — the same two-phase shape billing uses, and for the same reason: a refused posting leaves a
   // document that can be released again rather than a half-posted one.
   const plan = await withTenant(client, async (tx) => {
+    let actor;
+    if (!provisioning) actor = await purchasingActor(tx, client, input.authorization, [INVOICE_LIST_RELEASE_CAPABILITY], refuseList);
     const view = await loadInvoiceList(tx, client, number);
-    if (!view) throw new InvoiceListError(`Invoice list ${number} does not exist.`);
+    if (!view || (actor && !(await companyInScope(tx, client, actor, view.header.companyCode)))) {
+      throw new InvoiceListError(`Invoice list ${number} does not exist.`);
+    }
+    if (actor) judged.username = actor.username;
     // Cancelled before the documents are counted: a cancelled list has had its members deleted and
     // given back, so the first thing a reader needs told is that there is nothing left to post.
     if (view.header.status === 'CANCELLED') {
@@ -705,6 +799,7 @@ export async function releaseInvoiceList(input: InvoiceListReleaseInput): Promis
     };
   });
 
+  if (judged.username) changedBy = judged.username;
   if (plan.posted) {
     return { list: plan.view, invoice: null, posted: true, replayed: true };
   }
@@ -977,6 +1072,8 @@ async function postingLines(tx: Tx, client: string, view: InvoiceListView): Prom
 
 export interface InvoiceListCancelInput {
   client: string;
+  /** The verified session. The recorded actor is this session's user; `changedBy` is not trusted. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   invoiceListNumber: string;
   reason?: string;
@@ -985,11 +1082,30 @@ export interface InvoiceListCancelInput {
 }
 
 export async function cancelInvoiceList(input: InvoiceListCancelInput): Promise<InvoiceListView> {
-  return withTenant(input.client, async (tx) => {
+  return cancelInvoiceListImpl(input, false);
+}
+
+/** Seeding and fixtures only: no session exists there, so nothing is judged. Never import this from `src/app`. */
+export async function cancelInvoiceListForProvisioning(
+  input: Omit<InvoiceListCancelInput, 'authorization'>,
+): Promise<InvoiceListView> {
+  return cancelInvoiceListImpl({ ...input, authorization: undefined }, true);
+}
+
+async function cancelInvoiceListImpl(rawInput: InvoiceListCancelInput, provisioning: boolean): Promise<InvoiceListView> {
+  return withTenant(rawInput.client, async (tx) => {
+    let input = rawInput;
+    let actor;
+    if (!provisioning) {
+      actor = await purchasingActor(tx, rawInput.client, rawInput.authorization, [INVOICE_LIST_CREATE_CAPABILITY], refuseList);
+      input = { ...rawInput, changedBy: actor.username };
+    }
     const client = input.client;
     const number = input.invoiceListNumber.trim().toUpperCase();
     const view = await loadInvoiceList(tx, client, number);
-    if (!view) throw new InvoiceListError(`Invoice list ${number} does not exist.`);
+    if (!view || (actor && !(await companyInScope(tx, client, actor, view.header.companyCode)))) {
+      throw new InvoiceListError(`Invoice list ${number} does not exist.`);
+    }
     if (view.header.status === 'CANCELLED') {
       throw new InvoiceListError(`Invoice list ${number} has already been cancelled.`, 'Cancellation stands once.');
     }
