@@ -53,6 +53,11 @@ import {
 } from './schema';
 import { documentPartners, resolvePartners, writeDocumentPartners } from './partners';
 import { ShippingPointError, loadingGroupOf, shippingConditionOf, shippingPointFor } from './shipping-point';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { deliveryInReach } from './delivery';
+import { billingInReach } from './billing';
+import { orderInReach } from './sales-order';
+import { salesActor } from './sales-scope';
 
 /** The transaction code this posting records. No screen offers it yet, so no capability is bound. */
 export const RETURNS_RECEIPT_TRANSACTION = 'SALES.RETURNS.RECEIPT';
@@ -95,6 +100,18 @@ export class ReturnsError extends Error {
  * configuration rather than from here.
  */
 /** The movement the delivered returns chain receives with, named so the standard package can seed it. */
+/** Any returns capability opens a returns list; each write names its own. */
+const RETURNS_ACCESS_CAPABILITIES = [
+  'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST',
+] as const;
+
+/** Session, the named capability and explicit Company Code scope, judged inside the caller's own transaction. */
+function returnsActor(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined, capabilities: readonly string[],
+) {
+  return salesActor(tx, client, authorization, capabilities, (m, r) => new ReturnsError(m, r));
+}
+
 export const DELIVERED_RETURNS_RECEIPT_MOVEMENT = 'RETURNS_RECEIPT';
 
 export const DELIVERED_RETURNS_MOVEMENTS = [
@@ -187,6 +204,8 @@ export interface ReturnsReceiptLineInput {
 
 export interface PostReturnsReceiptInput {
   client: string;
+  /** The verified session or job lease the receipt is posted under; the recorded actor is that session's user. */
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   /** The delivery the goods went out on, and come back against. */
   deliveryNumber: string;
@@ -326,10 +345,19 @@ async function standingReceipt(
 
 export async function postReturnsReceipt(input: PostReturnsReceiptInput): Promise<ReturnsReceiptResult> {
   validateInput(input);
-  return withTenant(input.client, (tx) => postReturnsReceiptInTx(tx, input));
+  return withTenant(input.client, async (tx) => {
+    const actor = await returnsActor(tx, input.client, input.authorization, [RETURNS_RECEIPT_CAPABILITY]);
+    if (!(await deliveryInReach(tx, input.client, actor, input.deliveryNumber))) {
+      throw new ReturnsError(
+        `Delivery ${input.deliveryNumber} does not stand for this tenant.`,
+        'Return against a delivery that exists.',
+      );
+    }
+    return postReturnsReceiptInTx(tx, { ...input, changedBy: actor.username });
+  });
 }
 
-/** Post a returns receipt inside an existing tenant transaction so callers can compose it. */
+/** Post a returns receipt inside an existing tenant transaction. Internal: the caller has already judged capability and reach. */
 export async function postReturnsReceiptInTx(tx: Tx, input: PostReturnsReceiptInput): Promise<ReturnsReceiptResult> {
   validateInput(input);
   const [scope] = await tx.execute(sql<{ client: string | null }>`
@@ -593,6 +621,7 @@ export const RETURNS_DELIVERY_TRANSACTION = 'SALES.RETURNS.DELIVERY';
 
 export interface CreateReturnsDeliveryInput {
   client: string;
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   /**
    * The outbound delivery the goods went out on. Named when the return is raised against a delivery;
@@ -609,6 +638,7 @@ export interface CreateReturnsDeliveryInput {
 
 export interface PostReturnsDeliveryInput {
   client: string;
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   /** The returns delivery being received. */
   deliveryNumber: string;
@@ -707,6 +737,9 @@ export async function createReturnsDelivery(
     );
   }
   return withTenant(input.client, async (tx) => {
+    const actor = await returnsActor(tx, input.client, input.authorization, [RETURNS_DELIVERY_CAPABILITY]);
+    const changedBy = actor.username;
+    input = { ...input, changedBy };
     const chain = await returnsChain(tx, input.client);
     const type = await salesDocumentTypeFor(tx, input.client, chain.returnsDeliveryType);
     if (!type) {
@@ -719,7 +752,12 @@ export async function createReturnsDelivery(
     const [standing] = await tx.select({ number: delivery.deliveryNumber }).from(delivery).where(and(
       eq(delivery.client, input.client), eq(delivery.requestKey, input.requestKey),
     ));
-    if (standing) return { deliveryNumber: standing.number, replayed: true };
+    if (standing) {
+      if (!(await deliveryInReach(tx, input.client, actor, standing.number))) {
+        throw new ReturnsError('This request key was used for another document.', REQUEST_MISMATCH_REMEDY);
+      }
+      return { deliveryNumber: standing.number, replayed: true };
+    }
 
     /** What one item resolves to: the delivery line the goods left on, and the order line behind it. */
     interface RequestedLine {
@@ -741,7 +779,7 @@ export async function createReturnsDelivery(
       const [order] = await tx.select().from(salesOrder).where(and(
         eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, returnsOrderNumber),
       )).limit(1);
-      if (!order) {
+      if (!order || !(await orderInReach(tx, input.client, actor, returnsOrderNumber))) {
         throw new ReturnsError(
           `Returns order ${returnsOrderNumber} does not stand for this tenant.`,
           'Name a returns order that exists.',
@@ -823,7 +861,7 @@ export async function createReturnsDelivery(
     const [origin] = await tx.select().from(delivery).where(and(
       eq(delivery.client, input.client), eq(delivery.deliveryNumber, originNumber),
     )).limit(1);
-    if (!origin) {
+    if (!origin || !(await deliveryInReach(tx, input.client, actor, originNumber))) {
       throw new ReturnsError(
         `Delivery ${originNumber} does not stand for this tenant.`,
         'Return against a delivery that exists.',
@@ -989,11 +1027,13 @@ export async function postReturnsDelivery(
   }
 
   return withTenant(input.client, async (tx) => {
+    const actor = await returnsActor(tx, input.client, input.authorization, [RETURNS_RECEIPT_CAPABILITY]);
+    input = { ...input, changedBy: actor.username };
     const chain = await returnsChain(tx, input.client);
     const [header] = await tx.select().from(delivery).where(and(
       eq(delivery.client, input.client), eq(delivery.deliveryNumber, input.deliveryNumber),
     ));
-    if (!header) {
+    if (!header || !(await deliveryInReach(tx, input.client, actor, input.deliveryNumber))) {
       throw new ReturnsError(`Returns delivery ${input.deliveryNumber} does not stand for this tenant.`);
     }
     if (header.documentType !== chain.returnsDeliveryType) {
@@ -1035,6 +1075,7 @@ export async function postReturnsDelivery(
 
     const receipt = await postReturnsReceiptInTx(tx, {
       client: input.client, changedBy: input.changedBy,
+      authorization: input.authorization,
       deliveryNumber: header.referenceDeliveryNumber,
       postingDate: input.postingDate, documentDate: input.documentDate,
       headerText: `Return ${header.deliveryNumber}`.slice(0, 25),
@@ -1096,6 +1137,7 @@ export interface ReturnsOrderLineInput {
 
 export interface CreateReturnsOrderInput {
   client: string;
+  authorization: ServiceAuthorityContext | undefined;
   changedBy: string;
   requestKey: string;
   /** The invoice the goods were billed on, which the return is priced from. */
@@ -1208,6 +1250,8 @@ export async function createReturnsOrder(
 ): Promise<{ orderNumber: string; replayed: boolean; netValue: string; taxValue: string; grossValue: string }> {
   validateReturnsOrderInput(input);
   return withTenant(input.client, async (tx) => {
+    const actor = await returnsActor(tx, input.client, input.authorization, [RETURNS_ORDER_CAPABILITY]);
+    input = { ...input, changedBy: actor.username };
     const chain = await returnsChain(tx, input.client);
     const type = await salesDocumentTypeFor(tx, input.client, chain.returnsOrderType);
     if (!type) {
@@ -1221,6 +1265,9 @@ export async function createReturnsOrder(
       eq(salesOrder.client, input.client), eq(salesOrder.requestKey, input.requestKey),
     )).limit(1);
     if (standing) {
+      if (!(await orderInReach(tx, input.client, actor, standing.orderNumber))) {
+        throw new ReturnsError('This request key was used for another document.', REQUEST_MISMATCH_REMEDY);
+      }
       const [saved] = await tx.select().from(salesOrder).where(and(
         eq(salesOrder.client, input.client), eq(salesOrder.orderNumber, standing.orderNumber),
       ));
@@ -1235,7 +1282,7 @@ export async function createReturnsOrder(
     const [invoice] = await tx.select().from(billingDocument).where(and(
       eq(billingDocument.client, input.client), eq(billingDocument.billingNumber, input.billingNumber),
     )).limit(1);
-    if (!invoice) {
+    if (!invoice || !(await billingInReach(tx, input.client, actor, input.billingNumber))) {
       throw new ReturnsError(
         `Billing document ${input.billingNumber} does not stand for this tenant.`,
         'Raise the return against an invoice that exists.',
@@ -1418,9 +1465,11 @@ export interface ReturnsOrderSummary {
 
 export async function listReturnsOrders(
   client: string,
-  filter: { customerNumber?: string } = {},
+  filter: { customerNumber?: string } | undefined,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<ReturnsOrderSummary[]> {
   return withTenant(client, async (tx) => {
+    const actor = await returnsActor(tx, client, authorization, RETURNS_ACCESS_CAPABILITIES);
     // What a returns order is, is configuration: the list reads the type this tenant named (9237).
     const { returnsOrderType, returnsDeliveryType } = await returnsChain(tx, client);
     const rows = await tx.execute(sql`
@@ -1441,8 +1490,8 @@ export async function listReturnsOrders(
                on l.client = o.client and l.order_number = o.order_number and l.status = 'OPEN'
        where o.client = ${client}
          and o.document_type = ${returnsOrderType}
-         and (${filter.customerNumber ?? null}::varchar is null
-              or o.customer_number = ${filter.customerNumber ?? null}::varchar)
+         and (${filter?.customerNumber ?? null}::varchar is null
+              or o.customer_number = ${filter?.customerNumber ?? null}::varchar)
        group by o.order_number, o.order_date, o.customer_number, o.currency, o.gross_value,
                 o.status, o.header_text, o.reference_document_number
        order by o.order_number desc
@@ -1452,7 +1501,9 @@ export async function listReturnsOrders(
       gross_value: string; status: string; header_text: string | null; reference_document_number: string | null;
       requested: string; committed: string;
     }>;
-    return rows.map((row) => ({
+    const reach = new Map<string, boolean>();
+    for (const row of rows) reach.set(row.order_number, await orderInReach(tx, client, actor, row.order_number));
+    return rows.filter((row) => reach.get(row.order_number)).map((row) => ({
       orderNumber: row.order_number,
       orderDate: typeof row.order_date === 'string' ? row.order_date : String(row.order_date).slice(0, 10),
       customerNumber: row.customer_number,
@@ -1484,9 +1535,11 @@ export interface ReturnsDeliverySummary {
 
 export async function listReturnsDeliveries(
   client: string,
-  filter: { orderNumber?: string } = {},
+  filter: { orderNumber?: string } | undefined,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<ReturnsDeliverySummary[]> {
   return withTenant(client, async (tx) => {
+    const actor = await returnsActor(tx, client, authorization, RETURNS_ACCESS_CAPABILITIES);
     const { returnsDeliveryType } = await returnsChain(tx, client);
     const rows = await tx.execute(sql`
       select d.delivery_number, d.delivery_date, d.order_number, d.reference_delivery_number,
@@ -1496,8 +1549,8 @@ export async function listReturnsDeliveries(
         left join delivery_line dl on dl.client = d.client and dl.delivery_number = d.delivery_number
        where d.client = ${client}
          and d.document_type = ${returnsDeliveryType}
-         and (${filter.orderNumber ?? null}::varchar is null
-              or d.order_number = ${filter.orderNumber ?? null}::varchar)
+         and (${filter?.orderNumber ?? null}::varchar is null
+              or d.order_number = ${filter?.orderNumber ?? null}::varchar)
        group by d.delivery_number, d.delivery_date, d.order_number, d.reference_delivery_number,
                 d.customer_number, d.status, d.material_document_number
        order by d.delivery_number desc
@@ -1507,7 +1560,9 @@ export async function listReturnsDeliveries(
       reference_delivery_number: string | null; customer_number: string; status: string;
       material_document_number: string | null; quantity: string;
     }>;
-    return rows.map((row) => ({
+    const reach = new Map<string, boolean>();
+    for (const row of rows) reach.set(row.delivery_number, await deliveryInReach(tx, client, actor, row.delivery_number));
+    return rows.filter((row) => reach.get(row.delivery_number)).map((row) => ({
       deliveryNumber: row.delivery_number,
       deliveryDate: typeof row.delivery_date === 'string' ? row.delivery_date : String(row.delivery_date).slice(0, 10),
       orderNumber: row.order_number,

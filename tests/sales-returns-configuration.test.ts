@@ -23,11 +23,13 @@
  * was given nothing but the delivered standard.
  */
 import { sql } from 'drizzle-orm';
+import { createFinanceActor } from './helpers/finance-actor';
+import { listReturnsOrders as listReturnsOrdersScoped } from '../src/modules/sales/returns';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { listReturnsOrders } from '../src/modules/sales/returns';
+import { listReturnsOrders } from './helpers/sales-authorized';
 import {
   defineSalesDocumentType,
   setSalesDocumentTypeActive,
@@ -180,7 +182,11 @@ describe('the returns chain is configured rather than carried as constants (9237
   });
 
   it('refuses a tenant whose chain has never been configured, and says where to configure it', async () => {
-    await expect(listReturnsOrders(unconfigured.client)).rejects.toMatchObject({
+    // A tenant with no company code of its own: the actor is given an explicit scope, so the refusal is the chain's.
+    const actor = await createFinanceActor(unconfigured.client, {
+      capabilities: ['SALES.RETURNS.ORDER.CREATE'], companyScopes: ['1000'], plantScopes: ['P1'],
+    });
+    await expect(listReturnsOrdersScoped(unconfigured.client, {}, actor.authorization)).rejects.toMatchObject({
       name: 'ReturnsConfigurationError',
       message: expect.stringContaining('The returns chain is not configured for this tenant'),
       remedy: expect.stringContaining('/config/sales-returns'),

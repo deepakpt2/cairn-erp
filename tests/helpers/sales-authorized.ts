@@ -14,6 +14,10 @@ import {
   billingDueList as dueL, cancelBillingDocument as cancelB, getBilling as getB, goodsIssueStands as stands,
   listBillableDeliveries as billable, listBillings as listB, salesDocumentFlow as flow,
 } from '../../src/modules/sales/billing';
+import {
+  createReturnsDelivery as createRD, createReturnsOrder as createRO, listReturnsDeliveries as listRD,
+  listReturnsOrders as listRO, postReturnsDelivery as postRD, postReturnsReceipt as postRR,
+} from '../../src/modules/sales/returns';
 import { listDueRegister as dueR } from '../../src/modules/sales/registers';
 import { createFinanceActor, refreshFinanceActorScopes, type FinanceActor } from './finance-actor';
 
@@ -21,6 +25,7 @@ export const SALES_TEST_CAPABILITIES = [
   'SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE',
   'SALES.ORDER.AVAILABILITY.CHECK', 'CFG.SALES.CONDITION.MAINTAIN', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
   'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.CREDIT.REQUEST.CREATE',
+  'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST',
 ];
 
 const actors = new Map<string, Promise<FinanceActor>>();
@@ -92,4 +97,23 @@ export async function salesDocumentFlow(client: string, orderNumber: string) { r
 export async function goodsIssueStands(client: string, deliveryNumber: string) { return stands(client, deliveryNumber, await salesTestAuth(client)); }
 export async function cancelBillingDocument(input: Opt<typeof cancelB>) {
   return cancelB({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof cancelB>[0]);
+}
+
+export async function createReturnsOrder(input: Opt<typeof createRO>) {
+  return createRO({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof createRO>[0]);
+}
+export async function createReturnsDelivery(input: Opt<typeof createRD>) {
+  return createRD({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof createRD>[0]);
+}
+export async function postReturnsDelivery(input: Opt<typeof postRD>) {
+  return postRD({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof postRD>[0]);
+}
+export async function postReturnsReceipt(input: Opt<typeof postRR>) {
+  return postRR({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof postRR>[0]);
+}
+export async function listReturnsOrders(client: string, filter: NonNullable<Parameters<typeof listRO>[1]> = {}) {
+  return listRO(client, filter, await salesTestAuth(client));
+}
+export async function listReturnsDeliveries(client: string, filter: NonNullable<Parameters<typeof listRD>[1]> = {}) {
+  return listRD(client, filter, await salesTestAuth(client));
 }

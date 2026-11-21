@@ -163,3 +163,14 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** `linkPostedInvoice` is exported but takes no authorization; it is only reached from the scoped post paths and is not imported by any page or action. The collective-run reach check reads the due list by the run's own authority. Invoice lists, credit memos and down payments are separate services, not reviewed here. Not browser-tested.
 
 **Still not covered in sales:** returns, rebates, down payments, conditions, analysis/registers (document register), shipping point, credit-control area.
+
+## Phase 6e-1 — sales area: returns (returns order, returns delivery, 651 receipt)
+
+**Found:** `createReturnsOrder`, `createReturnsDelivery`, `postReturnsDelivery`, `postReturnsReceipt`, `listReturnsOrders` and `listReturnsDeliveries` checked no session, capability or scope and recorded a caller-supplied `changedBy`. A returns order could be priced from another company's invoice, and goods received back against another company's delivery.
+
+**Covered:** each service judges session, its returns capability and explicit Company Code scope inside its own transaction, before any read. A returns order is raised only against an invoice inside the actor's reach (company, sales area, every plant); a returns delivery only against a delivery or returns order inside it (the origin delivery is judged as well); a receipt only against a delivery inside it. Otherwise the answer is the same "does not stand for this tenant" as a nonexistent number, and nothing is written. A replayed request key that points at an out-of-reach document is refused rather than answered. Both lists filter by reach. The recorded actor is the session user. `postReturnsReceiptInTx` stays internal and is only reached after the callers' own checks.
+- Tests: 3 more in `tests/company-scope-sales.test.ts` (21 in the file); the returns suites use `tests/helpers/sales-authorized.ts` wrappers.
+
+**Limits:** the generic goods-movement reversal (`reverseMaterialDocument`) of a 651 is not scoped here. Not browser-tested.
+
+**Still not covered in sales:** rebates, down payments, conditions, analysis/registers (document register), shipping point, credit-control area.

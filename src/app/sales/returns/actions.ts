@@ -104,6 +104,7 @@ export async function createReturnsOrderAction(
   try {
     const result = await createReturnsOrder({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       requestKey: text(form, 'requestKey') || `RO-${session.user.username}-${Date.now()}`,
       billingNumber: text(form, 'billingNumber'),
@@ -159,6 +160,7 @@ export async function createReturnsDeliveryAction(
   try {
     const result = await createReturnsDelivery({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       requestKey: text(form, 'requestKey') || `RT-${session.user.username}-${Date.now()}`,
       deliveryDate: text(form, 'deliveryDate'),
@@ -209,6 +211,7 @@ export async function receiveReturnsDeliveryAction(
   try {
     const result = await postReturnsDelivery({
       client: session.user.client,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       changedBy: session.user.username,
       deliveryNumber,
       expectedVersion: Number(text(form, 'expectedVersion') || '0'),

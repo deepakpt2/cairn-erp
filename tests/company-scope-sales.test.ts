@@ -15,6 +15,10 @@ import {
   billingDueList, cancelBillingDocument, createBillingFromDelivery, getBilling, goodsIssueStands, listBillableDeliveries,
   listBillings, postBillingDocument, salesDocumentFlow,
 } from '../src/modules/sales/billing';
+import { returnsChain } from '../src/modules/sales/returns-configuration';
+import {
+  createReturnsDelivery, createReturnsOrder, listReturnsDeliveries, listReturnsOrders, postReturnsDelivery, postReturnsReceipt,
+} from '../src/modules/sales/returns';
 import {
   cancelDelivery, confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, listDeliveries,
 } from '../src/modules/sales/delivery';
@@ -27,7 +31,7 @@ import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 const A = '1000';
 const B = '2000';
 const SEED = 'SCOPE_SALES_SEED';
-const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL'];
+const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.RETURNS.ORDER.CREATE', 'SALES.RETURNS.DELIVERY.CREATE', 'SALES.RETURNS.RECEIPT.POST'];
 const SO_A = 'SOA0000001';
 const SO_B = 'SOB0000001';
 const SO_D2 = 'SOD0000002';
@@ -425,5 +429,101 @@ describe('billing', () => {
     const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from billing_document where client = ${client} and billing_number = ${BD2}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
     expect(row.status).toBe('CANCELLED');
     expect(row.changed_by).toBe(actors.A!.username);
+  });
+});
+
+describe('returns', () => {
+  const RA = 'RTA0000001';
+  const RB = 'RTB0000001';
+  const XA = 'RXA0000001';
+  const XB = 'RXB0000001';
+  const GONE_R = 'RTZ9999999';
+  const nums = (rows: Array<{ orderNumber?: string; deliveryNumber?: string }>) => rows.map((r) => r.deliveryNumber ?? r.orderNumber).sort();
+  const counts = () => withTenant(client, async (tx) => (await tx.execute(sql`select
+      (select count(*)::int from sales_order where client = ${client}) as orders,
+      (select count(*)::int from delivery where client = ${client}) as deliveries,
+      (select count(*)::int from material_document where client = ${client}) as docs`)) as unknown as Array<{ orders: number; deliveries: number; docs: number }>);
+
+  beforeAll(async () => {
+    await withTenant(client, async (tx) => {
+      const chain = await returnsChain(tx, client);
+      for (const [no, org, company, plant] of [[RA, '1000', A, 'PSA1'], [RB, '2000', B, 'PSB1']] as const) {
+        await tx.execute(sql`insert into sales_order (client, order_number, document_type, sales_org, distribution_channel, division, customer_number, company_code, currency, order_date, created_by)
+          values (${client}, ${no}, ${chain.returnsOrderType}, ${org}, '10', '01', 'CUSTSC1', ${company}, 'USD', '2026-04-05', ${SEED})`);
+        await tx.execute(sql`insert into sales_order_line (client, order_number, line_number, material_number, plant, order_quantity, quantity_unit, base_quantity, condition_number, created_by)
+          values (${client}, ${no}, 10, 'SCSM1', ${plant}, 1, 'UNT', 1, 'COND', ${SEED})`);
+      }
+      for (const [no, org, company, plant, ref] of [[XA, '1000', A, 'PSA1', DA], [XB, '2000', B, 'PSB1', DB]] as const) {
+        await tx.execute(sql`insert into delivery (client, delivery_number, document_type, order_number, reference_delivery_number, sales_org, distribution_channel, division, customer_number, company_code, plant, delivery_date, created_by)
+          values (${client}, ${no}, ${chain.returnsDeliveryType}, ${ref === DA ? SO_A : SO_B}, ${ref}, ${org}, '10', '01', 'CUSTSC1', ${company}, ${plant}, '2026-04-06', ${SEED})`);
+        await tx.execute(sql`insert into delivery_line (client, delivery_number, line_number, order_number, order_line_number, material_number, plant, quantity_unit, ordered_quantity, delivery_quantity, remaining_quantity, created_by)
+          values (${client}, ${no}, 10, ${ref === DA ? SO_A : SO_B}, 10, 'SCSM1', ${plant}, 'UNT', 1, 1, 0, ${SEED})`);
+      }
+    });
+  });
+
+  it('lists returns orders and returns deliveries only inside company, sales area and plant reach', async () => {
+    expect(nums(await listReturnsOrders(client, undefined, auth('A')))).toEqual([RA]);
+    expect(nums(await listReturnsOrders(client, undefined, auth('both')))).toEqual([RA, RB]);
+    expect(nums(await listReturnsOrders(client, undefined, auth('org1000')))).toEqual([RA]);
+    expect(nums(await listReturnsOrders(client, undefined, auth('plantA')))).toEqual([RA]);
+    expect(nums(await listReturnsDeliveries(client, undefined, auth('A')))).toEqual([XA]);
+    expect(nums(await listReturnsDeliveries(client, undefined, auth('both')))).toEqual([XA, XB]);
+    expect(nums(await listReturnsDeliveries(client, undefined, auth('org1000')))).toEqual([XA]);
+    expect(nums(await listReturnsDeliveries(client, undefined, auth('plantA')))).toEqual([XA]);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant', async () => {
+    expect(await ask(listReturnsOrders(client, undefined, undefined))).not.toBe('done');
+    expect(await ask(listReturnsDeliveries(client, undefined, undefined))).not.toBe('done');
+    const rd = (a: FinanceActor['authorization'] | undefined) => createReturnsDelivery({
+      client, authorization: a, changedBy: 'FORGED', deliveryNumber: DA, deliveryDate: '2026-04-10', requestKey: randomUUID(),
+      items: [{ lineNumber: 10, quantity: 1 }],
+    });
+    expect(await ask(rd(undefined))).not.toBe('done');
+    for (const k of denied) {
+      expect(await ask(listReturnsOrders(client, undefined, auth(k)))).not.toBe('done');
+      expect(await ask(listReturnsDeliveries(client, undefined, auth(k)))).not.toBe('done');
+      expect(await ask(rd(auth(k)))).not.toBe('done');
+    }
+  });
+
+  it('answers returns raised or received against an out-of-reach document as a missing one and writes nothing', async () => {
+    const before = await counts();
+    const order = (a: string, billing: string) => ask(createReturnsOrder({
+      client, authorization: auth(a), changedBy: 'FORGED', requestKey: randomUUID(), billingNumber: billing,
+      orderDate: '2026-04-10', items: [{ billingLineNumber: 10, quantity: 1 }],
+    }));
+    const missOrder = await order('A', BGONE);
+    expect(missOrder).toMatch(/does not stand/);
+    for (const [who, n] of [['A', BB], ['org1000', BB], ['plantA', BB]] as const) {
+      expect((await order(who, n)).replaceAll(n, '#')).toBe(missOrder.replaceAll(BGONE, '#'));
+    }
+    const del = (a: string, d: string | undefined, o?: string) => ask(createReturnsDelivery({
+      client, authorization: auth(a), changedBy: 'FORGED', requestKey: randomUUID(), deliveryNumber: d, returnsOrderNumber: o,
+      deliveryDate: '2026-04-10', items: [{ lineNumber: 10, quantity: 1 }],
+    }));
+    const missDel = await del('A', DGONE);
+    expect(missDel).toMatch(/does not stand/);
+    for (const [who, d] of [['A', DB], ['org1000', DB], ['plantA', DB]] as const) {
+      expect((await del(who, d)).replaceAll(d, '#')).toBe(missDel.replaceAll(DGONE, '#'));
+    }
+    const missRo = await del('A', undefined, GONE_R);
+    expect(missRo).toMatch(/does not stand/);
+    expect((await del('A', undefined, RB)).replaceAll(RB, '#')).toBe(missRo.replaceAll(GONE_R, '#'));
+    const post = (a: string, d: string) => ask(postReturnsDelivery({
+      client, authorization: auth(a), changedBy: 'FORGED', deliveryNumber: d, expectedVersion: 1, postingDate: '2026-04-11', requestKey: randomUUID(),
+    }));
+    const missPost = await post('A', GONE_R);
+    expect(missPost).toMatch(/does not stand/);
+    expect((await post('A', XB)).replaceAll(XB, '#')).toBe(missPost.replaceAll(GONE_R, '#'));
+    const receipt = (a: string, d: string) => ask(postReturnsReceipt({
+      client, authorization: auth(a), changedBy: 'FORGED', deliveryNumber: d, postingDate: '2026-04-11', requestKey: randomUUID(),
+      lines: [{ lineNumber: 10, quantity: 1 }],
+    }));
+    const missRc = await receipt('A', DGONE);
+    expect(missRc).toMatch(/does not stand/);
+    expect((await receipt('A', DB)).replaceAll(DB, '#')).toBe(missRc.replaceAll(DGONE, '#'));
+    expect(await counts()).toEqual(before);
   });
 });

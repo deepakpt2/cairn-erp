@@ -11,10 +11,11 @@ import { createBillingFromDelivery, postBillingDocument } from '../src/modules/s
 import { cancelBillingDocument, getBilling, goodsIssueStands, listBillableDeliveries, salesDocumentFlow } from './helpers/sales-authorized';
 import { DeliveryError, createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { SalesOrderError, createSalesOrder } from '../src/modules/sales/sales-order';
+import { ReturnsError } from '../src/modules/sales/returns';
 import {
   createReturnsDelivery, createReturnsOrder, listReturnsDeliveries, listReturnsOrders,
-  postReturnsDelivery, postReturnsReceipt, ReturnsError,
-} from '../src/modules/sales/returns';
+  postReturnsDelivery, postReturnsReceipt,
+} from './helpers/sales-authorized';
 import { openSalesCommitments } from '../src/modules/sales/exposure';
 import {
   createCreditMemoForProvisioning as createCreditMemo, createCreditMemoRequestForProvisioning as createCreditMemoRequest,

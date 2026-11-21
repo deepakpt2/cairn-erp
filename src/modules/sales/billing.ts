@@ -664,7 +664,7 @@ async function billingPlants(
 }
 
 /** The billing document's company, sales area and every plant it bills from are inside the actor's reach. */
-async function billingInReach(tx: Tx, client: string, actor: BillingActor, billingNumber: string): Promise<boolean> {
+export async function billingInReach(tx: Tx, client: string, actor: BillingActor, billingNumber: string): Promise<boolean> {
   const [header] = await tx.select({
     billingNumber: billingDocument.billingNumber, companyCode: billingDocument.companyCode,
     salesOrg: billingDocument.salesOrg, distributionChannel: billingDocument.distributionChannel,

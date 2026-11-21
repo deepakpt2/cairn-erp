@@ -609,7 +609,7 @@ const orderMissing = (orderNumber: string, remedy: string) => new SalesOrderErro
  * Judge the order against the actor's reach: company, sales area and plants. An order outside it answers as a
  * missing one, so its existence is not disclosed. Returns false for a missing or unreachable order.
  */
-async function orderInReach(tx: Tx, client: string, actor: Awaited<ReturnType<typeof salesActor>>, orderNumber: string): Promise<boolean> {
+export async function orderInReach(tx: Tx, client: string, actor: Awaited<ReturnType<typeof salesActor>>, orderNumber: string): Promise<boolean> {
   const [header] = await tx.select({
     companyCode: salesOrder.companyCode, salesOrg: salesOrder.salesOrg,
     distributionChannel: salesOrder.distributionChannel, division: salesOrder.division,
