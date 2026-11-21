@@ -6,7 +6,7 @@ import { t } from '@/platform/i18n';
 import { withTenant } from '@/platform/db/client';
 
 import {
-  billingDueList, BILLING_CAPABILITY, BILLING_ROUTE,
+  billingDueListForAttention, BILLING_CAPABILITY, BILLING_ROUTE,
 } from '@/modules/sales/billing';
 import {
   listCreditMemoRequestsForAttention, CREDIT_MEMO_RELEASE_CAPABILITY, CREDIT_MEMO_ROUTE,
@@ -394,7 +394,7 @@ const billingDueListSource: AttentionSource = {
   code: BILLING_CAPABILITY,
   label: 'attention.source.bill',
   async due(who) {
-    const rows = await billingDueList(who.client);
+    const rows = await billingDueListForAttention(who.client);
     return rows.map((row) => ({
       source: BILLING_CAPABILITY,
       title: t('attention.noun.delivery', { number: row.deliveryNumber }),

@@ -202,7 +202,7 @@ export async function createCreditMemoAction(
     // The version the document stands at, so the post below is guarded by what the screen just read
     // rather than by a guess. A credit memo that was raised elsewhere carries its own, and it is asked
     // for rather than assumed.
-    const raised = await getBilling(session.user.client, result.billingNumber);
+    const raised = await getBilling(session.user.client, result.billingNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return {
       ok: true,
       billingNumber: result.billingNumber,

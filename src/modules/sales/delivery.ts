@@ -409,7 +409,7 @@ function deliveryActor(tx: Tx, client: string, authorization: ServiceAuthorityCo
 }
 
 /** The delivery's company, sales area and every plant it ships from are inside the actor's reach. */
-async function deliveryInReach(
+export async function deliveryInReach(
   tx: Tx, client: string, actor: Awaited<ReturnType<typeof deliveryActor>>, deliveryNumber: string,
 ): Promise<boolean> {
   const [header] = await tx.select({

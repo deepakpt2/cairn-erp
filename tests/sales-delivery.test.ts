@@ -7,15 +7,8 @@ import { defineRange } from '../src/platform/numbering';
 import { checkSalesDocumentCredit, releaseDocument, saveCustomerCredit } from '../src/modules/finance/credit';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { getCustomerInvoice } from '../src/modules/finance/customer-invoice';
-import {
-  cancelBillingDocument,
-  createBillingFromDelivery,
-  getBilling,
-  goodsIssueStands,
-  listBillableDeliveries,
-  postBillingDocument,
-  salesDocumentFlow,
-} from '../src/modules/sales/billing';
+import { createBillingFromDelivery, postBillingDocument } from '../src/modules/sales/billing';
+import { cancelBillingDocument, getBilling, goodsIssueStands, listBillableDeliveries, salesDocumentFlow } from './helpers/sales-authorized';
 import { DeliveryError, createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
 import { SalesOrderError, createSalesOrder } from '../src/modules/sales/sales-order';
 import {

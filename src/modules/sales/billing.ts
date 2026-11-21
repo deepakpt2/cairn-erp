@@ -34,6 +34,8 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import {
   type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
 } from '../../platform/auth/service-authority';
+import { salesActor, salesDocumentReachable } from './sales-scope';
+import { plantsAllow } from '../../platform/auth/scope-actor';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
@@ -67,7 +69,7 @@ import { type DownPaymentClearing, clearDownPaymentsForInvoice } from './down-pa
 import {
   type RebateAccrualPosted, accrueRebatesForBilling, reverseRebateAccrualsForBilling,
 } from './rebate';
-import { standingDetermination } from './delivery';
+import { deliveryInReach, standingDetermination } from './delivery';
 import { blockingEntries, describeBlocked } from './incompletion';
 import { recordSalesOutputs } from './output';
 
@@ -349,7 +351,7 @@ export async function billDueList(
     return authority.restrictions;
   });
   const criteria = await activeSplitCriteria(parsed.client);
-  const due = await billingDueList(parsed.client, parsed.selection ?? {});
+  const due = await dueListIn(parsed.client, parsed.selection ?? {}, { authorization: options.authorization });
   const groups = groupDueList(due, criteria);
   const documents: BillingCreateResult[] = [];
 
@@ -625,7 +627,77 @@ async function loadBilling(tx: Tx, client: string, billingNumber: string): Promi
   };
 }
 
-export async function getBilling(client: string, billingNumber: string): Promise<BillingView | null> {
+/** Any billing capability opens the read: the biller, the canceller, and the credit-memo and returns clerks who pick an invoice. */
+const BILLING_ACCESS_CAPABILITIES = [
+  'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.CREDIT.REQUEST.CREATE', 'SALES.CREDIT_MEMO.CREATE',
+  'SALES.CREDIT.MEMO.POST', 'SALES.RETURNS.ORDER.CREATE', 'SALES.INVOICE_LIST.CREATE',
+] as const;
+
+type BillingActor = Awaited<ReturnType<typeof billingActor>>;
+
+function billingActor(
+  tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
+  capabilities: readonly string[] = BILLING_ACCESS_CAPABILITIES,
+) {
+  return salesActor(tx, client, authorization, capabilities, (m, r) => new BillingError(m, r));
+}
+
+/** The plants a billing document's goods left from: its delivery, every delivery on its lines, else its order's lines. */
+async function billingPlants(
+  tx: Tx, client: string, header: { deliveryNumber: string | null; orderNumber: string | null; billingNumber: string },
+): Promise<string[]> {
+  const rows = await tx.execute(sql`
+    select distinct d.plant from delivery d
+     where d.client = ${client}
+       and (d.delivery_number = ${header.deliveryNumber}
+            or d.delivery_number in (select bl.delivery_number from billing_document_line bl
+                                      where bl.client = ${client} and bl.billing_number = ${header.billingNumber}
+                                        and bl.delivery_number is not null))
+  `) as unknown as Array<{ plant: string }>;
+  if (rows.length) return rows.map((r) => r.plant);
+  if (!header.orderNumber) return [];
+  const lines = await tx.execute(sql`
+    select distinct plant from sales_order_line
+     where client = ${client} and order_number = ${header.orderNumber} and plant is not null
+  `) as unknown as Array<{ plant: string }>;
+  return lines.map((r) => r.plant);
+}
+
+/** The billing document's company, sales area and every plant it bills from are inside the actor's reach. */
+async function billingInReach(tx: Tx, client: string, actor: BillingActor, billingNumber: string): Promise<boolean> {
+  const [header] = await tx.select({
+    billingNumber: billingDocument.billingNumber, companyCode: billingDocument.companyCode,
+    salesOrg: billingDocument.salesOrg, distributionChannel: billingDocument.distributionChannel,
+    division: billingDocument.division, deliveryNumber: billingDocument.deliveryNumber,
+    orderNumber: billingDocument.orderNumber,
+  }).from(billingDocument).where(and(
+    eq(billingDocument.client, client), eq(billingDocument.billingNumber, billingNumber),
+  )).limit(1);
+  if (!header) return false;
+  return salesDocumentReachable(actor, { ...header, plants: await billingPlants(tx, client, header) });
+}
+
+function billingMissing(billingNumber: string) {
+  return new BillingError(`Billing document ${billingNumber} does not exist.`);
+}
+
+/**
+ * Read one billing document. Outside the actor's company, sales area or plant reach it is absent, as a
+ * missing one is. Session, capability and Company Code scope are judged inside the read's own transaction.
+ */
+export async function getBilling(
+  client: string, billingNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<BillingView | null> {
+  const trimmed = billingNumber.trim().toUpperCase();
+  const reachable = await withTenant(client, async (tx) => {
+    const actor = await billingActor(tx, client, authorization);
+    return billingInReach(tx, client, actor, trimmed);
+  });
+  return reachable ? getBillingForProvisioning(client, trimmed) : null;
+}
+
+/** The read for services that already hold the document's authority (post-back after create, post, cancel) and for seeding. Never imported from src/app. */
+export async function getBillingForProvisioning(client: string, billingNumber: string): Promise<BillingView | null> {
   const trimmed = billingNumber.trim().toUpperCase();
   const document = await withTenant(client, (tx) => loadBilling(tx, client, trimmed));
   if (!document) return null;
@@ -689,14 +761,28 @@ export interface BillingDueRow {
  * plan answers for. A plan that asks only for advances is not such a plan — the advance is settled
  * against the invoice the delivery earns.
  */
+type BillingDueFilter = {
+  customerNumber?: string; deliveryNumber?: string; orderNumber?: string; materialNumber?: string;
+  salesOrg?: string; plant?: string; dateFrom?: string; dateTo?: string;
+};
+
+/** The due list a signed-in actor may see: only deliveries whose company, sales area and plant are inside the reach. */
 export async function billingDueList(
-  client: string,
-  filter: {
-    customerNumber?: string; deliveryNumber?: string; orderNumber?: string; materialNumber?: string;
-    salesOrg?: string; plant?: string; dateFrom?: string; dateTo?: string;
-  } = {},
+  client: string, filter: BillingDueFilter, authorization: ServiceAuthorityContext | undefined,
+): Promise<BillingDueRow[]> {
+  return dueListIn(client, filter, { authorization });
+}
+
+/** The whole due list, for the attention panel (which filters by the viewer's scope) and for runs that already hold authority. Never imported from src/app. */
+export async function billingDueListForAttention(client: string, filter: BillingDueFilter = {}): Promise<BillingDueRow[]> {
+  return dueListIn(client, filter, 'ALL');
+}
+
+async function dueListIn(
+  client: string, filter: BillingDueFilter, scope: 'ALL' | { authorization: ServiceAuthorityContext | undefined },
 ): Promise<BillingDueRow[]> {
   return withTenant(client, async (tx) => {
+    const actor = scope === 'ALL' ? null : await billingActor(tx, client, scope.authorization);
     const rows = await tx.execute(sql`
       select d.delivery_number, d.order_number, d.customer_number, d.plant, d.goods_movement_date,
              d.material_document_number, d.sales_org, d.distribution_channel, d.division,
@@ -792,7 +878,10 @@ export async function billingDueList(
       sales_org: string; distribution_channel: string; division: string;
       company_code: string; currency: string; payer: string; ship_to: string;
     }>;
-    return rows.map((row) => ({
+    return rows.filter((row) => !actor || salesDocumentReachable(actor, {
+      companyCode: row.company_code, salesOrg: row.sales_org, distributionChannel: row.distribution_channel,
+      division: row.division, plants: [row.plant],
+    })).map((row) => ({
       deliveryNumber: row.delivery_number,
       orderNumber: row.order_number,
       customerNumber: row.customer_number,
@@ -819,12 +908,13 @@ export async function billingDueList(
  */
 export async function listBillableDeliveries(
   client: string,
-  filter: { customerNumber?: string; deliveryNumber?: string } = {},
+  filter: { customerNumber?: string; deliveryNumber?: string },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<Array<{
   deliveryNumber: string; orderNumber: string; customerNumber: string; plant: string;
   goodsMovementDate: string | null; materialDocumentNumber: string | null; value: string;
 }>> {
-  const rows = await billingDueList(client, filter);
+  const rows = await billingDueList(client, filter, authorization);
   return rows.map((row) => ({
     deliveryNumber: row.deliveryNumber,
     orderNumber: row.orderNumber,
@@ -838,19 +928,25 @@ export async function listBillableDeliveries(
 
 export async function listBillings(
   client: string,
-  filter: { orderNumber?: string; customerNumber?: string; status?: string } = {},
+  filter: { orderNumber?: string; customerNumber?: string; status?: string },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<Array<{
   billingNumber: string; deliveryNumber: string | null; orderNumber: string; customerNumber: string;
   billingDate: string; status: string; grossValue: string; customerInvoiceNumber: string | null; version: number;
   creditOf: string | null; cancellationOf: string | null;
 }>> {
   return withTenant(client, async (tx) => {
-    const rows = await tx.select().from(billingDocument).where(and(
+    const actor = await billingActor(tx, client, authorization);
+    const all = await tx.select().from(billingDocument).where(and(
       eq(billingDocument.client, client),
       filter.orderNumber ? eq(billingDocument.orderNumber, filter.orderNumber) : undefined,
       filter.customerNumber ? eq(billingDocument.customerNumber, filter.customerNumber) : undefined,
       filter.status ? eq(billingDocument.status, filter.status) : undefined,
     )).orderBy(asc(billingDocument.billingNumber)).limit(200);
+    const rows: typeof all = [];
+    for (const row of all) {
+      if (await billingInReach(tx, client, actor, row.billingNumber)) rows.push(row);
+    }
     return rows.map((row) => ({
       billingNumber: row.billingNumber,
       deliveryNumber: row.deliveryNumber,
@@ -946,7 +1042,7 @@ async function postBuiltBilling(input: {
   built: BuiltBilling;
 }): Promise<BillingCreateResult> {
   const { built } = input;
-  const view = await getBilling(input.client, built.billingNumber);
+  const view = await getBillingForProvisioning(input.client, built.billingNumber);
   if (!view) throw new BillingError(`Billing document ${built.billingNumber} could not be read back.`);
   const waiting = built.replayed
     ? view.status === 'OPEN' && view.invoiceListStatus === 'DUE'
@@ -1067,7 +1163,7 @@ async function postBuiltBilling(input: {
   })).catch(() => []);
 
   return {
-    billing: (await getBilling(input.client, built.billingNumber)) ?? view,
+    billing: (await getBillingForProvisioning(input.client, built.billingNumber)) ?? view,
     invoice,
     posted: true,
     heldForCredit: false,
@@ -1739,6 +1835,15 @@ export async function createBillingFromDelivery(
         'Create the delivery at /sales/delivery and post its goods issue first.',
       );
     }
+    // Company Code and sales area as well as plant: a delivery outside the actor's reach is not theirs to bill,
+    // and answers as a missing one.
+    const reachActor = await billingActor(tx, parsed.client, options.authorization, [SALES_BILLING_CREATE_CAPABILITY]);
+    if (!(await deliveryInReach(tx, parsed.client, reachActor, deliveryHeader.deliveryNumber))) {
+      throw new BillingError(
+        `Delivery ${parsed.deliveryNumber} does not exist in this tenant.`,
+        'Create the delivery at /sales/delivery and post its goods issue first.',
+      );
+    }
     const outOfScope = await refusePlantOutsideScopeInTx(
       tx, parsed.client, deliveryHeader.plant, authority.restrictions,
     );
@@ -1865,6 +1970,13 @@ export async function createBillingFromPlanDate(
       billingDate: parsed.billingDate,
       action: 'billed',
     });
+    const planActor = await billingActor(tx, parsed.client, options.authorization, [SALES_BILLING_CREATE_CAPABILITY]);
+    if (!salesDocumentReachable(planActor, {
+      companyCode: order.companyCode, salesOrg: order.salesOrg, distributionChannel: order.distributionChannel,
+      division: order.division, plants: orderLine.plant ? [orderLine.plant] : [],
+    })) {
+      throw new BillingError(`Order ${parsed.orderNumber} does not exist.`);
+    }
     const planOutOfScope = await refusePlantOutsideScopeInTx(
       tx, parsed.client, orderLine.plant, authority.restrictions,
     );
@@ -2300,7 +2412,7 @@ async function postStandingBilling(input: {
     return { post: true as const, held: false, header, invoice, currency: order.currency };
   });
 
-  const view = await getBilling(input.client, input.billingNumber);
+  const view = await getBillingForProvisioning(input.client, input.billingNumber);
   if (!view) throw new BillingError(`Billing document ${input.billingNumber} could not be read back.`);
   if (!prepared.post) {
     return {
@@ -2337,7 +2449,7 @@ async function postStandingBilling(input: {
 
   await linkPostedInvoice(input.client, input.changedBy, prepared.header.billingNumber, invoice);
   return {
-    billing: (await getBilling(input.client, prepared.header.billingNumber)) ?? view,
+    billing: (await getBillingForProvisioning(input.client, prepared.header.billingNumber)) ?? view,
     invoice,
     posted: true,
     heldForCredit: false,
@@ -2357,6 +2469,15 @@ export async function postBillingDocument(
 ): Promise<BillingCreateResult> {
   const parsed = billingCreateInput.parse(input);
   const existing = await withTenant(parsed.client, async (tx) => {
+    // Releasing an existing document is as much an act of billing as raising one: the actor must hold the
+    // authority and reach the delivery before any document that stands for it is looked up or named.
+    const reachActor = await billingActor(tx, parsed.client, options.authorization, [SALES_BILLING_CREATE_CAPABILITY]);
+    if (!(await deliveryInReach(tx, parsed.client, reachActor, parsed.deliveryNumber))) {
+      throw new BillingError(
+        `Delivery ${parsed.deliveryNumber} does not exist in this tenant.`,
+        'Create the delivery at /sales/delivery and post its goods issue first.',
+      );
+    }
     const [row] = await tx.select({ number: billingDocument.billingNumber }).from(billingDocument).where(and(
       eq(billingDocument.client, parsed.client),
       eq(billingDocument.deliveryNumber, parsed.deliveryNumber),
@@ -2368,7 +2489,7 @@ export async function postBillingDocument(
   // drawn here, which is what the billing due list offers once a cancellation has released the delivery.
   if (!existing) return createBillingFromDelivery(parsed, options);
 
-  const view = await getBilling(parsed.client, existing);
+  const view = await getBillingForProvisioning(parsed.client, existing);
   if (!view) throw new BillingError(`Billing document ${existing} could not be read.`);
   // A document that is waiting for an invoice list is answered the way creation answers it: nothing is
   // posted, and the caller is told why. That is the rule that makes a list mean something — the
@@ -2538,9 +2659,18 @@ async function insertCancellationDocument(
  * delivery is billable again.
  */
 export async function cancelBillingDocument(
-  input: BillingCancelInput,
+  input: BillingCancelInput & { authorization: ServiceAuthorityContext | undefined },
 ): Promise<{ billing: BillingView; invoice: CustomerInvoiceView | null; cancellation: BillingView | null }> {
-  const parsed = billingCancelInput.parse(input);
+  const base = billingCancelInput.parse(input);
+  // Session, the cancellation capability, Company Code scope and the document's reach are judged before
+  // anything is read back; an out-of-reach document is refused exactly as a missing one. The change is
+  // recorded under the session's own user.
+  const username = await withTenant(base.client, async (tx) => {
+    const actor = await billingActor(tx, base.client, input.authorization, [BILLING_CANCEL_CAPABILITY]);
+    if (!(await billingInReach(tx, base.client, actor, base.billingNumber))) throw billingMissing(base.billingNumber);
+    return actor.username;
+  });
+  const parsed = { ...base, changedBy: username };
   const target = await withTenant(parsed.client, async (tx) => {
     const [header] = await tx.select().from(billingDocument).where(and(
       eq(billingDocument.client, parsed.client), eq(billingDocument.billingNumber, parsed.billingNumber),
@@ -2582,9 +2712,9 @@ export async function cancelBillingDocument(
       ))
       .limit(1));
     return {
-      billing: (await getBilling(parsed.client, parsed.billingNumber))!,
+      billing: (await getBillingForProvisioning(parsed.client, parsed.billingNumber))!,
       invoice: null,
-      cancellation: standing[0]?.number ? await getBilling(parsed.client, standing[0].number) : null,
+      cancellation: standing[0]?.number ? await getBillingForProvisioning(parsed.client, standing[0].number) : null,
     };
   }
   if (target.status === 'POSTED') {
@@ -2672,9 +2802,9 @@ export async function cancelBillingDocument(
   });
 
   return {
-    billing: (await getBilling(parsed.client, parsed.billingNumber))!,
+    billing: (await getBillingForProvisioning(parsed.client, parsed.billingNumber))!,
     invoice,
-    cancellation: cancellationNumber ? await getBilling(parsed.client, cancellationNumber) : null,
+    cancellation: cancellationNumber ? await getBillingForProvisioning(parsed.client, cancellationNumber) : null,
   };
 }
 
@@ -2691,6 +2821,7 @@ export async function cancelBillingDocument(
 export async function salesDocumentFlow(
   client: string,
   orderNumber: string,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<Array<{
   orderNumber: string;
   deliveryNumber: string | null;
@@ -2707,8 +2838,14 @@ export async function salesDocumentFlow(
   issuedStands: boolean;
 }>> {
   return withTenant(client, async (tx) => {
+    const actor = await billingActor(tx, client, authorization);
+    const [order] = await tx.select({
+      companyCode: salesOrder.companyCode, salesOrg: salesOrder.salesOrg,
+      distributionChannel: salesOrder.distributionChannel, division: salesOrder.division,
+    }).from(salesOrder).where(and(eq(salesOrder.client, client), eq(salesOrder.orderNumber, orderNumber))).limit(1);
+    if (!order || !salesDocumentReachable(actor, order)) return [];
     const rows = await tx.execute(sql`
-      select d.delivery_number, d.material_document_number, d.status as delivery_status,
+      select d.delivery_number, d.plant, d.material_document_number, d.status as delivery_status,
              bd.billing_number, bd.customer_invoice_number, bd.document_type, bd.status as billing_status,
              bd.cancellation_of,
              (select count(*) from material_document_line rev
@@ -2728,11 +2865,11 @@ export async function salesDocumentFlow(
        where d.client = ${client} and d.order_number = ${orderNumber}
        order by d.delivery_number, bd.created_at, bd.billing_number
     `) as unknown as Array<{
-      delivery_number: string; material_document_number: string | null; delivery_status: string;
+      delivery_number: string; plant: string; material_document_number: string | null; delivery_status: string;
       billing_number: string | null; customer_invoice_number: string | null; reversed_lines: number;
       document_type: string | null; billing_status: string | null; cancellation_of: string | null;
     }>;
-    return rows.map((row) => ({
+    return rows.filter((row) => plantsAllow(actor, [row.plant])).map((row) => ({
       orderNumber,
       deliveryNumber: row.delivery_number,
       materialDocumentNumber: row.material_document_number,
@@ -2757,8 +2894,12 @@ export async function salesDocumentFlow(
  * owns, and one that went on saying the goods were out after a reversal had put them back in the
  * plant. The fact is persisted where it belongs, and this reads it.
  */
-export async function goodsIssueStands(client: string, deliveryNumber: string): Promise<boolean> {
+export async function goodsIssueStands(
+  client: string, deliveryNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<boolean> {
   return withTenant(client, async (tx) => {
+    const actor = await billingActor(tx, client, authorization);
+    if (!(await deliveryInReach(tx, client, actor, deliveryNumber))) return false;
     const [row] = await tx.select({ stands: delivery.goodsIssueStands }).from(delivery).where(and(
       eq(delivery.client, client), eq(delivery.deliveryNumber, deliveryNumber),
     )).limit(1);

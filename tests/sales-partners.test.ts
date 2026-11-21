@@ -30,7 +30,8 @@ import {
 } from '../src/modules/sales/partners';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
-import { getBilling, postBillingDocument } from '../src/modules/sales/billing';
+import { postBillingDocument } from '../src/modules/sales/billing';
+import { getBilling } from './helpers/sales-authorized';
 import { createCreditMemoForProvisioning as createCreditMemo, postCreditMemoForProvisioning as postCreditMemo } from '../src/modules/sales/credit-memo';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,

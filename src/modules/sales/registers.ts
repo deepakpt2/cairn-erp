@@ -517,7 +517,7 @@ export async function listDueRegister(
   }
   const rows = await billingDueList(client, {
     ...filter, deliveryNumber: filter.deliveryNumber ?? filter.documentNumber,
-  });
+  }, authorization);
   return {
     kind: 'BILLING',
     rows: rows as unknown as Array<Record<string, string | number | null>>,

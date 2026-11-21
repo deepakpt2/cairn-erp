@@ -36,6 +36,7 @@ export default async function SalesBillingPage({ searchParams }: {
   const session = await requireSession(BILLING_ROUTE);
   const params = await searchParams;
   const client = session.user.client;
+  const auth = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const billingNumber = (params.billing ?? '').trim().toUpperCase();
   const deliveryNumber = (params.delivery ?? '').trim().toUpperCase();
   const customerNumber = (params.customer ?? '').trim().toUpperCase();
@@ -46,7 +47,7 @@ export default async function SalesBillingPage({ searchParams }: {
     billingDueList(client, {
       deliveryNumber: deliveryNumber || undefined,
       customerNumber: customerNumber || undefined,
-    }),
+    }, auth).catch(() => []),
     listSplitCriteria(client),
   ]);
   const groups = groupDueList(due, criteria.filter((row) => row.isActive).map((row) => row.criterion));
@@ -66,12 +67,12 @@ export default async function SalesBillingPage({ searchParams }: {
       ...(customerNumber ? { customerNumber } : {}),
       ...(orderNumber ? { orderNumber } : {}),
     }),
-    listBillings(client, customerNumber ? { customerNumber } : {}),
-    billingNumber ? getBilling(client, billingNumber) : Promise.resolve(null),
+    listBillings(client, customerNumber ? { customerNumber } : {}, auth).catch(() => []),
+    billingNumber ? getBilling(client, billingNumber, auth).catch(() => null) : Promise.resolve(null),
   ]);
   // A collective document names no order of its own, and the flow is a chain read from one order: what
   // it bills stands on its lines, and the screen says so rather than showing an empty chain.
-  const flow = selected?.orderNumber ? await salesDocumentFlow(client, selected.orderNumber) : [];
+  const flow = selected?.orderNumber ? await salesDocumentFlow(client, selected.orderNumber, auth).catch(() => []) : [];
   // What the customer was asked to pay in advance on this order, and what of it arrived: the register
   // beside the document that will consume it.
   const advances = selected?.orderNumber

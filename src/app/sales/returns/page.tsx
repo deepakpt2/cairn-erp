@@ -42,7 +42,7 @@ export default async function SalesReturnsPage({ searchParams }: {
   const [orders, deliveries, invoices, selectedOrder, selectedDelivery] = await Promise.all([
     listReturnsOrders(client, customerNumber ? { customerNumber } : {}),
     listReturnsDeliveries(client, orderNumber ? { orderNumber } : {}),
-    listBillings(client, {}),
+    listBillings(client, {}, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
     orderNumber ? getSalesOrder(client, orderNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : Promise.resolve(null),
     deliveryNumber ? getDelivery(client, deliveryNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : Promise.resolve(null),
   ]);

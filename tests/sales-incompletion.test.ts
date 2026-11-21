@@ -12,7 +12,8 @@ import {
 } from '../src/modules/sales/incompletion';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';
-import { billingDueList, postBillingDocument } from '../src/modules/sales/billing';
+import { postBillingDocument } from '../src/modules/sales/billing';
+import { billingDueList } from './helpers/sales-authorized';
 import { listInbox } from '../src/platform/notification/notify';
 import { assignSalesAreaDimensions, createTenant, destroyTenant, maintainMaterialSales, sql, type TestTenant } from './helpers';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';

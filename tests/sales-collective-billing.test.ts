@@ -5,17 +5,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
-import {
-  billingDueList,
-  billDueList,
-  cancelBillingDocument,
-  getBilling,
-  groupDueList,
-  listSplitCriteria,
-  saveSplitCriterion,
-  salesDocumentFlow,
-  type BillingDueRow,
-} from '../src/modules/sales/billing';
+import { billDueList, groupDueList, listSplitCriteria, saveSplitCriterion, type BillingDueRow } from '../src/modules/sales/billing';
+import { billingDueList, cancelBillingDocument, getBilling, salesDocumentFlow } from './helpers/sales-authorized';
 import { writeDocumentPartners } from '../src/modules/sales/partners';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { createDelivery, postDeliveryGoodsIssue } from '../src/modules/sales/delivery';

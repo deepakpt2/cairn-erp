@@ -223,6 +223,7 @@ export async function cancelBillingAction(
     const result = await cancelBillingDocument({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       billingNumber,
       postingDate: text(form, 'cancellationDate'),
       reason: optional(form, 'cancelReason'),

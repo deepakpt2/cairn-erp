@@ -28,7 +28,8 @@ import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
-import { cancelBillingDocument, createBillingFromPlanDate } from '../src/modules/sales/billing';
+import { createBillingFromPlanDate } from '../src/modules/sales/billing';
+import { cancelBillingDocument } from './helpers/sales-authorized';
 import {
   BillingPlanError,
   getBillingPlan,

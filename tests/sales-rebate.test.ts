@@ -27,7 +27,8 @@ import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { journalEntryLine } from '../src/modules/finance/schema';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
-import { cancelBillingDocument, createBillingFromPlanDate } from '../src/modules/sales/billing';
+import { createBillingFromPlanDate } from '../src/modules/sales/billing';
+import { cancelBillingDocument } from './helpers/sales-authorized';
 import { saveBillingPlan } from '../src/modules/sales/billing-plan';
 import {
   listRebateAgreements,

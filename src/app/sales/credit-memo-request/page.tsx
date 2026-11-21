@@ -38,7 +38,7 @@ export default async function SalesCreditMemoRequestPage({ searchParams }: {
   const customerNumber = (params.customer ?? '').trim().toUpperCase();
   const [requests, invoices, selected] = await Promise.all([
     listCreditMemoRequests(client, customerNumber ? { customerNumber } : {}, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
-    listBillings(client, {}),
+    listBillings(client, {}, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
     requestNumber ? getSalesOrder(client, requestNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : Promise.resolve(null),
   ]);
 

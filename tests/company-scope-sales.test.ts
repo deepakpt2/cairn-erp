@@ -12,6 +12,10 @@ import {
   changeQuotation, createOrderFromQuotation, getQuotation, listQuotations, rejectQuotation,
 } from '../src/modules/sales/quotation';
 import {
+  billingDueList, cancelBillingDocument, createBillingFromDelivery, getBilling, goodsIssueStands, listBillableDeliveries,
+  listBillings, postBillingDocument, salesDocumentFlow,
+} from '../src/modules/sales/billing';
+import {
   cancelDelivery, confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, listDeliveries,
 } from '../src/modules/sales/delivery';
 import {
@@ -23,7 +27,7 @@ import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
 const A = '1000';
 const B = '2000';
 const SEED = 'SCOPE_SALES_SEED';
-const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST'];
+const CAPS = ['SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST', 'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL'];
 const SO_A = 'SOA0000001';
 const SO_B = 'SOB0000001';
 const SO_D2 = 'SOD0000002';
@@ -36,6 +40,10 @@ const DA = 'DLA0000001';
 const DB = 'DLB0000001';
 const DD2 = 'DLD0000002';
 const DGONE = 'DLZ9999999';
+const BA = 'BLA0000001';
+const BB = 'BLB0000001';
+const BD2 = 'BLD0000002';
+const BGONE = 'BLZ9999999';
 
 let tenant: TestTenant;
 let other: TestTenant;
@@ -115,6 +123,15 @@ beforeAll(async () => {
         values (${client}, ${no}, ${order}, ${org}, '10', ${div}, 'CUSTSC1', ${company}, ${plant}, '2026-04-06', ${SEED})`);
       await tx.execute(sql`insert into delivery_line (client, delivery_number, line_number, order_number, order_line_number, material_number, plant, quantity_unit, ordered_quantity, delivery_quantity, remaining_quantity, created_by)
         values (${client}, ${no}, 10, ${order}, 10, 'SCSM1', ${plant}, 'UNT', 1, 1, 0, ${SEED})`);
+    }
+  });
+  await withTenant(client, async (tx) => {
+    const billings: Array<[string, string | null, string, string, string, string]> = [
+      [BA, DA, '1000', '01', A, SO_A], [BB, DB, '2000', '01', B, SO_B], [BD2, null, '1000', '02', A, SO_D2],
+    ];
+    for (const [no, del, org, div, company, order] of billings) {
+      await tx.execute(sql`insert into billing_document (client, billing_number, delivery_number, order_number, sales_org, distribution_channel, division, customer_number, company_code, currency, billing_date, created_by)
+        values (${client}, ${no}, ${del}, ${order}, ${org}, '10', ${div}, 'CUSTSC1', ${company}, 'USD', '2026-04-08', ${SEED})`);
     }
   });
   actors.A = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A], plantScopes: [] });
@@ -330,6 +347,82 @@ describe('deliveries', () => {
   it('cancels a delivery inside the reach and records the session user, not the supplied name', async () => {
     await cancel(auth('A'), DD2);
     const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from delivery where client = ${client} and delivery_number = ${DD2}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
+    expect(row.status).toBe('CANCELLED');
+    expect(row.changed_by).toBe(actors.A!.username);
+  });
+});
+
+describe('billing', () => {
+  const numbers = (rows: Array<{ billingNumber: string }>) => rows.map((r) => r.billingNumber).sort();
+  const cancel = (a: FinanceActor['authorization'] | undefined, n: string) => cancelBillingDocument({
+    client, changedBy: 'FORGED', billingNumber: n, postingDate: '2026-04-09', authorization: a });
+
+  it('reads, lists and follows a billing document only inside company, sales area and plant reach', async () => {
+    expect((await getBilling(client, BA, auth('A')))?.billingNumber).toBe(BA);
+    expect(await getBilling(client, BB, auth('A'))).toBeNull();
+    expect(await getBilling(client, BGONE, auth('A'))).toBeNull();
+    expect(await getBilling(client, BD2, auth('div01'))).toBeNull();
+    expect(await getBilling(client, BB, auth('org1000'))).toBeNull();
+    expect(await getBilling(client, BB, auth('plantA'))).toBeNull();
+    expect(numbers(await listBillings(client, {}, auth('A')))).toEqual([BA, BD2].sort());
+    expect(numbers(await listBillings(client, {}, auth('both')))).toEqual([BA, BB, BD2].sort());
+    expect(numbers(await listBillings(client, {}, auth('div01')))).toEqual([BA, BB].sort());
+    expect(numbers(await listBillings(client, {}, auth('plantA')))).toEqual([BA, BD2].sort());
+    expect((await salesDocumentFlow(client, SO_A, auth('A'))).length).toBeGreaterThan(0);
+    expect(await salesDocumentFlow(client, SO_B, auth('A'))).toEqual([]);
+    expect(await salesDocumentFlow(client, SO_B, auth('org1000'))).toEqual([]);
+    expect(await goodsIssueStands(client, DB, auth('A'))).toBe(false);
+  });
+
+  it('shows the due list only for deliveries inside reach', async () => {
+    await withTenant(client, async (tx) => {
+      for (const d of [DA, DB]) {
+        await tx.execute(sql`insert into material_document (client, material_document_number, document_year, document_date, posting_date)
+          values (${client}, ${'MD' + d}, 2026, '2026-04-07', '2026-04-07')`);
+      }
+      await tx.execute(sql`update delivery set status = 'GOODS_ISSUED', goods_issue_stands = true, material_document_number = 'MD' || delivery_number, material_document_year = 2026, goods_movement_date = '2026-04-07' where client = ${client} and delivery_number in (${DA}, ${DB})`);
+    });
+    const due = async (a: string) => (await billingDueList(client, {}, auth(a))).map((r) => r.deliveryNumber).sort();
+    expect(await due('both')).toEqual([DA, DB].sort());
+    expect(await due('A')).toEqual([DA]);
+    expect(await due('org1000')).toEqual([DA]);
+    expect(await due('plantA')).toEqual([DA]);
+    expect((await listBillableDeliveries(client, {}, auth('A'))).map((r) => r.deliveryNumber)).toEqual([DA]);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant', async () => {
+    expect(await ask(getBilling(client, BA, undefined))).not.toBe('done');
+    expect(await ask(listBillings(client, {}, undefined))).not.toBe('done');
+    expect(await ask(billingDueList(client, {}, undefined))).not.toBe('done');
+    expect(await ask(salesDocumentFlow(client, SO_A, undefined))).not.toBe('done');
+    for (const k of denied) {
+      expect(await ask(getBilling(client, BA, auth(k)))).not.toBe('done');
+      expect(await ask(listBillings(client, {}, auth(k)))).not.toBe('done');
+      expect(await ask(billingDueList(client, {}, auth(k)))).not.toBe('done');
+      expect(await ask(salesDocumentFlow(client, SO_A, auth(k)))).not.toBe('done');
+      expect(await ask(cancel(auth(k), BA))).not.toMatch(/^done$|does not exist/);
+    }
+  });
+
+  it('answers cancel, post and creation against an out-of-reach billing document or delivery as a missing one and writes nothing', async () => {
+    const miss = await ask(cancel(auth('A'), BGONE));
+    expect(miss).toMatch(/does not exist/);
+    for (const [who, n] of [['A', BB], ['div01', BD2], ['plantA', BB], ['org1000', BB]] as const) {
+      expect((await ask(cancel(auth(who), n))).replaceAll(n, '#')).toBe(miss.replaceAll(BGONE, '#'));
+    }
+    const input = (n: string) => ({ client, changedBy: 'FORGED', deliveryNumber: n, billingDate: '2026-04-09' });
+    for (const call of [createBillingFromDelivery, postBillingDocument]) {
+      expect(await ask(call(input(DB) as never, { authorization: auth('org1000p') }))).toMatch(/does not exist/);
+    }
+    const state = await withTenant(client, async (tx) => (await tx.execute(sql`select status, version from billing_document where client = ${client}`)) as unknown as Array<{ status: string; version: number }>);
+    expect(state.every((r) => r.status === 'OPEN' && r.version === 1)).toBe(true);
+    const count = await withTenant(client, async (tx) => (await tx.execute(sql`select count(*)::int as n from billing_document where client = ${client}`)) as unknown as Array<{ n: number }>);
+    expect(count[0]!.n).toBe(3);
+  });
+
+  it('cancels a billing document inside the reach and records the session user, not the supplied name', async () => {
+    await cancel(auth('A'), BD2);
+    const row = (await withTenant(client, async (tx) => (await tx.execute(sql`select status, changed_by from billing_document where client = ${client} and billing_number = ${BD2}`)) as unknown as Array<{ status: string; changed_by: string }>))[0]!;
     expect(row.status).toBe('CANCELLED');
     expect(row.changed_by).toBe(actors.A!.username);
   });

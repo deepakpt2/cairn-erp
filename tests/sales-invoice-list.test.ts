@@ -5,7 +5,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { getCustomerInvoice } from '../src/modules/finance/customer-invoice';
-import { billDueList, cancelBillingDocument, getBilling, postBillingDocument } from '../src/modules/sales/billing';
+import { billDueList, postBillingDocument } from '../src/modules/sales/billing';
+import { cancelBillingDocument, getBilling } from './helpers/sales-authorized';
 import {
   INVOICE_LIST_TYPE,
   cancelInvoiceListForProvisioning as cancelInvoiceList,

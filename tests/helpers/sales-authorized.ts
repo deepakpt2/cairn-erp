@@ -10,12 +10,17 @@ import {
   cancelDelivery as cancelD, confirmDeliveryPicks as pickD, getDelivery as getD,
   listDeliverableOrderLines as listLines, listDeliveries as listD,
 } from '../../src/modules/sales/delivery';
+import {
+  billingDueList as dueL, cancelBillingDocument as cancelB, getBilling as getB, goodsIssueStands as stands,
+  listBillableDeliveries as billable, listBillings as listB, salesDocumentFlow as flow,
+} from '../../src/modules/sales/billing';
 import { listDueRegister as dueR } from '../../src/modules/sales/registers';
 import { createFinanceActor, refreshFinanceActorScopes, type FinanceActor } from './finance-actor';
 
 export const SALES_TEST_CAPABILITIES = [
   'SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE',
   'SALES.ORDER.AVAILABILITY.CHECK', 'CFG.SALES.CONDITION.MAINTAIN', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
+  'SALES.BILLING.CREATE', 'SALES.BILLING.CANCEL', 'SALES.CREDIT.REQUEST.CREATE',
 ];
 
 const actors = new Map<string, Promise<FinanceActor>>();
@@ -71,4 +76,20 @@ export async function cancelDelivery(input: Opt<typeof cancelD>) {
 }
 export async function listDueRegister(client: string, input: Parameters<typeof dueR>[1]) {
   return dueR(client, input, await salesTestAuth(client));
+}
+
+export async function getBilling(client: string, billingNumber: string) { return getB(client, billingNumber, await salesTestAuth(client)); }
+export async function listBillings(client: string, filter: Parameters<typeof listB>[1] = {}) {
+  return listB(client, filter, await salesTestAuth(client));
+}
+export async function billingDueList(client: string, filter: NonNullable<Parameters<typeof dueL>[1]> = {}) {
+  return dueL(client, filter, await salesTestAuth(client));
+}
+export async function listBillableDeliveries(client: string, filter: NonNullable<Parameters<typeof billable>[1]> = {}) {
+  return billable(client, filter, await salesTestAuth(client));
+}
+export async function salesDocumentFlow(client: string, orderNumber: string) { return flow(client, orderNumber, await salesTestAuth(client)); }
+export async function goodsIssueStands(client: string, deliveryNumber: string) { return stands(client, deliveryNumber, await salesTestAuth(client)); }
+export async function cancelBillingDocument(input: Opt<typeof cancelB>) {
+  return cancelB({ ...input, authorization: input.authorization ?? await salesTestAuth(input.client) } as Parameters<typeof cancelB>[0]);
 }

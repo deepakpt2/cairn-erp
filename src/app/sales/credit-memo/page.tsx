@@ -30,7 +30,7 @@ export default async function SalesCreditMemoPage({ searchParams }: {
 
   const [invoice, billings, taxes] = await Promise.all([
     invoiceNumber ? getCustomerCreditMemo(client, invoiceNumber) : null,
-    customerNumber ? listBillings(client, { customerNumber, status: 'POSTED' }) : null,
+    customerNumber ? listBillings(client, { customerNumber, status: 'POSTED' }, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []) : null,
     listCustomerInvoiceTaxCodes(client, '1000'),
   ]);
   const today = new Date().toISOString().slice(0, 10);
