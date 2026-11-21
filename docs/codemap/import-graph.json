@@ -5103,7 +5103,6 @@
     "modules/sales/billing.ts",
     "modules/sales/down-payment.ts",
     "modules/sales/output.ts",
-    "modules/sales/rebate.ts",
     "ui/money.ts"
   ],
   "app/sales/billing/actions.ts": [
@@ -5117,7 +5116,6 @@
     "modules/sales/billing.ts",
     "modules/sales/down-payment.ts",
     "modules/sales/output.ts",
-    "modules/sales/rebate.ts",
     "platform/auth/current.ts",
     "ui/kit/index.ts"
   ],
@@ -8152,6 +8150,7 @@
   ],
   "modules/purchasing/contract-display.ts": [
     "modules/purchasing/contract.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
@@ -8167,6 +8166,8 @@
     "modules/purchasing/info-record.ts",
     "modules/purchasing/release.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8220,6 +8221,9 @@
     "modules/inventory/schema.ts",
     "modules/inventory/unit-conversion.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8310,6 +8314,7 @@
     "modules/purchasing/receipt-unit-basis.ts",
     "modules/purchasing/release.ts",
     "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
@@ -8319,6 +8324,7 @@
     "modules/purchasing/receipt-unit-basis.ts",
     "modules/purchasing/release.ts",
     "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
@@ -8339,7 +8345,10 @@
     "modules/foundation/supplier-purchasing-schema.ts",
     "modules/inventory/schema.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
     "modules/purchasing/source-list.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8350,7 +8359,10 @@
     "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
     "modules/purchasing/quotation.ts",
+    "modules/purchasing/rfq.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -8358,14 +8370,20 @@
     "modules/foundation/business-partner-schema.ts",
     "modules/foundation/schema.ts",
     "modules/purchasing/quotation.ts",
+    "modules/purchasing/rfq.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/tables/audit-trail.ts"
   ],
   "modules/purchasing/quotation.ts": [
     "modules/foundation/business-partner-schema.ts",
     "modules/inventory/schema.ts",
+    "modules/purchasing/rfq.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8396,6 +8414,7 @@
   ],
   "modules/purchasing/requisition-list.ts": [
     "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
@@ -8423,6 +8442,9 @@
     "modules/inventory/schema.ts",
     "modules/purchasing/follow-on.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8431,6 +8453,7 @@
   ],
   "modules/purchasing/scheduling-agreement-display.ts": [
     "modules/purchasing/scheduling-agreement.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
@@ -8439,6 +8462,8 @@
     "modules/foundation/supplier-purchasing-schema.ts",
     "modules/inventory/schema.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8448,6 +8473,7 @@
   "modules/purchasing/scheduling-agreement-schedule-display.ts": [
     "modules/purchasing/scheduling-agreement-schedule.ts",
     "modules/purchasing/scheduling-agreement.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
@@ -8456,6 +8482,8 @@
     "modules/foundation/supplier-purchasing-schema.ts",
     "modules/purchasing/scheduling-agreement.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
@@ -8471,6 +8499,8 @@
     "modules/purchasing/info-record.ts",
     "modules/purchasing/release.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8495,6 +8525,9 @@
     "modules/foundation/supplier-purchasing-schema.ts",
     "modules/inventory/schema.ts",
     "modules/purchasing/schema.ts",
+    "modules/purchasing/scope.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts"
@@ -8567,7 +8600,9 @@
     "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
     "modules/sales/document-type.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/sales/availability-check.ts": [
@@ -8630,7 +8665,9 @@
     "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
     "modules/sales/pricing-procedure.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/tables/reference.ts"
@@ -8704,7 +8741,10 @@
     "modules/sales/billing-plan.ts",
     "modules/sales/document-type.ts",
     "modules/sales/partners.ts",
+    "modules/sales/sales-order.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts"
@@ -8827,7 +8867,9 @@
     "modules/sales/document-type.ts",
     "modules/sales/partners.ts",
     "modules/sales/pricing-procedure.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8840,7 +8882,11 @@
     "modules/inventory/schema.ts",
     "modules/sales/billing.ts",
     "modules/sales/delivery.ts",
+    "modules/sales/sales-order.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
@@ -8867,11 +8913,16 @@
     "modules/inventory/storage-location.ts",
     "modules/inventory/unit-conversion.ts",
     "modules/inventory/warehouse-stocks.ts",
+    "modules/sales/billing.ts",
+    "modules/sales/delivery.ts",
     "modules/sales/document-type.ts",
     "modules/sales/partners.ts",
     "modules/sales/returns-configuration.ts",
+    "modules/sales/sales-order.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
     "modules/sales/shipping-point.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -8915,6 +8966,7 @@
     "platform/tables/reference.ts"
   ],
   "modules/sales/sales-scope.ts": [
+    "modules/foundation/schema.ts",
     "platform/auth/company-scope.ts",
     "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
@@ -8933,8 +8985,11 @@
     "modules/foundation/customer-sales-area-schema.ts",
     "modules/foundation/schema.ts",
     "modules/inventory/schema.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
     "modules/sales/shipping-point.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],

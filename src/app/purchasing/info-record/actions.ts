@@ -157,7 +157,7 @@ export async function checkInfoRecordAction(
     return { ok: false, message: 'A material is required. A material-group record is not created.' };
   }
   try {
-    const preview = await previewPurchasingInfoRecord(createInput(form, session.user.client, session.user.username));
+    const preview = await previewPurchasingInfoRecord({ ...createInput(form, session.user.client, session.user.username), authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     return {
       ok: true,
       wrote: false,
@@ -245,9 +245,9 @@ export async function checkChangeInfoRecordAction(
   const stop = blocked(form) ?? refusedNamed(form);
   if (stop) return stop;
   try {
-    const preview = await previewPurchasingInfoRecordChange(
-      changeInput(form, session.user.client, session.user.username, 'change'),
-    );
+    const preview = await previewPurchasingInfoRecordChange({
+      ...changeInput(form, session.user.client, session.user.username, 'change'), authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+    });
     return {
       ok: true,
       wrote: false,
@@ -275,7 +275,7 @@ export async function createInfoRecordAction(
     return { ok: false, message: 'A material is required. A material-group record is not created.' };
   }
   try {
-    const created = await createPurchasingInfoRecord(createInput(form, session.user.client, session.user.username));
+    const created = await createPurchasingInfoRecord({ ...createInput(form, session.user.client, session.user.username), authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(INFO_RECORD_ROUTE);
     return {
       ok: true,
@@ -299,9 +299,9 @@ export async function changeInfoRecordAction(
   const intent = text(form, 'intent') || 'change';
   try {
     await assertChangeForSession(session, { lockObject: 'INFO_RECORD', argument: text(form, 'infoRecordNumber') });
-    const changed = await changePurchasingInfoRecord(
-      changeInput(form, session.user.client, session.user.username, intent),
-    );
+    const changed = await changePurchasingInfoRecord({
+      ...changeInput(form, session.user.client, session.user.username, intent), authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
+    });
     revalidatePath(INFO_RECORD_ROUTE);
     return {
       ok: true,

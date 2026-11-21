@@ -49,6 +49,8 @@ function flag(form: FormData, name: string): boolean {
   return value === 'on' || value === 'true' || value === '1';
 }
 
+const authorityOf = (session: Awaited<ReturnType<typeof requireSession>>) => ({ userId: session.user.userId, sessionId: session.sessionId ?? '' });
+
 function missing(): SourceListActionState {
   return {
     ok: false,
@@ -143,7 +145,7 @@ export async function checkSourceListAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const preview = await previewSourceListEntry(createInput(form, session.user.client, session.user.username));
+    const preview = await previewSourceListEntry({ ...createInput(form, session.user.client, session.user.username), authorization: authorityOf(session) });
     return {
       ok: true,
       wrote: false,
@@ -164,8 +166,8 @@ export async function checkChangeSourceListAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const preview = await previewSourceListChange(
-      changeInput(form, session.user.client, session.user.username, 'change'),
+    const preview = await previewSourceListChange({
+      ...changeInput(form, session.user.client, session.user.username, 'change'), authorization: authorityOf(session) },
     );
     return {
       ok: true,
@@ -188,7 +190,7 @@ export async function createSourceListAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const created = await createSourceListEntry(createInput(form, session.user.client, session.user.username));
+    const created = await createSourceListEntry({ ...createInput(form, session.user.client, session.user.username), authorization: authorityOf(session) });
     revalidatePath(SOURCE_LIST_ROUTE);
     return {
       ok: true,
@@ -212,8 +214,8 @@ export async function changeSourceListAction(
   const intent = text(form, 'intent') || 'change';
   try {
     await assertChangeForSession(session, { lockObject: 'SOURCE_LIST', argument: text(form, 'sourceNumber') });
-    const changed = await changeSourceListEntry(
-      changeInput(form, session.user.client, session.user.username, intent),
+    const changed = await changeSourceListEntry({
+      ...changeInput(form, session.user.client, session.user.username, intent), authorization: authorityOf(session) },
     );
     revalidatePath(SOURCE_LIST_ROUTE);
     return {

@@ -37,15 +37,16 @@ export default async function PurchasingSourceListPage({ searchParams }: {
   const requestedMaterial = last(params.material).toUpperCase();
   const requestedPlant = last(params.plant).toUpperCase();
   const requestedOrg = last(params.org).toUpperCase();
+  const authority = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const opened = requestedSource
-    ? await getSourceListEntry(session.user.client, requestedSource)
+    ? await getSourceListEntry(session.user.client, requestedSource, authority).catch(() => null)
     : null;
   const materialNumber = opened?.materialNumber ?? requestedMaterial;
   const plantCode = opened?.plant ?? requestedPlant;
   const list = materialNumber && plantCode
-    ? await getSourceList(session.user.client, materialNumber, plantCode)
+    ? await getSourceList(session.user.client, materialNumber, plantCode, authority).catch(() => null)
     : null;
-  const recent = await listRecentSourceEntries(session.user.client);
+  const recent = await listRecentSourceEntries(session.user.client, authority).catch(() => []);
   const canMaintain = can(session, SOURCE_LIST_CAPABILITY);
   const changeLock = opened && canMaintain
     ? await openChangeForSession(session, {

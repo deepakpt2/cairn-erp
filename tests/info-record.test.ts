@@ -3,11 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import {
-  changePurchasingInfoRecord, createPurchasingInfoRecord, findPurchasingInfoRecord,
-  getPurchasingInfoRecord, previewPurchasingInfoRecord, previewPurchasingInfoRecordChange,
-  resolvePurchasingInfoRecord, writePurchasingInfoRecord, writePurchasingInfoRecordChange,
-} from '../src/modules/purchasing/info-record';
+import { changePurchasingInfoRecordForProvisioning as changePurchasingInfoRecord, createPurchasingInfoRecordForProvisioning as createPurchasingInfoRecord, findPurchasingInfoRecordForProvisioning as findPurchasingInfoRecord, getPurchasingInfoRecordForProvisioning as getPurchasingInfoRecord, previewPurchasingInfoRecordForProvisioning as previewPurchasingInfoRecord, previewPurchasingInfoRecordChangeForProvisioning as previewPurchasingInfoRecordChange, resolvePurchasingInfoRecord, writePurchasingInfoRecord, writePurchasingInfoRecordChange } from '../src/modules/purchasing/info-record';
 import { changeOrderForProvisioning as changeOrder, createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../src/modules/purchasing/orders';
 import { createTenant, destroyTenant } from './helpers';
 

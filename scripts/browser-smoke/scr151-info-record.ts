@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 import type { Page } from '@playwright/test';
 
 import { withTenant } from '../../src/platform/db/client';
-import { createPurchasingInfoRecord } from '../../src/modules/purchasing/info-record';
+import { createPurchasingInfoRecordForProvisioning as createPurchasingInfoRecord } from '../../src/modules/purchasing/info-record';
 import type { BrowserTarget } from './targets';
 import { chooseClosed } from './closed-fields';
 

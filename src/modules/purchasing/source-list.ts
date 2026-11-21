@@ -9,6 +9,9 @@
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { orgSegmentInReach, plantDocumentInReach } from '../../platform/auth/scope-actor';
+import { purchasingActor } from './scope';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber, NumberRangeError } from '../../platform/numbering';
@@ -337,7 +340,7 @@ function snapshot(entry: {
 }
 
 /** The same judgement as create, and it writes nothing. */
-export async function previewSourceListEntry(input: SourceListCreateInput): Promise<SourceListPreview> {
+export async function previewSourceListEntryForProvisioning(input: SourceListCreateInput): Promise<SourceListPreview> {
   refuseCuts(input);
   if (blank(input.sourceNumber)) {
     throw new SourceListError('The client does not assign the source number.');
@@ -381,7 +384,7 @@ export async function previewSourceListEntry(input: SourceListCreateInput): Prom
   });
 }
 
-export async function createSourceListEntry(input: SourceListCreateInput): Promise<{
+export async function createSourceListEntryForProvisioning(input: SourceListCreateInput): Promise<{
   sourceNumber: string;
   version: number;
   sourceListRequired: boolean;
@@ -564,7 +567,7 @@ function planChange(
   };
 }
 
-export async function previewSourceListChange(input: SourceListChangeInput): Promise<SourceListChangePreview> {
+export async function previewSourceListChangeForProvisioning(input: SourceListChangeInput): Promise<SourceListChangePreview> {
   return withTenant(input.client, async (tx) => {
     const entry = await loadEntry(tx, input.client, input.sourceNumber.trim());
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey(input.client, entry.materialNumber, entry.plant)}, 0))`);
@@ -611,7 +614,7 @@ async function loadEntry(tx: Tx, client: string, sourceNumber: string): Promise<
   };
 }
 
-export async function changeSourceListEntry(input: SourceListChangeInput): Promise<{
+export async function changeSourceListEntryForProvisioning(input: SourceListChangeInput): Promise<{
   sourceNumber: string;
   version: number;
   listVersion: number;
@@ -742,7 +745,7 @@ export async function resolveSourceList(tx: Tx, input: {
   return { required: header.required, sourceNumber: named[0]?.sourceNumber ?? null };
 }
 
-export async function getSourceListEntry(client: string, sourceNumber: string): Promise<{
+export async function getSourceListEntryForProvisioning(client: string, sourceNumber: string): Promise<{
   sourceNumber: string;
   materialNumber: string;
   plant: string;
@@ -803,7 +806,7 @@ export interface SourceListDocument {
   }>;
 }
 
-export async function getSourceList(client: string, materialNumber: string, plantCode: string): Promise<SourceListDocument | null> {
+export async function getSourceListForProvisioning(client: string, materialNumber: string, plantCode: string): Promise<SourceListDocument | null> {
   const materialKey = materialNumber.trim();
   const plantKey = plantCode.trim();
   if (!materialKey || !plantKey) return null;
@@ -836,7 +839,7 @@ export async function getSourceList(client: string, materialNumber: string, plan
   });
 }
 
-export async function listRecentSourceEntries(client: string): Promise<Array<{
+async function listRecentSourceEntriesUnscoped(client: string): Promise<Array<{
   sourceNumber: string;
   materialNumber: string;
   plant: string;
@@ -852,4 +855,125 @@ export async function listRecentSourceEntries(client: string): Promise<Array<{
   }).from(purchasingSourceListEntry).where(eq(purchasingSourceListEntry.client, client))
     .orderBy(sql`${purchasingSourceListEntry.sourceNumber} desc`)
     .limit(40));
+}
+
+
+// ---- Scoped entry points: session, capability, and the reach of the entry's plant and purchasing organisation ----
+
+const refuseSource = (message: string, remedy?: string) => new SourceListError(message, remedy);
+type SourceActor = Awaited<ReturnType<typeof purchasingActor>>;
+type WithAuth<T> = T & { authorization: ServiceAuthorityContext | undefined };
+const OUTSIDE = 'The plant or purchasing organisation is outside your access.';
+
+const entryReach = (tx: Tx, client: string, actor: SourceActor, e: { plant: string; purchasingOrg: string }) =>
+  orgSegmentInReach(tx, client, actor, e);
+
+/** An entry outside the reach answers as a source that does not exist. */
+async function requireEntry(tx: Tx, client: string, actor: SourceActor, sourceNumber: string): Promise<void> {
+  const number = sourceNumber.trim();
+  const [entry] = await tx.select().from(purchasingSourceListEntry).where(and(
+    eq(purchasingSourceListEntry.client, client), eq(purchasingSourceListEntry.sourceNumber, number),
+  ));
+  if (!entry || !(await entryReach(tx, client, actor, entry))) throw new SourceListError(`Source ${number} does not exist.`);
+}
+
+async function requireCreateReach(tx: Tx, client: string, actor: SourceActor, input: SourceListCreateInput): Promise<void> {
+  if (!(await entryReach(tx, client, actor, { plant: input.plant, purchasingOrg: input.purchasingOrg }))) {
+    throw refuseSource(OUTSIDE, 'Name one inside your access.');
+  }
+}
+
+/** A change may name another plant or organisation: the new values are judged as well. */
+async function requireChangeTarget(tx: Tx, client: string, actor: SourceActor, input: SourceListChangeInput): Promise<void> {
+  await requireEntry(tx, client, actor, input.sourceNumber);
+  const plant = input.plant?.trim();
+  const org = input.purchasingOrg?.trim();
+  if (plant || org) {
+    const [entry] = await tx.select().from(purchasingSourceListEntry).where(and(
+      eq(purchasingSourceListEntry.client, client), eq(purchasingSourceListEntry.sourceNumber, input.sourceNumber.trim()),
+    ));
+    if (!(await entryReach(tx, client, actor, { plant: plant || entry!.plant, purchasingOrg: org || entry!.purchasingOrg }))) {
+      throw refuseSource(OUTSIDE, 'Name one inside your access.');
+    }
+  }
+}
+
+export async function previewSourceListEntry(input: WithAuth<SourceListCreateInput>): Promise<SourceListPreview> {
+  const { authorization, ...rest } = input;
+  await withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [SOURCE_LIST_CAPABILITY], refuseSource);
+    await requireCreateReach(tx, rest.client, actor, rest);
+  });
+  return previewSourceListEntryForProvisioning(rest);
+}
+
+export async function createSourceListEntry(input: WithAuth<SourceListCreateInput>) {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [SOURCE_LIST_CAPABILITY], refuseSource);
+    await requireCreateReach(tx, rest.client, actor, rest);
+    return writeSourceListEntry(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function previewSourceListChange(input: WithAuth<SourceListChangeInput>): Promise<SourceListChangePreview> {
+  const { authorization, ...rest } = input;
+  await withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [SOURCE_LIST_CAPABILITY], refuseSource);
+    await requireChangeTarget(tx, rest.client, actor, rest);
+  });
+  return previewSourceListChangeForProvisioning(rest);
+}
+
+export async function changeSourceListEntry(input: WithAuth<SourceListChangeInput>) {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [SOURCE_LIST_CAPABILITY], refuseSource);
+    await requireChangeTarget(tx, rest.client, actor, rest);
+    return writeSourceListChange(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function getSourceListEntry(
+  client: string, sourceNumber: string, authorization: ServiceAuthorityContext | undefined,
+): ReturnType<typeof getSourceListEntryForProvisioning> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [SOURCE_LIST_CAPABILITY], refuseSource);
+    const found = await getSourceListEntryForProvisioning(client, sourceNumber);
+    return found && (await entryReach(tx, client, actor, found)) ? found : null;
+  });
+}
+
+export async function getSourceList(
+  client: string, materialNumber: string, plantCode: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<SourceListDocument | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [SOURCE_LIST_CAPABILITY], refuseSource);
+    if (!(await plantDocumentInReach(tx, client, actor, { plants: [plantCode] }))) return null;
+    const document = await getSourceListForProvisioning(client, materialNumber, plantCode);
+    if (!document) return null;
+    const entries: typeof document.entries = [];
+    for (const entry of document.entries) if (await entryReach(tx, client, actor, { plant: document.plant, purchasingOrg: entry.purchasingOrg })) entries.push(entry);
+    return { ...document, entries };
+  });
+}
+
+export async function listRecentSourceEntries(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): ReturnType<typeof listRecentSourceEntriesUnscoped> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [SOURCE_LIST_CAPABILITY], refuseSource);
+    const rows = await tx.select({
+      sourceNumber: purchasingSourceListEntry.sourceNumber, materialNumber: purchasingSourceListEntry.materialNumber,
+      plant: purchasingSourceListEntry.plant, partnerNumber: purchasingSourceListEntry.partnerNumber,
+      purchasingOrg: purchasingSourceListEntry.purchasingOrg, markedForDeletion: purchasingSourceListEntry.markedForDeletion,
+    }).from(purchasingSourceListEntry).where(eq(purchasingSourceListEntry.client, client))
+      .orderBy(sql`${purchasingSourceListEntry.sourceNumber} desc`).limit(400);
+    const out: Array<{ sourceNumber: string; materialNumber: string; plant: string; partnerNumber: string; markedForDeletion: boolean }> = [];
+    for (const { purchasingOrg: org, ...row } of rows) {
+      if (out.length >= 40) break;
+      if (await entryReach(tx, client, actor, { plant: row.plant, purchasingOrg: org })) out.push(row);
+    }
+    return out;
+  });
 }

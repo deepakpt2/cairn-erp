@@ -4,10 +4,11 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import {
-  changeQuotaArrangement, createQuotaArrangement, getQuotaArrangement, previewQuotaArrangement,
-  previewQuotaChange, previewQuotaSelection, rateQuota, writeQuotaArrangement, writeQuotaChange,
+  changeQuotaArrangementForProvisioning as changeQuotaArrangement, createQuotaArrangementForProvisioning as createQuotaArrangement,
+  getQuotaArrangementForProvisioning as getQuotaArrangement, previewQuotaArrangementForProvisioning as previewQuotaArrangement,
+  previewQuotaChangeForProvisioning as previewQuotaChange, previewQuotaSelectionForProvisioning as previewQuotaSelection, rateQuota, writeQuotaArrangement, writeQuotaChange,
 } from '../src/modules/purchasing/quota-arrangement';
-import { changeSourceListEntry, createSourceListEntry } from '../src/modules/purchasing/source-list';
+import { changeSourceListEntryForProvisioning as changeSourceListEntry, createSourceListEntryForProvisioning as createSourceListEntry } from '../src/modules/purchasing/source-list';
 import { createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR154_QUOTA';

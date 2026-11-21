@@ -34,7 +34,7 @@ import { getCustomerCompany, saveCustomerCompany } from '../../modules/foundatio
 import { saveCustomerCredit } from '../../modules/finance/credit';
 import { getCustomerSalesArea, saveCustomerSalesArea } from '../../modules/foundation/customer-sales-areas';
 import { saveTaxCode } from '../../modules/foundation/tax-code-definition';
-import { createPurchasingInfoRecord } from '../../modules/purchasing/info-record';
+import { createPurchasingInfoRecordForProvisioning as createPurchasingInfoRecord } from '../../modules/purchasing/info-record';
 import { listSalesConditionsForProvisioning as listSalesConditions, saveSalesConditionForProvisioning as saveSalesCondition } from '../../modules/sales/conditions';
 import {
   createMaterialBom,

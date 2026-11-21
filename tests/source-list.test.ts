@@ -5,8 +5,9 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { changeOrderForProvisioning as changeOrder, createOrderForProvisioning as createOrder, getOrderForProvisioning as getOrder } from '../src/modules/purchasing/orders';
 import {
-  changeSourceListEntry, createSourceListEntry, getSourceListEntry, previewSourceListChange,
-  previewSourceListEntry, resolveSourceList, writeSourceListChange, writeSourceListEntry,
+  changeSourceListEntryForProvisioning as changeSourceListEntry, createSourceListEntryForProvisioning as createSourceListEntry,
+  getSourceListEntryForProvisioning as getSourceListEntry, previewSourceListChangeForProvisioning as previewSourceListChange,
+  previewSourceListEntryForProvisioning as previewSourceListEntry, resolveSourceList, writeSourceListChange, writeSourceListEntry,
 } from '../src/modules/purchasing/source-list';
 import { createTenant, destroyTenant } from './helpers';
 

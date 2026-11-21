@@ -56,6 +56,8 @@ function flag(form: FormData, name: string): boolean {
   return value === 'on' || value === 'true' || value === '1';
 }
 
+const authorityOf = (session: Awaited<ReturnType<typeof requireSession>>) => ({ userId: session.user.userId, sessionId: session.sessionId ?? '' });
+
 function missing(): QuotaActionState {
   return {
     ok: false,
@@ -201,7 +203,7 @@ export async function checkQuotaAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const preview = await previewQuotaArrangement(createInput(form, session.user.client, session.user.username));
+    const preview = await previewQuotaArrangement({ ...createInput(form, session.user.client, session.user.username), authorization: authorityOf(session) });
     return {
       ok: true,
       wrote: false,
@@ -223,7 +225,7 @@ export async function createQuotaAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const created = await createQuotaArrangement(createInput(form, session.user.client, session.user.username));
+    const created = await createQuotaArrangement({ ...createInput(form, session.user.client, session.user.username), authorization: authorityOf(session) });
     revalidatePath(QUOTA_ROUTE);
     return {
       ok: true,
@@ -245,7 +247,7 @@ export async function checkChangeQuotaAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
-    const preview = await previewQuotaChange(changeInput(form, session.user.client, session.user.username, 'change'));
+    const preview = await previewQuotaChange({ ...changeInput(form, session.user.client, session.user.username, 'change'), authorization: authorityOf(session) });
     return {
       ok: true,
       wrote: false,
@@ -269,7 +271,7 @@ export async function changeQuotaAction(
   const intent = text(form, 'intent') || 'change';
   try {
     await assertChangeForSession(session, { lockObject: 'QUOTA_ARRANGEMENT', argument: text(form, 'quotaNumber') });
-    const changed = await changeQuotaArrangement(changeInput(form, session.user.client, session.user.username, intent));
+    const changed = await changeQuotaArrangement({ ...changeInput(form, session.user.client, session.user.username, intent), authorization: authorityOf(session) });
     revalidatePath(QUOTA_ROUTE);
     return {
       ok: true,
@@ -299,10 +301,11 @@ export async function rateQuotaAction(
   if (stop) return stop;
   try {
     if (hasRefusedField(form)) {
-      await previewQuotaArrangement(createInput(form, session.user.client, session.user.username));
+      await previewQuotaArrangement({ ...createInput(form, session.user.client, session.user.username), authorization: authorityOf(session) });
       return { ok: false, wrote: false, message: 'A field this screen does not maintain was sent. Nothing was written.' };
     }
     const selection = await previewQuotaSelection({
+      authorization: authorityOf(session),
       client: session.user.client,
       materialNumber: text(form, 'materialNumber'),
       plant: text(form, 'plant'),

@@ -36,15 +36,16 @@ export default async function PurchasingQuotaPage({ searchParams }: {
   const requestedQuota = last(params.quota).toUpperCase();
   const requestedMaterial = last(params.material).toUpperCase();
   const requestedPlant = last(params.plant).toUpperCase();
+  const authority = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const opened = requestedQuota
-    ? await getQuotaArrangement(session.user.client, requestedQuota)
+    ? await getQuotaArrangement(session.user.client, requestedQuota, authority).catch(() => null)
     : null;
   const materialNumber = opened?.materialNumber ?? requestedMaterial;
   const plantCode = opened?.plant ?? requestedPlant;
   const arrangements = materialNumber && plantCode
-    ? await listQuotaArrangements(session.user.client, materialNumber, plantCode)
+    ? await listQuotaArrangements(session.user.client, materialNumber, plantCode, authority).catch(() => [])
     : [];
-  const recent = await listRecentQuotaArrangements(session.user.client);
+  const recent = await listRecentQuotaArrangements(session.user.client, authority).catch(() => []);
   const canMaintain = can(session, QUOTA_CAPABILITY);
   const changeLock = opened && canMaintain
     ? await openChangeForSession(session, {

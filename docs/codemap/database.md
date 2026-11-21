@@ -221,7 +221,7 @@
 | purchase_requisition_item | purchasing | platform/attention, platform/tenancy, production |
 | purchasing_contract_type | purchasing | platform/tenancy |
 | purchasing_group | foundation | inventory, platform/tenancy, purchasing |
-| purchasing_org | foundation | platform/tenancy, purchasing |
+| purchasing_org | foundation | platform/auth, platform/tenancy, purchasing |
 | purchasing_org_plant | foundation | platform/tenancy, purchasing |
 | purchasing_quotation | purchasing | foundation |
 | purchasing_rfq | purchasing | foundation |

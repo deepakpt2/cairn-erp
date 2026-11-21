@@ -8,7 +8,7 @@ import { createOrderForProvisioning as createOrder } from '../src/modules/purcha
 import { releaseDocumentForProvisioning as releaseDocument } from '../src/modules/purchasing/release';
 import { createRequestForQuotationForProvisioning as createRequestForQuotation, getRequestForQuotationForProvisioning as getRequestForQuotation } from '../src/modules/purchasing/rfq';
 import { createQuotationForProvisioning as createQuotation, getQuotationForProvisioning as getQuotation } from '../src/modules/purchasing/quotation';
-import { createPurchasingInfoRecord } from '../src/modules/purchasing/info-record';
+import { createPurchasingInfoRecordForProvisioning as createPurchasingInfoRecord } from '../src/modules/purchasing/info-record';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';

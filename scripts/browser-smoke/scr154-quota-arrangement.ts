@@ -4,8 +4,8 @@ import { sql } from 'drizzle-orm';
 import type { Page } from '@playwright/test';
 
 import { withTenant } from '../../src/platform/db/client';
-import { createQuotaArrangement, previewQuotaSelection } from '../../src/modules/purchasing/quota-arrangement';
-import { createSourceListEntry } from '../../src/modules/purchasing/source-list';
+import { createQuotaArrangementForProvisioning as createQuotaArrangement, previewQuotaSelectionForProvisioning as previewQuotaSelection } from '../../src/modules/purchasing/quota-arrangement';
+import { createSourceListEntryForProvisioning as createSourceListEntry } from '../../src/modules/purchasing/source-list';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };

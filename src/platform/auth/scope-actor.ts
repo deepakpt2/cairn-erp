@@ -158,3 +158,22 @@ export async function plantDocumentInReach(
   }
   return true;
 }
+
+/**
+ * An org-level or plant-level segment (info record, source list, quota): with a plant it is judged as a plant document;
+ * without one, by the company of its purchasing organisation. An organisation that names no company is not reachable.
+ */
+export async function orgSegmentInReach(
+  tx: Tx, client: string, actor: CompanyAuthority,
+  seg: { purchasingOrg?: string | null; plant?: string | null; purchasingGroup?: string | null },
+): Promise<boolean> {
+  const plant = (seg.plant ?? '').trim();
+  if (plant) return plantDocumentInReach(tx, client, actor, { plants: [plant], purchasingOrg: seg.purchasingOrg, purchasingGroup: seg.purchasingGroup });
+  const org = (seg.purchasingOrg ?? '').trim();
+  if (!org || !purchasingLevelsAllow(actor, seg)) return false;
+  const rows = (await tx.execute(sql`
+    select coalesce(company_code, '') as company_code from purchasing_org where client = ${client} and purchasing_org = ${org}
+  `)) as unknown as Array<{ company_code: string }>;
+  const company = rows[0]?.company_code.trim();
+  return !!company && companyInScope(tx, client, actor, company);
+}

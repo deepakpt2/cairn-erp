@@ -39,11 +39,11 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
   const requestedOrg = last(params.org).toUpperCase();
   const requestedPlant = last(params.plant).toUpperCase();
   const found = !requestedNumber && supplier && materialNumber
-    ? await findPurchasingInfoRecord(session.user.client, supplier, materialNumber)
+    ? await findPurchasingInfoRecord(session.user.client, supplier, materialNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null)
     : null;
   const number = requestedNumber || found || '';
-  const record = number ? await getPurchasingInfoRecord(session.user.client, number) : null;
-  const choices = await infoRecordChoices(session.user.client);
+  const record = number ? await getPurchasingInfoRecord(session.user.client, number, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : null;
+  const choices = await infoRecordChoices(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
   const canMaintain = can(session, INFO_RECORD_CAPABILITY);
   const changeLock = record && canMaintain
     ? await openChangeForSession(session, {

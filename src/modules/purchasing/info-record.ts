@@ -10,6 +10,9 @@
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { orgSegmentInReach } from '../../platform/auth/scope-actor';
+import { purchasingActor } from './scope';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber, NumberRangeError } from '../../platform/numbering';
@@ -352,7 +355,7 @@ async function existingGeneral(tx: Tx, client: string, partner: string, material
 }
 
 /** The same judgement as create, and it writes nothing. */
-export async function previewPurchasingInfoRecord(input: InfoRecordCreateInput): Promise<{
+export async function previewPurchasingInfoRecordForProvisioning(input: InfoRecordCreateInput): Promise<{
   infoRecordNumber: string | null;
   existing: boolean;
 }> {
@@ -396,7 +399,7 @@ export async function previewPurchasingInfoRecord(input: InfoRecordCreateInput):
   });
 }
 
-export async function createPurchasingInfoRecord(input: InfoRecordCreateInput): Promise<{
+export async function createPurchasingInfoRecordForProvisioning(input: InfoRecordCreateInput): Promise<{
   infoRecordNumber: string;
   segmentNumber: number;
   priceSequence: number;
@@ -561,7 +564,7 @@ function assertReason(reason: string): string {
   return trimmed;
 }
 
-export async function changePurchasingInfoRecord(input: InfoRecordChangeInput): Promise<{
+export async function changePurchasingInfoRecordForProvisioning(input: InfoRecordChangeInput): Promise<{
   infoRecordNumber: string;
   version: number;
 }> {
@@ -583,7 +586,7 @@ export async function writePurchasingInfoRecordChange(tx: Tx, input: InfoRecordC
 }
 
 /** The same judgement as a change, and it writes nothing. */
-export async function previewPurchasingInfoRecordChange(input: InfoRecordChangeInput): Promise<InfoRecordChangePreview> {
+export async function previewPurchasingInfoRecordChangeForProvisioning(input: InfoRecordChangeInput): Promise<InfoRecordChangePreview> {
   assertReason(input.reason);
   return withTenant(input.client, async (tx) => {
     const plan = await planInfoRecordChange(tx, input);
@@ -1120,7 +1123,7 @@ export interface InfoRecordChoiceLists {
 }
 
 /** The standing number for a supplier and material, or none. It writes nothing. */
-export async function findPurchasingInfoRecord(
+export async function findPurchasingInfoRecordForProvisioning(
   client: string,
   partnerNumber: string,
   materialNumber: string,
@@ -1142,7 +1145,7 @@ export async function findPurchasingInfoRecord(
 }
 
 /** The record the screen opens. It writes nothing. */
-export async function getPurchasingInfoRecord(client: string, infoRecordNumber: string): Promise<InfoRecordDocument | null> {
+export async function getPurchasingInfoRecordForProvisioning(client: string, infoRecordNumber: string): Promise<InfoRecordDocument | null> {
   const number = infoRecordNumber.trim();
   if (!number) return null;
   return withTenant(client, async (tx) => {
@@ -1202,7 +1205,7 @@ export async function getPurchasingInfoRecord(client: string, infoRecordNumber: 
 }
 
 /** Lists for the screen. A typed value that is not in the list is still sent, and the service refuses it by name. */
-export async function infoRecordChoices(client: string): Promise<InfoRecordChoiceLists> {
+export async function infoRecordChoicesForProvisioning(client: string): Promise<InfoRecordChoiceLists> {
   return withTenant(client, async (tx) => {
     const suppliers = await tx.select().from(supplierPurchasing).where(eq(supplierPurchasing.client, client));
     const partners = await tx.select({ partnerNumber: businessPartner.partnerNumber, name: businessPartner.name })
@@ -1239,6 +1242,135 @@ export async function infoRecordChoices(client: string): Promise<InfoRecordChoic
       currencies: currencies.map((row) => row.code.trim()),
       units: units.map((row) => row.code),
       records,
+    };
+  });
+}
+
+
+// ---- Scoped entry points: session, capability, and the reach of the record's purchasing-org / plant segments ----
+
+const refuseInfo = (message: string, remedy?: string) => new InfoRecordError(message, remedy);
+type InfoActor = Awaited<ReturnType<typeof purchasingActor>>;
+type WithAuth<T> = T & { authorization: ServiceAuthorityContext | undefined };
+const OUTSIDE = 'The purchasing organisation or plant is outside your access.';
+
+async function segmentReach(tx: Tx, client: string, actor: InfoActor, infoRecordNumber: string) {
+  const segments = await tx.select().from(purchasingInfoRecordOrg).where(and(
+    eq(purchasingInfoRecordOrg.client, client), eq(purchasingInfoRecordOrg.infoRecordNumber, infoRecordNumber.trim()),
+  ));
+  const reachable = new Set<number>();
+  for (const segment of segments) if (await orgSegmentInReach(tx, client, actor, segment)) reachable.add(segment.segmentNumber);
+  return { total: segments.length, reachable };
+}
+
+/** A record is reachable through at least one segment; one with none reachable answers as a record that does not exist. */
+async function requireRecord(tx: Tx, client: string, actor: InfoActor, input: InfoRecordChangeInput) {
+  const number = input.infoRecordNumber.trim();
+  const { total, reachable } = await segmentReach(tx, client, actor, number);
+  if (reachable.size === 0) throw new InfoRecordError(`Info record ${number} does not exist.`);
+  if (input.segmentNumber != null && !reachable.has(input.segmentNumber)) {
+    throw new InfoRecordError(`Info record ${number} has no segment ${input.segmentNumber}.`);
+  }
+  // A change to the record itself reaches every segment, so it needs every segment inside the reach.
+  if ((input.markRecordDeleted || input.reactivateRecord) && reachable.size !== total) throw refuseInfo(OUTSIDE, 'Ask for access to every segment of the record.');
+  if (input.segmentNumber == null && (input.newPrice || input.markPriceDeleted != null || input.reactivatePrice != null)) {
+    throw new InfoRecordError('A segment is required to change a price.');
+  }
+}
+
+async function requireCreateReach(tx: Tx, client: string, actor: InfoActor, input: InfoRecordCreateInput) {
+  if (!(await orgSegmentInReach(tx, client, actor, { purchasingOrg: input.purchasingOrg, plant: input.plant }))) {
+    throw refuseInfo(OUTSIDE, 'Name one inside your access.');
+  }
+  // Adding a segment to a named record: a record with no segment inside the reach answers as a missing one.
+  const named = (input.infoRecordNumber ?? '').trim();
+  if (named && (await segmentReach(tx, client, actor, named)).reachable.size === 0) {
+    throw new InfoRecordError(`Info record ${named} does not exist.`);
+  }
+}
+
+export async function previewPurchasingInfoRecord(input: WithAuth<InfoRecordCreateInput>) {
+  const { authorization, ...rest } = input;
+  await withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [INFO_RECORD_CAPABILITY], refuseInfo);
+    await requireCreateReach(tx, rest.client, actor, rest);
+  });
+  return previewPurchasingInfoRecordForProvisioning(rest);
+}
+
+export async function createPurchasingInfoRecord(input: WithAuth<InfoRecordCreateInput>) {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [INFO_RECORD_CAPABILITY], refuseInfo);
+    await requireCreateReach(tx, rest.client, actor, rest);
+    return writePurchasingInfoRecord(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function changePurchasingInfoRecord(input: WithAuth<InfoRecordChangeInput>) {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [INFO_RECORD_CAPABILITY], refuseInfo);
+    await requireRecord(tx, rest.client, actor, rest);
+    return writePurchasingInfoRecordChange(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function previewPurchasingInfoRecordChange(input: WithAuth<InfoRecordChangeInput>): Promise<InfoRecordChangePreview> {
+  const { authorization, ...rest } = input;
+  assertReason(rest.reason);
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [INFO_RECORD_CAPABILITY], refuseInfo);
+    await requireRecord(tx, rest.client, actor, rest);
+    const plan = await planInfoRecordChange(tx, { ...rest, changedBy: actor.username });
+    return {
+      infoRecordNumber: plan.infoRecordNumber, version: plan.version, segmentNumber: plan.segmentNumber,
+      changes: plan.changes, closedInterval: plan.close,
+    };
+  });
+}
+
+export async function findPurchasingInfoRecord(
+  client: string, partnerNumber: string, materialNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<string | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [INFO_RECORD_CAPABILITY], refuseInfo);
+    const number = await findPurchasingInfoRecordForProvisioning(client, partnerNumber, materialNumber);
+    if (!number) return null;
+    return (await segmentReach(tx, client, actor, number)).reachable.size > 0 ? number : null;
+  });
+}
+
+export async function getPurchasingInfoRecord(
+  client: string, infoRecordNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<InfoRecordDocument | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [INFO_RECORD_CAPABILITY], refuseInfo);
+    const { reachable } = await segmentReach(tx, client, actor, infoRecordNumber);
+    if (reachable.size === 0) return null;
+    const document = await getPurchasingInfoRecordForProvisioning(client, infoRecordNumber);
+    // Only the segments inside the reach are shown.
+    return document && { ...document, segments: document.segments.filter((segment) => reachable.has(segment.segmentNumber)) };
+  });
+}
+
+export async function infoRecordChoices(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<InfoRecordChoiceLists> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [INFO_RECORD_CAPABILITY], refuseInfo);
+    const all = await infoRecordChoicesForProvisioning(client);
+    const orgOk = new Map<string, boolean>();
+    for (const org of all.purchasingOrgs) orgOk.set(org.purchasingOrg, await orgSegmentInReach(tx, client, actor, { purchasingOrg: org.purchasingOrg }));
+    const plants: typeof all.plants = [];
+    for (const row of all.plants) if (await orgSegmentInReach(tx, client, actor, { purchasingOrg: row.purchasingOrg, plant: row.plant })) plants.push(row);
+    const records: typeof all.records = [];
+    for (const row of all.records) if ((await segmentReach(tx, client, actor, row.infoRecordNumber)).reachable.size > 0) records.push(row);
+    return {
+      ...all,
+      suppliers: all.suppliers.filter((row) => orgOk.get(row.purchasingOrg)),
+      purchasingOrgs: all.purchasingOrgs.filter((row) => orgOk.get(row.purchasingOrg)),
+      plants, records,
     };
   });
 }

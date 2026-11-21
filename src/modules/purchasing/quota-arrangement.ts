@@ -26,6 +26,9 @@ import {
   purchasingSourceList,
   purchasingSourceListEntry,
 } from './schema';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { orgSegmentInReach, plantDocumentInReach } from '../../platform/auth/scope-actor';
+import { purchasingActor } from './scope';
 import { resolveSourceList, SourceListError } from './source-list';
 
 export const QUOTA_CAPABILITY = 'PROC.QUOTA.MAINTAIN';
@@ -563,7 +566,7 @@ async function prepareCreate(tx: Tx, input: QuotaCreateInput): Promise<{
   return { materialNumber, plant: plantCode, validFrom: input.validFrom, validTo: input.validTo, items };
 }
 
-export async function previewQuotaArrangement(input: QuotaCreateInput): Promise<{
+export async function previewQuotaArrangementForProvisioning(input: QuotaCreateInput): Promise<{
   quotaNumber: null;
   materialNumber: string;
   plant: string;
@@ -599,7 +602,7 @@ export async function previewQuotaArrangement(input: QuotaCreateInput): Promise<
   });
 }
 
-export async function createQuotaArrangement(input: QuotaCreateInput): Promise<{ quotaNumber: string; version: number }> {
+export async function createQuotaArrangementForProvisioning(input: QuotaCreateInput): Promise<{ quotaNumber: string; version: number }> {
   return withTenant(input.client, (tx) => writeQuotaArrangement(tx, input));
 }
 
@@ -668,7 +671,7 @@ export async function writeQuotaArrangement(tx: Tx, input: QuotaCreateInput): Pr
   return { quotaNumber: drawn.display, version: 1 };
 }
 
-export async function previewQuotaChange(input: QuotaChangeInput): Promise<{
+export async function previewQuotaChangeForProvisioning(input: QuotaChangeInput): Promise<{
   quotaNumber: string;
   version: number;
   changes: Array<{ field: string; before: string | null; after: string | null }>;
@@ -687,7 +690,7 @@ export async function previewQuotaChange(input: QuotaChangeInput): Promise<{
   });
 }
 
-export async function changeQuotaArrangement(input: QuotaChangeInput): Promise<{ quotaNumber: string; version: number }> {
+export async function changeQuotaArrangementForProvisioning(input: QuotaChangeInput): Promise<{ quotaNumber: string; version: number }> {
   return withTenant(input.client, (tx) => writeQuotaChange(tx, input));
 }
 
@@ -762,7 +765,7 @@ export async function writeQuotaChange(tx: Tx, input: QuotaChangeInput): Promise
   return { quotaNumber: current.quotaNumber, version: plan.next.version };
 }
 
-export async function listQuotaArrangements(client: string, materialNumber: string, plantCode: string): Promise<StandingArrangement[]> {
+export async function listQuotaArrangementsForProvisioning(client: string, materialNumber: string, plantCode: string): Promise<StandingArrangement[]> {
   const materialKey = materialNumber.trim();
   const plantKey = plantCode.trim();
   if (!materialKey || !plantKey) return [];
@@ -789,7 +792,7 @@ export async function listQuotaArrangements(client: string, materialNumber: stri
   });
 }
 
-export async function listRecentQuotaArrangements(client: string): Promise<Array<{
+export async function listRecentQuotaArrangementsForProvisioning(client: string): Promise<Array<{
   quotaNumber: string;
   materialNumber: string;
   plant: string;
@@ -805,7 +808,7 @@ export async function listRecentQuotaArrangements(client: string): Promise<Array
     .limit(40));
 }
 
-export async function getQuotaArrangement(client: string, quotaNumber: string): Promise<StandingArrangement | null> {
+export async function getQuotaArrangementForProvisioning(client: string, quotaNumber: string): Promise<StandingArrangement | null> {
   const named = quotaNumber.trim();
   return withTenant(client, async (tx) => {
     const [row] = await tx.select().from(purchasingQuotaArrangement).where(and(
@@ -826,7 +829,7 @@ export async function getQuotaArrangement(client: string, quotaNumber: string): 
   });
 }
 
-export async function previewQuotaSelection(input: {
+export async function previewQuotaSelectionForProvisioning(input: {
   client: string;
   materialNumber: string;
   plant: string;
@@ -966,4 +969,147 @@ async function sourceGate(
       fixedSourcePartner: fixed?.[2] ?? null,
     };
   }
+}
+
+
+// ---- Scoped entry points: session, capability, and the reach of the arrangement's plant and its suppliers' organisations ----
+
+type QuotaActor = Awaited<ReturnType<typeof purchasingActor>>;
+type QuotaWithAuth<T> = T & { authorization: ServiceAuthorityContext | undefined };
+const refuseQuota = (message: string, remedy?: string) => new QuotaError(message, remedy);
+const OUTSIDE = 'The plant or purchasing organisation is outside your access.';
+
+async function orgsReachable(tx: Tx, client: string, actor: QuotaActor, plantCode: string, orgs: readonly string[]): Promise<boolean[]> {
+  const out: boolean[] = [];
+  for (const org of orgs) out.push(await orgSegmentInReach(tx, client, actor, { plant: plantCode, purchasingOrg: org }));
+  return out;
+}
+
+/** Visible: the plant is reachable and at least one item (or none yet) is. Whole: every item is. */
+async function arrangementReach(tx: Tx, client: string, actor: QuotaActor, a: StandingArrangement): Promise<{ visible: boolean; whole: boolean; items: StandingItem[] }> {
+  if (!(await plantDocumentInReach(tx, client, actor, { plants: [a.plant] }))) return { visible: false, whole: false, items: [] };
+  const flags = await orgsReachable(tx, client, actor, a.plant, a.items.map((i) => i.purchasingOrg));
+  const items = a.items.filter((_, i) => flags[i]);
+  return { visible: a.items.length === 0 || items.length > 0, whole: items.length === a.items.length, items };
+}
+
+async function requireArrangement(tx: Tx, client: string, actor: QuotaActor, quotaNumber: string, needWhole: boolean): Promise<void> {
+  const number = quotaNumber.trim();
+  const current = await loadArrangement(tx, client, number);
+  const reach = await arrangementReach(tx, client, actor, current);
+  if (!reach.visible) throw new QuotaError(`Quota ${number} does not exist.`);
+  if (needWhole && !reach.whole) throw refuseQuota(OUTSIDE, 'Name one inside your access.');
+}
+
+async function requireCreateReach(tx: Tx, client: string, actor: QuotaActor, input: QuotaCreateInput): Promise<void> {
+  const plantCode = input.plant.trim();
+  const flags = await orgsReachable(tx, client, actor, plantCode, input.items.map((i) => i.purchasingOrg ?? ''));
+  if (!(await plantDocumentInReach(tx, client, actor, { plants: [plantCode] })) || input.items.length === 0 || flags.some((f) => !f)) {
+    throw refuseQuota(OUTSIDE, 'Name one inside your access.');
+  }
+}
+
+async function requireChangeReach(tx: Tx, client: string, actor: QuotaActor, input: QuotaChangeInput): Promise<void> {
+  // The whole arrangement must be reachable to change it; a new plant or added item organisation is judged as well.
+  await requireArrangement(tx, client, actor, input.quotaNumber, true);
+  const current = await loadArrangement(tx, client, input.quotaNumber.trim());
+  const plantCode = (input.plant ?? '').trim() || current.plant;
+  if (!(await plantDocumentInReach(tx, client, actor, { plants: [plantCode] }))) throw refuseQuota(OUTSIDE, 'Name one inside your access.');
+  const flags = await orgsReachable(tx, client, actor, plantCode, (input.items ?? []).map((i) => i.purchasingOrg ?? ''));
+  if (flags.some((f) => !f)) throw refuseQuota(OUTSIDE, 'Name one inside your access.');
+}
+
+export async function previewQuotaArrangement(input: QuotaWithAuth<QuotaCreateInput>) {
+  const { authorization, ...rest } = input;
+  await withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTA_CAPABILITY], refuseQuota);
+    await requireCreateReach(tx, rest.client, actor, rest);
+  });
+  return previewQuotaArrangementForProvisioning(rest);
+}
+
+export async function createQuotaArrangement(input: QuotaWithAuth<QuotaCreateInput>): Promise<{ quotaNumber: string; version: number }> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTA_CAPABILITY], refuseQuota);
+    await requireCreateReach(tx, rest.client, actor, rest);
+    return writeQuotaArrangement(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function previewQuotaChange(input: QuotaWithAuth<QuotaChangeInput>) {
+  const { authorization, ...rest } = input;
+  await withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTA_CAPABILITY], refuseQuota);
+    await requireChangeReach(tx, rest.client, actor, rest);
+  });
+  return previewQuotaChangeForProvisioning(rest);
+}
+
+export async function changeQuotaArrangement(input: QuotaWithAuth<QuotaChangeInput>): Promise<{ quotaNumber: string; version: number }> {
+  const { authorization, ...rest } = input;
+  return withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTA_CAPABILITY], refuseQuota);
+    await requireChangeReach(tx, rest.client, actor, rest);
+    return writeQuotaChange(tx, { ...rest, changedBy: actor.username });
+  });
+}
+
+export async function listQuotaArrangements(
+  client: string, materialNumber: string, plantCode: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<StandingArrangement[]> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [QUOTA_CAPABILITY], refuseQuota);
+    const out: StandingArrangement[] = [];
+    for (const a of await listQuotaArrangementsForProvisioning(client, materialNumber, plantCode)) {
+      const reach = await arrangementReach(tx, client, actor, a);
+      if (reach.visible) out.push({ ...a, items: reach.items });
+    }
+    return out;
+  });
+}
+
+export async function listRecentQuotaArrangements(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): ReturnType<typeof listRecentQuotaArrangementsForProvisioning> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [QUOTA_CAPABILITY], refuseQuota);
+    const rows = await tx.select({ quotaNumber: purchasingQuotaArrangement.quotaNumber })
+      .from(purchasingQuotaArrangement).where(eq(purchasingQuotaArrangement.client, client))
+      .orderBy(sql`${purchasingQuotaArrangement.quotaNumber} desc`).limit(400);
+    const out: Awaited<ReturnType<typeof listRecentQuotaArrangementsForProvisioning>> = [];
+    for (const { quotaNumber } of rows) {
+      if (out.length >= 40) break;
+      const a = await getQuotaArrangementForProvisioning(client, quotaNumber);
+      if (a && (await arrangementReach(tx, client, actor, a)).visible) {
+        out.push({ quotaNumber: a.quotaNumber, materialNumber: a.materialNumber, plant: a.plant, markedForDeletion: a.markedForDeletion });
+      }
+    }
+    return out;
+  });
+}
+
+export async function getQuotaArrangement(
+  client: string, quotaNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<StandingArrangement | null> {
+  return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [QUOTA_CAPABILITY], refuseQuota);
+    const a = await getQuotaArrangementForProvisioning(client, quotaNumber);
+    if (!a) return null;
+    const reach = await arrangementReach(tx, client, actor, a);
+    return reach.visible ? { ...a, items: reach.items } : null;
+  });
+}
+
+/** A selection ranks every supplier of the arrangement: one holding a supplier outside the reach is refused whole. */
+export async function previewQuotaSelection(input: QuotaWithAuth<Parameters<typeof previewQuotaSelectionForProvisioning>[0]>): Promise<QuotaSelection> {
+  const { authorization, ...rest } = input;
+  await withTenant(rest.client, async (tx) => {
+    const actor = await purchasingActor(tx, rest.client, authorization, [QUOTA_CAPABILITY], refuseQuota);
+    if (!(await plantDocumentInReach(tx, rest.client, actor, { plants: [rest.plant] }))) throw refuseQuota(OUTSIDE, 'Name one inside your access.');
+    for (const a of await listQuotaArrangementsForProvisioning(rest.client, rest.materialNumber, rest.plant)) {
+      if (!(await arrangementReach(tx, rest.client, actor, a)).whole) throw refuseQuota(OUTSIDE, 'Name one inside your access.');
+    }
+  });
+  return previewQuotaSelectionForProvisioning(rest);
 }

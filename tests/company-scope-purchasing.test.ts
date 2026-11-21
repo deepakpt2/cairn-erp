@@ -35,6 +35,17 @@ import {
 import { createQuotation, getQuotation, listRecentQuotationRequests, openQuotation, previewQuotation } from '../src/modules/purchasing/quotation';
 import { displayQuotation, displayQuotationForRequest } from '../src/modules/purchasing/quotation-display';
 import { compareQuotations } from '../src/modules/purchasing/quotation-comparison';
+import {
+  changePurchasingInfoRecord, createPurchasingInfoRecord, findPurchasingInfoRecord, getPurchasingInfoRecord,
+  infoRecordChoices, previewPurchasingInfoRecord, previewPurchasingInfoRecordChange,
+} from '../src/modules/purchasing/info-record';
+import {
+  changeSourceListEntry, createSourceListEntry, getSourceList, getSourceListEntry, listRecentSourceEntries, previewSourceListEntry,
+} from '../src/modules/purchasing/source-list';
+import {
+  changeQuotaArrangement, createQuotaArrangement, getQuotaArrangement, listQuotaArrangements, listRecentQuotaArrangements,
+  previewQuotaArrangement, previewQuotaSelection,
+} from '../src/modules/purchasing/quota-arrangement';
 import { openPurchaseContractDisplay } from '../src/modules/purchasing/contract-display';
 import {
   changeSchedulingAgreement, createSchedulingAgreement, getSchedulingAgreement, listSchedulingAgreements, schedulingAgreementChoices,
@@ -842,6 +853,164 @@ describe('requests for quotation and quotations', () => {
     expect(await getQuotation(client, own.quotationNumber, onlyB.authorization)).toBeNull();
     expect((await displayQuotation(client, own.quotationNumber, onlyB.authorization)).found).toBe(false);
     expect((await displayQuotation(client, own.quotationNumber, onlyA.authorization)).found).toBe(true);
+  });
+});
+
+describe('info records, source lists and quota arrangements', () => {
+  const R = 'Scope sourcing setup';
+  const bad = () => [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization];
+  const price = { amount: 10, currency: 'USD', priceUnit: 1, priceUnitOfMeasure: 'EA', validFrom: '2020-01-01', validTo: '2099-12-31' };
+  const infoA = (extra: Record<string, unknown> = {}) => ({ client, changedBy: 'X', partnerNumber: 'V10000', materialNumber: 'M7001', purchasingOrg: '1000', price, ...extra });
+  const source = (plant: string, org: string, material = 'M7001') => ({
+    client, changedBy: 'X', materialNumber: material, plant, partnerNumber: 'V10000', purchasingOrg: org, validFrom: '2020-01-01', validTo: '2099-12-31',
+  });
+  const quota = (plant: string, org: string, material = 'M7001') => ({
+    client, changedBy: 'X', materialNumber: material, plant, validFrom: '2020-01-01', validTo: '2099-12-31',
+    items: [{ partnerNumber: 'V10000', purchasingOrg: org, quota: 100 }],
+  });
+  let orgOnly: FinanceActor;
+  let recordA = '';
+  let recordB = '';
+  let sourceA = '';
+  let sourceB = '';
+  let quotaA = '';
+  let quotaB = '';
+  const counted = () => Promise.all(['purchasing_info_record', 'purchasing_source_list_entry', 'purchasing_quota_arrangement'].map(count));
+
+  beforeAll(async () => {
+    await withTenant(client, async (tx) => {
+      await defineRange(tx, { client, objectCode: 'INFOREC', subObject: '*', prefix: 'IR', numberLength: 7, createdBy: R });
+      await defineRange(tx, { client, objectCode: 'SOURCELIST', subObject: '*', prefix: 'SL', numberLength: 7, createdBy: R });
+      await defineRange(tx, { client, objectCode: 'QUOTAARR', subObject: '*', prefix: 'QA', numberLength: 7, createdBy: R });
+      await tx.execute(sql`insert into purchasing_org (client, purchasing_org, name, company_code, created_by) values (${client}, '1000', 'Org 1000', ${A}, ${R}), (${client}, '2000', 'Org 2000', ${B}, ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into purchasing_org_plant (client, purchasing_org, plant, created_by) values (${client}, '1000', 'PLA1', ${R}), (${client}, '2000', 'PLB1', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into bp_role (client, partner_number, role_code, created_by) values (${client}, 'V10000', 'SUPPLIER', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into supplier_purchasing_org (client, partner_number, role_code, purchasing_org, order_currency, purchasing_group, purchasing_status, created_by) values (${client}, 'V10000', 'SUPPLIER', '1000', 'USD', '001', 'CREATED', ${R}), (${client}, 'V10000', 'SUPPLIER', '2000', 'USD', '001', 'CREATED', ${R}) on conflict do nothing`);
+      await tx.execute(sql`update supplier_purchasing_org set purchasing_status = 'CREATED' where client = ${client} and partner_number = 'V10000'`);
+      await tx.execute(sql`update business_partner set general_status = 'CREATED', is_blocked = false where client = ${client} and partner_number = 'V10000'`);
+      await tx.execute(sql`insert into purchasing_group (client, purchasing_group, name, created_by) values (${client}, '001', 'Group 001', ${R}) on conflict do nothing`);
+      await tx.execute(sql`update purchasing_group set purchasing_org = null, is_active = true where client = ${client} and purchasing_group = '001'`);
+      await tx.execute(sql`update supplier_purchasing_org set purchasing_group = '001' where client = ${client} and partner_number = 'V10000'`);
+      for (const m of ['M7001', 'M7002']) {
+        await tx.execute(sql`insert into material (client, material_number, description, material_type, base_unit, created_by)
+          select ${client}, ${m}, 'Sourcing material', material_type, 'EA', ${R} from material_type where client = ${client} order by material_type limit 1 on conflict do nothing`);
+        await tx.execute(sql`insert into material_plant (client, material_number, plant, procurement_type, created_by) values (${client}, ${m}, 'PLA1', 'BUY', ${R}), (${client}, ${m}, 'PLB1', 'BUY', ${R}) on conflict do nothing`);
+      }
+    });
+    orgOnly = await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: [A, B] });
+    await withTenant(client, async (tx) => {
+      await tx.insert(authOrgRestriction).values([{ id: randomUUID(), client, userId: orgOnly.userId, scopeType: 'PURCHASING_ORG', scopeValue: '1000', createdBy: R }]);
+    });
+    recordA = (await createPurchasingInfoRecord({ ...infoA(), authorization: onlyA.authorization, changedBy: 'SPOOFED_NAME' })).infoRecordNumber;
+    recordB = (await createPurchasingInfoRecord({ ...infoA({ materialNumber: 'M7002', purchasingOrg: '2000' }), authorization: onlyB.authorization })).infoRecordNumber;
+    sourceA = (await createSourceListEntry({ ...source('PLA1', '1000'), authorization: onlyA.authorization, changedBy: 'SPOOFED_NAME' })).sourceNumber;
+    sourceB = (await createSourceListEntry({ ...source('PLB1', '2000'), authorization: onlyB.authorization })).sourceNumber;
+    quotaA = (await createQuotaArrangement({ ...quota('PLA1', '1000'), authorization: onlyA.authorization, changedBy: 'SPOOFED_NAME' })).quotaNumber;
+    quotaB = (await createQuotaArrangement({ ...quota('PLB1', '2000'), authorization: onlyB.authorization })).quotaNumber;
+  }, 240_000);
+
+  it('records the verified session user, never a supplied name', async () => {
+    const who = async (table: string, column: string, key: string) => withTenant(client, async (tx) =>
+      ((await tx.execute(sql`select created_by from ${sql.raw(table)} where client = ${client} and ${sql.raw(column)} = ${key}`)) as unknown as Array<{ created_by: string }>)[0]?.created_by);
+    expect(await who('purchasing_info_record', 'info_record_number', recordA)).toBe(onlyA.username);
+    expect(await who('purchasing_source_list_entry', 'source_number', sourceA)).toBe(onlyA.username);
+    expect(await who('purchasing_quota_arrangement', 'quota_number', quotaA)).toBe(onlyA.username);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant before anything is read or written', async () => {
+    const before = await counted();
+    for (const authorization of bad()) {
+      await refused(createPurchasingInfoRecord({ ...infoA({ materialNumber: 'M7002' }), authorization }));
+      await refused(previewPurchasingInfoRecord({ ...infoA({ materialNumber: 'M7002' }), authorization }));
+      await refused(getPurchasingInfoRecord(client, recordA, authorization));
+      await refused(findPurchasingInfoRecord(client, 'V10000', 'M7001', authorization));
+      await refused(infoRecordChoices(client, authorization));
+      await refused(createSourceListEntry({ ...source('PLA1', '1000', 'M7002'), authorization }));
+      await refused(previewSourceListEntry({ ...source('PLA1', '1000', 'M7002'), authorization }));
+      await refused(getSourceListEntry(client, sourceA, authorization));
+      await refused(getSourceList(client, 'M7001', 'PLA1', authorization));
+      await refused(listRecentSourceEntries(client, authorization));
+      await refused(createQuotaArrangement({ ...quota('PLA1', '1000', 'M7002'), authorization }));
+      await refused(previewQuotaArrangement({ ...quota('PLA1', '1000', 'M7002'), authorization }));
+      await refused(getQuotaArrangement(client, quotaA, authorization));
+      await refused(listQuotaArrangements(client, 'M7001', 'PLA1', authorization));
+      await refused(listRecentQuotaArrangements(client, authorization));
+      await refused(previewQuotaSelection({ client, materialNumber: 'M7001', plant: 'PLA1', documentDate: '2026-10-22', authorization }));
+    }
+    expect(await counted()).toEqual(before);
+  });
+
+  it('refuses writing into another company\'s organisation or plant, writing nothing', async () => {
+    const before = await counted();
+    await refused(createPurchasingInfoRecord({ ...infoA({ materialNumber: 'M7002', purchasingOrg: '2000' }), authorization: onlyA.authorization }), /outside your access/);
+    await refused(createPurchasingInfoRecord({ ...infoA({ materialNumber: 'M7002', plant: 'PLB1' }), authorization: onlyA.authorization }), /outside your access/);
+    await refused(createPurchasingInfoRecord({ ...infoA({ materialNumber: 'M7002' }), authorization: orgOnly.authorization, purchasingOrg: '2000' }), /outside your access/);
+    await refused(createSourceListEntry({ ...source('PLB1', '2000', 'M7002'), authorization: onlyA.authorization }), /outside your access/);
+    await refused(createSourceListEntry({ ...source('PLA1', '2000', 'M7002'), authorization: onlyA.authorization }), /outside your access|not assigned to plant/);
+    await refused(createQuotaArrangement({ ...quota('PLB1', '2000', 'M7002'), authorization: onlyA.authorization }), /outside your access/);
+    await refused(createQuotaArrangement({ ...quota('PLA1', '2000', 'M7002'), authorization: onlyA.authorization }), /outside your access|not assigned to plant/);
+    await refused(createQuotaArrangement({ ...quota('PLA1', '1000', 'M7002'), authorization: orgOnly.authorization, items: [{ partnerNumber: 'V10000', purchasingOrg: '2000', quota: 100 }] }), /outside your access/);
+    expect(await counted()).toEqual(before);
+  });
+
+  it('reads, lists and offers choices only inside the reach; another company answers as missing', async () => {
+    const record = await getPurchasingInfoRecord(client, recordA, onlyA.authorization);
+    expect(record?.segments.map((s) => s.purchasingOrg)).toEqual(['1000']);
+    expect(await getPurchasingInfoRecord(client, recordB, onlyA.authorization)).toBeNull();
+    expect(await findPurchasingInfoRecord(client, 'V10000', 'M7002', onlyA.authorization)).toBeNull();
+    expect(await findPurchasingInfoRecord(client, 'V10000', 'M7002', onlyB.authorization)).toBe(recordB);
+    const choices = await infoRecordChoices(client, onlyA.authorization);
+    expect(choices.purchasingOrgs.map((o) => o.purchasingOrg)).not.toContain('2000');
+    expect(choices.records.map((r) => r.infoRecordNumber)).not.toContain(recordB);
+
+    expect((await getSourceListEntry(client, sourceA, onlyA.authorization))?.sourceNumber).toBe(sourceA);
+    expect(await getSourceListEntry(client, sourceB, onlyA.authorization)).toBeNull();
+    expect(await getSourceList(client, 'M7001', 'PLB1', onlyA.authorization)).toBeNull();
+    expect((await listRecentSourceEntries(client, onlyA.authorization)).map((r) => r.sourceNumber)).not.toContain(sourceB);
+    expect((await listRecentSourceEntries(client, onlyA.authorization)).map((r) => r.sourceNumber)).toContain(sourceA);
+
+    expect((await getQuotaArrangement(client, quotaA, onlyA.authorization))?.quotaNumber).toBe(quotaA);
+    expect(await getQuotaArrangement(client, quotaB, onlyA.authorization)).toBeNull();
+    expect(await listQuotaArrangements(client, 'M7001', 'PLB1', onlyA.authorization)).toEqual([]);
+    expect((await listRecentQuotaArrangements(client, onlyA.authorization)).map((r) => r.quotaNumber)).not.toContain(quotaB);
+    await refused(previewQuotaSelection({ client, materialNumber: 'M7001', plant: 'PLB1', documentDate: '2026-10-22', authorization: onlyA.authorization }), /outside your access/);
+  });
+
+  it('answers a change of another company\'s document as a missing one, and changes nothing', async () => {
+    const ask = (p: Promise<unknown>) => p.then(() => 'done', (e: Error) => e.message);
+    expect(await ask(changePurchasingInfoRecord({ client, changedBy: 'X', authorization: onlyA.authorization, reason: 'Scope probe', infoRecordNumber: recordB, expectedVersion: 1, plannedDeliveryDays: 3 }))).toMatch(/does not exist/);
+    expect(await ask(previewPurchasingInfoRecordChange({ client, changedBy: 'X', authorization: onlyA.authorization, reason: 'Scope probe', infoRecordNumber: recordB, expectedVersion: 1, plannedDeliveryDays: 3 }))).toMatch(/does not exist/);
+    expect(await ask(changeSourceListEntry({ client, changedBy: 'X', authorization: onlyA.authorization, reason: 'Scope probe', sourceNumber: sourceB, expectedVersion: 1, mrpRelevant: true }))).toMatch(/does not exist/);
+    expect(await ask(changeQuotaArrangement({ client, changedBy: 'X', authorization: onlyA.authorization, reason: 'Scope probe', quotaNumber: quotaB, expectedVersion: 1, markDeleted: true }))).toMatch(/does not exist/);
+    const marked = await withTenant(client, async (tx) =>
+      ((await tx.execute(sql`select (select count(*) from purchasing_quota_arrangement where client = ${client} and marked_for_deletion) as q`)) as unknown as Array<{ q: string }>)[0]!.q);
+    expect(Number(marked)).toBe(0);
+    // The same actor changes their own, recording the session user.
+    const done = await changePurchasingInfoRecord({ client, changedBy: 'SPOOFED_NAME', authorization: onlyA.authorization, reason: 'Delivery time', infoRecordNumber: recordA, expectedVersion: 1, segmentNumber: 1, plannedDeliveryDays: 4 });
+    expect(done.infoRecordNumber).toBe(recordA);
+    const changedBy = await withTenant(client, async (tx) =>
+      ((await tx.execute(sql`select changed_by from purchasing_info_record where client = ${client} and info_record_number = ${recordA}`)) as unknown as Array<{ changed_by: string }>)[0]?.changed_by);
+    expect(changedBy).toBe(onlyA.username);
+  });
+
+  it('answers adding a segment to a record with no segment in the reach as a missing record', async () => {
+    const before = await counted();
+    const version = (await getPurchasingInfoRecord(client, recordA, onlyA.authorization))!.version;
+    await expect(createPurchasingInfoRecord({ ...infoA({ purchasingOrg: '2000', infoRecordNumber: recordA, expectedVersion: version }), authorization: onlyB.authorization }))
+      .rejects.toThrow(/does not exist/);
+    // Naming a segment that is not the actor's answers as no such segment.
+    await expect(changePurchasingInfoRecord({ client, changedBy: 'X', authorization: onlyA.authorization, reason: 'Scope probe', infoRecordNumber: recordA, expectedVersion: version, segmentNumber: 9, plannedDeliveryDays: 9 }))
+      .rejects.toThrow(/has no segment/);
+    expect(await counted()).toEqual(before);
+  });
+
+  it('judges the purchasing org level on all three', async () => {
+    expect(await getPurchasingInfoRecord(client, recordB, orgOnly.authorization)).toBeNull();
+    expect((await getPurchasingInfoRecord(client, recordA, orgOnly.authorization))?.infoRecordNumber).toBe(recordA);
+    expect(await getSourceListEntry(client, sourceB, orgOnly.authorization)).toBeNull();
+    expect((await getSourceListEntry(client, sourceA, orgOnly.authorization))?.sourceNumber).toBe(sourceA);
+    expect(await getQuotaArrangement(client, quotaB, orgOnly.authorization)).toBeNull();
+    expect((await getQuotaArrangement(client, quotaA, orgOnly.authorization))?.quotaNumber).toBe(quotaA);
   });
 });
 
