@@ -4,6 +4,7 @@
  * A read of the lines that already stand. It writes nothing and does not
  * release, reprice, or send a supplier message.
  */
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { changeHistory } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
 import { SCHEDULING_AGREEMENT_OBJECT_CLASS } from './scheduling-agreement';
@@ -47,6 +48,7 @@ function refuseNamed(params: Record<string, string>): void {
 export async function openDeliveryScheduleDisplay(
   client: string,
   params: Record<string, string>,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<{
   refusal: { message: string; remedy?: string } | null;
   document: SchedulingAgreementDocument | null;
@@ -61,7 +63,7 @@ export async function openDeliveryScheduleDisplay(
     if (itemText && (!Number.isInteger(itemNumber) || (itemNumber ?? 0) <= 0)) {
       fail('The item number is not valid.');
     }
-    const document = await readDeliverySchedule(client, agreement, itemNumber);
+    const document = await readDeliverySchedule(client, agreement, itemNumber, authorization);
     if (!document || (itemNumber != null && document.items.length === 0)) {
       return {
         refusal: { message: `Scheduling agreement ${agreement} item ${itemText || '—'} does not exist.`, remedy: 'Choose an agreement and item that stand in this client.' },
@@ -77,7 +79,9 @@ export async function openDeliveryScheduleDisplay(
   }
 }
 
-export async function deliveryScheduleHistory(client: string, agreementNumber: string) {
+export async function deliveryScheduleHistory(client: string, agreementNumber: string, authorization: ServiceAuthorityContext | undefined) {
+  // An agreement outside the reach has no history to show, exactly as one that does not exist.
+  if (!(await readDeliverySchedule(client, agreementNumber, undefined, authorization))) return [];
   return withTenant(client, async (tx) => {
     const documents = await changeHistory(tx, client, SCHEDULING_AGREEMENT_OBJECT_CLASS, agreementNumber);
     return documents.filter((entry) => entry.transactionCode === 'ME38');

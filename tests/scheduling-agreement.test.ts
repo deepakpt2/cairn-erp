@@ -5,15 +5,18 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { releaseDocumentForProvisioning as releaseDocument } from '../src/modules/purchasing/release';
 import { closeDb, createTenant, destroyTenant } from './helpers';
+import { FINANCE_ACTOR_CAPABILITIES, createFinanceActor } from './helpers/finance-actor';
 import {
   SchedulingAgreementError,
-  changeSchedulingAgreement,
-  createSchedulingAgreement,
-  getSchedulingAgreement,
+  changeSchedulingAgreementForProvisioning as changeSchedulingAgreement,
+  createSchedulingAgreementForProvisioning as createSchedulingAgreement,
+  getSchedulingAgreementForProvisioning as getSchedulingAgreement,
 } from '../src/modules/purchasing/scheduling-agreement';
 import { openSchedulingAgreementDisplay } from '../src/modules/purchasing/scheduling-agreement-display';
 
 const ACTOR = 'SCHED_TEST';
+const viewer = async (client: string) => (await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: ['1000'] })).authorization;
+
 const clients: string[] = [];
 
 afterAll(async () => {
@@ -238,13 +241,13 @@ describe('scheduling agreement', () => {
       `) as unknown as Array<{ changed_at: Date | null }>;
       return row.changed_at;
     });
-    const refused = await openSchedulingAgreementDisplay(client, { agreement: saved.agreementNumber, netPrice: '1' });
+    const refused = await openSchedulingAgreementDisplay(client, { agreement: saved.agreementNumber, netPrice: '1' }, await viewer(client));
     expect(refused.refusal?.message).toMatch(/price change/i);
     expect(refused.document).toBeNull();
-    const opened = await openSchedulingAgreementDisplay(client, { agreement: saved.agreementNumber });
+    const opened = await openSchedulingAgreementDisplay(client, { agreement: saved.agreementNumber }, await viewer(client));
     expect(opened.document?.items[0].netPrice).toBe('4.0000');
     expect(opened.document?.scheduleLines).toEqual([]);
-    const hidden = await openSchedulingAgreementDisplay(other, { agreement: saved.agreementNumber });
+    const hidden = await openSchedulingAgreementDisplay(other, { agreement: saved.agreementNumber }, await viewer(other));
     expect(hidden.document).toBeNull();
     expect(hidden.refusal?.message).toMatch(/does not exist/);
     const after = await withTenant(client, async (tx) => {

@@ -42,9 +42,9 @@ export default async function SchedulingAgreementsPage({ searchParams }: {
   const client = session.user.client;
   const agreementNumber = params.agreement?.trim() || '';
   const [documents, choices, selected] = await Promise.all([
-    listSchedulingAgreements(client),
-    schedulingAgreementChoices(client),
-    agreementNumber ? getSchedulingAgreement(client, agreementNumber) : Promise.resolve(null),
+    listSchedulingAgreements(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
+    schedulingAgreementChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }),
+    agreementNumber ? getSchedulingAgreement(client, agreementNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : Promise.resolve(null),
   ]);
   const selectedRelease = selected
     ? await getDocumentRelease(client, 'SCHED_AGREEMENT', selected.agreementNumber)

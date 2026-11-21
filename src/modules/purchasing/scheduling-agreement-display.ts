@@ -4,6 +4,7 @@
  * A read of the agreement that already stands. It writes nothing, takes no
  * change lock, and does not release, reprice, or create a schedule line.
  */
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { changeHistory } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
 import {
@@ -79,6 +80,7 @@ function when(value: Date | string | null | undefined): string {
 export async function openSchedulingAgreementDisplay(
   client: string,
   params: Record<string, string>,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<{
   refusal: { message: string; remedy?: string } | null;
   document: SchedulingAgreementDocument | null;
@@ -90,7 +92,7 @@ export async function openSchedulingAgreementDisplay(
     const number = params.agreement?.trim() ?? '';
     if (number.length > 20) fail('The agreement number is too long.');
     if (!number) {
-      const listed = await listSchedulingAgreements(client);
+      const listed = await listSchedulingAgreements(client, authorization);
       const supplier = params.supplier?.trim().toUpperCase() ?? '';
       const type = params.documentType?.trim().toUpperCase() ?? '';
       return {
@@ -103,7 +105,7 @@ export async function openSchedulingAgreementDisplay(
         )).slice(0, 20),
       };
     }
-    const document = await getSchedulingAgreement(client, number);
+    const document = await getSchedulingAgreement(client, number, authorization);
     if (!document) {
       return {
         refusal: { message: `Scheduling agreement ${number} does not exist.`, remedy: 'Choose an agreement that stands in this client.' },

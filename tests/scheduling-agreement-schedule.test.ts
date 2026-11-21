@@ -5,14 +5,20 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { releaseDocumentForProvisioning as releaseDocument } from '../src/modules/purchasing/release';
 import { closeDb, createTenant, destroyTenant } from './helpers';
-import { createSchedulingAgreement, getSchedulingAgreement } from '../src/modules/purchasing/scheduling-agreement';
+import { FINANCE_ACTOR_CAPABILITIES, createFinanceActor } from './helpers/finance-actor';
+import {
+  createSchedulingAgreementForProvisioning as createSchedulingAgreement,
+  getSchedulingAgreementForProvisioning as getSchedulingAgreement,
+} from '../src/modules/purchasing/scheduling-agreement';
 import {
   SchedulingAgreementScheduleError,
-  maintainDeliverySchedule,
+  maintainDeliveryScheduleForProvisioning as maintainDeliverySchedule,
 } from '../src/modules/purchasing/scheduling-agreement-schedule';
 import { openDeliveryScheduleDisplay } from '../src/modules/purchasing/scheduling-agreement-schedule-display';
 
 const ACTOR = 'SCHED_LINE_TEST';
+const viewer = async (client: string) => (await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: ['1000'] })).authorization;
+
 const clients: string[] = [];
 
 afterAll(async () => {
@@ -205,12 +211,12 @@ describe('delivery schedule', () => {
       lines: [{ deliveryDate: '2026-06-01', quantity: 2 }],
     });
     const before = await getSchedulingAgreement(client, saved.agreementNumber);
-    const refused = await openDeliveryScheduleDisplay(client, { agreement: saved.agreementNumber, quantity: '9' });
+    const refused = await openDeliveryScheduleDisplay(client, { agreement: saved.agreementNumber, quantity: '9' }, await viewer(client));
     expect(refused.refusal?.message).toMatch(/quantity change/i);
     expect(refused.document).toBeNull();
-    const opened = await openDeliveryScheduleDisplay(client, { agreement: saved.agreementNumber, item: '10' });
+    const opened = await openDeliveryScheduleDisplay(client, { agreement: saved.agreementNumber, item: '10' }, await viewer(client));
     expect(opened.document?.scheduleLines[0].quantity).toBe('2.000');
-    const hidden = await openDeliveryScheduleDisplay(other, { agreement: saved.agreementNumber });
+    const hidden = await openDeliveryScheduleDisplay(other, { agreement: saved.agreementNumber }, await viewer(other));
     expect(hidden.document).toBeNull();
     const after = await getSchedulingAgreement(client, saved.agreementNumber);
     expect(after?.scheduleLines[0].quantity).toBe(before?.scheduleLines[0].quantity);

@@ -31,9 +31,9 @@ import {
 import {
   saveReleaseGroup, saveReleaseStrategy, setReleaseStrategyStatus,
 } from '../../modules/foundation/release-strategy-definition';
-import { createPurchaseContract } from '../../modules/purchasing/contract';
+import { createPurchaseContractForProvisioning as createPurchaseContract } from '../../modules/purchasing/contract';
 import { createRequisitionForProvisioning as createRequisition } from '../../modules/purchasing/requisitions';
-import { createSchedulingAgreement } from '../../modules/purchasing/scheduling-agreement';
+import { createSchedulingAgreementForProvisioning as createSchedulingAgreement } from '../../modules/purchasing/scheduling-agreement';
 import { documentRelease, purchaseContract, purchaseOrder, purchaseRequisitionItem, schedulingAgreement } from '../../modules/purchasing/schema';
 import {
   getDocumentRelease, orderAttributes, releaseDocumentForProvisioning as releaseDocument, syncDocumentRelease,

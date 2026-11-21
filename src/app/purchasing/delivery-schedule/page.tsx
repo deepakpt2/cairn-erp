@@ -35,7 +35,7 @@ export default async function DeliverySchedulePage({ searchParams }: {
   const agreement = last(raw.agreement);
   const itemText = last(raw.item);
   const itemNumber = itemText ? Number(itemText) : undefined;
-  const document = agreement ? await readDeliverySchedule(session.user.client, agreement, itemNumber) : null;
+  const document = agreement ? await readDeliverySchedule(session.user.client, agreement, itemNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : null;
   const selectedItem = itemNumber && document?.items.some((item) => item.itemNumber === itemNumber)
     ? itemNumber
     : document?.items.length === 1 ? document.items[0].itemNumber : undefined;

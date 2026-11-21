@@ -4,17 +4,20 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { closeDb, createTenant, destroyTenant } from './helpers';
+import { FINANCE_ACTOR_CAPABILITIES, createFinanceActor } from './helpers/finance-actor';
 import { releaseDocumentForProvisioning as releaseDocument } from '../src/modules/purchasing/release';
-import { createSchedulingAgreement } from '../src/modules/purchasing/scheduling-agreement';
-import { maintainDeliverySchedule } from '../src/modules/purchasing/scheduling-agreement-schedule';
+import { createSchedulingAgreementForProvisioning as createSchedulingAgreement } from '../src/modules/purchasing/scheduling-agreement';
+import { maintainDeliveryScheduleForProvisioning as maintainDeliverySchedule } from '../src/modules/purchasing/scheduling-agreement-schedule';
 import {
-  assignReleaseProfile,
-  createSchedulingAgreementReleases,
+  assignReleaseProfileForProvisioning as assignReleaseProfile,
+  createSchedulingAgreementReleasesForProvisioning as createSchedulingAgreementReleases,
   listSchedulingAgreementReleases,
-  saveReleaseProfile,
+  saveReleaseProfileForProvisioning as saveReleaseProfile,
 } from '../src/modules/purchasing/scheduling-agreement-release';
 
 const ACTOR = 'SA_RELEASE_TEST';
+const viewer = async (client: string) => (await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: ['1000'] })).authorization;
+
 const clients: string[] = [];
 
 afterAll(async () => {
@@ -123,7 +126,7 @@ describe('scheduling agreement release', () => {
     expect(run.created[0].transmissionStatus).toBe('NOT_TRANSMITTED');
     expect(run.created[0].releasedQuantity).toBe('4.000');
     expect(run.created[0].transmissionDetail).toMatch(/not notified/i);
-    const history = await listSchedulingAgreementReleases(client, saved.agreementNumber);
+    const history = await listSchedulingAgreementReleases(client, saved.agreementNumber, await viewer(client));
     expect(history[0].lines).toEqual([{ lineNumber: 1, deliveryDate: '2026-11-15', quantity: '4.000', unit: 'PC' }]);
     const again = await createSchedulingAgreementReleases({
       client, changedBy: ACTOR, agreementFrom: saved.agreementNumber, releaseTypes: ['FRC'], generationDate: '2026-11-01',
@@ -154,7 +157,7 @@ describe('scheduling agreement release', () => {
     });
     expect(run.created).toEqual([]);
     expect(run.skipped[0].reason).toMatch(/does not use release documentation/);
-    expect(await listSchedulingAgreementReleases(client, saved.agreementNumber)).toEqual([]);
+    expect(await listSchedulingAgreementReleases(client, saved.agreementNumber, await viewer(client))).toEqual([]);
   });
 
   it('skips JIT until the item and the material plant both allow it', async () => {
@@ -217,7 +220,7 @@ describe('scheduling agreement release', () => {
       generationDate: '2026-11-01', profileCode: 'WK01',
     });
     expect(first.created[0].releasedQuantity).toBe('10.000');
-    const [line] = (await listSchedulingAgreementReleases(client, saved.agreementNumber))[0].lines;
+    const [line] = (await listSchedulingAgreementReleases(client, saved.agreementNumber, await viewer(client)))[0].lines;
     expect(line.deliveryDate).toBe('2026-11-02');
     expect(line.quantity).toBe('10.000');
     await maintainDeliverySchedule({
@@ -239,7 +242,7 @@ describe('scheduling agreement release', () => {
       generationDate: '2026-11-01', profileCode: 'WK01',
     });
     expect(beyond.created).toHaveLength(1);
-    const history = await listSchedulingAgreementReleases(client, saved.agreementNumber);
+    const history = await listSchedulingAgreementReleases(client, saved.agreementNumber, await viewer(client));
     const original = history.find((row) => row.releaseNumber === first.created[0].releaseNumber);
     expect(original?.lines[0].quantity).toBe('10.000');
     expect(original?.releasedQuantity).toBe('10.000');
@@ -256,7 +259,7 @@ describe('scheduling agreement release', () => {
       client, changedBy: ACTOR, agreementFrom: '5500000099', releaseTypes: ['FRC'], generationDate: '2026-11-01',
     });
     expect(missing.skipped[0].reason).toMatch(/does not exist/);
-    expect(await listSchedulingAgreementReleases(other, saved.agreementNumber)).toEqual([]);
+    expect(await listSchedulingAgreementReleases(other, saved.agreementNumber, await viewer(other))).toEqual([]);
   });
 
   it('does not create a release while approval is pending, and a repeated request does not duplicate', async () => {

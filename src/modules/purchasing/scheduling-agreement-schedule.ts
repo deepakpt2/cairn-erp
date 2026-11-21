@@ -8,6 +8,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
@@ -17,6 +18,7 @@ import {
   SCHEDULING_AGREEMENT_OBJECT_CLASS,
   getSchedulingAgreement,
 } from './scheduling-agreement';
+import { purchasingActor, purchasingDocumentInReach } from './scope';
 import {
   schedulingAgreement,
   schedulingAgreementItem,
@@ -90,15 +92,32 @@ function snapshot(rows: Array<{
   return result;
 }
 
+type ScheduleMode = { scoped: true; authorization: ServiceAuthorityContext | undefined } | { scoped: false };
+
+/** Maintain schedule lines under the session's authority (capability, company, purchasing org and group). */
 export async function maintainDeliverySchedule(
+  raw: MaintainScheduleInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<{ agreementNumber: string; itemNumber: number }> {
+  const { authorization, ...rest } = raw;
+  return maintainScheduleImpl(rest, { scoped: true, authorization });
+}
+
+/** Fixtures only; never imported from `src/app`. */
+export async function maintainDeliveryScheduleForProvisioning(
   raw: MaintainScheduleInput,
+): Promise<{ agreementNumber: string; itemNumber: number }> {
+  return maintainScheduleImpl(raw, { scoped: false });
+}
+
+async function maintainScheduleImpl(
+  raw: MaintainScheduleInput, mode: ScheduleMode,
 ): Promise<{ agreementNumber: string; itemNumber: number }> {
   const parsed = maintainInput.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new SchedulingAgreementScheduleError(`${issue.path.join('.') || 'schedule'}: ${issue.message}`);
   }
-  const input = parsed.data;
+  let input = parsed.data;
   const seen = new Set<number>();
   for (const line of input.lines) {
     calendarDate(line.deliveryDate);
@@ -114,6 +133,17 @@ export async function maintainDeliverySchedule(
       eq(schedulingAgreement.client, input.client),
       eq(schedulingAgreement.agreementNumber, input.agreementNumber),
     ));
+    if (mode.scoped) {
+      const actor = await purchasingActor(
+        tx, input.client, mode.authorization, [SCHEDULE_MAINTAIN_CAPABILITY],
+        (message, remedy) => new SchedulingAgreementScheduleError(message, remedy),
+      );
+      // An agreement outside the reach answers exactly as one that does not exist.
+      if (!header || !(await purchasingDocumentInReach(tx, input.client, actor, header))) {
+        throw new SchedulingAgreementScheduleError(`Scheduling agreement ${input.agreementNumber} does not exist.`);
+      }
+      input = { ...input, changedBy: actor.username };
+    }
     if (!header) throw new SchedulingAgreementScheduleError(`Scheduling agreement ${input.agreementNumber} does not exist.`);
     const [partner] = await tx.select().from(businessPartner).where(and(
       eq(businessPartner.client, input.client),
@@ -236,8 +266,10 @@ export async function maintainDeliverySchedule(
   return { agreementNumber: input.agreementNumber, itemNumber: input.itemNumber };
 }
 
-export async function readDeliverySchedule(client: string, agreementNumber: string, itemNumber?: number) {
-  const document = await getSchedulingAgreement(client, agreementNumber);
+export async function readDeliverySchedule(
+  client: string, agreementNumber: string, itemNumber: number | undefined, authorization: ServiceAuthorityContext | undefined,
+) {
+  const document = await getSchedulingAgreement(client, agreementNumber, authorization);
   if (!document) return null;
   if (itemNumber == null) return document;
   return {

@@ -55,11 +55,11 @@ export async function saveContractAction(
         lockObject: 'PURCHASE_CONTRACT',
         argument: payload.contractNumber,
       });
-      const saved = await changePurchaseContract({ ...input, contractNumber: payload.contractNumber });
+      const saved = await changePurchaseContract({ ...input, contractNumber: payload.contractNumber, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
       revalidatePath(ROUTE);
       return { ok: true, contractNumber: saved.contractNumber, warnings: saved.warnings, message: `Contract ${saved.contractNumber} was changed. Stock and accounting were not posted.` };
     }
-    const saved = await createPurchaseContract(input);
+    const saved = await createPurchaseContract({ ...input, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return { ok: true, contractNumber: saved.contractNumber, warnings: saved.warnings, message: `Contract ${saved.contractNumber} was created. Stock and accounting were not posted.` };
   } catch (error) {

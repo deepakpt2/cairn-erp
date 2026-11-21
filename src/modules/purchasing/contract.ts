@@ -36,6 +36,8 @@ import { glAccount } from '../finance/schema';
 import { material, materialDocumentLine, movementType } from '../inventory/schema';
 import { convertMoney, FollowOnError } from './follow-on';
 import { resolvePurchasingInfoRecord } from './info-record';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { companyInScope, purchasingActor, purchasingDocumentInReach, purchasingLevelsAllow } from './scope';
 import {
   ReleaseError,
   assertDocumentNotReleased,
@@ -750,23 +752,56 @@ async function copySourceItems(
   }));
 }
 
+const refuseContract = (message: string, remedy?: string) => new PurchaseContractError(message, remedy);
+const CONTRACT_READ_CAPABILITIES = [CONTRACT_DISPLAY_CAPABILITY, CONTRACT_LIST_CAPABILITY, CONTRACT_MAINTAIN_CAPABILITY] as const;
+
+/** Create under the session's authority: capability, company, purchasing org and group are judged in the service's own tx. */
 export async function createPurchaseContract(
+  raw: CreateContractInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<{ contractNumber: string; warnings: string[] }> {
+  const { authorization, ...rest } = raw;
+  return createContractImpl(rest, { scoped: true, authorization });
+}
+
+/** Seeding, demo and fixtures only; never imported from `src/app`. */
+export async function createPurchaseContractForProvisioning(
   raw: CreateContractInput,
+): Promise<{ contractNumber: string; warnings: string[] }> {
+  return createContractImpl(raw, { scoped: false });
+}
+
+type ContractMode = { scoped: true; authorization: ServiceAuthorityContext | undefined } | { scoped: false };
+
+async function createContractImpl(
+  raw: CreateContractInput, mode: ContractMode,
 ): Promise<{ contractNumber: string; warnings: string[] }> {
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new PurchaseContractError(`${issue.path.join('.')}: ${issue.message}`);
   }
-  const input = parsed.data;
+  let input = parsed.data;
   const warnings: string[] = [];
   const contractNumber = await withTenant(input.client, async (tx) => {
+    if (mode.scoped) {
+      const actor = await purchasingActor(tx, input.client, mode.authorization, [CONTRACT_MAINTAIN_CAPABILITY], refuseContract);
+      if (!(await purchasingDocumentInReach(tx, input.client, actor, input))) {
+        throw refuseContract('The company, purchasing organisation or purchasing group is outside your access.', 'Name one inside your access.');
+      }
+      input = { ...input, changedBy: actor.username };
+    }
     if (input.requestKey) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/purchase_contract/request/${input.requestKey}`}, 0))`);
       const [existing] = await tx.select().from(purchaseContract).where(and(
         eq(purchaseContract.client, input.client), eq(purchaseContract.requestKey, input.requestKey),
       ));
-      if (existing) return existing.contractNumber;
+      if (existing) {
+        // A replayed key that points at a contract outside the reach answers as a key never seen.
+        if (mode.scoped && !(await purchasingDocumentInReach(tx, input.client, await purchasingActor(tx, input.client, mode.authorization, [CONTRACT_MAINTAIN_CAPABILITY], refuseContract), existing))) {
+          throw refuseContract('The request key belongs to a document outside your access.', 'Use a new request key.');
+        }
+        return existing.contractNumber;
+      }
     }
     const type = await loadType(tx, input.client, input.documentType);
     const agreementDate = input.agreementDate ?? await businessDate(tx, input.client);
@@ -872,7 +907,21 @@ export async function createPurchaseContract(
 }
 
 export async function changePurchaseContract(
+  raw: CreateContractInput & { contractNumber: string; authorization: ServiceAuthorityContext | undefined },
+): Promise<{ contractNumber: string; warnings: string[] }> {
+  const { authorization, ...rest } = raw;
+  return changeContractImpl(rest, { scoped: true, authorization });
+}
+
+/** Fixtures only, as `createPurchaseContractForProvisioning`. */
+export async function changePurchaseContractForProvisioning(
   raw: CreateContractInput & { contractNumber: string },
+): Promise<{ contractNumber: string; warnings: string[] }> {
+  return changeContractImpl(raw, { scoped: false });
+}
+
+async function changeContractImpl(
+  raw: CreateContractInput & { contractNumber: string }, mode: ContractMode,
 ): Promise<{ contractNumber: string; warnings: string[] }> {
   const { contractNumber: suppliedNumber, ...document } = raw;
   const parsed = documentInput.safeParse(document);
@@ -880,11 +929,25 @@ export async function changePurchaseContract(
     const issue = parsed.error.issues[0];
     throw new PurchaseContractError(`${issue.path.join('.')}: ${issue.message}`);
   }
-  const input = parsed.data;
+  let input = parsed.data;
   const number = suppliedNumber.trim();
   if (!number) throw new PurchaseContractError('A contract number is required.');
   const warnings: string[] = [];
   await withTenant(input.client, async (tx) => {
+    if (mode.scoped) {
+      const actor = await purchasingActor(tx, input.client, mode.authorization, [CONTRACT_MAINTAIN_CAPABILITY], refuseContract);
+      const [stored] = await tx.select().from(purchaseContract).where(and(
+        eq(purchaseContract.client, input.client), eq(purchaseContract.contractNumber, number),
+      ));
+      // A stored contract outside the reach answers exactly as one that does not exist, before the request is judged.
+      if (!stored || !(await purchasingDocumentInReach(tx, input.client, actor, stored))) {
+        throw refuseContract(`Contract ${number} does not exist.`);
+      }
+      if (!(await purchasingDocumentInReach(tx, input.client, actor, input))) {
+        throw refuseContract('The company, purchasing organisation or purchasing group is outside your access.', 'Name one inside your access.');
+      }
+      input = { ...input, changedBy: actor.username };
+    }
     await lockContract(tx, input.client, number);
     try {
       await assertDocumentNotReleased(tx, input.client, CONTRACT_CATEGORY, number, 'Purchase contract');
@@ -1098,12 +1161,25 @@ async function movementTotals(
   return { goods, invoices };
 }
 
-export async function getPurchaseContract(client: string, contractNumber: string): Promise<ContractDocument | null> {
+export async function getPurchaseContract(
+  client: string, contractNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<ContractDocument | null> {
+  return readContract(client, contractNumber, { scoped: true, authorization });
+}
+
+/** Unscoped read for seeding, demo and tests; never imported from `src/app`. */
+export async function getPurchaseContractForProvisioning(client: string, contractNumber: string): Promise<ContractDocument | null> {
+  return readContract(client, contractNumber, { scoped: false });
+}
+
+async function readContract(client: string, contractNumber: string, mode: ContractMode): Promise<ContractDocument | null> {
   return withTenant(client, async (tx) => {
+    const actor = mode.scoped ? await purchasingActor(tx, client, mode.authorization, CONTRACT_READ_CAPABILITIES, refuseContract) : null;
     const [header] = await tx.select().from(purchaseContract).where(and(
       eq(purchaseContract.client, client), eq(purchaseContract.contractNumber, contractNumber),
     ));
     if (!header) return null;
+    if (actor && !(await purchasingDocumentInReach(tx, client, actor, header))) return null;
     const items = await tx.select().from(purchaseContractItem).where(and(
       eq(purchaseContractItem.client, client), eq(purchaseContractItem.contractNumber, contractNumber),
     )).orderBy(asc(purchaseContractItem.itemNumber));
@@ -1169,7 +1245,7 @@ export async function getPurchaseContract(client: string, contractNumber: string
   });
 }
 
-export async function contractChoices(client: string): Promise<{
+export async function contractChoices(client: string, authorization: ServiceAuthorityContext | undefined): Promise<{
   types: Array<{ documentType: string; description: string; category: string }>;
   suppliers: Array<{ partnerNumber: string; name: string }>;
   organizations: Array<{ purchasingOrg: string; name: string }>;
@@ -1178,6 +1254,7 @@ export async function contractChoices(client: string): Promise<{
   plants: Array<{ plant: string; name: string }>;
 }> {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, CONTRACT_READ_CAPABILITIES, refuseContract);
     const [types, suppliers, organizations, groups, companies, plants] = await Promise.all([
       tx.select().from(purchasingContractType).where(and(
         eq(purchasingContractType.client, client), eq(purchasingContractType.isActive, true),
@@ -1188,23 +1265,31 @@ export async function contractChoices(client: string): Promise<{
       tx.select().from(companyCode).where(eq(companyCode.client, client)).orderBy(asc(companyCode.companyCode)),
       tx.select().from(plant).where(eq(plant.client, client)).orderBy(asc(plant.plant)),
     ]);
+    const readableCompanies = new Set<string>();
+    for (const row of companies) if (await companyInScope(tx, client, actor, row.companyCode)) readableCompanies.add(row.companyCode);
     return {
       types: types.map((row) => ({ documentType: row.documentType, description: row.description, category: row.category })),
       suppliers: suppliers.map((row) => ({ partnerNumber: row.partnerNumber, name: row.name })),
-      organizations: organizations.map((row) => ({ purchasingOrg: row.purchasingOrg, name: row.name })),
-      groups: groups.map((row) => ({ purchasingGroup: row.purchasingGroup, name: row.name })),
-      companies: companies.map((row) => ({ companyCode: row.companyCode, name: row.name })),
-      plants: plants.map((row) => ({ plant: row.plant, name: row.name })),
+      organizations: organizations.filter((row) => purchasingLevelsAllow(actor, { purchasingOrg: row.purchasingOrg }))
+        .map((row) => ({ purchasingOrg: row.purchasingOrg, name: row.name })),
+      groups: groups.filter((row) => purchasingLevelsAllow(actor, { purchasingGroup: row.purchasingGroup }))
+        .map((row) => ({ purchasingGroup: row.purchasingGroup, name: row.name })),
+      companies: companies.filter((row) => readableCompanies.has(row.companyCode)).map((row) => ({ companyCode: row.companyCode, name: row.name })),
+      plants: plants.filter((row) => row.companyCode && readableCompanies.has(row.companyCode)).map((row) => ({ plant: row.plant, name: row.name })),
     };
   });
 }
 
-export async function listPurchaseContracts(client: string): Promise<ContractListRow[]> {
+export async function listPurchaseContracts(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<ContractListRow[]> {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, CONTRACT_READ_CAPABILITIES, refuseContract);
     const headers = await tx.select().from(purchaseContract).where(eq(purchaseContract.client, client))
       .orderBy(asc(purchaseContract.contractNumber));
     const rows: ContractListRow[] = [];
     for (const header of headers) {
+      if (!(await purchasingDocumentInReach(tx, client, actor, header))) continue;
       const usage = await calledOff(tx, client, header.contractNumber);
       const calledValue = [...usage.values()].reduce((sum, row) => sum + row.value, 0);
       const release = await releaseStatus(tx, client, header.contractNumber);

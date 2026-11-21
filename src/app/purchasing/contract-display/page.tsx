@@ -50,7 +50,7 @@ export default async function PurchaseContractDisplayPage({ searchParams }: {
     items: last(raw.items),
     changedBy: last(raw.changedBy),
   };
-  const opened = await openPurchaseContractDisplay(session.user.client, params);
+  const opened = await openPurchaseContractDisplay(session.user.client, params, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
   const document = opened.document;
   const canChange = can(session, CONTRACT_MAINTAIN_CAPABILITY);
 

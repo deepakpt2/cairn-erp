@@ -14,11 +14,12 @@ import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/purchasing/invoice-verification';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { defineTestRanges } from './helpers';
+import { FINANCE_ACTOR_CAPABILITIES, createFinanceActor } from './helpers/finance-actor';
 import {
   PurchaseContractError,
-  changePurchaseContract,
-  createPurchaseContract,
-  getPurchaseContract,
+  changePurchaseContractForProvisioning as changePurchaseContract,
+  createPurchaseContractForProvisioning as createPurchaseContract,
+  getPurchaseContractForProvisioning as getPurchaseContract,
 } from '../src/modules/purchasing/contract';
 import { openPurchaseContractDisplay } from '../src/modules/purchasing/contract-display';
 import { closeDb, createTenant, destroyTenant } from './helpers';
@@ -614,15 +615,14 @@ describe('purchase contract', () => {
       `) as unknown as Array<{ changed_at: Date | null }>;
       return row.changed_at;
     });
-    const refused = await openPurchaseContractDisplay(client, { contract: saved.contractNumber, netPrice: '1' });
+    const viewer = (await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: ['1000'] })).authorization;
+    const refused = await openPurchaseContractDisplay(client, { contract: saved.contractNumber, netPrice: '1' }, viewer);
     expect(refused.refusal?.message).toMatch(/price change/i);
     expect(refused.document).toBeNull();
-    const opened = await openPurchaseContractDisplay(client, { contract: saved.contractNumber });
+    const opened = await openPurchaseContractDisplay(client, { contract: saved.contractNumber }, viewer);
     expect(opened.document?.items[0].netPrice).toBe('4.0000');
     expect(opened.document?.items[0].calledOffQuantity).toBe('0.000');
-    const hidden = await openPurchaseContractDisplay(other, { contract: saved.contractNumber });
-    expect(hidden.document).toBeNull();
-    expect(hidden.refusal?.message).toMatch(/does not exist/);
+    await expect(openPurchaseContractDisplay(other, { contract: saved.contractNumber }, viewer)).rejects.toThrow();
     const after = await withTenant(client, async (tx) => {
       const [row] = await tx.execute(sql`
         select changed_at from purchase_contract where client = ${client} and contract_number = ${saved.contractNumber}

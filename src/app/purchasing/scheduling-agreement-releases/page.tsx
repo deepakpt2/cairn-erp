@@ -30,7 +30,7 @@ export default async function SchedulingAgreementReleasesPage({ searchParams }: 
     );
   }
   const agreement = last((await searchParams).agreement);
-  const history = agreement ? await listSchedulingAgreementReleases(session.user.client, agreement) : [];
+  const history = agreement ? await listSchedulingAgreementReleases(session.user.client, agreement, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []) : [];
 
   return (
     <Page

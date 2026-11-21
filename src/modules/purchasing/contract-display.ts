@@ -5,6 +5,7 @@
  * change lock, and does not release, reprice, or send output. The figures
  * come from the same reader as the contract itself.
  */
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { changeHistory } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
 import {
@@ -76,6 +77,7 @@ function when(value: Date | string | null | undefined): string {
 export async function openPurchaseContractDisplay(
   client: string,
   params: Record<string, string>,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<{
   refusal: { message: string; remedy?: string } | null;
   document: ContractDocument | null;
@@ -87,7 +89,7 @@ export async function openPurchaseContractDisplay(
     const number = params.contract?.trim() ?? '';
     if (number.length > 20) fail('The contract number is too long.');
     if (!number) {
-      const listed = await listPurchaseContracts(client);
+      const listed = await listPurchaseContracts(client, authorization);
       const supplier = params.supplier?.trim().toUpperCase() ?? '';
       const type = params.documentType?.trim().toUpperCase() ?? '';
       const rows = listed.filter((row) => (
@@ -96,7 +98,7 @@ export async function openPurchaseContractDisplay(
       )).slice(0, 20);
       return { refusal: null, document: null, history: [], rows };
     }
-    const document = await getPurchaseContract(client, number);
+    const document = await getPurchaseContract(client, number, authorization);
     if (!document) {
       return {
         refusal: { message: `Contract ${number} does not exist.`, remedy: 'Choose a contract that stands in this client.' },

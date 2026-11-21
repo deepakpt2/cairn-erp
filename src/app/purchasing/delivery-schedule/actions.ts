@@ -46,6 +46,7 @@ export async function saveDeliveryScheduleAction(
       ...payload,
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(SCHEDULE_ROUTE);
     return {

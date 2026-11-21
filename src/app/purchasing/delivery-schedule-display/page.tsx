@@ -46,7 +46,7 @@ export default async function DeliveryScheduleDisplayPage({ searchParams }: {
     mrp: last(raw.mrp),
     stock: last(raw.stock),
   };
-  const opened = await openDeliveryScheduleDisplay(session.user.client, params);
+  const opened = await openDeliveryScheduleDisplay(session.user.client, params, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
   const document = opened.document;
   const canChange = can(session, SCHEDULE_MAINTAIN_CAPABILITY);
 

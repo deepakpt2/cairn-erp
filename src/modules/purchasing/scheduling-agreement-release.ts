@@ -11,6 +11,7 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
@@ -19,6 +20,7 @@ import { numberRange } from '../../platform/tables/numbering';
 import { businessPartner } from '../foundation/business-partner-schema';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { materialPlant } from '../inventory/schema';
+import { purchasingActor, purchasingDocumentInReach } from './scope';
 import {
   documentRelease,
   schedulingAgreement,
@@ -194,7 +196,8 @@ async function businessDate(tx: Tx): Promise<string> {
   return row?.today ?? new Date().toISOString().slice(0, 10);
 }
 
-export async function saveReleaseProfile(raw: z.input<typeof profileInput>): Promise<void> {
+/** Profile set-up has no screen: it serves seeding and fixtures only and is never imported from `src/app`. */
+export async function saveReleaseProfileForProvisioning(raw: z.input<typeof profileInput>): Promise<void> {
   const parsed = profileInput.safeParse(raw);
   if (!parsed.success) throw new SchedulingAgreementReleaseError(parsed.error.issues[0].message);
   const input = parsed.data;
@@ -228,7 +231,8 @@ export async function saveReleaseProfile(raw: z.input<typeof profileInput>): Pro
   });
 }
 
-export async function assignReleaseProfile(raw: z.input<typeof assignmentInput>): Promise<void> {
+/** See `saveReleaseProfileForProvisioning`. */
+export async function assignReleaseProfileForProvisioning(raw: z.input<typeof assignmentInput>): Promise<void> {
   const parsed = assignmentInput.safeParse(raw);
   if (!parsed.success) throw new SchedulingAgreementReleaseError(parsed.error.issues[0].message);
   const input = parsed.data;
@@ -546,10 +550,34 @@ async function generateItem(
   });
 }
 
-export async function createSchedulingAgreementReleases(raw: CreateSchedulingReleasesInput): Promise<ReleaseRunResult> {
+const refuseRelease = (message: string, remedy?: string) => new SchedulingAgreementReleaseError(message, remedy);
+type ReleaseMode = { scoped: true; authorization: ServiceAuthorityContext | undefined } | { scoped: false };
+
+/** Release run under the session's authority: capability, company, purchasing org and group per agreement. */
+export async function createSchedulingAgreementReleases(
+  raw: CreateSchedulingReleasesInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<ReleaseRunResult> {
+  const { authorization, ...rest } = raw;
+  return createReleasesImpl(rest, { scoped: true, authorization });
+}
+
+/** Fixtures only; never imported from `src/app`. */
+export async function createSchedulingAgreementReleasesForProvisioning(raw: CreateSchedulingReleasesInput): Promise<ReleaseRunResult> {
+  return createReleasesImpl(raw, { scoped: false });
+}
+
+async function createReleasesImpl(raw: CreateSchedulingReleasesInput, mode: ReleaseMode): Promise<ReleaseRunResult> {
   const parsed = selectionInput.safeParse(raw);
   if (!parsed.success) throw new SchedulingAgreementReleaseError(parsed.error.issues[0].message);
-  const input = parsed.data;
+  let input = parsed.data;
+  let actor: Awaited<ReturnType<typeof purchasingActor>> | null = null;
+  if (mode.scoped) {
+    // Session, capability and company scope are judged before anything is read or numbered.
+    actor = await withTenant(input.client, (tx) => (
+      purchasingActor(tx, input.client, mode.authorization, [RELEASE_CREATE_CAPABILITY], refuseRelease)
+    ));
+    input = { ...input, changedBy: actor.username };
+  }
   if (!input.agreementFrom && !input.supplierNumber && !input.purchasingOrg && !input.plant) {
     throw new SchedulingAgreementReleaseError('Enter an agreement, a supplier, a purchasing organization, or a plant.');
   }
@@ -567,15 +595,25 @@ export async function createSchedulingAgreementReleases(raw: CreateSchedulingRel
     if (input.supplierNumber) conditions.push(eq(schedulingAgreement.supplierNumber, input.supplierNumber));
     if (input.purchasingOrg) conditions.push(eq(schedulingAgreement.purchasingOrg, input.purchasingOrg));
     if (input.purchasingGroup) conditions.push(eq(schedulingAgreement.purchasingGroup, input.purchasingGroup));
-    return tx.select().from(schedulingAgreement).where(and(...conditions)).orderBy(asc(schedulingAgreement.agreementNumber));
+    const rows = await tx.select().from(schedulingAgreement).where(and(...conditions)).orderBy(asc(schedulingAgreement.agreementNumber));
+    if (!actor) return { rows, all: rows };
+    const inReach: typeof rows = [];
+    for (const row of rows) if (await purchasingDocumentInReach(tx, input.client, actor, row)) inReach.push(row);
+    return { rows: inReach, all: rows };
   });
   const from = input.agreementFrom;
   const to = input.agreementTo || input.agreementFrom;
-  const selected = agreements.filter((row) => {
-    if (from && row.agreementNumber < from) return false;
-    if (to && row.agreementNumber > to) return false;
-    return true;
-  });
+  const inSelection = (row: { agreementNumber: string }) => !((from && row.agreementNumber < from) || (to && row.agreementNumber > to));
+  const selected = agreements.rows.filter(inSelection);
+  // A selection that reaches an agreement outside the actor's access is refused as a whole, never trimmed; a single
+  // named agreement outside the reach answers as one that does not exist.
+  const outsideSelected = agreements.all.filter((row) => inSelection(row) && !agreements.rows.includes(row)).length;
+  if (outsideSelected > 0 && !(from && from === to)) {
+    throw refuseRelease(
+      'The selection includes agreements outside your access, so it cannot run as a whole.',
+      'Narrow the selection to agreements inside your company, purchasing organisation and purchasing group access.',
+    );
+  }
   if (from && from === to && selected.length === 0) {
     result.skipped.push({ agreementNumber: from, itemNumber: null, releaseType: null, reason: `Scheduling agreement ${from} does not exist.` });
     return result;
@@ -623,8 +661,15 @@ export async function createSchedulingAgreementReleases(raw: CreateSchedulingRel
   return result;
 }
 
-export async function listSchedulingAgreementReleases(client: string, agreementNumber: string) {
+export async function listSchedulingAgreementReleases(
+  client: string, agreementNumber: string, authorization: ServiceAuthorityContext | undefined,
+) {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [RELEASE_CREATE_CAPABILITY], refuseRelease);
+    const [agreement] = await tx.select().from(schedulingAgreement).where(and(
+      eq(schedulingAgreement.client, client), eq(schedulingAgreement.agreementNumber, agreementNumber.trim()),
+    ));
+    if (!agreement || !(await purchasingDocumentInReach(tx, client, actor, agreement))) return [];
     const headers = await tx.select().from(schedulingAgreementRelease).where(and(
       eq(schedulingAgreementRelease.client, client),
       eq(schedulingAgreementRelease.agreementNumber, agreementNumber.trim()),

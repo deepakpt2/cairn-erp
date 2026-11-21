@@ -126,3 +126,11 @@ export function purchasingLevelsSql(
   }
   return parts.length ? sql`(${sql.join(parts, sql` and `)})` : sql`true`;
 }
+
+/** A document of one company, purchasing org and purchasing group: company scope and the held levels together. */
+export async function purchasingDocumentInReach(
+  tx: Tx, client: string, actor: CompanyAuthority,
+  doc: { companyCode: string; purchasingOrg?: string | null; purchasingGroup?: string | null },
+): Promise<boolean> {
+  return (await companyInScope(tx, client, actor, doc.companyCode)) && purchasingLevelsAllow(actor, doc);
+}

@@ -27,6 +27,14 @@ import { changeRequisition, createRequisition, getRequisition, requisitionChoice
 import { listPurchaseRequisitions } from '../src/modules/purchasing/requisition-list';
 import { cancelDocumentRelease, getDocumentRelease, releaseDocument } from '../src/modules/purchasing/release';
 import { defineRange } from '../src/platform/numbering';
+import { changePurchaseContract, createPurchaseContract, contractChoices, getPurchaseContract, listPurchaseContracts } from '../src/modules/purchasing/contract';
+import { openPurchaseContractDisplay } from '../src/modules/purchasing/contract-display';
+import {
+  changeSchedulingAgreement, createSchedulingAgreement, getSchedulingAgreement, listSchedulingAgreements, schedulingAgreementChoices,
+} from '../src/modules/purchasing/scheduling-agreement';
+import { openSchedulingAgreementDisplay } from '../src/modules/purchasing/scheduling-agreement-display';
+import { maintainDeliverySchedule, readDeliverySchedule } from '../src/modules/purchasing/scheduling-agreement-schedule';
+import { createSchedulingAgreementReleases, listSchedulingAgreementReleases } from '../src/modules/purchasing/scheduling-agreement-release';
 import { saveCharacteristic } from '../src/modules/foundation/characteristic-definition';
 import { saveClass, setClassStatus } from '../src/modules/foundation/class-definition';
 import { saveReleaseGroup, saveReleaseStrategy, setReleaseStrategyStatus } from '../src/modules/foundation/release-strategy-definition';
@@ -578,6 +586,150 @@ describe('purchasing org and group scope', () => {
     const msg = await releaseDocument({ client, authorization: orgA.authorization, changedBy: 'X', documentCategory: 'PURCHASE_ORDER', documentNumber: orderOrg2000, releaseCode: 'MGR' } as never)
       .then(() => 'done', (e: Error) => e.message);
     expect(msg).toMatch(/needs no release/);
+  });
+});
+
+describe('contracts and scheduling agreements', () => {
+  const R = 'Scope contract setup';
+  let orgOnly: FinanceActor;
+  let groupOnly: FinanceActor;
+  const header = (company: string, extra: Record<string, unknown> = {}) => ({
+    documentType: 'Q1', supplierNumber: 'V10000', purchasingOrg: company === A ? '1000' : '2000', purchasingGroup: '001',
+    companyCode: company, currency: 'USD', validityStart: '2026-01-01', validityEnd: '2026-12-31', ...extra,
+  });
+  const cItems = [{ shortText: 'Steel', targetQuantity: 10, unit: 'PC', netPrice: 5 }];
+  const sItems = (plant: string) => [{ shortText: 'Steel', targetQuantity: 100, unit: 'PC', netPrice: 5, plant }];
+  const createdBy = (table: string, keyColumn: string, key: string) => withTenant(client, async (tx) =>
+    ((await tx.execute(sql.raw(`select created_by from ${table} where client = '${client}' and ${keyColumn} = '${key}'`))) as unknown as Array<{ created_by: string }>)[0]?.created_by);
+  const bad = () => [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization];
+  let contractA = '';
+  let contractB = '';
+  let agreementA = '';
+  let agreementB = '';
+
+  beforeAll(async () => {
+    await withTenant(client, async (tx) => {
+      await defineRange(tx, { client, objectCode: 'PURCHCONT', subObject: '*', prefix: '46', numberLength: 10, createdBy: R });
+      await defineRange(tx, { client, objectCode: 'SCHEDAGREE', subObject: '*', prefix: '55', numberLength: 10, createdBy: R });
+      await defineRange(tx, { client, objectCode: 'SARELEASE', subObject: '*', prefix: '58', numberLength: 10, createdBy: R });
+      await tx.execute(sql`insert into purchasing_org (client, purchasing_org, name, company_code, created_by) values (${client}, '1000', 'Org 1000', ${A}, ${R}), (${client}, '2000', 'Org 2000', ${B}, ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into purchasing_org_plant (client, purchasing_org, plant, created_by) values (${client}, '1000', 'PLA1', ${R}), (${client}, '2000', 'PLB1', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into bp_role (client, partner_number, role_code, created_by) values (${client}, 'V10000', 'SUPPLIER', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into supplier_purchasing_org (client, partner_number, role_code, purchasing_org, order_currency, created_by) values (${client}, 'V10000', 'SUPPLIER', '1000', 'USD', ${R}), (${client}, 'V10000', 'SUPPLIER', '2000', 'USD', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into purchasing_group (client, purchasing_group, name, created_by) values (${client}, '001', 'Group 001', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into purchasing_contract_type (client, document_type, description, category, created_by) values (${client}, 'Q1', 'Quantity contract', 'QUANTITY', ${R}) on conflict do nothing`);
+      await tx.execute(sql`insert into scheduling_agreement_type (client, document_type, description, category, created_by) values (${client}, 'LP', 'Scheduling agreement', 'SCHEDULING', ${R}) on conflict do nothing`);
+    });
+    orgOnly = await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: [A, B] });
+    groupOnly = await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: [A, B] });
+    await withTenant(client, async (tx) => {
+      await tx.insert(authOrgRestriction).values([
+        { id: randomUUID(), client, userId: orgOnly.userId, scopeType: 'PURCHASING_ORG', scopeValue: '1000', createdBy: R },
+        { id: randomUUID(), client, userId: groupOnly.userId, scopeType: 'PURCHASING_GROUP', scopeValue: '999', createdBy: R },
+      ]);
+    });
+    contractA = (await createPurchaseContract({ client, authorization: onlyA.authorization, changedBy: 'SPOOFED_NAME', ...header(A), items: cItems })).contractNumber;
+    contractB = (await createPurchaseContract({ client, authorization: onlyB.authorization, changedBy: 'SPOOFED_NAME', ...header(B), items: cItems })).contractNumber;
+    agreementA = (await createSchedulingAgreement({ client, authorization: onlyA.authorization, changedBy: 'SPOOFED_NAME', ...header(A, { documentType: 'LP' }), items: sItems('PLA1') })).agreementNumber;
+    agreementB = (await createSchedulingAgreement({ client, authorization: onlyB.authorization, changedBy: 'SPOOFED_NAME', ...header(B, { documentType: 'LP' }), items: sItems('PLB1') })).agreementNumber;
+  }, 240_000);
+
+  it('records the verified session user, never a supplied name', async () => {
+    expect(await createdBy('purchase_contract', 'contract_number', contractA)).toBe(onlyA.username);
+    expect(await createdBy('purchase_contract', 'contract_number', contractB)).toBe(onlyB.username);
+    expect(await createdBy('scheduling_agreement', 'agreement_number', agreementA)).toBe(onlyA.username);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant before anything is read or written', async () => {
+    const contracts = await count('purchase_contract');
+    const agreements = await count('scheduling_agreement');
+    for (const authorization of bad()) {
+      await refused(createPurchaseContract({ client, authorization, changedBy: 'X', ...header(A), items: cItems }));
+      await refused(getPurchaseContract(client, contractA, authorization));
+      await refused(listPurchaseContracts(client, authorization));
+      await refused(contractChoices(client, authorization));
+      await refused(createSchedulingAgreement({ client, authorization, changedBy: 'X', ...header(A, { documentType: 'LP' }), items: sItems('PLA1') }));
+      await refused(getSchedulingAgreement(client, agreementA, authorization));
+      await refused(listSchedulingAgreements(client, authorization));
+      await refused(schedulingAgreementChoices(client, authorization));
+      await refused(maintainDeliverySchedule({ client, authorization, changedBy: 'X', agreementNumber: agreementA, itemNumber: 10, lines: [{ deliveryDate: '2026-06-01', quantity: 1 }] } as never));
+      await refused(createSchedulingAgreementReleases({ client, authorization, changedBy: 'X', agreementFrom: agreementA, releaseTypes: ['FRC'] } as never));
+      await refused(listSchedulingAgreementReleases(client, agreementA, authorization));
+    }
+    expect(await count('purchase_contract')).toBe(contracts);
+    expect(await count('scheduling_agreement')).toBe(agreements);
+  });
+
+  it('refuses writing into another company, and answers a change of another company\'s document as a missing one', async () => {
+    const contracts = await count('purchase_contract');
+    const agreements = await count('scheduling_agreement');
+    await refused(createPurchaseContract({ client, authorization: onlyA.authorization, changedBy: 'X', ...header(B), items: cItems }), /outside your access/);
+    await refused(createSchedulingAgreement({ client, authorization: onlyA.authorization, changedBy: 'X', ...header(B, { documentType: 'LP' }), items: sItems('PLB1') }), /outside your access/);
+    const ask = (p: Promise<unknown>, n: string) => p.then(() => 'done', (e: Error) => e.message.replace(n, '#'));
+    expect(await ask(changePurchaseContract({ client, authorization: onlyA.authorization, changedBy: 'X', contractNumber: contractB, ...header(A), items: cItems } as never), contractB)).toMatch(/does not exist/);
+    expect(await ask(changeSchedulingAgreement({ client, authorization: onlyA.authorization, changedBy: 'X', agreementNumber: agreementB, ...header(A, { documentType: 'LP' }), items: sItems('PLA1') } as never), agreementB)).toMatch(/does not exist/);
+    expect(await ask(maintainDeliverySchedule({ client, authorization: onlyA.authorization, changedBy: 'X', agreementNumber: agreementB, itemNumber: 10, lines: [{ deliveryDate: '2026-06-01', quantity: 1 }] } as never), agreementB)).toMatch(/does not exist/);
+    expect(await count('purchase_contract')).toBe(contracts);
+    expect(await count('scheduling_agreement')).toBe(agreements);
+    expect(await count('scheduling_agreement_schedule_line')).toBe(0);
+  });
+
+  it('reads, lists, displays and offers choices only inside the scope; another company answers as missing', async () => {
+    expect((await getPurchaseContract(client, contractA, onlyA.authorization))?.contractNumber).toBe(contractA);
+    expect(await getPurchaseContract(client, contractB, onlyA.authorization)).toBeNull();
+    expect(await getSchedulingAgreement(client, agreementB, onlyA.authorization)).toBeNull();
+    expect((await listPurchaseContracts(client, onlyA.authorization)).map((r) => r.contractNumber)).toEqual(expect.arrayContaining([contractA]));
+    expect((await listPurchaseContracts(client, onlyA.authorization)).map((r) => r.contractNumber)).not.toContain(contractB);
+    expect((await listSchedulingAgreements(client, onlyA.authorization)).map((r) => r.agreementNumber)).not.toContain(agreementB);
+    expect((await openPurchaseContractDisplay(client, { contract: contractB }, onlyA.authorization)).document).toBeNull();
+    expect((await openSchedulingAgreementDisplay(client, { agreement: agreementB }, onlyA.authorization)).document).toBeNull();
+    expect(await readDeliverySchedule(client, agreementB, undefined, onlyA.authorization)).toBeNull();
+    expect(await listSchedulingAgreementReleases(client, agreementB, onlyA.authorization)).toEqual([]);
+    expect((await contractChoices(client, onlyA.authorization)).companies.map((c) => c.companyCode)).toEqual([A]);
+    expect((await schedulingAgreementChoices(client, onlyA.authorization)).companies.map((c) => c.companyCode)).toEqual([A]);
+  });
+
+  it('maintains a schedule only inside the scope and records the session user', async () => {
+    await maintainDeliverySchedule({ client, authorization: onlyA.authorization, changedBy: 'SPOOFED_NAME', agreementNumber: agreementA, itemNumber: 10, lines: [{ deliveryDate: '2026-06-01', quantity: 5 }] } as never);
+    const who = await withTenant(client, async (tx) =>
+      ((await tx.execute(sql`select created_by from scheduling_agreement_schedule_line where client = ${client} and agreement_number = ${agreementA}`)) as unknown as Array<{ created_by: string }>)[0]?.created_by);
+    expect(who).toBe(onlyA.username);
+  });
+
+  it('refuses a release run whose selection reaches another company as a whole, and a named one as missing', async () => {
+    const run = (a: FinanceActor, sel: Record<string, unknown>) => createSchedulingAgreementReleases({
+      client, authorization: a.authorization, changedBy: 'X', releaseTypes: ['FRC'], generationDate: '2026-06-02', ...sel,
+    } as never).then((r) => r, (e: Error) => e);
+    const wide = await run(onlyA, { supplierNumber: 'V10000' });
+    expect(wide).toBeInstanceOf(Error);
+    expect((wide as Error).message).toMatch(/outside your access/);
+    const named = await run(onlyA, { agreementFrom: agreementB });
+    expect(JSON.stringify(named)).toMatch(/does not exist/);
+    expect(await count('scheduling_agreement_release')).toBe(0);
+  });
+
+  it('judges purchasing org and group levels on contracts and agreements', async () => {
+    const before = await count('purchase_contract');
+    expect((await getPurchaseContract(client, contractA, orgOnly.authorization))?.contractNumber).toBe(contractA);
+    expect(await getPurchaseContract(client, contractB, orgOnly.authorization)).toBeNull();
+    expect(await getPurchaseContract(client, contractA, groupOnly.authorization)).toBeNull();
+    expect(await getSchedulingAgreement(client, agreementB, orgOnly.authorization)).toBeNull();
+    expect(await getSchedulingAgreement(client, agreementA, groupOnly.authorization)).toBeNull();
+    expect((await listSchedulingAgreements(client, groupOnly.authorization))).toEqual([]);
+    expect((await contractChoices(client, orgOnly.authorization)).organizations.map((o) => o.purchasingOrg)).toEqual(['1000']);
+    await refused(createPurchaseContract({ client, authorization: orgOnly.authorization, changedBy: 'X', ...header(B), items: cItems }), /outside your access/);
+    await refused(createPurchaseContract({ client, authorization: groupOnly.authorization, changedBy: 'X', ...header(A), items: cItems }), /outside your access/);
+    expect(await count('purchase_contract')).toBe(before);
+  });
+
+  it('answers a replayed request key that points at another company\'s document as refused, not as that document', async () => {
+    const key = `scope-replay-${randomUUID()}`;
+    const mine = await createPurchaseContract({ client, authorization: onlyB.authorization, changedBy: 'X', ...header(B), requestKey: key, items: cItems });
+    await refused(createPurchaseContract({ client, authorization: onlyA.authorization, changedBy: 'X', ...header(A), requestKey: key, items: cItems }), /outside your access/);
+    expect(mine.contractNumber).toBeTruthy();
+    const skey = `scope-replay-${randomUUID()}`;
+    await createSchedulingAgreement({ client, authorization: onlyB.authorization, changedBy: 'X', ...header(B, { documentType: 'LP' }), requestKey: skey, items: sItems('PLB1') });
+    await refused(createSchedulingAgreement({ client, authorization: onlyA.authorization, changedBy: 'X', ...header(A, { documentType: 'LP' }), requestKey: skey, items: sItems('PLA1') }), /outside your access/);
   });
 });
 

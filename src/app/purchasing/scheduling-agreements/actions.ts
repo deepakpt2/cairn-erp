@@ -56,7 +56,7 @@ export async function saveSchedulingAgreementAction(
         lockObject: 'SCHEDULING_AGREEMENT',
         argument: payload.agreementNumber,
       });
-      const saved = await changeSchedulingAgreement({ ...input, agreementNumber: payload.agreementNumber });
+      const saved = await changeSchedulingAgreement({ ...input, agreementNumber: payload.agreementNumber, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
       revalidatePath(ROUTE);
       return {
         ok: true,
@@ -65,7 +65,7 @@ export async function saveSchedulingAgreementAction(
         message: `Scheduling agreement ${saved.agreementNumber} was changed. No schedule line, stock, or accounting was posted.`,
       };
     }
-    const saved = await createSchedulingAgreement(input);
+    const saved = await createSchedulingAgreement({ ...input, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     revalidatePath(ROUTE);
     return {
       ok: true,

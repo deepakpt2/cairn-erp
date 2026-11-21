@@ -51,7 +51,7 @@ export default async function SchedulingAgreementDisplayPage({ searchParams }: {
     firmZone: last(raw.firmZone),
     centralContract: last(raw.centralContract),
   };
-  const opened = await openSchedulingAgreementDisplay(session.user.client, params);
+  const opened = await openSchedulingAgreementDisplay(session.user.client, params, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
   const document = opened.document;
   const canChange = can(session, SCHEDULING_AGREEMENT_MAINTAIN_CAPABILITY);
 

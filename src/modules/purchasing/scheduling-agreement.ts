@@ -36,6 +36,8 @@ import {
 import { glAccount } from '../finance/schema';
 import { material, materialPlant } from '../inventory/schema';
 import { resolvePurchasingInfoRecord } from './info-record';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { companyInScope, purchasingActor, purchasingDocumentInReach, purchasingLevelsAllow } from './scope';
 import {
   ReleaseError,
   assertDocumentNotReleased,
@@ -542,23 +544,58 @@ function releaseAttributes(
   return attributes;
 }
 
+const refuseAgreement = (message: string, remedy?: string) => new SchedulingAgreementError(message, remedy);
+export const SCHEDULING_AGREEMENT_READ_CAPABILITIES = [
+  SCHEDULING_AGREEMENT_DISPLAY_CAPABILITY, SCHEDULING_AGREEMENT_LIST_CAPABILITY, SCHEDULING_AGREEMENT_MAINTAIN_CAPABILITY,
+] as const;
+type AgreementMode = { scoped: true; authorization: ServiceAuthorityContext | undefined } | { scoped: false };
+
+/** Create under the session's authority: capability, company, purchasing org and group are judged in the service's own tx. */
 export async function createSchedulingAgreement(
+  raw: CreateSchedulingAgreementInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<{ agreementNumber: string; warnings: string[] }> {
+  const { authorization, ...rest } = raw;
+  return createAgreementImpl(rest, { scoped: true, authorization });
+}
+
+/** Seeding, demo and fixtures only; never imported from `src/app`. */
+export async function createSchedulingAgreementForProvisioning(
   raw: CreateSchedulingAgreementInput,
+): Promise<{ agreementNumber: string; warnings: string[] }> {
+  return createAgreementImpl(raw, { scoped: false });
+}
+
+async function createAgreementImpl(
+  raw: CreateSchedulingAgreementInput, mode: AgreementMode,
 ): Promise<{ agreementNumber: string; warnings: string[] }> {
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     throw new SchedulingAgreementError(`${issue.path.join('.')}: ${issue.message}`);
   }
-  const input = parsed.data;
+  let input = parsed.data;
   const warnings: string[] = [];
   const agreementNumber = await withTenant(input.client, async (tx) => {
+    let actor: Awaited<ReturnType<typeof purchasingActor>> | null = null;
+    if (mode.scoped) {
+      actor = await purchasingActor(tx, input.client, mode.authorization, [SCHEDULING_AGREEMENT_MAINTAIN_CAPABILITY], refuseAgreement);
+      if (!(await purchasingDocumentInReach(tx, input.client, actor, input))) {
+        throw refuseAgreement('The company, purchasing organisation or purchasing group is outside your access.', 'Name one inside your access.');
+      }
+      input = { ...input, changedBy: actor.username };
+    }
     if (input.requestKey) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/scheduling_agreement/request/${input.requestKey}`}, 0))`);
       const [existing] = await tx.select().from(schedulingAgreement).where(and(
         eq(schedulingAgreement.client, input.client), eq(schedulingAgreement.requestKey, input.requestKey),
       ));
-      if (existing) return existing.agreementNumber;
+      if (existing) {
+        // A replayed key that points at an agreement outside the reach answers as a key never seen.
+        if (actor && !(await purchasingDocumentInReach(tx, input.client, actor, existing))) {
+          throw refuseAgreement('The request key belongs to a document outside your access.', 'Use a new request key.');
+        }
+        return existing.agreementNumber;
+      }
     }
     const type = await loadType(tx, input.client, input.documentType);
     const agreementDate = input.agreementDate ?? await businessDate(tx, input.client);
@@ -649,7 +686,21 @@ export async function createSchedulingAgreement(
 }
 
 export async function changeSchedulingAgreement(
+  raw: CreateSchedulingAgreementInput & { agreementNumber: string; authorization: ServiceAuthorityContext | undefined },
+): Promise<{ agreementNumber: string; warnings: string[] }> {
+  const { authorization, ...rest } = raw;
+  return changeAgreementImpl(rest, { scoped: true, authorization });
+}
+
+/** Fixtures only, as `createSchedulingAgreementForProvisioning`. */
+export async function changeSchedulingAgreementForProvisioning(
   raw: CreateSchedulingAgreementInput & { agreementNumber: string },
+): Promise<{ agreementNumber: string; warnings: string[] }> {
+  return changeAgreementImpl(raw, { scoped: false });
+}
+
+async function changeAgreementImpl(
+  raw: CreateSchedulingAgreementInput & { agreementNumber: string }, mode: AgreementMode,
 ): Promise<{ agreementNumber: string; warnings: string[] }> {
   const { agreementNumber: suppliedNumber, ...document } = raw;
   const parsed = documentInput.safeParse(document);
@@ -657,11 +708,25 @@ export async function changeSchedulingAgreement(
     const issue = parsed.error.issues[0];
     throw new SchedulingAgreementError(`${issue.path.join('.')}: ${issue.message}`);
   }
-  const input = parsed.data;
+  let input = parsed.data;
   const number = suppliedNumber.trim();
   if (!number) throw new SchedulingAgreementError('An agreement number is required.');
   const warnings: string[] = [];
   await withTenant(input.client, async (tx) => {
+    if (mode.scoped) {
+      const actor = await purchasingActor(tx, input.client, mode.authorization, [SCHEDULING_AGREEMENT_MAINTAIN_CAPABILITY], refuseAgreement);
+      const [stored] = await tx.select().from(schedulingAgreement).where(and(
+        eq(schedulingAgreement.client, input.client), eq(schedulingAgreement.agreementNumber, number),
+      ));
+      // A stored agreement outside the reach answers exactly as one that does not exist, before the request is judged.
+      if (!stored || !(await purchasingDocumentInReach(tx, input.client, actor, stored))) {
+        throw refuseAgreement(`Scheduling agreement ${number} does not exist.`);
+      }
+      if (!(await purchasingDocumentInReach(tx, input.client, actor, input))) {
+        throw refuseAgreement('The company, purchasing organisation or purchasing group is outside your access.', 'Name one inside your access.');
+      }
+      input = { ...input, changedBy: actor.username };
+    }
     await lockAgreement(tx, input.client, number);
     try {
       await assertDocumentNotReleased(tx, input.client, SCHEDULING_AGREEMENT_CATEGORY, number, 'Scheduling agreement');
@@ -789,14 +854,24 @@ export async function changeSchedulingAgreement(
 }
 
 export async function getSchedulingAgreement(
-  client: string,
-  agreementNumber: string,
+  client: string, agreementNumber: string, authorization: ServiceAuthorityContext | undefined,
 ): Promise<SchedulingAgreementDocument | null> {
+  return readAgreement(client, agreementNumber, { scoped: true, authorization });
+}
+
+/** Unscoped read for seeding, demo and tests; never imported from `src/app`. */
+export async function getSchedulingAgreementForProvisioning(client: string, agreementNumber: string): Promise<SchedulingAgreementDocument | null> {
+  return readAgreement(client, agreementNumber, { scoped: false });
+}
+
+async function readAgreement(client: string, agreementNumber: string, mode: AgreementMode): Promise<SchedulingAgreementDocument | null> {
   return withTenant(client, async (tx) => {
+    const actor = mode.scoped ? await purchasingActor(tx, client, mode.authorization, SCHEDULING_AGREEMENT_READ_CAPABILITIES, refuseAgreement) : null;
     const [header] = await tx.select().from(schedulingAgreement).where(and(
       eq(schedulingAgreement.client, client), eq(schedulingAgreement.agreementNumber, agreementNumber.trim()),
     ));
     if (!header) return null;
+    if (actor && !(await purchasingDocumentInReach(tx, client, actor, header))) return null;
     const items = await tx.select().from(schedulingAgreementItem).where(and(
       eq(schedulingAgreementItem.client, client), eq(schedulingAgreementItem.agreementNumber, header.agreementNumber),
     )).orderBy(asc(schedulingAgreementItem.itemNumber));
@@ -855,12 +930,16 @@ export async function getSchedulingAgreement(
   });
 }
 
-export async function listSchedulingAgreements(client: string): Promise<SchedulingAgreementListRow[]> {
+export async function listSchedulingAgreements(
+  client: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<SchedulingAgreementListRow[]> {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, SCHEDULING_AGREEMENT_READ_CAPABILITIES, refuseAgreement);
     const headers = await tx.select().from(schedulingAgreement).where(eq(schedulingAgreement.client, client))
       .orderBy(asc(schedulingAgreement.agreementNumber));
     const rows: SchedulingAgreementListRow[] = [];
     for (const header of headers) {
+      if (!(await purchasingDocumentInReach(tx, client, actor, header))) continue;
       const items = await tx.select().from(schedulingAgreementItem).where(and(
         eq(schedulingAgreementItem.client, client), eq(schedulingAgreementItem.agreementNumber, header.agreementNumber),
       ));
@@ -883,8 +962,9 @@ export async function listSchedulingAgreements(client: string): Promise<Scheduli
   });
 }
 
-export async function schedulingAgreementChoices(client: string) {
+export async function schedulingAgreementChoices(client: string, authorization: ServiceAuthorityContext | undefined) {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, SCHEDULING_AGREEMENT_READ_CAPABILITIES, refuseAgreement);
     const [types, suppliers, organizations, groups, companies, plants] = await Promise.all([
       tx.select().from(schedulingAgreementType).where(and(
         eq(schedulingAgreementType.client, client), eq(schedulingAgreementType.isActive, true),
@@ -895,13 +975,17 @@ export async function schedulingAgreementChoices(client: string) {
       tx.select().from(companyCode).where(eq(companyCode.client, client)).orderBy(asc(companyCode.companyCode)),
       tx.select().from(plant).where(eq(plant.client, client)).orderBy(asc(plant.plant)),
     ]);
+    const readableCompanies = new Set<string>();
+    for (const row of companies) if (await companyInScope(tx, client, actor, row.companyCode)) readableCompanies.add(row.companyCode);
     return {
       types: types.map((row) => ({ documentType: row.documentType, description: row.description })),
       suppliers: suppliers.map((row) => ({ partnerNumber: row.partnerNumber, name: row.name })),
-      organizations: organizations.map((row) => ({ purchasingOrg: row.purchasingOrg, name: row.name })),
-      groups: groups.map((row) => ({ purchasingGroup: row.purchasingGroup, name: row.name })),
-      companies: companies.map((row) => ({ companyCode: row.companyCode, name: row.name })),
-      plants: plants.map((row) => ({ plant: row.plant, name: row.name })),
+      organizations: organizations.filter((row) => purchasingLevelsAllow(actor, { purchasingOrg: row.purchasingOrg }))
+        .map((row) => ({ purchasingOrg: row.purchasingOrg, name: row.name })),
+      groups: groups.filter((row) => purchasingLevelsAllow(actor, { purchasingGroup: row.purchasingGroup }))
+        .map((row) => ({ purchasingGroup: row.purchasingGroup, name: row.name })),
+      companies: companies.filter((row) => readableCompanies.has(row.companyCode)).map((row) => ({ companyCode: row.companyCode, name: row.name })),
+      plants: plants.filter((row) => row.companyCode && readableCompanies.has(row.companyCode)).map((row) => ({ plant: row.plant, name: row.name })),
     };
   });
 }

@@ -43,9 +43,9 @@ export default async function PurchaseContractsPage({ searchParams }: {
   const client = session.user.client;
   const contractNumber = params.contract?.trim() || '';
   const [documents, choices, selected] = await Promise.all([
-    listPurchaseContracts(client),
-    contractChoices(client),
-    contractNumber ? getPurchaseContract(client, contractNumber) : Promise.resolve(null),
+    listPurchaseContracts(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
+    contractChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }),
+    contractNumber ? getPurchaseContract(client, contractNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : Promise.resolve(null),
   ]);
   const selectedRelease = selected
     ? await getDocumentRelease(client, 'PURCHASE_CONTRACT', selected.contractNumber)

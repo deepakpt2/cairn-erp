@@ -34,6 +34,7 @@ export async function createSchedulingReleasesAction(
     const result = await createSchedulingAgreementReleases({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       agreementFrom: String(input.agreementFrom ?? ''),
       agreementTo: String(input.agreementTo ?? ''),
       supplierNumber: String(input.supplierNumber ?? ''),
