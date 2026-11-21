@@ -63,6 +63,7 @@ export default async function StockAgeingPage({
         client: session.user.client,
         localCurrency: currencyRows[0]?.currency ?? 'KWD',
         selection,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       });
     } catch (error) {
       reportError = error instanceof StockAgeingError

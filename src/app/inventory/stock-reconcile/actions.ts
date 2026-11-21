@@ -44,6 +44,7 @@ export async function rebuildAction(
       client: session.user.client,
       changedBy: session.user.username,
       materialNumber, plant, storageLocation, stockType,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(RECONCILE_ROUTE);
     if (Number(ledgerQuantity) === 0) {

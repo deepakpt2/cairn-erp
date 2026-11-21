@@ -55,9 +55,11 @@ export async function runOutputsAction(
   try {
     const determined = await determineOutputs({
       client: session.user.client, changedBy: session.user.username, selection: selectionOf(form),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     const run = await dispatchPending({
       client: session.user.client, changedBy: session.user.username, selection: selectionOf(form),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(MATERIAL_DOC_OUTPUT_ROUTE);
     return {
@@ -86,6 +88,7 @@ export async function dispatchOneAction(
       documentNumber: text(form, 'documentNumber'),
       outputType: text(form, 'outputType'),
       transmissionMedium: text(form, 'transmissionMedium'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(MATERIAL_DOC_OUTPUT_ROUTE);
     return {
@@ -114,6 +117,7 @@ export async function recipientAction(
       transmissionMedium: text(form, 'transmissionMedium'),
       recipient: text(form, 'recipient'),
       printerQueue: text(form, 'printerQueue'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(MATERIAL_DOC_OUTPUT_ROUTE);
     return { ok: true, message: `Recipient recorded for ${text(form, 'outputType')} on ${text(form, 'documentNumber')}.` };
@@ -135,9 +139,11 @@ export async function downloadSlipPdfAction(form: FormData): Promise<PdfDownload
       documentNumber: text(form, 'documentNumber'),
       outputType: text(form, 'outputType'),
       transmissionMedium: text(form, 'transmissionMedium'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     return { ok: true, fileName: pdf.fileName, base64: pdf.base64, warning: pdf.warning };
   } catch (error) {
+    if (error instanceof MaterialDocumentOutputError) return { ok: false, message: error.message, remedy: error.remedy };
     if (error instanceof PdfDownloadError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }

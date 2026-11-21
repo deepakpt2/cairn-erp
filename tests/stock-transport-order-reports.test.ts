@@ -7,7 +7,7 @@ import { displayPurchaseOrder } from '../src/modules/purchasing/purchase-order-d
 import { listPurchaseOrders } from '../src/modules/purchasing/purchase-order-list';
 import { displayMaterialDocument } from './helpers/material-document-authorized';
 import { getReversalDocument, reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
-import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
+import { reconcileStockForProvisioning as reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { stockOverview } from './helpers/material-document-authorized';
 import { listWarehouseStocks } from './helpers/material-document-authorized';
 import {

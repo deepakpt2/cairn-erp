@@ -22,7 +22,7 @@ import {
   listCreditMemoRequests as listCreditMemoRequestsRaw,
   postCreditMemoForProvisioning as postCreditMemo, releaseBillingBlockForProvisioning as releaseBillingBlock,
 } from '../src/modules/sales/credit-memo';
-import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
+import { reconcileStockForProvisioning as reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { postTransfer, reverseTransfer } from './helpers/transfer-authorized';
 import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
 import { listBillablePlanDates, saveBillingPlan } from '../src/modules/sales/billing-plan';

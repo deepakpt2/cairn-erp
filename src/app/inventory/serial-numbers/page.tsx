@@ -27,7 +27,7 @@ const ROUTE = SERIAL_ROUTE;
  */
 export default async function SerialNumbersPage() {
   const session = await requireSession(ROUTE);
-  const serials = await listSerialNumbers(session.user.client);
+  const serials = await listSerialNumbers(session.user.client, {}, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []);
   const canMaintain = can(session, SERIAL_CAPABILITY);
 
   return (

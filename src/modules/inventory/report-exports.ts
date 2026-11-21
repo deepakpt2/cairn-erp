@@ -77,7 +77,7 @@ export const materialDocumentListExport: ReportAdapter = {
 
 export const shelfLifeExport: ReportAdapter = {
   code: 'shelf-life-list', route: '/inventory/shelf-life-list', capability: SLED_LIST_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const remaining = get(q, 'remainingShelfLifeDays');
     const selection: ShelfLifeSelection = {
       materialFrom: up(q, 'materialFrom'), materialTo: up(q, 'materialTo'),
@@ -89,7 +89,7 @@ export const shelfLifeExport: ReportAdapter = {
       display: up(q, 'display') || 'DAYS', layout: up(q, 'layout') || 'ALV', layoutVariant: get(q, 'layoutVariant'),
       keyDate: businessDate('Asia/Kuwait'),
     };
-    const r = await listShelfLife({ client, selection, timeZone: 'Asia/Kuwait' });
+    const r = await listShelfLife({ client, selection, authorization, timeZone: 'Asia/Kuwait' });
     return {
       title: 'Shelf life list',
       subtitle: [`Key date ${r.keyDate}`, ...(r.truncated ? [`Truncated at ${r.maxHits} rows`] : []), ...r.warnings],

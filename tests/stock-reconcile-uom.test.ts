@@ -6,8 +6,8 @@ import { defineRange } from '../src/platform/numbering';
 import {
   RECONCILE_CAPABILITY,
   StockReconcileError,
-  rebuildStockDimension,
-  reconcileStock,
+  rebuildStockDimensionForProvisioning as rebuildStockDimension,
+  reconcileStockForProvisioning as reconcileStock,
 } from '../src/modules/inventory/stock-reconcile';
 import {
   UOM_CAPABILITY,

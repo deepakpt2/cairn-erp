@@ -257,3 +257,21 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** `follow-on` helpers `copyRequisition`, `adoptQuotation`, `settleQuota`, `updateInfoRecordFromOrder` and `convertMoney` are tx-level and are only called by the already-scoped order, RFQ and contract services; they carry no check themselves. `readDeliveryCompletionPolicy` (tx-level, used by goods receipt) is not scoped. The STO plant check runs in the order service's judging transaction, not the STO write's own. The STO service functions `createStockTransportOrder` and `changeStockTransportOrder` remain callable without a check by any server code that imports them (only `orders.ts` does). Plant-limited users keep the company-level reach on invoice documents (not judged by plant).
 
 **Not covered (unchanged):** the goods-movement side of stock transport orders (issue, receipt: inventory module, mapped to the inventory phase), the remaining mapping phases (inventory, controlling, finance leftovers, quality, master-data reads).
+
+## Phase 8a — inventory: stock reports, reconciliation, serial numbers, material document output (MB90)
+
+Same plant-reach rule as 5c: a plant is reachable when its company is in the explicit Company Code scope and, with a Plant scope held, the plant is named in it. A plant naming no company is never reachable. Each service has a `...ForProvisioning` variant (tests, seeding, scripts; never imported from `src/app`) and a scoped one that verifies session, capability and scope in its own transaction.
+
+**Covered:**
+- `stockAgeing` (`INV.STOCK.AGEING.DISPLAY`), `listShelfLife` (`INV.SLED.LIST`, also the report export), `stockOnPostingDate` (`INV.STOCK.POSTINGDATE`): only stock/lines of reachable plants are read; a named plant out of reach answers as a plant that does not stand.
+- `reconcileStock` and `rebuildStockDimension` (`INV.STOCK.RECONCILE`): compare only reachable plants. The rebuild is a **write** to `stock_quantity`: it refuses a plant out of reach as missing, changes nothing there, and records the session user.
+- `saveSerialNumber` / `listSerialNumbers` (`INV.SERIAL.MAINTAIN`): a unit is reachable by its plant; a plant-less unit is never reachable, so a scoped actor cannot record one. A save that would move an out-of-reach unit, or place one in an out-of-reach plant, is refused with one message ("cannot be recorded here") that does not say which case it was.
+- MB90 `listOutputMessages`, `determineOutputs`, `dispatchPending`, `dispatchMessage`, `setRecipient`, `renderSlip`, `materialOutputPdf`, `materialDocumentCompanyCode` (`INV.MATERIALDOC.RECEIVEPRINT`): a document is reachable only when it has lines and every line is at a reachable plant; another message answers as "No … output stands" / "does not exist". Recorded user is the session user.
+- Tests: `tests/company-scope-inventory.test.ts` (now 29+ tests): reach per company/plant scope, hidden-as-missing, no session/capability/scope/other tenant, nothing changed on refusal.
+
+**Not covered / residual:**
+- Batch master, batch cockpit/display/change, batch status and the other batch configuration services: **not scoped**. A batch at material or client level (batch level 1/2) carries no plant, so no company; a rule for it is a design decision (master-data class, phase 7). Plant-level batches carry a plant and could be scoped; this was not done.
+- `dispatchPending` still enqueues the tenant-wide output sweep after verifying its own selection; the sweep sends messages other authorised users already queued, so it discloses nothing, but it is not limited to the caller's reach.
+- The output job's per-message processing (`processMaterialOutputMessage`) runs as the job and is unchanged.
+- Storage-location, material-type, valuation-class and other configuration lists carry no company data and were left.
+- Not demonstrated at runtime; nothing browser-tested.

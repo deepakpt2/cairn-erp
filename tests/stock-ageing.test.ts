@@ -5,10 +5,10 @@ import { withTenant } from '../src/platform/db/client';
 import {
   MAX_HITS_CAP,
   StockAgeingError,
-  stockAgeing,
+  stockAgeingForProvisioning as stockAgeing,
   type StockAgeingSelection,
 } from '../src/modules/inventory/stock-ageing';
-import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
+import { reconcileStockForProvisioning as reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { createTenant, destroyTenant } from './helpers';
 
 /**

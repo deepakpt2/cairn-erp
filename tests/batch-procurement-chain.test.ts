@@ -16,7 +16,7 @@ import { createBatch } from '../src/modules/inventory/batch-master';
 import { postTransfer } from './helpers/transfer-authorized';
 import { stockOverview } from './helpers/material-document-authorized';
 import { listWarehouseStocks } from './helpers/material-document-authorized';
-import { stockOnPostingDate } from '../src/modules/inventory/stock-posting-date';
+import { stockOnPostingDateForProvisioning as stockOnPostingDate } from '../src/modules/inventory/stock-posting-date';
 import { closeDb, createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 const ACTOR = 'BATCH_CHAIN_TEST';

@@ -28,8 +28,10 @@
  * reads only what it wrote. What it still owns is its own determination — the
  * direction the lines move in, which is Inventory's test and no one else's.
  */
-import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { type AnyColumn, type SQL, and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import type { Tx } from '../../platform/db/client';
 import { plant as plantTable } from '../foundation/schema';
@@ -54,6 +56,40 @@ import {
 const DOCUMENT_CATEGORY = 'MATERIAL_DOCUMENT';
 
 export const MATERIAL_DOC_OUTPUT_CAPABILITY = 'INV.MATERIALDOC.RECEIVEPRINT';
+
+/**
+ * Scope of the MB90 services. A material document is of one company only through its lines' plants: it is reachable
+ * when it has lines and every one of them is at a plant the caller reaches. 'unscoped' serves seeding, tests and
+ * scripts through the `...ForProvisioning` variants only.
+ */
+type OutputMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type OutputReach = { reachable: string[]; username: string } | null;
+
+async function outputReach(tx: Tx, client: string, mode: OutputMode): Promise<OutputReach> {
+  if (mode === 'unscoped') return null;
+  const actor = await purchasingActor(
+    tx, client, mode.authorization, [MATERIAL_DOC_OUTPUT_CAPABILITY],
+    (m, r) => new MaterialDocumentOutputError(m, r),
+  );
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
+}
+
+function documentReachSql(client: string, number: SQL | AnyColumn, reachable: readonly string[]): SQL {
+  if (reachable.length === 0) return sql`false`;
+  const plants = sql.join(reachable.map((p) => sql`${p}`), sql`, `);
+  return sql`(exists (
+      select 1 from material_document_line rl where rl.client = ${client} and rl.material_document_number = ${number}
+    ) and not exists (
+      select 1 from material_document_line rl2
+       where rl2.client = ${client} and rl2.material_document_number = ${number} and rl2.plant not in (${plants})
+    ))`;
+}
+
+async function documentInReach(tx: Tx, client: string, reach: OutputReach, documentNumber: string): Promise<boolean> {
+  if (!reach) return true;
+  const rows = await tx.execute(sql`select ${documentReachSql(client, sql`${documentNumber}`, reach.reachable)} as ok`) as unknown as Array<{ ok: boolean }>;
+  return rows[0]?.ok === true;
+}
 export const MATERIAL_DOC_OUTPUT_ALIAS = 'MB90';
 export const MATERIAL_DOC_OUTPUT_ROUTE = '/inventory/material-document-output';
 
@@ -261,7 +297,7 @@ export async function recordOutputsForPostedDocument(
   return created;
 }
 
-async function selectionClause(client: string, s: OutputSelection) {
+async function selectionClause(client: string, s: OutputSelection, reach: OutputReach = null) {
   const clauses = [
     eq(outputMessage.client, client),
     eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
@@ -329,20 +365,31 @@ async function selectionClause(client: string, s: OutputSelection) {
         and l.plant between ${from} and ${to}
     )`);
   }
+  if (reach) clauses.push(documentReachSql(client, outputMessage.documentNumber, reach.reachable));
   return and(...clauses);
 }
 
 /** The MB90 grid: the queue as it stands, newest first, with its counts. */
-export async function listOutputMessages(input: {
-  client: string; selection?: OutputSelection;
-}): Promise<OutputListResult> {
+type ListInput = { client: string; selection?: OutputSelection };
+
+/** Session, `INV.MATERIALDOC.RECEIVEPRINT` and company scope: only messages of documents wholly inside the reach. */
+export async function listOutputMessages(input: ListInput & { authorization: ServiceAuthorityContext | undefined }): Promise<OutputListResult> {
+  return withTenant(input.client, async (tx) => listIn(tx, input, await outputReach(tx, input.client, { authorization: input.authorization })));
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function listOutputMessagesForProvisioning(input: ListInput): Promise<OutputListResult> {
+  return withTenant(input.client, (tx) => listIn(tx, input, null));
+}
+
+async function listIn(tx: Tx, input: ListInput, reach: OutputReach): Promise<OutputListResult> {
   const selection = input.selection ?? {};
   const maxHits = Math.min(
     Math.max(Number(selection.maxHits) || DEFAULT_MAX_HITS, 1), MAX_HITS_CAP,
   );
 
-  return withTenant(input.client, async (tx) => {
-    const where = await selectionClause(input.client, selection);
+  {
+    const where = await selectionClause(input.client, selection, reach);
     const rows = await tx.select({
       message: outputMessage,
       description: outputType.description,
@@ -368,7 +415,7 @@ export async function listOutputMessages(input: {
         eq(materialDocument.client, outputMessage.client),
         eq(materialDocument.materialDocumentNumber, outputMessage.documentNumber),
       ))
-      .where(await selectionClause(input.client, { ...selection, status: undefined }))
+      .where(await selectionClause(input.client, { ...selection, status: undefined }, reach))
       .groupBy(outputMessage.status);
 
     const shown = rows.slice(0, maxHits);
@@ -435,19 +482,33 @@ export async function listOutputMessages(input: {
       failed: statusCount('ERROR'),
       truncated: rows.length > maxHits,
     };
-  });
+  }
 }
 
 /**
  * Determine the outputs of every posted document in the selection that carries
  * none — the run's first half, and the way history acquires its slips.
  */
-export async function determineOutputs(input: {
-  client: string; changedBy: string; selection?: OutputSelection;
-}): Promise<{ examined: number; created: number; transfers: number }> {
+type DetermineInput = { client: string; changedBy: string; selection?: OutputSelection };
+type DetermineResult = { examined: number; created: number; transfers: number };
+
+/** Session, capability and company scope: only documents wholly inside the reach are examined; the user is the session user. */
+export async function determineOutputs(input: DetermineInput & { authorization: ServiceAuthorityContext | undefined }): Promise<DetermineResult> {
+  return determineWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function determineOutputsForProvisioning(input: DetermineInput): Promise<DetermineResult> {
+  return determineWith(input, 'unscoped');
+}
+
+async function determineWith(input: DetermineInput, mode: OutputMode): Promise<DetermineResult> {
   const selection = input.selection ?? {};
   return withTenant(input.client, async (tx) => {
-    const clauses = [eq(materialDocument.client, input.client)];
+    const reach = await outputReach(tx, input.client, mode);
+    const changedBy = reach?.username ?? input.changedBy;
+    const clauses: SQL[] = [eq(materialDocument.client, input.client)];
+    if (reach) clauses.push(documentReachSql(input.client, materialDocument.materialDocumentNumber, reach.reachable));
     if (selection.documentFrom) clauses.push(gte(materialDocument.materialDocumentNumber, selection.documentFrom.trim()));
     if (selection.documentTo) clauses.push(lte(materialDocument.materialDocumentNumber, selection.documentTo.trim()));
     if (selection.documentYear) clauses.push(eq(materialDocument.documentYear, Number(selection.documentYear)));
@@ -468,7 +529,7 @@ export async function determineOutputs(input: {
         eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
         eq(outputMessage.documentNumber, document.number),
       ));
-      const written = await recordOutputsForDocument(tx, input.client, document.number, input.changedBy);
+      const written = await recordOutputsForDocument(tx, input.client, document.number, changedBy);
       created += written;
       if (written === 0 && (before[0]?.count ?? 0) === 0) transfers += 1;
     }
@@ -563,8 +624,19 @@ export async function renderSlipIn(
 
 /** Render the slip from the document as posted, on its own read. */
 export async function renderSlip(input: {
-  client: string; documentNumber: string;
+  client: string; documentNumber: string; authorization: ServiceAuthorityContext | undefined;
 }): Promise<string> {
+  return withTenant(input.client, async (tx) => {
+    const reach = await outputReach(tx, input.client, { authorization: input.authorization });
+    if (!(await documentInReach(tx, input.client, reach, input.documentNumber))) {
+      throw new MaterialDocumentOutputError(`Material document ${input.documentNumber} does not exist.`);
+    }
+    return renderSlipIn(tx, input.client, input.documentNumber);
+  });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function renderSlipForProvisioning(input: { client: string; documentNumber: string }): Promise<string> {
   return withTenant(input.client, (tx) => renderSlipIn(tx, input.client, input.documentNumber));
 }
 
@@ -573,12 +645,27 @@ export async function renderSlip(input: {
  * OUTPUT.DISPATCH job renders the slip, emails it where that is the medium, and moves it to PROCESSED
  * or ERROR. A PROCESSED message refuses, because a repeat is a new output.
  */
-export async function dispatchMessage(input: {
+type DispatchInput = {
   client: string; changedBy: string; documentNumber: string;
   outputType: string; transmissionMedium: string;
-}): Promise<DispatchResult> {
-  return withTenant(input.client, async (tx) => {
-    const [message] = await tx.select().from(outputMessage).where(messageWhere(input.client, input));
+};
+
+/** Session, capability and company scope: a message of a document outside the reach answers as a missing one. */
+export async function dispatchMessage(input: DispatchInput & { authorization: ServiceAuthorityContext | undefined }): Promise<DispatchResult> {
+  return dispatchWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function dispatchMessageForProvisioning(input: DispatchInput): Promise<DispatchResult> {
+  return dispatchWith(input, 'unscoped');
+}
+
+async function dispatchWith(rawInput: DispatchInput, mode: OutputMode): Promise<DispatchResult> {
+  return withTenant(rawInput.client, async (tx) => {
+    const reach = await outputReach(tx, rawInput.client, mode);
+    const input = reach ? { ...rawInput, changedBy: reach.username } : rawInput;
+    const standing = await documentInReach(tx, input.client, reach, input.documentNumber);
+    const [message] = standing ? await tx.select().from(outputMessage).where(messageWhere(input.client, input)) : [];
     if (!message) {
       throw new MaterialDocumentOutputError(
         `No ${input.outputType} output stands for material document ${input.documentNumber}.`,
@@ -723,25 +810,49 @@ async function companyCodeOf(tx: Tx, client: string, documentNumber: string): Pr
 }
 
 /** Queue a dispatch run for the PENDING messages the selection names. */
-export async function dispatchPending(input: {
-  client: string; changedBy: string; selection?: OutputSelection;
-}): Promise<{ queued: number }> {
-  const list = await listOutputMessages({
-    client: input.client,
-    selection: { ...(input.selection ?? {}), status: 'PENDING', maxHits: MAX_HITS_CAP },
+type PendingInput = { client: string; changedBy: string; selection?: OutputSelection };
+
+/** Session, capability and company scope: only pending messages of documents inside the reach are counted. */
+export async function dispatchPending(input: PendingInput & { authorization: ServiceAuthorityContext | undefined }): Promise<{ queued: number }> {
+  return pendingWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function dispatchPendingForProvisioning(input: PendingInput): Promise<{ queued: number }> {
+  return pendingWith(input, 'unscoped');
+}
+
+async function pendingWith(input: PendingInput, mode: OutputMode): Promise<{ queued: number }> {
+  return withTenant(input.client, async (tx) => {
+    const reach = await outputReach(tx, input.client, mode);
+    const list = await listIn(tx, {
+      client: input.client,
+      selection: { ...(input.selection ?? {}), status: 'PENDING', maxHits: MAX_HITS_CAP },
+    }, reach);
+    if (list.rows.length === 0) return { queued: 0 };
+    await enqueueOutputSweep(tx, { client: input.client, triggeredBy: reach?.username ?? input.changedBy });
+    return { queued: list.rows.length };
   });
-  if (list.rows.length === 0) return { queued: 0 };
-  await withTenant(input.client, (tx) => enqueueOutputSweep(tx, {
-    client: input.client, triggeredBy: input.changedBy,
-  }));
-  return { queued: list.rows.length };
 }
 
 /** Set the recipient (and optionally the printer queue) on a message. */
-export async function setRecipient(input: {
+type RecipientInput = {
   client: string; changedBy: string; documentNumber: string; outputType: string;
   transmissionMedium: string; recipient?: string; printerQueue?: string;
-}): Promise<OutputMessageView> {
+};
+
+/** Session, capability and company scope: a message of a document outside the reach answers as a missing one. */
+export async function setRecipient(input: RecipientInput & { authorization: ServiceAuthorityContext | undefined }): Promise<OutputMessageView> {
+  return recipientWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function setRecipientForProvisioning(input: RecipientInput): Promise<OutputMessageView> {
+  return recipientWith(input, 'unscoped');
+}
+
+async function recipientWith(rawInput: RecipientInput, mode: OutputMode): Promise<OutputMessageView> {
+  let input = rawInput;
   const recipient = (input.recipient ?? '').trim();
   const printerQueue = (input.printerQueue ?? '').trim();
   if (recipient.length > 50) {
@@ -752,14 +863,17 @@ export async function setRecipient(input: {
   }
 
   return withTenant(input.client, async (tx) => {
-    const [message] = await tx.select().from(outputMessage).where(and(
+    const reach = await outputReach(tx, input.client, mode);
+    if (reach) input = { ...input, changedBy: reach.username };
+    const standing = await documentInReach(tx, input.client, reach, input.documentNumber);
+    const [message] = standing ? await tx.select().from(outputMessage).where(and(
       eq(outputMessage.client, input.client),
       eq(outputMessage.documentCategory, DOCUMENT_CATEGORY),
       eq(outputMessage.documentNumber, input.documentNumber),
       eq(outputMessage.outputType, input.outputType),
       eq(outputMessage.transmissionMedium, input.transmissionMedium),
       eq(outputMessage.issueNumber, 1),
-    ));
+    )) : [];
     if (!message) {
       throw new MaterialDocumentOutputError(
         `No ${input.outputType} output stands for material document ${input.documentNumber}.`,
@@ -806,10 +920,13 @@ export async function setRecipient(input: {
 /** The PDF of one stored message, for the Download PDF control. Refuses a message not yet rendered. */
 export async function materialOutputPdf(input: {
   client: string; documentNumber: string; outputType: string; transmissionMedium: string;
+  authorization: ServiceAuthorityContext | undefined;
 }) {
   return renderStoredPdf({
     client: input.client,
     load: async (tx) => {
+      const reach = await outputReach(tx, input.client, { authorization: input.authorization });
+      if (!(await documentInReach(tx, input.client, reach, input.documentNumber))) return null;
       const [message] = await tx.select().from(outputMessage).where(messageWhere(input.client, input));
       if (!message) return null;
       const [type] = await tx.select().from(outputType).where(and(
@@ -826,6 +943,12 @@ export async function materialOutputPdf(input: {
 }
 
 /** The company code a material document's letterhead comes from (its plant's). */
-export async function materialDocumentCompanyCode(client: string, documentNumber: string): Promise<string | null> {
-  return withTenant(client, (tx) => companyCodeOf(tx, client, documentNumber));
+export async function materialDocumentCompanyCode(
+  client: string, documentNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<string | null> {
+  return withTenant(client, async (tx) => {
+    const reach = await outputReach(tx, client, { authorization });
+    if (!(await documentInReach(tx, client, reach, documentNumber))) return null;
+    return companyCodeOf(tx, client, documentNumber);
+  });
 }

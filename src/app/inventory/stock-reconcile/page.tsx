@@ -33,7 +33,7 @@ export default async function StockReconcilePage({
   let reportError: string | null = null;
   if (plant && can(session, RECONCILE_CAPABILITY)) {
     try {
-      result = await reconcileStock(session.user.client, { plant });
+      result = await reconcileStock(session.user.client, { plant }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (caught) {
       const error = caught as { message?: string; remedy?: string };
       reportError = [error?.message, error?.remedy].filter(Boolean).join(' ') || 'The plant could not be reconciled.';

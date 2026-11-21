@@ -18,6 +18,8 @@
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 
@@ -103,10 +105,21 @@ function bound(value: string | undefined): string | undefined {
   return trimmed === '' ? undefined : trimmed;
 }
 
-export async function stockOnPostingDate(input: {
-  client: string;
-  selection: StockPostingDateSelection;
-}): Promise<StockPostingDateResult> {
+type PostingDateInput = { client: string; selection: StockPostingDateSelection };
+
+/** Session, `INV.STOCK.POSTINGDATE` and company scope: only lines of plants the caller reaches are rolled forward. */
+export async function stockOnPostingDate(input: PostingDateInput & { authorization: ServiceAuthorityContext | undefined }): Promise<StockPostingDateResult> {
+  return stockOnPostingDateWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function stockOnPostingDateForProvisioning(input: PostingDateInput): Promise<StockPostingDateResult> {
+  return stockOnPostingDateWith(input, 'unscoped');
+}
+
+async function stockOnPostingDateWith(
+  input: PostingDateInput, scope: 'unscoped' | { authorization: ServiceAuthorityContext | undefined },
+): Promise<StockPostingDateResult> {
   const { client } = input;
   const raw = input.selection;
   const s: StockPostingDateSelection = {
@@ -150,6 +163,9 @@ export async function stockOnPostingDate(input: {
   const calculatedAt = new Date().toISOString();
 
   return withTenant(client, async (tx) => {
+    const reachable = scope === 'unscoped' ? null : await reachablePlantsInTx(
+      tx, client, await purchasingActor(tx, client, scope.authorization, [STOCK_POSTINGDATE_CAPABILITY], (m, r) => new StockPostingDateError(m, r)),
+    );
     for (const [table, column, value, label] of [
       ['material', 'material_number', s.materialFrom, 'material'],
       ['material', 'material_number', materialTo, 'material'],
@@ -160,7 +176,7 @@ export async function stockOnPostingDate(input: {
         select ${sql.raw(column)} as key from ${sql.raw(table)}
         where client = ${client} and ${sql.raw(column)} = ${value}
       `) as unknown as Array<{ key: string }>;
-      if (rows.length === 0) fail(`The ${label} ${value} does not stand.`, `Maintain the ${label} before selecting it.`);
+      if (rows.length === 0 || (label === 'plant' && reachable && !reachable.includes(value as string))) fail(`The ${label} ${value} does not stand.`, `Maintain the ${label} before selecting it.`);
     }
     for (const value of [s.storageLocationFrom, s.storageLocationTo]) {
       if (!value) continue;
@@ -251,6 +267,7 @@ export async function stockOnPostingDate(input: {
         )
         and l.material_number between ${s.materialFrom} and ${materialTo}
         and l.plant between ${s.plantFrom} and ${plantTo}
+        ${reachable ? plantReachFilter('l.plant', reachable) : sql``}
         and l.stock_type = ${s.stockType ?? DEFAULT_STOCK_TYPE}
         and d.posting_date <= ${s.dateTo}
         ${storageFilter}

@@ -52,6 +52,7 @@ export async function saveSerialAction(
       ...(optional(form, 'plant') ? { plant: optional(form, 'plant') } : {}),
       ...(optional(form, 'storageLocation') ? { storageLocation: optional(form, 'storageLocation') } : {}),
       ...(optional(form, 'batchNumber') ? { batchNumber: optional(form, 'batchNumber') } : {}),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       ...(optional(form, 'status') ? { status: optional(form, 'status') as 'IN_STOCK' } : {}),
     });
     revalidatePath(ROUTE);

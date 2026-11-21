@@ -10,6 +10,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 
@@ -51,7 +53,7 @@ export interface ReconcileResult {
  * exists in only one of the two sides is a drift of its full quantity — a projection row with
  * no documents behind it is exactly the kind of ghost this check is for.
  */
-async function driftIn(tx: Tx, client: string, plant: string | null): Promise<StockDriftRow[]> {
+async function driftIn(tx: Tx, client: string, plant: string | null, reachable: readonly string[] | null): Promise<StockDriftRow[]> {
   const rows = await tx.execute(sql`
     with ledger as (
       select l.client, l.material_number, l.plant, l.storage_location, l.stock_type, l.batch_number,
@@ -62,6 +64,7 @@ async function driftIn(tx: Tx, client: string, plant: string | null): Promise<St
        where l.client = ${client}
          and d.status in ('POSTED', 'REVERSED')
          and (${plant}::text is null or l.plant = ${plant}::text)
+         ${reachable ? plantReachFilter('l.plant', reachable) : sql``}
        group by 1, 2, 3, 4, 5, 6
     ),
     projected as (
@@ -69,6 +72,7 @@ async function driftIn(tx: Tx, client: string, plant: string | null): Promise<St
         from stock_quantity s
        where s.client = ${client}
          and (${plant}::text is null or s.plant = ${plant}::text)
+         ${reachable ? plantReachFilter('s.plant', reachable) : sql``}
     ),
     both_sides as (
       select coalesce(l.material_number, p.material_number) as material_number,
@@ -110,15 +114,35 @@ async function driftIn(tx: Tx, client: string, plant: string | null): Promise<St
 }
 
 /** Read-only: what the ledger says, against what the projection says. */
+type Mode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+const refuse = (m: string, r?: string) => new StockReconcileError(m, r);
+
+/** Session, `INV.STOCK.RECONCILE` and company scope: only plants the caller reaches are compared. */
 export async function reconcileStock(
+  client: string, scope: { plant?: string | null }, authorization: ServiceAuthorityContext | undefined,
+): Promise<ReconcileResult> {
+  return reconcileStockWith(client, scope, { authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function reconcileStockForProvisioning(
   client: string, scope: { plant?: string | null } = {},
 ): Promise<ReconcileResult> {
+  return reconcileStockWith(client, scope, 'unscoped');
+}
+
+async function reconcileStockWith(client: string, scope: { plant?: string | null }, mode: Mode): Promise<ReconcileResult> {
   const plant = scope.plant?.trim() || null;
   return withTenant(client, async (tx) => {
-    const drift = await driftIn(tx, client, plant);
+    const reachable = mode === 'unscoped' ? null : await reachablePlantsInTx(
+      tx, client, await purchasingActor(tx, client, mode.authorization, [RECONCILE_CAPABILITY], refuse),
+    );
+    if (plant && reachable && !reachable.includes(plant)) throw refuse(`The plant ${plant} does not stand.`, 'Maintain the plant before selecting it.');
+    const drift = await driftIn(tx, client, plant, reachable);
     const counted = await tx.execute(sql`
       select count(*)::int as n from stock_quantity
        where client = ${client} and (${plant}::text is null or plant = ${plant}::text)
+         ${reachable ? plantReachFilter('plant', reachable) : sql``}
     `) as unknown as Array<{ n: number }>;
     return {
       balanced: drift.length === 0,
@@ -136,7 +160,7 @@ export async function reconcileStock(
  * Zero-quantity dimensions are kept only when the ledger still justifies them; a dimension
  * the ledger no longer knows is deleted, which is the ghost case.
  */
-export async function rebuildStockDimension(input: {
+type RebuildInput = {
   client: string;
   changedBy: string;
   materialNumber: string;
@@ -144,8 +168,29 @@ export async function rebuildStockDimension(input: {
   storageLocation: string | null;
   stockType: string;
   batchNumber?: string;
-}): Promise<{ ledgerQuantity: string }> {
-  return withTenant(input.client, async (tx) => {
+};
+
+/** Session, `INV.STOCK.RECONCILE` and a reachable plant; the recorded user is the session user, not `changedBy`. */
+export async function rebuildStockDimension(
+  input: RebuildInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<{ ledgerQuantity: string }> {
+  return rebuildWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function rebuildStockDimensionForProvisioning(input: RebuildInput): Promise<{ ledgerQuantity: string }> {
+  return rebuildWith(input, 'unscoped');
+}
+
+async function rebuildWith(rawInput: RebuildInput, mode: Mode): Promise<{ ledgerQuantity: string }> {
+  return withTenant(rawInput.client, async (tx) => {
+    let input = rawInput;
+    if (mode !== 'unscoped') {
+      const actor = await purchasingActor(tx, rawInput.client, mode.authorization, [RECONCILE_CAPABILITY], refuse);
+      const reachable = await reachablePlantsInTx(tx, rawInput.client, actor);
+      if (!reachable.includes(rawInput.plant)) throw refuse(`The plant ${rawInput.plant} does not stand.`, 'Maintain the plant before selecting it.');
+      input = { ...rawInput, changedBy: actor.username };
+    }
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${`${input.client}/stock-scope/${input.materialNumber}`}, 0))
     `);

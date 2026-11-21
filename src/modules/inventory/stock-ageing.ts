@@ -12,6 +12,8 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { RETURNS } from './stock-types';
 
@@ -197,11 +199,21 @@ function linesCte(client: string, stockType: string, asOf: string, filters: SQL)
     )`;
 }
 
-export async function stockAgeing(input: {
-  client: string;
-  localCurrency: string;
-  selection: StockAgeingSelection;
-}): Promise<StockAgeingResult> {
+type AgeingInput = { client: string; localCurrency: string; selection: StockAgeingSelection };
+
+/** Session, `INV.STOCK.AGEING.DISPLAY` and company scope: only stock of plants the caller reaches is read. */
+export async function stockAgeing(input: AgeingInput & { authorization: ServiceAuthorityContext | undefined }): Promise<StockAgeingResult> {
+  return stockAgeingWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function stockAgeingForProvisioning(input: AgeingInput): Promise<StockAgeingResult> {
+  return stockAgeingWith(input, 'unscoped');
+}
+
+async function stockAgeingWith(
+  input: AgeingInput, scope: 'unscoped' | { authorization: ServiceAuthorityContext | undefined },
+): Promise<StockAgeingResult> {
   const { client, localCurrency } = input;
   const raw = input.selection;
 
@@ -246,6 +258,9 @@ export async function stockAgeing(input: {
   const buckets = bucketLabels(ageBuckets);
 
   return withTenant(client, async (tx) => {
+    const reachable = scope === 'unscoped' ? null : await reachablePlantsInTx(
+      tx, client, await purchasingActor(tx, client, scope.authorization, [STOCK_AGEING_CAPABILITY], (m, r) => new StockAgeingError(m, r)),
+    );
     for (const value of [materialFrom, materialTo]) {
       if (!value) continue;
       const rows = await tx.execute(sql`
@@ -258,7 +273,7 @@ export async function stockAgeing(input: {
       const rows = await tx.execute(sql`
         select 1 as hit from plant where client = ${client} and plant = ${value} limit 1
       `) as unknown as Array<{ hit: number }>;
-      if (rows.length === 0) fail(`The plant ${value} does not stand.`, 'Maintain the plant before selecting it.');
+      if (rows.length === 0 || (reachable && !reachable.includes(value))) fail(`The plant ${value} does not stand.`, 'Maintain the plant before selecting it.');
     }
     if (namedStockType) {
       const rows = await tx.execute(sql`
@@ -272,6 +287,7 @@ export async function stockAgeing(input: {
       materialTo ? sql`and ${sql.raw(alias)}.material_number <= ${materialTo}` : sql``,
       plantFrom ? sql`and ${sql.raw(alias)}.plant >= ${plantFrom}` : sql``,
       plantTo ? sql`and ${sql.raw(alias)}.plant <= ${plantTo}` : sql``,
+      reachable ? plantReachFilter(`${alias}.plant`, reachable) : sql``,
     ], sql` `);
 
     // 1. The population: what the stock record says is on hand, with master data and the MB52 valuation.

@@ -51,7 +51,7 @@ export default async function MaterialDocumentOutputPage({ searchParams }: {
   let listError: string | null = null;
   if (canRun) {
     try {
-      result = await listOutputMessages({ client: session.user.client, selection });
+      result = await listOutputMessages({ client: session.user.client, selection, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, });
     } catch (error) {
       if (error instanceof MaterialDocumentOutputError) {
         listError = error.remedy ? `${error.message} ${error.remedy}` : error.message;
@@ -71,9 +71,9 @@ export default async function MaterialDocumentOutputPage({ searchParams }: {
       slip = {
         documentNumber,
         text: stored?.renderedDocument
-          ?? await renderSlip({ client: session.user.client, documentNumber }),
+          ?? await renderSlip({ client: session.user.client, documentNumber, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, }),
         companyCode: stored?.companyCodes[0]
-          ?? await materialDocumentCompanyCode(session.user.client, documentNumber),
+          ?? await materialDocumentCompanyCode(session.user.client, documentNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }),
         stored: Boolean(stored),
       };
     } catch {

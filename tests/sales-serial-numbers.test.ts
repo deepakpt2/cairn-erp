@@ -5,7 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { saveSalesConditionForProvisioning as saveSalesCondition } from '../src/modules/sales/conditions';
-import { listSerialNumbers, saveSerialNumber, serialsOfPick } from '../src/modules/inventory/serial-number';
+import { listSerialNumbersForProvisioning as listSerialNumbers, saveSerialNumberForProvisioning as saveSerialNumber, serialsOfPick } from '../src/modules/inventory/serial-number';
 import { createDelivery } from '../src/modules/sales/delivery';
 import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {

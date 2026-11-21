@@ -5,13 +5,13 @@ import { withTenant } from '../src/platform/db/client';
 import {
   MATERIAL_DOC_OUTPUT_CAPABILITY,
   MaterialDocumentOutputError,
-  determineOutputs,
-  dispatchMessage,
-  dispatchPending,
-  listOutputMessages,
+  determineOutputsForProvisioning as determineOutputs,
+  dispatchMessageForProvisioning as dispatchMessage,
+  dispatchPendingForProvisioning as dispatchPending,
+  listOutputMessagesForProvisioning as listOutputMessages,
   recordOutputsForPostedDocument,
-  renderSlip,
-  setRecipient,
+  renderSlipForProvisioning as renderSlip,
+  setRecipientForProvisioning as setRecipient,
 } from '../src/modules/inventory/material-document-output';
 import { createTenant, destroyTenant } from './helpers';
 import { runOutputDispatch } from './helpers/output-dispatch';

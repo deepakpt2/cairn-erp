@@ -13,6 +13,14 @@ import { listMaterialDocuments } from '../src/modules/inventory/material-documen
 import { changeMaterialPrice, listFuturePrices } from '../src/modules/inventory/price-change';
 import { completeReservationItem, createReservation, getReservation, withdrawReservation } from '../src/modules/inventory/reservations';
 import { stockOverview } from '../src/modules/inventory/stock-overview';
+import { stockAgeing, stockAgeingForProvisioning } from '../src/modules/inventory/stock-ageing';
+import { listShelfLife } from '../src/modules/inventory/shelf-life-list';
+import {
+  determineOutputs, dispatchMessage, dispatchPending, listOutputMessages, renderSlip, setRecipient,
+} from '../src/modules/inventory/material-document-output';
+import { listSerialNumbers, saveSerialNumber } from '../src/modules/inventory/serial-number';
+import { rebuildStockDimension, reconcileStock } from '../src/modules/inventory/stock-reconcile';
+import { stockOnPostingDate } from '../src/modules/inventory/stock-posting-date';
 import { getCountDocument, getCountHistory, getCountStatus, searchCountDocuments, submitCounts } from '../src/modules/inventory/physical-inventory-count';
 import { getDifferenceDocument, listDifferences } from '../src/modules/inventory/physical-inventory-differences';
 import { getDifferencePosting, getPostingHistory, postDifferences, validateDifferencePosting } from '../src/modules/inventory/physical-inventory-posting';
@@ -29,7 +37,7 @@ const DOC_B = '4900000002';
 const DOC_X = '4900000003';
 const DOC_N = '4900000004';
 const GONE = '4999999999';
-const CAPS = ['INV.DISPLAY', 'INV.MATERIALDOC.LIST', 'INV.STOCK.VIEW', 'INV.STOCK.WAREHOUSE'];
+const CAPS = ['INV.DISPLAY', 'INV.MATERIALDOC.LIST', 'INV.STOCK.VIEW', 'INV.STOCK.WAREHOUSE', 'INV.STOCK.AGEING.DISPLAY', 'INV.SLED.LIST', 'INV.STOCK.POSTINGDATE', 'INV.STOCK.RECONCILE', 'INV.SERIAL.MAINTAIN', 'INV.MATERIALDOC.RECEIVEPRINT'];
 const WINDOW = { postingDateFrom: '2026-04-01', postingDateTo: '2026-04-30', maxHits: 100 };
 
 let tenant: TestTenant;
@@ -452,6 +460,162 @@ describe('physical inventory (count, differences, posting, recount)', () => {
       expect(await ask(post(a, DA, 'PP-NOAUTH'))).not.toMatch(/^done$|does not exist/);
       expect(await ask(getRecountSource(client, key(DA), a))).not.toBe('done');
       expect(await ask(recount(a, DA, 'RC-NOAUTH'))).not.toMatch(/^done$|does not exist/);
+    }
+  });
+});
+
+describe('stock ageing, shelf-life list and stock on posting date', () => {
+  type Auth = FinanceActor['authorization'] | undefined;
+  const ageing = (a: Auth, selection = {}) => stockAgeing({ client, localCurrency: 'USD', selection: { asOf: '2026-05-01', maxHits: 100, ...selection }, authorization: a });
+  const sled = (a: Auth, selection = {}) => listShelfLife({ client, selection: { keyDate: '2026-05-01', includeZeroStock: true, ...selection }, authorization: a });
+  const roll = (a: Auth, selection = {}) => stockOnPostingDate({
+    client, selection: { materialFrom: 'SCM1', plantFrom: 'PLA1', plantTo: 'PLB1', dateFrom: '2026-04-01', dateTo: '2026-04-30', maxHits: 100, ...selection }, authorization: a,
+  });
+  const plants = (rows: Array<{ plant: string }>) => [...new Set(rows.map((r) => r.plant))].sort();
+
+  it('lists only stock of plants inside the reach', async () => {
+    expect(plants((await ageing(onlyA.authorization)).rows)).toEqual(['PLA1']);
+    expect(plants((await ageing(onlyB.authorization)).rows)).toEqual(['PLB1']);
+    expect(plants((await ageing(both.authorization)).rows)).toEqual(['PLA1', 'PLB1']);
+    expect(plants((await ageing(plantA.authorization)).rows)).toEqual(['PLA1']);
+    expect(plants((await roll(both.authorization)).rows)).toEqual(['PLA1', 'PLB1']);
+    expect(plants((await roll(onlyA.authorization, { plantTo: 'PLA1' })).rows)).toEqual(['PLA1']);
+    expect(plants((await roll(plantA.authorization, { plantTo: 'PLA1' })).rows)).toEqual(['PLA1']);
+    expect(plants((await stockAgeingForProvisioning({ client, localCurrency: 'USD', selection: { asOf: '2026-05-01' } })).rows)).toContain('PLN1');
+  });
+
+  it('answers a named plant outside the reach as a plant that does not stand', async () => {
+    const mask = (m: string, p: string) => m.replaceAll(p, '#');
+    const missing = mask(await ask(ageing(onlyA.authorization, { plantFrom: 'PLZZ' })), 'PLZZ');
+    expect(mask(await ask(ageing(onlyA.authorization, { plantFrom: 'PLB1' })), 'PLB1')).toBe(missing);
+    expect(mask(await ask(ageing(onlyA.authorization, { plantFrom: 'PLN1' })), 'PLN1')).toBe(missing);
+    expect(mask(await ask(ageing(plantA.authorization, { plantFrom: 'PLB1' })), 'PLB1')).toBe(missing);
+    expect(mask(await ask(sled(onlyA.authorization, { plantFrom: 'PLB1' })), 'PLB1')).toMatch(/does not stand/);
+    expect(await ask(roll(onlyA.authorization))).toMatch(/does not stand/);
+    expect(await ask(roll(onlyB.authorization, { plantFrom: 'PLA1', plantTo: 'PLA1' }))).toMatch(/does not stand/);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant on all three', async () => {
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      expect(await ask(ageing(bad))).not.toBe('done');
+      expect(await ask(sled(bad))).not.toBe('done');
+      expect(await ask(roll(bad))).not.toBe('done');
+    }
+  });
+});
+
+describe('stock reconciliation and rebuild', () => {
+  type Auth = FinanceActor['authorization'] | undefined;
+  const rebuild = (a: Auth, plant: string) => rebuildStockDimension({
+    client, changedBy: 'someone-else', materialNumber: 'SCM1', plant, storageLocation: 'SL01', stockType: 'UNRESTRICTED', authorization: a,
+  });
+  const stockOf = (plant: string) => withTenant(client, async (tx) => (await tx.execute(sql`
+    select quantity::text as q, changed_by from stock_quantity where client = ${client} and plant = ${plant} and material_number = 'SCM1'
+  `)) as unknown as Array<{ q: string; changed_by: string | null }>);
+
+  it('compares only plants inside the reach and answers another plant as missing', async () => {
+    const own = await reconcileStock(client, {}, onlyA.authorization);
+    expect(own.drift.every((d) => d.plant === 'PLA1')).toBe(true);
+    expect(own.dimensionsChecked).toBe(1);
+    expect((await reconcileStock(client, {}, both.authorization)).dimensionsChecked).toBe(2);
+    const mask = (m: string, p: string) => m.replaceAll(p, '#');
+    const missing = mask(await ask(reconcileStock(client, { plant: 'PLZZ' }, onlyA.authorization)), 'PLZZ');
+    expect(mask(await ask(reconcileStock(client, { plant: 'PLB1' }, onlyA.authorization)), 'PLB1')).toBe(missing);
+    expect(mask(await ask(reconcileStock(client, { plant: 'PLN1' }, onlyA.authorization)), 'PLN1')).toBe(missing);
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      expect(await ask(reconcileStock(client, {}, bad))).not.toBe('done');
+    }
+  });
+
+  it('refuses a rebuild of another plant, changes nothing there, and records the session user', async () => {
+    const before = await stockOf('PLB1');
+    expect(await ask(rebuild(onlyA.authorization, 'PLB1'))).toMatch(/does not stand/);
+    expect(await ask(rebuild(onlyA.authorization, 'PLN1'))).toMatch(/does not stand/);
+    expect(await ask(rebuild(plantA.authorization, 'PLB1'))).toMatch(/does not stand/);
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      expect(await ask(rebuild(bad, 'PLA1'))).not.toBe('done');
+    }
+    expect(await stockOf('PLB1')).toEqual(before);
+    await rebuild(onlyA.authorization, 'PLA1');
+    expect((await stockOf('PLA1'))[0]?.changed_by).toBe(onlyA.username);
+  });
+});
+
+describe('serial numbers', () => {
+  type Auth = FinanceActor['authorization'] | undefined;
+  const save = (a: Auth, serial: string, plant: string | undefined, status: 'AVAILABLE' | 'IN_STOCK' = 'IN_STOCK') => saveSerialNumber({
+    client, changedBy: 'someone-else', materialNumber: 'SCM1', serialNumber: serial, plant, storageLocation: 'SL01', status, authorization: a,
+  });
+  const serials = async (a: Auth) => (await listSerialNumbers(client, { materialNumber: 'SCM1' }, a)).map((r) => r.serialNumber).sort();
+
+  it('saves and lists only units of plants inside the reach, records the session user', async () => {
+    await save(onlyA.authorization, 'SN-A', 'PLA1');
+    await save(onlyB.authorization, 'SN-B', 'PLB1');
+    expect(await serials(onlyA.authorization)).toEqual(['SN-A']);
+    expect(await serials(onlyB.authorization)).toEqual(['SN-B']);
+    expect(await serials(both.authorization)).toEqual(['SN-A', 'SN-B']);
+    expect(await serials(plantA.authorization)).toEqual(['SN-A']);
+    const rows = await withTenant(client, async (tx) => (await tx.execute(sql`
+      select created_by from serial_number where client = ${client} and serial_number = 'SN-A'`)) as unknown as Array<{ created_by: string }>);
+    expect(rows[0]?.created_by).toBe(onlyA.username);
+  });
+
+  it('refuses a unit at another plant, a unit of another company, a plant-less unit and a move of one out of reach', async () => {
+    expect(await ask(save(onlyA.authorization, 'SN-X1', 'PLB1'))).toMatch(/cannot be recorded here/);
+    expect(await ask(save(onlyA.authorization, 'SN-X2', 'PLN1'))).toMatch(/cannot be recorded here/);
+    expect(await ask(save(onlyA.authorization, 'SN-X3', undefined, 'AVAILABLE'))).toMatch(/cannot be recorded here/);
+    expect(await ask(save(plantA.authorization, 'SN-X4', 'PLB1'))).toMatch(/cannot be recorded here/);
+    // moving B's unit into A's plant by name must not work either
+    expect(await ask(save(onlyA.authorization, 'SN-B', 'PLA1'))).toMatch(/cannot be recorded here/);
+    expect(await serials(both.authorization)).toEqual(['SN-A', 'SN-B']);
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      expect(await ask(save(bad, 'SN-Y', 'PLA1'))).not.toBe('done');
+      expect(await ask(listSerialNumbers(client, {}, bad))).not.toBe('done');
+    }
+  });
+});
+
+describe('material document output (MB90)', () => {
+  type Auth = FinanceActor['authorization'] | undefined;
+  const sel = { documentFrom: DOC_A, documentTo: DOC_N };
+  const docsOf = async (a: Auth) => [...new Set((await listOutputMessages({ client, selection: sel, authorization: a })).rows.map((r) => r.documentNumber))].sort();
+  const key = (n: string) => ({ documentNumber: n, outputType: 'WE01', transmissionMedium: 'PRINT' });
+
+  it('determines and lists outputs only for documents wholly inside the reach', async () => {
+    const run = await determineOutputs({ client, changedBy: 'someone-else', selection: sel, authorization: onlyA.authorization });
+    expect(run.examined).toBe(1);
+    expect(await docsOf(onlyA.authorization)).toEqual([DOC_A]);
+    expect(await docsOf(onlyB.authorization)).toEqual([]);
+    await determineOutputs({ client, changedBy: 'x', selection: sel, authorization: both.authorization });
+    expect(await docsOf(both.authorization)).toEqual([DOC_A, DOC_B, DOC_X]);
+    expect(await docsOf(onlyB.authorization)).toEqual([DOC_B]);
+    expect(await docsOf(plantA.authorization)).toEqual([DOC_A]);
+  });
+
+  it('answers another company, a mixed document and a no-company plant as a missing message; changes nothing', async () => {
+    const mask = (m: string, n: string) => m.replaceAll(n, '#');
+    const missing = mask(await ask(setRecipient({ client, changedBy: 'x', ...key(GONE), recipient: 'a@b.c', authorization: onlyA.authorization })), GONE);
+    for (const n of [DOC_B, DOC_X, DOC_N]) {
+      expect(mask(await ask(setRecipient({ client, changedBy: 'x', ...key(n), recipient: 'a@b.c', authorization: onlyA.authorization })), n)).toBe(missing);
+      expect(mask(await ask(dispatchMessage({ client, changedBy: 'x', ...key(n), authorization: onlyA.authorization })), n)).toBe(mask(await ask(dispatchMessage({ client, changedBy: 'x', ...key(GONE), authorization: onlyA.authorization })), GONE));
+      expect(await ask(renderSlip({ client, documentNumber: n, authorization: onlyA.authorization }))).toMatch(/does not exist/);
+    }
+    const rows = await withTenant(client, async (tx) => (await tx.execute(sql`
+      select recipient from output_message where client = ${client} and document_number in (${DOC_B}, ${DOC_X})`)) as unknown as Array<{ recipient: string | null }>);
+    expect(rows.every((r) => r.recipient === null)).toBe(true);
+    expect(await ask(renderSlip({ client, documentNumber: DOC_A, authorization: onlyA.authorization }))).toBe('done');
+    expect(await ask(renderSlip({ client, documentNumber: DOC_A, authorization: plantA.authorization }))).toBe('done');
+    expect(await ask(renderSlip({ client, documentNumber: DOC_B, authorization: plantA.authorization }))).toMatch(/does not exist/);
+  });
+
+  it('refuses no session, no capability, no scope and another tenant on every entry point', async () => {
+    for (const bad of [undefined, noCapability.authorization, noScope.authorization, otherTenantActor.authorization]) {
+      expect(await ask(listOutputMessages({ client, selection: sel, authorization: bad }))).not.toBe('done');
+      expect(await ask(determineOutputs({ client, changedBy: 'x', selection: sel, authorization: bad }))).not.toBe('done');
+      expect(await ask(dispatchPending({ client, changedBy: 'x', selection: sel, authorization: bad }))).not.toBe('done');
+      expect(await ask(dispatchMessage({ client, changedBy: 'x', ...key(DOC_A), authorization: bad }))).not.toBe('done');
+      expect(await ask(setRecipient({ client, changedBy: 'x', ...key(DOC_A), authorization: bad }))).not.toBe('done');
+      expect(await ask(renderSlip({ client, documentNumber: DOC_A, authorization: bad }))).not.toBe('done');
     }
   });
 });

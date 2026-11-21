@@ -17,6 +17,8 @@
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 
 export const SLED_LIST_CAPABILITY = 'INV.SLED.LIST';
 export const SLED_LIST_ALIAS = 'MB5M';
@@ -203,11 +205,21 @@ interface RawRow {
   undetermined_reason: string | null;
 }
 
-export async function listShelfLife(input: {
-  client: string;
-  selection?: ShelfLifeSelection;
-  timeZone?: string;
-}): Promise<ShelfLifeResult> {
+type ShelfLifeInput = { client: string; selection?: ShelfLifeSelection; timeZone?: string };
+
+/** Session, `INV.SLED.LIST` and company scope: only batches stocked at plants the caller reaches are listed. */
+export async function listShelfLife(input: ShelfLifeInput & { authorization: ServiceAuthorityContext | undefined }): Promise<ShelfLifeResult> {
+  return listShelfLifeWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function listShelfLifeForProvisioning(input: ShelfLifeInput): Promise<ShelfLifeResult> {
+  return listShelfLifeWith(input, 'unscoped');
+}
+
+async function listShelfLifeWith(
+  input: ShelfLifeInput, mode: 'unscoped' | { authorization: ServiceAuthorityContext | undefined },
+): Promise<ShelfLifeResult> {
   const raw = input.selection ?? {};
   if (bound(raw.salesOrder)) fail('A sales order is not on this list.', 'Select a material, a plant, or a batch.');
   if (bound(raw.delivery)) fail('A delivery is not on this list.', 'Select a material, a plant, or a batch.');
@@ -264,6 +276,9 @@ export async function listShelfLife(input: {
   warnings.push('A goods movement does not calculate this date. The stored batch date is read as it stands.');
 
   return withTenant(input.client, async (tx) => {
+    const reachable = mode === 'unscoped' ? null : await reachablePlantsInTx(
+      tx, input.client, await purchasingActor(tx, input.client, mode.authorization, [SLED_LIST_CAPABILITY], (m, r) => new ShelfLifeListError(m, r ?? "")),
+    );
     for (const value of [materialFrom, materialTo]) {
       if (!value) continue;
       const rows = await tx.execute(sql`select 1 as hit from material where client = ${input.client} and material_number = ${value} limit 1`) as unknown as Array<{ hit: number }>;
@@ -272,7 +287,7 @@ export async function listShelfLife(input: {
     for (const value of [plantFrom, plantTo]) {
       if (!value) continue;
       const rows = await tx.execute(sql`select 1 as hit from plant where client = ${input.client} and plant = ${value} limit 1`) as unknown as Array<{ hit: number }>;
-      if (rows.length === 0) fail(`The plant ${value} does not stand.`, 'Maintain the plant before selecting it.');
+      if (rows.length === 0 || (reachable && !reachable.includes(value))) fail(`The plant ${value} does not stand.`, 'Maintain the plant before selecting it.');
     }
     for (const value of [locationFrom, locationTo]) {
       if (!value) continue;
@@ -289,6 +304,7 @@ export async function listShelfLife(input: {
       materialTo ? sql`and s.material_number <= ${materialTo}` : sql``,
       plantFrom ? sql`and s.plant >= ${plantFrom}` : sql``,
       plantTo ? sql`and s.plant <= ${plantTo}` : sql``,
+      reachable ? plantReachFilter('s.plant', reachable) : sql``,
       locationFrom ? sql`and s.storage_location >= ${locationFrom}` : sql``,
       locationTo ? sql`and s.storage_location <= ${locationTo}` : sql``,
       batchFrom ? sql`and s.batch_number >= ${batchFrom}` : sql``,

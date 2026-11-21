@@ -49,7 +49,7 @@ export default async function StockPostingDatePage({
   let reportError: string | null = null;
   if (can(session, STOCK_POSTINGDATE_CAPABILITY)) {
     try {
-      result = await stockOnPostingDate({ client: session.user.client, selection: initialSelection });
+      result = await stockOnPostingDate({ client: session.user.client, selection: initialSelection, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, });
     } catch (error) {
       reportError = error instanceof StockPostingDateError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)

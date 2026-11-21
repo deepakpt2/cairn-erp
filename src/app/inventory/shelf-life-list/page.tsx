@@ -51,7 +51,7 @@ export default async function ShelfLifeListPage({
   let reportError: string | null = null;
   if (canUse && get('run') === '1') {
     try {
-      result = await listShelfLife({ client: session.user.client, selection, timeZone: 'Asia/Kuwait' });
+      result = await listShelfLife({ client: session.user.client, selection, authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' }, timeZone: 'Asia/Kuwait' });
     } catch (caught) {
       reportError = caught instanceof ShelfLifeListError ? `${caught.message} ${caught.remedy}` : t('mb5m.failed');
     }

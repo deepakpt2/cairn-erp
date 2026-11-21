@@ -25,7 +25,7 @@ import {
 } from '../src/modules/output/document-layout';
 import { renderPdfWithLetterhead, renderDocumentPdf } from '../src/modules/output/render-pdf';
 import { renderStoredPdf, PdfDownloadError } from '../src/modules/output/download-pdf';
-import { dispatchMessage, recordOutputsForPostedDocument } from '../src/modules/inventory/material-document-output';
+import { dispatchMessageForProvisioning as dispatchMessage, recordOutputsForPostedDocument } from '../src/modules/inventory/material-document-output';
 import { saveMailConfig } from '../src/platform/mail/service';
 import { createTenant, destroyTenant } from './helpers';
 import { runOutputDispatch } from './helpers/output-dispatch';

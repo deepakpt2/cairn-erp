@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import {
   StockPostingDateError,
-  stockOnPostingDate,
+  stockOnPostingDateForProvisioning as stockOnPostingDate,
   type StockPostingDateSelection,
 } from '../src/modules/inventory/stock-posting-date';
 import { createTenant, destroyTenant } from './helpers';

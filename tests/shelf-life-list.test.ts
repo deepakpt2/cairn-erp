@@ -5,7 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
 import { saveMaterialShelfLife } from '../src/modules/inventory/material-shelf-life';
-import { ShelfLifeListError, listShelfLife } from '../src/modules/inventory/shelf-life-list';
+import { ShelfLifeListError, listShelfLifeForProvisioning as listShelfLife } from '../src/modules/inventory/shelf-life-list';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'MB5M_TEST';

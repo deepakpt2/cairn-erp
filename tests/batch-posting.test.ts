@@ -11,7 +11,7 @@ import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { postTransfer, reverseTransfer } from './helpers/transfer-authorized';
 import { stockOverview } from './helpers/material-document-authorized';
 import { listWarehouseStocks } from './helpers/material-document-authorized';
-import { stockOnPostingDate } from '../src/modules/inventory/stock-posting-date';
+import { stockOnPostingDateForProvisioning as stockOnPostingDate } from '../src/modules/inventory/stock-posting-date';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { saveBatchStatus } from '../src/modules/inventory/batch-status';
 import { createBatch } from '../src/modules/inventory/batch-master';

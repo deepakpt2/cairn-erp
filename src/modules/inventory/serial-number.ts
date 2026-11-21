@@ -29,6 +29,8 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { purchasingActor, reachablePlantsInTx, plantReachFilter } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { deliveryPickingSerial } from '../sales/schema';
 import { material, serialNumber } from './schema';
@@ -118,10 +120,37 @@ export async function requiresSerialFor(
   return new Map(distinct.map((number) => [number, found.get(number) ?? false]));
 }
 
-/** Create one serialised unit, or move one that stands. */
-export async function saveSerialNumber(input: SerialNumberInput): Promise<SerialView> {
-  const parsed = serialNumberInput.parse(input);
+type SerialMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+
+/**
+ * Create one serialised unit, or move one that stands. Needs a session, `INV.SERIAL.MAINTAIN` and company scope: the
+ * unit's plant, before and after the save, must be one the caller reaches (a unit that names no plant is never
+ * reachable). The recorded user is the session user.
+ */
+export async function saveSerialNumber(
+  input: SerialNumberInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<SerialView> {
+  return saveSerialWith(input, { authorization: input.authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function saveSerialNumberForProvisioning(input: SerialNumberInput): Promise<SerialView> {
+  return saveSerialWith(input, 'unscoped');
+}
+
+async function saveSerialWith(rawInput: SerialNumberInput, mode: SerialMode): Promise<SerialView> {
+  let parsed = serialNumberInput.parse({ ...rawInput, authorization: undefined });
   return withTenant(parsed.client, async (tx) => {
+    let reachable: string[] | null = null;
+    if (mode !== 'unscoped') {
+      const actor = await purchasingActor(tx, parsed.client, mode.authorization, [SERIAL_CAPABILITY], (m) => new SerialNumberError(m, 'Ask for the serial number capability and the company scope.'));
+      reachable = await reachablePlantsInTx(tx, parsed.client, actor);
+      parsed = { ...parsed, changedBy: actor.username };
+    }
+    const cannot = () => new SerialNumberError(
+      `Serial ${parsed.serialNumber} of ${parsed.materialNumber} cannot be recorded here.`,
+      'Name a plant inside your company scope.',
+    );
     const [existing] = await tx.select().from(serialNumber).where(and(
       eq(serialNumber.client, parsed.client),
       eq(serialNumber.materialNumber, parsed.materialNumber),
@@ -130,6 +159,10 @@ export async function saveSerialNumber(input: SerialNumberInput): Promise<Serial
 
     const status = parsed.status ?? existing?.status ?? 'AVAILABLE';
     const plant = (parsed.plant ?? existing?.plant ?? '').trim().toUpperCase();
+    if (reachable) {
+      if (existing && !reachable.includes((existing.plant ?? '').trim())) throw cannot();
+      if (!reachable.includes(plant)) throw cannot();
+    }
     if (status !== 'AVAILABLE' && plant === '') {
       throw new SerialNumberError(
         `Serial ${parsed.serialNumber} of ${parsed.materialNumber} is ${status}, and ${status.toLowerCase()} names no plant.`,
@@ -181,9 +214,26 @@ export async function saveSerialNumber(input: SerialNumberInput): Promise<Serial
   });
 }
 
-export async function listSerialNumbers(client: string, filter: SerialFilter = {}): Promise<SerialView[]> {
+/** Session, `INV.SERIAL.MAINTAIN` and company scope: only units standing in a plant the caller reaches are listed. */
+export async function listSerialNumbers(
+  client: string, filter: SerialFilter, authorization: ServiceAuthorityContext | undefined,
+): Promise<SerialView[]> {
+  return listSerialsWith(client, filter, { authorization });
+}
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function listSerialNumbersForProvisioning(client: string, filter: SerialFilter = {}): Promise<SerialView[]> {
+  return listSerialsWith(client, filter, 'unscoped');
+}
+
+async function listSerialsWith(client: string, filter: SerialFilter, mode: SerialMode): Promise<SerialView[]> {
   return withTenant(client, async (tx) => {
     const conditions = [eq(serialNumber.client, client)];
+    if (mode !== 'unscoped') {
+      const actor = await purchasingActor(tx, client, mode.authorization, [SERIAL_CAPABILITY], (m) => new SerialNumberError(m, 'Ask for the serial number capability and the company scope.'));
+      const reachable = await reachablePlantsInTx(tx, client, actor);
+      conditions.push(sql`true ${plantReachFilter('trim(coalesce(plant, \'\'))', reachable)}`);
+    }
     if (filter.materialNumber) conditions.push(eq(serialNumber.materialNumber, filter.materialNumber.trim().toUpperCase()));
     if (filter.customerNumber) conditions.push(eq(serialNumber.customerNumber, filter.customerNumber.trim().toUpperCase()));
     if (filter.deliveryNumber) conditions.push(eq(serialNumber.deliveryNumber, filter.deliveryNumber.trim().toUpperCase()));
