@@ -37,7 +37,7 @@ Columns: the grouping key, **Period** (when a period split is chosen), **Curr.**
 
 ## Incomplete documents
 
-**SD → Sales information → Incomplete documents** (`/sales/incomplete`). Lists documents held because a required field is empty. Columns: **Line**, **What is missing**, **Consequence** (what you cannot do until it is filled), **Filled in at** (the screen that fixes it). Fix it there; the document releases on its own at the next save.
+**SD → Sales information → Incomplete documents** (`/sales/incomplete`). Lists documents held because a required field is empty. Columns: **Line**, **What is missing**, **Consequence** (what you cannot do until it is filled), **Filled in at** (the screen that fixes it). Fill the field at the screen named there, then retry the blocked step.
 
 What is mandatory is set by the administrator in **Configuration → Incompletion** (`/config/incompletion`).
 

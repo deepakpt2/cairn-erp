@@ -71,7 +71,7 @@ Tenant 0100
 | **Material** | Everything about something you buy, make or sell: description, unit, type, group, plant data, planning and cost settings | **MM** → Material master | `/inventory/materials` |
 | **Business partner** | One record for a company or person you deal with; it can act as **supplier**, **customer** or both | **Finance & Controlling** → Business partners | `/foundation/partners` |
 | **G/L account** | An account in the chart of accounts | **Finance & Controlling** → General ledger | `/config/gl-accounts/new` |
-| **Cost centre** | A department whose costs you track | **Finance & Controlling** → Controlling | see the FICO guide |
+| **Cost centre** | A department whose costs you track | **Finance & Controlling** → Controlling | `/config/cost-centers` — see [FICO master data](../05-fico-finance-controlling/master-data.md#4-cost-centres-and-profit-centres) |
 | **Bill of materials (BOM)** | The parts and quantities that make one product | **PP** → Master data | `/production/boms` |
 | **Routing** | The ordered operations to make the product, with times | **PP** → Master data | `/production/routings` |
 | **Work centre** | A machine or line that carries out operations | **PP** → Master data | `/production/work-centers` |
