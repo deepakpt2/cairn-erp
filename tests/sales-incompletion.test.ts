@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { changeSalesOrder, getSalesOrder } from './helpers/sales-authorized';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
@@ -9,9 +10,7 @@ import {
   saveIncompletionProcedure, saveIncompletionProcedureField, saveIncompletionStatusGroup,
   withdrawIncompletionAssignment,
 } from '../src/modules/sales/incompletion';
-import {
-  changeSalesOrder, createSalesOrder, getSalesOrder,
-} from '../src/modules/sales/sales-order';
+import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
   confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines,
   postDeliveryGoodsIssue,

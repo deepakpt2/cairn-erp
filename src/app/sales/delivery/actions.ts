@@ -258,6 +258,7 @@ export async function releaseDeliveryCreditAction(
       justification: optional(form, 'releaseJustification'),
       approvalRef: optional(form, 'releaseApprovalRef'),
       canOverride: can(session, 'FIN.CREDIT.OVERRIDE'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {

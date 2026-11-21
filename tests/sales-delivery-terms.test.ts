@@ -22,6 +22,7 @@
  * And the master's own maintenance refuses a value that is not one: an indicator that is neither
  * blank nor C, a maximum that is not a number a delivery could count to.
  */
+import { getSalesOrder } from './helpers/sales-authorized';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -34,7 +35,7 @@ import {
 } from '../src/modules/foundation/customer-sales-areas';
 import { saveCustomerPartner } from '../src/modules/sales/partners';
 import { assignShippingPoint, defineShippingPoint } from '../src/modules/sales/shipping-point-maintenance';
-import { createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { createDelivery, listDeliverableOrderLines } from '../src/modules/sales/delivery';
 import {
   assignSalesAreaDimensions, createTenant, defineTestRanges, destroyTenant, maintainMaterialSales,

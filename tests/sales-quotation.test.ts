@@ -7,6 +7,7 @@
  * credit, completeness or output; it expires by a date and never by a write; and the order raised from
  * it is an ordinary order, created by the ordinary order service.
  */
+import { getSalesOrder } from './helpers/sales-authorized';
 import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -17,7 +18,7 @@ import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
 import { DELIVERY_CHECKING_RULE, ORDER_CHECKING_RULE } from '../src/modules/sales/availability';
 import { saveCheckingGroup, saveCheckingRule, saveScopeOfCheck } from '../src/modules/production/availability-check';
-import { createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
   SalesQuotationError, changeQuotation, createOrderFromQuotation, createQuotation, getQuotation,
   listQuotations, quotationCreateInput, rejectQuotation,
@@ -613,6 +614,6 @@ describe('sales quotation', () => {
     expect(type[0]).toMatchObject({ name: 'Quotation', number_range_object: 'SALESORD', number_range_sub_object: 'AG' });
     // Granted to no role by the migration.
     expect(await count(sql`select count(*)::text as n from role_capability
-      where capability_code = 'SALES.QUOTATION.CREATE' and role_code not like 'TEST_SALES_%'`)).toBe(0);
+      where capability_code = 'SALES.QUOTATION.CREATE' and role_code not like 'TEST_SALES_%' and role_code not like 'TEST_FINANCE_%'`)).toBe(0);
   });
 });

@@ -26,6 +26,7 @@
  * Every material here carries its own stock and its own promises, so a test is never a test of the
  * orders the tests before it left behind.
  */
+import { changeSalesOrder, getSalesOrder } from './helpers/sales-authorized';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -39,7 +40,7 @@ import {
 import {
   saveCheckingGroup, saveCheckingRule, saveScopeOfCheck,
 } from '../src/modules/production/availability-check';
-import { changeSalesOrder, createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { changeSalesDocumentType } from '../src/modules/sales/document-type-maintenance';
 import {
   SalesAvailabilityError, checkSalesOrderAvailability, simulateSalesOrderAvailability,

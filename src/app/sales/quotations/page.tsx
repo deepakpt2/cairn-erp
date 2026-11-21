@@ -9,6 +9,7 @@ import {
   listQuotations,
   quotationChoices,
 } from '@/modules/sales/quotation';
+import { NO_SALES_CHOICES } from '@/modules/sales/sales-order';
 import Quotations from './Quotations';
 import { Page } from '@/ui/kit';
 
@@ -26,7 +27,7 @@ export default async function SalesQuotationsPage({ searchParams }: {
   const client = session.user.client;
   const [documents, choices, selected] = await Promise.all([
     listQuotations(client, params.customer ? { customerNumber: params.customer } : {}),
-    quotationChoices(client),
+    quotationChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => NO_SALES_CHOICES),
     params.quotation ? getQuotation(client, params.quotation.trim()) : Promise.resolve(null),
   ]);
 

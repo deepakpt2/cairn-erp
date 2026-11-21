@@ -153,6 +153,7 @@ export async function changeOrderAction(
       ...headerFrom(form),
       lines,
       rejectLines: [],
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {
@@ -183,6 +184,7 @@ export async function cancelOrderAction(
       orderNumber: text(form, 'orderNumber'),
       expectedVersion: Number(text(form, 'expectedVersion') || '0'),
       reason: optional(form, 'cancelReason'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return { ok: true, orderNumber: result.orderNumber, message: `Sales order ${result.orderNumber} cancelled.` };
@@ -217,6 +219,7 @@ export async function releaseCreditAction(
       justification: optional(form, 'releaseJustification'),
       approvalRef: optional(form, 'releaseApprovalRef'),
       canOverride: can(session, 'FIN.CREDIT.OVERRIDE'),
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     revalidatePath(ROUTE);
     return {

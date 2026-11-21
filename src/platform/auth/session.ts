@@ -719,7 +719,9 @@ export async function loadCapabilities(
  * unrestricted; a user with restrictions may only touch the listed values.
  */
 export interface OrgRestriction {
-  scopeType: 'COMPANY_CODE' | 'PLANT' | 'STORAGE_LOCATION' | 'PURCHASING_ORG' | 'SALES_ORG' | 'COST_CENTER';
+  scopeType:
+    | 'COMPANY_CODE' | 'PLANT' | 'STORAGE_LOCATION' | 'PURCHASING_ORG' | 'SALES_ORG' | 'COST_CENTER'
+    | 'PURCHASING_GROUP' | 'DISTRIBUTION_CHANNEL' | 'DIVISION' | 'CREDIT_CONTROL_AREA' | 'CONTROLLING_AREA';
   scopeValue: string;
 }
 

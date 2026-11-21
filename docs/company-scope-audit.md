@@ -116,3 +116,17 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** `reverseMaterialDocument` itself (the generic MIGO reversal) is still unscoped for non-STO documents; the physical-inventory entry point gates it, direct callers are not covered. Internal helpers (`releaseDifferenceAllocations`, `recomputePostingStatus`, `syncRecountLink`) take no authorization and are only reached through scoped services. Not browser-tested; the smoke scripts typecheck but were not run.
 
 **Still not covered in inventory:** stock ageing/reconcile/shelf-life lists, batch reads, serial numbers, MIGO, return delivery, goods-receipt posting.
+
+## Phase 6a — sales area: sales orders (VA01/VA02/VA03/VA05, credit release)
+
+**Found:** `getSalesOrder`, `changeSalesOrder`, `cancelSalesOrder`, `listSalesOrderDocuments`, `salesOrderChoices` and `releaseSalesOrderCredit` checked no session, capability or scope; a capability alone reached any company's, sales org's or plant's order. Only `createSalesOrder` verified company and plant authority. The sales org, distribution channel and division levels were stored but enforced nowhere.
+
+**Covered:** every service judges inside its own transaction before any read or replay lookup: session, live capability (`SALES.ORDER.CREATE`, release: `SALES.ORDER.RELEASE`), explicit Company Code scope. An order is reachable when its company is in scope, its sales area is inside any Sales Org / Distribution Channel / Division restriction the actor holds (a level with no restriction does not narrow), and every plant it ships from is inside any Plant scope held. Anything else answers as a missing order. Lists filter the same way; `salesOrderChoices` offers only areas of reachable companies. The recorded actor is the session user.
+- Shared helper: `src/modules/sales/sales-scope.ts` (`salesActor`, `salesDocumentReachable`, `salesAreaReachable`), plus `orgLevelsAllow`/`plantsAllow` in `src/platform/auth/scope-actor.ts`.
+- Tests: `tests/company-scope-sales.test.ts` (5 tests); the 42 existing `tests/sales-*` files use `tests/helpers/sales-authorized.ts`.
+
+**Found by the adversarial test:** `salesOrderChoices` first offered sales areas of other companies (area filter ignored the company); fixed.
+
+**Limits:** a secondary level only narrows when the actor holds a restriction of that level; Company Code stays the mandatory gate. Not browser-tested.
+
+**Still not covered in sales:** quotations, deliveries (reads, picks, cancel), billing remainder, returns, rebates, down payments, conditions, analysis/registers, shipping point, credit-control area.

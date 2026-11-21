@@ -8895,7 +8895,9 @@
     "modules/sales/pricing-procedure.ts",
     "modules/sales/pricing.ts",
     "modules/sales/sales-demand.ts",
+    "modules/sales/sales-scope.ts",
     "modules/sales/schema.ts",
+    "platform/auth/scope-actor.ts",
     "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/change/index.ts",
@@ -8904,6 +8906,13 @@
     "platform/posting/decimal.ts",
     "platform/posting/money.ts",
     "platform/tables/reference.ts"
+  ],
+  "modules/sales/sales-scope.ts": [
+    "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/db/client.ts"
   ],
   "modules/sales/schema.ts": [
     "modules/finance/schema.ts",

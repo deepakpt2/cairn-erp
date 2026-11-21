@@ -23,9 +23,11 @@
 import { fromScaled, roundToScale } from '../../platform/posting/decimal';
 import { currencyScale } from '../../platform/posting/money';
 import { z } from 'zod';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { hasOrgAccess } from '../../platform/auth/session';
+import { reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import { salesActor, salesAreaReachable, salesDocumentReachable } from './sales-scope';
 import {
   type ServiceAuthorityContext, refusePlantOutsideScopeInTx, verifyServiceAuthorityInTx,
 } from '../../platform/auth/service-authority';
@@ -578,11 +580,60 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
 }
 
 /** Read one order with the credit determination that stands against it. */
-export async function getSalesOrder(client: string, orderNumber: string): Promise<SalesOrderView | null> {
+async function readSalesOrder(client: string, orderNumber: string): Promise<SalesOrderView | null> {
   const document = await withTenant(client, (tx) => loadDocument(tx, client, orderNumber));
   if (!document) return null;
   return { ...document, credit: await readCredit(client, orderNumber) };
 }
+
+/** SQL conditions limiting a sales header table to the actor's company, sales area and plants. */
+function reachConditions(actor: Awaited<ReturnType<typeof salesActor>>) {
+  const held = (type: string) => actor.restrictions.filter((r) => r.scopeType === type).map((r) => r.scopeValue.trim());
+  const out = [inArray(salesOrder.companyCode, held('COMPANY_CODE').length ? held('COMPANY_CODE') : [''])];
+  if (held('SALES_ORG').length) out.push(inArray(salesOrder.salesOrg, held('SALES_ORG')));
+  if (held('DISTRIBUTION_CHANNEL').length) out.push(inArray(salesOrder.distributionChannel, held('DISTRIBUTION_CHANNEL')));
+  if (held('DIVISION').length) out.push(inArray(salesOrder.division, held('DIVISION')));
+  if (held('PLANT').length) {
+    out.push(sql`not exists (select 1 from sales_order_line l where l.client = ${salesOrder.client}
+      and l.order_number = ${salesOrder.orderNumber} and l.plant not in (${sql.join(held('PLANT').map((p) => sql`${p}`), sql`, `)}))`);
+  }
+  return out;
+}
+
+/** The capabilities an order is read, changed or cancelled under. */
+const ORDER_ACCESS_CAPABILITIES = [SALES_ORDER_CAPABILITY, SALES_ORDER_RELEASE_CAPABILITY] as const;
+
+const orderMissing = (orderNumber: string, remedy: string) => new SalesOrderError(`Sales order ${orderNumber} does not exist.`, remedy);
+
+/**
+ * Judge the order against the actor's reach: company, sales area and plants. An order outside it answers as a
+ * missing one, so its existence is not disclosed. Returns false for a missing or unreachable order.
+ */
+async function orderInReach(tx: Tx, client: string, actor: Awaited<ReturnType<typeof salesActor>>, orderNumber: string): Promise<boolean> {
+  const [header] = await tx.select({
+    companyCode: salesOrder.companyCode, salesOrg: salesOrder.salesOrg,
+    distributionChannel: salesOrder.distributionChannel, division: salesOrder.division,
+  }).from(salesOrder).where(and(eq(salesOrder.client, client), eq(salesOrder.orderNumber, orderNumber))).limit(1);
+  if (!header) return false;
+  const lines = await tx.select({ plant: salesOrderLine.plant }).from(salesOrderLine)
+    .where(and(eq(salesOrderLine.client, client), eq(salesOrderLine.orderNumber, orderNumber)));
+  return salesDocumentReachable(actor, { ...header, plants: lines.map((l) => l.plant) });
+}
+
+/** Read one order with the credit determination that stands against it. Outside the actor's reach it is absent. */
+export async function getSalesOrder(
+  client: string, orderNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<SalesOrderView | null> {
+  const reachable = await withTenant(client, async (tx) => {
+    const actor = await salesActor(tx, client, authorization, ORDER_ACCESS_CAPABILITIES,
+      (m, r) => new SalesOrderError(m, r));
+    return orderInReach(tx, client, actor, orderNumber);
+  });
+  return reachable ? readSalesOrder(client, orderNumber) : null;
+}
+
+/** Seeding and walkthroughs only: no session, no scope. Never imported from `src/app`. */
+export const getSalesOrderForProvisioning = readSalesOrder;
 
 export interface CreateSalesOrderResult extends SalesOrderView {
   /** True when the submission replayed a request that had already created this order. */
@@ -695,6 +746,12 @@ export async function createSalesOrder(
       );
     }
 
+    if (!salesAreaReachable(authority, parsed)) {
+      throw new SalesOrderError(
+        `Your Sales Organization, Distribution Channel and Division scope does not cover sales area ${parsed.salesOrg}/${parsed.distributionChannel}/${parsed.division}.`,
+        'Ask an administrator to extend your sales area scope, then repeat the action.',
+      );
+    }
     const area = await requireOne(await (async () => {
       const [row] = await tx.select().from(salesArea).where(and(
         eq(salesArea.client, parsed.client),
@@ -909,7 +966,7 @@ export async function createSalesOrder(
     return { orderNumber: number, replayed: false, creditArea, orderDate: parsed.orderDate };
   });
 
-  const view = await getSalesOrder(parsed.client, created.orderNumber);
+  const view = await readSalesOrder(parsed.client, created.orderNumber);
   if (!view) throw new SalesOrderError(`Sales order ${created.orderNumber} could not be read back.`);
   const credit = await checkSalesDocumentCredit({
     client: parsed.client, changedBy: parsed.changedBy, salesDocument: created.orderNumber,
@@ -927,9 +984,18 @@ export async function createSalesOrder(
  * against the new value — so an order that was inside its limit when it was created and is outside it
  * after a quantity change carries the block that the new value deserves.
  */
-export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOrderView> {
+export async function changeSalesOrder(
+  input: OrderChangeInput & { authorization: ServiceAuthorityContext | undefined },
+): Promise<SalesOrderView> {
   const parsed = orderChangeInput.parse(input);
   const changed = await withTenant(parsed.client, async (tx) => {
+    const actor = await salesActor(tx, parsed.client, input.authorization, [SALES_ORDER_CAPABILITY],
+      (m, r) => new SalesOrderError(m, r));
+    // The recorded actor is the verified session user; an order outside the reach answers as a missing one.
+    parsed.changedBy = actor.username;
+    if (!(await orderInReach(tx, parsed.client, actor, parsed.orderNumber))) {
+      throw orderMissing(parsed.orderNumber, 'Read the order before changing it.');
+    }
     const [before] = await tx.select().from(salesOrder).where(and(
       eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, parsed.orderNumber),
     )).limit(1);
@@ -1155,7 +1221,7 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
     return { orderDate: before.orderDate };
   });
 
-  const view = await getSalesOrder(parsed.client, parsed.orderNumber);
+  const view = await readSalesOrder(parsed.client, parsed.orderNumber);
   if (!view) throw new SalesOrderError(`Sales order ${parsed.orderNumber} does not exist.`);
   const creditArea = view.credit?.creditControlArea
     ?? await withTenant(parsed.client, (tx) => creditAreaFor(tx, parsed.client, parsed.customerNumber, parsed.companyCode, parsed.creditControlArea));
@@ -1173,9 +1239,17 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
  */
 export async function cancelSalesOrder(input: {
   client: string; changedBy: string; orderNumber: string; expectedVersion: number; reason?: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<SalesOrderView> {
-  const { client, changedBy, orderNumber, expectedVersion, reason } = input;
+  const { client, orderNumber, expectedVersion, reason } = input;
+  let changedBy = input.changedBy;
   await withTenant(client, async (tx) => {
+    const actor = await salesActor(tx, client, input.authorization, [SALES_ORDER_CAPABILITY],
+      (m, r) => new SalesOrderError(m, r));
+    changedBy = actor.username;
+    if (!(await orderInReach(tx, client, actor, orderNumber))) {
+      throw orderMissing(orderNumber, 'Read the order before cancelling it.');
+    }
     const [before] = await tx.select().from(salesOrder).where(and(
       eq(salesOrder.client, client), eq(salesOrder.orderNumber, orderNumber),
     )).limit(1);
@@ -1220,7 +1294,7 @@ export async function cancelSalesOrder(input: {
       after: { status: 'CANCELLED' },
     });
   });
-  const view = await getSalesOrder(client, orderNumber);
+  const view = await readSalesOrder(client, orderNumber);
   if (!view) throw new SalesOrderError(`Sales order ${orderNumber} does not exist.`);
   return view;
 }
@@ -1228,12 +1302,15 @@ export async function cancelSalesOrder(input: {
 export async function listSalesOrderDocuments(
   client: string,
   filter: { customerNumber?: string; status?: string } = {},
+  authorization: ServiceAuthorityContext | undefined = undefined,
 ): Promise<Array<{
   orderNumber: string; customerNumber: string; orderDate: string; status: string;
   currency: string; grossValue: string; blockedForCredit: boolean;
 }>> {
   return withTenant(client, async (tx) => {
-    const conditions = [eq(salesOrder.client, client)];
+    const actor = await salesActor(tx, client, authorization, ORDER_ACCESS_CAPABILITIES,
+      (m, r) => new SalesOrderError(m, r));
+    const conditions = [eq(salesOrder.client, client), ...reachConditions(actor)];
     if (filter.customerNumber) conditions.push(eq(salesOrder.customerNumber, filter.customerNumber.trim().toUpperCase()));
     if (filter.status) conditions.push(eq(salesOrder.status, filter.status));
     const rows = await tx.select().from(salesOrder).where(and(...conditions))
@@ -1264,19 +1341,43 @@ export async function listSalesOrderDocuments(
   });
 }
 
+/** Any sales authority that shows these lists: they are the user's own scope, offered to the screen they work on. */
+const SALES_CHOICE_CAPABILITIES = [
+  'SALES.ORDER.CREATE', 'SALES.ORDER.RELEASE', 'SALES.QUOTATION.CREATE', 'SALES.DELIVERY.CREATE',
+  'SALES.ORDER.AVAILABILITY.CHECK', 'CFG.SALES.CONDITION.MAINTAIN',
+] as const;
+
+/** What a screen shows when its scope offers nothing. */
+export const NO_SALES_CHOICES = { salesAreas: [], companies: [], plants: [] } as {
+  salesAreas: Array<{ salesOrg: string; distributionChannel: string; division: string; name: string; isActive: boolean }>;
+  companies: Array<{ companyCode: string; country: string }>;
+  plants: Array<{ plant: string; name: string }>;
+};
+
 /** What the order screen may offer: the sales areas, the companies and the plants of this client. */
-export async function salesOrderChoices(client: string): Promise<{
+export async function salesOrderChoices(client: string, authorization: ServiceAuthorityContext | undefined): Promise<{
   salesAreas: Array<{ salesOrg: string; distributionChannel: string; division: string; name: string; isActive: boolean }>;
   companies: Array<{ companyCode: string; country: string }>;
   plants: Array<{ plant: string; name: string }>;
 }> {
   return withTenant(client, async (tx) => {
-    const areas = await tx.select().from(salesArea).where(eq(salesArea.client, client)).orderBy(asc(salesArea.salesOrg));
-    const companies = await tx.select({
+    const actor = await salesActor(tx, client, authorization, SALES_CHOICE_CAPABILITIES,
+      (m, r) => new SalesOrderError(m, r));
+    const orgCompanies = new Map(((await tx.execute(sql`
+      select sales_org, coalesce(company_code, '') as company_code from sales_org where client = ${client}
+    `)) as unknown as Array<{ sales_org: string; company_code: string }>).map((r) => [r.sales_org, r.company_code.trim()]));
+    const areas = (await tx.select().from(salesArea).where(eq(salesArea.client, client)).orderBy(asc(salesArea.salesOrg)))
+      .filter((area) => {
+        const company = orgCompanies.get(area.salesOrg) ?? '';
+        return company !== '' && hasOrgAccess(actor.restrictions, 'COMPANY_CODE', company) && salesAreaReachable(actor, area);
+      });
+    const companies = (await tx.select({
       companyCode: companyCode.companyCode, country: companyCode.country,
-    }).from(companyCode).where(eq(companyCode.client, client)).orderBy(asc(companyCode.companyCode));
-    const plants = await tx.select({ plant: plant.plant, name: plant.name }).from(plant)
-      .where(eq(plant.client, client)).orderBy(asc(plant.plant));
+    }).from(companyCode).where(eq(companyCode.client, client)).orderBy(asc(companyCode.companyCode)))
+      .filter((c) => hasOrgAccess(actor.restrictions, 'COMPANY_CODE', c.companyCode.trim()));
+    const reachablePlantSet = new Set(await reachablePlantsInTx(tx, client, actor));
+    const plants = (await tx.select({ plant: plant.plant, name: plant.name }).from(plant)
+      .where(eq(plant.client, client)).orderBy(asc(plant.plant))).filter((p) => reachablePlantSet.has(p.plant));
     return {
       salesAreas: areas.map((r) => ({
         salesOrg: r.salesOrg, distributionChannel: r.distributionChannel, division: r.division,
@@ -1296,10 +1397,19 @@ export async function salesOrderChoices(client: string): Promise<{
 export async function releaseSalesOrderCredit(input: {
   client: string; changedBy: string; orderNumber: string; expectedVersion?: number;
   justification?: string; approvalRef?: string; canOverride: boolean;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<ReleaseOutcome> {
+  const actorName = await withTenant(input.client, async (tx) => {
+    const actor = await salesActor(tx, input.client, input.authorization, [SALES_ORDER_RELEASE_CAPABILITY],
+      (m, r) => new SalesOrderError(m, r));
+    if (!(await orderInReach(tx, input.client, actor, input.orderNumber))) {
+      throw orderMissing(input.orderNumber, 'Choose an order you can reach.');
+    }
+    return actor.username;
+  });
   return releaseDocument({
     client: input.client,
-    changedBy: input.changedBy,
+    changedBy: actorName,
     salesDocument: input.orderNumber,
     expectedVersion: input.expectedVersion,
     override: input.justification

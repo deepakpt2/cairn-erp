@@ -12,7 +12,7 @@ import {
   type CompanyAuthority, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx,
 } from './company-scope';
 import type { ServiceAuthorityContext } from './service-authority';
-import { hasOrgAccess } from './session';
+import { hasOrgAccess, type OrgRestriction } from './session';
 
 export type ScopeFailure = (message: string, remedy?: string) => Error;
 
@@ -74,4 +74,30 @@ export function plantReachFilter(column: string, reachable: readonly string[]) {
 /** True when one plant is reachable (see `reachablePlantsInTx`). */
 export async function plantReachableInTx(tx: Tx, client: string, actor: CompanyAuthority, plant: string): Promise<boolean> {
   return (await reachablePlantsInTx(tx, client, actor)).includes(plant);
+}
+
+/**
+ * A secondary organisational level (Sales Org, Distribution Channel, Division, Purchasing Org…): when the actor holds
+ * any restriction of a level, the document's value for it must be one of them, and a document that names no value is
+ * outside it. A level the actor holds no restriction for does not narrow the reach. Company Code stays the mandatory,
+ * explicit gate: `purchasingActor` already refused an actor with none.
+ */
+export function orgLevelsAllow(
+  actor: CompanyAuthority,
+  levels: Partial<Record<OrgRestriction['scopeType'], string | null | undefined>>,
+): boolean {
+  for (const [type, value] of Object.entries(levels) as Array<[OrgRestriction['scopeType'], string | null | undefined]>) {
+    const held = actor.restrictions.filter((r) => r.scopeType === type);
+    if (held.length === 0) continue;
+    const named = (value ?? '').trim();
+    if (!named || !held.some((r) => r.scopeValue.trim() === named)) return false;
+  }
+  return true;
+}
+
+/** Every plant named is inside the actor's Plant scope (no Plant scope held: the Company Code gate decides). */
+export function plantsAllow(actor: CompanyAuthority, plants: readonly string[]): boolean {
+  const held = actor.restrictions.filter((r) => r.scopeType === 'PLANT');
+  if (held.length === 0) return true;
+  return plants.every((plant) => held.some((r) => r.scopeValue.trim() === plant.trim()));
 }

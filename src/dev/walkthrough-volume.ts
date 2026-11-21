@@ -56,7 +56,7 @@ import { openLot } from '../modules/quality/lot';
 import { listCharacteristics, listInspectionResults, recordInspectionResult, saveCharacteristic } from '../modules/quality/inspection-results';
 import { getUsageDecisionView, postUsageDecisionWithStock } from '../modules/quality/usage-decision';
 
-import { createSalesOrder, getSalesOrder } from '../modules/sales/sales-order';
+import { createSalesOrder, getSalesOrderForProvisioning } from '../modules/sales/sales-order';
 import { confirmDeliveryPicks, createDelivery, getDelivery, postDeliveryGoodsIssue } from '../modules/sales/delivery';
 import { createBillingFromDelivery } from '../modules/sales/billing';
 import { getReceivables, postIncomingPayment } from '../modules/finance/incoming-payment';
@@ -747,7 +747,7 @@ async function runSales(
         ctx.record(`volume sales order ${orderNumber}`, false);
       }
 
-      const salesOrder = await getSalesOrder(ctx.tenant, orderNumber);
+      const salesOrder = await getSalesOrderForProvisioning(ctx.tenant, orderNumber);
       if (!salesOrder || salesOrder.lines.length !== 1) {
         throw new Error(`Volume sales order ${orderNumber} is not readable or carries an unexpected line count.`);
       }

@@ -1,11 +1,12 @@
 import { asc, eq } from 'drizzle-orm';
+import { getSalesOrder } from './helpers/sales-authorized';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveCustomerCredit } from '../src/modules/finance/credit';
 import { saveSalesCondition } from '../src/modules/sales/conditions';
-import { createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { createSalesOrder } from '../src/modules/sales/sales-order';
 import { salesConditionType } from '../src/modules/sales/schema';
 import {
   DELIVERED_CONDITION_TYPES, PRICING_PROCEDURE_ROUTE, STANDARD_DOCUMENT_PRICING_PROCEDURE,

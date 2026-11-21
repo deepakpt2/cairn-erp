@@ -5,7 +5,7 @@ import {
   CONDITION_ROUTE,
   listSalesConditions,
 } from '@/modules/sales/conditions';
-import { salesOrderChoices } from '@/modules/sales/sales-order';
+import { NO_SALES_CHOICES, salesOrderChoices } from '@/modules/sales/sales-order';
 import Conditions from './Conditions';
 import { Page } from '@/ui/kit';
 
@@ -29,7 +29,7 @@ export default async function SalesConditionsPage({ searchParams }: {
       ...(params.customer ? { customerNumber: params.customer } : {}),
       ...(params.material ? { materialNumber: params.material } : {}),
     }),
-    salesOrderChoices(client),
+    salesOrderChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => NO_SALES_CHOICES),
   ]);
 
   return (

@@ -9,7 +9,7 @@ import {
   listDeliverableOrderLines,
   listDeliveries,
 } from '@/modules/sales/delivery';
-import { SALES_ORDER_RELEASE_CAPABILITY, salesOrderChoices } from '@/modules/sales/sales-order';
+import { NO_SALES_CHOICES, SALES_ORDER_RELEASE_CAPABILITY, salesOrderChoices } from '@/modules/sales/sales-order';
 import Delivery from './Delivery';
 import { LinkButton, Page } from '@/ui/kit';
 
@@ -37,7 +37,7 @@ export default async function SalesDeliveryPage({ searchParams }: {
       ? listDeliverableOrderLines(client, { orderNumber })
       : listDeliverableOrderLines(client, {}),
     deliveryNumber ? getDelivery(client, deliveryNumber) : Promise.resolve(null),
-    salesOrderChoices(client),
+    salesOrderChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => NO_SALES_CHOICES),
   ]);
 
   return (

@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { cancelSalesOrder, getSalesOrder } from './helpers/sales-authorized';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
@@ -10,7 +11,7 @@ import {
   cancelDelivery, confirmDeliveryPicks, createDelivery, getDelivery,
   listDeliverableOrderLines, postDeliveryGoodsIssue,
 } from '../src/modules/sales/delivery';
-import { cancelSalesOrder, createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
   listDocumentRegister, listDueRegister, listRegisterChoices,
 } from '../src/modules/sales/registers';

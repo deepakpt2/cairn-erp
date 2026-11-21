@@ -17,6 +17,7 @@
  * A document carries the partners it was made with, so the money goes back to the customer that paid
  * it and not to the customer that happened to place the order.
  */
+import { getSalesOrder } from './helpers/sales-authorized';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -27,7 +28,7 @@ import { saveSalesCondition } from '../src/modules/sales/conditions';
 import {
   PartnerError, changeCustomerPartnerStatus, listCustomerPartners, saveCustomerPartner,
 } from '../src/modules/sales/partners';
-import { createSalesOrder, getSalesOrder } from '../src/modules/sales/sales-order';
+import { createSalesOrder } from '../src/modules/sales/sales-order';
 import {
   confirmDeliveryPicks, createDelivery, getDelivery, listDeliverableOrderLines, postDeliveryGoodsIssue,
 } from '../src/modules/sales/delivery';

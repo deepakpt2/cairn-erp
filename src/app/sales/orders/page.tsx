@@ -5,6 +5,7 @@ import {
   SALES_ORDER_ROUTE,
   getSalesOrder,
   listSalesOrderDocuments,
+  NO_SALES_CHOICES,
   salesOrderChoices,
 } from '@/modules/sales/sales-order';
 import { AVAILABILITY_CHECK_CAPABILITY } from '@/modules/sales/availability-check';
@@ -27,9 +28,9 @@ export default async function SalesOrdersPage({ searchParams }: {
   const params = await searchParams;
   const client = session.user.client;
   const [documents, choices, selected] = await Promise.all([
-    listSalesOrderDocuments(client, params.customer ? { customerNumber: params.customer } : {}),
-    salesOrderChoices(client),
-    params.order ? getSalesOrder(client, params.order.trim()) : Promise.resolve(null),
+    listSalesOrderDocuments(client, params.customer ? { customerNumber: params.customer } : {}, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []),
+    salesOrderChoices(client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => NO_SALES_CHOICES),
+    params.order ? getSalesOrder(client, params.order.trim(), { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null) : Promise.resolve(null),
   ]);
 
   return (
