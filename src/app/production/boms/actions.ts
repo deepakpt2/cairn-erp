@@ -140,7 +140,7 @@ export async function saveBomAction(_previous: BomActionState, formData: FormDat
         argument: `${input.plant}/${input.materialNumber}/${input.usage}/${input.alternative}`,
       });
     }
-    const bom = mode === 'CHANGE' ? await changeMaterialBom(input) : await createMaterialBom(input);
+    const bom = mode === 'CHANGE' ? await changeMaterialBom(input, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : await createMaterialBom(input, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return {
       ok: true,
       bom,

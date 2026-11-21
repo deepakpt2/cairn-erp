@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { toScaled } from '../src/platform/posting/decimal';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { componentRequirementQuantity, SCALE } from '../src/modules/production/mrp-explosion';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';

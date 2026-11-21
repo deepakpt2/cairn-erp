@@ -8,7 +8,7 @@ import { saveProductionOrderType } from '../src/modules/production/production-or
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { materialPlant, mrpController } from '../src/modules/inventory/schema';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { createProductionVersion } from '../src/modules/production/production-version';

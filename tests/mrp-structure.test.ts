@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { structuralBomLevels, type StructuralBomLevels } from '../src/modules/production/mrp-structure';
 import { createProductionVersion, deleteProductionVersion, lockProductionVersion, selectProductionVersion } from '../src/modules/production/production-version';

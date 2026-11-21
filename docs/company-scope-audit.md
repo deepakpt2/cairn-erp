@@ -315,3 +315,11 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - `...ForProvisioning` variants for tests, seed and the foreground run's own post-write read.
 - Tests: `tests/company-scope-production.test.ts` (17 now). Residual: the check-run tests are simulation-only; the background worker's chunk path is covered by the existing suite plus the new submission-refusal test, not a dedicated adversarial test of a user losing scope mid-run. The demand/supply reads inside a run are bounded by the run's plant range, not separately company-checked. Other users' proposals made by a run (planned orders, requisitions) are not re-scoped by a later reader beyond their own services.
 - Still unscoped in production: BOM, routing, work centre, production version, availability, capacity load, stock-requirements, STO planning, cost estimate, other reports.
+
+## Phase 9f — Production: material BOM (CS01 / CS02 / CS03 and the BOM list)
+
+- `createMaterialBom`, `changeMaterialBom`, `getMaterialBom`, `listMaterialBoms`, `resolveMaterialBom` now need a session, the BOM capability (`PROD.BOM.CREATE` / `PROD.BOM.CHANGE`; reads accept display, change or create) and a plant in reach (explicit Company Code scope, plus Plant scope where held). A plant of another company, with no company, or outside the Plant scope "does not stand"; a BOM there reads as missing. The list drops rows out of reach and refuses a named plant out of reach. The recorded user is the session user.
+- `...ForProvisioning` variants for tests, seeds, scripts and `displayMaterialBomForProvisioning`.
+- Deliberately left unscoped (internal downstream reads, no actor): `selectEffectiveMaterialBom` and the BOM usage / item-category / status configuration. Residual: callers such as explosion, costing and order creation rely on their own service's scope to bound which plant they ask about.
+- Tests: `tests/company-scope-production.test.ts` (19 now); about 27 existing suites repointed; `tests/production-master-lock-enforcement.test.ts` now signs its people in as real persisted actors.
+- Still unscoped in production: routing, work centre, production version, availability, capacity load, stock-requirements, STO planning, cost estimate, other reports.

@@ -5,7 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createProductionOrder, getProductionOrder } from '../src/modules/inventory/production-orders';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createProductionVersion } from '../src/modules/production/production-version';

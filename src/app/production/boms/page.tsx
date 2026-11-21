@@ -67,7 +67,7 @@ export default async function MaterialBomsPage({ searchParams }: {
   ]);
   if (materialNumber && plant && usage) {
     try {
-      listed = await listMaterialBoms(session.user.client, { materialNumber, plant, usage });
+      listed = await listMaterialBoms(session.user.client, { materialNumber, plant, usage }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof MaterialBomError ? error.message : 'The BOM could not be opened.';
     }
@@ -75,7 +75,7 @@ export default async function MaterialBomsPage({ searchParams }: {
   let document = null;
   if (!creating && materialNumber && plant && usage && (alternative || listed.length === 1)) {
     try {
-      document = await resolveMaterialBom(session.user.client, materialNumber, plant, usage, alternative || listed[0]?.alternative, validOn || null);
+      document = await resolveMaterialBom(session.user.client, materialNumber, plant, usage, alternative || listed[0]?.alternative, validOn || null, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof MaterialBomError ? error.message : 'The BOM could not be opened.';
     }

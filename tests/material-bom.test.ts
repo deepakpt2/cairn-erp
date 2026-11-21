@@ -14,18 +14,18 @@ import {
   BOM_CREATE_CAPABILITY,
   BOM_DISPLAY_CAPABILITY,
   MaterialBomError,
-  changeMaterialBom,
-  createMaterialBom,
-  getMaterialBom,
+  changeMaterialBomForProvisioning as changeMaterialBom,
+  createMaterialBomForProvisioning as createMaterialBom,
+  getMaterialBomForProvisioning as getMaterialBom,
   holdsMaterialBomAuthority,
-  listMaterialBoms,
-  resolveMaterialBom,
+  listMaterialBomsForProvisioning as listMaterialBoms,
+  resolveMaterialBomForProvisioning as resolveMaterialBom,
   saveBomItemCategory,
   saveBomStatus,
   saveBomUsage,
   selectEffectiveMaterialBom,
 } from '../src/modules/production/material-bom';
-import { displayMaterialBom } from '../src/modules/production/material-bom-display';
+import { displayMaterialBomForProvisioning as displayMaterialBom } from '../src/modules/production/material-bom-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'CS01_TEST';

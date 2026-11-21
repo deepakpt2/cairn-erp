@@ -16,7 +16,7 @@ import { clearJobRegistry, registerJob } from '../src/platform/job/registry';
 import { defineRange } from '../src/platform/numbering';
 import { appUser, userCapability } from '../src/platform/tables/security';
 import { saveMaterialView } from '../src/modules/inventory/materials';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { MRP_PLANT_JOB, runMrpPlantChunk, submitMrpBackgroundRun, getMrpRunProgressForProvisioning as getMrpRunProgress } from '../src/modules/production/mrp-background';
 import { MrpRunError, cancelMrpRunForProvisioning as cancelMrpRun, getMrpRunForProvisioning as getMrpRun, planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { createProductionVersion } from '../src/modules/production/production-version';

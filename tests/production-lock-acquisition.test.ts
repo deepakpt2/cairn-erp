@@ -48,7 +48,7 @@ vi.mock('@/platform/auth/current', async (original) => {
 import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 import { releaseChangeLock } from '@/platform/lock/enqueue';
 import { saveMaterialView } from '@/modules/inventory/materials';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '@/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '@/modules/production/material-bom';
 import { createWorkCenter, saveWorkCenterCategory } from '@/modules/production/work-center';
 import { ROUTING_LOCK, createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '@/modules/production/routing';
 import { PRODUCTION_VERSION_LOCK, createProductionVersion } from '@/modules/production/production-version';

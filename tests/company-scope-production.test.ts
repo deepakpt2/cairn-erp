@@ -21,6 +21,10 @@ import {
   cancelMrpRun, getMrpRun, listMrpRuns, planMaterials, planSingleItem,
 } from '../src/modules/production/mrp-run';
 import { getMrpRunProgress, submitMrpBackgroundRun } from '../src/modules/production/mrp-background';
+import {
+  saveBomItemCategory, saveBomStatus, saveBomUsage,
+  changeMaterialBom, createMaterialBom, getMaterialBom, listMaterialBoms, resolveMaterialBom,
+} from '../src/modules/production/material-bom';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -72,6 +76,12 @@ let mNoCap: FinanceActor;
 let mNoScope: FinanceActor;
 let mOther: FinanceActor;
 let mBoth: FinanceActor;
+let bA: FinanceActor;
+let bB: FinanceActor;
+let bPlantA: FinanceActor;
+let bNoCap: FinanceActor;
+let bNoScope: FinanceActor;
+let bOther: FinanceActor;
 
 type Auth = FinanceActor['authorization'] | undefined;
 const ask = (p: Promise<unknown>) => p.then(() => 'done', (e: Error) => e.message);
@@ -102,6 +112,13 @@ beforeAll(async () => {
     await tx.execute(sql`insert into material (client, material_number, description, material_type, base_unit, created_by)
       select ${client}, 'SCMK', 'Scope make', t.material_type, 'PC', ${SEED}
         from (select material_type from material_type where client = ${client} order by material_type limit 1) t on conflict do nothing`);
+    await tx.execute(sql`insert into material (client, material_number, description, material_type, base_unit, created_by)
+      select ${client}, 'SCMC', 'Scope comp', t.material_type, 'PC', ${SEED}
+        from (select material_type from material_type where client = ${client} order by material_type limit 1) t on conflict do nothing`);
+    for (const plant of ['PLA1', 'PLB1', 'PLN1']) {
+      await tx.execute(sql`insert into material_plant (client, material_number, plant, procurement_type, created_by)
+        values (${client}, 'SCMC', ${plant}, 'BUY', ${SEED}) on conflict do nothing`);
+    }
     for (const plant of ['PLA1', 'PLB1', 'PLN1']) {
       await tx.execute(sql`insert into material_plant (client, material_number, plant, procurement_type, in_house_production_days, created_by)
         values (${client}, 'SCMK', ${plant}, 'MAKE', 1, ${SEED}) on conflict do nothing`);
@@ -161,6 +178,22 @@ beforeAll(async () => {
   mNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
   mNoScope = await createFinanceActor(client, { capabilities: MCAPS, companyScopes: [] });
   mOther = await createFinanceActor(other.client, { capabilities: MCAPS });
+  await saveBomUsage({
+    client, changedBy: SEED, usage: 'P', description: 'Production',
+    productionRelevance: '.', engineeringRelevance: '.', costingRelevance: '.', salesRelevance: '.',
+  });
+  await saveBomItemCategory({
+    client, changedBy: SEED, category: 'S', description: 'Stock',
+    materialEntry: '+', quantityEntry: '+', allowFixedQuantity: 'X', allowBulk: 'X', allowPhantom: 'X',
+  });
+  await saveBomStatus({ client, changedBy: SEED, status: '1', description: 'Active', releasedForCosting: 'X', releasedForOrders: 'X' });
+  const BCAPS = ['PROD.BOM.DISPLAY', 'PROD.BOM.CREATE', 'PROD.BOM.CHANGE'];
+  bA = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [A] });
+  bB = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [B] });
+  bPlantA = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [A, B], plantScopes: ['PLA1'] });
+  bNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
+  bNoScope = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [] });
+  bOther = await createFinanceActor(other.client, { capabilities: BCAPS });
   otherTenantActor = await createFinanceActor(other.client, { capabilities: CAPS });
 }, 240_000);
 
@@ -449,5 +482,47 @@ describe('MRP run', () => {
     expect(await ask(submit(mA, 'PLA1', 'PLB1'))).toContain('no longer holds');
     expect(await ask(submit(mPlantA, 'PLB1'))).toContain('no longer holds');
     expect(await runs()).toBe(before);
+  });
+});
+
+describe('material BOM', () => {
+  const bom = (plant: string, requestKey = '') => ({
+    client, changedBy: 'someone-else', materialNumber: 'SCMK', plant, usage: 'P', alternative: '01',
+    baseQuantity: '1', baseUnit: 'PC', validFrom: '2020-01-01', requestKey,
+    items: [{ itemNumber: '0010', itemCategory: 'S', componentMaterial: 'SCMC', quantity: '1', unit: 'PC' }],
+  });
+  const count = () => withTenant(client, async (tx) => Number(((await tx.execute(sql`
+    select count(*)::int as n from material_bom where client = ${client}`)) as unknown as Array<{ n: number }>)[0]!.n));
+
+  it('creates at a plant in reach, records the session user, and refuses a plant out of reach as a missing plant', async () => {
+    const before = await count();
+    const missing = mask(await ask(createMaterialBom(bom('PLZZ'), bA.authorization)), 'PLZZ');
+    for (const p of ['PLB1', 'PLN1']) expect(mask(await ask(createMaterialBom(bom(p), bA.authorization)), p)).toBe(missing);
+    expect(mask(await ask(createMaterialBom(bom('PLB1'), bPlantA.authorization)), 'PLB1')).toBe(missing);
+    for (const bad of [undefined, bNoCap.authorization, bNoScope.authorization, bOther.authorization]) {
+      expect(await ask(createMaterialBom(bom('PLA1'), bad))).not.toBe('done');
+    }
+    expect(await count()).toBe(before);
+    expect(await ask(createMaterialBom(bom('PLA1'), bA.authorization))).toBe('done');
+    expect(await ask(createMaterialBom(bom('PLB1'), bB.authorization))).toBe('done');
+    const by = await withTenant(client, async (tx) => (await tx.execute(sql`
+      select plant, created_by from material_bom where client = ${client} order by plant`)) as unknown as Array<{ plant: string; created_by: string }>);
+    expect(by.find((r) => r.plant === 'PLA1')?.created_by).toBe(bA.username);
+  });
+
+  it('shows, resolves and lists only BOMs at plants in reach; a change out of reach is refused', async () => {
+    expect((await getMaterialBom(client, 'SCMK', 'PLA1', 'P', '01', null, bA.authorization))?.plant).toBe('PLA1');
+    expect(await getMaterialBom(client, 'SCMK', 'PLB1', 'P', '01', null, bA.authorization)).toBeNull();
+    expect(await getMaterialBom(client, 'SCMK', 'PLB1', 'P', '01', null, bPlantA.authorization)).toBeNull();
+    expect(await resolveMaterialBom(client, 'SCMK', 'PLB1', 'P', null, null, bA.authorization).catch((e: Error) => e.message)).toContain('does not stand');
+    expect((await listMaterialBoms(client, { materialNumber: 'SCMK' }, bA.authorization)).map((r) => r.plant)).toEqual(['PLA1']);
+    expect((await listMaterialBoms(client, { materialNumber: 'SCMK' }, bB.authorization)).map((r) => r.plant)).toEqual(['PLB1']);
+    expect(await ask(listMaterialBoms(client, { plant: 'PLB1' }, bPlantA.authorization))).toContain('does not stand');
+    const changeOf = (p: string, a: Auth) => changeMaterialBom({ ...bom(p), version: 1, headerText: 'x' } as never, a);
+    expect(await ask(changeOf('PLB1', bA.authorization))).toContain('does not stand');
+    for (const bad of [undefined, bNoCap.authorization, bNoScope.authorization, bOther.authorization]) {
+      expect(await ask(listMaterialBoms(client, {}, bad))).not.toBe('done');
+      expect(await ask(changeOf('PLA1', bad))).not.toBe('done');
+    }
   });
 });

@@ -15,6 +15,8 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { markActivityComplete } from '../../platform/tenancy';
@@ -676,7 +678,26 @@ async function prepareItems(
   return prepared;
 }
 
-async function writeBom(input: MaterialBomInput, mode: 'CREATE' | 'CHANGE'): Promise<MaterialBomView> {
+type BomMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type BomReach = { reachable: string[]; username: string } | null;
+
+/** Session, live capability and company scope, judged in the caller's own transaction. */
+async function bomReach(tx: Tx, client: string, mode: BomMode, capabilities: readonly string[]): Promise<BomReach> {
+  if (mode === 'unscoped') return null;
+  const actor = await purchasingActor(tx, client, mode.authorization, capabilities, (m, r) => new MaterialBomError(m, r));
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
+}
+
+/** A BOM is a plant document; a plant out of reach answers as a plant that does not stand. */
+function requirePlantReach(reach: BomReach, plant: string): void {
+  if (reach && !reach.reachable.includes(plant)) fail(`The plant ${plant} does not stand.`, 'Enter a plant in this tenant.');
+}
+
+/** The BOM screens look a BOM up under their own capability. */
+const BOM_READERS = [BOM_DISPLAY_CAPABILITY, BOM_CHANGE_CAPABILITY, BOM_CREATE_CAPABILITY] as const;
+
+async function writeBom(rawInput: MaterialBomInput, mode: 'CREATE' | 'CHANGE', scope: BomMode): Promise<MaterialBomView> {
+  let input = rawInput;
   if ((input.changeNumber ?? '').trim()) {
     fail('Engineering change management is not implemented. A change number is not stored.', 'Save without a change number. Validity is the from and to dates.');
   }
@@ -694,6 +715,10 @@ async function writeBom(input: MaterialBomInput, mode: 'CREATE' | 'CHANGE'): Pro
   const requestKey = textOf(input.requestKey, 'Request key', 64);
 
   return withTenant(input.client, async (tx) => {
+    const reach = await bomReach(tx, input.client, scope, [mode === 'CREATE' ? BOM_CREATE_CAPABILITY : BOM_CHANGE_CAPABILITY]);
+    requirePlantReach(reach, plant);
+    // The recorded user is the session user, never the caller's name.
+    if (reach) input = { ...rawInput, changedBy: reach.username };
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/material-bom/${plant}/${materialNumber}/${usage}`}, 0))`);
     if (mode === 'CREATE' && requestKey) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/material-bom-request/${requestKey}`}, 0))`);
@@ -903,40 +928,27 @@ async function writeBom(input: MaterialBomInput, mode: 'CREATE' | 'CHANGE'): Pro
   });
 }
 
-export function createMaterialBom(input: MaterialBomInput): Promise<MaterialBomView> {
-  return writeBom(input, 'CREATE');
-}
-
-export function changeMaterialBom(input: MaterialBomInput): Promise<MaterialBomView> {
-  return writeBom(input, 'CHANGE');
-}
-
-export async function getMaterialBom(
-  client: string,
-  materialNumber: string,
-  plant: string,
-  usage: string,
-  alternative: string,
-  keyDate?: string | null,
+async function getWith(
+  client: string, materialNumber: string, plant: string, usage: string, alternative: string,
+  keyDate: string | null | undefined, mode: BomMode,
 ): Promise<MaterialBomView | null> {
   const parsedDate = keyDate?.trim() ? dateOf(keyDate, 'Valid-on date') : null;
-  return withTenant(client, (tx) => readInTx(
-    tx,
-    client,
-    materialNumber.trim(),
-    plant.trim(),
-    usageKey(usage),
-    alternativeKey(alternative),
-    parsedDate,
-  ));
+  return withTenant(client, async (tx) => {
+    const reach = await bomReach(tx, client, mode, BOM_READERS);
+    // A BOM at a plant out of reach answers exactly as a missing one.
+    if (reach && !reach.reachable.includes(plant.trim())) return null;
+    return readInTx(tx, client, materialNumber.trim(), plant.trim(), usageKey(usage), alternativeKey(alternative), parsedDate);
+  });
 }
 
-export async function listMaterialBoms(client: string, filter: {
+async function listWith(client: string, filter: {
   materialNumber?: string;
   plant?: string;
   usage?: string;
-} = {}): Promise<Array<{ materialNumber: string; plant: string; usage: string; alternative: string; bomNumber: string; validFrom: string; validTo: string; deletionFlag: string }>> {
+}, mode: BomMode): Promise<Array<{ materialNumber: string; plant: string; usage: string; alternative: string; bomNumber: string; validFrom: string; validTo: string; deletionFlag: string }>> {
   return withTenant(client, async (tx) => {
+    const reach = await bomReach(tx, client, mode, BOM_READERS);
+    if (filter.plant?.trim()) requirePlantReach(reach, filter.plant.trim());
     const rows = await tx.select({
       materialNumber: materialBom.materialNumber,
       plant: materialBom.plant,
@@ -948,6 +960,7 @@ export async function listMaterialBoms(client: string, filter: {
       deletionFlag: materialBom.deletionFlag,
     }).from(materialBom).where(eq(materialBom.client, client)).orderBy(asc(materialBom.materialNumber), asc(materialBom.alternative));
     return rows.filter((row) => {
+      if (reach && !reach.reachable.includes(row.plant)) return false;
       if (filter.materialNumber && row.materialNumber !== filter.materialNumber.trim()) return false;
       if (filter.plant && row.plant !== filter.plant.trim()) return false;
       if (filter.usage && row.usage !== usageKey(filter.usage)) return false;
@@ -956,21 +969,17 @@ export async function listMaterialBoms(client: string, filter: {
   });
 }
 
-export async function resolveMaterialBom(
-  client: string,
-  materialNumber: string,
-  plant: string,
-  usage: string,
-  alternative?: string | null,
-  keyDate?: string | null,
+async function resolveWith(
+  client: string, materialNumber: string, plant: string, usage: string,
+  alternative: string | null | undefined, keyDate: string | null | undefined, mode: BomMode,
 ): Promise<MaterialBomView | null> {
-  if (alternative?.trim()) return getMaterialBom(client, materialNumber, plant, usage, alternative, keyDate);
-  const rows = await listMaterialBoms(client, { materialNumber, plant, usage });
+  if (alternative?.trim()) return getWith(client, materialNumber, plant, usage, alternative, keyDate, mode);
+  const rows = await listWith(client, { materialNumber, plant, usage }, mode);
   if (rows.length === 0) return null;
   if (rows.length > 1) {
     fail(`More than one BOM matches. Choose an alternative: ${rows.map((row) => row.alternative).join(', ')}.`, 'Select the alternative. The first row was not opened.');
   }
-  return getMaterialBom(client, materialNumber, plant, usage, rows[0].alternative, keyDate);
+  return getWith(client, materialNumber, plant, usage, rows[0].alternative, keyDate, mode);
 }
 
 /** Downstream selection. Does not write. MD01 and CO01 do not call this. */
@@ -1101,3 +1110,30 @@ export async function saveBomItemCategory(input: BomItemCategoryInput) {
     return { category };
   });
 }
+
+/** Session, `PROD.BOM.CREATE` / `PROD.BOM.CHANGE` and company scope; a plant out of reach does not stand. The recorded user is the session user. */
+export function createMaterialBom(input: MaterialBomInput, authorization: ServiceAuthorityContext | undefined) { return writeBom(input, 'CREATE', { authorization }); }
+export function changeMaterialBom(input: MaterialBomInput, authorization: ServiceAuthorityContext | undefined) { return writeBom(input, 'CHANGE', { authorization }); }
+/** A BOM at a plant out of reach answers as a missing one; a list holds only BOMs at plants in reach. */
+export async function getMaterialBom(
+  client: string, materialNumber: string, plant: string, usage: string, alternative: string,
+  keyDate: string | null | undefined, authorization: ServiceAuthorityContext | undefined,
+) { return getWith(client, materialNumber, plant, usage, alternative, keyDate, { authorization }); }
+export async function listMaterialBoms(
+  client: string, filter: Parameters<typeof listWith>[1], authorization: ServiceAuthorityContext | undefined,
+) { return listWith(client, filter, { authorization }); }
+export async function resolveMaterialBom(
+  client: string, materialNumber: string, plant: string, usage: string,
+  alternative: string | null | undefined, keyDate: string | null | undefined, authorization: ServiceAuthorityContext | undefined,
+) { return resolveWith(client, materialNumber, plant, usage, alternative, keyDate, { authorization }); }
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export function createMaterialBomForProvisioning(input: MaterialBomInput) { return writeBom(input, 'CREATE', 'unscoped'); }
+export function changeMaterialBomForProvisioning(input: MaterialBomInput) { return writeBom(input, 'CHANGE', 'unscoped'); }
+export async function getMaterialBomForProvisioning(
+  client: string, materialNumber: string, plant: string, usage: string, alternative: string, keyDate?: string | null,
+) { return getWith(client, materialNumber, plant, usage, alternative, keyDate, 'unscoped'); }
+export async function listMaterialBomsForProvisioning(client: string, filter: Parameters<typeof listWith>[1] = {}) { return listWith(client, filter, 'unscoped'); }
+export async function resolveMaterialBomForProvisioning(
+  client: string, materialNumber: string, plant: string, usage: string, alternative?: string | null, keyDate?: string | null,
+) { return resolveWith(client, materialNumber, plant, usage, alternative, keyDate, 'unscoped'); }

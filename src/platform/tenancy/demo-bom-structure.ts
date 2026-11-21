@@ -18,7 +18,7 @@
 import { getMaterialDetail, saveMaterialView } from '../../modules/inventory/materials';
 import { seedMrpController } from '../../modules/inventory/mrp-controller-maintenance';
 import { withTenant } from '../db/client';
-import { createMaterialBom, getMaterialBom, saveBomItemCategory } from '../../modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, getMaterialBomForProvisioning as getMaterialBom, saveBomItemCategory } from '../../modules/production/material-bom';
 import { createProductionVersion, getProductionVersion } from '../../modules/production/production-version';
 import { createRouting, resolveRouting } from '../../modules/production/routing';
 import { DEMO_ACTOR, DEMO_IDENTITY, DEMO_STRUCTURE } from './demo-organisation';

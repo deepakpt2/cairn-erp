@@ -11,7 +11,7 @@ import {
   isoWeekKey, loadCapacityReport, requirementOf, type CapacityLoadQuery, type CapacityLoadReport,
 } from '../src/modules/production/capacity-load';
 import { createProductionVersion } from '../src/modules/production/production-version';
-import { createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { changeWorkCenter, createWorkCenter, getWorkCenter, saveWorkCenterCategory, WorkCenterError, type WorkCenterCapacityInput } from '../src/modules/production/work-center';
 import { saveCalendarPeriod, saveHolidayCalendar, addHolidayDay } from '../src/modules/foundation/factory-calendar';

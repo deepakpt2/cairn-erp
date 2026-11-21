@@ -21,7 +21,7 @@ import {
   activityAmount, COST_ESTIMATE_CAPABILITY, CostEstimateError, createCostEstimate, getCostEstimate, listCostEstimates, materialAmount,
   type CostEstimateInput, type CostEstimateView,
 } from '../src/modules/production/cost-estimate';
-import { createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';
 import { componentRequirementQuantity, SCALE } from '../src/modules/production/mrp-explosion';
 import { createProductionVersion, selectProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';

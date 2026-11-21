@@ -8,7 +8,7 @@ import { postGoodsIssue } from '../src/modules/inventory/goods-issue';
 import { postProductionReceipt } from '../src/modules/inventory/production-receipt';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';

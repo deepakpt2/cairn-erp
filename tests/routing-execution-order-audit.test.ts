@@ -6,7 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { createProductionOrder, getProductionOrder } from '../src/modules/inventory/production-orders';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { mrpController } from '../src/modules/inventory/schema';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { runOrderInformation } from '../src/modules/production/order-information';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';

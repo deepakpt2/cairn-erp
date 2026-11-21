@@ -11,7 +11,7 @@ import {
   getProductionOrder,
   previewProductionOrderBom,
 } from '../src/modules/inventory/production-orders';
-import { changeMaterialBom, createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { changeMaterialBomForProvisioning as changeMaterialBom, createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { createProductionVersion } from '../src/modules/production/production-version';

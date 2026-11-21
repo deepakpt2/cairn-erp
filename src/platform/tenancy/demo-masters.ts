@@ -37,8 +37,8 @@ import { saveTaxCode } from '../../modules/foundation/tax-code-definition';
 import { createPurchasingInfoRecordForProvisioning as createPurchasingInfoRecord } from '../../modules/purchasing/info-record';
 import { listSalesConditionsForProvisioning as listSalesConditions, saveSalesConditionForProvisioning as saveSalesCondition } from '../../modules/sales/conditions';
 import {
-  createMaterialBom,
-  getMaterialBom,
+  createMaterialBomForProvisioning as createMaterialBom,
+  getMaterialBomForProvisioning as getMaterialBom,
   saveBomItemCategory,
   saveBomStatus,
   saveBomUsage,

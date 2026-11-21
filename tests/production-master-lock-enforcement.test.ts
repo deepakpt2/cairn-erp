@@ -46,12 +46,13 @@ vi.mock('@/platform/auth/current', async (original) => {
 
 import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 import { releaseChangeLock } from '@/platform/lock/enqueue';
+import { createFinanceActor } from './helpers/finance-actor';
 import { saveMaterialView } from '@/modules/inventory/materials';
 import {
   BOM_CHANGE_CAPABILITY,
   BOM_CREATE_CAPABILITY,
   BOM_LOCK,
-  createMaterialBom,
+  createMaterialBomForProvisioning as createMaterialBom,
   saveBomItemCategory,
   saveBomUsage,
 } from '@/modules/production/material-bom';
@@ -103,29 +104,25 @@ const PEOPLE = {
 
 type Person = keyof typeof PEOPLE;
 
+/** Real identities: an enforced BOM service reads the authority and the reach from the database. */
+const IDS: Record<string, { userId: string; sessionId: string }> = {};
+
 async function seed(): Promise<void> {
-  for (const person of Object.values(PEOPLE)) {
-    await withTenant(tenant.client, (tx) => tx.execute(sql`
-      insert into app_user
-        (id, client, username, full_name, email, password_hash, is_active, is_locked, created_by)
-      values (${`user-${person.username}`}, ${tenant.client}, ${person.username}, ${person.username},
-              null, 'test-hash', true, false, 'TEST')
-    `));
-    // A live `user_session` row, because a lock is only honoured while its session is alive.
-    await withTenant(tenant.client, (tx) => tx.execute(sql`
-      insert into user_session (id, client, user_id, token_hash, issued_at, expires_at)
-      values (${person.sessionId}, ${tenant.client}, ${`user-${person.username}`}, ${`token-${person.sessionId}`},
-              now(), now() + interval '8 hours')
-    `));
+  for (const [key, person] of Object.entries(PEOPLE)) {
+    const actor = await createFinanceActor(tenant.client, {
+      username: person.username, capabilities: [...person.capabilities],
+    });
+    IDS[key] = { userId: actor.userId, sessionId: actor.sessionId };
   }
 }
 
 function actingAs(person: Person): void {
-  const { username, sessionId, capabilities } = PEOPLE[person];
+  const { username, capabilities } = PEOPLE[person];
+  const { sessionId, userId } = IDS[person]!;
   request.session = {
     sessionId,
     user: {
-      client: tenant.client, userId: `user-${username}`, username, fullName: username,
+      client: tenant.client, userId, username, fullName: username,
       email: null, mustChangePassword: false, capabilities: [...capabilities],
     },
     expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
@@ -162,7 +159,7 @@ async function lockCount(): Promise<number> {
 }
 
 async function release(person: Person, lockObject: string, argument: string): Promise<void> {
-  await releaseChangeLock({ client: tenant.client, sessionId: PEOPLE[person].sessionId, lockObject, argument });
+  await releaseChangeLock({ client: tenant.client, sessionId: IDS[person]!.sessionId, lockObject, argument });
 }
 
 type AnyElement = ReactElement<{ children?: ReactNode }>;
@@ -285,7 +282,7 @@ describe('the material BOM screen gets the lock it already takes enforced where 
 
     // The screen's own identity: plant, material, usage, alternative, under the transaction it names.
     expect(await enqueueRow(BOM_LOCK, BOM_ARGUMENT)).toMatchObject({
-      owner_session_id: PEOPLE.holder.sessionId,
+      owner_session_id: IDS.holder!.sessionId,
       owner_user: PEOPLE.holder.username,
       mode: 'EXCLUSIVE',
     });
@@ -380,7 +377,7 @@ describe('the work-center screen gets the lock it already takes enforced where t
     const page = await WorkCentersPage({ searchParams: centerParams() });
 
     expect(await enqueueRow(WORK_CENTER_LOCK, CENTER_ARGUMENT)).toMatchObject({
-      owner_session_id: PEOPLE.holder.sessionId,
+      owner_session_id: IDS.holder!.sessionId,
       owner_user: PEOPLE.holder.username,
       mode: 'EXCLUSIVE',
     });

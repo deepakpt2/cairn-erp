@@ -49,7 +49,7 @@ export default async function MaterialBomDisplayPage({ searchParams }: {
   let openError = '';
   if (materialNumber && plant && usage) {
     try {
-      listed = await listMaterialBomsForDisplay(session.user.client, { materialNumber, plant, usage });
+      listed = await listMaterialBomsForDisplay(session.user.client, { materialNumber, plant, usage }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof MaterialBomError ? error.message : 'The BOM could not be displayed.';
     }
@@ -58,7 +58,7 @@ export default async function MaterialBomDisplayPage({ searchParams }: {
   let document = null;
   if (chosen) {
     try {
-      document = await displayMaterialBom(session.user.client, materialNumber, plant, usage, chosen, validOn || null);
+      document = await displayMaterialBom(session.user.client, materialNumber, plant, usage, chosen, validOn || null, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof MaterialBomError ? error.message : 'The BOM could not be displayed.';
     }

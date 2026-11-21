@@ -15,7 +15,7 @@ import {
   type ScopeOfCheckRow,
 } from '../src/modules/production/availability-check';
 import { saveCheckingControl, listCheckingControls } from '../src/modules/production/checking-control';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import {
   ORDER_AVAILABILITY_ELEMENTS_CAPABILITY,
   ORDER_AVAILABILITY_ORDER_CAPABILITY,

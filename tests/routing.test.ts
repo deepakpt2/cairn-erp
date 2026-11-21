@@ -6,7 +6,7 @@ import { changeDocument } from '../src/platform/tables/audit-trail';
 import { withTenant } from '../src/platform/db/client';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { productionOrder, productionOrderComponent } from '../src/modules/inventory/schema';
-import { createMaterialBom, getMaterialBom } from '../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, getMaterialBomForProvisioning as getMaterialBom } from '../src/modules/production/material-bom';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { productionOrderType, routing } from '../src/modules/production/schema';
 import {

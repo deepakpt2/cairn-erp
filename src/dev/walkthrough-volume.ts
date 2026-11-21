@@ -37,7 +37,7 @@ import { getCustomerSalesArea, saveCustomerSalesArea } from '../modules/foundati
 import { getCustomerCredit, saveCustomerCredit } from '../modules/finance/credit';
 import { listSalesConditionsForProvisioning as listSalesConditions, saveSalesConditionForProvisioning as saveSalesCondition } from '../modules/sales/conditions';
 
-import { createMaterialBom, getMaterialBom } from '../modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, getMaterialBomForProvisioning as getMaterialBom } from '../modules/production/material-bom';
 import { createRouting, getRouting } from '../modules/production/routing';
 import { createProductionVersion, getProductionVersion } from '../modules/production/production-version';
 import { createPlannedOrderForProvisioning as createPlannedOrder } from '../modules/production/planned-order-create';

@@ -5,7 +5,7 @@ import type { Page } from '@playwright/test';
 
 import { withTenant } from '../../src/platform/db/client';
 import { saveMaterialView } from '../../src/modules/inventory/materials';
-import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../../src/modules/production/material-bom';
+import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../../src/modules/production/material-bom';
 import { checkProductionVersion, createProductionVersion } from '../../src/modules/production/production-version';
 import { saveOrderTypeParameter } from '../../src/modules/production/order-type-parameters';
 import {
