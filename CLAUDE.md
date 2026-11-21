@@ -29,6 +29,11 @@ These are standing rules for every session. Follow them even when a task seems t
    - One row: `grep -n '<file or table>' docs/codemap/modules/<m>.md` or `grep -rn '<name>' docs/codemap/*.md docs/codemap/modules/`
    - Gotchas only (read before changing a module): `awk '/^## Gotchas/{p=1;next} /^## /{p=0} p' docs/codemap/modules/<m>.md`
 
+## End-user documentation (`docs/`)
+Beginner-friendly user guide, one folder per module (`docs/README.md` is the index). **It must never go stale:** when a change alters a screen, menu name, URL, button label, field (mandatory/optional), validation message, posting effect or business rule, update the matching page under `docs/` in the same change, including its "What Happens in the Background?" callout. Add pages for new screens and link them from `docs/README.md`.
+- Run `npm run docs:check` (`scripts/docs-check.mjs`): fails on dead relative links, missing anchors, and backticked `/routes` that have no `page.tsx`.
+- Every page: Table of Contents, Prerequisites callout, numbered steps with sample data, background callout, Previous/Next links. Take names and fields from the code, never from memory.
+
 ## Environment & commands
 Claude runs in the **workbench** container. The repo is shared with the **app** container, which runs `npm run dev` permanently on http://app:3000.
 
