@@ -22,7 +22,7 @@ const routes = walk(appDir)
   .filter((f) => /\/page\.tsx$/.test(f))
   .map((f) => '/' + path.relative(appDir, path.dirname(f)).split(path.sep).filter((s) => !/^\(.*\)$/.test(s)).join('/'))
   .map((r) => (r === '/.' ? '/' : r))
-const routeRes = routes.map((r) => new RegExp('^' + r.replace(/\[[^\]]+\]/g, '[^/]+') + '$'))
+const routeRes = routes.map((r) => new RegExp('^' + r.replace(/(\/\[\[\.\.\.[^\]]+\]\])$/, '(?:/.*)?').replace(/\[[^\]]+\]/g, '[^/]+') + '$'))
 const routeOk = (p) => routeRes.some((re) => re.test(p))
 
 const slug = (h) =>

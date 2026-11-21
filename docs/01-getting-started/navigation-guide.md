@@ -28,6 +28,7 @@ How to find any screen quickly, how a typical screen is laid out, and what the l
 |---|---|---|
 | **Command box** | Top bar, wide text box with an **Execute** button | Type a screen's name or code and press **Enter** to open it. |
 | **Quick links** | Top bar, right of the Command box | **Tenants**, **Configuration workbench** and **Term registry** — shown only if your role allows them. |
+| **User guide** | Session bar, left of the bell | Opens this guide inside the app at `/help`. Every page is also reachable from its index; links between pages work as in the files. |
 | **Session bar** | Under the top bar | Your **Tenant** key, your user name, how many authorities you hold, and a menu with **My account** and **Sign out**. |
 | **Main menu** | Left side | The module → category → activity → screen tree, with a search box, **Favourites** and **Recent**. |
 | **Work area** | Centre | The screen itself. |

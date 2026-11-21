@@ -47,6 +47,7 @@ export async function SessionBar() {
       <span className="text-ink-faint">{authority}</span>
 
       <div className="ms-auto flex items-center gap-3">
+        <a href="/help" className="text-accent hover:underline">User guide</a>
         <NotificationBell />
         <SessionMenu
           fullName={session.user.fullName}

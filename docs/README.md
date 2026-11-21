@@ -73,6 +73,9 @@ Every page in this guide follows the same layout so you always know where to loo
 - Screen addresses are shown like `/inventory/materials`. You never type them: use the menu or the Command box.
 - Sample data (for example material `RM-FLOUR-25`, supplier `Northern Mills`) is invented. Replace it with your own.
 
+> [!TIP]
+> **Read it in the app.** Signed-in users can open this whole guide at `/help` (the **User guide** link in the session bar). The app serves these same files, so an update here appears there at once.
+
 ## Keeping this guide current
 
 This guide describes what the application does *today*. It is part of the product: whenever a screen, a field, a button label or a business rule changes, the page that describes it is changed in the same piece of work. The rule is recorded in the project's `CLAUDE.md`, and `npm run docs:check` verifies that every screen address named in these pages still exists and every link between pages opens.

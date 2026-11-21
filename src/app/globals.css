@@ -41,6 +41,31 @@
 }
 
 @layer components {
+
+  /* ---- In-app user guide (/help): rendered Markdown from docs/ ------------- */
+  .help-doc { @apply text-base text-ink; }
+  .help-doc h1 { @apply mb-3 text-2xl font-semibold tracking-tight; }
+  .help-doc h2 { @apply mb-2 mt-7 border-b border-line-strong pb-1 text-xl font-semibold; }
+  .help-doc h3 { @apply mb-1 mt-5 text-lg font-semibold; }
+  .help-doc h4, .help-doc h5 { @apply mb-1 mt-4 font-semibold; }
+  .help-doc p { @apply my-2 leading-relaxed; }
+  .help-doc ul { @apply my-2 list-disc ps-6; }
+  .help-doc ol { @apply my-2 list-decimal ps-6; }
+  .help-doc li { @apply my-0.5; }
+  .help-doc a { @apply text-accent underline; }
+  .help-doc code { @apply rounded bg-sunken px-1 text-sm; }
+  .help-doc pre { @apply my-3 overflow-x-auto rounded border border-line bg-sunken p-3; }
+  .help-doc pre code { @apply bg-transparent p-0; }
+  .help-doc hr { @apply my-5 border-line; }
+  .help-doc blockquote { @apply my-3 border-s-4 border-line-strong ps-3 text-ink-soft; }
+  .help-doc .table-wrap { @apply my-3 overflow-x-auto; }
+  .help-doc table { @apply w-full border-collapse text-sm; }
+  .help-doc th { @apply border border-line bg-sunken px-2 py-1 text-start font-semibold; }
+  .help-doc td { @apply border border-line px-2 py-1 align-top; }
+  .help-doc .callout { @apply my-4 rounded border border-line border-s-4 bg-sunken px-3 py-1; }
+  .help-doc .callout-label { @apply my-1 text-xs font-semibold uppercase tracking-wide text-ink-soft; }
+  .help-doc .callout-important { @apply border-s-accent; }
+  .help-doc .callout-warning { @apply border-s-signal-warn; }
   /* ---- Structure ---------------------------------------------------------- */
 
   .ledger-frame {
