@@ -23,7 +23,8 @@ import { sql } from 'drizzle-orm';
 
 import { PO_RELEASE_STATUS_SQL } from './release';
 
-import { readableCompaniesInTx } from '../../platform/auth/company-scope';
+import { type CompanyAuthority, readableCompaniesInTx } from '../../platform/auth/company-scope';
+import { purchasingLevelsSql } from '../../platform/auth/scope-actor';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
@@ -191,7 +192,7 @@ export async function listPurchaseOrders(input: {
   return listPurchaseOrdersCore(input.client, input.selection, async (tx) => {
     const readable = await readableCompaniesInTx(tx, input.client, input.authorization, [PO_LIST_CAPABILITY, `${PO_LIST_CAPABILITY}.read`], { allowPlantLimited: true });
     if (!readable.ok) fail(readable.refusal.message, readable.refusal.remedy);
-    return readable.companies;
+    return { companies: readable.companies, actor: readable.actor };
   });
 }
 
@@ -208,7 +209,7 @@ async function listPurchaseOrdersCore(
   client: string,
   rawSelection: PoListSelection,
   /** The readable companies, or null for no company restriction (provisioning only). */
-  resolveCompanies: (tx: Tx) => Promise<string[] | null>,
+  resolveCompanies: (tx: Tx) => Promise<{ companies: string[]; actor: CompanyAuthority } | null>,
 ): Promise<PoListResult> {
   const input = { selection: rawSelection };
   const raw = input.selection;
@@ -275,8 +276,8 @@ async function listPurchaseOrdersCore(
     // absent and never named. Judged before anything of the selection is looked up.
     const readable = await resolveCompanies(tx);
     const companyFilter = readable === null ? sql`true`
-      : readable.length > 0
-        ? sql`po.company_code in (${sql.join(readable.map((c) => sql`${c}`), sql`, `)})`
+      : readable.companies.length > 0
+        ? sql`(po.company_code in (${sql.join(readable.companies.map((c) => sql`${c}`), sql`, `)}) and ${purchasingLevelsSql(readable.actor, { purchasingOrg: sql`po.purchasing_org`, purchasingGroup: sql`po.purchasing_group` })})`
         : sql`false`;
     // Every supplied range endpoint is judged against its master, so a key that
     // does not stand refuses by name instead of answering an empty list.

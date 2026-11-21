@@ -30,7 +30,7 @@ import {
   characteristic, releaseGroup, releaseStrategy, releaseStrategyCriterion, releaseStrategyStep,
 } from '../foundation/characteristic-schema';
 import { plant } from '../foundation/schema';
-import { purchasingActor, requireCompanyInScope } from './scope';
+import { purchasingActor, purchasingLevelsAllow, requireCompanyInScope } from './scope';
 import {
   documentRelease, purchaseOrder, purchaseOrderItem, purchaseRequisitionItem,
 } from './schema';
@@ -524,7 +524,37 @@ async function authorizeReleaseInTx(
       hidden: `Document ${input.documentNumber} needs no release — no strategy claims it.`,
     });
   }
+  const levels = await releaseLevelsInTx(tx, input.client, input.documentCategory, input.documentNumber);
+  if (levels.some((l) => !purchasingLevelsAllow(actor, l))) {
+    throw releaseRefusal(`Document ${input.documentNumber} needs no release — no strategy claims it.`);
+  }
   return actor.username;
+}
+
+/** The purchasing org and group a document of this category carries; a category with neither returns none. */
+async function releaseLevelsInTx(
+  tx: Tx, client: string, category: string, number: string,
+): Promise<Array<{ purchasingOrg?: string; purchasingGroup?: string }>> {
+  const rows = async (query: ReturnType<typeof sql>) =>
+    (await tx.execute(query)) as unknown as Array<{ purchasing_org?: string; purchasing_group?: string }>;
+  let found: Array<{ purchasing_org?: string; purchasing_group?: string }> = [];
+  switch (category) {
+    case 'PURCHASE_ORDER':
+      found = await rows(sql`select purchasing_org, purchasing_group from purchase_order where client = ${client} and order_number = ${number}`);
+      break;
+    case 'PURCHASE_CONTRACT':
+      found = await rows(sql`select purchasing_org, purchasing_group from purchase_contract where client = ${client} and contract_number = ${number}`);
+      break;
+    case 'SCHED_AGREEMENT':
+      found = await rows(sql`select purchasing_org, purchasing_group from scheduling_agreement where client = ${client} and agreement_number = ${number}`);
+      break;
+    case 'PURCHASE_REQUISITION':
+      found = await rows(sql`select distinct purchasing_group from purchase_requisition_item where client = ${client} and requisition_number = ${number}`);
+      break;
+    default:
+      return [];
+  }
+  return found.map((r) => ({ purchasingOrg: r.purchasing_org, purchasingGroup: r.purchasing_group }));
 }
 
 /**

@@ -25,7 +25,7 @@ import {
   STO_ORDER_TYPE, StoOrderError, changeStockTransportOrder, createStockTransportOrder,
 } from './stock-transport-order';
 import { z } from 'zod';
-import { companyInScope, purchasingActor, requireCompanyInScope } from './scope';
+import { companyInScope, purchasingActor, purchasingLevelsAllow, requireCompanyInScope } from './scope';
 
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { recordChange } from '../../platform/change';
@@ -179,18 +179,25 @@ const ORDER_READ_CAPABILITIES = [PO_CREATE_CAPABILITY, 'PROC.PO.DISPLAY', 'PROC.
 async function judgeOrderWrite(
   tx: Tx, client: string, authorization: ServiceAuthorityContext | undefined,
   requestedCompany: string, storedOrder?: string,
+  requestedLevels: { purchasingOrg?: string; purchasingGroup?: string } = {},
 ): Promise<string> {
   const actor = await purchasingActor(tx, client, authorization, [PO_CREATE_CAPABILITY], refuseOrder);
   if (storedOrder) {
     const [row] = await tx.execute(sql`
-      select company_code from purchase_order where client = ${client} and order_number = ${storedOrder}
-    `) as unknown as Array<{ company_code: string }>;
+      select company_code, purchasing_org, purchasing_group from purchase_order where client = ${client} and order_number = ${storedOrder}
+    `) as unknown as Array<{ company_code: string; purchasing_org: string; purchasing_group: string }>;
     // A missing order answers before the requested company is judged, so a probe cannot tell it from another company's.
     if (!row) throw refuseOrder(`Purchase order ${storedOrder} does not exist.`);
     await requireCompanyInScope(tx, client, actor, row.company_code, refuseOrder, { hidden: `Purchase order ${storedOrder} does not exist.` });
+    if (!purchasingLevelsAllow(actor, { purchasingOrg: row.purchasing_org, purchasingGroup: row.purchasing_group })) {
+      throw refuseOrder(`Purchase order ${storedOrder} does not exist.`);
+    }
   }
   const company = String(requestedCompany ?? '').trim();
   if (company) await requireCompanyInScope(tx, client, actor, company, refuseOrder);
+  if (!purchasingLevelsAllow(actor, requestedLevels)) {
+    throw refuseOrder('The purchasing organisation or purchasing group is outside your access.', 'Name a purchasing organisation and group inside your access.');
+  }
   return actor.username;
 }
 
@@ -855,7 +862,8 @@ export async function getOrder(
   return withTenant(client, async (tx) => {
     const actor = await purchasingActor(tx, client, authorization, ORDER_READ_CAPABILITIES, refuseOrder);
     const document = await loadDocument(tx, client, orderNumber);
-    return document && await companyInScope(tx, client, actor, document.companyCode) ? document : null;
+    return document && await companyInScope(tx, client, actor, document.companyCode)
+      && purchasingLevelsAllow(actor, document) ? document : null;
   });
 }
 
@@ -1066,7 +1074,7 @@ async function createOrderImpl(
     // transaction of this service, so the strict payload carries only the verified user.
     const actor = provisioning
       ? raw.changedBy
-      : await withTenant(raw.client, (tx) => judgeOrderWrite(tx, raw.client, authorization, raw.companyCode));
+      : await withTenant(raw.client, (tx) => judgeOrderWrite(tx, raw.client, authorization, raw.companyCode, undefined, { purchasingOrg: raw.purchasingOrg, purchasingGroup: raw.purchasingGroup }));
     return createStockTransportOrder({ ...raw, changedBy: actor }).catch(stoError);
   }
   refuseStoFieldsOnSupplierOrder(raw);
@@ -1083,7 +1091,7 @@ async function createOrderImpl(
   const orderNumber = await withTenant(parsed.data.client, async (tx) => {
     const input = provisioning
       ? parsed.data
-      : { ...parsed.data, changedBy: await judgeOrderWrite(tx, parsed.data.client, authorization, parsed.data.companyCode) };
+      : { ...parsed.data, changedBy: await judgeOrderWrite(tx, parsed.data.client, authorization, parsed.data.companyCode, undefined, parsed.data) };
     const { currency, paymentTermsCode, incotermsCode, incotermsLocation } = await judgeHeader(tx, input.client, input);
     let drawn: Awaited<ReturnType<typeof allocateNumber>>;
     try {
@@ -1253,7 +1261,7 @@ async function changeOrderImpl(
   let actor = raw.changedBy;
   // An order never changes type: the stored type decides which service may edit it.
   const stored = await withTenant(raw.client, async (tx) => {
-    if (!provisioning) actor = await judgeOrderWrite(tx, raw.client, authorization, raw.companyCode, raw.orderNumber);
+    if (!provisioning) actor = await judgeOrderWrite(tx, raw.client, authorization, raw.companyCode, raw.orderNumber, { purchasingOrg: raw.purchasingOrg, purchasingGroup: raw.purchasingGroup });
     const [row] = await tx.select({ documentType: purchaseOrder.documentType }).from(purchaseOrder).where(and(
       eq(purchaseOrder.client, raw.client), eq(purchaseOrder.orderNumber, raw.orderNumber),
     ));
@@ -1280,7 +1288,7 @@ async function changeOrderImpl(
   await withTenant(parsed.data.client, async (tx) => {
     const input = provisioning
       ? parsed.data
-      : { ...parsed.data, changedBy: await judgeOrderWrite(tx, parsed.data.client, authorization, parsed.data.companyCode, raw.orderNumber) };
+      : { ...parsed.data, changedBy: await judgeOrderWrite(tx, parsed.data.client, authorization, parsed.data.companyCode, raw.orderNumber, parsed.data) };
     const before = await loadDocument(tx, input.client, raw.orderNumber);
     if (!before) throw new PurchaseOrderError(`Purchase order ${raw.orderNumber} does not exist.`);
     await assertReleaseImpact(tx, input.client, raw.orderNumber, before, input.items);
@@ -1388,8 +1396,8 @@ export async function orderChoices(
         incotermsCode: s.incotermsCode,
         incotermsLocation: s.incotermsLocation,
       })),
-      purchasingOrgs: orgRows.filter((o) => o.isActive).map((o) => ({ purchasingOrg: o.purchasingOrg, name: o.name })),
-      purchasingGroups: groupRows.filter((g) => g.isActive).map((g) => ({
+      purchasingOrgs: orgRows.filter((o) => o.isActive && purchasingLevelsAllow(actor, { purchasingOrg: o.purchasingOrg })).map((o) => ({ purchasingOrg: o.purchasingOrg, name: o.name })),
+      purchasingGroups: groupRows.filter((g) => g.isActive && purchasingLevelsAllow(actor, { purchasingGroup: g.purchasingGroup })).map((g) => ({
         purchasingGroup: g.purchasingGroup, name: g.name,
       })),
       companies: companyRows.filter((c) => readable.has(c.companyCode)).map((c) => ({ companyCode: c.companyCode, name: c.name, currency: c.currency })),

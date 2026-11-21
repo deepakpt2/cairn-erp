@@ -7,7 +7,9 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { randomUUID } from 'node:crypto';
 import { withTenant } from '../src/platform/db/client';
+import { authOrgRestriction } from '../src/platform/tables/security';
 import { displayPurchaseOrder, openPurchaseOrderDisplay, searchPurchaseOrders } from '../src/modules/purchasing/purchase-order-display';
 import { listPurchaseOrders } from '../src/modules/purchasing/purchase-order-list';
 import { listInvoiceOverview, readInvoiceOverviewDocument } from '../src/modules/purchasing/invoice-overview';
@@ -486,6 +488,96 @@ describe('orders, requisitions and release', () => {
     const by = await withTenant(client, async (tx) => (await tx.execute(sql`
       select changed_by from change_document where client = ${client} and object_key = ${orderA} order by changed_at desc limit 1`)) as unknown as Array<{ changed_by: string }>);
     expect(by[0]?.changed_by).toBe(onlyA.username);
+  });
+});
+
+describe('purchasing org and group scope', () => {
+  const R = 'Scope level setup';
+  let orgA: FinanceActor;
+  let groupOther: FinanceActor;
+  const header = (company: string) => ({
+    supplierNumber: 'V10000', purchasingOrg: company === A ? '1000' : '2000', purchasingGroup: '001', companyCode: company, currency: '',
+  });
+  const item = (plant: string) => ({
+    materialNumber: '', shortText: 'Steel plate', quantity: 10, unit: 'PC', netPrice: 150, priceUnit: 1, taxCode: '',
+    plant, storageLocation: '', markedForDeletion: false,
+    scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 10 }], assignments: [] as never[],
+  });
+  const reqItem = (plant: string, group = '001') => ({
+    materialNumber: '', shortText: 'Steel plate', quantity: 10, unit: 'PC', deliveryDate: '2026-11-15', plant,
+    storageLocation: '', purchasingGroup: group, estimatedPrice: 150, priceUnit: 1, currency: 'USD',
+    markedForDeletion: false, assignments: [] as never[],
+  });
+  const orderNumbers = async (a: FinanceActor) =>
+    (await listPurchaseOrders({ client, authorization: a.authorization, selection: { perspective: 'VENDOR', scope: 'ALL', maxHits: 500 } as never }))
+      .rows.map((r) => r.orderNumber);
+  let orderOrg1000 = '';
+  let orderOrg2000 = '';
+  let reqNumber = '';
+
+  beforeAll(async () => {
+    orgA = await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: [A, B] });
+    groupOther = await createFinanceActor(client, { capabilities: FINANCE_ACTOR_CAPABILITIES, companyScopes: [A, B] });
+    await withTenant(client, async (tx) => {
+      await tx.insert(authOrgRestriction).values([
+        { id: randomUUID(), client, userId: orgA.userId, scopeType: 'PURCHASING_ORG', scopeValue: '1000', createdBy: R },
+        { id: randomUUID(), client, userId: groupOther.userId, scopeType: 'PURCHASING_GROUP', scopeValue: '999', createdBy: R },
+      ]);
+    });
+    orderOrg1000 = (await createOrder({ client, authorization: both.authorization, changedBy: 'X', ...header(A), items: [item('PLA1')] })).orderNumber;
+    orderOrg2000 = (await createOrder({ client, authorization: both.authorization, changedBy: 'X', ...header(B), items: [item('PLB1')] })).orderNumber;
+    reqNumber = (await createRequisition({ client, authorization: both.authorization, changedBy: 'X', items: [reqItem('PLA1')] })).requisitionNumber;
+  }, 240_000);
+
+  it('reads an order only inside the purchasing org and group the actor holds, a missing one otherwise', async () => {
+    expect((await getOrder(client, orderOrg1000, orgA.authorization))?.orderNumber).toBe(orderOrg1000);
+    expect(await getOrder(client, orderOrg2000, orgA.authorization)).toBeNull();
+    expect(await getOrder(client, orderOrg1000, groupOther.authorization)).toBeNull();
+    expect((await getOrder(client, orderOrg2000, both.authorization))?.orderNumber).toBe(orderOrg2000);
+  });
+
+  it('lists, searches and displays orders only inside the held levels', async () => {
+    expect(await orderNumbers(orgA)).toContain(orderOrg1000);
+    expect(await orderNumbers(orgA)).not.toContain(orderOrg2000);
+    expect(await orderNumbers(groupOther)).not.toContain(orderOrg1000);
+    expect(await orderNumbers(both)).toEqual(expect.arrayContaining([orderOrg1000, orderOrg2000]));
+    const display = await displayPurchaseOrder(client, orderOrg2000, orgA.authorization);
+    expect(display.found).toBe(false);
+    const search = await searchPurchaseOrders(client, {}, orgA.authorization);
+    expect(JSON.stringify(search)).not.toContain(orderOrg2000);
+  });
+
+  it('refuses writing an order into an organisation or group outside the held levels, and a change as a missing order', async () => {
+    const before = await count('purchase_order');
+    await refused(createOrder({ client, authorization: orgA.authorization, changedBy: 'X', ...header(B), items: [item('PLB1')] }), /outside your access/);
+    await refused(createOrder({ client, authorization: groupOther.authorization, changedBy: 'X', ...header(A), items: [item('PLA1')] }), /outside your access/);
+    const change = (a: FinanceActor, order: string) => changeOrder({
+      client, authorization: a.authorization, changedBy: 'X', orderNumber: order, ...header(A), items: [{ ...item('PLA1'), itemNumber: 10 }],
+    } as never).then(() => 'done', (e: Error) => e.message.replace(order, '#'));
+    expect(await change(orgA, orderOrg2000)).toMatch(/does not exist/);
+    expect(await change(groupOther, orderOrg1000)).toMatch(/does not exist/);
+    expect(await count('purchase_order')).toBe(before);
+  });
+
+  it('offers only the purchasing orgs and groups inside the held levels', async () => {
+    const choices = await orderChoices(client, orgA.authorization);
+    expect(choices.purchasingOrgs.map((o) => o.purchasingOrg)).toEqual(['1000']);
+    expect((await orderChoices(client, groupOther.authorization)).purchasingGroups).toEqual([]);
+    expect((await requisitionChoices(client, groupOther.authorization)).purchasingGroups).toEqual([]);
+  });
+
+  it('judges requisitions by their purchasing group', async () => {
+    expect(await getRequisition(client, reqNumber, groupOther.authorization)).toBeNull();
+    expect((await getRequisition(client, reqNumber, orgA.authorization))?.requisitionNumber).toBe(reqNumber);
+    await refused(createRequisition({ client, authorization: groupOther.authorization, changedBy: 'X', items: [reqItem('PLA1')] }), /outside your access/);
+    const rows = await listPurchaseRequisitions({ client, authorization: groupOther.authorization, selection: { displayClosed: false, maxHits: 100 } });
+    expect(rows.rows).toEqual([]);
+  });
+
+  it('answers a release of a document outside the held levels as needing no release', async () => {
+    const msg = await releaseDocument({ client, authorization: orgA.authorization, changedBy: 'X', documentCategory: 'PURCHASE_ORDER', documentNumber: orderOrg2000, releaseCode: 'MGR' } as never)
+      .then(() => 'done', (e: Error) => e.message);
+    expect(msg).toMatch(/needs no release/);
   });
 });
 

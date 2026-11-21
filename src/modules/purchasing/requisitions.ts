@@ -30,7 +30,7 @@ import { glAccount } from '../finance/schema';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
 import { employee } from '../people/schema';
 import { purchaseRequisitionAssignment, purchaseRequisitionItem } from './schema';
-import { companyInScope, purchasingActor, requireCompanyInScope } from './scope';
+import { companyInScope, purchasingActor, purchasingLevelsAllow, requireCompanyInScope } from './scope';
 import {
   ReleaseError, assertDocumentNotReleased, requisitionAttributes, syncDocumentRelease,
 } from './release';
@@ -356,6 +356,7 @@ export async function getRequisition(
     for (const company of await requisitionCompaniesInTx(tx, client, document.items.map((i) => i.plant))) {
       if (!(await companyInScope(tx, client, actor, company))) return null;
     }
+    if (document.items.some((i) => !purchasingLevelsAllow(actor, { purchasingGroup: i.purchasingGroup }))) return null;
     return document;
   });
 }
@@ -403,6 +404,9 @@ async function createRequisitionImpl(
       const actor = await purchasingActor(tx, input.client, raw.authorization, [PR_CREATE_CAPABILITY], refuse);
       for (const company of await requisitionCompaniesInTx(tx, input.client, input.items.map((i) => i.plant))) {
         await requireCompanyInScope(tx, input.client, actor, company, refuse);
+      }
+      if (input.items.some((i) => !purchasingLevelsAllow(actor, { purchasingGroup: i.purchasingGroup }))) {
+        throw refuse('A purchasing group on the requisition is outside your access.', 'Name a purchasing group inside your access.');
       }
       input = { ...input, changedBy: actor.username };
     }
@@ -522,6 +526,13 @@ async function changeRequisitionImpl(
       for (const company of await requisitionCompaniesInTx(tx, input.client, input.items.map((i) => i.plant))) {
         await requireCompanyInScope(tx, input.client, actor, company, refuse);
       }
+      const storedDoc = await loadDocument(tx, input.client, raw.requisitionNumber);
+      if (storedDoc?.items.some((i) => !purchasingLevelsAllow(actor, { purchasingGroup: i.purchasingGroup }))) {
+        throw new PurchaseRequisitionError(hidden);
+      }
+      if (input.items.some((i) => !purchasingLevelsAllow(actor, { purchasingGroup: i.purchasingGroup }))) {
+        throw refuse('A purchasing group on the requisition is outside your access.', 'Name a purchasing group inside your access.');
+      }
       input = { ...input, changedBy: actor.username };
     }
     const before = await loadDocument(tx, input.client, raw.requisitionNumber);
@@ -637,7 +648,7 @@ export async function requisitionChoices(
       storageLocations: slRows.filter((s) => s.isActive && plantRows.some((p) => p.plant === s.plant)).map((s) => ({
         plant: s.plant, storageLocation: s.storageLocation, name: s.name,
       })),
-      purchasingGroups: groupRows.filter((g) => g.isActive).map((g) => ({
+      purchasingGroups: groupRows.filter((g) => g.isActive && purchasingLevelsAllow(actor, { purchasingGroup: g.purchasingGroup })).map((g) => ({
         purchasingGroup: g.purchasingGroup, name: g.name,
       })),
       units: unitRows.map((u) => u.code),

@@ -194,7 +194,7 @@ export async function readableCompaniesInTx(
   authorization: ServiceAuthorityContext | undefined,
   capabilities: readonly string[],
   options: { allowPlantLimited?: boolean } = {},
-): Promise<{ ok: true; companies: string[] } | { ok: false; refusal: { message: string; remedy: string } }> {
+): Promise<{ ok: true; companies: string[]; actor: CompanyAuthority } | { ok: false; refusal: { message: string; remedy: string } }> {
   const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, capabilities);
   if (!verdict.ok) return { ok: false, refusal: verdict.refusal };
   const rows = (await tx.execute(sql`select company_code from company_code where client = ${client} order by company_code`)) as unknown as Array<{ company_code: string }>;
@@ -202,5 +202,5 @@ export async function readableCompaniesInTx(
   for (const { company_code: code } of rows) {
     if (!(await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [code], options))) companies.push(code);
   }
-  return { ok: true, companies };
+  return { ok: true, companies, actor: { username: verdict.username, restrictions: verdict.restrictions } };
 }

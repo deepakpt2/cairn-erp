@@ -209,3 +209,11 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Limits:** shipping points and conditions are tenant-wide masters with no company of their own; defining a new one needs only the capability. A user without the capability now gets an error page instead of a read-only view of `/config/shipping-points`. Not browser-tested.
 
 **Moved:** the credit-control area is finance-module configuration and is handled with the finance leftovers.
+
+## Phase 7a — purchasing org and purchasing group (orders, requisitions, release)
+
+**Found:** the purchasing services judged only Company Code (and plant); a Purchasing Org or Purchasing Group restriction held in `auth_org_restriction` narrowed nothing.
+
+**Covered:** `purchasingLevelsAllow` / `purchasingLevelsSql` (platform `scope-actor.ts`): each level narrows only when the actor holds a restriction of it; a blank value is outside a held level; `undefined` means the document has no such level. Applied to: order create/change (stored and requested org/group; a stored order outside answers as missing), `getOrder`, `orderChoices` (orgs and groups), the PO list and PO display/search (SQL predicate), requisition get/create/change (per-item group), `requisitionChoices`, the requisition list, and release (`authorizeReleaseInTx` over orders, contracts, scheduling agreements and requisitions). `readableCompaniesInTx` now also returns the verified actor. Tests: 6 more in `tests/company-scope-purchasing.test.ts` (33).
+
+**Not covered (no scope check of any kind, company or level):** `contract`, `scheduling-agreement` (+ release, schedule), `rfq`, `quotation`, `info-record`, `source-list`, `quota-arrangement`, `vendor-evaluation`, `delivery-completion`, `follow-on`, `stock-transport-order` (its create path is judged through `judgeOrderWrite`, its other functions are not). Parked invoices and invoice verification judge company only, not org/group. Not browser-tested.

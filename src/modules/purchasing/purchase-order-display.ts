@@ -10,6 +10,7 @@
 import { getStoStatus, type StoOrderStatus } from '../inventory/stock-transport';
 import { sql } from 'drizzle-orm';
 
+import { purchasingLevelsAllow, purchasingLevelsSql } from '../../platform/auth/scope-actor';
 import { readableCompaniesInTx, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx } from '../../platform/auth/company-scope';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
@@ -396,7 +397,8 @@ export async function displayPurchaseOrder(
     // stand (a plant limit does not refuse a document display).
     const verdict = await verifyCompanyAuthorityAnyInTx(tx, client, authorization, DISPLAY_CAPABILITIES);
     if (!verdict.ok) fail(verdict.refusal.message, verdict.refusal.remedy);
-    if (header && await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [text(header.company_code)], { allowPlantLimited: true })) return null;
+    if (header && (await refuseCompaniesOutsideScopeInTx(tx, client, verdict, [text(header.company_code)], { allowPlantLimited: true })
+      || !purchasingLevelsAllow(verdict, { purchasingOrg: text(header.purchasing_org), purchasingGroup: text(header.purchasing_group) }))) return null;
     if (!header) return null;
 
     const items = await tx.execute(sql`
@@ -703,7 +705,7 @@ export async function searchPurchaseOrders(
     const readable = await readableCompaniesInTx(tx, client, authorization, DISPLAY_CAPABILITIES, { allowPlantLimited: true });
     if (!readable.ok) fail(readable.refusal.message, readable.refusal.remedy);
     const companyFilter = readable.companies.length > 0
-      ? sql`po.company_code in (${sql.join(readable.companies.map((c) => sql`${c}`), sql`, `)})`
+      ? sql`(po.company_code in (${sql.join(readable.companies.map((c) => sql`${c}`), sql`, `)}) and ${purchasingLevelsSql(readable.actor, { purchasingOrg: sql`po.purchasing_org`, purchasingGroup: sql`po.purchasing_group` })})`
       : sql`false`;
     if (chosen.supplier) {
       const [partner] = await tx.execute(sql`

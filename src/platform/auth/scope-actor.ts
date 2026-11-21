@@ -6,7 +6,7 @@
  * A service that exposes a document answers a company outside the scope exactly as it answers a document that
  * does not exist: it passes that message as `hidden`.
  */
-import { sql } from 'drizzle-orm';
+import { type AnyColumn, type SQL, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   type CompanyAuthority, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx,
@@ -100,4 +100,29 @@ export function plantsAllow(actor: CompanyAuthority, plants: readonly string[]):
   const held = actor.restrictions.filter((r) => r.scopeType === 'PLANT');
   if (held.length === 0) return true;
   return plants.every((plant) => held.some((r) => r.scopeValue.trim() === plant.trim()));
+}
+
+/** Purchasing Org and Purchasing Group: each narrows only when the actor holds a restriction of that level. */
+export function purchasingLevelsAllow(
+  actor: CompanyAuthority, doc: { purchasingOrg?: string | null; purchasingGroup?: string | null },
+): boolean {
+  // `undefined` means the document has no such level (not judged); null or blank is a value outside any held level.
+  const levels: Parameters<typeof orgLevelsAllow>[1] = {};
+  if (doc.purchasingOrg !== undefined) levels.PURCHASING_ORG = doc.purchasingOrg;
+  if (doc.purchasingGroup !== undefined) levels.PURCHASING_GROUP = doc.purchasingGroup;
+  return orgLevelsAllow(actor, levels);
+}
+
+/** The same judgement as a SQL predicate over a document table's columns; `true` when the actor holds neither level. */
+export function purchasingLevelsSql(
+  actor: CompanyAuthority, columns: { purchasingOrg?: SQL | AnyColumn; purchasingGroup?: SQL | AnyColumn },
+): SQL {
+  const parts: SQL[] = [];
+  for (const [type, column] of [['PURCHASING_ORG', columns.purchasingOrg], ['PURCHASING_GROUP', columns.purchasingGroup]] as const) {
+    if (!column) continue;
+    const held = actor.restrictions.filter((r) => r.scopeType === type).map((r) => r.scopeValue.trim());
+    if (held.length === 0) continue;
+    parts.push(sql`trim(${column}) in (${sql.join(held.map((v) => sql`${v}`), sql`, `)})`);
+  }
+  return parts.length ? sql`(${sql.join(parts, sql` and `)})` : sql`true`;
 }

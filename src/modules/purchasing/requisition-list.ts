@@ -17,6 +17,7 @@
 import { sql } from 'drizzle-orm';
 
 import { readableCompaniesInTx } from '../../platform/auth/company-scope';
+import { purchasingLevelsSql } from '../../platform/auth/scope-actor';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
@@ -235,6 +236,7 @@ export async function listPurchaseRequisitions(input: {
     filters.push(readable.companies.length === 0
       ? sql`false`
       : sql`r.plant in (select plant from plant where client = ${client} and company_code in ${readable.companies})`);
+    filters.push(purchasingLevelsSql(readable.actor, { purchasingGroup: sql`r.purchasing_group` }));
     if (s.purchasingGroupFrom || s.purchasingGroupTo) {
       filters.push(sql`r.purchasing_group between ${s.purchasingGroupFrom ?? ''} and ${s.purchasingGroupTo ?? '￿'}`);
     }
