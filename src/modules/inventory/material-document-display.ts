@@ -31,6 +31,8 @@
 import { and, eq, inArray } from 'drizzle-orm';
 
 import { type Tx, withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { plant as plantTable } from '../foundation/schema';
 import { accountingForOriginal, readJournalStatus, journalLinksFor, type DocumentJournalLink, type JournalAccounting } from './material-document-accounting';
 import { material, materialDocument, materialDocumentLine, movementType } from './schema';
@@ -121,6 +123,8 @@ export async function displayMaterialDocument(input: {
   itemNumber?: string;
   /** When given, journals of companies outside this user's scope are withheld. */
   viewerUserId?: string;
+  /** The verified session. A document with a line in a plant outside its scope answers as a missing one. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<DisplayedDocument> {
   const number = input.documentNumber.trim();
   if (!number) {
@@ -139,6 +143,8 @@ export async function displayMaterialDocument(input: {
   const itemText = (input.itemNumber ?? '').trim();
 
   return withTenant(input.client, async (tx) => {
+    const actor = await purchasingActor(tx, input.client, input.authorization, [MATERIAL_DOC_DISPLAY_CAPABILITY], (m, r) => new MaterialDocumentDisplayError(m, r));
+    const reachable = new Set(await reachablePlantsInTx(tx, input.client, actor));
     const [header] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, input.client),
       eq(materialDocument.materialDocumentNumber, number),
@@ -160,6 +166,13 @@ export async function displayMaterialDocument(input: {
       eq(materialDocumentLine.client, input.client),
       eq(materialDocumentLine.materialDocumentNumber, number),
     )).orderBy(materialDocumentLine.lineNumber);
+    // A document touching a plant outside the caller's reach is not shown at all, and answers as a missing one.
+    if (lines.length === 0 || lines.some((l) => !reachable.has(l.plant))) {
+      throw new MaterialDocumentDisplayError(
+        `Material document ${number} does not exist.`,
+        'Check the number; a document is unique per tenant. The list shows the documents that stand.',
+      );
+    }
 
     let selectedItem: number | null = null;
     if (itemText) {

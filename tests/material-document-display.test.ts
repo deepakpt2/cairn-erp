@@ -6,7 +6,7 @@ import {
   MATERIAL_DOC_DISPLAY_CAPABILITY,
   MaterialDocumentDisplayError,
   displayMaterialDocument,
-} from '../src/modules/inventory/material-document-display';
+} from './helpers/material-document-authorized';
 import { createTenant, destroyTenant } from './helpers';
 
 /**

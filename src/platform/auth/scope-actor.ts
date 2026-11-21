@@ -6,11 +6,13 @@
  * A service that exposes a document answers a company outside the scope exactly as it answers a document that
  * does not exist: it passes that message as `hidden`.
  */
+import { sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
 import {
   type CompanyAuthority, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx,
 } from './company-scope';
 import type { ServiceAuthorityContext } from './service-authority';
+import { hasOrgAccess } from './session';
 
 export type ScopeFailure = (message: string, remedy?: string) => Error;
 
@@ -40,4 +42,24 @@ export async function requireCompanyInScope(
     allowPlantLimited: options.allowPlantLimited ?? true,
   });
   if (refusal) throw failure(options.hidden ?? refusal.message, options.hidden ? undefined : refusal.remedy);
+}
+
+/**
+ * The plants the actor may reach: the plant's company is inside the explicit Company Code scope and, when the actor
+ * holds a Plant scope, the plant is named in it. A plant that names no company belongs to no company's scope, so it
+ * is never reachable. The tenant's plant list is small; callers filter rows with `plant = any(...)`.
+ */
+export async function reachablePlantsInTx(tx: Tx, client: string, actor: CompanyAuthority): Promise<string[]> {
+  const rows = (await tx.execute(sql`
+    select plant, coalesce(company_code, '') as company_code from plant where client = ${client}
+  `)) as unknown as Array<{ plant: string; company_code: string }>;
+  const plantScopes = actor.restrictions.filter((r) => r.scopeType === 'PLANT');
+  const out: string[] = [];
+  for (const row of rows) {
+    const company = row.company_code.trim();
+    if (!company || !hasOrgAccess(actor.restrictions, 'COMPANY_CODE', company)) continue;
+    if (plantScopes.length > 0 && !hasOrgAccess(plantScopes, 'PLANT', row.plant.trim())) continue;
+    out.push(row.plant);
+  }
+  return out;
 }

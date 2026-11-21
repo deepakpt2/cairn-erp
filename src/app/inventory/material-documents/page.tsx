@@ -54,6 +54,7 @@ export default async function MaterialDocumentPage({ searchParams }: {
         fiscalYear: params.fiscalYear,
         itemNumber: params.item,
         viewerUserId: session.user.userId,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       });
     } catch (caught) {
       if (caught instanceof MaterialDocumentDisplayError) {

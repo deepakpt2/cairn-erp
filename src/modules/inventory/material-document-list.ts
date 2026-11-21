@@ -20,6 +20,8 @@
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 
 export const MATERIAL_DOC_LIST_CAPABILITY = 'INV.MATERIALDOC.LIST';
@@ -142,6 +144,8 @@ const MASTERS: Array<{ key: keyof MaterialDocListSelection; table: string; colum
 export async function listMaterialDocuments(input: {
   client: string;
   selection: MaterialDocListSelection;
+  /** The verified session. Only lines of plants in the caller's Company Code (and Plant) scope are listed. */
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<MaterialDocListResult> {
   const { client } = input;
   const raw = input.selection;
@@ -223,9 +227,15 @@ export async function listMaterialDocuments(input: {
   const calculatedAt = new Date().toISOString();
 
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, input.authorization, [MATERIAL_DOC_LIST_CAPABILITY], (m, r) => new MaterialDocListError(m, r));
+    const reachable = await reachablePlantsInTx(tx, client, actor);
     for (const master of MASTERS) {
       const value = s[master.key] as string | undefined;
       if (!value) continue;
+      // A plant outside the caller's reach answers as a plant that does not stand.
+      if (master.table === 'plant' && !reachable.includes(value)) {
+        fail(`The ${master.label} ${value} does not stand.`, `Maintain the ${master.label} before selecting it.`);
+      }
       const rows = await tx.execute(sql`
         select ${sql.raw(master.column)} as key from ${sql.raw(master.table)}
         where client = ${client} and ${sql.raw(master.column)} = ${value}
@@ -283,7 +293,8 @@ export async function listMaterialDocuments(input: {
       }
     }
 
-    const filters = [sql`l.client = ${client}`];
+    const filters = [sql`l.client = ${client}`,
+      reachable.length > 0 ? sql`l.plant in (${sql.join(reachable.map((p) => sql`${p}`), sql`, `)})` : sql`false`];
     const range = (column: string, from?: string, to?: string) => {
       if (!from && !to) return;
       filters.push(sql`${sql.raw(column)} between ${from ?? ''} and ${to ?? '￿'}`);

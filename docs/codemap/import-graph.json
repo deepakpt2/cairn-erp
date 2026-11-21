@@ -6986,9 +6986,13 @@
     "modules/foundation/schema.ts",
     "modules/inventory/material-document-accounting.ts",
     "modules/inventory/schema.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts"
   ],
   "modules/inventory/material-document-list.ts": [
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
@@ -8967,6 +8971,7 @@
   "platform/auth/scope-actor.ts": [
     "platform/auth/company-scope.ts",
     "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
     "platform/db/client.ts"
   ],
   "platform/auth/service-authority.ts": [

@@ -5,7 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
 import { displayPurchaseOrder } from '../src/modules/purchasing/purchase-order-display';
 import { listPurchaseOrders } from '../src/modules/purchasing/purchase-order-list';
-import { displayMaterialDocument } from '../src/modules/inventory/material-document-display';
+import { displayMaterialDocument } from './helpers/material-document-authorized';
 import { getReversalDocument, reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { reconcileStock } from '../src/modules/inventory/stock-reconcile';
 import { stockOverview } from '../src/modules/inventory/stock-overview';

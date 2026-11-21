@@ -10,7 +10,7 @@ import { getJournalItems as getJournalItemsService } from '../src/modules/financ
 import { calculateBalanceSheet } from '../src/modules/finance/balance-sheet';
 import { calculateTrialBalance } from '../src/modules/finance/trial-balance';
 import { postGoodsIssue } from '../src/modules/inventory/goods-issue';
-import { displayMaterialDocument } from '../src/modules/inventory/material-document-display';
+import { displayMaterialDocument } from './helpers/material-document-authorized';
 import { JOURNAL_ACCOUNTING_NOTE } from '../src/modules/inventory/material-document-accounting';
 import { MaterialReversalError, reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';

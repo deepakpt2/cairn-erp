@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { displayMaterialDocument } from '../src/modules/inventory/material-document-display';
+import { displayMaterialDocument } from './helpers/material-document-authorized';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'MB03_BATCH_TEST';

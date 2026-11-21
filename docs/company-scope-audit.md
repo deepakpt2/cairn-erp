@@ -67,3 +67,14 @@ Not covered: **`postCustomerInvoice` and the whole finance AR/AP posting family 
 **Behaviour change:** an order whose plant names no company is no longer shown to anyone.
 
 **Not covered in production:** the MRP run still uses unscoped requisition variants; order create/change/release/confirmation plant scope is not re-audited here; nothing is browser-tested.
+
+## Phase 5c — inventory: material document display and list
+
+Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_code`). New shared helper `reachablePlantsInTx` (`src/platform/auth/scope-actor.ts`): a plant is reachable when its company is in the explicit Company Code scope and, if the caller holds a Plant scope, the plant is in it. A plant that names no company is never reachable.
+
+**Covered:**
+- `listMaterialDocuments` (MB51, incl. the report export): needs `INV.MATERIALDOC.LIST` and a session; lists only lines of reachable plants; a plant outside reach in the selection answers as a plant that does not stand.
+- `displayMaterialDocument` (MB03): needs `INV.DISPLAY` and a session; a document with any line in an unreachable plant answers exactly as a missing document (a missing number answers first).
+- Tests: `tests/company-scope-inventory.test.ts` (6 tests); existing suites use `tests/helpers/material-document-authorized.ts`.
+
+**Not covered yet in inventory:** physical inventory, price change, reservations, warehouse stocks, stock overview/ageing/reconcile/shelf-life lists, batch reads, serial numbers, goods-receipt posting (uses plant-level checks only where its own service already verifies), MIGO. Document list lines of a mixed-company document are trimmed per line rather than the document refused.

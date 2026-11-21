@@ -6,7 +6,7 @@ import {
   MaterialDocListError,
   listMaterialDocuments,
   type MaterialDocListSelection,
-} from '../src/modules/inventory/material-document-list';
+} from './helpers/material-document-authorized';
 import { createTenant, destroyTenant } from './helpers';
 
 /**
@@ -27,9 +27,9 @@ describe('SCR-125 material document list (MB51)', () => {
     client = tenant.client;
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
-        insert into plant (client, plant, name, country, created_by) values
-          (${client}, 'Q100', 'Plant 100', 'KW', ${ACTOR}),
-          (${client}, 'Q200', 'Plant 200', 'KW', ${ACTOR})
+        insert into plant (client, plant, name, country, company_code, created_by) values
+          (${client}, 'Q100', 'Plant 100', 'KW', ${tenant.companyCode}, ${ACTOR}),
+          (${client}, 'Q200', 'Plant 200', 'KW', ${tenant.companyCode}, ${ACTOR})
         on conflict do nothing
       `);
       await tx.execute(sql`

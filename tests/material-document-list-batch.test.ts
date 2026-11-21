@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { MaterialDocListError, listMaterialDocuments } from '../src/modules/inventory/material-document-list';
+import { MaterialDocListError, listMaterialDocuments } from './helpers/material-document-authorized';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 
 const ACTOR = 'MB51_BATCH_TEST';

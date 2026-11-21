@@ -48,7 +48,7 @@ export const stockOverviewExport: ReportAdapter = {
 
 export const materialDocumentListExport: ReportAdapter = {
   code: 'material-document-list', route: '/inventory/material-document-list', capability: MATERIAL_DOC_LIST_CAPABILITY,
-  async build(client, q) {
+  async build(client, q, authorization) {
     const s: MaterialDocListSelection = {
       materialFrom: up(q, 'materialFrom'), materialTo: up(q, 'materialTo'),
       plantFrom: up(q, 'plantFrom'), plantTo: up(q, 'plantTo'),
@@ -62,7 +62,7 @@ export const materialDocumentListExport: ReportAdapter = {
       schedulingAgreement: get(q, 'schedulingAgreement'), serialNumber: get(q, 'serialNumber'),
       userName: get(q, 'userName'), maxHits: Number(get(q, 'maxHits')) || undefined,
     };
-    const r = await listMaterialDocuments({ client, selection: s });
+    const r = await listMaterialDocuments({ client, selection: s, authorization });
     return {
       title: 'Material document list',
       subtitle: [`${r.rowCount} line(s)${r.truncated ? ` (truncated at ${r.maxHits})` : ''}`, ...r.warnings],

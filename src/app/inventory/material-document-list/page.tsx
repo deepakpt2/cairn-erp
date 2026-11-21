@@ -59,7 +59,8 @@ export default async function MaterialDocumentListPage({
   let listError: string | null = null;
   if (can(session, MATERIAL_DOC_LIST_CAPABILITY)) {
     try {
-      result = await listMaterialDocuments({ client: session.user.client, selection: initialSelection });
+      result = await listMaterialDocuments({ client: session.user.client, selection: initialSelection,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' } });
     } catch (error) {
       listError = error instanceof MaterialDocListError
         ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)
