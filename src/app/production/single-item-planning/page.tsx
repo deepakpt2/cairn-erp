@@ -33,7 +33,7 @@ export default async function SingleItemPlanningPage({
     period: one(params.period),
   });
   const runNumber = one(params.run);
-  const run = !refusal && runNumber ? await getMrpRun(session.user.client, runNumber) : null;
+  const run = !refusal && runNumber ? await getMrpRun(session.user.client, runNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
 
   return (
     <Page

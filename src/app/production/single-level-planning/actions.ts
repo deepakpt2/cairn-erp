@@ -73,7 +73,7 @@ export async function planSingleLevelAction(
       simulationOnly: text(form, 'intent') === 'check',
       confirmRegenerative: text(form, 'confirmRegenerative') === 'on',
       named,
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     const failed = run.status === 'FAILED';
     return {
       ok: !failed,

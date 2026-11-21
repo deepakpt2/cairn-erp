@@ -17,6 +17,10 @@ import { enterTimeTicket, getTimeTicket, loadTimeTicket, previewTimeTicket } fro
 import { settleProductionOrder, settleProductionOrdersCollective } from '../src/modules/production/order-settlement';
 import { getProductionOrderDisplay, listProductionOrders } from '../src/modules/production/production-order-display';
 import { changeProductionOrder } from '../src/modules/production/production-order-change';
+import {
+  cancelMrpRun, getMrpRun, listMrpRuns, planMaterials, planSingleItem,
+} from '../src/modules/production/mrp-run';
+import { getMrpRunProgress, submitMrpBackgroundRun } from '../src/modules/production/mrp-background';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -61,6 +65,13 @@ let poPlantA: FinanceActor;
 let poNoCap: FinanceActor;
 let poNoScope: FinanceActor;
 let poOther: FinanceActor;
+let mA: FinanceActor;
+let mB: FinanceActor;
+let mPlantA: FinanceActor;
+let mNoCap: FinanceActor;
+let mNoScope: FinanceActor;
+let mOther: FinanceActor;
+let mBoth: FinanceActor;
 
 type Auth = FinanceActor['authorization'] | undefined;
 const ask = (p: Promise<unknown>) => p.then(() => 'done', (e: Error) => e.message);
@@ -105,6 +116,7 @@ beforeAll(async () => {
     }
     await tx.execute(sql`insert into production_order_component (client, order_number, item_number, material_number, plant, required_quantity, unit_of_measure, created_by)
       values (${client}, 'PO-A', 10, 'SCMK', 'PLA1', 1, 'PC', ${SEED})`);
+    await defineRange(tx, { client, objectCode: 'MRPRUN', subObject: '*', prefix: 'MR', numberLength: 7, createdBy: SEED });
     await defineRange(tx, { client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: SEED });
   });
   onlyA = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A] });
@@ -141,6 +153,14 @@ beforeAll(async () => {
   poNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
   poNoScope = await createFinanceActor(client, { capabilities: PCAPS, companyScopes: [] });
   poOther = await createFinanceActor(other.client, { capabilities: PCAPS });
+  const MCAPS = ['PROD.MRP.RUN', 'PROD.MRP.REGENERATE'];
+  mA = await createFinanceActor(client, { capabilities: MCAPS, companyScopes: [A] });
+  mB = await createFinanceActor(client, { capabilities: MCAPS, companyScopes: [B] });
+  mPlantA = await createFinanceActor(client, { capabilities: MCAPS, companyScopes: [A, B], plantScopes: ['PLA1'] });
+  mBoth = await createFinanceActor(client, { capabilities: ['PROD.MRP.RUN', 'PROD.MRP.REGENERATE'], companyScopes: [A, B] });
+  mNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
+  mNoScope = await createFinanceActor(client, { capabilities: MCAPS, companyScopes: [] });
+  mOther = await createFinanceActor(other.client, { capabilities: MCAPS });
   otherTenantActor = await createFinanceActor(other.client, { capabilities: CAPS });
 }, 240_000);
 
@@ -359,5 +379,75 @@ describe('production order display and change', () => {
     const row = await read('PO-A');
     expect(row.q).toBe('7.000');
     expect(row.changed_by).toBe(poA.username);
+  });
+});
+
+describe('MRP run', () => {
+  let key = 0;
+  const plan = (a: Auth, from: string, to = from) => planMaterials({
+    client, requestedBy: 'someone-else', requestKey: `mrp-${++key}`, processingKey: 'NEUPL', plantFrom: from, plantTo: to,
+    confirmRegenerative: true, simulationOnly: true,
+  }, a);
+  const requestedBy = (run: string) => withTenant(client, async (tx) => ((await tx.execute(sql`
+    select requested_by from mrp_run where client = ${client} and run_number = ${run}`)) as unknown as Array<{ requested_by: string }>)[0]!.requested_by);
+  const runs = () => withTenant(client, async (tx) => Number(((await tx.execute(sql`
+    select count(*)::int as n from mrp_run where client = ${client}`)) as unknown as Array<{ n: number }>)[0]!.n));
+  let runA = '';
+  let runBoth = '';
+
+  it('plans a range wholly in reach, records the session user, and refuses a range holding a plant out of reach as a whole', async () => {
+    const run = await plan(mA.authorization, 'PLA1');
+    runA = run.runNumber;
+    expect(await requestedBy(run.runNumber)).toBe(mA.username);
+    const before = await runs();
+    const missing = mask(await ask(plan(mA.authorization, 'PLZZ')), 'PLZZ');
+    expect(mask(await ask(plan(mA.authorization, 'PLB1')), 'PLB1')).toBe(missing);
+    expect(mask(await ask(plan(mA.authorization, 'PLN1')), 'PLN1')).toBe(missing);
+    expect(mask(await ask(plan(mPlantA.authorization, 'PLB1')), 'PLB1')).toBe(missing);
+    for (const [who, from, to] of [[mA, 'PLA1', 'PLN1'], [mB, 'PLA1', 'PLB1'], [mPlantA, 'PLA1', 'PLB1']] as const) {
+      expect(await ask(plan(who.authorization, from, to))).toContain('holds a plant outside your scope');
+    }
+    expect(await runs()).toBe(before);
+    const both = await plan(mBoth.authorization, 'PLA1', 'PLB1');
+    runBoth = both.runNumber;
+    expect(await requestedBy(both.runNumber)).toBe(mBoth.username);
+    expect(await ask(planSingleItem({
+      client, requestedBy: 'x', requestKey: `si-${++key}`, materialNumber: 'SCMK', plant: 'PLB1', processingKey: 'NEUPL', confirmRegenerative: true, simulationOnly: true,
+    }, mA.authorization))).toContain('does not stand');
+    for (const bad of [undefined, mNoCap.authorization, mNoScope.authorization, mOther.authorization]) {
+      expect(await ask(plan(bad, 'PLA1'))).not.toBe('done');
+    }
+  });
+
+  it('shows, lists, reads progress of and cancels a run only when its whole range is in reach', async () => {
+    expect((await getMrpRun(client, runA, mA.authorization))?.runNumber).toBe(runA);
+    expect(await getMrpRun(client, runA, mB.authorization)).toBeNull();
+    expect(await getMrpRun(client, runBoth, mA.authorization)).toBeNull();
+    expect(await getMrpRun(client, runBoth, mPlantA.authorization)).toBeNull();
+    expect((await getMrpRun(client, runBoth, mBoth.authorization))?.runNumber).toBe(runBoth);
+    const listed = async (a: Auth) => (await listMrpRuns(client, a)).map((r) => r.runNumber);
+    expect(await listed(mA.authorization)).toEqual([runA]);
+    expect(await listed(mBoth.authorization)).toEqual(expect.arrayContaining([runA, runBoth]));
+    expect(await listed(mB.authorization)).toEqual([]);
+    expect(await getMrpRunProgress(client, runBoth, mA.authorization)).toBeNull();
+    expect(await getMrpRunProgress(client, runA, mA.authorization)).not.toBeNull();
+    expect(mask(await ask(cancelMrpRun(client, runBoth, 'x', mA.authorization)), runBoth)).toBe(mask(await ask(cancelMrpRun(client, 'MR-GONE', 'x', mA.authorization)), 'MR-GONE'));
+    for (const bad of [undefined, mNoCap.authorization, mNoScope.authorization, mOther.authorization]) {
+      expect(await ask(getMrpRun(client, runA, bad))).not.toBe('done');
+      expect(await ask(listMrpRuns(client, bad))).not.toBe('done');
+    }
+  });
+
+  it('refuses a background submission whose plants or company scope are out of reach', async () => {
+    const submit = (a: FinanceActor, from: string, to = from) => submitMrpBackgroundRun({
+      client, requestedBy: a.username, actorUserId: a.authorization.userId, requestKey: `bg-${++key}`, processingKey: 'NEUPL',
+      plantFrom: from, plantTo: to, confirmRegenerative: true, simulationOnly: true,
+    });
+    const before = await runs();
+    expect(await ask(submit(mNoScope, 'PLA1'))).toContain('no longer holds');
+    expect(await ask(submit(mA, 'PLB1'))).toContain('no longer holds');
+    expect(await ask(submit(mA, 'PLA1', 'PLB1'))).toContain('no longer holds');
+    expect(await ask(submit(mPlantA, 'PLB1'))).toContain('no longer holds');
+    expect(await runs()).toBe(before);
   });
 });

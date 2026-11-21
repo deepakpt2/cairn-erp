@@ -7,7 +7,7 @@ import { defineRange } from '../src/platform/numbering';
 import { changeDocument, changeDocumentItem } from '../src/platform/tables/audit-trail';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { mrpController, productionOrder } from '../src/modules/inventory/schema';
-import { planMaterials } from '../src/modules/production/mrp-run';
+import { planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { mrpDependentRequirement, plannedOrder, productionOrderType } from '../src/modules/production/schema';
 import {
   PlannedOrderChangeError,

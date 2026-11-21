@@ -21,6 +21,8 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { reachablePlantsForUserInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { assertActorCan, JobActorError, loadJobActor, type JobActor } from '../../platform/job/actor';
 import { enqueue } from '../../platform/job/queue';
 import { LeaseLostError, type ChunkResult, type JobContext } from '../../platform/job/types';
@@ -34,6 +36,7 @@ import {
   clean,
   closeRun,
   getMrpRun,
+  getMrpRunForProvisioning,
   nextLine,
   planMaterialInTx,
   rows,
@@ -64,8 +67,13 @@ async function assertMrpAuthority(
     select plant from plant
      where client = ${client} and plant >= ${selection.plantFrom} and plant <= ${selection.plantTo}
   `);
+  // The Company Code scope must be explicit and name every plant's company; a plant out of reach refuses the run whole.
+  const reachable = await reachablePlantsForUserInTx(tx, client, actor.id);
   for (const row of plants) {
     await assertActorCan(tx, client, actor, MRP_RUN_CAPABILITY, { plant: String(row.plant) });
+    if (!reachable.includes(String(row.plant))) {
+      throw new JobActorError(`${actor.username} no longer holds Company Code and Plant scope for plant ${String(row.plant)}.`);
+    }
   }
 }
 
@@ -163,7 +171,7 @@ export async function submitMrpBackgroundRun(input: MrpBackgroundRequest): Promi
     `);
     return number;
   });
-  return (await getMrpRun(input.client, runNumber))!;
+  return (await getMrpRunForProvisioning(input.client, runNumber))!;
 }
 
 export interface MrpRunProgress {
@@ -180,7 +188,18 @@ export interface MrpRunProgress {
 }
 
 /** A light read for polling: counts and states, never the material list. */
-export async function getMrpRunProgress(client: string, runNumber: string): Promise<MrpRunProgress | null> {
+export async function getMrpRunProgress(
+  client: string, runNumber: string, authorization: ServiceAuthorityContext | undefined,
+): Promise<MrpRunProgress | null> {
+  // Session, capability and plant reach are judged by the run read; a run out of reach answers as a missing one.
+  if (!(await getMrpRun(client, runNumber, authorization))) return null;
+  return progressOf(client, runNumber);
+}
+
+/** Tests, seeds and scripts only; never imported from `src/app`. */
+export async function getMrpRunProgressForProvisioning(client: string, runNumber: string) { return progressOf(client, runNumber); }
+
+async function progressOf(client: string, runNumber: string): Promise<MrpRunProgress | null> {
   return withTenant(client, async (tx) => {
     const found = await rows(tx, sql`
       select r.run_number, r.status, r.execution_mode, r.error_summary, r.job_run_id,

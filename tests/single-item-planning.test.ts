@@ -8,7 +8,7 @@ import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createRequisitionForProvisioning as createRequisition } from '../src/modules/purchasing/requisitions';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { componentRequirementQuantity } from '../src/modules/production/mrp-explosion';
-import { planMaterials, planSingleItem } from '../src/modules/production/mrp-run';
+import { planMaterialsForProvisioning as planMaterials, planSingleItemForProvisioning as planSingleItem } from '../src/modules/production/mrp-run';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';

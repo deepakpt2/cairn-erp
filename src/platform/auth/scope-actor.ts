@@ -12,7 +12,7 @@ import {
   type CompanyAuthority, refuseCompaniesOutsideScopeInTx, verifyCompanyAuthorityAnyInTx,
 } from './company-scope';
 import type { ServiceAuthorityContext } from './service-authority';
-import { hasOrgAccess, type OrgRestriction } from './session';
+import { hasOrgAccess, loadOrgRestrictions, type OrgRestriction } from './session';
 
 export type ScopeFailure = (message: string, remedy?: string) => Error;
 
@@ -62,6 +62,16 @@ export async function reachablePlantsInTx(tx: Tx, client: string, actor: Company
     out.push(row.plant);
   }
   return out;
+}
+
+/**
+ * The same reach for a user named only by id (a background job has a durable user, never a session). A user with no
+ * explicit Company Code restriction reaches no plant: a missing restriction never means unrestricted.
+ */
+export async function reachablePlantsForUserInTx(tx: Tx, client: string, userId: string): Promise<string[]> {
+  const restrictions = await loadOrgRestrictions(tx, client, userId);
+  if (!restrictions.some((r) => r.scopeType === 'COMPANY_CODE' && r.scopeValue.trim())) return [];
+  return reachablePlantsInTx(tx, client, { username: '', restrictions });
 }
 
 /** `and <column> in (reachable plants)`; with none reachable, `and false`. `column` is a trusted literal. */

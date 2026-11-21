@@ -34,8 +34,8 @@ export default async function MrpRunPage({
     scheduleLine: one(params.scheduleLine),
   });
   const runNumber = one(params.run);
-  const run = !refusal && runNumber ? await getMrpRun(session.user.client, runNumber) : null;
-  const runs = await listMrpRuns(session.user.client);
+  const run = !refusal && runNumber ? await getMrpRun(session.user.client, runNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
+  const runs = await listMrpRuns(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
 
   return (
     <Page

@@ -14,7 +14,7 @@ import {
   getStoStatus, postStoIssue, postStoReceipt, reconcileStoItem,
 } from '../src/modules/inventory/stock-transport';
 import { postTransfer } from './helpers/transfer-authorized';
-import { planMaterials } from '../src/modules/production/mrp-run';
+import { planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { defineRange } from '../src/platform/numbering';
 import { defineReleaseStrategy } from './helpers/release-config';

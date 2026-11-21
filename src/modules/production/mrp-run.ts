@@ -17,6 +17,8 @@
  * Single-level planning is a third entry. It plans the named material and does not plan a lower-level component.
  */
 import { sql } from 'drizzle-orm';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 
 import { lineNotReversed, lineReversalDisagreement, OPEN_PRODUCTION_DOCUMENT, REVERSAL_QUANTITY_DISAGREEMENT } from '../inventory/production-document-quantity';
 
@@ -1356,20 +1358,61 @@ export async function closeRun(tx: Tx, client: string, runNumber: string, status
   `);
 }
 
-export async function getMrpRun(client: string, runNumber: string): Promise<MrpRunView | null> {
-  return withTenant(client, async (tx) => viewOf(tx, client, runNumber.trim()));
+type MrpMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type MrpReach = { reachable: string[]; username: string } | null;
+
+/** Session, live capability (all of those named) and company scope, judged in the caller's own transaction. */
+async function mrpReach(tx: Tx, client: string, mode: MrpMode, capabilities: readonly string[]): Promise<MrpReach> {
+  if (mode === 'unscoped') return null;
+  let actor;
+  for (const capability of capabilities) {
+    actor = await purchasingActor(tx, client, mode.authorization, [capability], (m, r) => new MrpRunError(m, r));
+  }
+  if (!actor) throw new MrpRunError('No planning capability was named.');
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
 }
 
-export async function listMrpRuns(client: string): Promise<Array<{ runNumber: string; status: string; plantFrom: string; processingKey: string }>> {
+/**
+ * A run covers every plant of its range. A range that holds a plant out of reach (another company, no company,
+ * outside the Plant scope) is refused whole: a run is never narrowed to the plants the actor may see.
+ */
+async function plantRangeInReach(tx: Tx, client: string, reach: MrpReach, from: string, to: string): Promise<boolean> {
+  if (!reach) return true;
+  const plants = await rows(tx, sql`select plant from plant where client = ${client} and plant >= ${from} and plant <= ${to}`);
+  return plants.length > 0 && plants.every((row) => reach.reachable.includes(String(row.plant)));
+}
+
+async function runInReach(tx: Tx, client: string, reach: MrpReach, runNumber: string): Promise<boolean> {
+  if (!reach) return true;
+  const found = await rows(tx, sql`select plant_from, plant_to from mrp_run where client = ${client} and run_number = ${runNumber}`);
+  return !!found[0] && plantRangeInReach(tx, client, reach, String(found[0].plant_from), String(found[0].plant_to));
+}
+
+async function getRunWith(client: string, runNumber: string, mode: MrpMode): Promise<MrpRunView | null> {
   return withTenant(client, async (tx) => {
+    const reach = await mrpReach(tx, client, mode, [MRP_RUN_CAPABILITY]);
+    if (!(await runInReach(tx, client, reach, runNumber.trim()))) return null;
+    return viewOf(tx, client, runNumber.trim());
+  });
+}
+
+async function listRunsWith(client: string, mode: MrpMode): Promise<Array<{ runNumber: string; status: string; plantFrom: string; processingKey: string }>> {
+  return withTenant(client, async (tx) => {
+    const reach = await mrpReach(tx, client, mode, [MRP_RUN_CAPABILITY]);
     const found = await rows(tx, sql`
-      select run_number, status, plant_from, processing_key
+      select run_number, status, plant_from, plant_to, processing_key
         from mrp_run
        where client = ${client}
        order by created_at desc
-       limit 12
+       limit ${reach ? 200 : 12}
     `);
-    return found.map((row) => ({
+    // A run whose plant range holds a plant out of reach is not listed to this actor.
+    const visible: typeof found = [];
+    for (const row of found) {
+      if (visible.length === 12) break;
+      if (await plantRangeInReach(tx, client, reach, String(row.plant_from), String(row.plant_to))) visible.push(row);
+    }
+    return visible.map((row) => ({
       runNumber: String(row.run_number),
       status: String(row.status),
       plantFrom: String(row.plant_from),
@@ -1453,8 +1496,12 @@ export async function planMaterialInTx(tx: Tx, p: {
   await finishMaterial(tx, p.client, p.runNumber, p.actor, candidate, calculation, counts);
 }
 
-export async function cancelMrpRun(client: string, runNumber: string, requestedBy: string): Promise<MrpRunView> {
+async function cancelWith(client: string, runNumber: string, requestedByRaw: string, mode: MrpMode): Promise<MrpRunView> {
   return withTenant(client, async (tx) => {
+    const reach = await mrpReach(tx, client, mode, [MRP_RUN_CAPABILITY]);
+    // The recorded user is the session user; a run out of reach answers as a missing one.
+    const requestedBy = reach ? reach.username : requestedByRaw;
+    if (!(await runInReach(tx, client, reach, runNumber))) fail(`Run ${runNumber} does not stand.`);
     // Lock order is job_run, then mrp_run, everywhere: the background material transaction fences
     // (locks the job row) before it share-locks the run, so taking them the other way round deadlocks.
     const link = await rows(tx, sql`
@@ -1516,9 +1563,26 @@ export async function storeStructuralLevels(tx: Tx, client: string, runNumber: s
   }
 }
 
-export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
+async function planWith(raw: MrpRunRequest, mode: MrpMode): Promise<MrpRunView> {
+  let input = raw;
   const selection = selectionOf(input);
   const opened = await withTenant(input.client, async (tx) => {
+    const capabilities = [MRP_RUN_CAPABILITY];
+    if (selection.processingKey === 'NEUPL') capabilities.push(MRP_REGENERATE_CAPABILITY);
+    if (selection.entryPoint === 'SINGLE_LEVEL') capabilities.push(MRP_SINGLE_LEVEL_CAPABILITY);
+    const reach = await mrpReach(tx, input.client, mode, capabilities);
+    if (reach) {
+      // The recorded user is the session user, never the caller's name. A range holding a plant out of reach is refused whole.
+      input = { ...raw, requestedBy: reach.username };
+      if (!(await plantRangeInReach(tx, input.client, reach, selection.plantFrom, selection.plantTo))) {
+        fail(
+          selection.plantFrom === selection.plantTo
+            ? `The plant ${selection.plantFrom} does not stand.`
+            : `The plant range ${selection.plantFrom} to ${selection.plantTo} holds a plant outside your scope.`,
+          'Plan only plants inside your Company Code and Plant scope. Nothing was planned.',
+        );
+      }
+    }
     const prior = await rows(tx, sql`
       select run_number, processing_key, planning_mode, plant_from, plant_to, material_from, material_to, mrp_controller,
              horizon_start::text as horizon_start, horizon_end::text as horizon_end, simulation_only, status,
@@ -1629,7 +1693,7 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
     return { runNumber, resume: true };
   });
 
-  if (!opened.resume) return (await getMrpRun(input.client, opened.runNumber))!;
+  if (!opened.resume) return (await getMrpRunForProvisioning(input.client, opened.runNumber))!;
 
   for (let step = 0; step < MRP_FOREGROUND_LIMIT * 4; step += 1) {
     const pending = await withTenant(input.client, async (tx) => rows(tx, sql`
@@ -1738,7 +1802,7 @@ export function singleItemRefusal(fields: Record<string, string | undefined> | u
   return null;
 }
 
-export async function planSingleItem(input: {
+async function singleItemWith(input: {
   client: string;
   requestedBy: string;
   requestKey: string;
@@ -1753,7 +1817,7 @@ export async function planSingleItem(input: {
   confirmRegenerative?: boolean;
   productionVersion?: string;
   named?: Record<string, string | undefined>;
-}): Promise<MrpRunView> {
+}, mode: MrpMode): Promise<MrpRunView> {
   const refused = singleItemRefusal(input.named, input.planningMode);
   if (refused) fail(refused, 'Plan one material in one plant. A run posts nothing.');
   const scheduling = clean(input.schedulingMode).toUpperCase();
@@ -1768,7 +1832,7 @@ export async function planSingleItem(input: {
   if (version && !/^[A-Z0-9]{1,4}$/.test(version)) fail('The production version is not a version code.');
   let planningMode = clean(input.planningMode).toUpperCase();
   if (!planningMode || planningMode === '1' || planningMode === 'ADAPT') planningMode = 'ADAPT_EXISTING';
-  return planMaterials({
+  return planWith({
     client: input.client,
     requestedBy: input.requestedBy,
     requestKey: input.requestKey,
@@ -1785,7 +1849,7 @@ export async function planSingleItem(input: {
     explode: true,
     entryPoint: 'SINGLE_ITEM',
     productionVersion: version || undefined,
-  });
+  }, mode);
 }
 
 const SINGLE_LEVEL_REFUSED: Record<string, string> = {
@@ -1808,7 +1872,7 @@ export function singleLevelRefusal(fields: Record<string, string | undefined> | 
 }
 
 /** MD03. One material, one plant, one level. A component is not planned. */
-export async function planSingleLevel(input: {
+async function singleLevelWith(input: {
   client: string;
   requestedBy: string;
   requestKey: string;
@@ -1823,7 +1887,7 @@ export async function planSingleLevel(input: {
   confirmRegenerative?: boolean;
   productionVersion?: string;
   named?: Record<string, string | undefined>;
-}): Promise<MrpRunView> {
+}, mode: MrpMode): Promise<MrpRunView> {
   const refused = singleLevelRefusal(input.named, input.planningMode);
   if (refused) fail(refused, 'Plan one material in one plant. A lower-level component is not planned. A run posts nothing.');
   const scheduling = clean(input.schedulingMode).toUpperCase();
@@ -1836,7 +1900,7 @@ export async function planSingleLevel(input: {
   if (plant.length > 10) fail('The plant is too long.');
   const version = clean(input.productionVersion).toUpperCase();
   if (version && !/^[A-Z0-9]{1,4}$/.test(version)) fail('The production version is not a version code.');
-  return planMaterials({
+  return planWith({
     client: input.client,
     requestedBy: input.requestedBy,
     requestKey: input.requestKey,
@@ -1854,5 +1918,22 @@ export async function planSingleLevel(input: {
     entryPoint: 'SINGLE_LEVEL',
     productionVersion: version || undefined,
     named: input.named,
-  });
+  }, mode);
 }
+
+/** Session, `PROD.MRP.RUN` (+ regenerate / single-level where used) and company scope; a run range holding a plant out of reach is refused whole. */
+export async function planMaterials(input: MrpRunRequest, authorization: ServiceAuthorityContext | undefined) { return planWith(input, { authorization }); }
+export async function planSingleItem(input: Parameters<typeof singleItemWith>[0], authorization: ServiceAuthorityContext | undefined) { return singleItemWith(input, { authorization }); }
+export async function planSingleLevel(input: Parameters<typeof singleLevelWith>[0], authorization: ServiceAuthorityContext | undefined) { return singleLevelWith(input, { authorization }); }
+/** A run whose range holds a plant out of reach answers as a missing one; the recorded user is the session user. */
+export async function cancelMrpRun(client: string, runNumber: string, requestedBy: string, authorization: ServiceAuthorityContext | undefined) { return cancelWith(client, runNumber, requestedBy, { authorization }); }
+export async function getMrpRun(client: string, runNumber: string, authorization: ServiceAuthorityContext | undefined) { return getRunWith(client, runNumber, { authorization }); }
+export async function listMrpRuns(client: string, authorization: ServiceAuthorityContext | undefined) { return listRunsWith(client, { authorization }); }
+
+/** Seeding, demo, tests, scripts and the background job's own reads only; never imported from `src/app`. */
+export async function planMaterialsForProvisioning(input: MrpRunRequest) { return planWith(input, 'unscoped'); }
+export async function planSingleItemForProvisioning(input: Parameters<typeof singleItemWith>[0]) { return singleItemWith(input, 'unscoped'); }
+export async function planSingleLevelForProvisioning(input: Parameters<typeof singleLevelWith>[0]) { return singleLevelWith(input, 'unscoped'); }
+export async function cancelMrpRunForProvisioning(client: string, runNumber: string, requestedBy: string) { return cancelWith(client, runNumber, requestedBy, 'unscoped'); }
+export async function getMrpRunForProvisioning(client: string, runNumber: string) { return getRunWith(client, runNumber, 'unscoped'); }
+export async function listMrpRunsForProvisioning(client: string) { return listRunsWith(client, 'unscoped'); }

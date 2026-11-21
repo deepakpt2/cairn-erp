@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
-import { planMaterials } from '../src/modules/production/mrp-run';
+import { planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { structuralBomLevels, type StructuralBomLevels } from '../src/modules/production/mrp-structure';
 import { createProductionVersion, deleteProductionVersion, lockProductionVersion, selectProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
@@ -216,7 +216,7 @@ describe('plant structural bill levels', () => {
   it('explodes through the shared function, and the structural calculator writes nothing', () => {
     const planning = readFileSync('src/modules/production/mrp-run.ts', 'utf8');
     const structure = readFileSync('src/modules/production/mrp-structure.ts', 'utf8');
-    const store = planning.slice(planning.indexOf('async function storeStructuralLevels'), planning.indexOf('export async function planMaterials'));
+    const store = planning.slice(planning.indexOf('async function storeStructuralLevels'), planning.indexOf('async function planWith'));
     expect(planning).toContain('A bill of material is selected through the production version. It is not entered.');
     expect(planning).toContain('explodePlannedSupply');
     expect(planning).not.toMatch(/selectProductionVersion/);

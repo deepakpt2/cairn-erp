@@ -108,7 +108,7 @@ export async function planMaterialsAction(
       executionMode: text(form, 'executionMode') || undefined,
       planningMode: text(form, 'planningMode') || undefined,
       named,
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return {
       ok: true,
       message: check
@@ -133,7 +133,7 @@ export async function cancelMrpRunAction(
   const refused = mrpNamedRefusal(namedFields(form));
   if (refused) return { ok: false, message: refused };
   try {
-    const run = await cancelMrpRun(session.user.client, text(form, 'runNumber'), session.user.username);
+    const run = await cancelMrpRun(session.user.client, text(form, 'runNumber'), session.user.username, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return { ok: true, message: `Run ${run.runNumber} stands at ${run.status}.`, run };
   } catch (caught) {
     if (caught instanceof MrpRunError) return { ok: false, message: caught.message, remedy: caught.remedy };
@@ -145,12 +145,12 @@ export async function cancelMrpRunAction(
 export async function mrpRunProgressAction(runNumber: string): Promise<MrpRunProgress | null> {
   const session = await requireSession(MRP_RUN_ROUTE);
   if (!can(session, MRP_RUN_CAPABILITY)) return null;
-  return getMrpRunProgress(session.user.client, runNumber);
+  return getMrpRunProgress(session.user.client, runNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
 }
 
 /** The full run, read once when polling sees it end. */
 export async function mrpRunViewAction(runNumber: string): Promise<MrpRunView | null> {
   const session = await requireSession(MRP_RUN_ROUTE);
   if (!can(session, MRP_RUN_CAPABILITY)) return null;
-  return getMrpRun(session.user.client, runNumber);
+  return getMrpRun(session.user.client, runNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
 }

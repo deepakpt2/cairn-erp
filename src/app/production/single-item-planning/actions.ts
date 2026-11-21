@@ -64,7 +64,7 @@ export async function planSingleItemAction(
       simulationOnly: text(form, 'intent') === 'check',
       confirmRegenerative: text(form, 'confirmRegenerative') === 'on',
       named,
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return {
       ok: true,
       run,

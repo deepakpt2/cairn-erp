@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
-import { MrpRunError, getMrpRun, planMaterials } from '../src/modules/production/mrp-run';
+import { MrpRunError, getMrpRunForProvisioning as getMrpRun, planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant } from './helpers';

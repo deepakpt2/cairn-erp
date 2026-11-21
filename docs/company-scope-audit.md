@@ -306,3 +306,12 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - Already scoped, unchanged: technical completion and its revocation (own authority + plant scope). Residual: they answer an out-of-reach order with a scope refusal rather than as a missing one.
 - Tests: `tests/company-scope-production.test.ts` (14 now); 14 existing suites repointed.
 - Still unscoped in production: MRP run, routing, BOM, work centre, production version, availability, capacity load, stock-requirements, STO planning, cost estimate, other reports.
+
+## Phase 9e — Production: MRP run (MD01 / MD02 / MD03, background)
+
+- `planMaterials`, `planSingleItem`, `planSingleLevel`, `cancelMrpRun`, `getMrpRun`, `listMrpRuns`, `getMrpRunProgress` now need a session, `PROD.MRP.RUN` (plus `PROD.MRP.REGENERATE` for regenerative, `PROD.MRP.SINGLELEVEL` for MD03) and Company Code scope.
+- A run covers every plant of its range. A range holding any plant out of reach (another company, no company, outside the Plant scope, or a range with no plant) is refused as a whole, never narrowed; a single plant out of reach "does not stand". A run whose range is not wholly in reach is not shown, not listed, and answers as missing to progress and cancel. The recorded user is the session user.
+- Background path: `submitMrpBackgroundRun` and every chunk re-check through `assertMrpAuthority`. That check had treated a missing Company Code restriction as unrestricted (`canWith`: "an absent level is unrestricted"); it now also requires an explicit Company Code restriction naming each plant's company (`reachablePlantsForUserInTx`), re-judged per chunk. Test planner fixtures now carry an explicit scope.
+- `...ForProvisioning` variants for tests, seed and the foreground run's own post-write read.
+- Tests: `tests/company-scope-production.test.ts` (17 now). Residual: the check-run tests are simulation-only; the background worker's chunk path is covered by the existing suite plus the new submission-refusal test, not a dedicated adversarial test of a user losing scope mid-run. The demand/supply reads inside a run are bounded by the run's plant range, not separately company-checked. Other users' proposals made by a run (planned orders, requisitions) are not re-scoped by a later reader beyond their own services.
+- Still unscoped in production: BOM, routing, work centre, production version, availability, capacity load, stock-requirements, STO planning, cost estimate, other reports.

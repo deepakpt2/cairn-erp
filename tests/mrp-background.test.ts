@@ -17,8 +17,8 @@ import { defineRange } from '../src/platform/numbering';
 import { appUser, userCapability } from '../src/platform/tables/security';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
-import { MRP_PLANT_JOB, runMrpPlantChunk, submitMrpBackgroundRun, getMrpRunProgress } from '../src/modules/production/mrp-background';
-import { MrpRunError, cancelMrpRun, getMrpRun, planMaterials } from '../src/modules/production/mrp-run';
+import { MRP_PLANT_JOB, runMrpPlantChunk, submitMrpBackgroundRun, getMrpRunProgressForProvisioning as getMrpRunProgress } from '../src/modules/production/mrp-background';
+import { MrpRunError, cancelMrpRunForProvisioning as cancelMrpRun, getMrpRunForProvisioning as getMrpRun, planMaterialsForProvisioning as planMaterials } from '../src/modules/production/mrp-run';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
@@ -118,6 +118,9 @@ beforeAll(async () => {
         validFrom: '2020-01-01', reason: 'DIRECT', granter: 'boss', createdBy: 'TEST',
       });
     }
+    // The planner's Company Code scope is explicit: a missing restriction reaches no plant.
+    await tx.execute(sql`insert into auth_org_restriction (id, client, user_id, scope_type, scope_value, created_by)
+      select ${randomUUID()}, ${tenant.client}, ${id}, 'COMPANY_CODE', company_code, 'TEST' from company_code where client = ${tenant.client}`);
     planner = { id, username: 'planner' };
   });
   for (let i = 1; i <= N; i += 1) await extend(`INIT-${pad(i)}`, 'BUY', '5');

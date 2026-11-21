@@ -14,7 +14,7 @@ import { listCheckingControls, saveCheckingControl } from '../../src/modules/pro
 import { changeMaterialBom, createMaterialBom, saveBomItemCategory, saveBomUsage } from '../../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../../src/modules/production/routing';
 import { createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
-import { planSingleItem } from '../../src/modules/production/mrp-run';
+import { planSingleItemForProvisioning as planSingleItem } from '../../src/modules/production/mrp-run';
 import { convertPlannedOrder } from '../../src/modules/production/planned-order-conversion';
 import { saveOrderTypeParameter } from '../../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../../src/modules/production/production-version';
