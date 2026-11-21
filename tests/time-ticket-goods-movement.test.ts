@@ -30,7 +30,7 @@ import {
   discardProductionCogiFailure,
   retryProductionCogiFailure,
 } from '../src/modules/production/production-cogi';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';

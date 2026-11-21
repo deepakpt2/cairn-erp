@@ -21,7 +21,7 @@ import {
   previewOrderConfirmationForProvisioning as previewOrderConfirmation,
 } from '../src/modules/production/order-confirmation';
 import { enterTimeTicketForProvisioning as enterTimeTicket, getTimeTicketForProvisioning as getTimeTicket, loadTimeTicketForProvisioning as loadTimeTicket } from '../src/modules/production/time-ticket';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 import type { RoutingOperationInput } from '../src/modules/production/routing';

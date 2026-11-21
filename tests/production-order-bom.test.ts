@@ -13,7 +13,7 @@ import {
 } from '../src/modules/inventory/production-orders';
 import { changeMaterialBomForProvisioning as changeMaterialBom, createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { saveProductionOrderType } from '../src/modules/production/production-order-type';

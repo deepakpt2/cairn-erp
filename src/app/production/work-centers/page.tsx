@@ -47,11 +47,11 @@ export default async function WorkCentersPage({ searchParams }: {
   const plant = last(raw.plant);
   const center = last(raw.workCenter);
   const creating = last(raw.create) === '1' || !center;
-  const document = plant && center ? await getWorkCenter(session.user.client, plant, center) : null;
+  const document = plant && center ? await getWorkCenter(session.user.client, plant, center, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
   const parameters = await listStandardValueParameters(session.user.client, document?.standardValueKey);
   const [categories, centers, plants] = await Promise.all([
     listWorkCenterCategories(session.user.client),
-    listWorkCenters(session.user.client),
+    listWorkCenters(session.user.client, { userId: session.user.userId, sessionId: session.sessionId ?? '' }),
     withTenant(session.user.client, (tx) => tx.select({
       plant: plantTable.plant,
       name: plantTable.name,

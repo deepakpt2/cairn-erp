@@ -8163,6 +8163,8 @@
   "modules/production/work-center.ts": [
     "modules/foundation/schema.ts",
     "modules/production/schema.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",

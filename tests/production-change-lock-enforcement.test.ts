@@ -47,7 +47,7 @@ import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } fro
 import { openForChange, releaseChangeLock } from '@/platform/lock/enqueue';
 import { saveMaterialView } from '@/modules/inventory/materials';
 import { saveBomItemCategory, saveBomUsage, createMaterialBomForProvisioning as createMaterialBom } from '@/modules/production/material-bom';
-import { createWorkCenter, saveWorkCenterCategory } from '@/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '@/modules/production/work-center';
 import { ROUTING_LOCK, createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '@/modules/production/routing';
 import { PRODUCTION_VERSION_LOCK, createProductionVersion } from '@/modules/production/production-version';
 import { checkVersionAction, deleteVersionAction, lockVersionAction, saveVersionAction } from '@/app/production/production-versions/actions';

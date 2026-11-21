@@ -60,7 +60,7 @@ import {
   WORK_CENTER_CHANGE_CAPABILITY,
   WORK_CENTER_CREATE_CAPABILITY,
   WORK_CENTER_LOCK,
-  createWorkCenter,
+  createWorkCenterForProvisioning as createWorkCenter,
   saveWorkCenterCategory,
 } from '@/modules/production/work-center';
 import { saveBomAction, saveUsageAction, type BomActionState } from '@/app/production/boms/actions';

@@ -17,7 +17,7 @@ import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCateg
 import { componentRequirementQuantity, SCALE } from '../src/modules/production/mrp-explosion';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { BomExplosionError, explodeBom, whereUsedBom, type ExplodeBomInput } from '../src/modules/production/bom-explosion';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';

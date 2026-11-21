@@ -19,7 +19,7 @@ import { saveOrderTypeParameter } from '../src/modules/production/order-type-par
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { enterTimeTicketForProvisioning as enterTimeTicket } from '../src/modules/production/time-ticket';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';
 

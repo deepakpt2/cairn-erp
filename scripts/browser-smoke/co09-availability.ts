@@ -13,7 +13,7 @@ import {
 import { listCheckingControls, saveCheckingControl } from '../../src/modules/production/checking-control';
 import { changeMaterialBomForProvisioning as changeMaterialBom, createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../../src/modules/production/routing';
-import { createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
 import { planSingleItemForProvisioning as planSingleItem } from '../../src/modules/production/mrp-run';
 import { convertPlannedOrder } from '../../src/modules/production/planned-order-conversion';
 import { saveOrderTypeParameter } from '../../src/modules/production/order-type-parameters';

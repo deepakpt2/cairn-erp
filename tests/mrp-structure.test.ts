@@ -9,7 +9,7 @@ import { planMaterialsForProvisioning as planMaterials } from '../src/modules/pr
 import { structuralBomLevels, type StructuralBomLevels } from '../src/modules/production/mrp-structure';
 import { createProductionVersion, deleteProductionVersion, lockProductionVersion, selectProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'MD01_STRUCTURE';

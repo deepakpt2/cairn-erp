@@ -11,7 +11,7 @@ import { saveOrderTypeParameter } from '../../src/modules/production/order-type-
 import {
   createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage,
 } from '../../src/modules/production/routing';
-import { createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };

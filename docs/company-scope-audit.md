@@ -323,3 +323,10 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - Deliberately left unscoped (internal downstream reads, no actor): `selectEffectiveMaterialBom` and the BOM usage / item-category / status configuration. Residual: callers such as explosion, costing and order creation rely on their own service's scope to bound which plant they ask about.
 - Tests: `tests/company-scope-production.test.ts` (19 now); about 27 existing suites repointed; `tests/production-master-lock-enforcement.test.ts` now signs its people in as real persisted actors.
 - Still unscoped in production: routing, work centre, production version, availability, capacity load, stock-requirements, STO planning, cost estimate, other reports.
+
+## Phase 9g — Production: work center (CR01 / CR02 / CR03)
+
+- `createWorkCenter`, `changeWorkCenter`, `getWorkCenter` (and `displayWorkCenter`), `listWorkCenters` now need a session, a work-center capability (create / change; reads accept display, change or create) and a plant in reach. A plant out of reach (other company, no company, outside the Plant scope) "does not stand"; a work center there reads as missing and is dropped from the list. A copy-from reference at a plant out of reach is refused. The recorded user is the session user.
+- `...ForProvisioning` variants for tests, seeds, scripts. `saveWorkCenterCategory` and `listWorkCenterCategories` (client-wide customizing) stay unscoped.
+- Residual: a cost-center assignment on a work center is not checked against the actor's Controlling Area scope (that gate is a later phase).
+- Tests: `tests/company-scope-production.test.ts` (21 now); about 30 suites, scripts and seeds repointed.

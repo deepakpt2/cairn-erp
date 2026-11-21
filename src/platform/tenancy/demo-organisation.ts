@@ -26,7 +26,7 @@ import { saveCostCenter } from '../../modules/foundation/cost-center-definition'
 import { saveProfitCenter } from '../../modules/foundation/profit-center-definition';
 import { purchasingOrgPlant } from '../../modules/foundation/schema';
 import { maintainNumberRange } from '../../modules/foundation/number-ranges';
-import { createWorkCenter, saveWorkCenterCategory } from '../../modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../../modules/production/work-center';
 import { assignShippingPointForProvisioning as assignShippingPoint, defineShippingPointForProvisioning as defineShippingPoint } from '../../modules/sales/shipping-point-maintenance';
 import { seedTypeValuationForPlant } from '../../modules/inventory/standard-config';
 import type { DemoTimeline } from './demo-provisioning';

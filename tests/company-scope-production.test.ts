@@ -25,6 +25,9 @@ import {
   saveBomItemCategory, saveBomStatus, saveBomUsage,
   changeMaterialBom, createMaterialBom, getMaterialBom, listMaterialBoms, resolveMaterialBom,
 } from '../src/modules/production/material-bom';
+import {
+  changeWorkCenter, createWorkCenter, getWorkCenter, listWorkCenters, saveWorkCenterCategory,
+} from '../src/modules/production/work-center';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -187,7 +190,7 @@ beforeAll(async () => {
     materialEntry: '+', quantityEntry: '+', allowFixedQuantity: 'X', allowBulk: 'X', allowPhantom: 'X',
   });
   await saveBomStatus({ client, changedBy: SEED, status: '1', description: 'Active', releasedForCosting: 'X', releasedForOrders: 'X' });
-  const BCAPS = ['PROD.BOM.DISPLAY', 'PROD.BOM.CREATE', 'PROD.BOM.CHANGE'];
+  const BCAPS = ['PROD.BOM.DISPLAY', 'PROD.BOM.CREATE', 'PROD.BOM.CHANGE', 'PROD.WORKCENTER.DISPLAY', 'PROD.WORKCENTER.CREATE', 'PROD.WORKCENTER.CHANGE'];
   bA = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [A] });
   bB = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [B] });
   bPlantA = await createFinanceActor(client, { capabilities: BCAPS, companyScopes: [A, B], plantScopes: ['PLA1'] });
@@ -524,5 +527,46 @@ describe('material BOM', () => {
       expect(await ask(listMaterialBoms(client, {}, bad))).not.toBe('done');
       expect(await ask(changeOf('PLA1', bad))).not.toBe('done');
     }
+  });
+});
+
+describe('work center', () => {
+  const wc = (plant: string, key: string, extra: Record<string, unknown> = {}) => ({
+    client, changedBy: 'someone-else', plant, workCenter: key, category: 'MACH', description: 'Machine', ...extra,
+  });
+  const exists = (key: string) => withTenant(client, async (tx) => (await tx.execute(sql`
+    select plant, created_by from work_center where client = ${client} and work_center = ${key}`)) as unknown as Array<{ plant: string; created_by: string }>);
+
+  it('creates, changes, reads and lists only inside reach, and refuses a plant out of reach as a missing plant', async () => {
+    await saveWorkCenterCategory({ client, changedBy: 'SETUP', category: 'MACH', description: 'Machine' });
+    expect(await ask(createWorkCenter(wc('PLA1', 'WCA'), bA.authorization))).toBe('done');
+    expect(await ask(createWorkCenter(wc('PLB1', 'WCB'), bB.authorization))).toBe('done');
+    expect((await exists('WCA'))[0]?.created_by).toBe(bA.username);
+
+    const missing = mask(await ask(createWorkCenter(wc('PLZZ', 'WCX'), bA.authorization)), 'PLZZ');
+    for (const p of ['PLB1', 'PLN1']) expect(mask(await ask(createWorkCenter(wc(p, 'WCX'), bA.authorization)), p)).toBe(missing);
+    expect(await exists('WCX')).toHaveLength(0);
+
+    expect((await getWorkCenter(client, 'PLA1', 'WCA', bA.authorization))?.plant).toBe('PLA1');
+    expect(await getWorkCenter(client, 'PLB1', 'WCB', bA.authorization)).toBeNull();
+    expect((await listWorkCenters(client, bA.authorization)).map((r) => r.workCenter)).toEqual(['WCA']);
+
+    const before = await getWorkCenter(client, 'PLB1', 'WCB', bB.authorization);
+    expect(await ask(changeWorkCenter({ ...wc('PLB1', 'WCB', { description: 'Hijack' }), version: before!.version }, bA.authorization))).not.toBe('done');
+    expect((await getWorkCenter(client, 'PLB1', 'WCB', bB.authorization))?.description).toBe('Machine');
+    // Copying from a plant out of reach is refused too.
+    expect(await ask(createWorkCenter(wc('PLA1', 'WCC', { copyFrom: { plant: 'PLB1', workCenter: 'WCB' } }), bA.authorization))).not.toBe('done');
+  });
+
+  it('refuses a missing session, a missing capability, no scope, a plant scope that excludes the plant, and another tenant', async () => {
+    for (const bad of [undefined, { userId: 'nobody', sessionId: 'nothing' }, bNoCap.authorization, bNoScope.authorization, bPlantA.authorization, bOther.authorization]) {
+      const plant = bad === bPlantA.authorization ? 'PLB1' : 'PLA1';
+      if (bad === bPlantA.authorization) expect(await ask(createWorkCenter(wc(plant, 'WCQ'), bad))).not.toBe('done');
+      else {
+        expect(await ask(createWorkCenter(wc(plant, 'WCQ'), bad))).not.toBe('done');
+        expect(await ask(listWorkCenters(client, bad))).not.toBe('done');
+      }
+    }
+    expect(await exists('WCQ')).toHaveLength(0);
   });
 });

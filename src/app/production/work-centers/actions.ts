@@ -103,7 +103,7 @@ export async function saveWorkCenterAction(
         argument: `${input.plant}/${input.workCenter}`,
       });
     }
-    const saved = mode === 'CHANGE' ? await changeWorkCenter(input) : await createWorkCenter(input);
+    const saved = mode === 'CHANGE' ? await changeWorkCenter(input, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : await createWorkCenter(input, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     return {
       ok: true,
       workCenter: saved,

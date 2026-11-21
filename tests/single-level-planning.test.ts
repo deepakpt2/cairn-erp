@@ -10,7 +10,7 @@ import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCateg
 import { planSingleItemForProvisioning as planSingleItem, planSingleLevelForProvisioning as planSingleLevel, singleLevelRefusal } from '../src/modules/production/mrp-run';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'MD03_PLANNER';

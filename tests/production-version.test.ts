@@ -7,7 +7,7 @@ import { withTenant } from '../src/platform/db/client';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { productionOrder, productionOrderComponent } from '../src/modules/inventory/schema';
 import { changeMaterialBomForProvisioning as changeMaterialBom, createMaterialBomForProvisioning as createMaterialBom, getMaterialBomForProvisioning as getMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { productionOrderType, productionVersion } from '../src/modules/production/schema';
 import {

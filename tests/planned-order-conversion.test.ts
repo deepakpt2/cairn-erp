@@ -10,7 +10,7 @@ import { saveMaterialView } from '../src/modules/inventory/materials';
 import { materialPlant, mrpController } from '../src/modules/inventory/schema';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { PlannedOrderChangeError, changePlannedOrderForProvisioning as changePlannedOrder } from '../src/modules/production/planned-order-change';

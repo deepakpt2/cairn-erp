@@ -14,7 +14,7 @@ import {
 } from '../src/modules/production/routing';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { enterTimeTicketForProvisioning as enterTimeTicket } from '../src/modules/production/time-ticket';
-import { createWorkCenter, saveWorkCenterCategory, changeWorkCenter } from '../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory, changeWorkCenterForProvisioning as changeWorkCenter } from '../src/modules/production/work-center';
 import { cancelConfirmation } from '../src/modules/production/confirmation-cancel';
 import {
   costConfirmation, listUncostedConfirmations, previewConfirmationCost, processUncostedConfirmations,

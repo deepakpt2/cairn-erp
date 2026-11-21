@@ -15,7 +15,7 @@ import { checkProductionVersion, createProductionVersion } from '../../src/modul
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../../src/modules/production/routing';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../../src/modules/production/order-operation-snapshot';
 import { movementRequestKey } from '../../src/modules/production/confirmation-movements';
-import { createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '../../src/modules/production/work-center';
 import type { BrowserTarget } from './targets';
 import { createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
 

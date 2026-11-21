@@ -49,7 +49,7 @@ import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } fro
 import { releaseChangeLock } from '@/platform/lock/enqueue';
 import { saveMaterialView } from '@/modules/inventory/materials';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '@/modules/production/material-bom';
-import { createWorkCenter, saveWorkCenterCategory } from '@/modules/production/work-center';
+import { createWorkCenterForProvisioning as createWorkCenter, saveWorkCenterCategory } from '@/modules/production/work-center';
 import { ROUTING_LOCK, createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '@/modules/production/routing';
 import { PRODUCTION_VERSION_LOCK, createProductionVersion } from '@/modules/production/production-version';
 import { copyVersionAction, saveVersionAction } from '@/app/production/production-versions/actions';

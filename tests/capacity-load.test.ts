@@ -13,7 +13,7 @@ import {
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomStatus, saveBomUsage } from '../src/modules/production/material-bom';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingStatus, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { changeWorkCenter, createWorkCenter, getWorkCenter, saveWorkCenterCategory, WorkCenterError, type WorkCenterCapacityInput } from '../src/modules/production/work-center';
+import { changeWorkCenterForProvisioning as changeWorkCenter, createWorkCenterForProvisioning as createWorkCenter, getWorkCenterForProvisioning as getWorkCenter, saveWorkCenterCategory, WorkCenterError, type WorkCenterCapacityInput } from '../src/modules/production/work-center';
 import { saveCalendarPeriod, saveHolidayCalendar, addHolidayDay } from '../src/modules/foundation/factory-calendar';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 

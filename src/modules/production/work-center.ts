@@ -12,6 +12,8 @@ import { and, asc, eq } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { hasCapability } from '../../platform/auth/session';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { markActivityComplete } from '../../platform/tenancy';
 import {
@@ -640,25 +642,70 @@ export async function listWorkCenterCategories(client: string) {
   return withTenant(client, (tx) => tx.select().from(workCenterCategory).where(eq(workCenterCategory.client, client)).orderBy(asc(workCenterCategory.category)));
 }
 
-export async function listWorkCenters(client: string) {
-  return withTenant(client, (tx) => tx.select({
-    plant: workCenter.plant,
-    workCenter: workCenter.workCenter,
-    description: workCenter.description,
-    category: workCenter.category,
-    deletionFlag: workCenter.deletionFlag,
-  }).from(workCenter).where(eq(workCenter.client, client)).orderBy(asc(workCenter.plant), asc(workCenter.workCenter)));
+type CenterMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type CenterReach = { reachable: string[]; username: string } | null;
+
+/** Session, live capability and company scope, judged in the caller's own transaction. */
+async function centerReach(tx: Tx, client: string, mode: CenterMode, capabilities: readonly string[]): Promise<CenterReach> {
+  if (mode === 'unscoped') return null;
+  const actor = await purchasingActor(tx, client, mode.authorization, capabilities, (m, r) => new WorkCenterError(m, r));
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
 }
 
-export async function getWorkCenter(client: string, plantCode: string, centerCode: string): Promise<WorkCenterView | null> {
-  return withTenant(client, (tx) => readInTx(tx, client, plantCode, centerCode));
+/** A work center is a plant object; a plant out of reach answers as a plant that does not stand. */
+function requirePlantReach(reach: CenterReach, plant: string): void {
+  if (reach && !reach.reachable.includes(plant)) fail(`The plant ${plant} does not stand.`, 'Enter a plant in this tenant.');
 }
 
-async function writeCenter(input: WorkCenterInput, mode: 'CREATE' | 'CHANGE'): Promise<WorkCenterView> {
+const CENTER_READERS = [WORK_CENTER_DISPLAY_CAPABILITY, WORK_CENTER_CHANGE_CAPABILITY, WORK_CENTER_CREATE_CAPABILITY] as const;
+
+async function listWith(client: string, mode: CenterMode) {
+  return withTenant(client, async (tx) => {
+    const reach = await centerReach(tx, client, mode, CENTER_READERS);
+    const rows = await tx.select({
+      plant: workCenter.plant,
+      workCenter: workCenter.workCenter,
+      description: workCenter.description,
+      category: workCenter.category,
+      deletionFlag: workCenter.deletionFlag,
+    }).from(workCenter).where(eq(workCenter.client, client)).orderBy(asc(workCenter.plant), asc(workCenter.workCenter));
+    return reach ? rows.filter((row) => reach.reachable.includes(row.plant)) : rows;
+  });
+}
+
+async function getWith(client: string, plantCode: string, centerCode: string, mode: CenterMode): Promise<WorkCenterView | null> {
+  return withTenant(client, async (tx) => {
+    const reach = await centerReach(tx, client, mode, CENTER_READERS);
+    // A work center at a plant out of reach answers exactly as a missing one.
+    if (reach && !reach.reachable.includes(plantCode)) return null;
+    return readInTx(tx, client, plantCode, centerCode);
+  });
+}
+
+export function listWorkCenters(client: string, authorization: ServiceAuthorityContext | undefined) {
+  return listWith(client, { authorization });
+}
+export function listWorkCentersForProvisioning(client: string) {
+  return listWith(client, 'unscoped');
+}
+export function getWorkCenter(client: string, plantCode: string, centerCode: string, authorization: ServiceAuthorityContext | undefined): Promise<WorkCenterView | null> {
+  return getWith(client, plantCode, centerCode, { authorization });
+}
+export function getWorkCenterForProvisioning(client: string, plantCode: string, centerCode: string): Promise<WorkCenterView | null> {
+  return getWith(client, plantCode, centerCode, 'unscoped');
+}
+
+async function writeCenter(rawInput: WorkCenterInput, mode: 'CREATE' | 'CHANGE', scope: CenterMode): Promise<WorkCenterView> {
+  let input = rawInput;
   const plantCode = asTyped(input.plant, 'Plant', /^[A-Z0-9]{1,10}$/, 10);
   const centerCode = workCenterKey(input.workCenter);
   if (!plantCode) fail('A plant is required.');
   return withTenant(input.client, async (tx) => {
+    const reach = await centerReach(tx, input.client, scope, [mode === 'CREATE' ? WORK_CENTER_CREATE_CAPABILITY : WORK_CENTER_CHANGE_CAPABILITY]);
+    requirePlantReach(reach, plantCode);
+    if (input.copyFrom) requirePlantReach(reach, input.copyFrom.plant);
+    // The recorded user is the session user, never the caller's name.
+    if (reach) input = { ...rawInput, changedBy: reach.username };
     const plantRow = await assertPlant(tx, input.client, plantCode);
     const before = await readInTx(tx, input.client, plantCode, centerCode);
     if (mode === 'CREATE' && before) {
@@ -811,12 +858,17 @@ function asLocation(raw: string | null | undefined): string | null {
   return raw;
 }
 
-export async function createWorkCenter(input: WorkCenterInput): Promise<WorkCenterView> {
-  return writeCenter(input, 'CREATE');
+export function createWorkCenter(input: WorkCenterInput, authorization: ServiceAuthorityContext | undefined): Promise<WorkCenterView> {
+  return writeCenter(input, 'CREATE', { authorization });
 }
-
-export async function changeWorkCenter(input: WorkCenterInput): Promise<WorkCenterView> {
-  return writeCenter(input, 'CHANGE');
+export function changeWorkCenter(input: WorkCenterInput, authorization: ServiceAuthorityContext | undefined): Promise<WorkCenterView> {
+  return writeCenter(input, 'CHANGE', { authorization });
+}
+export function createWorkCenterForProvisioning(input: WorkCenterInput): Promise<WorkCenterView> {
+  return writeCenter(input, 'CREATE', 'unscoped');
+}
+export function changeWorkCenterForProvisioning(input: WorkCenterInput): Promise<WorkCenterView> {
+  return writeCenter(input, 'CHANGE', 'unscoped');
 }
 
 /** The parameters a capacity of a work center with this standard value key may name (CM01 mapping field). */

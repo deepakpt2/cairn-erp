@@ -11,13 +11,13 @@ import {
   WORK_CENTER_CREATE_CAPABILITY,
   WORK_CENTER_DISPLAY_CAPABILITY,
   WorkCenterError,
-  changeWorkCenter,
-  createWorkCenter,
-  getWorkCenter,
+  changeWorkCenterForProvisioning as changeWorkCenter,
+  createWorkCenterForProvisioning as createWorkCenter,
+  getWorkCenterForProvisioning as getWorkCenter,
   holdsWorkCenterAuthority,
   saveWorkCenterCategory,
 } from '../src/modules/production/work-center';
-import { displayWorkCenter } from '../src/modules/production/work-center-display';
+import { displayWorkCenterForProvisioning as displayWorkCenter } from '../src/modules/production/work-center-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'CR01_TEST';

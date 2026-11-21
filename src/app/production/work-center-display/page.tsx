@@ -41,7 +41,7 @@ export default async function WorkCenterDisplayPage({ searchParams }: {
   const raw = await searchParams;
   const plant = last(raw.plant);
   const center = last(raw.workCenter);
-  const document = plant && center ? await displayWorkCenter(session.user.client, plant, center) : null;
+  const document = plant && center ? await displayWorkCenter(session.user.client, plant, center, { userId: session.user.userId, sessionId: session.sessionId ?? '' }) : null;
 
   return (
     <Page
