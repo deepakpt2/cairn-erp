@@ -83,7 +83,7 @@ export async function enterTimeTicketAction(
   const check = text(form, 'intent') === 'check';
   try {
     const ticket = check
-      ? await previewTimeTicket(session.user.client, input)
+      ? await previewTimeTicket(session.user.client, input, { userId: session.user.userId, sessionId: session.sessionId ?? '' })
       : await enterTimeTicket(session.user.client, {
         ...input,
         requestedBy: session.user.username,
@@ -108,7 +108,7 @@ export async function enterTimeTicketAction(
     };
   } catch (error) {
     if (error instanceof MovementFailurePersistenceError) {
-      const ticket = await getTimeTicket(session.user.client, error.confirmationNumber).catch(() => null);
+      const ticket = await getTimeTicket(session.user.client, error.confirmationNumber, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null);
       return {
         ok: false,
         ticket,

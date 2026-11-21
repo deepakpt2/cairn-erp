@@ -14,7 +14,7 @@ import { convertPlannedOrder } from '../src/modules/production/planned-order-con
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { changeRouting, createRouting, getRouting, RoutingError, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { loadTimeTicket } from '../src/modules/production/time-ticket';
+import { loadTimeTicketForProvisioning as loadTimeTicket } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';

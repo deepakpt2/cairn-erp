@@ -13,7 +13,7 @@ import { saveOrderTypeParameter } from '../src/modules/production/order-type-par
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
-import { enterTimeTicket, loadTimeTicket, previewTimeTicket, timeTicketRefusal } from '../src/modules/production/time-ticket';
+import { enterTimeTicketForProvisioning as enterTimeTicket, loadTimeTicketForProvisioning as loadTimeTicket, previewTimeTicketForProvisioning as previewTimeTicket, timeTicketRefusal } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createProductionActor, refreshActorPlants } from './helpers/production-actor';

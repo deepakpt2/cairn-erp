@@ -284,3 +284,10 @@ Same plant-reach rule as 5c: a plant is reachable when its company is in the exp
 - `...ForProvisioning` variants (tests, demo seed, scripts) run unscoped and are not imported from `src/app`.
 - Tests: `tests/company-scope-production.test.ts` (8). Existing production tests repointed to the provisioning variants.
 - Residual, not yet scoped: time ticket, order settlement (single and collective), MRP run, routing, work centre, BOM, availability, production-order types. Production-order display shims used by the confirmation page were not separately reviewed. Not browser-tested; full suite not run.
+
+## Phase 9b — Production: time ticket (CO11N)
+
+- `loadTimeTicket`, `previewTimeTicket`, `enterTimeTicket`, `getTimeTicket` now need a session, `PROD.CONFIRM.ENTER` and Company Code scope, judged in the service's own transaction. An order at a plant out of reach (another company, no company, outside the Plant scope) answers as a missing order; get returns null. The recorded user is the session user. `enterTimeTicket` takes the session from `input.authorization` (the same one carried into the automatic movements).
+- `...ForProvisioning` variants run unscoped for tests, seeds and scripts.
+- Tests: `tests/company-scope-production.test.ts` (10 now). Existing time-ticket tests repointed.
+- Already scoped by its own check, not changed: confirmation cancel (CO13) requires an explicit Company Code and Plant scope. Residual: it answers an out-of-reach order with "not authorised" rather than as a missing one, so it discloses that the order exists.

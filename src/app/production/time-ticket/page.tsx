@@ -45,7 +45,7 @@ export default async function TimeTicketPage({
         operationNumber: one(params.operation),
         productionVersion: one(params.version),
         postingDate: one(params.postingDate),
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     } catch (error) {
       openError = error instanceof TimeTicketError ? error.message : 'The order could not be read.';
     }

@@ -22,7 +22,7 @@ import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { enterTimeTicket, loadTimeTicket } from '../src/modules/production/time-ticket';
+import { enterTimeTicketForProvisioning as enterTimeTicket, loadTimeTicketForProvisioning as loadTimeTicket } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 

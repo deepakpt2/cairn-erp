@@ -13,6 +13,7 @@ import { createPlannedOrder } from '../src/modules/production/planned-order-crea
 import {
   enterOrderConfirmation, loadOrderConfirmation, previewOrderConfirmation,
 } from '../src/modules/production/order-confirmation';
+import { enterTimeTicket, getTimeTicket, loadTimeTicket, previewTimeTicket } from '../src/modules/production/time-ticket';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -39,6 +40,12 @@ let confPlantA: FinanceActor;
 let confNoCap: FinanceActor;
 let confNoScope: FinanceActor;
 let confOther: FinanceActor;
+let tickA: FinanceActor;
+let tickB: FinanceActor;
+let tickPlantA: FinanceActor;
+let tickNoCap: FinanceActor;
+let tickNoScope: FinanceActor;
+let tickOther: FinanceActor;
 
 type Auth = FinanceActor['authorization'] | undefined;
 const ask = (p: Promise<unknown>) => p.then(() => 'done', (e: Error) => e.message);
@@ -96,6 +103,13 @@ beforeAll(async () => {
   confNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
   confNoScope = await createFinanceActor(client, { capabilities: CCAPS, companyScopes: [] });
   confOther = await createFinanceActor(other.client, { capabilities: CCAPS });
+  const TCAPS = ['PROD.CONFIRM.ENTER'];
+  tickA = await createFinanceActor(client, { capabilities: TCAPS, companyScopes: [A] });
+  tickB = await createFinanceActor(client, { capabilities: TCAPS, companyScopes: [B] });
+  tickPlantA = await createFinanceActor(client, { capabilities: TCAPS, companyScopes: [A, B], plantScopes: ['PLA1'] });
+  tickNoCap = await createFinanceActor(client, { capabilities: CAPS, companyScopes: [A, B] });
+  tickNoScope = await createFinanceActor(client, { capabilities: TCAPS, companyScopes: [] });
+  tickOther = await createFinanceActor(other.client, { capabilities: TCAPS });
   otherTenantActor = await createFinanceActor(other.client, { capabilities: CAPS });
 }, 240_000);
 
@@ -206,5 +220,42 @@ describe('order confirmation', () => {
       expect(await ask(enter(bad, 'PO-A'))).not.toBe('done');
     }
     expect(await confirmations()).toBe(before);
+  });
+});
+
+describe('time ticket (CO11N)', () => {
+  const enter = (a: Auth, n: string) => enterTimeTicket(client, {
+    requestedBy: 'someone-else', requestKey: `t-${n}`, orderNumber: n, operationNumber: '0010', confirmationType: 'PARTIAL',
+    yieldQuantity: '1', postingDate: '2026-10-24', expectedVersion: 1, authorization: a,
+  });
+  const tickets = () => withTenant(client, async (tx) => Number(((await tx.execute(sql`
+    select count(*)::int as n from production_confirmation where client = ${client}`)) as unknown as Array<{ n: number }>)[0]!.n));
+
+  it('answers an order out of reach as a missing order for load, check and get', async () => {
+    const load = (a: Auth, n: string) => loadTimeTicket(client, { orderNumber: n }, a);
+    const missing = mask(await ask(load(tickA.authorization, 'PO-GONE')), 'PO-GONE');
+    expect(missing).toContain('does not stand');
+    for (const n of ['PO-B', 'PO-N']) expect(mask(await ask(load(tickA.authorization, n)), n)).toBe(missing);
+    expect(mask(await ask(load(tickPlantA.authorization, 'PO-B')), 'PO-B')).toBe(missing);
+    expect(mask(await ask(load(tickB.authorization, 'PO-A')), 'PO-A')).toBe(missing);
+    expect(mask(await ask(previewTimeTicket(client, {
+      orderNumber: 'PO-B', operationNumber: '0010', confirmationType: 'PARTIAL', postingDate: '2026-10-24', expectedVersion: 1,
+    }, tickA.authorization)), 'PO-B')).toBe(missing);
+    expect(await ask(load(tickA.authorization, 'PO-A'))).not.toContain('does not stand');
+    for (const bad of [undefined, tickNoCap.authorization, tickNoScope.authorization, tickOther.authorization]) {
+      expect(await ask(load(bad, 'PO-A'))).not.toBe('done');
+      expect(await ask(getTimeTicket(client, 'X', bad))).not.toBe('done');
+    }
+  });
+
+  it('refuses an entry out of reach, with no session, capability, scope or tenant; writes nothing', async () => {
+    const before = await tickets();
+    const missing = mask(await ask(enter(tickA.authorization, 'PO-GONE')), 'PO-GONE');
+    for (const n of ['PO-B', 'PO-N']) expect(mask(await ask(enter(tickA.authorization, n)), n)).toBe(missing);
+    expect(mask(await ask(enter(tickPlantA.authorization, 'PO-B')), 'PO-B')).toBe(missing);
+    for (const bad of [undefined, tickNoCap.authorization, tickNoScope.authorization, tickOther.authorization]) {
+      expect(await ask(enter(bad, 'PO-A'))).not.toBe('done');
+    }
+    expect(await tickets()).toBe(before);
   });
 });

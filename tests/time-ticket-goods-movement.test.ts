@@ -14,7 +14,7 @@ import { checkProductionVersion, createProductionVersion } from '../src/modules/
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { cancelConfirmation } from '../src/modules/production/confirmation-cancel';
-import { enterTimeTicket, loadTimeTicket, previewTimeTicket, rows } from '../src/modules/production/time-ticket';
+import { enterTimeTicketForProvisioning as enterTimeTicket, loadTimeTicketForProvisioning as loadTimeTicket, previewTimeTicketForProvisioning as previewTimeTicket, rows } from '../src/modules/production/time-ticket';
 import { getProductionConfirmationDisplay } from '../src/modules/production/confirmation-display';
 import { movementConfiguration, movementRequestKey, postedMovements } from '../src/modules/production/confirmation-movements';
 import {

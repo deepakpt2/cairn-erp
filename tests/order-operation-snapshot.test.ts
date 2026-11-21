@@ -10,7 +10,7 @@ import { saveOrderTypeParameter } from '../src/modules/production/order-type-par
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { enterTimeTicket, loadTimeTicket } from '../src/modules/production/time-ticket';
+import { enterTimeTicketForProvisioning as enterTimeTicket, loadTimeTicketForProvisioning as loadTimeTicket } from '../src/modules/production/time-ticket';
 import { releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';

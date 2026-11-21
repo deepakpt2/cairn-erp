@@ -17,6 +17,7 @@
  */
 import { sql } from 'drizzle-orm';
 
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
 import { hasCapability } from '../../platform/auth/session';
 import {
   confirmationBlockReason,
@@ -217,6 +218,27 @@ const GAPS = [
 
 function fail(message: string, remedy?: string): never {
   throw new TimeTicketError(message, remedy);
+}
+
+type TicketMode = 'unscoped' | { authorization: ServiceAuthorityContext | undefined };
+type TicketReach = { reachable: string[]; username: string } | null;
+
+/** Session, `PROD.CONFIRM.ENTER` and company scope, judged in the caller's own transaction. */
+async function ticketReach(tx: Tx, client: string, mode: TicketMode): Promise<TicketReach> {
+  if (mode === 'unscoped') return null;
+  const actor = await purchasingActor(
+    tx, client, mode.authorization, [TIME_TICKET_CAPABILITY], (m, r) => new TimeTicketError(m, r),
+  );
+  return { reachable: await reachablePlantsInTx(tx, client, actor), username: actor.username };
+}
+
+/** An order at a plant out of reach answers exactly as a missing order. */
+async function assertTicketOrderInReach(tx: Tx, client: string, reach: TicketReach, orderNumber: string): Promise<void> {
+  if (!reach) return;
+  const found = await rows(tx, sql`select plant from production_order where client = ${client} and order_number = ${orderNumber}`);
+  if (!found[0] || !reach.reachable.includes(String(found[0].plant))) {
+    fail(`Production order ${orderNumber} does not stand.`, 'Enter an order in this tenant.');
+  }
 }
 
 function clean(value: string | null | undefined): string {
@@ -508,17 +530,18 @@ export function remainingText(scaled: bigint): string {
   return negative ? `-${text}` : text;
 }
 
-export async function loadTimeTicket(client: string, input: {
+async function loadWith(client: string, input: {
   orderNumber: string;
   operationNumber?: string | null;
   productionVersion?: string | null;
   postingDate?: string | null;
-}): Promise<TimeTicketLoad> {
+}, mode: TicketMode): Promise<TimeTicketLoad> {
   const orderNumber = clean(input.orderNumber).toUpperCase();
   if (!orderNumber) fail('A production order is required.', 'Enter the order to confirm.');
   const askedDate = clean(input.postingDate);
   if (askedDate) dateOf(askedDate, 'The posting date');
   return withTenant(client, async (tx) => {
+    await assertTicketOrderInReach(tx, client, await ticketReach(tx, client, mode), orderNumber);
     const header = await headerOf(tx, client, orderNumber);
     let blockingReason: string | null = confirmationBlockReason(header.status);
     const operations = await operationsOf(tx, client, header);
@@ -867,7 +890,7 @@ function matches(stored: TimeTicketView, prepared: Prepared): boolean {
   return prepared.activities.every((row) => stored.activities.some((storedRow) => storedRow.parameter === row.parameter && sameQuantity(storedRow.quantity, row.quantity)));
 }
 
-export async function previewTimeTicket(client: string, input: {
+async function previewWith(client: string, input: {
   orderNumber: string;
   operationNumber: string;
   productionVersion?: string | null;
@@ -885,16 +908,17 @@ export async function previewTimeTicket(client: string, input: {
   activities?: TimeTicketActivityInput[];
   expectedVersion: number;
   named?: Record<string, string | null | undefined>;
-}): Promise<TimeTicketView> {
+}, mode: TicketMode): Promise<TimeTicketView> {
   const refused = timeTicketRefusal(input.named);
   if (refused) fail(refused, 'Confirm one operation. A check writes nothing.');
   return withTenant(client, async (tx) => {
+    await assertTicketOrderInReach(tx, client, await ticketReach(tx, client, mode), clean(input.orderNumber).toUpperCase());
     const prepared = await prepare(tx, client, { ...input, orderNumber: clean(input.orderNumber).toUpperCase(), operationNumber: clean(input.operationNumber).toUpperCase(), simulationOnly: true });
     return viewOf('', '', prepared, false);
   });
 }
 
-export async function enterTimeTicket(client: string, input: {
+async function enterWith(client: string, raw: {
   requestedBy: string;
   requestKey: string;
   orderNumber: string;
@@ -924,7 +948,8 @@ export async function enterTimeTicket(client: string, input: {
    * COGI to recover rather than moving stock under no authority at all.
    */
   authorization?: ServiceAuthorityContext;
-}): Promise<TimeTicketView> {
+}, scoped: boolean): Promise<TimeTicketView> {
+  let input = raw;
   const refused = timeTicketRefusal(input.named);
   if (refused) fail(refused, 'Confirm one operation. Nothing was saved.');
   const requestKey = clean(input.requestKey);
@@ -938,6 +963,9 @@ export async function enterTimeTicket(client: string, input: {
   await withTenant(client, async (tx) => {
     // This transaction owns only confirmation persistence and its durable movement intents.
     // No stock, valuation, reservation, journal or material-document posting happens here.
+    const reach = await ticketReach(tx, client, scoped ? { authorization: raw.authorization } : 'unscoped');
+    await assertTicketOrderInReach(tx, client, reach, orderNumber);
+    if (reach) input = { ...raw, requestedBy: reach.username };
     await acquireLock(tx, { objectCode: TIME_TICKET_LOCK, keys: [client, orderNumber] }, {
       client, requestedBy: input.requestedBy, transactionCode: TIME_TICKET_ALIAS,
     });
@@ -1049,8 +1077,36 @@ export async function enterTimeTicket(client: string, input: {
   }
 }
 
-export async function getTimeTicket(client: string, confirmationNumber: string): Promise<TimeTicketView | null> {
+async function getWith(client: string, confirmationNumber: string, mode: TicketMode): Promise<TimeTicketView | null> {
   const number = clean(confirmationNumber).toUpperCase();
   if (!number) return null;
-  return withTenant(client, (tx) => storedView(tx, client, number));
+  return withTenant(client, async (tx) => {
+    const reach = await ticketReach(tx, client, mode);
+    const stored = await storedView(tx, client, number);
+    if (!stored) return null;
+    if (reach) {
+      const found = await rows(tx, sql`select plant from production_order where client = ${client} and order_number = ${stored.orderNumber}`);
+      if (!found[0] || !reach.reachable.includes(String(found[0].plant))) return null;
+    }
+    return stored;
+  });
 }
+
+/** Session, `PROD.CONFIRM.ENTER` and company scope: an order at a plant out of reach answers as a missing one. */
+export async function loadTimeTicket(
+  client: string, input: Parameters<typeof loadWith>[1], authorization: ServiceAuthorityContext | undefined,
+) { return loadWith(client, input, { authorization }); }
+export async function previewTimeTicket(
+  client: string, input: Parameters<typeof previewWith>[1], authorization: ServiceAuthorityContext | undefined,
+) { return previewWith(client, input, { authorization }); }
+/** The session is `input.authorization` (also carried into the automatic movements); the recorded user is the session user, never `requestedBy`. */
+export async function enterTimeTicket(client: string, input: Parameters<typeof enterWith>[1]) { return enterWith(client, input, true); }
+export async function getTimeTicket(
+  client: string, confirmationNumber: string, authorization: ServiceAuthorityContext | undefined,
+) { return getWith(client, confirmationNumber, { authorization }); }
+
+/** Seeding, demo, tests and scripts only; never imported from `src/app`. */
+export async function loadTimeTicketForProvisioning(client: string, input: Parameters<typeof loadWith>[1]) { return loadWith(client, input, 'unscoped'); }
+export async function previewTimeTicketForProvisioning(client: string, input: Parameters<typeof previewWith>[1]) { return previewWith(client, input, 'unscoped'); }
+export async function enterTimeTicketForProvisioning(client: string, input: Parameters<typeof enterWith>[1]) { return enterWith(client, input, false); }
+export async function getTimeTicketForProvisioning(client: string, confirmationNumber: string) { return getWith(client, confirmationNumber, 'unscoped'); }
