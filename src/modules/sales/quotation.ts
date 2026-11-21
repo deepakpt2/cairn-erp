@@ -412,7 +412,7 @@ export async function createQuotation(
         'Ask an administrator to extend your Company Code scope, then repeat the action.',
       );
     }
-    if (!salesAreaReachable(authority, parsed) || !plantsAllow(authority, parsed.lines.map((l) => l.plant))) {
+    if (!salesAreaReachable(authority, parsed) || !plantsAllow(authority, parsed.lines.flatMap((l) => (l.plant ? [l.plant] : [])))) {
       throw new SalesQuotationError(
         `Your sales area or plant scope does not cover sales area ${parsed.salesOrg}/${parsed.distributionChannel}/${parsed.division} and these plants.`,
         'Ask an administrator to extend your scope, then repeat the action.',
