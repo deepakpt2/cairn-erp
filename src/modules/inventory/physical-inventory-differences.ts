@@ -11,6 +11,8 @@ import { z } from 'zod';
 
 import { withTenant, type Tx } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { phyInvScope } from './phyinv-scope';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { materialPeriodAllows } from './material-period-control';
 
@@ -301,6 +303,7 @@ async function assertStands(
 export async function listDifferences(
   client: string,
   raw: DifferenceSelection,
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<DifferenceListResult> {
   const parsed = selectionSchema.safeParse(raw);
   if (!parsed.success) {
@@ -345,8 +348,15 @@ export async function listDifferences(
   const threshold = selection.minimumDifferenceValue ?? null;
 
   return withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_DIFF_LIST_CAPABILITY], (m, r) => new PhysicalInventoryDifferenceError(m, r));
     await assertStands(tx, client, 'plant', 'plant', plantFrom);
     if (plantTo) await assertStands(tx, client, 'plant', 'plant', plantTo);
+    // A plant outside the caller's Company Code (or Plant) scope answers as one that does not stand.
+    for (const named of [plantFrom, plantTo]) {
+      if (named && !scope.reachable.has(named)) {
+        throw new PhysicalInventoryDifferenceError(`Plant ${named} does not exist.`);
+      }
+    }
     if (slocFrom) await assertStands(tx, client, 'storage_location', 'storage location', slocFrom, plantFrom);
     if (slocTo) await assertStands(tx, client, 'storage_location', 'storage location', slocTo, plantTo ?? plantFrom);
 
@@ -355,6 +365,9 @@ export async function listDifferences(
       sql`d.fiscal_year = ${selection.fiscalYear}`,
       sql`d.status <> 'CANCELLED'`,
       sql`d.plant >= ${plantFrom}`,
+      scope.reachable.size > 0
+        ? sql`d.plant in (${sql.join([...scope.reachable].map((p) => sql`${p}`), sql`, `)})`
+        : sql`false`,
       plantTo ? sql`d.plant <= ${plantTo}` : sql`true`,
       slocFrom ? sql`d.storage_location >= ${slocFrom}` : sql`true`,
       slocTo ? sql`d.storage_location <= ${slocTo}` : sql`true`,
@@ -537,12 +550,14 @@ export interface DifferenceDocumentView {
 export async function getDifferenceDocument(
   client: string,
   keys: { documentNumber: string; fiscalYear: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<DifferenceDocumentView | null> {
   const documentNumber = keys.documentNumber.trim().toUpperCase();
   if (!documentNumber || keys.fiscalYear < 2000 || keys.fiscalYear > 2999) {
     throw new PhysicalInventoryDifferenceError('A document number and a fiscal year are required.');
   }
   const header = await withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_DIFF_LIST_CAPABILITY], (m, r) => new PhysicalInventoryDifferenceError(m, r));
     const headers = await tx.execute(sql`
       select inventory_document_number, fiscal_year, plant, storage_location, planned_count_date,
              status, posting_block
@@ -554,7 +569,8 @@ export async function getDifferenceDocument(
       inventory_document_number: string; fiscal_year: number; plant: string;
       storage_location: string | null; planned_count_date: string; status: string; posting_block: boolean;
     }>;
-    return headers[0] ?? null;
+    const found = headers[0] ?? null;
+    return found && scope.reachable.has(found.plant) ? found : null;
   });
   if (!header) return null;
   // A second transaction, not a nested one: the test pool has a single connection.
@@ -566,7 +582,7 @@ export async function getDifferenceDocument(
     differenceExists: false,
     includeUncounted: true,
     pageSize: DIFFERENCE_PAGE_SIZE_MAX,
-  });
+  }, authorization);
   return {
     documentNumber: header.inventory_document_number,
     fiscalYear: header.fiscal_year,
@@ -586,6 +602,7 @@ export async function getDifferenceDocument(
 export async function openDifferenceWorkflow(
   client: string,
   input: { workflow: 'DISPLAY' | 'POST' | 'RECOUNT'; documentNumber: string; fiscalYear: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<DifferenceDocumentView | null> {
   if (input.workflow === 'POST') {
     throw new PhysicalInventoryDifferenceError(
@@ -599,5 +616,5 @@ export async function openDifferenceWorkflow(
       'Open the recount screen. That is navigation. This list still does not recount.',
     );
   }
-  return getDifferenceDocument(client, input);
+  return getDifferenceDocument(client, input, authorization);
 }

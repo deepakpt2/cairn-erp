@@ -22,6 +22,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { changeHistory, recordChange } from '../../platform/change';
+import { phyInvScope } from './phyinv-scope';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { material, physicalInventoryDocument, physicalInventoryItem } from './schema';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
@@ -108,7 +110,10 @@ const submissionSchema = z.object({
 
 export interface SubmitCountsInput {
   client: string;
+  /** Recorded as the verified session user; the caller's value is not trusted. */
   changedBy: string;
+  /** The verified session. The document's plant must be in the caller's Company Code (and Plant) scope. */
+  authorization: ServiceAuthorityContext | undefined;
   documentNumber: string;
   fiscalYear: number;
   countDate: string;
@@ -289,8 +294,14 @@ function ineligibleReasonFor(status: string): string | null {
 export async function getCountDocument(
   client: string,
   keys: { documentNumber: string; fiscalYear: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<CountDocumentView | null> {
-  return withTenant(client, async (tx) => viewOf(tx, client, keys.documentNumber, keys.fiscalYear));
+  return withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_COUNT_CAPABILITY, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY], (m, r) => new PhysicalInventoryCountError(m, r));
+    const header = await loadDocument(tx, client, keys.documentNumber, keys.fiscalYear);
+    if (!header || !scope.reachable.has(header.plant)) return null;
+    return viewOf(tx, client, keys.documentNumber, keys.fiscalYear);
+  });
 }
 
 async function viewOf(
@@ -370,13 +381,15 @@ export interface CountDocumentRow {
 export async function searchCountDocuments(
   client: string,
   filter: { plant?: string; status?: string } = {},
+  authorization: ServiceAuthorityContext | undefined = undefined,
 ): Promise<CountDocumentRow[]> {
   return withTenant(client, async (tx) => {
-    const headers = await tx.select().from(physicalInventoryDocument).where(and(
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_COUNT_CAPABILITY, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY], (m, r) => new PhysicalInventoryCountError(m, r));
+    const headers = (await tx.select().from(physicalInventoryDocument).where(and(
       eq(physicalInventoryDocument.client, client),
       filter.plant ? eq(physicalInventoryDocument.plant, filter.plant) : sql`true`,
       filter.status ? eq(physicalInventoryDocument.status, filter.status) : sql`true`,
-    )).orderBy(physicalInventoryDocument.inventoryDocumentNumber);
+    )).orderBy(physicalInventoryDocument.inventoryDocumentNumber)).filter((h) => scope.reachable.has(h.plant));
 
     const rows: CountDocumentRow[] = [];
     for (const header of headers) {
@@ -526,6 +539,8 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
   }
 
   return withTenant(input.client, async (tx) => {
+    const scope = await phyInvScope(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_COUNT_CAPABILITY], (m, r) => new PhysicalInventoryCountError(m, r));
+    input = { ...input, changedBy: scope.username };
     // Header first, then items in a fixed order, so two counters serialise instead of deadlocking.
     await tx.execute(sql`
       select 1 from physical_inventory_document
@@ -534,7 +549,7 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
        for update
     `);
     const header = await loadDocument(tx, input.client, submission.documentNumber, submission.fiscalYear);
-    if (!header) {
+    if (!header || !scope.reachable.has(header.plant)) {
       throw new PhysicalInventoryCountError(
         `Physical inventory document ${submission.documentNumber} for fiscal year ${submission.fiscalYear} does not exist.`,
         'Check the document number and the fiscal year.',
@@ -768,7 +783,10 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
 
 export interface ClearCountInput {
   client: string;
+  /** Recorded as the verified session user; the caller's value is not trusted. */
   changedBy: string;
+  /** The verified session. The document's plant must be in the caller's Company Code (and Plant) scope. */
+  authorization: ServiceAuthorityContext | undefined;
   documentNumber: string;
   fiscalYear: number;
   itemNumber: number;
@@ -794,6 +812,8 @@ export async function clearCount(input: ClearCountInput): Promise<CountDocumentV
     );
   }
   return withTenant(input.client, async (tx) => {
+    const scope = await phyInvScope(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY], (m, r) => new PhysicalInventoryCountError(m, r));
+    input = { ...input, changedBy: scope.username };
     await tx.execute(sql`
       select 1 from physical_inventory_document
        where client = ${input.client} and inventory_document_number = ${input.documentNumber}
@@ -801,7 +821,7 @@ export async function clearCount(input: ClearCountInput): Promise<CountDocumentV
        for update
     `);
     const header = await loadDocument(tx, input.client, input.documentNumber, input.fiscalYear);
-    if (!header) {
+    if (!header || !scope.reachable.has(header.plant)) {
       throw new PhysicalInventoryCountError(
         `Physical inventory document ${input.documentNumber} for fiscal year ${input.fiscalYear} does not exist.`,
       );
@@ -918,8 +938,12 @@ export interface CountHistoryEntry {
 export async function getCountHistory(
   client: string,
   keys: { documentNumber: string; fiscalYear: number; itemNumber?: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<CountHistoryEntry[]> {
   return withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_COUNT_CAPABILITY, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY], (m, r) => new PhysicalInventoryCountError(m, r));
+    const doc = await loadDocument(tx, client, keys.documentNumber, keys.fiscalYear);
+    if (!doc || !scope.reachable.has(doc.plant)) return [];
     const itemNumbers = keys.itemNumber
       ? [keys.itemNumber]
       : (await loadItems(tx, client, keys.documentNumber, keys.fiscalYear)).map((i) => i.itemNumber);
@@ -958,10 +982,12 @@ export async function getCountHistory(
 export async function getCountStatus(
   client: string,
   keys: { documentNumber: string; fiscalYear: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<CountStatusSummary | null> {
   return withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_COUNT_CAPABILITY, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY], (m, r) => new PhysicalInventoryCountError(m, r));
     const header = await loadDocument(tx, client, keys.documentNumber, keys.fiscalYear);
-    if (!header) return null;
+    if (!header || !scope.reachable.has(header.plant)) return null;
     return summaryOf(await loadItems(tx, client, keys.documentNumber, keys.fiscalYear));
   });
 }

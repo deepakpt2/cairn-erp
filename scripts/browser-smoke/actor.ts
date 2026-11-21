@@ -33,6 +33,12 @@ export const BROWSER_PRODUCTION_CAPABILITIES: readonly string[] = [
   'INV.GR.POST',
 ];
 
+/** The authorities the physical-inventory screens and services ask for. */
+export const BROWSER_PHYINV_CAPABILITIES: readonly string[] = [
+  'INV.PHYINV.CREATE', 'INV.PHYINV.CANCEL', 'INV.PHYINV.COUNT', 'INV.PHYINV.COUNT.CORRECT',
+  'INV.PHYINV.DIFF.LIST', 'INV.PHYINV.DIFF.POST', 'INV.PHYINV.RECOUNT', 'INV.REVERSE',
+];
+
 export interface BrowserActor {
   username: string;
   userId: string;

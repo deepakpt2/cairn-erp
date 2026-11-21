@@ -30,7 +30,7 @@ export default async function PhysicalInventoryPage({ searchParams }: {
   const today = new Date().toISOString().slice(0, 10);
   const documents = await listPhysicalInventory(session.user.client, {
     plant: params.plant?.trim() || undefined,
-  });
+  }, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => []);
 
   return (
     <Page

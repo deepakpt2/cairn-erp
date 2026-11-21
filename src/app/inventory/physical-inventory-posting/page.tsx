@@ -37,11 +37,12 @@ export default async function PhysicalInventoryPostingPage({ searchParams }: {
   const documentNumber = last(params.doc).toUpperCase();
   const fiscalYear = Number(last(params.year) || '0');
   const client = session.user.client;
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const document = documentNumber && fiscalYear
-    ? await getDifferencePosting(client, { documentNumber, fiscalYear })
+    ? await getDifferencePosting(client, { documentNumber, fiscalYear }, authorization).catch(() => null)
     : null;
   const history = document
-    ? await getPostingHistory(client, { documentNumber: document.documentNumber, fiscalYear: document.fiscalYear })
+    ? await getPostingHistory(client, { documentNumber: document.documentNumber, fiscalYear: document.fiscalYear }, authorization).catch(() => [])
     : [];
   const today = new Date().toISOString().slice(0, 10);
   const canPost = can(session, PHYSICAL_INVENTORY_DIFF_POST_CAPABILITY);

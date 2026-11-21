@@ -7,6 +7,17 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { postDifferences, reverseDifferencePosting } from '../../src/modules/inventory/physical-inventory-posting';
 import type { BrowserTarget } from './targets';
+import { BROWSER_PHYINV_CAPABILITIES, createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
+
+const PHYINV_ACTOR: BrowserActor = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/** Sign in once with the physical-inventory authorities, and widen the reach to whatever the scene has added since. */
+async function phyInvAuthority(client: string) {
+  if (!PHYINV_ACTOR.userId) Object.assign(PHYINV_ACTOR, await createBrowserActor(client, BROWSER_PHYINV_CAPABILITIES));
+  await refreshBrowserActor(client, PHYINV_ACTOR);
+  return PHYINV_ACTOR.authorization;
+}
+
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -345,7 +356,8 @@ export async function scr149Mi07Posting(ctx: Context) {
   await expectSecondReversal(page, base, materialDocument);
   const afterSecond = await documents();
   try {
-    await reverseDifferencePosting({
+    await phyInvAuthority(client);
+    await reverseDifferencePosting({ authorization: PHYINV_ACTOR.authorization,
       client, changedBy: 'browser.admin', materialDocumentNumber: materialDocument,
       postingDate: DAY, documentDate: DAY, requestKey: `t848-second-${Date.now()}`,
     });
@@ -463,7 +475,8 @@ export async function scr149Mi07Posting(ctx: Context) {
 
   const beforeAgain = await documents();
   try {
-    await postDifferences({
+    await phyInvAuthority(client);
+    await postDifferences({ authorization: PHYINV_ACTOR.authorization,
       client, changedBy: 'browser.admin', documentNumber, fiscalYear: 2026, itemNumbers: [10],
       postingDate: DAY, documentDate: DAY, requestKey: `t848-again-${Date.now()}`,
     });

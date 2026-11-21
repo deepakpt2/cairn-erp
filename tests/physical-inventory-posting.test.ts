@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { submitCounts, getDifferencePosting, getPostingHistory, postDifferences, reverseDifferencePosting, validateDifferencePosting } from './helpers/material-document-authorized';
 import { join } from 'node:path';
 
 import { sql } from 'drizzle-orm';
@@ -6,16 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createPhysicalInventory } from '../src/modules/inventory/physical-inventory';
-import { submitCounts } from '../src/modules/inventory/physical-inventory-count';
-import {
-  PhysicalInventoryPostingError,
-  getDifferencePosting,
-  getPostingHistory,
-  postDifferences,
-  reverseDifferencePosting,
-  validateDifferencePosting,
-} from '../src/modules/inventory/physical-inventory-posting';
+import { createPhysicalInventory } from './helpers/material-document-authorized';
+import { PhysicalInventoryPostingError } from '../src/modules/inventory/physical-inventory-posting';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 /**

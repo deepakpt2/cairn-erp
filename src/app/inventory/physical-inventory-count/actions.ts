@@ -111,6 +111,7 @@ export async function submitCountsAction(
     const document = await submitCounts({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       documentNumber: text(form, 'documentNumber'),
       fiscalYear: Number(text(form, 'fiscalYear') || '0'),
       countDate: text(form, 'countDate'),
@@ -155,6 +156,7 @@ export async function clearCountAction(
     const document = await clearCount({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       documentNumber: text(form, 'documentNumber'),
       fiscalYear: Number(text(form, 'fiscalYear') || '0'),
       itemNumber: Number(text(form, 'itemNumber') || '0'),

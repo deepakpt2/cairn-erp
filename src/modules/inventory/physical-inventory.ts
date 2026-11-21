@@ -10,7 +10,7 @@
  * control that does not control, so `assertInventoryCountOpen` runs inside every service that
  * moves stock and refuses with the blocking document's number.
  */
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
@@ -19,6 +19,8 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { materialPeriodAllows } from './material-period-control';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { plant as plantTable } from '../foundation/schema';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { material } from './schema';
 import {
@@ -46,7 +48,10 @@ export class PhysicalInventoryError extends Error {
 
 export interface CreatePhysicalInventoryInput {
   client: string;
+  /** Recorded as the verified session user; the caller's value is not trusted. */
   createdBy: string;
+  /** The verified session. The plant must be in the caller's Company Code (and Plant) scope. */
+  authorization: ServiceAuthorityContext | undefined;
   plant: string;
   /** Absent means the whole plant is counted. */
   storageLocation?: string;
@@ -524,17 +529,28 @@ export async function createPhysicalInventory(
   }
 
   return withTenant(input.client, async (tx) => {
+    const actor = await purchasingActor(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_CREATE_CAPABILITY], (m, r) => new PhysicalInventoryError(m, r));
+    const reachable = new Set(await reachablePlantsInTx(tx, input.client, actor));
+    // A plant outside the caller's reach answers as a plant that does not exist.
+    if (!reachable.has(plant)) {
+      throw new PhysicalInventoryError(`Plant ${plant} does not exist.`, 'Count a plant the tenant carries (CFG.PLT.DEFINE).');
+    }
     if (input.requestKey) {
       const [replay] = await tx.select().from(physicalInventoryDocument).where(and(
         eq(physicalInventoryDocument.client, input.client),
         eq(physicalInventoryDocument.requestKey, input.requestKey),
       ));
-      if (replay) return toView(tx, input.client, replay);
+      if (replay) {
+        if (!reachable.has(replay.plant)) {
+          throw new PhysicalInventoryError('This request key is already in use.', 'Submit the count again with a new request key.');
+        }
+        return toView(tx, input.client, replay);
+      }
     }
 
     const header = await writeInventoryDocument(tx, {
       client: input.client,
-      createdBy: input.createdBy,
+      createdBy: actor.username,
       plant,
       storageLocation: location || null,
       plannedCountDate,
@@ -554,17 +570,21 @@ export async function createPhysicalInventory(
 export async function cancelPhysicalInventory(input: {
   client: string;
   changedBy: string;
+  authorization: ServiceAuthorityContext | undefined;
   inventoryDocumentNumber: string;
   fiscalYear: number;
 }): Promise<PhysicalInventoryView> {
   const number = input.inventoryDocumentNumber.trim().toUpperCase();
   return withTenant(input.client, async (tx) => {
+    const actor = await purchasingActor(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_CANCEL_CAPABILITY], (m, r) => new PhysicalInventoryError(m, r));
+    input = { ...input, changedBy: actor.username };
+    const reachable = new Set(await reachablePlantsInTx(tx, input.client, actor));
     const [header] = await tx.select().from(physicalInventoryDocument).where(and(
       eq(physicalInventoryDocument.client, input.client),
       eq(physicalInventoryDocument.inventoryDocumentNumber, number),
       eq(physicalInventoryDocument.fiscalYear, input.fiscalYear),
     ));
-    if (!header) {
+    if (!header || !reachable.has(header.plant)) {
       throw new PhysicalInventoryError(
         `Physical inventory document ${number}/${input.fiscalYear} does not exist.`,
         'Choose a document this tenant carries.',
@@ -608,11 +628,14 @@ export async function cancelPhysicalInventory(input: {
 
 /** Documents of a plant, newest planned date first — the screen's list. */
 export async function listPhysicalInventory(
-  client: string, filter: { plant?: string } = {},
+  client: string, filter: { plant?: string } = {}, authorization: ServiceAuthorityContext | undefined,
 ): Promise<PhysicalInventoryView[]> {
   return withTenant(client, async (tx) => {
+    const actor = await purchasingActor(tx, client, authorization, [PHYSICAL_INVENTORY_CREATE_CAPABILITY, PHYSICAL_INVENTORY_CANCEL_CAPABILITY], (m, r) => new PhysicalInventoryError(m, r));
+    const reachable = await reachablePlantsInTx(tx, client, actor);
     const rows = await tx.select().from(physicalInventoryDocument).where(and(
       eq(physicalInventoryDocument.client, client),
+      reachable.length > 0 ? inArray(physicalInventoryDocument.plant, reachable) : sql`false`,
       filter.plant ? eq(physicalInventoryDocument.plant, filter.plant) : sql`true`,
     )).orderBy(
       desc(physicalInventoryDocument.plannedCountDate),

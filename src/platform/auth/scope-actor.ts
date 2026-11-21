@@ -70,3 +70,8 @@ export function plantReachFilter(column: string, reachable: readonly string[]) {
     ? sql`and ${sql.raw(column)} in (${sql.join(reachable.map((p) => sql`${p}`), sql`, `)})`
     : sql`and false`;
 }
+
+/** True when one plant is reachable (see `reachablePlantsInTx`). */
+export async function plantReachableInTx(tx: Tx, client: string, actor: CompanyAuthority, plant: string): Promise<boolean> {
+  return (await reachablePlantsInTx(tx, client, actor)).includes(plant);
+}

@@ -8,7 +8,7 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import { getReceiptOrder } from '../src/modules/inventory/goods-receipt';
 import { postGoodsReceipt, reverseGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
-import { createPhysicalInventory } from '../src/modules/inventory/physical-inventory';
+import { createPhysicalInventory } from './helpers/material-document-authorized';
 import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
 import {
   RETURN_CAPABILITY,

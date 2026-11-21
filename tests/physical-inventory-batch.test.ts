@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { submitCounts, postDifferences } from './helpers/material-document-authorized';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
@@ -7,9 +8,7 @@ import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
 import { GoodsIssueError } from '../src/modules/inventory/goods-issue';
 import { postGoodsIssue } from './helpers/goods-issue-authorized';
-import { submitCounts } from '../src/modules/inventory/physical-inventory-count';
-import { postDifferences } from '../src/modules/inventory/physical-inventory-posting';
-import { createPhysicalInventory } from '../src/modules/inventory/physical-inventory';
+import { createPhysicalInventory } from './helpers/material-document-authorized';
 import { closeDb, createTenant, destroyTenant, expectRejectedError } from './helpers';
 
 const ACTOR = 'PI_BATCH_TEST';

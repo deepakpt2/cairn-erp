@@ -35,7 +35,7 @@ export default async function PhysicalInventoryRecountPage({ searchParams }: {
   const documentNumber = last(params.doc).toUpperCase();
   const fiscalYear = Number(last(params.year) || '0');
   const document = documentNumber && fiscalYear
-    ? await getRecountSource(session.user.client, { documentNumber, fiscalYear })
+    ? await getRecountSource(session.user.client, { documentNumber, fiscalYear }, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null)
     : null;
   const today = new Date().toISOString().slice(0, 10);
   const canRecount = can(session, PHYSICAL_INVENTORY_RECOUNT_CAPABILITY);

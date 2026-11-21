@@ -15,7 +15,7 @@ import {
   toBaseQuantity,
 } from '../src/modules/inventory/unit-conversion';
 import { postGoodsIssue } from './helpers/goods-issue-authorized';
-import { createPhysicalInventory } from '../src/modules/inventory/physical-inventory';
+import { createPhysicalInventory } from './helpers/material-document-authorized';
 import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
 
 /**

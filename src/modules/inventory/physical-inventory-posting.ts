@@ -8,13 +8,15 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { PostingError, postJournalEntry } from '../../platform/posting';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { phyInvScope } from './phyinv-scope';
 import { lockStockScope } from './physical-inventory';
 import { lockRequestKey } from './balance-update';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { materialPeriodAllows } from './material-period-control';
 import { postingValuationRefusal } from './valuation-class-definition';
 import { recordOutputsForPostedDocument } from './material-document-output';
-import { reverseMaterialDocument } from './material-document-reversal';
+import { REVERSE_CAPABILITY, reverseMaterialDocument } from './material-document-reversal';
 import { recomputePostingStatus } from './physical-inventory-posting-status';
 import { recountPostingBlock, syncRecountLink } from './physical-inventory-recount';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
@@ -80,6 +82,8 @@ export interface PostDifferencesInput {
   requestKey: string;
   /** Not implemented. A present value is refused, never applied. */
   maximumDifferenceValue?: unknown;
+  /** The verified session. The document's plant must be in the caller's Company Code (and Plant) scope. */
+  authorization: ServiceAuthorityContext | undefined;
 }
 
 export interface PostingLineView {
@@ -703,8 +707,10 @@ async function missingValuationReason(
 export async function getDifferencePosting(
   client: string,
   keys: { documentNumber: string; fiscalYear: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<DifferencePostingPreview | null> {
   return withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_DIFF_POST_CAPABILITY], (m, r) => new PhysicalInventoryPostingError(m, r));
     const rows = await tx.execute(sql`
       select inventory_document_number, fiscal_year, plant, storage_location, status, version
         from physical_inventory_document
@@ -713,7 +719,7 @@ export async function getDifferencePosting(
          and fiscal_year = ${keys.fiscalYear}
     `) as unknown as HeaderRow[];
     const header = rows[0];
-    if (!header) return null;
+    if (!header || !scope.reachable.has(header.plant)) return null;
     const items = await loadItems(tx, client, keys.documentNumber, keys.fiscalYear);
     const lines = [];
     for (const item of items) {
@@ -765,8 +771,9 @@ export async function validateDifferencePosting(
   const full: PostDifferencesInput = { ...input, requestKey: input.requestKey ?? 'validate' };
   assertShape(full, false);
   return withTenant(input.client, async (tx) => {
+    const scope = await phyInvScope(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_DIFF_POST_CAPABILITY], (m, r) => new PhysicalInventoryPostingError(m, r));
     const header = await loadHeader(tx, input.client, input.documentNumber, input.fiscalYear);
-    if (!header) {
+    if (!header || !scope.reachable.has(header.plant)) {
       throw new PhysicalInventoryPostingError(
         `Physical inventory document ${input.documentNumber} for fiscal year ${input.fiscalYear} does not exist.`,
       );
@@ -793,6 +800,15 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
   assertShape(input, true);
   const fingerprint = fingerprintOf(input);
   return withTenant(input.client, async (tx) => {
+    const scope = await phyInvScope(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_DIFF_POST_CAPABILITY], (m, r) => new PhysicalInventoryPostingError(m, r));
+    input = { ...input, changedBy: scope.username };
+    // A document outside the caller's scope answers as a missing one, before any replay lookup.
+    const early = await loadHeader(tx, input.client, input.documentNumber, input.fiscalYear);
+    if (!early || !scope.reachable.has(early.plant)) {
+      throw new PhysicalInventoryPostingError(
+        `Physical inventory document ${input.documentNumber} for fiscal year ${input.fiscalYear} does not exist.`,
+      );
+    }
     await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await replayOrRefuse(tx, input.client, input.requestKey, fingerprint);
     if (replay) return replay;
@@ -1030,8 +1046,12 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
 export async function getPostingHistory(
   client: string,
   keys: { documentNumber: string; fiscalYear: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<PostingHistoryEntry[]> {
   return withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_DIFF_POST_CAPABILITY], (m, r) => new PhysicalInventoryPostingError(m, r));
+    const owner = await loadHeader(tx, client, keys.documentNumber, keys.fiscalYear);
+    if (!owner || !scope.reachable.has(owner.plant)) return [];
     const rows = await tx.execute(sql`
       select a.item_number, a.material_document_number, a.line_number,
              a.posted_difference::text as posted_difference, a.reversed_quantity::text as reversed_quantity,
@@ -1072,10 +1092,24 @@ export async function reverseDifferencePosting(input: {
   /** Forwarded so the canonical reversal can refuse a reason. This screen does not invent a table. */
   reason?: string;
   requestKey: string;
+  authorization: ServiceAuthorityContext | undefined;
 }) {
+  // The reversal is judged here first: every plant on the document must be reachable, or it answers as missing.
+  const scope = await withTenant(input.client, async (tx) => {
+    const sc = await phyInvScope(tx, input.client, input.authorization, [REVERSE_CAPABILITY], (m, r) => new PhysicalInventoryPostingError(m, r));
+    const plants = await tx.execute(sql`
+      select distinct plant from material_document_line
+       where client = ${input.client} and material_document_number = ${input.materialDocumentNumber.trim()}
+    `) as unknown as Array<{ plant: string }>;
+    if (plants.length === 0 || plants.some((row) => !sc.reachable.has(row.plant))) {
+      throw new PhysicalInventoryPostingError(`Material document ${input.materialDocumentNumber} does not exist.`);
+    }
+    return sc;
+  });
   return reverseMaterialDocument({
     client: input.client,
-    changedBy: input.changedBy,
+    changedBy: scope.username,
+    authorization: input.authorization,
     materialDocumentNumber: input.materialDocumentNumber,
     postingDate: input.postingDate,
     documentDate: input.documentDate,

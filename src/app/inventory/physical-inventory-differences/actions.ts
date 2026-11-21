@@ -38,7 +38,7 @@ export async function openDifferenceWorkflowAction(
       workflow,
       documentNumber: String(form.get('documentNumber') ?? ''),
       fiscalYear: Number(String(form.get('fiscalYear') ?? '0')),
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
     if (workflow === 'DISPLAY' && !document) {
       return { ok: false, message: 'That physical inventory document does not stand.' };
     }

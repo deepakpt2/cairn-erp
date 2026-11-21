@@ -1,22 +1,12 @@
 import { sql } from 'drizzle-orm';
+import { clearCount, getCountDocument, getCountHistory, getCountStatus, searchCountDocuments, submitCounts } from './helpers/material-document-authorized';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
-import {
-  createPhysicalInventory,
-  cancelPhysicalInventory,
-} from '../src/modules/inventory/physical-inventory';
-import {
-  PhysicalInventoryCountError,
-  clearCount,
-  getCountDocument,
-  getCountHistory,
-  getCountStatus,
-  searchCountDocuments,
-  submitCounts,
-} from '../src/modules/inventory/physical-inventory-count';
+import { createPhysicalInventory, cancelPhysicalInventory } from './helpers/material-document-authorized';
+import { PhysicalInventoryCountError } from '../src/modules/inventory/physical-inventory-count';
 import { createTenant, destroyTenant } from './helpers';
 
 /**
@@ -274,7 +264,9 @@ describe('SCR-147 physical inventory count (MI04)', () => {
     const history = await getCountHistory(client, { documentNumber, fiscalYear, itemNumber: 20 });
     expect(history.length).toBeGreaterThanOrEqual(2);
     const correction = history[0];
-    expect(correction.changedBy).toBe(SUPERVISOR);
+    // The recorded actor is the verified session user, not the name the caller supplied.
+    expect(correction.changedBy).toMatch(/^FINANCE_ACTOR_/);
+    expect(correction.changedBy).not.toBe(SUPERVISOR);
     expect(correction.reason).toBe('Miscount: a pallet was double counted.');
     expect(correction.correlationId).toBeTruthy();
     const quantityField = correction.fields.find((f) => f.field === 'countedQuantity');

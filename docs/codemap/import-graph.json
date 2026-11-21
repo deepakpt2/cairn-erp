@@ -7092,17 +7092,27 @@
     "platform/db/client.ts",
     "platform/tenancy/index.ts"
   ],
+  "modules/inventory/phyinv-scope.ts": [
+    "platform/auth/company-scope.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
+    "platform/db/client.ts"
+  ],
   "modules/inventory/physical-inventory-count.ts": [
+    "modules/inventory/phyinv-scope.ts",
     "modules/inventory/physical-inventory-posting-status.ts",
     "modules/inventory/physical-inventory-recount.ts",
     "modules/inventory/schema.ts",
     "modules/inventory/unit-conversion.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
   "modules/inventory/physical-inventory-differences.ts": [
     "modules/inventory/goods-issue.ts",
     "modules/inventory/material-period-control.ts",
+    "modules/inventory/phyinv-scope.ts",
+    "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts"
   ],
@@ -7120,12 +7130,14 @@
     "modules/inventory/material-document-output.ts",
     "modules/inventory/material-document-reversal.ts",
     "modules/inventory/material-period-control.ts",
+    "modules/inventory/phyinv-scope.ts",
     "modules/inventory/physical-inventory-posting-status.ts",
     "modules/inventory/physical-inventory-recount.ts",
     "modules/inventory/physical-inventory.ts",
     "modules/inventory/schema.ts",
     "modules/inventory/storage-location.ts",
     "modules/inventory/valuation-class-definition.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",
@@ -7133,9 +7145,11 @@
     "platform/posting/index.ts"
   ],
   "modules/inventory/physical-inventory-recount.ts": [
+    "modules/inventory/phyinv-scope.ts",
     "modules/inventory/physical-inventory-posting-status.ts",
     "modules/inventory/physical-inventory.ts",
     "modules/inventory/schema.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
@@ -7145,6 +7159,8 @@
     "modules/inventory/material-period-control.ts",
     "modules/inventory/schema.ts",
     "modules/inventory/storage-location.ts",
+    "platform/auth/scope-actor.ts",
+    "platform/auth/service-authority.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/numbering/index.ts",

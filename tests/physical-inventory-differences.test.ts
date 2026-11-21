@@ -1,18 +1,11 @@
 import { sql } from 'drizzle-orm';
+import { submitCounts, listDifferences, openDifferenceWorkflow } from './helpers/material-document-authorized';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import {
-  cancelPhysicalInventory,
-  createPhysicalInventory,
-} from '../src/modules/inventory/physical-inventory';
-import { submitCounts } from '../src/modules/inventory/physical-inventory-count';
-import {
-  PhysicalInventoryDifferenceError,
-  listDifferences,
-  openDifferenceWorkflow,
-} from '../src/modules/inventory/physical-inventory-differences';
+import { cancelPhysicalInventory, createPhysicalInventory } from './helpers/material-document-authorized';
+import { PhysicalInventoryDifferenceError } from '../src/modules/inventory/physical-inventory-differences';
 import { createTenant, destroyTenant } from './helpers';
 
 /**

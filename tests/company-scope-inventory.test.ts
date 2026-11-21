@@ -13,6 +13,10 @@ import { listMaterialDocuments } from '../src/modules/inventory/material-documen
 import { changeMaterialPrice, listFuturePrices } from '../src/modules/inventory/price-change';
 import { completeReservationItem, createReservation, getReservation, withdrawReservation } from '../src/modules/inventory/reservations';
 import { stockOverview } from '../src/modules/inventory/stock-overview';
+import { getCountDocument, getCountHistory, getCountStatus, searchCountDocuments, submitCounts } from '../src/modules/inventory/physical-inventory-count';
+import { getDifferenceDocument, listDifferences } from '../src/modules/inventory/physical-inventory-differences';
+import { getDifferencePosting, getPostingHistory, postDifferences, validateDifferencePosting } from '../src/modules/inventory/physical-inventory-posting';
+import { createRecount, getRecountSource } from '../src/modules/inventory/physical-inventory-recount';
 import { listWarehouseStocks } from '../src/modules/inventory/warehouse-stocks';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createFinanceActor, type FinanceActor } from './helpers/finance-actor';
@@ -330,5 +334,124 @@ describe('reservations', () => {
       expect(await ask(create(a, 'PLA1'))).not.toMatch(/^done$|does not exist/);
     }
     expect(await withTenant(client, async (tx) => Number(((await tx.execute(sql`select count(*)::int as n from reservation_header where client = ${client}`)) as unknown as Array<{ n: number }>)[0]!.n))).toBe(3);
+  });
+});
+
+describe('physical inventory (count, differences, posting, recount)', () => {
+  const PHY = ['INV.PHYINV.COUNT', 'INV.PHYINV.COUNT.CORRECT', 'INV.PHYINV.DIFF.LIST', 'INV.PHYINV.DIFF.POST', 'INV.PHYINV.RECOUNT', 'INV.PHYINV.CREATE', 'INV.PHYINV.CANCEL'];
+  const YEAR = 2026;
+  const DA = 'PIA0000001';
+  const DB = 'PIB0000001';
+  const DN = 'PIN0000001';
+  const DGONE = 'PIZ9999999';
+  let pA: FinanceActor;
+  let pB: FinanceActor;
+  let pBoth: FinanceActor;
+  let pNoScope: FinanceActor;
+  let pNoCap: FinanceActor;
+  let pOther: FinanceActor;
+  let pPlantA: FinanceActor;
+  const key = (d: string) => ({ documentNumber: d, fiscalYear: YEAR });
+  const noOne = (a: FinanceActor) => [undefined, a.authorization];
+  const counted = async (d: string) => withTenant(client, async (tx) => ((await tx.execute(sql`
+    select count(*)::int as n from physical_inventory_item where client = ${client} and inventory_document_number = ${d} and counted_quantity is not null`)) as unknown as Array<{ n: number }>)[0]!.n);
+
+  beforeAll(async () => {
+    pA = await createFinanceActor(client, { capabilities: PHY, companyScopes: [A] });
+    pB = await createFinanceActor(client, { capabilities: PHY, companyScopes: [B] });
+    pBoth = await createFinanceActor(client, { capabilities: PHY, companyScopes: [A, B] });
+    pNoScope = await createFinanceActor(client, { capabilities: PHY, companyScopes: [] });
+    pNoCap = await createFinanceActor(client, { capabilities: ['FIN.JOURNAL.DISPLAY'], companyScopes: [A, B] });
+    pOther = await createFinanceActor(other.client, { capabilities: PHY });
+    pPlantA = await createFinanceActor(client, { capabilities: PHY, companyScopes: [A, B], plantScopes: ['PLA1'] });
+    await withTenant(client, async (tx) => {
+      for (const [d, plant] of [[DA, 'PLA1'], [DB, 'PLB1'], [DN, 'PLN1']] as const) {
+        await tx.execute(sql`insert into physical_inventory_document (client, inventory_document_number, fiscal_year, plant, planned_count_date, created_by)
+          values (${client}, ${d}, ${YEAR}, ${plant}, '2026-04-05', ${SEED}) on conflict do nothing`);
+        await tx.execute(sql`insert into physical_inventory_item (client, inventory_document_number, fiscal_year, item_number, material_number, stock_type, created_by)
+          values (${client}, ${d}, ${YEAR}, 10, 'SCM1', 'UNRESTRICTED', ${SEED}) on conflict do nothing`);
+      }
+    });
+  });
+
+  it('reads a count document only inside the reach; other companies, no-company plants and plant scope answer as missing', async () => {
+    expect((await getCountDocument(client, key(DA), pA.authorization))?.documentNumber).toBe(DA);
+    for (const d of [DB, DN, DGONE]) expect(await getCountDocument(client, key(d), pA.authorization)).toBeNull();
+    expect(await getCountDocument(client, key(DB), pPlantA.authorization)).toBeNull();
+    expect((await getCountDocument(client, key(DB), pBoth.authorization))?.documentNumber).toBe(DB);
+    expect((await searchCountDocuments(client, {}, pA.authorization)).map((r) => r.documentNumber)).toEqual([DA]);
+    expect((await searchCountDocuments(client, {}, pBoth.authorization)).map((r) => r.documentNumber).sort()).toEqual([DA, DB]);
+    expect(await getCountHistory(client, key(DB), pA.authorization)).toEqual([]);
+    expect(await getCountStatus(client, key(DB), pA.authorization)).toBeNull();
+    expect(await getCountStatus(client, key(DA), pA.authorization)).not.toBeNull();
+  });
+
+  it('refuses no session, no capability, no scope and another tenant on every count read', async () => {
+    for (const a of [undefined, pNoCap.authorization, pNoScope.authorization, pOther.authorization]) {
+      expect(await ask(getCountDocument(client, key(DA), a))).not.toBe('done');
+      expect(await ask(searchCountDocuments(client, {}, a))).not.toBe('done');
+      expect(await ask(getCountHistory(client, key(DA), a))).not.toBe('done');
+      expect(await ask(getCountStatus(client, key(DA), a))).not.toBe('done');
+    }
+  });
+
+  it("refuses to count another company's document as a missing one and writes nothing; records the session user", async () => {
+    const submit = (a: FinanceActor['authorization'] | undefined, d: string, requestKey: string) => submitCounts({
+      client, changedBy: 'FORGED', authorization: a, documentNumber: d, fiscalYear: YEAR, countDate: '2026-04-05', requestKey,
+      lines: [{ itemNumber: 10, quantity: 1 }],
+    });
+    const miss = await ask(submit(pA.authorization, DGONE, 'PI-MISS'));
+    expect(miss).not.toBe('done');
+    for (const d of [DB, DN]) expect((await ask(submit(pA.authorization, d, `PI-${d}`))).replaceAll(d, '#')).toBe(miss.replaceAll(DGONE, '#'));
+    expect(await ask(submit(pPlantA.authorization, DB, 'PI-PLANT'))).toBe(miss.replaceAll(DGONE, DB));
+    for (const a of noOne(pNoCap).concat([pNoScope.authorization, pOther.authorization])) {
+      expect(await ask(submit(a, DA, 'PI-NOAUTH'))).not.toMatch(/^done$|does not exist/);
+    }
+    expect(await counted(DB)).toBe(0);
+    expect(await counted(DN)).toBe(0);
+    expect(await counted(DA)).toBe(0);
+    expect(await ask(submit(pA.authorization, DA, 'PI-OK'))).toBe('done');
+    const by = await withTenant(client, async (tx) => ((await tx.execute(sql`
+      select counter_name, changed_by from physical_inventory_item where client = ${client} and inventory_document_number = ${DA}`)) as unknown as Array<{ counter_name: string | null; changed_by: string | null }>)[0]!);
+    expect(by.changed_by).toBe(pA.username);
+    expect(by.changed_by).not.toBe('FORGED');
+  });
+
+  it("answers differences, posting and recount of another company's document as a missing one", async () => {
+    const sel = (plant: string, doc: string) => ({ plantFrom: plant, fiscalYear: YEAR, documentFrom: doc, documentTo: doc, differenceExists: false, includeUncounted: true });
+    expect(await ask(listDifferences(client, sel('PLB1', DB), pA.authorization))).toMatch(/does not exist/);
+    expect(await ask(listDifferences(client, sel('PLN1', DN), pA.authorization))).toMatch(/does not exist/);
+    expect(await ask(listDifferences(client, sel('PLB1', DB), pPlantA.authorization))).toMatch(/does not exist/);
+    expect((await listDifferences(client, sel('PLA1', DA), pA.authorization)).rows.length).toBeGreaterThan(0);
+    expect(await getDifferenceDocument(client, key(DB), pA.authorization)).toBeNull();
+    expect((await getDifferenceDocument(client, key(DA), pA.authorization))?.documentNumber).toBe(DA);
+
+    expect(await getDifferencePosting(client, key(DB), pA.authorization)).toBeNull();
+    expect(await getPostingHistory(client, key(DB), pA.authorization)).toEqual([]);
+    const post = (a: FinanceActor['authorization'] | undefined, d: string, requestKey: string) => postDifferences({
+      client, changedBy: 'FORGED', authorization: a, documentNumber: d, fiscalYear: YEAR, itemNumbers: [10],
+      postingDate: '2026-04-05', documentDate: '2026-04-05', requestKey });
+    const missPost = await ask(post(pA.authorization, DGONE, 'PP-MISS'));
+    expect(missPost).toMatch(/does not exist/);
+    expect((await ask(post(pA.authorization, DB, 'PP-B'))).replaceAll(DB, '#')).toBe(missPost.replaceAll(DGONE, '#'));
+    expect((await ask(post(pPlantA.authorization, DB, 'PP-B2'))).replaceAll(DB, '#')).toBe(missPost.replaceAll(DGONE, '#'));
+    expect(await ask(validateDifferencePosting({ client, changedBy: 'x', authorization: pA.authorization, documentNumber: DB, fiscalYear: YEAR, itemNumbers: [10], postingDate: '2026-04-05', documentDate: '2026-04-05' }))).toMatch(/does not exist/);
+
+    expect(await getRecountSource(client, key(DB), pA.authorization)).toBeNull();
+    const recount = (a: FinanceActor['authorization'] | undefined, d: string, requestKey: string) => createRecount({
+      client, changedBy: 'FORGED', authorization: a, documentNumber: d, fiscalYear: YEAR, itemNumbers: [10],
+      plannedRecountDate: '2026-04-06', reason: 'Check', requestKey });
+    expect(await ask(recount(pA.authorization, DB, 'RC-B'))).toMatch(/does not exist/);
+    expect(await ask(recount(pPlantA.authorization, DB, 'RC-B2'))).toMatch(/does not exist/);
+    expect(await withTenant(client, async (tx) => ((await tx.execute(sql`select count(*)::int as n from physical_inventory_document where client = ${client}`)) as unknown as Array<{ n: number }>)[0]!.n)).toBe(3);
+
+    for (const a of [undefined, pNoCap.authorization, pNoScope.authorization, pOther.authorization]) {
+      expect(await ask(listDifferences(client, sel('PLA1', DA), a))).not.toBe('done');
+      expect(await ask(getDifferenceDocument(client, key(DA), a))).not.toBe('done');
+      expect(await ask(getDifferencePosting(client, key(DA), a))).not.toBe('done');
+      expect(await ask(post(a, DA, 'PP-NOAUTH'))).not.toMatch(/^done$|does not exist/);
+      expect(await ask(getRecountSource(client, key(DA), a))).not.toBe('done');
+      expect(await ask(recount(a, DA, 'RC-NOAUTH'))).not.toMatch(/^done$|does not exist/);
+    }
   });
 });

@@ -125,6 +125,7 @@ export async function checkPostingAction(
     const preview = await validateDifferencePosting({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       ...selectionOf(form),
     });
     return {
@@ -157,6 +158,7 @@ export async function postDifferencesAction(
     const posted = await postDifferences({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       requestKey: text(form, 'requestKey'),
       ...selectionOf(form),
     });
@@ -194,6 +196,7 @@ export async function reversePostingAction(
     const reversed = await reverseDifferencePosting({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       materialDocumentNumber: text(form, 'materialDocumentNumber'),
       postingDate: text(form, 'postingDate'),
       documentDate: text(form, 'documentDate'),

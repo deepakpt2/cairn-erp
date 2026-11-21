@@ -85,7 +85,7 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
 
   if (allowed && executed && plantFrom) {
     try {
-      const result = await listDifferences(session.user.client, selection);
+      const result = await listDifferences(session.user.client, selection, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
       rows = result.rows;
       total = result.total;
       excludedOtherCurrency = result.excludedOtherCurrency;
@@ -104,7 +104,7 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
         workflow: workflow as 'POST' | 'RECOUNT' | 'DISPLAY',
         documentNumber: last(params.doc),
         fiscalYear: Number(last(params.year) || last(params.fiscalYear) || '0'),
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
       if (workflow === 'DISPLAY') document = opened;
     } catch (caught) {
       workflowMessage = caught instanceof PhysicalInventoryDifferenceError
@@ -115,14 +115,14 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
     document = await getDifferenceDocument(session.user.client, {
       documentNumber: last(params.doc),
       fiscalYear: Number(last(params.year)),
-    });
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => null);
   }
 
   const comparison: RecountComparison[] = document
     ? await getRecountComparison(session.user.client, {
       documentNumber: document.documentNumber,
       fiscalYear: document.fiscalYear,
-    })
+    }, { userId: session.user.userId, sessionId: session.sessionId ?? '' }).catch(() => [])
     : [];
 
   return (

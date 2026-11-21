@@ -3,16 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import {
-  PHYSICAL_INVENTORY_CANCEL_CAPABILITY,
-  PHYSICAL_INVENTORY_CREATE_CAPABILITY,
-  PhysicalInventoryError,
-  cancelPhysicalInventory,
-  createPhysicalInventory,
-  listPhysicalInventory,
-  lockStockScope,
-  tryLockStockScope,
-} from '../src/modules/inventory/physical-inventory';
+import { PHYSICAL_INVENTORY_CANCEL_CAPABILITY, PHYSICAL_INVENTORY_CREATE_CAPABILITY, PhysicalInventoryError, lockStockScope, tryLockStockScope } from '../src/modules/inventory/physical-inventory';
+import { cancelPhysicalInventory, createPhysicalInventory, listPhysicalInventory } from './helpers/material-document-authorized';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { TransferPostingError } from '../src/modules/inventory/transfer-posting';
 import { postTransfer } from './helpers/transfer-authorized';

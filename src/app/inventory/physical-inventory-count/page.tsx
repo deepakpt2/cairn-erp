@@ -52,15 +52,16 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
     countEvent: one(params.countEvent),
   });
   const year = Number(yearText) || null;
+  const authorization = { userId: session.user.userId, sessionId: session.sessionId ?? '' };
   const document = !refusal && doc && year
-    ? await getCountDocument(client, { documentNumber: doc.toUpperCase(), fiscalYear: year })
+    ? await getCountDocument(client, { documentNumber: doc.toUpperCase(), fiscalYear: year }, authorization).catch(() => null)
     : null;
   const history = document
     ? await getCountHistory(client, {
       documentNumber: document.documentNumber, fiscalYear: document.fiscalYear,
-    })
+    }, authorization).catch(() => [])
     : [];
-  const documents = await searchCountDocuments(client);
+  const documents = await searchCountDocuments(client, {}, authorization).catch(() => []);
   const today = new Date().toISOString().slice(0, 10);
   const countKey = document ? `${document.documentNumber.trim()}/${document.fiscalYear}` : '';
   const canEnter = can(session, PHYSICAL_INVENTORY_COUNT_CAPABILITY)

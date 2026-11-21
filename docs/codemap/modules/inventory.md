@@ -12,7 +12,7 @@ Stock/warehouse: goods movements, batches, physical inventory, material master. 
 - Stock transport order (ITEM-22) lives in `stock-transport.ts`: 351/101/102/352 link to the STO item via `material_document_line.sto_*` (never `purchase_order_number`, so GR/IR, invoice verification and delivered-quantity readers cannot see them). Transit is `stock_quantity` stock type `IN_TRANSIT` with a blank storage location (also blank on the document lines, so the ledger and the projection reconcile); the ledger is `sto_transit_allocation` (one row per original 351 line: issue/transit value, currencies, rate, received/reversed quantity; DB CHECKs). A cross-company 351 writes two journals, linked in `material_document_journal`; `material_document.journal_document_number` keeps the first only for legacy readers.
 - STO documents reverse as whole documents through `reverseStoDocumentInTx` (routed from `reverseMaterialDocument`; `reverseTransfer`/`reverseGoodsReceipt` refuse them). 351 and 352 are never free transfers (`transfer-posting` refuses the codes by name). Planning reads STO supply/requirement only from `production/sto-planning.ts`, never from movement signs.
 
-## Files (246)
+## Files (247)
 | file | exports | tables |
 |---|---|---|
 | **app/config/batch-access-sequences/** | | |
@@ -288,6 +288,7 @@ Stock/warehouse: goods movements, batches, physical inventory, material master. 
 | movement-type-vocabulary.ts | MOVEMENT_DIRECTIONS, MOVEMENT_REFERENCES, MOVEMENT_KINDS, MOVEMENT_STOCK_TYPES, MOVEMENT_RULES, MOVEMENT_NEGATIVE_POLICIES, MOVEMENT_ASSIGNMENTS |  |
 | mrp-controller-key.ts | ACTIVITY, MRP_CONTROLLER_ROUTE, LOCK_OBJECT, mrpControllerKey, parseMrpControllerKey |  |
 | mrp-controller-maintenance.ts | MrpControllerError, listMrpControllers, saveMrpController, setMrpControllerActive, deleteMrpController, seedMrpController, ACTIVITY, LOCK_OBJECT, MRP_CONTROLLER_ROUTE, mrpControllerKey, parseMrpControllerKey | material, material_plant, mrp_controller, plant |
+| phyinv-scope.ts | phyInvScope |  |
 | physical-inventory-count.ts | PHYSICAL_INVENTORY_COUNT_CAPABILITY, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY, PHYSICAL_INVENTORY_COUNT_ROUTE, PHYSICAL_INVENTORY_COUNT_ALIASES, countNamedRefusal, PhysicalInventoryCountError, getCountDocument, searchCountDocuments, submitCounts, clearCount, getCountHistory, getCountStatus | change_document, material, physical_inventory_document, physical_inventory_item, plant, stock_quantity |
 | physical-inventory-differences.ts | PHYSICAL_INVENTORY_DIFF_LIST_CAPABILITY, PHYSICAL_INVENTORY_DIFF_LIST_ROUTE, PHYSICAL_INVENTORY_DIFF_LIST_ALIASES, DIFFERENCE_PAGE_SIZE_DEFAULT, DIFFERENCE_PAGE_SIZE_MAX, PhysicalInventoryDifferenceError, labelOf, directionOf, listDifferences, getDifferenceDocument, openDifferenceWorkflow | currency, material, material_valuation, physical_inventory_document, physical_inventory_item, plant, storage_location |
 | physical-inventory-posting-status.ts | releaseDifferenceAllocations, recomputePostingStatus | physical_inventory_difference_allocation, physical_inventory_document, physical_inventory_item |

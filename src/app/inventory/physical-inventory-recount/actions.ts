@@ -115,6 +115,7 @@ export async function checkRecountAction(
     const preview = await validateRecount({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       ...selectionOf(form),
     });
     return {
@@ -143,6 +144,7 @@ export async function createRecountAction(
     const recount = await createRecount({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       requestKey: text(form, 'requestKey'),
       ...selectionOf(form),
     });
@@ -174,6 +176,7 @@ export async function cancelRecountAction(
     const recount = await cancelRecount({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       recountDocumentNumber: text(form, 'recountDocumentNumber'),
       recountFiscalYear: Number(text(form, 'recountFiscalYear')),
       reason: raw(form, 'reason'),

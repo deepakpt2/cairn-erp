@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createOrderForProvisioning as createOrder } from '../src/modules/purchasing/orders';
-import { createPhysicalInventory } from '../src/modules/inventory/physical-inventory';
+import { createPhysicalInventory } from './helpers/material-document-authorized';
 import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
 import { getStoStatus, postStoIssue, postStoReceipt, reconcileStoItem, reverseStoDocument } from '../src/modules/inventory/stock-transport';
 import { buildStoFixture } from './helpers/sto-fixture';
@@ -197,7 +197,7 @@ describe('ITEM-22 inventory locks and stock sufficiency', () => {
     } as never);
     await expect(issue(order, [{ itemNumber: 10, quantity: 1 }])).rejects.toThrow(new RegExp(count.inventoryDocumentNumber));
     expect((await getStoStatus(client, order))?.items[0].netIssued).toBe('0.000');
-    const { cancelPhysicalInventory } = await import('../src/modules/inventory/physical-inventory');
+    const { cancelPhysicalInventory } = await import('./helpers/material-document-authorized');
     await cancelPhysicalInventory({ client, changedBy: ACTOR, inventoryDocumentNumber: count.inventoryDocumentNumber, fiscalYear: count.fiscalYear });
     expect((await issue(order, [{ itemNumber: 10, quantity: 1 }])).status).toBe('POSTED');
   });

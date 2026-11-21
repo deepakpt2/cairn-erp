@@ -10,6 +10,17 @@ import { submitCounts } from '../../src/modules/inventory/physical-inventory-cou
 import { postDifferences } from '../../src/modules/inventory/physical-inventory-posting';
 import { createRecount } from '../../src/modules/inventory/physical-inventory-recount';
 import type { BrowserTarget } from './targets';
+import { BROWSER_PHYINV_CAPABILITIES, createBrowserActor, refreshBrowserActor, type BrowserActor } from './actor';
+
+const PHYINV_ACTOR: BrowserActor = { username: '', userId: '', sessionId: '', authorization: { userId: '', sessionId: '' } };
+
+/** Sign in once with the physical-inventory authorities, and widen the reach to whatever the scene has added since. */
+async function phyInvAuthority(client: string) {
+  if (!PHYINV_ACTOR.userId) Object.assign(PHYINV_ACTOR, await createBrowserActor(client, BROWSER_PHYINV_CAPABILITIES));
+  await refreshBrowserActor(client, PHYINV_ACTOR);
+  return PHYINV_ACTOR.authorization;
+}
+
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -423,7 +434,7 @@ export async function scr150Mi11Recount(ctx: Context) {
   await page.locator('[data-posting-document]').waitFor();
   assert.match(await page.locator('[data-posting-document]').innerText(), new RegExp(recountDocument));
   await assert.rejects(
-    () => postDifferences({
+    () => postDifferences({ authorization: PHYINV_ACTOR.authorization,
       client, changedBy: ACTOR, documentNumber, fiscalYear: 2026,
       itemNumbers: [unrestricted.item_number], postingDate: DAY, documentDate: DAY, requestKey: 'scr150-direct',
     }),
@@ -452,7 +463,7 @@ export async function scr150Mi11Recount(ctx: Context) {
   assert.equal(link[0].status, 'RESOLVED');
   assert.equal((await itemsOf(documentNumber)).find((item) => item.item_number === unrestricted.item_number)?.count_status, 'RECOUNT_REQUIRED');
   await assert.rejects(
-    () => postDifferences({
+    () => postDifferences({ authorization: PHYINV_ACTOR.authorization,
       client, changedBy: ACTOR, documentNumber, fiscalYear: 2026,
       itemNumbers: [unrestricted.item_number], postingDate: DAY, documentDate: DAY, requestKey: 'scr150-after',
     }),
@@ -460,11 +471,13 @@ export async function scr150Mi11Recount(ctx: Context) {
   );
   console.log('  ✓ the recount posted once, the link resolved, and the original stays ineligible');
 
-  const one = await createPhysicalInventory({
+  await phyInvAuthority(client);
+  const one = await createPhysicalInventory({ authorization: PHYINV_ACTOR.authorization,
     client, createdBy: ACTOR, plant: PLANT, storageLocation: SLOC,
     plannedCountDate: DAY, materials: ['RC49-C'], requestKey: 'scr150-one-doc',
   });
-  await submitCounts({
+  await phyInvAuthority(client);
+  await submitCounts({ authorization: PHYINV_ACTOR.authorization,
     client, changedBy: ACTOR, documentNumber: one.inventoryDocumentNumber, fiscalYear: one.fiscalYear,
     countDate: DAY, requestKey: 'scr150-one-count', lines: [{ itemNumber: 10, quantity: 14 }],
   });
@@ -492,15 +505,18 @@ export async function scr150Mi11Recount(ctx: Context) {
   assert.equal(Number((await itemsOf(one.inventoryDocumentNumber))[0].counted), 14);
   console.log('  ✓ one item was recounted, and cancellation released the original and kept the link');
 
-  const postedSource = await createPhysicalInventory({
+  await phyInvAuthority(client);
+  const postedSource = await createPhysicalInventory({ authorization: PHYINV_ACTOR.authorization,
     client, createdBy: ACTOR, plant: PLANT, storageLocation: SLOC,
     plannedCountDate: DAY, materials: ['RC49-P'], requestKey: 'scr150-posted-doc',
   });
-  await submitCounts({
+  await phyInvAuthority(client);
+  await submitCounts({ authorization: PHYINV_ACTOR.authorization,
     client, changedBy: ACTOR, documentNumber: postedSource.inventoryDocumentNumber, fiscalYear: postedSource.fiscalYear,
     countDate: DAY, requestKey: 'scr150-posted-count', lines: [{ itemNumber: 10, quantity: 18 }],
   });
-  await postDifferences({
+  await phyInvAuthority(client);
+  await postDifferences({ authorization: PHYINV_ACTOR.authorization,
     client, changedBy: ACTOR, documentNumber: postedSource.inventoryDocumentNumber, fiscalYear: postedSource.fiscalYear,
     itemNumbers: [10], postingDate: DAY, documentDate: DAY, requestKey: 'scr150-posted-post',
   });
@@ -533,11 +549,13 @@ export async function scr150Mi11Recount(ctx: Context) {
   assert.equal(afterPostedRefusal.material_documents, beforePostedRefusal.material_documents, 'the refusal did not reverse');
   console.log('  ✓ a still-posted item was refused, with no reversal and no document left behind');
 
-  const closedSource = await createPhysicalInventory({
+  await phyInvAuthority(client);
+  const closedSource = await createPhysicalInventory({ authorization: PHYINV_ACTOR.authorization,
     client, createdBy: ACTOR, plant: PLANT, storageLocation: SLOC,
     plannedCountDate: DAY, materials: ['RC49-D'], requestKey: 'scr150-closed-doc',
   });
-  await submitCounts({
+  await phyInvAuthority(client);
+  await submitCounts({ authorization: PHYINV_ACTOR.authorization,
     client, changedBy: ACTOR, documentNumber: closedSource.inventoryDocumentNumber, fiscalYear: closedSource.fiscalYear,
     countDate: DAY, requestKey: 'scr150-closed-count', lines: [{ itemNumber: 10, quantity: 5 }],
   });
@@ -564,20 +582,23 @@ export async function scr150Mi11Recount(ctx: Context) {
     `));
   }
 
-  const raceSource = await createPhysicalInventory({
+  await phyInvAuthority(client);
+  const raceSource = await createPhysicalInventory({ authorization: PHYINV_ACTOR.authorization,
     client, createdBy: ACTOR, plant: PLANT, storageLocation: SLOC,
     plannedCountDate: DAY, materials: ['RC49-E'], requestKey: 'scr150-race-doc',
   });
-  await submitCounts({
+  await phyInvAuthority(client);
+  await submitCounts({ authorization: PHYINV_ACTOR.authorization,
     client, changedBy: ACTOR, documentNumber: raceSource.inventoryDocumentNumber, fiscalYear: raceSource.fiscalYear,
     countDate: DAY, requestKey: 'scr150-race-count', lines: [{ itemNumber: 10, quantity: 3 }],
   });
+  await phyInvAuthority(client);
   const raced = await Promise.allSettled([
-    createRecount({
+    createRecount({ authorization: PHYINV_ACTOR.authorization,
       client, changedBy: ACTOR, documentNumber: raceSource.inventoryDocumentNumber, fiscalYear: raceSource.fiscalYear,
       itemNumbers: [10], plannedRecountDate: DAY, reason: 'Race', requestKey: 'scr150-race-a',
     }),
-    createRecount({
+    createRecount({ authorization: PHYINV_ACTOR.authorization,
       client, changedBy: ACTOR, documentNumber: raceSource.inventoryDocumentNumber, fiscalYear: raceSource.fiscalYear,
       itemNumbers: [10], plannedRecountDate: DAY, reason: 'Race', requestKey: 'scr150-race-b',
     }),

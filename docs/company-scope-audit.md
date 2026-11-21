@@ -100,3 +100,19 @@ Inventory is keyed by **plant**; a plant belongs to one company (`plant.company_
 **Covered:** all four need `INV.RESERVATION.CREATE` and a session. A reservation is reachable only if it has items and every item's plant is reachable; anything else answers as a missing reservation (`getReservation` returns null). Create refuses an unreachable plant as "does not exist"; a replayed request key whose reservation is not fully reachable is refused. The recorded user is the session user. `withdrawReservationInTx` is unchanged: it is only called by the goods issue, which verifies its own authority. Tests: 3 more in `tests/company-scope-inventory.test.ts` (reads and withdraw/complete on direct-insert fixtures; create covers the refusals only, the success path stays in `reservations.test.ts`).
 
 **Still not covered in inventory:** physical inventory, stock ageing/reconcile/shelf-life lists, batch reads, serial numbers, MIGO, return delivery.
+
+## Phase 5g — inventory: physical inventory (MI01, MI04, MI20, MI07, recount)
+
+**Found:** none of the physical-inventory services checked a session, a capability or a Company Code scope. A capability alone reached any plant's count document, difference list, posting and recount. `changedBy`/`createdBy` came from the caller, and a request-key replay could return another company's document.
+
+**Covered:** a document belongs to its plant, a plant to one company. Every service judges inside its own transaction: session, a live capability, an explicit Company Code scope (and the Plant scope when held). A plant with no company is never reachable.
+- Create, cancel, list (`INV.PHYINV.CREATE`/`CANCEL`), count read/search/history/status, `submitCounts` (`INV.PHYINV.COUNT`), `clearCount` (`INV.PHYINV.COUNT.CORRECT`).
+- Differences list, display and workflow (`INV.PHYINV.DIFF.LIST`); posting read, validate, post, history (`INV.PHYINV.DIFF.POST`); recount validate/create/cancel (`INV.PHYINV.RECOUNT`), source and comparison reads (any of recount, diff list, diff post).
+- `reverseDifferencePosting` needs `INV.REVERSE` and every plant on the material document reachable; otherwise it answers as a missing document.
+- A document outside the reach, and a plant named in a selection outside the reach, answer exactly as a missing one, before any replay lookup. Reads return null or an empty list. The recorded actor is the session user.
+- Shared helper: `src/modules/inventory/phyinv-scope.ts`. Pages and actions pass `authorization`. The browser-smoke scripts scr149/scr150 sign in a scoped actor (`BROWSER_PHYINV_CAPABILITIES`).
+- Tests: `tests/company-scope-inventory.test.ts` (4 physical-inventory tests); existing suites use the wrappers in `tests/helpers/material-document-authorized.ts`.
+
+**Limits:** `reverseMaterialDocument` itself (the generic MIGO reversal) is still unscoped for non-STO documents; the physical-inventory entry point gates it, direct callers are not covered. Internal helpers (`releaseDifferenceAllocations`, `recomputePostingStatus`, `syncRecountLink`) take no authorization and are only reached through scoped services. Not browser-tested; the smoke scripts typecheck but were not run.
+
+**Still not covered in inventory:** stock ageing/reconcile/shelf-life lists, batch reads, serial numbers, MIGO, return delivery, goods-receipt posting.

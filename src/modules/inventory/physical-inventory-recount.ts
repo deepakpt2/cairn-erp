@@ -9,6 +9,8 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
+import { phyInvScope } from './phyinv-scope';
 import { writeInventoryDocument } from './physical-inventory';
 import { physicalInventoryDocument, physicalInventoryItem, physicalInventoryRecountLink } from './schema';
 export const PHYSICAL_INVENTORY_RECOUNT_CAPABILITY = 'INV.PHYINV.RECOUNT';
@@ -36,6 +38,8 @@ export interface CreateRecountInput {
   reason: string;
   headerText?: string;
   requestKey: string;
+  /** The verified session. The document's plant must be in the caller's Company Code (and Plant) scope. */
+  authorization: ServiceAuthorityContext | undefined;
   /** Not implemented. A present value is refused, never applied. */
   varianceThreshold?: unknown;
   batch?: unknown;
@@ -320,8 +324,9 @@ export async function validateRecount(input: Omit<CreateRecountInput, 'requestKe
   const full = { ...input, requestKey: input.requestKey ?? 'validate' };
   const shaped = assertShape(full, false);
   return withTenant(input.client, async (tx) => {
+    const scope = await phyInvScope(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_RECOUNT_CAPABILITY], (m, r) => new PhysicalInventoryRecountError(m, r));
     const header = await lockSource(tx, input.client, input.documentNumber.trim(), input.fiscalYear);
-    if (!header) {
+    if (!header || !scope.reachable.has(header.plant)) {
       throw new PhysicalInventoryRecountError(
         `Physical inventory document ${input.documentNumber} for fiscal year ${input.fiscalYear} does not exist.`,
         'Choose a document this tenant carries.',
@@ -369,12 +374,17 @@ export async function createRecount(input: CreateRecountInput): Promise<RecountV
   const documentNumber = input.documentNumber.trim();
   const expectedItems = [...input.itemNumbers].sort((a, b) => a - b);
   return withTenant(input.client, async (tx) => {
+    const scope = await phyInvScope(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_RECOUNT_CAPABILITY], (m, r) => new PhysicalInventoryRecountError(m, r));
+    input = { ...input, changedBy: scope.username };
     const replay = await tx.execute(sql`
-      select inventory_document_number, fiscal_year
+      select inventory_document_number, fiscal_year, plant
         from physical_inventory_document
        where client = ${input.client} and request_key = ${input.requestKey}
        for update
-    `) as unknown as Array<{ inventory_document_number: string; fiscal_year: number }>;
+    `) as unknown as Array<{ inventory_document_number: string; fiscal_year: number; plant: string }>;
+    if (replay[0] && !scope.reachable.has(replay[0].plant)) {
+      throw new PhysicalInventoryRecountError('This request key is already in use.');
+    }
     if (replay[0]) {
       const stored = await tx.execute(sql`
         select original_document_number, original_fiscal_year, original_item_number,
@@ -402,7 +412,7 @@ export async function createRecount(input: CreateRecountInput): Promise<RecountV
     }
 
     const header = await lockSource(tx, input.client, documentNumber, input.fiscalYear);
-    if (!header) {
+    if (!header || !scope.reachable.has(header.plant)) {
       throw new PhysicalInventoryRecountError(
         `Physical inventory document ${documentNumber} for fiscal year ${input.fiscalYear} does not exist.`,
         'Choose a document this tenant carries.',
@@ -519,17 +529,20 @@ export async function cancelRecount(input: {
   recountDocumentNumber: string;
   recountFiscalYear: number;
   reason: string;
+  authorization: ServiceAuthorityContext | undefined;
 }): Promise<RecountView> {
   const reason = boundText(input.reason, 'The cancellation reason', true);
   return withTenant(input.client, async (tx) => {
+    const scope = await phyInvScope(tx, input.client, input.authorization, [PHYSICAL_INVENTORY_RECOUNT_CAPABILITY], (m, r) => new PhysicalInventoryRecountError(m, r));
+    input = { ...input, changedBy: scope.username };
     const header = await tx.execute(sql`
-      select status from physical_inventory_document
+      select status, plant from physical_inventory_document
        where client = ${input.client}
          and inventory_document_number = ${input.recountDocumentNumber}
          and fiscal_year = ${input.recountFiscalYear}
        for update
-    `) as unknown as Array<{ status: string }>;
-    if (!header[0]) {
+    `) as unknown as Array<{ status: string; plant: string }>;
+    if (!header[0] || !scope.reachable.has(header[0].plant)) {
       throw new PhysicalInventoryRecountError(
         `Recount document ${input.recountDocumentNumber}/${input.recountFiscalYear} does not exist.`,
         'Choose the recount document, not the original.',
@@ -728,8 +741,10 @@ export interface RecountSourceView {
 export async function getRecountSource(
   client: string,
   keys: { documentNumber: string; fiscalYear: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<RecountSourceView | null> {
   return withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_RECOUNT_CAPABILITY, 'INV.PHYINV.DIFF.LIST', 'INV.PHYINV.DIFF.POST'], (m, r) => new PhysicalInventoryRecountError(m, r));
     const headers = await tx.execute(sql`
       select inventory_document_number, fiscal_year, plant, storage_location, status, planned_count_date
         from physical_inventory_document
@@ -738,7 +753,7 @@ export async function getRecountSource(
          and fiscal_year = ${keys.fiscalYear}
     `) as unknown as Array<SourceHeader & { planned_count_date: string }>;
     const header = headers[0];
-    if (!header) return null;
+    if (!header || !scope.reachable.has(header.plant)) return null;
     const items = await tx.execute(sql`
       select item_number, material_number, stock_type, batch_number, count_status,
              counted_quantity::text, difference_quantity::text, book_quantity_snapshot::text, posting_status
@@ -819,8 +834,15 @@ export interface RecountComparison {
 export async function getRecountComparison(
   client: string,
   keys: { documentNumber: string; fiscalYear: number },
+  authorization: ServiceAuthorityContext | undefined,
 ): Promise<RecountComparison[]> {
   return withTenant(client, async (tx) => {
+    const scope = await phyInvScope(tx, client, authorization, [PHYSICAL_INVENTORY_RECOUNT_CAPABILITY, 'INV.PHYINV.DIFF.LIST', 'INV.PHYINV.DIFF.POST'], (m, r) => new PhysicalInventoryRecountError(m, r));
+    const owner = await tx.execute(sql`
+      select plant from physical_inventory_document
+       where client = ${client} and inventory_document_number = ${keys.documentNumber} and fiscal_year = ${keys.fiscalYear}
+    `) as unknown as Array<{ plant: string }>;
+    if (!owner[0] || !scope.reachable.has(owner[0].plant)) return [];
     const rows = await tx.execute(sql`
       select l.original_document_number, l.original_fiscal_year, l.original_item_number,
              l.recount_document_number, l.recount_fiscal_year, l.recount_item_number,

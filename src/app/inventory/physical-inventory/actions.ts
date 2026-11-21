@@ -54,6 +54,7 @@ export async function createPhysicalInventoryAction(
     const document = await createPhysicalInventory({
       client: session.user.client,
       createdBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       plant: text(form, 'plant'),
       storageLocation: text(form, 'storageLocation') || undefined,
       plannedCountDate: text(form, 'plannedCountDate'),
@@ -90,6 +91,7 @@ export async function cancelPhysicalInventoryAction(
     const document = await cancelPhysicalInventory({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       inventoryDocumentNumber: text(form, 'inventoryDocumentNumber'),
       fiscalYear: Number(text(form, 'fiscalYear') || '0'),
     });
@@ -116,6 +118,7 @@ export async function cancelListedAction(form: FormData): Promise<void> {
     await cancelPhysicalInventory({
       client: session.user.client,
       changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       inventoryDocumentNumber: text(form, 'inventoryDocumentNumber'),
       fiscalYear: Number(text(form, 'fiscalYear') || '0'),
     });
