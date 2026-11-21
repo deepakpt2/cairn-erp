@@ -23,7 +23,7 @@ import { saveProductionOrderType } from '../src/modules/production/production-or
 import { settleProductionOrderForProvisioning as settleProductionOrder } from '../src/modules/production/order-settlement';
 import { getProductionOrderCostReport } from './helpers/cost-report-authorized';
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
-import { calculateWip, postedWip, runWip, WIP_METHOD } from '../src/modules/production/order-wip';
+import { calculateWip, postedWip, runWipForProvisioning as runWip, WIP_METHOD } from '../src/modules/production/order-wip';
 
 /**
  * Financial WIP — actual-cost net balance, delta postings, unwind at final settlement.

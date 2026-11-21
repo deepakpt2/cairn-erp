@@ -95,7 +95,7 @@ export default async function OrderInformationPage({
           cost: one(params.cost),
           price: one(params.price),
         },
-      });
+      }, { userId: session.user.userId, sessionId: session.sessionId ?? '' });
       layouts = await listOrderInformationLayouts(session.user.client, session.user.username, object, listType);
     } catch (error) {
       openError = error instanceof OrderInformationError ? error.message : 'The list could not be read.';

@@ -17,6 +17,8 @@ import { sql } from 'drizzle-orm';
 
 import { lineNotReversed, OPEN_PRODUCTION_DOCUMENT } from '../inventory/production-document-quantity';
 
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
+import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { hasCapability } from '../../platform/auth/session';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { parseProductionOrderStatus } from './production-order-status';
@@ -329,6 +331,8 @@ function fragmentOf(value: string): string {
 }
 
 interface ParsedQuery {
+  /** Plants the caller reaches (Company, then Plant scope); null only for the unscoped provisioning read. */
+  reach: string[] | null;
   object: OrderObject;
   listType: string;
   plant: string;
@@ -486,6 +490,7 @@ function parseQuery(input: {
   const offset = input.offset ?? 0;
   if (!Number.isInteger(offset) || offset < 0) fail('The list offset is not valid.');
   return {
+    reach: null,
     object,
     listType,
     plant,
@@ -603,6 +608,7 @@ async function productionHeaders(tx: Tx, client: string, query: ParsedQuery): Pr
       ) delivered on true
      where o.client = ${client}
        and (${query.plant} = '' or o.plant = ${query.plant})
+       and (${query.reach === null}::boolean or o.plant = any(string_to_array(${(query.reach ?? []).join(",")}, ',')))
        and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
        and (${description} = '' or m.description ilike ${description})
        and (${query.mrpController} = '' or mp.mrp_controller = ${query.mrpController})
@@ -684,6 +690,7 @@ async function productionComponents(tx: Tx, client: string, query: ParsedQuery):
       ) issued on true
      where c.client = ${client}
        and (${query.plant} = '' or c.plant = ${query.plant})
+       and (${query.reach === null}::boolean or o.plant = any(string_to_array(${(query.reach ?? []).join(",")}, ',')))
        and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
        and (${query.componentMaterial} = '' or c.material_number = ${query.componentMaterial})
        and (${query.productionVersion} = '' or o.production_version = ${query.productionVersion})
@@ -731,6 +738,7 @@ async function confirmations(tx: Tx, client: string, query: ParsedQuery): Promis
       ) effects on true
      where c.client = ${client}
        and (${query.plant} = '' or o.plant = ${query.plant})
+       and (${query.reach === null}::boolean or o.plant = any(string_to_array(${(query.reach ?? []).join(",")}, ',')))
        and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
        and (${query.confirmationType} = '' or c.confirmation_type = ${query.confirmationType})
        and (${query.productionVersion} = '' or o.production_version = ${query.productionVersion})
@@ -800,6 +808,7 @@ async function productionOperations(tx: Tx, client: string, query: ParsedQuery):
       ) progress on true
      where op.client = ${client}
        and (${query.plant} = '' or o.plant = ${query.plant})
+       and (${query.reach === null}::boolean or o.plant = any(string_to_array(${(query.reach ?? []).join(",")}, ',')))
        and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
        and (${query.productionVersion} = '' or op.production_version = ${query.productionVersion})
        and (${anyStatus} = 'Y' or o.status in (${sql.join(query.statuses.length ? query.statuses.map((status) => sql`${status}`) : [sql`''`], sql`, `)}))
@@ -860,6 +869,7 @@ async function movements(tx: Tx, client: string, query: ParsedQuery): Promise<{ 
      where l.client = ${client}
        and l.production_order_number is not null
        and (${query.plant} = '' or l.plant = ${query.plant})
+       and (${query.reach === null}::boolean or o.plant = any(string_to_array(${(query.reach ?? []).join(",")}, ',')))
        and (${query.materialNumber} = '' or l.material_number = ${query.materialNumber})
        and (${query.movementType} = '' or l.movement_type = ${query.movementType})
        and (${query.storageLocation} = '' or l.storage_location = ${query.storageLocation})
@@ -905,6 +915,7 @@ async function plannedHeaders(tx: Tx, client: string, query: ParsedQuery): Promi
       left join production_order conv on conv.client = o.client and conv.planned_order_number = o.order_number
      where o.client = ${client}
        and (${query.plant} = '' or o.plant = ${query.plant})
+       and (${query.reach === null}::boolean or o.plant = any(string_to_array(${(query.reach ?? []).join(",")}, ',')))
        and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
        and (${description} = '' or m.description ilike ${description})
        and (${query.mrpController} = '' or mp.mrp_controller = ${query.mrpController})
@@ -948,6 +959,7 @@ async function dependents(tx: Tx, client: string, query: ParsedQuery): Promise<{
       left join material m on m.client = d.client and m.material_number = d.material_number
      where d.client = ${client}
        and (${query.plant} = '' or d.plant = ${query.plant})
+       and (${query.reach === null}::boolean or o.plant = any(string_to_array(${(query.reach ?? []).join(",")}, ',')))
        and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
        and (${query.componentMaterial} = '' or d.material_number = ${query.componentMaterial})
        and (${query.dateFrom} = '' or d.requirement_date >= nullif(${query.dateFrom}, '')::date)
@@ -987,7 +999,7 @@ function notesFor(query: ParsedQuery): string[] {
   return notes;
 }
 
-export async function runOrderInformation(client: string, input: {
+async function runOrderInformationWith(client: string, input: {
   object?: string | null;
   listType?: string | null;
   plant?: string | null;
@@ -1015,9 +1027,13 @@ export async function runOrderInformation(client: string, input: {
   layoutId?: string | null;
   owner?: string | null;
   named?: Record<string, string | null | undefined>;
-}): Promise<OrderInformationResult> {
+}, mode: 'unscoped' | { authorization: ServiceAuthorityContext | undefined }): Promise<OrderInformationResult> {
   const query = parseQuery(input);
   return withTenant(client, async (tx) => {
+    if (mode !== 'unscoped') {
+      const actor = await purchasingActor(tx, client, mode.authorization, [ORDER_INFORMATION_CAPABILITY], (m, r) => new OrderInformationError(m, r ?? ''));
+      query.reach = await reachablePlantsInTx(tx, client, actor);
+    }
     if (query.layoutId) {
       const layout = await layoutOf(tx, client, clean(input.owner), query.layoutId);
       if (!layout || layout.object !== query.object || layout.listType !== query.listType) {
@@ -1194,4 +1210,16 @@ export async function saveOrderInformationLayout(client: string, input: {
     if (!saved) fail('The layout was not saved.');
     return saved;
   });
+}
+
+type OrderInformationInput = Parameters<typeof runOrderInformationWith>[1];
+
+/** The order information lists for a signed-in user: only orders whose plant lies in the Company (and Plant) scope the session reaches. */
+export function runOrderInformation(client: string, input: OrderInformationInput, authorization: ServiceAuthorityContext | undefined): Promise<OrderInformationResult> {
+  return runOrderInformationWith(client, input, { authorization });
+}
+
+/** Unscoped read for tests, seeds and scripts. Never imported from `src/app`. */
+export function runOrderInformationForProvisioning(client: string, input: OrderInformationInput): Promise<OrderInformationResult> {
+  return runOrderInformationWith(client, input, 'unscoped');
 }

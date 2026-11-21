@@ -41,6 +41,8 @@ import { loadCapacityReport } from '../src/modules/production/capacity-load';
 import { checkOrderAvailability } from '../src/modules/production/order-availability';
 import { commitOrderComponentAvailability, resetOrderComponentAvailability } from '../src/modules/production/order-availability-commitment';
 import { createCostEstimate, getCostEstimate, listCostEstimates } from '../src/modules/production/cost-estimate';
+import { runWip } from '../src/modules/production/order-wip';
+import { runOrderInformation } from '../src/modules/production/order-information';
 import { changePlannedOrder } from '../src/modules/production/planned-order-change';
 import { getPlannedOrder, listPlannedOrders } from '../src/modules/production/planned-order-display';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -778,6 +780,70 @@ describe('cost estimate', () => {
     for (const bad of [undefined, { userId: 'nobody', sessionId: 'nothing' }, ceNoCap.authorization, ceNoScope.authorization, ceOther.authorization]) {
       for (const op of [create, get, list]) expect(await ask(op('PLA1', bad as Auth))).toMatch(/./);
       expect(await ask(list('PLA1', bad as Auth))).not.toBe('done');
+    }
+  });
+});
+
+describe('WIP run and order information', () => {
+  const WC = ['PROD.ORDER.SETTLE', 'PROD.ORDER.INFO'];
+  let wA: FinanceActor; let wB: FinanceActor; let wPlantA: FinanceActor; let wNoCap: FinanceActor; let wNoScope: FinanceActor; let wOther: FinanceActor;
+  beforeAll(async () => {
+    wA = await createFinanceActor(client, { capabilities: WC, companyScopes: [A] });
+    wB = await createFinanceActor(client, { capabilities: WC, companyScopes: [B] });
+    wPlantA = await createFinanceActor(client, { capabilities: WC, companyScopes: [A, B], plantScopes: ['PLA1'] });
+    wNoCap = await createFinanceActor(client, { capabilities: ['FIN.JOURNAL.DISPLAY'], companyScopes: [A, B] });
+    wNoScope = await createFinanceActor(client, { capabilities: WC, companyScopes: [] });
+    wOther = await createFinanceActor(other.client, { capabilities: WC });
+  });
+  const wip = (a: Auth, testRun: boolean, over: Record<string, unknown> = {}) => runWip({
+    client, by: 'someone-else', authorization: a as never, fiscalYear: 2026, period: 10, testRun, ...over,
+  } as never);
+  const shown = async (a: Auth, order: string, testRun = true) => JSON.stringify((await wip(a, testRun, { orderNumber: order })).orders);
+  const info = (a: Auth, listType: string, over: Record<string, unknown> = {}) => runOrderInformation(client, { object: 'PRODUCTION_ORDER', listType, materialNumber: 'SCMK', ...over } as never, a);
+  const orders = async (a: Auth, listType = 'HEADERS') => (await info(a, listType)).rows.map((r) => String(r.orderNumber)).sort();
+
+  it('WIP test run and update calculate an order out of reach as one that does not stand', async () => {
+    for (const testRun of [true, false]) {
+      const missing = (await shown(wA.authorization, 'PO-ZZ', testRun)).replaceAll('PO-ZZ', '#');
+      for (const o of ['PO-B', 'PO-N']) expect((await shown(wA.authorization, o, testRun)).replaceAll(o, '#')).toBe(missing);
+      expect((await shown(wA.authorization, 'PO-A', testRun)).replaceAll('PO-A', '#')).not.toBe(missing);
+      expect((await shown(wPlantA.authorization, 'PO-B', testRun)).replaceAll('PO-B', '#')).toBe(missing);
+    }
+  });
+
+  it('WIP range selects only orders in reach', async () => {
+    const listed = async (a: Auth) => (await wip(a, true, { orderFrom: 'PO-A', orderTo: 'PO-N' })).orders.map((o) => o.orderNumber);
+    expect(await listed(wA.authorization)).toEqual(['PO-A']);
+    expect(await listed(wB.authorization)).toEqual(['PO-B']);
+    expect(await listed(wPlantA.authorization)).toEqual(['PO-A']);
+  });
+
+  it('order information lists only orders in reach, for every list type', async () => {
+    expect(await orders(wA.authorization)).toEqual(['PO-A']);
+    expect(await orders(wB.authorization)).toEqual(['PO-B']);
+    expect(await orders(wPlantA.authorization)).toEqual(['PO-A']);
+    for (const t of ['COMPONENTS', 'OPERATIONS', 'CONFIRMATIONS', 'GOODS_MOVEMENTS']) {
+      expect((await info(wB.authorization, t)).rows.filter((r) => String(r.orderNumber) === 'PO-A')).toEqual([]);
+    }
+    expect((await info(wB.authorization, 'COMPONENTS')).rows).toEqual([]);
+    expect((await info(wA.authorization, 'COMPONENTS')).rows.map((r) => String(r.orderNumber))).toEqual(['PO-A']);
+    const planned = (a: Auth) => info(a, 'HEADERS', { object: 'PLANNED_ORDER' }).then((r) => r.rows.map((x) => String(x.orderNumber)).sort());
+    const plA = await planned(wA.authorization);
+    expect(plA).toContain('PL-A');
+    expect(plA).not.toContain('PL-B');
+    expect(plA).not.toContain('PL-N');
+    const plB = await planned(wB.authorization);
+    expect(plB).toContain('PL-B');
+    expect(plB).not.toContain('PL-A');
+    const ov = await info(wB.authorization, 'OVERVIEW', { orderNumber: 'PO-A' });
+    expect(ov.overview ?? null).toBeNull();
+  });
+
+  it('refuses a missing session, a missing capability, no scope and another tenant', async () => {
+    for (const bad of [undefined, { userId: 'nobody', sessionId: 'nothing' }, wNoCap.authorization, wNoScope.authorization, wOther.authorization]) {
+      expect(await ask(wip(bad as Auth, true, { orderNumber: 'PO-A' }))).not.toBe('done');
+      expect(await ask(wip(bad as Auth, false, { orderNumber: 'PO-A' }))).not.toBe('done');
+      expect(await ask(info(bad as Auth, 'HEADERS'))).not.toBe('done');
     }
   });
 });

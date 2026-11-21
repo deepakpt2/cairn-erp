@@ -49,6 +49,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { purchasingActor, reachablePlantsInTx } from '../../platform/auth/scope-actor';
 import { acquireLock } from '../../platform/lock';
 import { derivePosition, periodWindows } from '../../platform/periods';
 import { fiscalYearPeriod, fiscalYearVariant } from '../foundation/schema';
@@ -523,7 +524,7 @@ function periodArgs(input: WipRunInput) {
   if (!Number.isInteger(input.period) || input.period < 1 || input.period > 16) throw new WipError('The period must be between 1 and 16.', 'Enter a posting period of the company\'s fiscal year.');
 }
 
-async function selectOrders(client: string, input: WipRunInput): Promise<string[]> {
+async function selectOrders(client: string, input: WipRunInput, reach: string[] | null): Promise<string[]> {
   const one = (input.orderNumber ?? '').trim().toUpperCase();
   const from = (input.orderFrom ?? '').trim().toUpperCase();
   const to = (input.orderTo ?? '').trim().toUpperCase();
@@ -538,6 +539,7 @@ async function selectOrders(client: string, input: WipRunInput): Promise<string[
          and (${one || null}::text is null or order_number = ${one})
          and (${from || null}::text is null or order_number >= ${from})
          and (${to || null}::text is null or order_number <= ${to})
+         and (${reach === null}::boolean or trim(plant) = any(string_to_array(${(reach ?? []).join(',')}, ',')))
        order by order_number limit ${WIP_MAX_ORDERS + 1}
     `) as unknown as Array<{ order_number: string }>;
     if (rows.length > WIP_MAX_ORDERS) throw new WipError(`The range selects more than ${WIP_MAX_ORDERS} orders.`, 'Narrow the range; a large close belongs in a background run.');
@@ -552,20 +554,41 @@ async function selectOrders(client: string, input: WipRunInput): Promise<string[
  * run finds the delta already posted and posts nothing. A refusal of one order (closed period, missing account) is
  * reported for that order and never blocks another.
  */
-export async function runWip(input: WipRunInput): Promise<WipRunResult> {
+async function runWipWith(input: WipRunInput, scoped: boolean): Promise<WipRunResult> {
   periodArgs(input);
   const client = input.client;
-  const orders = await selectOrders(client, input);
+  // Scoped: the actor's Company (and Plant) reach is judged once, in the service's own transaction, for the test run
+  // and the update alike. An order out of reach is calculated as one that does not stand, never disclosed.
+  let reach: string[] | null = null;
+  if (scoped) {
+    reach = await withTenant(client, async (tx) => {
+      const actor = await purchasingActor(tx, client, input.authorization, [WIP_CAPABILITY], (m, r) => new WipError(m, r ?? ''));
+      return reachablePlantsInTx(tx, client, actor);
+    });
+  }
+  const orders = await selectOrders(client, input, reach);
+  const MISSING = '#NO-SUCH-ORDER#';
+  const calc = async (tx: Tx, orderNumber: string): Promise<WipCalculation> => {
+    if (reach) {
+      const [row] = await tx.execute(sql`select plant from production_order where client = ${client} and order_number = ${orderNumber}`) as unknown as Array<{ plant: string }>;
+      if (row && !reach.includes(row.plant.trim())) {
+        const hidden = await calculateWip(tx, client, MISSING, input.fiscalYear, input.period);
+        return JSON.parse(JSON.stringify(hidden).replaceAll(MISSING, orderNumber)) as WipCalculation;
+      }
+    }
+    return calculateWip(tx, client, orderNumber, input.fiscalYear, input.period);
+  };
   const results: WipCalculation[] = [];
   let posted = 0;
   for (const orderNumber of orders) {
     if (input.testRun) {
-      results.push(await withTenant(client, (tx) => calculateWip(tx, client, orderNumber, input.fiscalYear, input.period)));
+      results.push(await withTenant(client, (tx) => calc(tx, orderNumber)));
       continue;
     }
     try {
       const result = await withTenant(client, async (tx) => {
-        const [found] = await tx.execute(sql`select plant from production_order where client = ${client} and order_number = ${orderNumber}`) as unknown as Array<{ plant: string }>;
+        const [seen] = await tx.execute(sql`select plant from production_order where client = ${client} and order_number = ${orderNumber}`) as unknown as Array<{ plant: string }>;
+        const found = seen && reach && !reach.includes(seen.plant.trim()) ? undefined : seen;
         const verdict = await verifyServiceAuthorityInTx(tx, client, input.authorization, WIP_CAPABILITY);
         if (!verdict.ok) throw new WipError(verdict.refusal.message, verdict.refusal.remedy);
         const out = found ? await refusePlantOutsideScopeInTx(tx, client, found.plant.trim(), verdict.restrictions) : null;
@@ -577,22 +600,22 @@ export async function runWip(input: WipRunInput): Promise<WipRunResult> {
             select journal_document, journal_year, posting_id from production_order_wip_posting where client = ${client} and request_key = ${key}
           `) as unknown as Array<{ journal_document: string; journal_year: number; posting_id: string }>;
           if (replay) {
-            const again = await calculateWip(tx, client, orderNumber, input.fiscalYear, input.period);
+            const again = await calc(tx, orderNumber);
             return { ...again, status: 'NO_CHANGE' as WipStatus, reasons: [`This request was already posted as ${replay.journal_document}. No second document was created.`], document: { documentNumber: replay.journal_document, fiscalYear: Number(replay.journal_year), postingId: replay.posting_id } };
           }
         }
-        const calc = await calculateWip(tx, client, orderNumber, input.fiscalYear, input.period);
-        if (calc.status !== 'POST' && calc.status !== 'UNWIND') return calc;
-        const document = await tx.transaction(async (savepoint) => postWipDelta(savepoint as unknown as Tx, client, calc, input.by, {
-          requestKey: key, postingDate: calc.periodEnd!, fiscalYear: input.fiscalYear, period: input.period,
+        const calculated = await calc(tx, orderNumber);
+        if (calculated.status !== 'POST' && calculated.status !== 'UNWIND') return calculated;
+        const document = await tx.transaction(async (savepoint) => postWipDelta(savepoint as unknown as Tx, client, calculated, input.by, {
+          requestKey: key, postingDate: calculated.periodEnd!, fiscalYear: input.fiscalYear, period: input.period,
         }));
-        return { ...calc, document, reasons: [...calc.reasons, `Posted ${document.documentNumber}.`] };
+        return { ...calculated, document, reasons: [...calculated.reasons, `Posted ${document.documentNumber}.`] };
       });
       if (result.document && result.status !== 'NO_CHANGE') posted += 1;
       results.push(result);
     } catch (error) {
       if (!(error instanceof WipError) && !(error instanceof PostingError) && !(error instanceof MoneyError)) throw error;
-      const preview = await withTenant(client, (tx) => calculateWip(tx, client, orderNumber, input.fiscalYear, input.period));
+      const preview = await withTenant(client, (tx) => calc(tx, orderNumber));
       results.push({
         ...preview, status: 'REFUSED', document: null,
         reasons: [error.message], remedy: (error as { remedy?: string }).remedy ?? 'Resolve the cause; nothing was posted for this order.',
@@ -603,6 +626,16 @@ export async function runWip(input: WipRunInput): Promise<WipRunResult> {
     ? 'Test run. Nothing was posted.'
     : posted > 0 ? `Update run. ${posted} WIP document(s) posted.` : 'Update run. Nothing was posted.';
   return { testRun: input.testRun, method: WIP_METHOD, methodStatement: WIP_METHOD_STATEMENT, fiscalYear: input.fiscalYear, period: input.period, orders: results, posted, message };
+}
+
+/** The WIP run for a signed-in user: scoped to the Company (and Plant) the session reaches, test run and update alike. */
+export function runWip(input: WipRunInput): Promise<WipRunResult> {
+  return runWipWith(input, true);
+}
+
+/** Unscoped test run for tests, seeds and scripts. The update still judges the authorization it is given. Never imported from `src/app`. */
+export function runWipForProvisioning(input: WipRunInput): Promise<WipRunResult> {
+  return runWipWith(input, false);
 }
 
 /**

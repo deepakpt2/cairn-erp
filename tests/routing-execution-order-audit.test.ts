@@ -7,7 +7,7 @@ import { createProductionOrder, getProductionOrder } from '../src/modules/invent
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { mrpController } from '../src/modules/inventory/schema';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
-import { runOrderInformation } from '../src/modules/production/order-information';
+import { runOrderInformationForProvisioning as runOrderInformation } from '../src/modules/production/order-information';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { createPlannedOrderForProvisioning as createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { convertPlannedOrder } from '../src/modules/production/planned-order-conversion';

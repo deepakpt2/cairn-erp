@@ -8,7 +8,7 @@ import { createProductionOrder, releaseProductionOrder } from '../src/modules/in
 import { cancelConfirmation } from '../src/modules/production/confirmation-cancel';
 import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { enterOrderConfirmationForProvisioning as enterOrderConfirmation, scaledEffectWithinLimit } from '../src/modules/production/order-confirmation';
-import { runOrderInformation } from '../src/modules/production/order-information';
+import { runOrderInformationForProvisioning as runOrderInformation } from '../src/modules/production/order-information';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { changeProductionOrderForProvisioning as changeProductionOrder } from '../src/modules/production/production-order-change';
 import { getProductionOrderDisplayForProvisioning as getProductionOrderDisplay } from '../src/modules/production/production-order-display';

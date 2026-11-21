@@ -9,7 +9,7 @@ import { createMaterialBomForProvisioning as createMaterialBom, saveBomItemCateg
 import {
   orderInformationLists,
   orderInformationRefusal,
-  runOrderInformation,
+  runOrderInformationForProvisioning as runOrderInformation,
   saveOrderInformationLayout,
 } from '../src/modules/production/order-information';
 import { enterOrderConfirmationForProvisioning as enterOrderConfirmation } from '../src/modules/production/order-confirmation';
