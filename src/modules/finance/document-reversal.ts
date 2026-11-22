@@ -22,6 +22,7 @@ import type { ServiceAuthorityContext } from '../../platform/auth/service-author
 import { derivePosition, getCompanyCode, PeriodError } from '../../platform/periods';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
 import { accountingReversalLink, journalEntry, journalEntryLine, reversalReason } from './schema';
+import { activeBankMatchForJournal } from './bank-reconciliation';
 
 export const DOCUMENT_REVERSE_CAPABILITY = 'FIN.DOCUMENT.REVERSE';
 const REVERSAL_DOCUMENT_TYPE = 'AB';
@@ -460,6 +461,15 @@ export async function reverseDocument(input: {
       );
     }
     const lines = await loadLines(tx, input.client, input.documentNumber, input.fiscalYear);
+    // A document whose line stands in an active bank reconciliation match is not reversed silently:
+    // that would leave a signed-off match pointing at a document that no longer posts.
+    const bankMatch = await activeBankMatchForJournal(tx, input.client, input.documentNumber, input.fiscalYear);
+    if (bankMatch) {
+      throw new DocumentReversalError(
+        `Line ${bankMatch.lineNumber} of document ${input.documentNumber} stands in bank reconciliation match ${bankMatch.matchId} on statement ${bankMatch.statementReference}.`,
+        'Reopen the bank statement and unmatch the line first; then the reversal can post and the reconciliation is corrected explicitly.',
+      );
+    }
     const clearsItemCount = await loadClearsCount(tx, input.client, input.companyCode, input.documentNumber);
     const gate = eligibility(header, lines, clearsItemCount, standing);
     if (!gate.canReverse) throw new DocumentReversalError(gate.refusal!, gate.remedy ?? undefined);

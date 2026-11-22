@@ -2652,19 +2652,31 @@
     "platform/i18n/index.ts",
     "ui/kit/index.ts"
   ],
-  "app/finance/gl-clearing/GlClearing.tsx": [
+  "app/finance/gl-clearing/BankReconciliation.tsx": [
     "app/finance/gl-clearing/actions.ts",
+    "modules/finance/bank-reconciliation.ts"
+  ],
+  "app/finance/gl-clearing/GlClearing.tsx": [
+    "app/finance/gl-clearing/BankReconciliation.tsx",
+    "app/finance/gl-clearing/actions.ts",
+    "modules/finance/bank-reconciliation.ts",
     "modules/finance/gl-clearing.ts",
     "ui/fields/ConstrainedField.tsx",
     "ui/lock/ChangeLock.tsx"
   ],
   "app/finance/gl-clearing/actions.ts": [
+    "modules/finance/bank-reconciliation.ts",
     "modules/finance/gl-clearing.ts",
     "platform/auth/current.ts",
     "platform/lock/enqueue.ts"
   ],
+  "app/finance/gl-clearing/export/route.ts": [
+    "modules/finance/bank-reconciliation.ts",
+    "platform/auth/current.ts"
+  ],
   "app/finance/gl-clearing/page.tsx": [
     "app/finance/gl-clearing/GlClearing.tsx",
+    "modules/finance/bank-reconciliation.ts",
     "modules/finance/gl-clearing.ts",
     "platform/auth/current.ts",
     "ui/kit/index.ts"
@@ -3177,6 +3189,11 @@
     "platform/lock/enqueue.ts"
   ],
   "app/globals.css": [],
+  "app/help/[[...slug]]/page.tsx": [
+    "modules/platform/help-docs.ts",
+    "platform/auth/current.ts",
+    "ui/kit/index.ts"
+  ],
   "app/inventory/batch-classes/ClassForm.tsx": [
     "app/inventory/batch-classes/actions.ts",
     "modules/inventory/batch-class.ts",
@@ -5501,6 +5518,17 @@
     "platform/periods/index.ts",
     "platform/posting/decimal.ts"
   ],
+  "modules/finance/bank-reconciliation.ts": [
+    "modules/finance/schema.ts",
+    "modules/foundation/schema.ts",
+    "platform/auth/company-scope.ts",
+    "platform/auth/service-authority.ts",
+    "platform/auth/session.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/periods/index.ts",
+    "platform/posting/money.ts"
+  ],
   "modules/finance/carryforward.ts": [
     "modules/finance/gl-document.ts",
     "modules/finance/ledger-journal.ts",
@@ -5686,6 +5714,7 @@
     "platform/posting/decimal.ts"
   ],
   "modules/finance/document-reversal.ts": [
+    "modules/finance/bank-reconciliation.ts",
     "modules/finance/schema.ts",
     "platform/auth/company-scope.ts",
     "platform/auth/service-authority.ts",
@@ -7694,6 +7723,7 @@
     "platform/db/client.ts",
     "platform/posting/decimal.ts"
   ],
+  "modules/platform/help-docs.ts": [],
   "modules/platform/organisation-scope-admin.ts": [
     "modules/foundation/schema.ts",
     "modules/platform/user-admin.ts",

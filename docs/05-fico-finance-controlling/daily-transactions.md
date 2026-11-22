@@ -91,6 +91,29 @@ Example: pay `120.000 KWD` for a repair in cash. Debit the expense, credit the b
 - **Reset cleared items** (`/finance/clearing-reset`): lifts the clearing so items stand open again. It posts nothing; it records the reason.
 - **Post an intercompany journal** (`/finance/intercompany`): one submission posts **two balanced documents in one transaction**: the sending company's lines plus a clearing line on its intercompany clearing account, and the mirror lines plus its own clearing line in the receiving company. If either fails, both roll back. Each line names the other company as trading partner so consolidation can eliminate the pair; the clearing balances are cleared later with **Clear G/L account**. Clearing accounts are set at `/config/intercompany-clearing`.
 
+### 1.6 Reconcile a bank statement
+
+Open **G/L clearing → Bank reconciliation** (`/finance/gl-clearing?mode=bank`). This is a separate mode on the same screen; it reads and writes no G/L clearing document.
+
+1. **Choose the bank account.** Type the company code, house bank and account (suggestions come from the accounts in your Company Code scope). The account must be a local-currency account with its **own** bank G/L account. A shared G/L account or a foreign-currency account is refused by name — the posted ledger cannot say which account or which authoritative amount a line belongs to.
+2. **Enter the statement.** Give it the bank's reference, the period, the opening and closing balances and every line. Amounts are **debit-to-bank**: money in is positive, money out is negative; an overdrawn closing balance is a negative number. Choose **Money in** or **Money out** and enter the positive amount. Identical amounts and references are legitimate; the statement reference identifies the statement and each line keeps a stable sequence.
+3. **Save a draft.** A draft may be incomplete and may not add up. `opening + signed lines = closing` is checked at account-currency precision; a statement that fails it can be saved but **cannot be finalized**. For the first statement only, an authorised **cutover baseline** with a reason may explain an opening balance that differs from the posted ledger; the baseline must equal `statement opening − ledger opening` and is carried into later statements.
+4. **Match lines.** Select a statement line, then allocate one or more posted bank lines to it (or repeat for several statement lines against one bank line). Both sides must have the same direction and currency; total active allocations cannot exceed either remaining amount. A match is **evidence only** — it posts no journal, clears no AR/AP item and marks no payment as bank-executed. Bank fees and missing receipts are posted first through the ordinary screens; the resulting bank line is then matched. **Withdraw match** requires a reason and keeps the original allocation as history.
+5. **Read the as-of bridge.** The screen shows statement and ledger opening/closing, matched and unmatched amounts on both sides, the carried baseline and the explicit **unexplained difference**. The bridge is `statement closing − ledger closing = unmatched statement − unmatched ledger + baseline`. Outstanding timing items are identified, never dropped to force zero.
+6. **Finalize.** Confirm the reviewed snapshot. Finalization requires exact statement arithmetic, a zero unexplained difference, resolved scope/identity issues and your explicit confirmation; identified outstanding items do not block it. The snapshot stores the statement identity, ledger basis, allocations, outstanding items, baseline, reviewer and timestamp, and **posts nothing**. A later match, late/backdated posting or reversal is shown as `changed after sign-off`; it never rewrites the signed snapshot.
+7. **Reopen or correct.** Reopening a finalized statement requires a reason. Matching is then open again; finalizing appends a new snapshot and keeps the earlier one. A journal with an active match cannot be reversed until the statement is reopened and the line unmatched.
+8. **Export.** **Export reconciliation evidence (CSV)** downloads the bridge, statement lines, bank G/L lines and matches. The download re-checks your session, capability and Company Code scope.
+
+| Refusal | Meaning |
+|---|---|
+| "is used by N bank accounts … cannot tell which account" | Give each bank account its own bank G/L account in House Banks |
+| "Foreign-currency bank reconciliation is not available" | Reconcile a local-currency account; the ledger has no authoritative comparable amount |
+| "does not equal the closing balance" | Correct the lines or balances; a draft may be saved, a reconciliation may not |
+| "leaves an unexplained difference" | Match the remaining items or record a supported first-statement baseline |
+| "is finalized and is not edited" | Reopen it with a reason first |
+| "exceeds … remaining" | Reduce the allocation; active allocations cannot exceed either side |
+| "belongs to a journal that stands REVERSED" | Post the correction; a reversed document cannot be matched |
+
 ---
 
 ## 2. Accounts payable

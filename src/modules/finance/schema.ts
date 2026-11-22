@@ -22,10 +22,17 @@ import {
   index,
   foreignKey,
   check,
+  uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { auditColumns, client } from '../../platform/tables/tenancy';
-import { chartOfAccounts, companyCode as foundationCompanyCode, creditControlArea, fiscalYearVariant } from '../foundation/schema';
+import {
+  bankAccount as foundationBankAccount,
+  chartOfAccounts,
+  companyCode as foundationCompanyCode,
+  creditControlArea,
+  fiscalYearVariant,
+} from '../foundation/schema';
 import { businessPartner } from '../foundation/business-partner-schema';
 import { glAccountGroup } from './gl-account-group-schema';
 
@@ -2537,4 +2544,188 @@ export const intercompanyDocumentHeader = pgTable('intercompany_document_header'
     t.client, t.receivingCompanyCode, t.partnerDocumentNumber,
   ),
   check('intercompany_document_header_distinct', sql`${t.sendingCompanyCode} <> ${t.receivingCompanyCode}`),
+]);
+
+/**
+ * Manual bank statement document (bank reconciliation). One row per statement
+ * a finance user enters by hand for one house-bank account. The statement is a
+ * reconciliation document, never a journal: finalising it posts nothing.
+ *
+ * Identity: the reference is unique per tenant/company/house bank/account while
+ * the statement is not SUPERSEDED. Reopening keeps the same row and preserves
+ * every finalized snapshot in `bank_reconciliation_snapshot`.
+ */
+export const bankStatement = pgTable('bank_statement', {
+  client: tenantClient(),
+  statementId: uuid('statement_id').notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  houseBankKey: varchar('house_bank_key', { length: 5 }).notNull(),
+  accountId: varchar('account_id', { length: 5 }).notNull(),
+  statementReference: varchar('statement_reference', { length: 40 }).notNull(),
+  fromDate: date('from_date', { mode: 'string' }).notNull(),
+  toDate: date('to_date', { mode: 'string' }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  openingBalance: numeric('opening_balance', { precision: 23, scale: 4 }).notNull(),
+  closingBalance: numeric('closing_balance', { precision: 23, scale: 4 }).notNull(),
+  /** DRAFT | FINALIZED | REOPENED | SUPERSEDED */
+  status: varchar('status', { length: 12 }).notNull().default('DRAFT'),
+  /** Cutover evidence: a reasoned opening difference on the first statement only. */
+  baseline: boolean('baseline').notNull().default(false),
+  baselineAmount: numeric('baseline_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  baselineReason: text('baseline_reason'),
+  requestKey: varchar('request_key', { length: 80 }),
+  finalizedSnapshotId: uuid('finalized_snapshot_id'),
+  finalizedBy: varchar('finalized_by', { length: 60 }),
+  finalizedAt: timestamp('finalized_at', { withTimezone: true }),
+  reopenedBy: varchar('reopened_by', { length: 60 }),
+  reopenedAt: timestamp('reopened_at', { withTimezone: true }),
+  reopenReason: text('reopen_reason'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.statementId] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.houseBankKey, t.accountId],
+    foreignColumns: [
+      foundationBankAccount.client,
+      foundationBankAccount.companyCode,
+      foundationBankAccount.houseBankKey,
+      foundationBankAccount.accountId,
+    ],
+  }).onDelete('restrict'),
+  uniqueIndex('bank_statement_identity_uq')
+    .on(t.client, t.companyCode, t.houseBankKey, t.accountId, t.statementReference)
+    .where(sql`${t.status} <> 'SUPERSEDED'`),
+  uniqueIndex('bank_statement_request_uq')
+    .on(t.client, t.requestKey)
+    .where(sql`${t.requestKey} is not null`),
+  index('bank_statement_account_idx')
+    .on(t.client, t.companyCode, t.houseBankKey, t.accountId, t.toDate),
+  check('bank_statement_status_ck', sql`${t.status} in ('DRAFT', 'FINALIZED', 'REOPENED', 'SUPERSEDED')`),
+  check('bank_statement_period_ck', sql`${t.fromDate} <= ${t.toDate}`),
+  check('bank_statement_reference_ck', sql`length(btrim(${t.statementReference})) between 1 and 40`),
+]);
+
+/**
+ * One manually entered line of a bank statement. `amount` is signed in the
+ * account currency using the debit-to-bank convention: a positive amount is
+ * money in (a deposit, a debit to the bank asset), a negative amount is money
+ * out (a withdrawal, a credit). Line identity is the generated UUID; the
+ * sequence number is stable within the statement.
+ */
+export const bankStatementLine = pgTable('bank_statement_line', {
+  client: tenantClient(),
+  statementId: uuid('statement_id').notNull(),
+  lineId: uuid('line_id').notNull(),
+  lineNumber: integer('line_number').notNull(),
+  valueDate: date('value_date', { mode: 'string' }).notNull(),
+  transactionDate: date('transaction_date', { mode: 'string' }).notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  bankReference: varchar('bank_reference', { length: 60 }),
+  description: varchar('description', { length: 200 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.lineId] }),
+  uniqueIndex('bank_statement_line_sequence_uq').on(t.client, t.statementId, t.lineNumber),
+  index('bank_statement_line_statement_idx').on(t.client, t.statementId),
+  foreignKey({ columns: [t.client, t.statementId], foreignColumns: [bankStatement.client, bankStatement.statementId] })
+    .onDelete('cascade'),
+  check('bank_statement_line_amount_ck', sql`${t.amount} <> 0`),
+  check('bank_statement_line_number_ck', sql`${t.lineNumber} > 0`),
+]);
+
+/**
+ * One confirmed allocation between a statement line and a posted bank G/L
+ * line. Allocations are evidence only: creating one posts no journal, clears no
+ * AR/AP item and marks no payment as bank-executed. Unmatching deactivates the
+ * row and keeps it as history; rows are never deleted.
+ */
+export const bankReconciliationMatch = pgTable('bank_reconciliation_match', {
+  client: tenantClient(),
+  matchId: uuid('match_id').notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  houseBankKey: varchar('house_bank_key', { length: 5 }).notNull(),
+  accountId: varchar('account_id', { length: 5 }).notNull(),
+  statementId: uuid('statement_id').notNull(),
+  statementLineId: uuid('statement_line_id').notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  ledgerDocumentNumber: varchar('ledger_document_number', { length: 40 }).notNull(),
+  ledgerFiscalYear: integer('ledger_fiscal_year').notNull(),
+  ledgerLineNumber: integer('ledger_line_number').notNull(),
+  allocatedAmount: numeric('allocated_amount', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  matchedBy: varchar('matched_by', { length: 60 }).notNull(),
+  matchedAt: timestamp('matched_at', { withTimezone: true }).notNull().defaultNow(),
+  unmatchedBy: varchar('unmatched_by', { length: 60 }),
+  unmatchedAt: timestamp('unmatched_at', { withTimezone: true }),
+  unmatchReason: text('unmatch_reason'),
+  requestKey: varchar('request_key', { length: 80 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.matchId] }),
+  foreignKey({ columns: [t.client, t.statementId], foreignColumns: [bankStatement.client, bankStatement.statementId] })
+    .onDelete('cascade'),
+  foreignKey({ columns: [t.client, t.statementLineId], foreignColumns: [bankStatementLine.client, bankStatementLine.lineId] })
+    .onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.ledgerDocumentNumber, t.ledgerFiscalYear, t.ledgerLineNumber],
+    foreignColumns: [
+      journalEntryLine.client,
+      journalEntryLine.documentNumber,
+      journalEntryLine.fiscalYear,
+      journalEntryLine.lineNumber,
+    ],
+  }).onDelete('restrict'),
+  uniqueIndex('bank_reconciliation_match_replay_uq')
+    .on(t.client, t.requestKey, t.statementLineId, t.ledgerDocumentNumber, t.ledgerFiscalYear, t.ledgerLineNumber)
+    .where(sql`${t.requestKey} is not null`),
+  index('bank_reconciliation_match_statement_idx').on(t.client, t.statementId, t.statementLineId),
+  index('bank_reconciliation_match_ledger_idx').on(
+    t.client, t.ledgerDocumentNumber, t.ledgerFiscalYear, t.ledgerLineNumber,
+  ),
+  check('bank_reconciliation_match_amount_ck', sql`${t.allocatedAmount} > 0`),
+]);
+
+/**
+ * Immutable, finalized reconciliation evidence. One row per finalization (a
+ * later reopen and re-finalize appends a new sequence); nothing updates or
+ * deletes a row. `evidence` carries the readable as-of calculation and every
+ * line/allocation it was computed from, so a later posting or match cannot
+ * silently rewrite what a reviewer signed.
+ */
+export const bankReconciliationSnapshot = pgTable('bank_reconciliation_snapshot', {
+  client: tenantClient(),
+  snapshotId: uuid('snapshot_id').notNull(),
+  statementId: uuid('statement_id').notNull(),
+  sequence: integer('sequence').notNull(),
+  statementReference: varchar('statement_reference', { length: 40 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  houseBankKey: varchar('house_bank_key', { length: 5 }).notNull(),
+  accountId: varchar('account_id', { length: 5 }).notNull(),
+  fromDate: date('from_date', { mode: 'string' }).notNull(),
+  toDate: date('to_date', { mode: 'string' }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  openingBalance: numeric('opening_balance', { precision: 23, scale: 4 }).notNull(),
+  closingBalance: numeric('closing_balance', { precision: 23, scale: 4 }).notNull(),
+  ledgerOpeningBalance: numeric('ledger_opening_balance', { precision: 23, scale: 4 }).notNull(),
+  ledgerClosingBalance: numeric('ledger_closing_balance', { precision: 23, scale: 4 }).notNull(),
+  matchedStatementAmount: numeric('matched_statement_amount', { precision: 23, scale: 4 }).notNull(),
+  matchedLedgerAmount: numeric('matched_ledger_amount', { precision: 23, scale: 4 }).notNull(),
+  unmatchedStatementAmount: numeric('unmatched_statement_amount', { precision: 23, scale: 4 }).notNull(),
+  unmatchedLedgerAmount: numeric('unmatched_ledger_amount', { precision: 23, scale: 4 }).notNull(),
+  baselineAmount: numeric('baseline_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  unexplainedDifference: numeric('unexplained_difference', { precision: 23, scale: 4 }).notNull(),
+  ledgerLineCount: integer('ledger_line_count').notNull(),
+  matchCount: integer('match_count').notNull(),
+  outstandingCount: integer('outstanding_count').notNull(),
+  evidence: jsonb('evidence').notNull(),
+  finalizedBy: varchar('finalized_by', { length: 60 }).notNull(),
+  finalizedAt: timestamp('finalized_at', { withTimezone: true }).notNull().defaultNow(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.snapshotId] }),
+  uniqueIndex('bank_reconciliation_snapshot_sequence_uq').on(t.client, t.statementId, t.sequence),
+  foreignKey({ columns: [t.client, t.statementId], foreignColumns: [bankStatement.client, bankStatement.statementId] })
+    .onDelete('restrict'),
+  index('bank_reconciliation_snapshot_statement_idx').on(t.client, t.statementId, t.sequence),
 ]);

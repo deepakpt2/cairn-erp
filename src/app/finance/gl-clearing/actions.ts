@@ -7,11 +7,30 @@ import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   GL_CLEARING_CAPABILITY, GlClearingError, clearGlItems,
 } from '@/modules/finance/gl-clearing';
+import {
+  BANK_STATEMENT_ENTER_CAPABILITY,
+  BANK_STATEMENT_FINALIZE_CAPABILITY,
+  BANK_STATEMENT_MATCH_CAPABILITY,
+  BankReconciliationError,
+  finalizeBankStatement,
+  matchBankStatement,
+  reopenBankStatement,
+  saveBankStatement,
+  unmatchBankStatement,
+  type BankStatementLineInput,
+} from '@/modules/finance/bank-reconciliation';
 
 export interface GlClearingActionState {
   ok: boolean;
   message: string;
   remedy?: string;
+}
+
+export interface BankReconciliationActionState {
+  ok: boolean;
+  message: string;
+  remedy?: string;
+  statementId?: string;
 }
 
 const ROUTE = '/finance/gl-clearing';
@@ -24,6 +43,15 @@ function text(form: FormData, name: string): string {
 function wrap(error: unknown): GlClearingActionState {
   if (error instanceof GlClearingError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
+}
+
+function wrapBank(error: unknown): BankReconciliationActionState {
+  if (error instanceof BankReconciliationError) return { ok: false, message: error.message, remedy: error.remedy };
+  throw error;
+}
+
+function authorityOf(session: Awaited<ReturnType<typeof requireSession>>) {
+  return { userId: session.user.userId, sessionId: session.sessionId ?? '' };
 }
 
 export async function clearAction(
@@ -81,5 +109,177 @@ export async function clearAction(
     };
   } catch (error) {
     return wrap(error);
+  }
+}
+
+function parseLines(raw: string): BankStatementLineInput[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw || '[]');
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((line) => {
+    const row = line as Record<string, unknown>;
+    return {
+      ...(typeof row.lineId === 'string' && row.lineId.trim() ? { lineId: row.lineId.trim() } : {}),
+      direction: row.direction === 'OUT' ? 'OUT' : 'IN',
+      amount: String(row.amount ?? ''),
+      valueDate: String(row.valueDate ?? ''),
+      ...(row.transactionDate ? { transactionDate: String(row.transactionDate) } : {}),
+      ...(row.bankReference ? { bankReference: String(row.bankReference) } : {}),
+      ...(row.description ? { description: String(row.description) } : {}),
+    };
+  });
+}
+
+export async function saveBankStatementAction(
+  _previous: BankReconciliationActionState,
+  form: FormData,
+): Promise<BankReconciliationActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, BANK_STATEMENT_ENTER_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the bank statement entry capability.' };
+  }
+  try {
+    const lines = parseLines(text(form, 'lines'));
+    if (lines.length === 0) {
+      return { ok: false, message: 'A statement needs at least one line.', remedy: 'Add the statement lines, then save.' };
+    }
+    const result = await saveBankStatement({
+      client: session.user.client,
+      ...(text(form, 'statementId') ? { statementId: text(form, 'statementId') } : {}),
+      companyCode: text(form, 'companyCode'),
+      houseBankKey: text(form, 'houseBankKey').toUpperCase(),
+      accountId: text(form, 'accountId').toUpperCase(),
+      statementReference: text(form, 'statementReference'),
+      fromDate: text(form, 'fromDate'),
+      toDate: text(form, 'toDate'),
+      currency: text(form, 'currency').toUpperCase(),
+      openingBalance: text(form, 'openingBalance'),
+      closingBalance: text(form, 'closingBalance'),
+      baseline: text(form, 'baseline') === 'yes',
+      baselineAmount: text(form, 'baselineAmount') || '0',
+      ...(text(form, 'baselineReason') ? { baselineReason: text(form, 'baselineReason') } : {}),
+      ...(text(form, 'requestKey') ? { requestKey: text(form, 'requestKey') } : {}),
+      lines,
+    }, { authorization: authorityOf(session) });
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      statementId: result.statementId,
+      message: result.arithmeticValid
+        ? 'Statement saved; its opening balance and signed lines equal the closing balance.'
+        : `Statement saved as a draft, but it does not add up yet (difference ${result.arithmeticDifference}). It cannot be finalized until it balances.`,
+    };
+  } catch (error) {
+    return wrapBank(error);
+  }
+}
+
+export async function matchBankStatementAction(
+  _previous: BankReconciliationActionState,
+  form: FormData,
+): Promise<BankReconciliationActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, BANK_STATEMENT_MATCH_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the bank reconciliation matching capability.' };
+  }
+  try {
+    let allocations: Array<{
+      statementLineId: string; ledgerDocumentNumber: string; ledgerFiscalYear: number;
+      ledgerLineNumber: number; amount: string;
+    }>;
+    try {
+      allocations = JSON.parse(text(form, 'allocations') || '[]') as typeof allocations;
+    } catch {
+      return { ok: false, message: 'The allocation selection could not be read.', remedy: 'Reload the statement and try again.' };
+    }
+    const result = await matchBankStatement({
+      client: session.user.client,
+      statementId: text(form, 'statementId'),
+      ...(text(form, 'requestKey') ? { requestKey: text(form, 'requestKey') } : {}),
+      allocations: allocations.map((allocation) => ({
+        statementLineId: String(allocation.statementLineId ?? ''),
+        ledgerDocumentNumber: String(allocation.ledgerDocumentNumber ?? ''),
+        ledgerFiscalYear: Number(allocation.ledgerFiscalYear),
+        ledgerLineNumber: Number(allocation.ledgerLineNumber),
+        amount: String(allocation.amount ?? ''),
+      })),
+    }, { authorization: authorityOf(session) });
+    revalidatePath(ROUTE);
+    return { ok: true, statementId: result.statementId, message: `Matched ${result.matchIds.length} allocation(s) as reconciliation evidence. No journal was posted and no AR/AP item was cleared.` };
+  } catch (error) {
+    return wrapBank(error);
+  }
+}
+
+export async function unmatchBankStatementAction(
+  _previous: BankReconciliationActionState,
+  form: FormData,
+): Promise<BankReconciliationActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, BANK_STATEMENT_MATCH_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the bank reconciliation matching capability.' };
+  }
+  try {
+    const result = await unmatchBankStatement({
+      client: session.user.client,
+      matchId: text(form, 'matchId'),
+      reason: text(form, 'reason'),
+    }, { authorization: authorityOf(session) });
+    revalidatePath(ROUTE);
+    return { ok: true, statementId: result.statementId, message: 'Match withdrawn. The original allocation remains as history; no journal was changed.' };
+  } catch (error) {
+    return wrapBank(error);
+  }
+}
+
+export async function finalizeBankStatementAction(
+  _previous: BankReconciliationActionState,
+  form: FormData,
+): Promise<BankReconciliationActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, BANK_STATEMENT_FINALIZE_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the bank reconciliation finalization capability.' };
+  }
+  try {
+    const result = await finalizeBankStatement({
+      client: session.user.client,
+      statementId: text(form, 'statementId'),
+      confirmed: text(form, 'confirmed') === 'yes',
+    }, { authorization: authorityOf(session) });
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      statementId: result.statementId,
+      message: result.snapshotId
+        ? `Reconciliation finalized and frozen as snapshot ${result.snapshotId}. Outstanding items remain open for later matching.`
+        : 'The reconciliation already stands finalized.',
+    };
+  } catch (error) {
+    return wrapBank(error);
+  }
+}
+
+export async function reopenBankStatementAction(
+  _previous: BankReconciliationActionState,
+  form: FormData,
+): Promise<BankReconciliationActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, BANK_STATEMENT_FINALIZE_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the bank reconciliation finalization capability.' };
+  }
+  try {
+    const result = await reopenBankStatement({
+      client: session.user.client,
+      statementId: text(form, 'statementId'),
+      reason: text(form, 'reason'),
+    }, { authorization: authorityOf(session) });
+    revalidatePath(ROUTE);
+    return { ok: true, statementId: result.statementId, message: 'Statement reopened for correction. The previous snapshot stays as evidence; a new finalization appends another snapshot.' };
+  } catch (error) {
+    return wrapBank(error);
   }
 }

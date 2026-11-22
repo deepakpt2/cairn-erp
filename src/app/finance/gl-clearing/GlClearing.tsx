@@ -3,9 +3,14 @@
 import { useActionState, useState } from 'react';
 
 import type { GlClearingView } from '@/modules/finance/gl-clearing';
+import type {
+  BankAccountChoice,
+  BankReconciliationView,
+} from '@/modules/finance/bank-reconciliation';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import { clearAction, type GlClearingActionState } from './actions';
 import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
+import BankReconciliation from './BankReconciliation';
 
 const INITIAL: GlClearingActionState = { ok: false, message: '' };
 
@@ -16,10 +21,22 @@ const itemKey = (i: { documentNumber: string; fiscalYear: number; lineNumber: nu
  * Stage-1 shell: selection and the open-item grid stand over
  * the vocabulary; loading and posting arrive in stage 3.
  */
-export default function GlClearing({ view, loadError, canClear, today }: {
+export default function GlClearing({
+  mode, view, loadError, canClear, bankView, bankError, bankAccounts, bankQuery,
+  canBankView, canBankEnter, canBankMatch, canBankFinalize, today,
+}: {
+  mode: 'gl' | 'bank';
   view: GlClearingView | null;
   loadError: string | null;
   canClear: boolean;
+  bankView: BankReconciliationView | null;
+  bankError: string | null;
+  bankAccounts: BankAccountChoice[];
+  bankQuery: { companyCode: string; houseBankKey: string; accountId: string; statementId: string };
+  canBankView: boolean;
+  canBankEnter: boolean;
+  canBankMatch: boolean;
+  canBankFinalize: boolean;
   today: string;
 }) {
   const [state, action, clearing] = useActionState(clearAction, INITIAL);
@@ -75,6 +92,38 @@ export default function GlClearing({ view, loadError, canClear, today }: {
 
   return (
     <>
+      <nav aria-label="Clearing mode" className="flex flex-wrap gap-2 border-b border-line pb-3">
+        <a
+          href={view ? `/finance/gl-clearing?companyCode=${encodeURIComponent(view.companyCode)}&glAccount=${encodeURIComponent(view.glAccount)}` : '/finance/gl-clearing'}
+          className={`btn ${mode === 'gl' ? 'btn-primary' : 'btn-default'} min-h-11 sm:min-h-8`}
+          aria-current={mode === 'gl' ? 'page' : undefined}
+        >
+          G/L open-item clearing
+        </a>
+        {canBankView && (
+          <a
+            href="/finance/gl-clearing?mode=bank"
+            className={`btn ${mode === 'bank' ? 'btn-primary' : 'btn-default'} min-h-11 sm:min-h-8`}
+            aria-current={mode === 'bank' ? 'page' : undefined}
+          >
+            Bank reconciliation
+          </a>
+        )}
+      </nav>
+
+      {mode === 'bank' ? (
+        <BankReconciliation
+          view={bankView}
+          loadError={bankError}
+          accounts={bankAccounts}
+          query={bankQuery}
+          canEnter={canBankEnter}
+          canMatch={canBankMatch}
+          canFinalize={canBankFinalize}
+          today={today}
+        />
+      ) : (
+        <>
       <section aria-labelledby="glc-selection" className="border border-line bg-surface p-4">
         <h2 id="glc-selection" className="text-sm font-semibold">Selection</h2>
         <form method="get" action="/finance/gl-clearing" className="mt-3 flex flex-wrap items-end gap-3">
@@ -296,6 +345,8 @@ export default function GlClearing({ view, loadError, canClear, today }: {
             </div>
           )}
         </section>
+      )}
+        </>
       )}
     </>
   );
