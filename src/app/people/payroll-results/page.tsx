@@ -19,6 +19,7 @@ import {
   listPayrollRuns,
   listResults,
 } from '@/modules/people/payroll-run';
+import { payslipAvailable, payslipHref } from '@/modules/people/payroll-payslip';
 import { getPayrollPosting } from '@/modules/people/payroll-posting';
 import { COMPANY_RESPONSIBILITY_NOTICE } from '@/modules/people/payroll-components';
 import { LinkButton, Page } from '@/ui/kit';
@@ -111,7 +112,16 @@ export default async function PayrollResultPage({
                   {slip.result.personnelNumber} — {slip.result.employeeName ?? ''}
                   {slipRun ? ` · ${slipRun.companyCode} ${slipRun.period}/${slipRun.fiscalYear} (${slipRun.status.toLowerCase()})` : ''}
                 </h2>
-                <Link href={query({})} className="text-sm underline">Close</Link>
+                <div className="flex items-center gap-3">
+                  {slipRun && payslipAvailable(slipRun.status) ? (
+                    <a href={payslipHref(slip.result.resultId)} className="btn btn-default min-h-11 sm:min-h-8" target="_blank" rel="noopener">
+                      Print / Save as PDF
+                    </a>
+                  ) : (
+                    <span className="text-xs text-ink-soft">An official payslip is available once the run is released or posted.</span>
+                  )}
+                  <Link href={query({})} className="text-sm underline">Close</Link>
+                </div>
               </div>
               <p className="px-4 text-sm text-ink-soft">
                 Paid {slip.result.payableDays} of {slip.result.totalDays} days (held a position {slip.result.coveredDays} days,

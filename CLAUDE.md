@@ -85,3 +85,14 @@ Business logic must be built as **service functions in `src/modules/<module>/*.t
 - `src/app/<module>/<feature>/page.tsx` / `*.tsx` — reads via the service function, renders, delegates writes to `actions.ts`.
 
 Keep this split even for small features. When a new module/feature doc is needed, reflect it in `docs/codemap/modules/<module>.md`.
+
+## Printable payslip (people / payroll)
+
+`/people/payroll-results` links **Print / Save as PDF** to the protected route handler `/people/payroll-results/payslip?result=…` (`src/app/people/payroll-results/payslip/route.ts`). The service is `getPayslip` in `src/modules/people/payroll-payslip.ts`; it is a read-only view of the stored result and its lines — never a recalculation, posting or payment.
+
+- **Final results only.** RELEASED and POSTED print; PROPOSED (`PAYSLIP_NOT_FINAL`) and CANCELLED (`PAYSLIP_CANCELLED`) are refused server-side.
+- **Authority is re-judged in the service tx:** the live session, `PEOPLE.PAYROLL.RESULT`/`PEOPLE.PAYROLLRUN.EXECUTE`, and the run's Company Code reach. Tenant and user come from the session; `?result=` only names a result the caller already reaches. An unreachable result answers like a missing one (`PAYSLIP_UNAVAILABLE`, 404) — do not add a different response, it would become a probe.
+- **Persisted amounts only.** Gross/deductions/net are `payroll_result` columns written at `currency.decimal_places` (never a fixed 2). Employer contributions are a separate section and never enter deductions or net. There is no recalculation and no summing of subtotals.
+- **No sensitive internals.** G/L accounts, cost receivers and bank details are excluded. The page has no script, image, font or external resource; the route is `private, no-store` with a `default-src 'none'` CSP. It is not cached and not linked publicly.
+- **Not a payment.** The page says the payslip is a payroll calculation, not evidence a bank payment succeeded, and makes no statutory-compliance claim.
+- **No new screen or PDF library.** Browser Print → Save as PDF is the supported workflow. `pdf-lib` is not used for payslips, and bulk generation / email / employee self-service are out of scope.

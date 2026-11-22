@@ -5,6 +5,7 @@ HR: employees, org assignments, time/leave, pay components, salary structures & 
 
 - Background payroll (`payroll-background.ts`, jobs `PAYROLL.RUN.CALC`/`PAYROLL.RUN.POST`, queue INTENSIVE): one active `payroll_run_operation` per run (partial unique index); every other payroll action calls `assertNoActiveOperation`. Calculation stages into `payroll_calc_stage` and publishes in one tx. The job acts as `job_run.triggered_by` via `ServiceAuthorityContext.jobLease` (lease verified + current grants), never a session or the capability-array shortcut. The job runner only ever sees a fixed generic error; the real reason is on the operation.
 - Append-only at grant level (DELETE revoked, 9193–9197); exceptions: `org_hierarchy`, and results/exceptions of a PROPOSED payroll run.
+- Printable payslip (`payroll-payslip.ts`, route `/people/payroll-results/payslip`): a read-only view of `payroll_result`/`payroll_result_line`, never a recalculation. `getPayslip` re-judges the live session + `PEOPLE.PAYROLL.RESULT`/`PEOPLE.PAYROLLRUN.EXECUTE` and the run's Company Code in its own tx; an unreachable result answers exactly like a missing one (`PAYSLIP_UNAVAILABLE`, 404) so it cannot probe. Only RELEASED/POSTED runs print (`PAYSLIP_NOT_FINAL`/`PAYSLIP_CANCELLED`); amounts are written at `currency.decimal_places` (KWD = 3). Employer contributions are shown apart and never in net. Accounts, cost receivers and bank data are omitted; the page links no external resource and the route is `private, no-store` with a `default-src 'none'` CSP. Browser Print → Save as PDF is the only PDF path (no pdf-lib).
 - Overlap checks take `pg_advisory_xact_lock(hashtextextended(…))` first; PK is backstop. One assignment per employee at a time.
 - Cost centre validity is checked by raw SQL (dated PK can't be an FK target).
 - No role holds payroll capabilities (`PEOPLE.PAYROLL*`); demo reaches them via `demo.admin` `*`.
@@ -26,7 +27,7 @@ HR: employees, org assignments, time/leave, pay components, salary structures & 
 - Adjustments are applied at RELEASE (APPROVED→APPLIED under the period lock) and handed back when a released run is cancelled; a PROPOSED run is stale (`staleReasons`, `RUN_STALE_INPUTS`) when the approved set differs from its ONE_TIME lines or a recurring entry was written after `calculated_at` (background runs stamp the operation's `started_at`). Entry writes and calculation share `pg_advisory_xact_lock('employee-pay:…')`. History a RELEASED/POSTED result covers is frozen: entries touching it and adjustments for that period are refused. Release needs `acknowledgePending` while adjustments of the period are pending. Negative net → `NEGATIVE_NET_PAY` exception. Employer-contribution corrections are refused.
 - Not implemented: self-service balances via `employee.appUserId`; sensitive report-access audit log; pending absence requests reserve no days.
 
-## Files (76)
+## Files (78)
 | file | exports | tables |
 |---|---|---|
 | **app/api/leave/balances/export/** | | |
@@ -68,6 +69,8 @@ HR: employees, org assignments, time/leave, pay components, salary structures & 
 | page.tsx | PeopleOrganizationPage |  |
 | **app/people/payroll-results/** | | |
 | page.tsx | PayrollResultPage |  |
+| **app/people/payroll-results/payslip/** | | |
+| route.ts | GET |  |
 | **app/people/payroll-runs/** | | |
 | actions.ts | proposeRunAction, recalculateRunAction, releaseRunAction, cancelRunAction, postPayrollRunAction, cancelOperationAction, payrollOperationStatusAction, paySalaryRunAction |  |
 | adjustment-actions.ts | enterAdjustmentAction, decideAdjustmentAction, cancelAdjustmentAction |  |
@@ -109,6 +112,7 @@ HR: employees, org assignments, time/leave, pay components, salary structures & 
 | payroll-access.ts | judgePayrollAccess, reachesCompany, assertCompanyScope |  |
 | payroll-background.ts | PAYROLL_CALC_JOB, PAYROLL_POST_JOB, submitPayrollProposal, submitPayrollRecalculation, submitPayrollPosting, cancelPayrollOperation, listPayrollOperations, getPayrollOperation, runPayrollCalcChunk, runPayrollPostChunk | job_run, payroll_calc_stage, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, payroll_run_operation |
 | payroll-components.ts | COMPANY_RESPONSIBILITY_NOTICE, BASIS_LABEL, addEmployeeComponent, endEmployeeComponent, withdrawEmployeeComponent, listEmployeeComponents, listEntryComponents, enterAdjustment, decideAdjustment, cancelAdjustment, listAdjustments, ADJUSTMENT_APPROVE_CAPABILITY, ADJUSTMENT_ENTER_CAPABILITY, COMPONENT_MAINTAIN_CAPABILITY, COMPONENT_MODES, PRORATION_POLICIES | cost_center, employee, employee_pay_component, pay_component, pay_component_config, payroll_adjustment, payroll_result, payroll_run, position_assignment |
+| payroll-payslip.ts | PAYSLIP_ROUTE, PayslipError, isPayslipError, refuse, sourceLabel, getPayslip, renderPayslipHtml, payslipHref, payslipAvailable | company_code, employee, payroll_result, payroll_result_line, payroll_run |
 | payroll-posting.ts | PAYROLL_POST_CAPABILITY, PAYROLL_POSTING_DOCUMENT_TYPE, PAYROLL_NET_PAY_EVENT, PayrollPostingError, buildPayrollJournal, postPayrollRun, getPayrollPosting | account_determination, accounting_reversal_link, gl_account, journal_entry, journal_entry_line, pay_component, payroll_result, payroll_result_line, payroll_run |
 | payroll-run.ts | PayrollRunError, refuse, EXECUTE, judge, INFORMATIONAL_EXCEPTIONS, translateTrigger, proposeInput, runActionInput, parse, releaseInput, daysBetween, payableDaysFor, daysOutside, calculateComponent, runView, staleReasonsOf, getPayrollRun, listPayrollRuns, listResults, getResultWithLines, currencyDecimals, loadRun, runRowFrom, selectEmployees, calculateResult, computeResultDraft, coverageOf, lockPeriod, assertPeriodOpen, proposePayrollRun, recalculatePayrollRun, activeOperation, assertNoActiveOperation, assertCalculationSettled, assertProposed, releasePayrollRun, cancelPayrollRun, listPayrollCompanies, currentPayrollPeriod, PAYROLL_RESULT_CAPABILITY, PAYROLL_RESULT_ROUTE, PAYROLL_RUN_CAPABILITY, PAYROLL_RUN_ROUTE | absence, company_code, cost_center, currency, employee, employee_pay_component, pay_component, pay_component_config, payroll_adjustment, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, payroll_run_operation, position_assignment, salary_structure_assignment, salary_structure_component, time_type |
 | payroll-structure.ts | EMPLOYEE_ROUTE, PAY_COMPONENT_ROUTE, EOS_PROVISION_KIND, PAYROLL_RESULT_CAPABILITY, PayrollStructureError, assertEmployeeScope, defineSalaryStructure, changeSalaryStructure, setStructureComponent, listStructures, getStructure, listAssignableComponents, removeStructureComponent, assignStructure, endAssignment, assignmentFor, listAssignments, validateEmployeeForRun, employeeRunReadiness, defaultPayrollCurrency, AMOUNT_KINDS, SALARY_ASSIGNMENT_OBJECT_CLASS, SALARY_STRUCTURE_CAPABILITY, SALARY_STRUCTURE_OBJECT_CLASS, SALARY_STRUCTURE_ROUTE | company_code, cost_center, currency, employee, pay_component, pay_component_config, position_assignment, salary_structure, salary_structure_assignment, salary_structure_component |
@@ -122,8 +126,8 @@ HR: employees, org assignments, time/leave, pay components, salary structures & 
 | leave-export.ts | leaveExportJob |  |
 | payroll-run.ts | payrollCalcJob, payrollPostJob |  |
 
-## Routes (13)
-`/api/leave/balances/export` · `/api/leave/balances/export/[exportId]` · `/config/pay-components` · `/config/people-record-types` · `/config/time-types` · `/people/assignments` · `/people/authority` · `/people/employees` · `/people/organization` · `/people/payroll-results` · `/people/payroll-runs` · `/people/salary-structures` · `/people/time-leave`
+## Routes (14)
+`/api/leave/balances/export` · `/api/leave/balances/export/[exportId]` · `/config/pay-components` · `/config/people-record-types` · `/config/time-types` · `/people/assignments` · `/people/authority` · `/people/employees` · `/people/organization` · `/people/payroll-results` · `/people/payroll-results/payslip` · `/people/payroll-runs` · `/people/salary-structures` · `/people/time-leave`
 
 ## Tables owned (31)
 absence, delegation, delegation_approval, delegation_scope, employee, employee_pay_component, employee_record, job, leave_quota, org_hierarchy, org_unit, pay_component, pay_component_config, payroll_adjustment, payroll_calc_stage, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, payroll_run_operation, position, position_assignment, record_field, record_field_value, record_type, salary_payment, salary_structure, salary_structure_assignment, salary_structure_component, time_recording, time_type
@@ -134,5 +138,5 @@ finance, foundation, platform/auth, platform/change, platform/db, platform/i18n,
 ## Used by
 dev/walkthrough-volume.ts, platform, platform/auth, platform/notification, platform/tenancy, purchasing, worker/jobs.ts
 
-## Tests (28)
-attention, authority-chart, authority-model, chain-of-command, delegation, leave-absence, leave-accrual, leave-export, leave-math, leave-policy, leave-report, leave-views, payroll-background, payroll-company-components, payroll-components-background, payroll-followup, payroll-posting, payroll-run, payroll-structure, people-authorization, people-employee-master, people-org-assignment, people-pay-components, people-plant-scope, people-service-authorization, people-tier-approval, people-time-leave, salary-payment
+## Tests (29)
+attention, authority-chart, authority-model, chain-of-command, delegation, leave-absence, leave-accrual, leave-export, leave-math, leave-policy, leave-report, leave-views, payroll-background, payroll-company-components, payroll-components-background, payroll-followup, payroll-payslip, payroll-posting, payroll-run, payroll-structure, people-authorization, people-employee-master, people-org-assignment, people-pay-components, people-plant-scope, people-service-authorization, people-tier-approval, people-time-leave, salary-payment

@@ -61,6 +61,17 @@ Year-end preview: **Year**, **Entitlement**, **Remaining → opening**, **Blocke
 
 For a run that is not posted the screen says "Not posted yet: each slip shows the accounts its lines will post to." Totals are sums of the lines, each rounded once to the currency's decimals, so a slip always adds up.
 
+### Printable payslip
+
+Open a slip and choose **Print / Save as PDF**. The payslip opens on its own printable page; use the browser's **Print** command and pick **Save as PDF** to keep a copy. There is no separate PDF button and nothing is emailed.
+
+The payslip shows the company's name, address and tax registration from the company code, the employee's personnel number and name, the run and status, the payroll period and dates, the currency and its decimals, the days paid, total and unpaid, every earning and deduction line with its segment, source and basis, and the stored **Gross pay**, **Total deductions** and **Net pay**. Employer contributions are listed separately and are never part of net pay. Internal G/L accounts, cost receivers and bank details are not printed.
+
+- A payslip exists only for a **released** or **posted** run. A **proposed** run can still be recalculated, and a **cancelled** one was withdrawn, so the screen says an official payslip is not available yet.
+- The employee name is read from today's master data, and the payslip labels it that way; the amounts, component codes, segments and dates are the stored calculation.
+- The printable page needs the same authority as the screen, for the same company code. Opening it directly without signing in, without the payroll-result capability, or for another company's result shows nothing.
+- **A payslip is a payroll calculation.** It is not evidence that a bank payment succeeded, and it is not a statutory filing or a statement of compliance.
+
 On `/people/payroll-runs`, **Open the results of this run** goes straight to the slips, and the **Runs** table shows **Dates, Status, Net**. Statuses: **PROPOSED → RELEASED → POSTED**, or **CANCELLED**.
 
 ## Common messages and what to do
@@ -80,6 +91,7 @@ On `/people/payroll-runs`, **Open the results of this run** goes straight to the
 | "Component … is not mapped to an account in chart …" | No mapping | Map it at `/config/pay-components` |
 | "Component … charges to the employee's cost centre, and employee … has none" | Assignment has no cost centre | Give the assignment a cost centre |
 | Run cannot be released | Exceptions exist | Fix each, then **Recalculate** |
+| "An official payslip is available once the run is released or posted." | The run is proposed or cancelled | Release it first; a cancelled run is not printed |
 | "The calculation is out of date: recalculate before release." | Data changed after proposal | **Recalculate** |
 | "A posted run cannot be cancelled or posted again." | Already posted | Correct in a later period with an adjustment |
 | "You entered this; someone else must approve it." | Four-eyes rule | Another user approves the adjustment |
