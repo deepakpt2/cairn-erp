@@ -31,7 +31,9 @@
  */
 import {
   boolean,
+  char,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -44,11 +46,33 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 import { auditColumns, client } from '../../platform/tables/tenancy';
+
+// A CSV body is stored as bytes, as the audit period pack stores its artifact.
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+
+/**
+ * One frozen payment row stored on `payroll_payment_file.bank_snapshot` when bank data is included: the
+ * non-identifier fields in the clear, and the account identifier as an AES-256-GCM envelope bound to
+ * tenant + employee + file id + field. No plaintext account number or IBAN.
+ */
+export interface PaymentFileBankRow {
+  personnelNumber: string;
+  beneficiaryName: string;
+  amount: string;
+  currency: string;
+  intendedPaymentDate: string;
+  bankName: string;
+  bankCode: string | null;
+  accountKind: 'IBAN' | 'ACCOUNT';
+  /** cbd1… envelope; decrypted only at download, fail closed without the keyring. */
+  accountCiphertext: string;
+}
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
 
@@ -1292,5 +1316,213 @@ export const payrollAdjustment = pgTable(
   (t) => [
     primaryKey({ columns: [t.client, t.adjustmentId] }),
     index('payroll_adjustment_period_idx').on(t.client, t.companyCode, t.fiscalYear, t.period, t.status),
+  ],
+);
+
+/**
+ * 9320: one prepared generic salary payment CSV per POSTED payroll run.
+ *
+ * A working file for manual conversion and bank upload — never a bank format, never sent by the ERP.
+ * The unique `(client, run_id)` is the duplicate-instruction guard: a retry or a concurrent call returns
+ * this frozen snapshot rather than a second batch, and the stored `body` makes a re-download byte-identical
+ * after any later master-data change. No employee bank details are stored: the columns are exported blank.
+ */
+export const payrollPaymentFile = pgTable(
+  'payroll_payment_file',
+  {
+    client: tenant(),
+    preparationId: varchar('preparation_id', { length: 36 }).notNull(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    companyCode: varchar('company_code', { length: 4 }).notNull(),
+    fiscalYear: integer('fiscal_year').notNull(),
+    period: integer('period').notNull(),
+    currency: char('currency', { length: 3 }).notNull(),
+    /** The instruction date; not proof of payment. */
+    intendedPaymentDate: date('intended_payment_date', { mode: 'string' }).notNull(),
+    fileReference: varchar('file_reference', { length: 60 }).notNull(),
+    filename: varchar('filename', { length: 120 }).notNull(),
+    rowCount: integer('row_count').notNull(),
+    totalAmount: numeric('total_amount', { precision: 23, scale: 4 }).notNull(),
+    /** The frozen CSV bytes; a re-download returns exactly this. Null when bank data is included (rebuilt from `bankSnapshot`). */
+    body: bytea('body'),
+    checksum: varchar('checksum', { length: 64 }).notNull(),
+    /** Frozen payment rows when bank data is included: clear metadata + the identifier as an encrypted envelope. */
+    bankSnapshot: jsonb('bank_snapshot').$type<PaymentFileBankRow[]>().notNull().default(sql`'[]'::jsonb`),
+    bankDataIncluded: boolean('bank_data_included').notNull().default(false),
+    /** Personnel numbers only, to re-judge employee reach on every download. Never bank details. */
+    beneficiaries: jsonb('beneficiaries').$type<string[]>().notNull(),
+    downloadCount: integer('download_count').notNull().default(0),
+    preparedBy: varchar('prepared_by', { length: 60 }).notNull(),
+    preparedAt: timestamp('prepared_at', { withTimezone: true }).notNull().defaultNow(),
+    lastDownloadedBy: varchar('last_downloaded_by', { length: 60 }),
+    lastDownloadedAt: timestamp('last_downloaded_at', { withTimezone: true }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.preparationId] }),
+    uniqueIndex('payroll_payment_file_run_uq').on(t.client, t.runId),
+    uniqueIndex('payroll_payment_file_reference_uq').on(t.client, t.fileReference),
+    index('payroll_payment_file_run_idx').on(t.client, t.runId),
+    foreignKey({
+      name: 'payroll_payment_file_run_fk',
+      columns: [t.client, t.runId],
+      foreignColumns: [payrollRun.client, payrollRun.runId],
+    }).onDelete('restrict'),
+    check('payroll_payment_file_period_ck', sql`${t.period} between 1 and 16`),
+    check('payroll_payment_file_currency_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+    check('payroll_payment_file_count_ck', sql`${t.rowCount} > 0`),
+    check('payroll_payment_file_amount_ck', sql`${t.totalAmount} > 0`),
+    check('payroll_payment_file_downloads_ck', sql`${t.downloadCount} >= 0`),
+  ],
+);
+
+/**
+ * 9321: employee salary bank details (SAP infotype 0009).
+ *
+ * Account identifiers are stored only as AES-256-GCM envelopes (`accountCiphertext`), bound to tenant +
+ * employee + record id + field — no plaintext column exists. One MAIN account per employee at any one time:
+ * a gist exclusion constraint on the inclusive date range of active main rows forbids overlap atomically. A
+ * change ends the current record and adds a new effective-dated one; history is never overwritten.
+ */
+export const employeeBankDetail = pgTable(
+  'employee_bank_detail',
+  {
+    client: tenant(),
+    bankRecordId: uuid('bank_record_id').notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    beneficiaryName: varchar('beneficiary_name', { length: 160 }).notNull(),
+    bankName: varchar('bank_name', { length: 160 }).notNull(),
+    bankCode: varchar('bank_code', { length: 40 }),
+    /** 'IBAN' or 'ACCOUNT'; the kind of the encrypted identifier (display only, not the value). */
+    accountKind: varchar('account_kind', { length: 8 }).notNull(),
+    accountCiphertext: varchar('account_ciphertext', { length: 5600 }).notNull(),
+    country: char('country', { length: 2 }),
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    validTo: date('valid_to', { mode: 'string' }),
+    isMain: boolean('is_main').notNull().default(true),
+    isActive: boolean('is_active').notNull().default(true),
+    requestKey: varchar('request_key', { length: 64 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.bankRecordId] }),
+    index('employee_bank_detail_employee_idx').on(t.client, t.personnelNumber, t.validFrom),
+    foreignKey({
+      name: 'employee_bank_detail_employee_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+    check('employee_bank_detail_name_ck', sql`length(trim(${t.beneficiaryName})) > 0`),
+    check('employee_bank_detail_bank_ck', sql`length(trim(${t.bankName})) > 0`),
+    check('employee_bank_detail_kind_ck', sql`${t.accountKind} in ('IBAN', 'ACCOUNT')`),
+    check('employee_bank_detail_period_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+  ],
+);
+
+/** 9323: user-attested original instruction outcome for one selected employee in a replacement. */
+export const REISSUE_ATTESTATION_OUTCOMES = ['NOT_UPLOADED', 'BANK_REJECTED', 'CANCELLED_BEFORE_EXECUTION', 'RETURNED'] as const;
+export type ReissueAttestationOutcome = (typeof REISSUE_ATTESTATION_OUTCOMES)[number];
+export const REISSUE_STATUSES = ['DRAFT', 'APPROVED', 'CANCELLED'] as const;
+export type ReissueStatus = (typeof REISSUE_STATUSES)[number];
+
+/**
+ * A controlled replacement of a generic salary payment file (all or selected employees).
+ *
+ * An instruction only: it produces a new CSV, never a recalculation, accounting payment or proof of payment.
+ * A DRAFT is frozen and encrypted; a different authorized approver releases it; only then may it be downloaded.
+ * Original files and their snapshots are never changed.
+ */
+export const payrollPaymentReissue = pgTable(
+  'payroll_payment_reissue',
+  {
+    client: tenant(),
+    reissueId: uuid('reissue_id').notNull(),
+    sourcePreparationId: uuid('source_preparation_id').notNull(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    companyCode: varchar('company_code', { length: 4 }).notNull(),
+    fiscalYear: integer('fiscal_year').notNull(),
+    period: integer('period').notNull(),
+    currency: char('currency', { length: 3 }).notNull(),
+    version: integer('version').notNull(),
+    reissueReference: varchar('reissue_reference', { length: 60 }).notNull(),
+    filename: varchar('filename', { length: 120 }).notNull(),
+    intendedPaymentDate: date('intended_payment_date', { mode: 'string' }).notNull(),
+    selection: varchar('selection', { length: 8 }).notNull(),
+    employeeCount: integer('employee_count').notNull(),
+    totalAmount: numeric('total_amount', { precision: 23, scale: 4 }).notNull(),
+    status: varchar('status', { length: 10 }).notNull().default('DRAFT'),
+    reason: varchar('reason', { length: 200 }).notNull(),
+    /** Frozen replacement rows: clear metadata + each identifier as an encrypted envelope bound to this reissue. */
+    bankSnapshot: jsonb('bank_snapshot').$type<PaymentFileBankRow[]>().notNull().default(sql`'[]'::jsonb`),
+    checksum: varchar('checksum', { length: 64 }).notNull(),
+    requestKey: varchar('request_key', { length: 64 }),
+    requestedBy: varchar('requested_by', { length: 60 }).notNull(),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+    approvedBy: varchar('approved_by', { length: 60 }),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    cancelledBy: varchar('cancelled_by', { length: 60 }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelReason: varchar('cancel_reason', { length: 200 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.reissueId] }),
+    uniqueIndex('payroll_payment_reissue_reference_uq').on(t.client, t.reissueReference),
+    uniqueIndex('payroll_payment_reissue_version_uq').on(t.client, t.runId, t.version),
+    index('payroll_payment_reissue_run_idx').on(t.client, t.runId, t.status),
+    foreignKey({
+      name: 'payroll_payment_reissue_source_fk',
+      columns: [t.client, t.sourcePreparationId],
+      foreignColumns: [payrollPaymentFile.client, payrollPaymentFile.preparationId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'payroll_payment_reissue_run_fk',
+      columns: [t.client, t.runId],
+      foreignColumns: [payrollRun.client, payrollRun.runId],
+    }).onDelete('restrict'),
+    check('payroll_payment_reissue_status_ck', sql`${t.status} in ('DRAFT', 'APPROVED', 'CANCELLED')`),
+    check('payroll_payment_reissue_selection_ck', sql`${t.selection} in ('ALL', 'SELECTED')`),
+    check('payroll_payment_reissue_count_ck', sql`${t.employeeCount} > 0`),
+    check('payroll_payment_reissue_amount_ck', sql`${t.totalAmount} > 0`),
+  ],
+);
+
+/** One selected employee in a replacement: frozen amount, attested outcome, and the attempt it replaces. */
+export const payrollPaymentReissueLine = pgTable(
+  'payroll_payment_reissue_line',
+  {
+    client: tenant(),
+    reissueId: uuid('reissue_id').notNull(),
+    lineNo: integer('line_no').notNull(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+    currency: char('currency', { length: 3 }).notNull(),
+    predecessorKind: varchar('predecessor_kind', { length: 8 }).notNull(),
+    predecessorId: varchar('predecessor_id', { length: 36 }).notNull(),
+    attestationOutcome: varchar('attestation_outcome', { length: 32 }).notNull(),
+    attestationReason: varchar('attestation_reason', { length: 200 }).notNull(),
+    verificationDate: date('verification_date', { mode: 'string' }).notNull(),
+    evidenceReference: varchar('evidence_reference', { length: 200 }).notNull(),
+    confirmedNoSubmission: boolean('confirmed_no_submission').notNull().default(false),
+    state: varchar('state', { length: 10 }).notNull().default('DRAFT'),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.reissueId, t.lineNo] }),
+    index('payroll_payment_reissue_line_reissue_idx').on(t.client, t.reissueId),
+    foreignKey({
+      name: 'payroll_payment_reissue_line_reissue_fk',
+      columns: [t.client, t.reissueId],
+      foreignColumns: [payrollPaymentReissue.client, payrollPaymentReissue.reissueId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'payroll_payment_reissue_line_employee_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+    check('payroll_payment_reissue_line_kind_ck', sql`${t.predecessorKind} in ('FILE', 'REISSUE')`),
+    check('payroll_payment_reissue_line_state_ck', sql`${t.state} in ('DRAFT', 'APPROVED', 'CANCELLED')`),
+    check('payroll_payment_reissue_line_amount_ck', sql`${t.amount} > 0`),
   ],
 );

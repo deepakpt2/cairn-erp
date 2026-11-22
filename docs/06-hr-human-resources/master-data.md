@@ -11,6 +11,7 @@ The records HR depends on: employees, their assignments, the organisation, autho
 - [5. Pay structures and pay components](#5-pay-structures-and-pay-components)
 - [6. Time types and leave policies](#6-time-types-and-leave-policies)
 - [7. Employee record types](#7-employee-record-types)
+- [8. Salary bank details](#8-salary-bank-details)
 - [Checklist: ready to run payroll?](#checklist-ready-to-run-payroll)
 
 > [!IMPORTANT]
@@ -137,6 +138,26 @@ Delegation is an *agreement*, not a copy: the delegate's authority is derived fr
 3. **Write a record of this type →** takes you to the employee.
 
 A type is **retired, never deleted**, so no record of it can be lost. A type with no fields cannot be used ("No field is defined, so nothing can be recorded with this type").
+
+## 8. Salary bank details
+
+**HR – People → Employees** (`/people/employees`) → open an employee → **Salary bank details**. These accounts feed the [generic salary payment file](daily-transactions.md#36-download-the-generic-salary-payment-file).
+
+| Field | Meaning | Required |
+|---|---|---|
+| **Beneficiary name** | As the bank should read it | **Yes** |
+| **Bank name** | The bank's name | **Yes** |
+| **Bank / routing code** | Sort/routing code, if the bank uses one | Optional |
+| **Identifier kind** | **IBAN** or **Account number** | **Yes** |
+| **IBAN / Account number** | The account identifier (free text; validated on the server) | **Yes** |
+| **Country** | Two letters, optional | Optional |
+| **Valid from / Valid to** | Effective dates, inclusive; leave **Valid to** blank for open-ended | **From** yes |
+
+- **One main account at a time.** Two overlapping active accounts are refused ("already has an active main account covering part of …"), atomically, including two people adding one at once. A change is a **new record**: **End** the current one on the day before, then add the new one. History is kept, so past payroll files can still be explained. A future-dated change is allowed.
+- **Encrypted and masked.** The account number or IBAN is stored encrypted and shown as `••••1234` (last four only). **Reveal** shows the full value to a holder of `PEOPLE.BANK.REVEAL` and is recorded in the audit log (who, when, which record, purpose — never the number).
+- **Who can do what.** `PEOPLE.BANK.VIEW` reads masked, `PEOPLE.BANK.MAINTAIN` adds/ends records, `PEOPLE.BANK.REVEAL` reveals the full value. **None is granted to a role by default** — ask an administrator. Every action re-checks your live session, the capability and the employee's company/plant reach.
+- **Key provisioning.** The account identifiers are encrypted with the deployment's **bank-data keyring** (`CAIRN_BANK_DATA_KEYRING_JSON`). Without it, adding, viewing or using bank data in a file **fails closed** — ask a deployment administrator to provision the keyring.
+- **No implied bank format.** The account feeds a **generic CSV**, not a bank-approved file: you still review, complete and convert it to your bank's format before uploading.
 
 ## Checklist: ready to run payroll?
 

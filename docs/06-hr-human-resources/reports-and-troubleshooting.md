@@ -97,6 +97,10 @@ On `/people/payroll-runs`, **Open the results of this run** goes straight to the
 | "You entered this; someone else must approve it." | Four-eyes rule | Another user approves the adjustment |
 | Posting refused: period closed | Posting period not open | [Open it](../05-fico-finance-controlling/master-data.md#7-document-types-number-ranges-and-posting-periods) |
 | Pay salaries refused: determination changed | Net-pay account differs from the posted document | Restore the determination, or have finance review |
+| Payment file refused: "only … a posted run" | The run is not posted | Release and post the run first |
+| Payment file refused: "a payment file … already exists" | A prepared batch stands for the run | An administrator resolves the existing batch and any bank submission; the file is not silently reissued |
+| Payment file refused: "has been reversed" | The payroll posting or salary payment was reversed | No automatic reissue; an administrator resolves the reversal and any bank submission first |
+| Re-download refused: "downloaded before" | Repeat download needs the duplicate-upload warning confirmed | Check your bank dashboard first, then confirm the warning |
 | "No leave policy governs this request: the legacy rules apply" | Employee has no policy | Informational; assign a policy for ledger-based leave |
 | "A retired position takes no new assignment" | Position retired | Use an active one |
 | "Code … cannot be reused once defined" | Unit code taken | Choose a new code |

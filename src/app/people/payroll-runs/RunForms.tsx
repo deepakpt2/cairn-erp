@@ -261,8 +261,126 @@ export function PaySalaryForm({
         One PY document: a debit per employee on the net pay payable, one credit to the bank. The payroll document&apos;s
         payable is cleared. A run is paid once.
       </p>
+      <p className="text-xs text-ink-soft">
+        Paying here is <strong>accounting</strong>: it books the bank side in the ledger. It is not proof that a bank
+        transfer reached the employee — the bank transfer and its confirmation happen outside the ERP.
+      </p>
       <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending || banks.length === 0}>Pay</button>
       <Status state={state} />
     </form>
+  );
+}
+
+/**
+ * Prepare and download the generic salary payment CSV for a POSTED run. The file is a working intermediate —
+ * not a bank format — and the panel says so plainly, and that it must be converted and uploaded by the user.
+ * A repeat download asks for explicit confirmation of the duplicate-upload risk.
+ */
+export function PaymentFilePanel({
+  runId,
+  prepared,
+  defaultDate,
+}: {
+  runId: string;
+  prepared: {
+    preparationId: string;
+    fileReference: string;
+    filename: string;
+    rowCount: number;
+    totalAmount: string;
+    currency: string;
+    intendedPaymentDate: string;
+    preparedBy: string;
+    preparedAt: string;
+    downloadCount: number;
+    lastDownloadedAt: string | null;
+    downloadPath: string;
+  } | null;
+  defaultDate: string;
+}) {
+  const router = useRouter();
+  const [state, setState] = useState<{ ok: boolean; message?: string; remedy?: string; downloadPath?: string } | null>(null);
+  const [pending, setPending] = useState(false);
+  const [reuseConfirmed, setReuseConfirmed] = useState(false);
+  const prepare = async () => {
+    setPending(true);
+    try {
+      const form = new FormData();
+      form.set('runId', runId);
+      form.set('intendedPaymentDate', prepared?.intendedPaymentDate ?? defaultDate);
+      const response = await fetch(window.location.pathname.replace(/\/$/, '') + '/payment-file', { method: 'POST', body: form });
+      const text = await response.text();
+      if (!response.ok) {
+        setState({ ok: false, message: text });
+      } else {
+        setState({ ok: true, message: 'Payment file prepared. Download it, then convert it to your bank’s format.' });
+        router.refresh();
+      }
+    } catch {
+      setState({ ok: false, message: 'The payment file could not be prepared. Try again, or contact an administrator.' });
+    } finally {
+      setPending(false);
+    }
+  };
+  const downloadPath = prepared
+    ? `/people/payroll-runs/payment-file?run=${encodeURIComponent(runId)}&confirm=${reuseConfirmed ? 'yes' : 'no'}`
+    : null;
+  return (
+    <section className="panel space-y-3 p-4" aria-label="Generic salary payment file">
+      <h2 className="panel-title">Generic salary payment file</h2>
+      <p role="note" className="rounded border border-signal-warn/40 bg-signal-warn/10 p-3 text-xs text-ink">
+        You must review, complete and convert this file to your bank’s required format before uploading it. The ERP does
+        not send it to the bank. No bank or country is asserted to accept this CSV.
+      </p>
+      <p className="text-xs text-ink-soft">
+        This is an intermediate CSV working file: one row per employee with positive net pay from the frozen results.
+        Beneficiary bank name, bank code, account and IBAN are exported <strong>blank</strong> — the ERP holds no
+        employee bank master — so complete and validate them in your bank’s file first. Preparing and downloading this
+        file posts nothing, pays no one and marks no salary paid.
+      </p>
+      {!prepared ? (
+        <button type="button" className="btn btn-default min-h-11 sm:min-h-8" onClick={prepare} disabled={pending}>
+          Prepare payment file
+        </button>
+      ) : (
+        <div className="space-y-2 text-sm">
+          <p>
+            Prepared <span className="code">{prepared.fileReference}</span> for <strong>{prepared.rowCount}</strong>{' '}
+            employee{prepared.rowCount === 1 ? '' : 's'}, total <span className="code">{prepared.totalAmount} {prepared.currency}</span>,
+            intended payment date <span className="code">{prepared.intendedPaymentDate}</span> (an instruction date, not
+            proof of payment). Frozen by {prepared.preparedBy}.
+          </p>
+          {prepared.downloadCount > 0 && (
+            <p role="alert" className="text-xs text-signal-error">
+              This file was downloaded {prepared.downloadCount} time{prepared.downloadCount === 1 ? '' : 's'}
+              {prepared.lastDownloadedAt ? ` (last ${prepared.lastDownloadedAt.slice(0, 16).replace('T', ' ')} UTC)` : ''}.
+              Uploading a second copy may pay employees twice. The ERP cannot prevent a second upload to an external
+              bank — check your bank dashboard first.
+            </p>
+          )}
+          {prepared.downloadCount > 0 && (
+            <label className="flex items-start gap-2 text-xs">
+              <input type="checkbox" className="mt-1" checked={reuseConfirmed} onChange={(e) => setReuseConfirmed(e.target.checked)} />
+              <span>I confirm the previous upload did not go through, and I accept the duplicate-upload risk.</span>
+            </label>
+          )}
+          <a
+            href={downloadPath ?? '#'}
+            className="btn btn-default inline-block min-h-11 sm:min-h-8"
+            onClick={(e) => {
+              if (prepared.downloadCount > 0 && !reuseConfirmed) e.preventDefault();
+            }}
+            aria-disabled={prepared.downloadCount > 0 && !reuseConfirmed}
+          >
+            Download CSV
+          </a>
+        </div>
+      )}
+      {state?.message && (
+        <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-signal-error'}`}>
+          {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+        </p>
+      )}
+    </section>
   );
 }

@@ -23,6 +23,14 @@ import {
 } from '@/modules/people/payroll-run';
 import { PAYROLL_POST_CAPABILITY, getPayrollPosting } from '@/modules/people/payroll-posting';
 import { SALARY_PAYMENT_CAPABILITY, getSalaryPayment } from '@/modules/people/salary-payment';
+import { PAYMENT_FILE_CAPABILITY, getPaymentFile } from '@/modules/people/payroll-payment-file';
+import {
+  FILE_HISTORICAL_CAPABILITY,
+  REISSUE_APPROVE_CAPABILITY,
+  REISSUE_DOWNLOAD_CAPABILITY,
+  REISSUE_REQUEST_CAPABILITY,
+  listReissues,
+} from '@/modules/people/payroll-payment-reissue';
 import { listBankChoices } from '@/modules/finance/payment-run';
 
 import { listPayrollOperations } from '@/modules/people/payroll-background';
@@ -35,7 +43,8 @@ import {
 } from '@/modules/people/payroll-components';
 import { PayrollStructureError } from '@/modules/people/payroll-structure';
 import { AdjustmentRowActions, EnterAdjustmentForm } from './Adjustments';
-import { OperationPanel, PaySalaryForm, ProposeRunForm, RunActions } from './RunForms';
+import { OperationPanel, PaymentFilePanel, PaySalaryForm, ProposeRunForm, RunActions } from './RunForms';
+import { PaymentReissuePanel } from './PaymentReissue';
 import { LinkButton, Page } from '@/ui/kit';
 
 export const dynamic = 'force-dynamic';
@@ -70,7 +79,18 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
   const mayPost = can(session, PAYROLL_POST_CAPABILITY);
   const mayDisplayJournal = can(session, 'FIN.JOURNAL.DISPLAY');
   const mayPay = can(session, SALARY_PAYMENT_CAPABILITY);
+  const mayExportFile = can(session, PAYMENT_FILE_CAPABILITY);
   const payment = selected && selected.status === 'POSTED' ? await getSalaryPayment(client, selected.runId, access) : null;
+  const paymentFile = selected && selected.status === 'POSTED' && mayExportFile
+    ? await getPaymentFile(client, selected.runId, access).catch(() => null)
+    : null;
+  const mayRequestReissue = can(session, REISSUE_REQUEST_CAPABILITY);
+  const mayApproveReissue = can(session, REISSUE_APPROVE_CAPABILITY);
+  const mayDownloadReissue = can(session, REISSUE_DOWNLOAD_CAPABILITY);
+  const mayHistorical = can(session, FILE_HISTORICAL_CAPABILITY);
+  const reissues = paymentFile && (mayRequestReissue || mayApproveReissue || mayDownloadReissue || mayHistorical)
+    ? await listReissues(client, selected!.runId, access).catch(() => [])
+    : [];
   const banks = selected && selected.status === 'POSTED' && !payment && mayPay
     ? (await listBankChoices(client)).filter((b) => b.companyCode === selected.companyCode)
     : [];
@@ -183,6 +203,7 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
                       ? <Link href={`/finance/journal/document?document=${payment.documentNumber}`} className="code underline">{payment.displayNumber}</Link>
                       : <span className="code">{payment.displayNumber}</span>}
                     {' '}by {payment.paidBy}.
+                    <span className="text-ink-soft"> This is the accounting payment: the bank side is booked, but the ERP does not confirm that a bank transfer reached each employee — the transfer and its confirmation happen outside the ERP.</span>
                     {payment.reversalDocumentNumber ? ` Reversed by document ${payment.reversalDocumentNumber}; the run stays paid — a correction is a new document.` : ''}
                   </p>
                 )}
@@ -223,6 +244,24 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
               )}
               {selected.status === 'POSTED' && !payment && !mayPay && (
                 <p className="text-sm text-ink-soft">Paying this run needs {SALARY_PAYMENT_CAPABILITY} and FIN.JOURNAL.POST.</p>
+              )}
+              {selected.status === 'POSTED' && mayExportFile && (
+                <PaymentFilePanel runId={selected.runId} prepared={paymentFile} defaultDate={payment?.paymentDate ?? nextPeriodStart} />
+              )}
+              {paymentFile && (mayRequestReissue || mayApproveReissue || mayDownloadReissue || mayHistorical) && (
+                <PaymentReissuePanel
+                  preparationId={paymentFile.preparationId}
+                  reissues={reissues}
+                  canRequest={mayRequestReissue}
+                  canApprove={mayApproveReissue}
+                  canDownload={mayDownloadReissue}
+                  canHistorical={mayHistorical}
+                  currentUsername={session.user.username}
+                  defaultDate={payment?.paymentDate ?? nextPeriodStart}
+                />
+              )}
+              {selected.status === 'POSTED' && !mayExportFile && (
+                <p className="text-sm text-ink-soft">Downloading the generic salary payment file needs {PAYMENT_FILE_CAPABILITY}.</p>
               )}
             </>
           )}

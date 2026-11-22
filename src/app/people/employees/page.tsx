@@ -20,6 +20,9 @@ import { PayrollRunError } from '@/modules/people/payroll-run';
 import Employees from './Employees';
 import { AssignStructureForm, EndAssignmentForm } from './PayStructure';
 import { AddComponentForm, EntryActions } from './RecurringComponents';
+import { AddBankForm, EndBankForm, RevealBank } from './EmployeeBank';
+import { BANK_MAINTAIN_CAPABILITY, BANK_REVEAL_CAPABILITY, BANK_VIEW_CAPABILITY, listEmployeeBank } from '@/modules/people/employee-bank';
+import { loadBankDataKeyring } from '@/platform/security/bank-data-keyring';
 import {
   BASIS_LABEL,
   COMPANY_RESPONSIBILITY_NOTICE,
@@ -117,7 +120,90 @@ export default async function PeopleEmployeesPage({ searchParams }: {
           access={access}
         />
       )}
+      {selected && (
+        <EmployeeBankSection
+          client={client}
+          personnelNumber={personnelNumber}
+          canView={can(session, BANK_VIEW_CAPABILITY) || can(session, BANK_REVEAL_CAPABILITY)}
+          canMaintain={can(session, BANK_MAINTAIN_CAPABILITY)}
+          canReveal={can(session, BANK_REVEAL_CAPABILITY)}
+          access={access}
+        />
+      )}
     </Page>
+  );
+}
+
+/**
+ * Salary bank details of this employee (infotype 0009): effective-dated records, one main account at a time,
+ * masked by default. Pay data + sensitive identifiers: shown only to holders of a bank capability, and every
+ * service call re-judges the live session, capability and employee reach. Reveal is separately audited.
+ */
+async function EmployeeBankSection({
+  client,
+  personnelNumber,
+  canView,
+  canMaintain,
+  canReveal,
+  access,
+}: {
+  client: string;
+  personnelNumber: string;
+  canView: boolean;
+  canMaintain: boolean;
+  canReveal: boolean;
+  access: { authorization: { userId: string; sessionId: string } };
+}) {
+  if (!canView) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  let records;
+  try {
+    records = await listEmployeeBank(client, personnelNumber, access, loadBankDataKeyring());
+  } catch (error) {
+    if (!(error instanceof PayrollRunError) && !(error instanceof Error)) throw error;
+    return (
+      <section className="panel p-4" aria-label="Salary bank details">
+        <h2 className="panel-title">Salary bank details</h2>
+        <p role="status" className="text-sm text-ink-soft">{error.message}{'remedy' in error && error.remedy ? ` ${error.remedy}` : ''}</p>
+      </section>
+    );
+  }
+  return (
+    <section className="panel space-y-3 p-4" aria-label="Salary bank details">
+      <h2 className="panel-title">Salary bank details</h2>
+      <p className="text-xs text-ink-soft">
+        Effective-dated bank accounts used for the generic salary payment file. One main account at a time; an account number
+        or IBAN is stored encrypted and shown masked. The generic CSV is not a bank format — you must convert and upload it
+        yourself.
+      </p>
+      {records.length === 0 ? (
+        <p className="text-sm text-ink-soft">No bank account stands for this employee. A payment file cannot include them until one is added.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="grid-table">
+            <thead><tr><th>Beneficiary</th><th>Bank</th><th>Account</th><th>Identifier</th><th>From</th><th>To</th><th>Status</th><th>Change</th></tr></thead>
+            <tbody>
+              {records.map((r) => (
+                <tr key={r.bankRecordId}>
+                  <td className="text-xs">{r.beneficiaryName}</td>
+                  <td className="text-xs">{r.bankName}{r.bankCode ? <div className="text-ink-soft code">{r.bankCode}</div> : null}</td>
+                  <td className="code">{r.maskedAccount}</td>
+                  <td className="text-xs">{r.accountKind === 'IBAN' ? 'IBAN' : 'Account no.'}{r.country ? ` · ${r.country}` : ''}</td>
+                  <td className="text-xs">{r.validFrom}</td>
+                  <td className="text-xs">{r.validTo ?? 'open'}</td>
+                  <td className="text-xs">{r.isActive ? 'active' : 'ended'}</td>
+                  <td className="space-y-2">
+                    {canReveal ? <RevealBank bankRecordId={r.bankRecordId} /> : null}
+                    {canMaintain && r.isActive ? <EndBankForm bankRecordId={r.bankRecordId} defaultEnd={today} /> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {canMaintain ? <AddBankForm personnelNumber={personnelNumber} /> : <p className="text-xs text-ink-soft">Adding or ending an account needs {BANK_MAINTAIN_CAPABILITY}.</p>}
+    </section>
   );
 }
 

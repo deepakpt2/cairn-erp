@@ -440,6 +440,17 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   // Migration 9286. Exact-grant-only and granted to no role, as PROD.ORDER.COST.DISPLAY is.
   { code: 'CO.ORDER.COST.DISPLAY', module: 'CO', action: 'DISPLAY', posting: false, description: 'Read the actual journal line items posted to one internal order (KOB1). Writes nothing' },
   { code: 'PEOPLE.PAYROLL.PAYMENT', module: 'PEOPLE', action: 'POST', posting: false, description: 'Pay the net pay of a posted payroll run from a house bank account' },
+  // Migration 9320. Granted to no role: the generic payment CSV is an intermediate working file for manual bank upload.
+  { code: 'PEOPLE.PAYROLL.FILE.EXPORT', module: 'PEOPLE', action: 'EXPORT', posting: false, description: 'Prepare and download the generic salary payment CSV for a posted payroll run (a working file for manual bank upload; grants no posting or payment)' },
+  // Migration 9321. Granted to no role: employee salary bank data is sensitive and reveal is separately audited.
+  { code: 'PEOPLE.BANK.VIEW', module: 'PEOPLE', action: 'DISPLAY', posting: false, description: 'View an employee salary bank record masked (last four characters only)' },
+  { code: 'PEOPLE.BANK.MAINTAIN', module: 'PEOPLE', action: 'MAINTAIN', posting: false, description: 'Create and end effective-dated employee salary bank records (encrypted account identifiers)' },
+  { code: 'PEOPLE.BANK.REVEAL', module: 'PEOPLE', action: 'DISPLAY', posting: false, description: 'Reveal the full account number or IBAN of an employee bank record, audited' },
+  // Migration 9323. Granted to no role: the controlled replacement of a salary payment file (all or selected employees).
+  { code: 'PEOPLE.PAYROLL.REISSUE.REQUEST', module: 'PEOPLE', action: 'CREATE', posting: false, description: 'Request a controlled replacement of a salary payment file (all or selected employees) with a user-attested original outcome' },
+  { code: 'PEOPLE.PAYROLL.REISSUE.APPROVE', module: 'PEOPLE', action: 'APPROVE', posting: false, description: 'Approve a requested salary payment-file replacement; must be a different person from the requester' },
+  { code: 'PEOPLE.PAYROLL.REISSUE.DOWNLOAD', module: 'PEOPLE', action: 'EXPORT', posting: false, description: 'Download an approved replacement salary payment CSV (an instruction for manual bank upload, not proof of payment)' },
+  { code: 'PEOPLE.PAYROLL.FILE.HISTORICAL', module: 'PEOPLE', action: 'EXPORT', posting: false, description: 'Download a superseded salary payment file as protected historical evidence, clearly marked do-not-upload' },
   { code: 'PEOPLE.PAYROLL.STRUCTURE.DEFINE', module: 'PEOPLE', action: 'DEFINE', posting: false, description: 'Define salary structures and their components, and assign employees to them' },
   // Migration 9318. Granted to no role: company-configured recurring components and one-time adjustments are pay data.
   { code: 'PEOPLE.PAYROLL.COMPONENT.MAINTAIN', module: 'PEOPLE', action: 'MAINTAIN', posting: false, description: 'Maintain employee-specific recurring payroll components (additions, deductions, employer contributions, replacements of a structure rule) on the employee screen' },

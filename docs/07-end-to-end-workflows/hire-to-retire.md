@@ -73,6 +73,7 @@ For each period: [Propose a run](../06-hr-human-resources/daily-transactions.md#
 > - **Proposal and release post nothing.** Released results are frozen; corrections are one-time adjustments in a later period, approved by someone else.
 > - **Post to G/L:** one `PR` document dated the last day of the period. **Dr** earnings and employer contributions on the employee's cost centre / **Cr** deductions, contribution payables and **net pay payable**.
 > - **Pay salaries:** a `PY` document: **Dr** net pay payable per employee / **Cr** the house bank account. It pays exactly what was posted.
+> - **Generic salary payment file:** a CSV working file (not a bank format) downloaded from a posted run; you convert and upload it yourself. The ERP does not send it to the bank, and creating/downloading it posts nothing and marks no salary paid.
 > - No tax, social insurance or country leave law is built in.
 
 ## Step 6 — Changes during employment

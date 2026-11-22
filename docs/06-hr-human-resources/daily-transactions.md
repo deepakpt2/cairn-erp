@@ -115,8 +115,38 @@ After posting, **Pay salaries**: **Payment date**, **Pay from** (the house bank 
 
 > [!NOTE]
 > **What Happens in the Background?** Type `PY`: **one debit per employee** with positive net pay on the net-pay payable account, **one credit** to the house bank's G/L account. The amount is reconciled against the posted document's uncleared net-pay credit first, so you pay **what was posted**, not what is calculated; a determination changed after posting is refused rather than paid around. The PR document's net-pay credit and the PY debits are stamped cleared together. Employees are not business partners, so no line carries a partner.
+>
+> Paying here is **accounting**: it books the bank side in the ledger. It is **not proof** that a bank transfer reached the employee — the bank transfer, its acceptance and its confirmation happen outside the ERP and are reconciled manually.
 
-### 3.6 Cancel a run
+### 3.6 Download the generic salary payment file
+
+Under **Generic salary payment file** on a **POSTED** run, click **Prepare payment file**, then **Download CSV**. This produces a **generic CSV working file** — one row per employee with positive net pay, from the frozen result, at the run currency's decimals. It is **not a bank format** and the ERP **does not send it anywhere**.
+
+> [!IMPORTANT]
+> **You must review, complete and convert this file to your bank's required format before uploading it. The ERP does not send it to the bank.** No bank or country is asserted to accept this CSV. Creating, downloading, converting and uploading this file are separate steps you control; bank acceptance and settlement are confirmed in your bank, not here.
+
+- **Columns:** `file_reference, run_reference, personnel_number, beneficiary_name, amount, currency, intended_payment_date, beneficiary_bank_name, beneficiary_bank_code, beneficiary_account, beneficiary_iban, remittance_information`. UTF-8, CRLF line endings, RFC 4180 quoting.
+- **Bank columns:** the CSV carries each employee's **effective main account** — beneficiary name, bank name, bank/routing code and the account number or IBAN — selected **as of the intended payment date** (not today), from the bank details on the employee screen. Leading zeroes and exact identifiers are preserved; a value that looks like a spreadsheet formula is neutralised.
+- **Missing or ambiguous details:** if any payable employee has no valid main account on that date, or an overlapping record, preparation is **refused with an employee-level list** — no partial file and no guessing. Add the account on the employee screen (see [Master data §8](master-data.md#8-salary-bank-details)) and prepare again.
+- **Intended payment date** is an **instruction date**, not proof of payment. If the run was already paid, its payment date is used; otherwise enter the date you intend.
+- **One file per run.** A retry returns the same frozen file. The file is **frozen and encrypted**: a later change to an employee's bank details or name never alters a re-download. A **re-download** asks you to confirm the duplicate-upload warning first, because a second external upload can pay employees twice and the ERP cannot see your bank. A file prepared before bank integration (blank bank columns) is kept exactly as it was; a corrected or reissued file is not created by this screen.
+- **Access:** preparing/downloading needs `PEOPLE.PAYROLL.FILE.EXPORT`, and reading the bank details it carries needs the bank capabilities (`PEOPLE.BANK.VIEW`/`REVEAL`) — all granted to no role by default. Preparing posts nothing, clears nothing and marks no salary paid. A reversed payroll posting or reversed salary payment refuses both preparing and downloading; nothing is reissued automatically.
+
+### 3.7 Replacement payment file (reissue)
+
+If the original file did not reach the bank as intended, a **replacement payment file** for **all or selected employees** can be requested under **Replacement payment file** on a POSTED run that already has a prepared file. This is a new generic CSV instruction — **not** a payroll recalculation and **not** an accounting payment.
+
+1. **Preview**: choose **All employees of the file** or **Only selected employees**, an **Intended payment date** and a **Reason**. Employees with no effective bank account on that date, or outside your scope, are listed and are **not** included — _"All"_ never silently drops anyone: resolve them first, or select employees explicitly.
+2. **Attest each selected employee's original outcome**. This is **your attestation of the actual instruction outcome**, not a bank-verified status: **not uploaded**, **bank rejected**, **cancelled before execution**, or **confirmed returned** — with a **reason**, a **verification date** and a **bank/external reference** or explanation. _"Not uploaded"_ requires an explicit confirmation that **no copy was submitted**. Unknown, pending, accepted/paid, or merely "cancellation requested" is refused. **The ERP cannot revoke a file that was uploaded.**
+3. **Create replacement draft.** A **different authorized approver** must **Approve** it; approval re-checks the frozen snapshot and eligibility. Until approved, it cannot be downloaded.
+4. **Download** the approved replacement. It carries only the selected employees' **original frozen net amounts and currency** (never recalculated) and their **effective bank details** as of the new date. Re-downloading gives identical bytes — control every copy to avoid paying twice.
+
+- **Safety and history.** The original file and its snapshot are never changed. Each replacement is a new version, linked to its source and to the per-employee attempt it replaces, so repeated selected reissues stay traceable. Employees not selected keep their own unchanged status. A file whose instructions are superseded is **blocked from ordinary download** — it would be dangerous to upload again — but stays readable as protected **historical evidence** (marked do-not-upload) for holders of `PEOPLE.PAYROLL.FILE.HISTORICAL`.
+- **One draft per employee at a time.** A second draft for the same employee is refused; approve or cancel the first. A draft can be **cancelled** with a reason before approval; approved snapshots are immutable.
+- **Accounting is separate.** A replacement creates instructions only. It does **not** post, reverse or reopen the payroll posting or salary payment; if the original accounting and the real bank outcome differ, finance resolves that manually.
+- **Access** (granted to no role by default): `PEOPLE.PAYROLL.REISSUE.REQUEST`, `.APPROVE` (a different person), `.DOWNLOAD`, and `PEOPLE.PAYROLL.FILE.HISTORICAL`. Every action re-checks the live session, your Company Code/Plant reach and the employee scope.
+
+### 3.8 Cancel a run
 
 Before posting, use **Cancel run** with a **Reason for cancelling**; this frees the period for a new proposal.
 

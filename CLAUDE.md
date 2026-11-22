@@ -96,3 +96,44 @@ Keep this split even for small features. When a new module/feature doc is needed
 - **No sensitive internals.** G/L accounts, cost receivers and bank details are excluded. The page has no script, image, font or external resource; the route is `private, no-store` with a `default-src 'none'` CSP. It is not cached and not linked publicly.
 - **Not a payment.** The page says the payslip is a payroll calculation, not evidence a bank payment succeeded, and makes no statutory-compliance claim.
 - **No new screen or PDF library.** Browser Print → Save as PDF is the supported workflow. `pdf-lib` is not used for payslips, and bulk generation / email / employee self-service are out of scope.
+
+## Generic salary payment file (people / payroll)
+
+`/people/payroll-runs` has a **Generic salary payment file** panel on a POSTED run. It prepares and downloads a **generic CSV working file** the user converts and uploads to their bank manually. It is **not a bank format**, the ERP never sends it, and no bank/country is asserted to accept it. Service: `src/modules/people/payroll-payment-file.ts` (migration `9320`, table `payroll_payment_file`); route: `src/app/people/payroll-runs/payment-file/route.ts` (`POST` prepare, `GET` download).
+
+- **POSTED only, frozen results.** One row per positive net pay, exact at `currency.decimal_places` (no floating point). Zero net dropped; negative net, no payable rows and a count/total mismatch against a salary payment refuse the file.
+- **One batch per run.** Unique `(client, run_id)`; `POST` is idempotent under a run advisory lock (a concurrent/retry call returns the same snapshot). A different intended date on an existing batch is refused (`FILE_EXISTS`), never rewritten. The CSV body is stored byte-identically, so a re-download ignores later master-data changes.
+- **Blank bank columns.** No authorised employee bank master exists, so `beneficiary_bank_name/bank_code/account/iban` are exported empty; the user completes them in the bank's file. No employee is dropped for missing details.
+- **Authority, fail closed.** Capability `PEOPLE.PAYROLL.FILE.EXPORT` (registered in 9320 + `scripts/seed.ts`, granted to no role) is judged with the live session, the run's Company Code and **every** included employee's reach in the service transaction. An unreachable run answers like a missing one (`FILE_UNAVAILABLE`, 404); never return a partial file.
+- **Duplicate-upload guard.** Every download after the first needs `confirm=yes` (`FILE_REUSE`, 409): a second external upload can pay twice and the ERP cannot see the bank. It is not a reissue workflow — a wrong date/data is resolved by an administrator.
+- **Reversal is terminal here.** A reversed payroll posting or salary payment refuses prepare and download (`RUN_REVERSED`/`PAYMENT_REVERSED`); nothing is auto-reissued.
+- **Separation of concerns.** Preparing/downloading posts nothing, clears nothing and marks no salary paid. The `PY` salary payment is accounting only — not proof a transfer reached an employee. Bank acceptance, settlement and reconciliation are external/manual.
+- **Privacy.** `private, no-store`; audit logs who/when/file reference/run/count/total only — never the CSV, account fields or salary line items. CSV cells are RFC 4180 quoted and formula-like leads (`= + - @`) are prefixed with an apostrophe.
+
+## Employee salary bank details (people, infotype 0009)
+
+`/people/employees` (open an employee) has a **Salary bank details** section, and the generic payment CSV carries it. Service: `src/modules/people/employee-bank.ts` (migration `9321`, table `employee_bank_detail`); actions: `src/app/people/employees/bank-actions.ts`; UI: `EmployeeBank.tsx`.
+
+- **Effective-dated, one main account at a time.** A gist exclusion constraint forbids two active main rows whose inclusive dates overlap — atomic, including concurrent writers (a per-employee advisory lock is the pre-check). A change is a new record: end the current one, add a new one; history is never overwritten. Future-dated changes are allowed.
+- **Encrypted only.** The account number/IBAN is stored as an AES-256-GCM envelope (`cbd1…`) from the bank-data keyring, authenticated to tenant + employee + record id + field. No plaintext column, change-log value, audit value, log line or URL. An unavailable keyring fails closed.
+- **Three least-privilege capabilities, granted to no role:** `PEOPLE.BANK.VIEW` (masked, `••••1234`), `PEOPLE.BANK.MAINTAIN` (add/end), `PEOPLE.BANK.REVEAL` (full value, audited). Every call re-judges the live session, capability and employee company/plant reach via `ServiceAuthorityContext`; bank records answer like unknown ones out of reach.
+- **Reveal audit:** actor, action, employee/record reference, purpose and timestamp — never the account number.
+- **Not a bank format.** The records only populate the generic CSV; the conversion/upload warning still applies, and reveal/creation does not post or pay.
+
+### Wiring into the CSV (`payroll-payment-file.ts`, migration `9322`)
+
+- At preparation, the effective main account is selected **as of the intended payment date** (`accountAsOf`), not today. Missing or ambiguous details refuse with an employee-level list — no partial file, no guess.
+- The frozen rows and the account identifier are snapshotted in `payroll_payment_file.bank_snapshot`: clear metadata + the identifier as an AES-256-GCM envelope bound to tenant + employee + **file id**. `body` is NULL for such a file; the CSV is rebuilt deterministically from the snapshot at download, and an unavailable keyring fails the download closed. A re-download after later master-data changes reproduces the same file.
+- A **legacy** file (pre-9322: plaintext `body`, `bank_data_included = false`, empty snapshot) downloads byte-for-byte and is never silently changed or regenerated — resolving it is a controlled process, not this screen.
+
+## Controlled salary-file reissue (people / payroll, migration 9323)
+
+`PaymentReissuePanel` on `/people/payroll-runs` (when a prepared file exists) drives the replacement workflow; service `src/modules/people/payroll-payment-reissue.ts`; route `src/app/people/payroll-runs/payment-file/reissue/route.ts` (`POST` preview/request/approve/cancel, `GET` download/historical). Tables `payroll_payment_reissue` + `payroll_payment_reissue_line`.
+
+- **Attestation, not bank truth.** Each selected employee needs a user-attested original outcome (`NOT_UPLOADED`, `BANK_REJECTED`, `CANCELLED_BEFORE_EXECUTION`, `RETURNED`) + reason + verification date + evidence reference; `NOT_UPLOADED` also needs `confirmedNoSubmission`. Unknown/pending/paid/“cancellation requested” is refused. The ERP cannot revoke an uploaded file.
+- **All-or-selected, frozen amounts only.** `selection` is `ALL` or `SELECTED`; every selected employee must be in the source file. The replacement reuses each employee's **original frozen net amount/currency** from the source snapshot (never recalculated, never editable) and re-selects bank details **as of the replacement intended date** (`accountAsOf`). Missing/ambiguous/out-of-reach refuse the whole request (no partial file).
+- **Four eyes.** `requestReissue` creates a DRAFT (capability `PEOPLE.PAYROLL.REISSUE.REQUEST`); a **different** approver (`…APPROVE`) releases it. Approval re-checks the exact frozen snapshot (canonical JSON checksum), re-checks every employee's eligibility/reach and refuses if a newer approved attempt for the same employee appeared after the draft was requested (`REISSUE_STALE`).
+- **One draft per obligation.** Partial unique index `(client, run_id, personnel_number) where state = 'DRAFT'` + a per-run advisory lock: concurrent/retried requests can't form two drafts; a same `requestKey` replays; a standing draft is `REISSUE_CONFLICT`.
+- **Immutable, encrypted snapshot.** Account identifiers are stored as AES-256-GCM envelopes bound to tenant+employee+reissue id (never plaintext, log, audit or URL). Download rebuilds the CSV from the frozen snapshot (`paymentRowsFromSnapshot`); keyring unavailable fails closed. Re-download is byte-identical (`private, no-store`).
+- **Old file blocked.** Once any included instruction is superseded by an APPROVED reissue, the source file's ordinary `downloadPaymentFile` refuses `FILE_SUPERSEDED`; `downloadHistoricalFile` (`…FILE.HISTORICAL`) serves it marked `HISTORICAL … do not upload` without regenerating.
+- **No accounting.** Reissue posts/reverses nothing and never recalculates; original files are never mutated. Audit logs carry actor, action, reference, count and total — never account numbers or amounts. All capabilities granted to no role.
