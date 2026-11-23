@@ -186,7 +186,14 @@ export interface SweepResult {
  * sweep transaction dies mid-way, its lock releases and any deletions already made were of unreferenced files.
  */
 export async function sweepOrphans(tx: Tx, client: string, options: { graceMs?: number; now?: number } = {}): Promise<SweepResult> {
-  // Must be the first statement of the sweep transaction: block until no publisher holds the shared lock.
+  // The safety argument needs READ COMMITTED: after waiting for the exclusive lock, the reference SELECT must be a
+  // FRESH statement that sees every publisher commit. Under REPEATABLE READ the transaction snapshot was taken
+  // earlier, so waiting does not refresh it — refuse rather than delete on a stale snapshot.
+  const isolation = (await tx.execute(sql`select current_setting('transaction_isolation') as isolation`)) as unknown as Array<{ isolation: string }>;
+  if (String(isolation[0]?.isolation ?? '').toLowerCase() !== 'read committed') {
+    throw new ArtifactError('The orphan sweep requires a READ COMMITTED transaction.', 'ARTIFACT_ISOLATION');
+  }
+  // Must be the first lock statement of the sweep transaction: block until no publisher holds the shared lock.
   await lockArtifactStoreExclusive(tx, client);
   const graceMs = options.graceMs ?? 60 * 60 * 1000;
   const now = options.now ?? Date.now();
@@ -198,6 +205,8 @@ export async function sweepOrphans(tx: Tx, client: string, options: { graceMs?: 
     stagingRemoved += 1;
   }
 
+  // Fresh statement after the exclusive lock was granted: under READ COMMITTED this sees every commit that
+  // happened while we waited.
   const candidates = listTenantArtifacts(client).filter((f) => now - f.modifiedMs > graceMs);
   if (candidates.length === 0) return { orphanedRemoved, stagingRemoved };
   const ids = candidates.map((c) => c.artifactId);

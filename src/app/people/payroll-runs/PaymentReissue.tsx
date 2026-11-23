@@ -2,9 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { PreviewGeneration, SubmissionKey, acceptsPreview, previewSignature, readUnresolved, rememberUnresolved, clearUnresolved } from './reissue-request-lifecycle';
+import { PreviewGeneration, SubmissionKey, acceptsPreview, previewSignature, readAndScrubLegacyKeys, clearLegacyRecovery, type LegacyRecovery } from './reissue-request-lifecycle';
 
-import type { ReissuePreview, ReissueView } from '@/modules/people/payroll-payment-reissue';
+import type { ReissueIntentView, ReissuePreview, ReissueView } from '@/modules/people/payroll-payment-reissue';
 
 const REISSUE_ENDPOINT = '/people/payroll-runs/payment-file/reissue';
 
@@ -76,122 +76,182 @@ export function PaymentReissuePanel({
   // Current inputs in a ref, so an in-flight closure reads the LATEST values (not the render's captured ones).
   const inputsRef = useRef({ source: preparationId, selection, selected, date });
   inputsRef.current = { source: preparationId, selection, selected, date };
-  const [unresolved, setUnresolved] = useState<{ key: string } | null>(null);
+  // The source this render belongs to, so an out-of-order response for another source is discarded, never applied.
+  const sourceRef = useRef(preparationId);
+  sourceRef.current = preparationId;
+  // Server-side durable recovery state for THIS source; the browser stores no payload at all.
+  const [intents, setIntents] = useState<ReissueIntentView[]>([]);
+  const [recovery, setRecovery] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [legacy, setLegacy] = useState<LegacyRecovery>({ keys: [], unreadable: false });
 
-  // Invalidate any in-flight preview when the SOURCE changes via props, and restore that source's unresolved
-  // submission (same key AND exact payload), so a reload retry is truthfully the same logical request. The record
-  // is per-source and per-tab, so switching sources or another tab cannot overwrite it.
+  // Invalidate any in-flight preview when the SOURCE changes via props, then load THIS source's durable recovery
+  // list from the server. Browser storage holds nothing but a legacy opaque key (scrubbed on read).
   useEffect(() => {
     previewGen.current.invalidate();
     setPreview(null);
     previewSig.current = null;
     previewEmployees.current = [];
-    // A new source gets its own key; a prior source's untracked state stays in this tab's recovery map.
+    // A new source gets its own in-memory key. Durable recovery comes from the server list, not the browser.
     submission.current = new SubmissionKey(() => crypto.randomUUID());
-    const recovered = readUnresolved(preparationId);
-    if (recovered) {
-      submission.current.seed(recovered);
-      setUnresolved({ key: recovered.key });
-    } else {
-      setUnresolved(null);
-    }
+    setMessage(null);
+    setLegacy(readAndScrubLegacyKeys());
+    setRecovery('loading');
+    setIntents([]);
+    void refreshIntents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preparationId]);
 
-  const post = async (fields: Record<string, string>) => {
+  const formOf = (fields: Record<string, string>) => {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.set(k, v);
+    return form;
+  };
+
+  /**
+   * POST and classify only the TRANSPORT. An HTTP status alone never proves a mutation's final outcome (an
+   * intermediary can answer 4xx/5xx after forwarding), so callers consult durable server state before concluding.
+   */
+  const postFields = async (fields: Record<string, string>): Promise<{ kind: 'ok'; data: unknown } | { kind: 'http'; status: number; text: string } | { kind: 'transport' }> => {
     setPending(true);
     try {
-      const form = new FormData();
-      for (const [k, v] of Object.entries(fields)) form.set(k, v);
-      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: form });
+      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: formOf(fields) });
       const text = await response.text();
-      if (!response.ok) { setMessage({ ok: false, text }); return null; }
-      return JSON.parse(text);
+      if (!response.ok) return { kind: 'http', status: response.status, text };
+      try {
+        return { kind: 'ok', data: JSON.parse(text) };
+      } catch {
+        // A 2xx with an unreadable body is ambiguous, not a success and not a refusal.
+        return { kind: 'http', status: response.status, text: '' };
+      }
     } catch {
-      setMessage({ ok: false, text: 'The preview could not be loaded. No replacement request was sent.' });
-      return null;
+      return { kind: 'transport' };
     } finally {
       setPending(false);
     }
   };
 
-  const signature = () => previewSignature(inputsRef.current);
-  /**
-   * A mutating POST. Only a 4xx with an application refusal is treated as a DEFINITE pre-commit refusal; a
-   * transport error, an unreadable body, a 5xx (a proxy can return it AFTER the app committed) or 408 is an
-   * UNKNOWN outcome. An unknown outcome never claims "nothing was saved" and keeps the retained key so a retry
-   * replays the same logical request.
-   */
-  const submit = async (fields: Record<string, string>): Promise<{ ok: boolean; unknown?: boolean; data?: unknown }> => {
-    setPending(true);
+  /** The requester's OWN durable intents for this source. Null means the check itself cannot be trusted. */
+  const refreshIntents = async (): Promise<ReissueIntentView[] | null> => {
+    const source = preparationId;
     try {
-      const form = new FormData();
-      for (const [k, v] of Object.entries(fields)) form.set(k, v);
-      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: form });
+      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: formOf({ action: 'intents', sourcePreparationId: source }) });
       const text = await response.text();
-      if (!response.ok) {
-        if (response.status >= 500 || response.status === 408) return { ok: false, unknown: true };
-        setMessage({ ok: false, text });
-        return { ok: false };
-      }
-      try {
-        return { ok: true, data: JSON.parse(text) };
-      } catch {
-        // The server answered 2xx but the body is unreadable/truncated: the change may have committed.
-        return { ok: false, unknown: true };
-      }
+      // Out-of-order source switch: never let an old source's answer overwrite the current one.
+      if (source !== sourceRef.current) return null;
+      if (!response.ok) { setRecovery('failed'); return null; }
+      const data = JSON.parse(text) as ReissueIntentView[];
+      setIntents(data);
+      setRecovery('ready');
+      return data;
     } catch {
-      return { ok: false, unknown: true };
-    } finally {
-      setPending(false);
+      if (source === sourceRef.current) setRecovery('failed');
+      return null;
     }
   };
+
+  const findIntent = (list: ReissueIntentView[] | null, match: { intentId?: string; requestKey?: string }) =>
+    list?.find((i) => (match.intentId ? i.intentId === match.intentId : i.requestKey === match.requestKey)) ?? null;
+
+  const signature = () => previewSignature(inputsRef.current);
 
   const runPreview = async () => {
     const inputs = inputsRef.current;
     const token = previewGen.current.issue();
     const sentSig = previewSignature(inputs);
-    const data = await post({
-      action: 'preview', sourcePreparationId: inputs.source, selection: inputs.selection,
-      personnelNumbers: inputs.selection === 'SELECTED' ? inputs.selected.join(',') : '', intendedPaymentDate: inputs.date,
-    });
-    // Accept only the NEWEST response for the CURRENT inputs; a later request always wins, identical inputs or not.
-    if (!acceptsPreview(token, previewGen.current, sentSig, signature())) return;
-    if (data) {
+    setPending(true);
+    try {
+      const response = await fetch(REISSUE_ENDPOINT, {
+        method: 'POST',
+        body: formOf({
+          action: 'preview', sourcePreparationId: inputs.source, selection: inputs.selection,
+          personnelNumbers: inputs.selection === 'SELECTED' ? inputs.selected.join(',') : '', intendedPaymentDate: inputs.date,
+        }),
+      });
+      const text = await response.text();
+      if (!response.ok) { setMessage({ ok: false, text }); return; }
+      const data = JSON.parse(text) as ReissuePreview;
+      // Accept only the NEWEST response for the CURRENT inputs; a later request always wins.
+      if (!acceptsPreview(token, previewGen.current, sentSig, signature())) return;
       previewGen.current.accept(token);
-      const typed = data as ReissuePreview;
-      previewSig.current = typed.inputSignature ?? sentSig;
-      previewEmployees.current = typed.employees.map((e) => e.personnelNumber);
-      setPreview(typed);
+      previewSig.current = data.inputSignature ?? sentSig;
+      previewEmployees.current = data.employees.map((e) => e.personnelNumber);
+      setPreview(data);
       // Functional update: keep anything already entered for these employees (a re-preview must not wipe typed
       // attestations by reading a stale closure), and add a blank row for anyone new.
       setAttest((prev) => {
         const map: Record<string, Attestation> = {};
-        for (const e of typed.employees) map[e.personnelNumber] = prev[e.personnelNumber] ?? blankAttestation();
+        for (const e of data.employees) map[e.personnelNumber] = prev[e.personnelNumber] ?? blankAttestation();
         return map;
       });
       setMessage(null);
+    } catch {
+      setMessage({ ok: false, text: 'The preview could not be loaded. No replacement request was sent.' });
+    } finally {
+      setPending(false);
     }
+  };
+
+  const onCreated = (reference?: string) => {
+    submission.current!.resolve();
+    setMessage({
+      ok: true,
+      text: reference
+        ? `Replacement draft ${reference} is ready. A different authorized approver must release it.`
+        : 'Replacement draft created. A different authorized approver must release it.',
+    });
+    setPreview(null); previewSig.current = null; previewEmployees.current = []; setReason('');
+    void refreshIntents();
+    router.refresh();
+  };
+
+  /**
+   * Execute (or replay) a registered intent. A completed intent is returned even when a fresh preview would now
+   * show the employees as ineligible because the draft already exists. Any non-2xx is resolved against the durable
+   * intent list: only an explicit REFUSED intent is final; "not found" cannot prove a delayed commit will not land.
+   */
+  const executeIntent = async (intentId: string): Promise<boolean> => {
+    const source = preparationId;
+    const result = await postFields({ action: 'execute', intentId });
+    if (source !== sourceRef.current) return false;
+    if (result.kind === 'ok') { onCreated((result.data as ReissueView).reissueReference); return true; }
+    const list = await refreshIntents();
+    if (source !== sourceRef.current) return false;
+    const found = findIntent(list, { intentId });
+    if (found?.status === 'COMPLETED') { onCreated(found.reissueReference ?? undefined); return true; }
+    if (found?.status === 'REFUSED') {
+      submission.current!.resolve();
+      setMessage({ ok: false, text: 'This request was refused and no draft exists for it. Start a new request if the situation has changed.' });
+      return false;
+    }
+    submission.current!.markUnresolved();
+    setMessage({
+      ok: false,
+      text: list === null
+        ? 'The outcome is unknown and the recovery check is unavailable. Do not start a different request; reload and check this file first.'
+        : 'The outcome is unknown: the draft may still be created. Check this request in the recovery panel before retrying; a retry reuses the same request and cannot create a second draft.',
+    });
+    return false;
   };
 
   const submitRequest = async () => {
     if (!preview) return;
-    // Submit only the EXACT previewed inputs: source, mode, date and the previewed employee set. The preview's
-    // own signature (computed by the service on the same normalized inputs) must still equal the current inputs.
-    // In ALL mode the employee set is server-derived, so the client-side selected array is irrelevant.
+    // Never dispatch without knowing whether an earlier attempt for this source is unresolved.
+    if (recovery !== 'ready') {
+      setMessage({ ok: false, text: 'The recovery check for this file could not be completed. Reload the screen before submitting; no request was sent.' });
+      return;
+    }
+    // Submit only the EXACT previewed inputs. In ALL mode the employee set is server-derived.
     if (previewSig.current === null || previewSig.current !== signature()) {
       setMessage({ ok: false, text: 'The selection or date changed since this preview. Review the current preview again before creating the draft.' });
       setPreview(null); previewSig.current = null; previewEmployees.current = [];
       return;
     }
-    // Never silently drop an ineligible employee: refuse the whole request if the preview contains one.
     const ineligible = preview.employees.filter((e) => !e.eligible);
     if (ineligible.length > 0) {
       setMessage({ ok: false, text: `Refusing the whole request: ${ineligible.map((e) => `${e.personnelNumber} (${e.blocker})`).join('; ')}. Resolve these first; no partial draft is created.` });
       return;
     }
     const previewPns = previewEmployees.current;
-    // Attestations cover exactly the previewed employees; refuse locally if any is incomplete (server re-checks).
     const incomplete = previewPns.filter((pn) => {
       const a = attest[pn];
       return !a || !a.outcome || !a.reason.trim() || !a.verificationDate || !(a.evidenceReference ?? '').trim()
@@ -212,61 +272,85 @@ export function PaymentReissuePanel({
     try {
       key = submission.current!.keyFor(payload, fields);
     } catch {
-      setMessage({ ok: false, text: 'An earlier replacement request has an unknown outcome. Reload to check the file history, or explicitly discard that attempt, before submitting a different one.' });
+      setMessage({ ok: false, text: 'An earlier replacement request has an unknown outcome. Check it in the recovery panel before submitting a different one.' });
       return;
     }
-    const result = await submit({ ...fields, requestKey: key });
-    if (result.ok) {
-      submission.current!.resolve();
-      clearUnresolved(preparationId);
-      setUnresolved(null);
-      setMessage({ ok: true, text: 'Replacement draft created. A different authorized approver must release it.' });
-      setPreview(null); previewSig.current = null; previewEmployees.current = []; setReason(''); router.refresh();
-      return;
-    }
-    if (result.unknown) {
-      // Ambiguous: the server may have committed. Retain the key + payload; warn; offer a same-key retry.
-      submission.current!.markUnresolved();
-      rememberUnresolved(preparationId, key, fields);
-      setUnresolved({ key });
-    }
-  };
 
-  const abandonUnresolved = () => {
-    submission.current!.abandon();
-    clearUnresolved(preparationId);
-    setUnresolved(null);
-    setMessage({ ok: false, text: 'The earlier request was marked as abandoned locally. If it did create a draft, cancel it from the history above so it cannot be approved.' });
-  };
-
-  /**
-   * Ask the server, under the same request-key lock, whether this key created a draft. Only the requester can see
-   * it; another user's key answers "not found". A "not found" is NOT proof that a delayed original cannot still
-   * commit, so the warning is kept unless a draft is actually found.
-   */
-  const reconcile = async () => {
-    if (!unresolved) return;
-    setPending(true);
-    try {
-      const form = new FormData();
-      form.set('action', 'reconcile');
-      form.set('sourcePreparationId', preparationId);
-      form.set('requestKey', unresolved.key);
-      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: form });
-      const text = await response.text();
-      if (!response.ok) {
-        setMessage({ ok: false, text: response.status >= 500 ? 'The outcome check failed (server error). The outcome is still unknown; check again later.' : text });
+    // STEP 1 — register durably. This creates NO draft. Do not execute anything until it is acknowledged or the
+    // durable list proves it exists.
+    const sourceAtSubmit = preparationId;
+    const reg = await postFields({ ...fields, action: 'register', requestKey: key });
+    if (sourceAtSubmit !== sourceRef.current) return;
+    let intentId: string | null = null;
+    if (reg.kind === 'ok') {
+      intentId = String((reg.data as ReissueIntentView).intentId);
+    } else {
+      const list = await refreshIntents();
+      const found = findIntent(list, { requestKey: key });
+      if (found) {
+        intentId = found.intentId;
+      } else if (reg.kind === 'transport' || reg.status >= 500 || reg.status === 408 || reg.status === 200 || list === null) {
+        // Not proven refused, and no durable confirmation: nothing was dispatched. Reuse the same key to retry.
+        submission.current!.markUnresolved();
+        setMessage({ ok: false, text: 'Registration outcome is unknown. No draft was requested; retry the same details (the same key is reused) or reload and check this file first.' });
+        return;
+      } else {
+        // The durable list proves no intent exists: registration was refused and no draft can exist.
+        submission.current!.resolve();
+        setMessage({ ok: false, text: reg.text || 'The request was refused.' });
         return;
       }
+    }
+
+    // STEP 2 — execute the registered intent (its exact stored payload and key).
+    await executeIntent(intentId);
+  };
+
+  const checkRecovery = async () => {
+    const list = await refreshIntents();
+    if (list === null) {
+      setMessage({ ok: false, text: 'The recovery check failed. The outcome remains unknown; check again before retrying.' });
+      return;
+    }
+    const active = list.find((i) => i.status === 'COMPLETED' || i.status === 'RUNNING' || i.status === 'REGISTERED');
+    setMessage(active
+      ? { ok: true, text: 'Request status refreshed.' }
+      : { ok: false, text: 'No registered or completed request is visible for this file right now. A delayed attempt could still commit; check again before starting a different request.' });
+  };
+
+  const discardIntent = async (intentId: string) => {
+    const result = await postFields({ action: 'abandon', intentId });
+    await refreshIntents();
+    if (result.kind === 'ok') {
+      submission.current!.resolve();
+      setMessage({ ok: false, text: 'The attempt was marked discarded. That does not undo it: if it created a draft, cancel that draft from the history above.' });
+    } else {
+      setMessage({ ok: false, text: 'The discard outcome is unknown. Check the request state before starting a different request.' });
+    }
+  };
+
+  /** Legacy (previous-version) browser record: reconcile by its opaque key only; the old payload is never replayed. */
+  const reconcileLegacyKey = async (key: string) => {
+    const source = preparationId;
+    setPending(true);
+    try {
+      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: formOf({ action: 'reconcile', sourcePreparationId: preparationId, requestKey: key }) });
+      const text = await response.text();
+      if (!response.ok) {
+        setMessage({ ok: false, text: response.status >= 500 ? 'The check failed (server error). The outcome is still unknown; check again later.' : text });
+        return;
+      }
+      if (source !== sourceRef.current) return;
       const data = JSON.parse(text) as { found?: boolean; status?: string; reissueReference?: string };
       if (data.found) {
         submission.current!.resolve();
-        clearUnresolved(preparationId);
-        setUnresolved(null);
-        setMessage({ ok: true, text: `The earlier request was confirmed: ${data.reissueReference ?? 'the draft'} is ${String(data.status ?? '').toLowerCase()}. Reload the history to act on it.` });
+        clearLegacyRecovery();
+        setLegacy({ keys: [], unreadable: false });
+        setMessage({ ok: true, text: `The earlier attempt was confirmed: ${data.reissueReference ?? 'a draft'} is ${String(data.status ?? '').toLowerCase()}. Reload the history to act on it.` });
+        void refreshIntents();
         router.refresh();
       } else {
-        setMessage({ ok: false, text: 'No draft exists for this request key right now. A delayed attempt would still reuse this key, so the outcome remains unresolved: retry the same details (the same key is reused) or discard this attempt after checking the history.' });
+        setMessage({ ok: false, text: 'No draft is visible for that older attempt right now. It cannot be retried exactly and the outcome is not final; check the file history before requesting a replacement.' });
       }
     } catch {
       setMessage({ ok: false, text: 'The outcome check could not be completed. The outcome is still unknown; check again before retrying.' });
@@ -276,17 +360,46 @@ export function PaymentReissuePanel({
   };
 
   const decide = async (reissueId: string, action: 'approve' | 'cancel', cancelReason = '', confirmDigest = '') => {
-    // Use the unknown-aware path: a lost response after a commit must not claim "nothing was saved".
-    const result = await submit({ action, reissueId, reason: cancelReason, confirmDigest, confirmReviewed: action === 'approve' ? 'yes' : '' });
-    if (result.ok) {
+    const result = await postFields({ action, reissueId, reason: cancelReason, confirmDigest, confirmReviewed: action === 'approve' ? 'yes' : '' });
+    if (result.kind === 'ok') {
       setMessage({ ok: true, text: action === 'approve' ? 'Replacement approved.' : 'Draft cancelled.' });
       router.refresh();
-    } else if (result.unknown) {
-      setMessage({ ok: false, text: 'The outcome is unknown: the connection failed after the request was sent. Reload the file history to confirm whether the replacement was released or cancelled; do not repeat the action blindly.' });
+      return;
     }
+    // A non-2xx is not proof of non-commit. Ask the durable record what actually happened.
+    let status: string | null = null;
+    try {
+      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: formOf({ action: 'reissueStatus', reissueId }) });
+      if (response.ok) status = (JSON.parse(await response.text()) as { status?: string | null }).status ?? null;
+    } catch {
+      status = null;
+    }
+    if (action === 'approve' && status === 'APPROVED') { setMessage({ ok: true, text: 'Replacement approved.' }); router.refresh(); return; }
+    if (action === 'cancel' && status === 'CANCELLED') { setMessage({ ok: true, text: 'Draft cancelled.' }); router.refresh(); return; }
+    if (status === 'DRAFT' && result.kind === 'http' && result.status < 500 && result.status !== 408) {
+      setMessage({ ok: false, text: result.text || 'The action was refused; the draft is unchanged.' });
+      return;
+    }
+    setMessage({ ok: false, text: 'The outcome is unknown: the connection or a gateway failed after the request was sent. Reload the file history to confirm whether the replacement was released or cancelled; do not repeat the action blindly.' });
   };
 
   const updateAttest = (pn: string, patch: Partial<Attestation>) => setAttest((prev) => ({ ...prev, [pn]: { ...(prev[pn] ?? blankAttestation()), ...patch } }));
+
+  const intentLabel = (status: ReissueIntentView['status']): string => ({
+    REGISTERED: 'registered — not yet confirmed executed',
+    RUNNING: 'executing — outcome unknown',
+    COMPLETED: 'completed — draft exists',
+    REFUSED: 'refused — no draft',
+    ABANDONED: 'discarded — a draft may still exist',
+  })[status];
+
+  const intentGuidance = (status: ReissueIntentView['status']): string => ({
+    REGISTERED: 'Registration creates no draft. Retrying execution is safe and reuses the exact registered request.',
+    RUNNING: 'The draft may still be created by the earlier attempt. A retry reuses the same request and cannot create a second draft; do not start a different one.',
+    COMPLETED: 'This request already created the draft shown. Approve or cancel it in the history above.',
+    REFUSED: 'The original request was refused before any draft was created. Start a new request if the situation has changed.',
+    ABANDONED: 'You discarded this attempt locally. That does not undo it: if a draft exists, cancel it in the history above.',
+  })[status];
 
   return (
     <section className="panel space-y-3 p-4" aria-label="Replacement payment file">
@@ -366,13 +479,56 @@ export function PaymentReissuePanel({
         </div>
       )}
 
-      {unresolved && (
+      {recovery === 'failed' && (
+        <div role="alert" className="rounded border border-signal-danger/50 bg-signal-danger/10 p-3 text-xs">
+          <p>The recovery check for this file failed, so an earlier request may still be unresolved. Do not submit a new request until this check succeeds.</p>
+          <button type="button" className="btn btn-default mt-2 min-h-9" disabled={pending} onClick={() => void refreshIntents()}>Retry recovery check</button>
+        </div>
+      )}
+
+      {recovery === 'ready' && intents.length > 0 && (
         <div role="alert" className="rounded border border-signal-warn/50 bg-signal-warn/10 p-3 text-xs">
-          <p>A previous replacement request has an <strong>unknown outcome</strong>. It may have created a draft. If you retry <em>exactly</em> the same details, the same request key is reused and no second draft is created; a different request is blocked until this is resolved.</p>
-          <p className="mt-1">Request key <span className="code">{unresolved.key.slice(0, 8)}…</span>. Check the file history above, or ask the server to confirm this key.</p>
+          <p className="font-semibold">Your earlier replacement requests for this file</p>
+          <ul className="mt-2 space-y-2">
+            {intents.map((i) => (
+              <li key={i.intentId} className="border-t border-line/50 pt-2 first:border-0 first:pt-0">
+                <p>
+                  <span className="code">{i.intentId.slice(0, 8)}…</span> — <strong>{intentLabel(i.status)}</strong>
+                  {i.reissueReference ? <> · draft <span className="code">{i.reissueReference}</span> ({String(i.draftStatus ?? '').toLowerCase()})</> : null}
+                </p>
+                <p className="mt-1 text-ink-soft">{intentGuidance(i.status)}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(i.status === 'REGISTERED' || i.status === 'RUNNING') && (
+                    <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={() => void executeIntent(i.intentId)}>Retry this request</button>
+                  )}
+                  {i.status === 'COMPLETED' && (
+                    <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={() => void refreshIntents()}>Refresh draft status</button>
+                  )}
+                  {(i.status === 'REGISTERED' || i.status === 'RUNNING') && (
+                    <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={() => void discardIntent(i.intentId)}>Discard (does not undo)</button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {legacy.unreadable && (
+        <div role="alert" className="rounded border border-signal-warn/50 bg-signal-warn/10 p-3 text-xs">
+          <p>An older local recovery record could not be read. If you had an unresolved attempt on this file, check the history above before requesting a replacement.</p>
+        </div>
+      )}
+
+      {legacy.keys.length > 0 && (
+        <div role="alert" className="rounded border border-signal-warn/50 bg-signal-warn/10 p-3 text-xs">
+          <p>An earlier version of this screen recorded an unresolved attempt in this tab. Its details are <strong>not</strong> replayed for safety, and the old stored copy has been stripped of sensitive fields. If it created a draft, it will appear in the history above.</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={reconcile}>Check this request key</button>
-            <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={abandonUnresolved}>Discard this unknown attempt</button>
+            {legacy.keys.map((k) => (
+              <button key={k} type="button" className="btn btn-default min-h-9" disabled={pending} onClick={() => void reconcileLegacyKey(k)}>
+                Check older attempt <span className="code">{k.slice(0, 8)}…</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -456,7 +612,7 @@ export function PaymentReissuePanel({
                   </tbody>
                 </table>
               </div>
-              <button type="button" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending || !reason || preview.employeeCount === 0} onClick={submitRequest}>Create replacement draft</button>
+              <button type="button" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending || !reason || preview.employeeCount === 0 || recovery !== 'ready'} onClick={submitRequest}>Create replacement draft</button>
             </div>
           )}
         </div>

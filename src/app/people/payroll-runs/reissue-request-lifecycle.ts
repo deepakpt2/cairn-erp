@@ -95,15 +95,6 @@ export class SubmissionKey {
     return this.retained.key;
   }
 
-  /**
-   * Restore an unresolved submission after a reload: seed the SAME key, signature and exact payload, so a retry of
-   * that payload reuses the key and a changed payload is refused until the attempt is reconciled or abandoned.
-   */
-  seed(entry: { key: string; payload: Record<string, string> }): void {
-    this.retained = { signature: JSON.stringify(entry.payload), key: entry.key, payload: entry.payload };
-    this.unresolved = true;
-  }
-
   /** Mark that the request's outcome is unknown (network failure) — retain the key and payload. */
   markUnresolved(): void {
     if (this.retained) this.unresolved = true;
@@ -126,63 +117,61 @@ export class SubmissionKey {
   }
 }
 
-// ── Safe reload recovery ──────────────────────────────────────────────────────
+// ── Legacy browser-state handling ────────────────────────────────────────────
 //
-// A reload must be able to tell the truth: the SAME logical request is retried with the SAME key and the SAME
-// normalized payload. We persist, per-tab, a record keyed by the source preparation id so switching sources in one
-// tab never overwrites another source's unresolved attempt. The record holds only the request key and the exact
-// form payload — never a bank identifier or a salary-line amount. sessionStorage is per-tab and not shared between
-// tabs; if it is unavailable (SSR, private mode) recovery is simply unavailable, which is safe.
+// Earlier versions of this screen wrote a full request payload (including attestation free text) to sessionStorage.
+// The server-side intent table is now the ONLY durable recovery record, and the screen never persists a payload,
+// an employee number, a reason or an evidence reference in browser storage.
+//
+// We must still handle an old record deliberately rather than silently "forget" it: this reads the legacy marker,
+// extracts only the opaque request key (never the payload) and REWRITES the marker without the sensitive fields.
+// If the storage is unavailable or unreadable we report that honestly; we never treat it as an empty safe state.
 
-const RECOVERY_KEY = 'cairn.paymentReissue.unresolved.v2';
+const LEGACY_RECOVERY_KEY = 'cairn.paymentReissue.unresolved.v2';
 
-export interface RecoveryState {
-  preparationId: string;
-  key: string;
-  /** The exact request fields that produced `key`, so a same-key retry is byte-for-byte the same logical request. */
-  payload: Record<string, string>;
-  at: string;
+export interface LegacyRecovery {
+  /** Opaque request keys from the previous format, for an authorized key-only reconciliation. */
+  keys: string[];
+  /** The legacy storage could not be read, so an old unresolved attempt cannot be ruled out. */
+  unreadable: boolean;
 }
 
-type RecoveryMap = Record<string, Omit<RecoveryState, 'preparationId'>>;
-
-function readMap(): RecoveryMap {
+export function readAndScrubLegacyKeys(): LegacyRecovery {
   try {
-    const raw = sessionStorage.getItem(RECOVERY_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as RecoveryMap;
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    const raw = sessionStorage.getItem(LEGACY_RECOVERY_KEY);
+    if (!raw) return { keys: [], unreadable: false };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return { keys: [], unreadable: true };
+    }
+    if (!parsed || typeof parsed !== 'object') return { keys: [], unreadable: true };
+    const keys: string[] = [];
+    const scrubbed: Record<string, { key: string; at?: string }> = {};
+    for (const [source, entry] of Object.entries(parsed as Record<string, unknown>)) {
+      const record = entry as { key?: unknown; at?: unknown } | null;
+      if (!record || typeof record.key !== 'string' || !record.key) continue;
+      keys.push(record.key);
+      // Keep the opaque key marker only. The payload (employee numbers, reason, evidence) is DROPPED for good.
+      scrubbed[source] = { key: record.key, at: typeof record.at === 'string' ? record.at : undefined };
+    }
+    try {
+      if (keys.length > 0) sessionStorage.setItem(LEGACY_RECOVERY_KEY, JSON.stringify(scrubbed));
+      else sessionStorage.removeItem(LEGACY_RECOVERY_KEY);
+    } catch {
+      // Could not rewrite: the caller still never reads or displays the sensitive fields.
+    }
+    return { keys, unreadable: false };
   } catch {
-    return {};
+    return { keys: [], unreadable: true };
   }
 }
 
-function writeMap(map: RecoveryMap): void {
+export function clearLegacyRecovery(): void {
   try {
-    if (Object.keys(map).length === 0) sessionStorage.removeItem(RECOVERY_KEY);
-    else sessionStorage.setItem(RECOVERY_KEY, JSON.stringify(map));
+    sessionStorage.removeItem(LEGACY_RECOVERY_KEY);
   } catch {
-    // No browser storage: recovery is unavailable, which is safe.
+    // Nothing to clear.
   }
-}
-
-export function rememberUnresolved(preparationId: string, key: string, payload: Record<string, string>, now: Date = new Date()): void {
-  if (!preparationId || !key) return;
-  const map = readMap();
-  map[preparationId] = { key, payload, at: now.toISOString() };
-  writeMap(map);
-}
-
-export function readUnresolved(preparationId: string): RecoveryState | null {
-  if (!preparationId) return null;
-  const entry = readMap()[preparationId];
-  if (!entry || typeof entry.key !== 'string' || typeof entry.payload !== 'object' || entry.payload === null) return null;
-  return { preparationId, key: entry.key, payload: entry.payload, at: entry.at };
-}
-
-export function clearUnresolved(preparationId?: string): void {
-  if (!preparationId) { writeMap({}); return; }
-  const map = readMap();
-  delete map[preparationId];
-  writeMap(map);
 }

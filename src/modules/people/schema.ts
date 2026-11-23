@@ -1564,6 +1564,63 @@ export const payrollPaymentArtifact = pgTable(
  * 9326: marks an owner as new-format (a retained `cad1` artifact is REQUIRED). Absence of a row means genuinely
  * legacy (pre-host-storage), which may legitimately be served from its stored body or immutable snapshot.
  */
+/** The normalized request fields retained server-side for an exact, idempotent retry. Never sent to the browser. */
+export interface ReissueIntentPayload {
+  selection: 'ALL' | 'SELECTED';
+  personnelNumbers: string[];
+  intendedPaymentDate: string;
+  reason: string;
+  attestations: Array<{
+    personnelNumber: string;
+    outcome: string;
+    reason: string;
+    verificationDate: string;
+    evidenceReference: string;
+    confirmedNoSubmission: boolean;
+  }>;
+}
+
+/**
+ * 9328: durable two-step submission intent for a controlled payment-file replacement.
+ *
+ * The screen REGISTERS the exact normalized request before it may EXECUTE it; registration never creates a draft.
+ * Execution is idempotent by `request_key` and commits the draft and `status = COMPLETED` in one transaction, so a
+ * lost response is recoverable by the requester from this table. `payload` holds the normalized fields needed for
+ * an exact retry and is sensitive: never returned by the recovery list, never placed in browser storage.
+ */
+export const payrollPaymentReissueIntent = pgTable(
+  'payroll_payment_reissue_intent',
+  {
+    client: tenant(),
+    intentId: uuid('intent_id').notNull(),
+    sourcePreparationId: uuid('source_preparation_id').notNull(),
+    requestKey: varchar('request_key', { length: 64 }).notNull(),
+    requestFingerprint: varchar('request_fingerprint', { length: 64 }).notNull(),
+    requestedBy: varchar('requested_by', { length: 60 }).notNull(),
+    status: varchar('status', { length: 12 }).notNull().default('REGISTERED'),
+    payload: jsonb('payload').$type<ReissueIntentPayload>().notNull().default(sql`'{}'::jsonb`),
+    reissueId: uuid('reissue_id'),
+    refusalCode: varchar('refusal_code', { length: 40 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.intentId] }),
+    uniqueIndex('payroll_payment_reissue_intent_key_uq').on(t.client, t.requestKey),
+    index('payroll_payment_reissue_intent_recovery_idx').on(t.client, t.sourcePreparationId, t.requestedBy, t.status),
+    check('payroll_payment_reissue_intent_status_ck', sql`${t.status} in ('REGISTERED', 'RUNNING', 'COMPLETED', 'REFUSED', 'ABANDONED')`),
+    foreignKey({
+      name: 'payroll_payment_reissue_intent_source_fk',
+      columns: [t.client, t.sourcePreparationId],
+      foreignColumns: [payrollPaymentFile.client, payrollPaymentFile.preparationId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'payroll_payment_reissue_intent_reissue_fk',
+      columns: [t.client, t.reissueId],
+      foreignColumns: [payrollPaymentReissue.client, payrollPaymentReissue.reissueId],
+    }).onDelete('restrict'),
+  ],
+);
+
 export const payrollPaymentArtifactState = pgTable(
   'payroll_payment_artifact_state',
   {

@@ -23,7 +23,7 @@
  *    protected historical evidence, clearly marked do-not-upload.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { recordChange } from '../../platform/change';
@@ -45,11 +45,13 @@ import {
   employee,
   payrollPaymentFile,
   payrollPaymentReissue,
+  payrollPaymentReissueIntent,
   payrollPaymentReissueLine,
   payrollRun,
   salaryPayment,
   type PaymentFileBankRow,
   type ReissueAttestationOutcome,
+  type ReissueIntentPayload,
 } from './schema';
 import {
   type PaymentFileRow,
@@ -134,6 +136,7 @@ const requestInput = z.object({
   changedBy: z.string().trim().min(1).max(60),
 });
 export type RequestReissueInput = z.input<typeof requestInput>;
+type ParsedRequestInput = z.output<typeof requestInput>;
 
 // ── Views ───────────────────────────────────────────────────────────────────
 
@@ -674,54 +677,63 @@ function isBankAmbiguous(error: unknown): boolean {
 // ── Request (create a DRAFT) ─────────────────────────────────────────────────
 
 /** Create a frozen, encrypted replacement draft for all or selected employees. An approver releases it. */
-export async function requestReissue(rawInput: RequestReissueInput, access: ReissueAccess | undefined): Promise<ReissueView> {
-  const input = requestInput.parse(rawInput);
-  return withTenant(input.client, async (tx) => {
-    const grant = await judge(tx, input.client, access, REQUEST);
-    const file = await loadSourceFile(tx, input.client, input.sourcePreparationId, grant);
-    const run = await loadRun(tx, input.client, file.runId);
-    await assertNotReversed(tx, input.client, run);
-    const money = await moneyForRun(tx, run);
-    if (!isCalendarDate(input.intendedPaymentDate)) refuse('PAYMENT_DATE', `Intended payment date ${input.intendedPaymentDate} is not a calendar date.`, 'Enter the date as YYYY-MM-DD.');
+/** The ONE normalization used by the fingerprint, the stored intent and the replay check. */
+function normalizeRequest(input: ParsedRequestInput, file: FileRow): {
+  selectionSet: string[];
+  attestationsNormalized: ReissueIntentPayload['attestations'];
+  fingerprint: string;
+} {
+  const selectionSet = (input.selection === 'ALL'
+    ? snapshotRowsOf(file).map((r) => r.personnelNumber)
+    : normaliseSelection(input.personnelNumbers));
+  const attestationsNormalized = [...input.attestations]
+    .map((a) => ({ personnelNumber: a.personnelNumber.toUpperCase(), outcome: a.outcome, reason: a.reason, verificationDate: a.verificationDate, evidenceReference: a.evidenceReference, confirmedNoSubmission: a.confirmedNoSubmission ?? false }))
+    .sort((a, b) => a.personnelNumber.localeCompare(b.personnelNumber));
+  const fingerprint = createHash('sha256').update(canonicalJson({
+    source: file.preparationId, selection: input.selection, employees: [...selectionSet].sort(), intendedPaymentDate: input.intendedPaymentDate,
+    reason: input.reason, attestations: attestationsNormalized,
+  }), 'utf8').digest('hex');
+  return { selectionSet, attestationsNormalized, fingerprint };
+}
 
-    // Idempotency: a repeated key replays only an IDENTICAL normalized request. The fingerprint covers the
-    // source, the all/selected set, the intended date, the reason and every attestation field. It is computed
-    // BEFORE any disclosure, so the replay path never returns employee data outside the caller's reach.
-    const sourceId = file.preparationId;
-    const selectionSet = (input.selection === 'ALL'
-      ? snapshotRowsOf(file).map((r) => r.personnelNumber)
-      : normaliseSelection(input.personnelNumbers));
-    const attestationsNormalized = [...input.attestations]
-      .map((a) => ({ personnelNumber: a.personnelNumber.toUpperCase(), outcome: a.outcome, reason: a.reason, verificationDate: a.verificationDate, evidenceReference: a.evidenceReference, confirmedNoSubmission: a.confirmedNoSubmission ?? false }))
-      .sort((a, b) => a.personnelNumber.localeCompare(b.personnelNumber));
-    const fingerprint = createHash('sha256').update(canonicalJson({
-      source: sourceId, selection: input.selection, employees: [...selectionSet].sort(), intendedPaymentDate: input.intendedPaymentDate,
-      reason: input.reason, attestations: attestationsNormalized,
-    }), 'utf8').digest('hex');
-    if (input.requestKey) {
-      // Serialise on the KEY (not just the run) so two identical concurrent submissions — even across runs —
-      // wait here; the second then finds the first's draft and replays it. The DB unique index on
-      // (client, request_key) remains the backstop.
-      await lockRequestKey(tx, input.client, input.requestKey);
-      const [replay] = await tx.select().from(payrollPaymentReissue)
-        .where(and(eq(payrollPaymentReissue.client, input.client), eq(payrollPaymentReissue.requestKey, input.requestKey))).limit(1);
-      if (replay) {
-        // A legacy draft has no fingerprint: never guess — refuse rather than risk returning the wrong draft.
-        if (!replay.requestFingerprint) {
-          refuse('REISSUE_KEY_REUSED', 'This request key belongs to an older draft that cannot be verified as identical.', 'Reload the screen to get a fresh request key.');
-        }
-        if (replay.requestFingerprint !== fingerprint) {
-          refuse('REISSUE_KEY_REUSED', 'This request key was already used for a different replacement request.', 'Reload the screen to get a fresh request key.');
-        }
-        // Recheck live scope before any replay leaves the service.
-        await assertReachable(tx, input.client, grant, (replay.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), replay.intendedPaymentDate);
-        return viewOf(tx, input.client, replay, money);
-      }
-    }
+/**
+ * Replay an already-committed draft for this key, WITHOUT any new-request eligibility check (an existing active
+ * draft would otherwise make the employees look ineligible). A legacy unverifiable key or a different fingerprint
+ * is a controlled conflict; live tenant/company/employee reach is still required before the draft is returned.
+ */
+async function replayKeyedDraft(
+  tx: Tx, client: string, grant: PayrollGrant, requestKey: string | undefined, fingerprint: string, money: Money,
+): Promise<ReissueView | null> {
+  if (!requestKey) return null;
+  // Serialise on the KEY (not just the run) so two identical concurrent submissions — even across runs —
+  // wait here; the second then finds the first's draft and replays it. The DB unique index on
+  // (client, request_key) remains the backstop.
+  await lockRequestKey(tx, client, requestKey);
+  const [replay] = await tx.select().from(payrollPaymentReissue)
+    .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.requestKey, requestKey))).limit(1);
+  if (!replay) return null;
+  if (!replay.requestFingerprint) {
+    refuse('REISSUE_KEY_REUSED', 'This request key belongs to an older draft that cannot be verified as identical.', 'Reload the screen to get a fresh request key.');
+  }
+  if (replay.requestFingerprint !== fingerprint) {
+    refuse('REISSUE_KEY_REUSED', 'This request key was already used for a different replacement request.', 'Reload the screen to get a fresh request key.');
+  }
+  await assertReachable(tx, client, grant, (replay.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), replay.intendedPaymentDate);
+  return viewOf(tx, client, replay, money);
+}
 
-    const all = snapshotRowsOf(file);
-    const selected = input.selection === 'ALL' ? all.map((r) => r.personnelNumber) : normaliseSelection(input.personnelNumbers);
-    if (selected.length === 0) refuse('NO_SELECTION', 'No employee was selected.', 'Choose all employees of the file, or select at least one employee.');
+/** Create (or replay) the DRAFT inside an existing transaction. Shared by requestReissue and intent execution. */
+async function createDraftInTx(
+  tx: Tx, input: ParsedRequestInput, grant: PayrollGrant, file: FileRow, run: Awaited<ReturnType<typeof loadRun>>, money: Money,
+  access: ReissueAccess | undefined,
+): Promise<ReissueView> {
+  const { selectionSet, attestationsNormalized, fingerprint } = normalizeRequest(input, file);
+  const replay = await replayKeyedDraft(tx, input.client, grant, input.requestKey, fingerprint, money);
+  if (replay) return replay;
+
+  const all = snapshotRowsOf(file);
+  const selected = selectionSet;
+  if (selected.length === 0) refuse('NO_SELECTION', 'No employee was selected.', 'Choose all employees of the file, or select at least one employee.');
     // Reach BEFORE membership: an out-of-scope number and a number missing from the file answer the same way, so
     // neither the employee's existence nor file membership is disclosed.
     if (!(await allReachable(tx, input.client, grant, selected, input.intendedPaymentDate))) {
@@ -834,6 +846,267 @@ export async function requestReissue(rawInput: RequestReissueInput, access: Reis
 
     const [row] = await tx.select().from(payrollPaymentReissue).where(and(eq(payrollPaymentReissue.client, input.client), eq(payrollPaymentReissue.reissueId, reissueId))).limit(1);
     return viewOf(tx, input.client, row!, money);
+}
+
+/** Create a frozen, encrypted replacement draft for all or selected employees. An approver releases it. */
+export async function requestReissue(rawInput: RequestReissueInput, access: ReissueAccess | undefined): Promise<ReissueView> {
+  const input = requestInput.parse(rawInput);
+  return withTenant(input.client, async (tx) => {
+    const grant = await judge(tx, input.client, access, REQUEST);
+    const file = await loadSourceFile(tx, input.client, input.sourcePreparationId, grant);
+    const run = await loadRun(tx, input.client, file.runId);
+    await assertNotReversed(tx, input.client, run);
+    const money = await moneyForRun(tx, run);
+    if (!isCalendarDate(input.intendedPaymentDate)) refuse('PAYMENT_DATE', `Intended payment date ${input.intendedPaymentDate} is not a calendar date.`, 'Enter the date as YYYY-MM-DD.');
+    return createDraftInTx(tx, input, grant, file, run, money, access);
+  });
+}
+
+// ── Durable submission intent (register -> execute) ──────────────────────────
+
+export type ReissueIntentStatus = 'REGISTERED' | 'RUNNING' | 'COMPLETED' | 'REFUSED' | 'ABANDONED';
+
+export interface ReissueIntentView {
+  intentId: string;
+  sourcePreparationId: string;
+  requestKey: string;
+  status: ReissueIntentStatus;
+  reissueId: string | null;
+  reissueReference: string | null;
+  draftStatus: string | null;
+  requestedAt: string;
+  updatedAt: string | null;
+}
+
+/**
+ * Refusals that can never succeed for the SAME payload, so the intent is marked REFUSED. Anything else (an
+ * environmental or state conflict that may clear) leaves the intent RUNNING so an exact retry is still possible.
+ */
+const FINAL_INTENT_REFUSALS = new Set([
+  'PAYMENT_DATE', 'NO_SELECTION', 'NOT_IN_FILE', 'ATTESTATION_REQUIRED', 'ATTESTATION_INVALID',
+  'ATTESTATION_DATE', 'NO_SUBMISSION_UNCONFIRMED', 'REISSUE_KEY_REUSED',
+]);
+
+type IntentRow = typeof payrollPaymentReissueIntent.$inferSelect;
+
+function intentView(row: IntentRow, draft?: { status: string; reissueReference: string }): ReissueIntentView {
+  return {
+    intentId: row.intentId,
+    sourcePreparationId: row.sourcePreparationId,
+    requestKey: row.requestKey,
+    status: row.status as ReissueIntentStatus,
+    reissueId: row.reissueId ?? null,
+    reissueReference: draft?.reissueReference ?? null,
+    draftStatus: draft?.status ?? null,
+    requestedAt: row.createdAt.toISOString(),
+    updatedAt: row.changedAt?.toISOString() ?? null,
+  };
+}
+
+async function draftOfIntent(tx: Tx, client: string, row: IntentRow): Promise<{ status: string; reissueReference: string } | undefined> {
+  if (!row.reissueId) return undefined;
+  const [draft] = await tx.select({ status: payrollPaymentReissue.status, reissueReference: payrollPaymentReissue.reissueReference })
+    .from(payrollPaymentReissue)
+    .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, row.reissueId))).limit(1);
+  return draft;
+}
+
+/**
+ * Step 1 of the durable protocol: record the exact normalized request under a stable key, scoped to the
+ * authenticated requester and the source file. This NEVER creates a draft. A repeated key with the same
+ * fingerprint replays the existing intent; a different fingerprint is a controlled conflict. Because the intent
+ * is durable, the caller may safely retry this step after a lost response, and a later reload can discover it
+ * without any browser storage.
+ */
+export async function registerReissueIntent(rawInput: RequestReissueInput, access: ReissueAccess | undefined): Promise<ReissueIntentView> {
+  const input = requestInput.parse(rawInput);
+  return withTenant(input.client, async (tx) => {
+    const grant = await judge(tx, input.client, access, REQUEST);
+    const file = await loadSourceFile(tx, input.client, input.sourcePreparationId, grant);
+    const key = String(input.requestKey ?? '').trim() || randomUUID();
+    if (key.length > 64) refuse('REISSUE_KEY_INVALID', 'The request key is too long.', 'Reload the screen and try again.');
+    const normalized = normalizeRequest(input, file);
+    await lockRequestKey(tx, input.client, key);
+    const [existing] = await tx.select().from(payrollPaymentReissueIntent)
+      .where(and(eq(payrollPaymentReissueIntent.client, input.client), eq(payrollPaymentReissueIntent.requestKey, key))).limit(1);
+    if (existing) {
+      // Do not confirm or deny another user's key, and never accept a different request under the same key.
+      if (existing.requestedBy !== input.changedBy || existing.requestFingerprint !== normalized.fingerprint) {
+        refuse('REISSUE_KEY_REUSED', 'This request key was already used for a different replacement request.', 'Reload the screen to get a fresh request key.');
+      }
+      return intentView(existing, await draftOfIntent(tx, input.client, existing));
+    }
+    // Registration itself performs only read-only shape/reach checks; it creates NO draft.
+    const selected = normalized.selectionSet;
+    if (selected.length === 0) refuse('NO_SELECTION', 'No employee was selected.', 'Choose all employees of the file, or select at least one employee.');
+    if (!(await allReachable(tx, input.client, grant, selected, input.intendedPaymentDate))) {
+      refuse('FILE_UNAVAILABLE', 'That file does not exist, or is not available to you.', 'Open a file whose employees are all within your Company Code or Plant scope.');
+    }
+    const all = snapshotRowsOf(file).map((r) => r.personnelNumber);
+    for (const pn of selected) {
+      if (!all.includes(pn)) refuse('NOT_IN_FILE', `Employee ${pn} is not in this file.`, 'Select employees from the file you are replacing.');
+    }
+    const payload: ReissueIntentPayload = {
+      selection: input.selection,
+      personnelNumbers: selected,
+      intendedPaymentDate: input.intendedPaymentDate,
+      reason: input.reason,
+      attestations: normalized.attestationsNormalized,
+    };
+    const intentId = randomUUID();
+    const [row] = await tx.insert(payrollPaymentReissueIntent).values({
+      client: input.client, intentId, sourcePreparationId: file.preparationId, requestKey: key,
+      requestFingerprint: normalized.fingerprint, requestedBy: input.changedBy, status: 'REGISTERED',
+      payload, createdBy: input.changedBy,
+    }).returning();
+    return intentView(row!);
+  });
+}
+
+/**
+ * Step 2: execute (or replay) a registered intent using the EXACT stored payload and key. A completed intent is
+ * replayed before any new-request eligibility check, so an existing active draft cannot block its recovery.
+ *
+ * Phase 1 commits `RUNNING` before the draft is attempted, so a crash, tab close or lost response leaves a state
+ * that is honestly "executing / unknown" and safe to retry. Phase 2 commits the draft and `COMPLETED` together.
+ * A truly final content refusal marks `REFUSED`; an environmental conflict leaves `RUNNING` and remains retryable.
+ */
+export async function executeReissueIntent(
+  client: string, intentId: string, access: ReissueAccess | undefined, changedBy: string,
+): Promise<ReissueView> {
+  const id = String(intentId ?? '').trim();
+  if (!id || id.length > 36) refuse('REISSUE_UNAVAILABLE', 'That replacement request does not exist, or is not available to you.', 'Open the file you were working on.');
+  // Phase 1 commits RUNNING on its own, so a crash or lost response is honestly observable and retryable.
+  await withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, REQUEST);
+    const [row] = await tx.select().from(payrollPaymentReissueIntent)
+      .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, id))).limit(1).for('update');
+    // Another user's identifier is indistinguishable from a missing one.
+    if (!row || row.requestedBy !== changedBy) {
+      refuse('REISSUE_UNAVAILABLE', 'That replacement request does not exist, or is not available to you.', 'Open the file you were working on.');
+    }
+    await loadSourceFile(tx, client, row.sourcePreparationId, grant);
+    if (row.status === 'COMPLETED') return { kind: 'completed' as const, row };
+    if (row.status === 'REFUSED') refuse(row.refusalCode ?? 'REISSUE_REFUSED', 'This replacement request was refused and cannot be executed.', 'Start a new request if the situation has changed.');
+    if (row.status === 'ABANDONED') refuse('REISSUE_ABANDONED', 'This replacement request was explicitly abandoned. A draft may still exist.', 'Check the file history; if a draft exists, cancel it.');
+    if (row.status === 'REGISTERED') {
+      await tx.update(payrollPaymentReissueIntent)
+        .set({ status: 'RUNNING', changedBy, changedAt: new Date() })
+        .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, id)));
+    }
+    return { kind: 'execute' as const, row };
+  });
+
+  let refusal: ReissueError | null = null;
+  let view: ReissueView | null = null;
+  await withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, REQUEST);
+    const [row] = await tx.select().from(payrollPaymentReissueIntent)
+      .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, id))).limit(1).for('update');
+    if (!row || row.requestedBy !== changedBy) {
+      refuse('REISSUE_UNAVAILABLE', 'That replacement request does not exist, or is not available to you.', 'Open the file you were working on.');
+    }
+    const file = await loadSourceFile(tx, client, row.sourcePreparationId, grant);
+    const run = await loadRun(tx, client, file.runId);
+    await assertNotReversed(tx, client, run);
+    const money = await moneyForRun(tx, run);
+    if (row.status === 'COMPLETED') {
+      const draft = await draftOfIntent(tx, client, row);
+      if (!draft) refuse('REISSUE_UNAVAILABLE', 'The draft for this request is not available.', 'Check the file history.');
+      const [committed] = await tx.select().from(payrollPaymentReissue)
+        .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, row.reissueId!))).limit(1);
+      if (!committed) refuse('REISSUE_UNAVAILABLE', 'The draft for this request is not available.', 'Check the file history.');
+      await assertReachable(tx, client, grant, (committed.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), committed.intendedPaymentDate);
+      view = await viewOf(tx, client, committed, money);
+      return;
+    }
+    if (row.status === 'REFUSED') refuse(row.refusalCode ?? 'REISSUE_REFUSED', 'This replacement request was refused and cannot be executed.', 'Start a new request if the situation has changed.');
+    if (row.status === 'ABANDONED') refuse('REISSUE_ABANDONED', 'This replacement request was explicitly abandoned. A draft may still exist.', 'Check the file history; if a draft exists, cancel it.');
+
+    // Reconstruct the EXACT normalized request that was registered; never the editable form.
+    const parsed = requestInput.parse({
+      client, sourcePreparationId: row.sourcePreparationId, requestKey: row.requestKey, changedBy: row.requestedBy,
+      selection: row.payload.selection, personnelNumbers: row.payload.personnelNumbers,
+      intendedPaymentDate: row.payload.intendedPaymentDate, reason: row.payload.reason, attestations: row.payload.attestations,
+    });
+    try {
+      view = await createDraftInTx(tx, parsed, grant, file, run, money, access);
+      await tx.update(payrollPaymentReissueIntent)
+        .set({ status: 'COMPLETED', reissueId: view.reissueId, changedBy, changedAt: new Date() })
+        .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, id)));
+    } catch (error) {
+      if (error instanceof ReissueError && FINAL_INTENT_REFUSALS.has(error.code)) {
+        refusal = error;
+        await tx.update(payrollPaymentReissueIntent)
+          .set({ status: 'REFUSED', refusalCode: error.code, changedBy, changedAt: new Date() })
+          .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, id)));
+      } else {
+        throw error;
+      }
+    }
+  });
+  if (refusal) throw refusal;
+  if (!view) refuse('REISSUE_STATE', 'The replacement request could not be executed.', 'Reload the screen and check the file history.');
+  return view;
+}
+
+/**
+ * The requester's own intents for ONE source file, newest first. Never returns the stored payload, never another
+ * user's intent, and hides a completed draft whose employees are no longer within the caller's live reach.
+ */
+export async function listReissueIntents(
+  client: string, sourcePreparationId: string, access: ReissueAccess | undefined, requestedBy: string,
+): Promise<ReissueIntentView[]> {
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, REQUEST);
+    const file = await loadSourceFile(tx, client, sourcePreparationId, grant);
+    const rows = await tx.select().from(payrollPaymentReissueIntent)
+      .where(and(
+        eq(payrollPaymentReissueIntent.client, client),
+        eq(payrollPaymentReissueIntent.sourcePreparationId, file.preparationId),
+        eq(payrollPaymentReissueIntent.requestedBy, requestedBy),
+      ))
+      .orderBy(desc(payrollPaymentReissueIntent.createdAt)).limit(20);
+    const out: ReissueIntentView[] = [];
+    for (const row of rows) {
+      if (!row.reissueId) { out.push(intentView(row)); continue; }
+      const [draft] = await tx.select({ status: payrollPaymentReissue.status, reissueReference: payrollPaymentReissue.reissueReference, snapshot: payrollPaymentReissue.bankSnapshot, intendedPaymentDate: payrollPaymentReissue.intendedPaymentDate })
+        .from(payrollPaymentReissue)
+        .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, row.reissueId))).limit(1);
+      if (!draft) { out.push(intentView(row)); continue; }
+      const pns = (draft.snapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber);
+      if (!(await allReachable(tx, client, grant, pns, draft.intendedPaymentDate))) continue;
+      out.push(intentView(row, draft));
+    }
+    return out;
+  });
+}
+
+/**
+ * Explicitly discard an unresolved attempt. This does NOT prove the operation never committed: it only stops this
+ * key being retried. A completed draft must be cancelled instead, and an in-flight execution may still commit.
+ */
+export async function abandonReissueIntent(
+  client: string, intentId: string, access: ReissueAccess | undefined, changedBy: string,
+): Promise<ReissueIntentView> {
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, REQUEST);
+    const [row] = await tx.select().from(payrollPaymentReissueIntent)
+      .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, String(intentId ?? '').trim()))).limit(1).for('update');
+    if (!row || row.requestedBy !== changedBy) {
+      refuse('REISSUE_UNAVAILABLE', 'That replacement request does not exist, or is not available to you.', 'Open the file you were working on.');
+    }
+    await loadSourceFile(tx, client, row.sourcePreparationId, grant);
+    if (row.status === 'COMPLETED') {
+      refuse('REISSUE_STATE', 'This request already created a draft.', 'Cancel the draft from the file history instead.');
+    }
+    if (row.status === 'REGISTERED' || row.status === 'RUNNING') {
+      const [updated] = await tx.update(payrollPaymentReissueIntent)
+        .set({ status: 'ABANDONED', changedBy, changedAt: new Date() })
+        .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, row.intentId))).returning();
+      return intentView(updated ?? row);
+    }
+    return intentView(row);
   });
 }
 
@@ -1181,6 +1454,29 @@ export async function listReissueSourceEmployees(
 }
 
 /** Every replacement of a run, newest version first, with its lines (masked). */
+/**
+ * Read-only durable status for one replacement, for the caller's own approve/cancel finality check. A non-2xx from
+ * an intermediary is not proof of non-commit; this returns what the database actually holds. A missing or
+ * out-of-reach replacement is indistinguishable from a nonexistent one.
+ */
+export async function reissueStatus(
+  client: string, reissueId: string, access: ReissueAccess | undefined,
+): Promise<{ found: boolean; status: string | null }> {
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, VIEW);
+    const id = String(reissueId ?? '').trim();
+    if (!id || id.length > 36) return { found: false, status: null } as const;
+    const [row] = await tx.select().from(payrollPaymentReissue)
+      .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, id))).limit(1);
+    if (!row) return { found: false, status: null } as const;
+    const pns = ((row.bankSnapshot ?? []) as PaymentFileBankRow[]).map((r) => r.personnelNumber);
+    if (!reachesCompany(grant, row.companyCode) || !(await allReachable(tx, client, grant, pns, row.intendedPaymentDate))) {
+      return { found: false, status: null } as const;
+    }
+    return { found: true, status: row.status } as const;
+  });
+}
+
 export async function listReissues(client: string, runId: string, access: ReissueAccess | undefined): Promise<ReissueView[]> {
   return withTenant(client, async (tx) => {
     const grant = await judge(tx, client, access, VIEW);

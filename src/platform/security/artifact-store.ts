@@ -91,14 +91,17 @@ export function writeEncryptedArtifact(client: string, artifactId: string, envel
   const staging = join(stagingDir, `${artifactId}.${process.pid}.${Date.now()}.tmp`);
   try {
     // Create the tenant/staging directories and make their PARENT entries durable: flushing the tenant directory
-    // after a rename does not persist its own entry in the root. Flush each parent only when a directory was
-    // actually created, so the normal path stays cheap.
-    const tenantExisted = existsSync(tenantDir);
+    // after a rename does not persist its own entry in the root.
+    //
+    // ALWAYS flush, never "only if this call created it". Publishers run concurrently under a SHARED lock, so a
+    // conditional skip would let writer B trust a tenant directory that writer A created but has not yet flushed;
+    // if A died, B's published file could reference a directory entry that is not durable. One extra directory
+    // fsync per publication is cheap for this workload. This is a POSIX best-effort: on a filesystem that does not
+    // persist directory fsync (some network filesystems), the platform cannot promise more than it provides.
     mkdirSync(tenantDir, { recursive: true, mode: 0o700 });
-    if (!tenantExisted) fsyncDir(root);
-    const stagingExisted = existsSync(stagingDir);
+    fsyncDir(root);
     mkdirSync(stagingDir, { recursive: true, mode: 0o700 });
-    if (!stagingExisted) fsyncDir(tenantDir);
+    fsyncDir(tenantDir);
     if (existsSync(absolute)) throw new ArtifactStoreError('An artifact with this id already exists; refusing to overwrite it.', 'ARTIFACT_EXISTS');
     const fd = openSync(staging, 'wx', 0o600);
     try {

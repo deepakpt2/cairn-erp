@@ -8,7 +8,9 @@ import {
   PreviewGeneration,
   SubmissionKey,
   acceptsPreview,
+  clearLegacyRecovery,
   previewSignature,
+  readAndScrubLegacyKeys,
 } from '../src/app/people/payroll-runs/reissue-request-lifecycle';
 import { reissueInputSignature } from '../src/modules/people/payment-reissue-inputs';
 
@@ -119,5 +121,59 @@ describe('submission key retention', () => {
     keys.resolve();
     const b = keys.keyFor(payload(), { action: 'request' });
     expect(b).not.toBe(a);
+  });
+});
+
+describe('legacy browser record handling', () => {
+  const LEGACY = 'cairn.paymentReissue.unresolved.v2';
+  const withStorage = <T,>(storage: unknown, fn: () => T): T => {
+    const saved = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+    Object.defineProperty(globalThis, 'sessionStorage', { value: storage, configurable: true, writable: true });
+    try { return fn(); } finally {
+      if (saved) Object.defineProperty(globalThis, 'sessionStorage', saved);
+      else delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+    }
+  };
+  const memory = (initial: Record<string, string> = {}) => {
+    const map = new Map(Object.entries(initial));
+    return {
+      map,
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => { map.set(k, v); },
+      removeItem: (k: string) => { map.delete(k); },
+    };
+  };
+
+  it('keeps only the opaque key and DROPS the sensitive payload for good', () => {
+    const store = memory({ [LEGACY]: JSON.stringify({
+      A: { key: 'k-A', payload: { reason: 'SECRET', attestations: 'SECRET-ATT' }, at: 'x' },
+      B: { key: 'k-B', payload: { reason: 'SECRET2' }, at: 'y' },
+    }) });
+    const result = withStorage(store, readAndScrubLegacyKeys);
+    expect(result).toEqual({ keys: ['k-A', 'k-B'], unreadable: false });
+    const rewritten = store.map.get(LEGACY)!;
+    expect(rewritten).toContain('k-A');
+    expect(rewritten).not.toContain('SECRET');
+    expect(rewritten).not.toContain('SECRET-ATT');
+    expect(rewritten).not.toContain('SECRET2');
+  });
+
+  it('reports unreadable storage honestly instead of treating it as safe and empty', () => {
+    const throwing = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); }, removeItem: () => { throw new Error('blocked'); } };
+    expect(withStorage(throwing, readAndScrubLegacyKeys)).toEqual({ keys: [], unreadable: true });
+  });
+
+  it('reports a corrupt record as unreadable and never echoes its contents', () => {
+    const store = memory({ [LEGACY]: '{not json SECRET' });
+    const result = withStorage(store, readAndScrubLegacyKeys);
+    expect(result).toEqual({ keys: [], unreadable: true });
+    expect(JSON.stringify(result)).not.toContain('SECRET');
+  });
+
+  it('an empty marker is neither unreadable nor retained', () => {
+    const store = memory();
+    expect(withStorage(store, readAndScrubLegacyKeys)).toEqual({ keys: [], unreadable: false });
+    withStorage(store, () => clearLegacyRecovery());
+    expect(store.map.has(LEGACY)).toBe(false);
   });
 });

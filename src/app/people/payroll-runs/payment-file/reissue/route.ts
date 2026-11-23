@@ -23,9 +23,14 @@ import {
   downloadHistoricalFile,
   downloadReissue,
   isReissueError,
+  abandonReissueIntent,
+  executeReissueIntent,
+  listReissueIntents,
   previewReissue,
   reconcileReissueRequest,
+  registerReissueIntent,
   requestReissue,
+  reissueStatus,
 } from '@/modules/people/payroll-payment-reissue';
 
 export const dynamic = 'force-dynamic';
@@ -47,7 +52,8 @@ function statusOf(code: string): number {
   if (code === 'REISSUE_AUTHORITY' || code === 'REISSUE_BANK_AUTHORITY' || code === 'FOUR_EYES') return code === 'FOUR_EYES' ? 409 : 403;
   if (code === 'REISSUE_UNAVAILABLE' || code === 'FILE_UNAVAILABLE' || code === 'REISSUE_NOT_APPROVED') return 404;
   if (code === 'REISSUE_SUPERSEDED' || code === 'REISSUE_BANK_CHANGED') return 409;
-  if (code === 'REISSUE_CONFLICT' || code === 'REISSUE_STATE' || code === 'REISSUE_KEY_REUSED') return 409;
+  if (code === 'REISSUE_CONFLICT' || code === 'REISSUE_STATE' || code === 'REISSUE_KEY_REUSED'
+    || code === 'REISSUE_ABANDONED' || code === 'REISSUE_REFUSED') return 409;
   return 400;
 }
 
@@ -95,6 +101,49 @@ export async function POST(request: Request): Promise<Response> {
         changedBy: s.user.username,
       }, access);
       return json({ ...view, warning: REISSUE_WARNING }, 201);
+    }
+    if (action === 'register' || action === 'execute') {
+      let attestations: unknown[] = [];
+      if (action === 'register') {
+        try {
+          const parsed = JSON.parse(String(form?.get('attestations') ?? '[]'));
+          if (Array.isArray(parsed)) attestations = parsed;
+        } catch {
+          return refusal(400, 'The attestations could not be read. Nothing was saved.', 'Reload the screen and enter each employee’s original outcome again.');
+        }
+      }
+      if (action === 'register') {
+        const intent = await registerReissueIntent({
+          client: s.user.client,
+          sourcePreparationId: String(form?.get('sourcePreparationId') ?? ''),
+          selection: String(form?.get('selection') ?? 'ALL') === 'SELECTED' ? 'SELECTED' : 'ALL',
+          personnelNumbers: String(form?.get('personnelNumbers') ?? '').split(',').map((n) => n.trim()).filter(Boolean),
+          intendedPaymentDate: String(form?.get('intendedPaymentDate') ?? ''),
+          reason: String(form?.get('reason') ?? ''),
+          attestations: attestations as never,
+          requestKey: String(form?.get('requestKey') ?? '') || undefined,
+          changedBy: s.user.username,
+        }, access);
+        return json(intent, 201);
+      }
+      const view = await executeReissueIntent(s.user.client, String(form?.get('intentId') ?? ''), access, s.user.username);
+      return json({ ...view, warning: REISSUE_WARNING }, 201);
+    }
+    if (action === 'intents') {
+      const list = await listReissueIntents(
+        s.user.client,
+        String(form?.get('sourcePreparationId') ?? ''),
+        access,
+        s.user.username,
+      );
+      return json(list);
+    }
+    if (action === 'reissueStatus') {
+      return json(await reissueStatus(s.user.client, String(form?.get('reissueId') ?? ''), access));
+    }
+    if (action === 'abandon') {
+      const intent = await abandonReissueIntent(s.user.client, String(form?.get('intentId') ?? ''), access, s.user.username);
+      return json(intent);
     }
     if (action === 'reconcile') {
       const result = await reconcileReissueRequest(

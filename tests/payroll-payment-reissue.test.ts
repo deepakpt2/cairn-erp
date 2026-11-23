@@ -49,9 +49,14 @@ import {
   downloadHistoricalFile,
   downloadHistoricalReissue,
   downloadReissue,
+  abandonReissueIntent,
+  executeReissueIntent,
+  listReissueIntents,
   listReissueSourceEmployees, listReissues,
   previewReissue,
   reconcileReissueRequest,
+  registerReissueIntent,
+  reissueStatus,
   requestReissue,
 } from '../src/modules/people/payroll-payment-reissue';
 import { buildPayrollFixture, createPayrollPoster, payrollEmployee, type PayrollFixture } from './helpers/payroll-actor';
@@ -785,6 +790,7 @@ describe('destination checks, historical replacements, and deliberate approval',
     await expectRefusal(downloadHistoricalReissue(tenant.client, v1.reissueId, { authorization: noHist.authorization }), 'REISSUE_AUTHORITY');
     expect(v2.lines.some((l) => l.personnelNumber === b)).toBe(false);
   }, 90_000);
+
 });
 
 describe('the reissue endpoint', () => {
@@ -864,4 +870,214 @@ describe('the reissue endpoint', () => {
     expect(response.headers.get('content-type')).toContain('text/csv');
     expect(response.headers.get('cache-control')).toBe('private, no-store');
   });
+});
+
+
+let iIntentPrep = '';
+let iIntentEmployees: string[] = [];
+
+describe('durable submission intent (register -> execute)', () => {
+  const post = (fields: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(fields)) f.set(k, v); return new Request('http://localhost/people/payroll-runs/payment-file/reissue', { method: 'POST', body: f }); };
+  // An isolated run/file so no other suite's drafts can collide with these obligations.
+  let iPrep: string;
+  let iRun: string;
+  let iEmployees: string[] = [];
+
+  beforeAll(async () => {
+    const run = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 11, changedBy: ACTOR }, RUN_AUTH);
+    expect(run.exceptions, JSON.stringify(run.exceptions)).toEqual([]);
+    await releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: ACTOR }, RUN_AUTH);
+    const poster = await createPayrollPoster(tenant.client);
+    await postPayrollRun({ client: tenant.client, runId: run.runId, changedBy: poster.username, authorization: poster.authorization });
+    iRun = run.runId;
+    iEmployees = (await withTenant(tenant.client, (tx) => tx.execute(sql`select personnel_number as pn from payroll_result where client = ${tenant.client} and run_id = ${run.runId} order by personnel_number`)) as unknown as Array<{ pn: string }>).map((r) => r.pn);
+    for (const pn of iEmployees) await bankAccount(pn).catch(() => null);
+    iPrep = (await preparePaymentFile({ client: tenant.client, runId: iRun, intendedPaymentDate: '2026-01-10', changedBy: ACTOR }, { authorization: requester.authorization })).preparationId;
+    iIntentPrep = iPrep;
+    iIntentEmployees = iEmployees;
+  }, 120_000);
+
+  const reg = (over: Record<string, unknown> = {}) => registerReissueIntent({
+    client: tenant.client, sourcePreparationId: iPrep, selection: 'SELECTED', personnelNumbers: [iEmployees[0]!],
+    intendedPaymentDate: '2026-01-15', reason: 'intent test', attestations: [att(iEmployees[0]!)] as never,
+    requestKey: randomUUID(), changedBy: 'RI.REQ', ...over,
+  }, { authorization: requester.authorization });
+
+  const intentRow = async (intentId: string) => (await withTenant(tenant.client, (tx) => tx.execute(sql`
+    select status, reissue_id::text as reissue_id, request_key, payload from payroll_payment_reissue_intent
+     where client = ${tenant.client} and intent_id = ${intentId}::uuid`)) as unknown as Array<{ status: string; reissue_id: string | null; request_key: string; payload: Record<string, unknown> }>)[0]!;
+
+  const draftCount = async (key: string) => (await withTenant(tenant.client, (tx) => tx.execute(sql`
+    select count(*)::int as n from payroll_payment_reissue where client = ${tenant.client} and request_key = ${key}`)) as unknown as Array<{ n: number }>)[0]!.n;
+
+  it('register records the exact request and creates NO draft; execute commits the draft and COMPLETED together', async () => {
+    const key = randomUUID();
+    const registered = await reg({ requestKey: key, reason: 'registered only' });
+    expect(registered.status).toBe('REGISTERED');
+    expect(await draftCount(key)).toBe(0);
+    // Registration alone never shows up in the reissue history.
+    expect((await listReissues(tenant.client, iRun, { authorization: requester.authorization })).length).toBe(0);
+
+    const view = await executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ');
+    expect(view.status).toBe('DRAFT');
+    expect(view.reason).toBe('registered only');
+    const row = await intentRow(registered.intentId);
+    expect(row.status).toBe('COMPLETED');
+    expect(row.reissue_id).toBe(view.reissueId);
+    expect(await draftCount(key)).toBe(1);
+
+    // Replay returns the SAME draft; a new-request eligibility check would say the employee is blocked.
+    const preview = await previewReissue(tenant.client, { sourcePreparationId: iPrep, selection: 'SELECTED', personnelNumbers: [iEmployees[0]!], intendedPaymentDate: '2026-01-15' }, { authorization: requester.authorization });
+    expect(preview.employees[0]!.eligible).toBe(false);
+    const replay = await executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ');
+    expect(replay.reissueId).toBe(view.reissueId);
+    expect(await draftCount(key)).toBe(1);
+    await cancelReissue(tenant.client, view.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 120_000);
+
+  it('two concurrent executes of one intent both return the same single draft', async () => {
+    const registered = await reg({ personnelNumbers: [iEmployees[1]!], attestations: [att(iEmployees[1]!)] as never, requestKey: randomUUID() });
+    const results = await Promise.allSettled([
+      executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ'),
+      executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ'),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<{ reissueId: string }>[];
+    expect(ok).toHaveLength(2);
+    expect(new Set(ok.map((r) => r.value.reissueId)).size).toBe(1);
+    expect(await draftCount(registered.requestKey)).toBe(1);
+    await cancelReissue(tenant.client, ok[0]!.value.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 120_000);
+
+  it('register is idempotent for the same key, and a different payload or source is a controlled conflict', async () => {
+    const key = randomUUID();
+    const first = await reg({ requestKey: key, reason: 'same' });
+    const again = await reg({ requestKey: key, reason: 'same' });
+    expect(again.intentId).toBe(first.intentId);
+    await expectRefusal(reg({ requestKey: key, reason: 'DIFFERENT' }), 'REISSUE_KEY_REUSED');
+    await expectRefusal(reg({ requestKey: key, reason: 'same', sourcePreparationId: preparationId, personnelNumbers: [employees[0]!], attestations: [att(employees[0]!)] as never }), 'REISSUE_KEY_REUSED');
+    // Registration still created no draft.
+    expect(await draftCount(key)).toBe(0);
+  }, 120_000);
+
+  it('the recovery list is requester-scoped, payload-free, and includes the completed draft reference', async () => {
+    const registered = await reg({ personnelNumbers: [iEmployees[2]!], attestations: [att(iEmployees[2]!)] as never, reason: 'SECRET-REASON-MARKER', requestKey: randomUUID() });
+    const list = await listReissueIntents(tenant.client, iPrep, { authorization: requester.authorization }, 'RI.REQ');
+    const mine = list.find((i) => i.intentId === registered.intentId)!;
+    expect(mine.status).toBe('REGISTERED');
+    // The payload (reason, evidence, employee set) is never returned by the recovery list.
+    expect(JSON.stringify(list)).not.toContain('SECRET-REASON-MARKER');
+    expect(JSON.stringify(list)).not.toContain('BANKREF-1');
+    // Another requester cannot enumerate it, even with a valid request capability.
+    const other = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY], suffix: 'OTHER' });
+    expect(await listReissueIntents(tenant.client, iPrep, { authorization: other.authorization }, 'RI.OTHER')).toEqual([]);
+    await expectRefusal(executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.OTHER'), 'REISSUE_UNAVAILABLE');
+    await expectRefusal(executeReissueIntent(tenant.client, registered.intentId, { authorization: other.authorization }, 'RI.OTHER'), 'REISSUE_UNAVAILABLE');
+    // Cross-tenant is indistinguishable from missing.
+    await expectRefusal(executeReissueIntent(otherTenant.client, registered.intentId, { authorization: otherTenantActor.authorization }, 'RI.REQ'), 'REISSUE_UNAVAILABLE');
+    await cancelReissue(tenant.client, (await executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ')).reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 120_000);
+
+  it('a final content refusal marks the intent REFUSED and never creates a draft', async () => {
+    const key = randomUUID();
+    const registered = await reg({ requestKey: key, personnelNumbers: [iEmployees[1]!], attestations: [att(iEmployees[1]!, 'PAID')] as never });
+    await expectRefusal(executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ'), 'ATTESTATION_INVALID');
+    expect((await intentRow(registered.intentId)).status).toBe('REFUSED');
+    expect(await draftCount(key)).toBe(0);
+    // A retry is a controlled refusal, not a new attempt.
+    await expectRefusal(executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ'), 'ATTESTATION_INVALID');
+    expect(await draftCount(key)).toBe(0);
+  }, 120_000);
+
+  it('an environmental conflict stays RUNNING and succeeds on a later retry once it clears', async () => {
+    const target = iEmployees[0]!;
+    const blocking = await requestReissue({
+      client: tenant.client, sourcePreparationId: iPrep, selection: 'SELECTED', personnelNumbers: [target],
+      intendedPaymentDate: '2026-01-20', reason: 'blocking draft', attestations: [att(target)] as never,
+      requestKey: randomUUID(), changedBy: 'RI.REQ',
+    }, { authorization: requester.authorization });
+    const key = randomUUID();
+    const registered = await reg({ requestKey: key, personnelNumbers: [target], attestations: [att(target)] as never, intendedPaymentDate: '2026-01-20' });
+    await expectRefusal(executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ'), 'REISSUE_CONFLICT');
+    expect((await intentRow(registered.intentId)).status).toBe('RUNNING');
+    expect(await draftCount(key)).toBe(0);
+    // Clear the conflict, retry the SAME intent: it now succeeds.
+    await cancelReissue(tenant.client, blocking.reissueId, { reason: 'clear conflict', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    const view = await executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ');
+    expect(view.status).toBe('DRAFT');
+    expect((await intentRow(registered.intentId)).status).toBe('COMPLETED');
+    await cancelReissue(tenant.client, view.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 120_000);
+
+  it('abandon refuses a completed intent, refuses to undo, and never bypasses duplicate safeguards', async () => {
+    const key = randomUUID();
+    const registered = await reg({ requestKey: key });
+    const abandoned = await abandonReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ');
+    expect(abandoned.status).toBe('ABANDONED');
+    await expectRefusal(executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ'), 'REISSUE_ABANDONED');
+    expect(await draftCount(key)).toBe(0);
+    // A completed intent cannot be abandoned; the draft must be cancelled.
+    const done = await reg({ requestKey: randomUUID() });
+    const view = await executeReissueIntent(tenant.client, done.intentId, { authorization: requester.authorization }, 'RI.REQ');
+    await expectRefusal(abandonReissueIntent(tenant.client, done.intentId, { authorization: requester.authorization }, 'RI.REQ'), 'REISSUE_STATE');
+    await cancelReissue(tenant.client, view.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 120_000);
+
+  it('ALL registration and execution keeps every file employee and records durable status', async () => {
+    const key = randomUUID();
+    const registered = await reg({ selection: 'ALL', personnelNumbers: [], attestations: iEmployees.map((pn) => att(pn)) as never, requestKey: key });
+    const view = await executeReissueIntent(tenant.client, registered.intentId, { authorization: requester.authorization }, 'RI.REQ');
+    expect(view.selection).toBe('ALL');
+    expect(view.employeeCount).toBe(iEmployees.length);
+    const status = await reissueStatus(tenant.client, view.reissueId, { authorization: requester.authorization });
+    expect(status).toEqual({ found: true, status: 'DRAFT' });
+    // A caller outside the tenant/company sees nothing.
+    const outsiderView = await reissueStatus(otherTenant.client, view.reissueId, { authorization: otherTenantActor.authorization });
+    expect(outsiderView.found).toBe(false);
+
+    await cancelReissue(tenant.client, view.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 120_000);
+
+  it('register + execute over HTTP creates one draft; the recovery list never returns the payload', async () => {
+    requestContext.cookie = encodeSessionCookie(tenant.client, requester.token);
+    const target = iEmployees[0]!;
+    const key = randomUUID();
+    const fields = {
+      sourcePreparationId: iPrep, selection: 'SELECTED', personnelNumbers: target,
+      intendedPaymentDate: '2026-02-10', reason: 'SECRET-REASON-HTTP', attestations: JSON.stringify([att(target)]),
+      requestKey: key,
+    };
+    const regResponse = await REISSUE_POST(post({ action: 'register', ...fields }));
+    expect(regResponse.status).toBe(201);
+    const reg = await regResponse.json() as { intentId: string; status: string };
+    expect(reg.status).toBe('REGISTERED');
+
+    const listResponse = await REISSUE_POST(post({ action: 'intents', sourcePreparationId: iPrep }));
+    expect(listResponse.status).toBe(200);
+    const listText = await listResponse.text();
+    expect(listText).toContain(reg.intentId);
+    // The sensitive payload is never in the recovery response.
+    expect(listText).not.toContain('SECRET-REASON-HTTP');
+    expect(listText).not.toContain('BANKREF-1');
+    expect(listText).not.toContain(target);
+
+    const execResponse = await REISSUE_POST(post({ action: 'execute', intentId: reg.intentId }));
+    expect(execResponse.status).toBe(201);
+    const created = await execResponse.json() as { reissueId: string; status: string };
+    expect(created.status).toBe('DRAFT');
+
+    // The allowlisted payload fields are returned to the REQUESTER for their own draft (they must review it).
+    const statusResponse = await REISSUE_POST(post({ action: 'reissueStatus', reissueId: created.reissueId }));
+    expect(await statusResponse.json()).toEqual({ found: true, status: 'DRAFT' });
+
+    // Another capable user cannot enumerate or execute this requester's intent.
+    const other = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY], suffix: 'HTTPO' });
+    requestContext.cookie = encodeSessionCookie(tenant.client, other.token);
+    const otherList = await REISSUE_POST(post({ action: 'intents', sourcePreparationId: iPrep }));
+    expect(await otherList.json()).toEqual([]);
+    const hijack = await REISSUE_POST(post({ action: 'execute', intentId: reg.intentId }));
+    expect(hijack.status).toBe(404);
+
+    requestContext.cookie = encodeSessionCookie(tenant.client, requester.token);
+    await cancelReissue(tenant.client, created.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 120_000);
 });

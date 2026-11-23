@@ -106,6 +106,17 @@ function loopDeclaredTables(text: string, effect: 'grant' | 'revoke'): string[] 
   return found;
 }
 
+/** Whether the migration's revoke for this table covers TRUNCATE as well as UPDATE and DELETE. */
+function revokeStatementRevokesTruncate(text: string, table: string): boolean {
+  const body = stripComments(text);
+  const pattern = new RegExp(`\\brevoke\\s+([^;]*?)\\bon\\s+(?:table\\s+)?(?:public\\.)?${table}\\s+from\\s+cairn_app`, 'gi');
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(body)) !== null) {
+    if (/\btruncate\b/i.test(match[1]!)) return true;
+  }
+  return false;
+}
+
 /** Tables a file revokes from the runtime role — an immutability declaration. */
 export function revokedTables(text: string): string[] {
   return [
@@ -193,6 +204,11 @@ export function auditMigrationGrantPolicy(text: string): string[] {
           `or mutable: "grant update, delete on table public.${table} to cairn_app;" ` +
           `(the default after 9186 is SELECT and INSERT only).`,
       );
+    }
+    // A declared-immutable table must also revoke TRUNCATE explicitly: revoking only UPDATE/DELETE leaves a
+    // blanket-granted truncate intact, which would let the runtime empty the evidence table.
+    if (revoked.has(table) && !revokeStatementRevokesTruncate(text, table)) {
+      problems.push(`${table}: declared immutable but TRUNCATE is not revoked from cairn_app.`);
     }
   }
 

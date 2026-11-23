@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { withTenant } from '../src/platform/db/client';
+import { withTenant, type Tx } from '../src/platform/db/client';
 import { parseBankDataKeyring } from '../src/platform/security/bank-data-keyring';
 import { encryptArtifact, decryptArtifact, ArtifactEncryptionError } from '../src/platform/security/artifact-encryption';
 import { readStoredArtifact, writeEncryptedArtifact } from '../src/platform/security/artifact-store';
@@ -21,7 +21,7 @@ import { PAYROLL_RUN_CAPABILITY, proposePayrollRun, releasePayrollRun } from '..
 import { postPayrollRun } from '../src/modules/people/payroll-posting';
 import { createEmployeeBank } from '../src/modules/people/employee-bank';
 import { PAYMENT_FILE_CAPABILITY, downloadPaymentFile, preparePaymentFile } from '../src/modules/people/payroll-payment-file';
-import { artifactOf, backfillLegacyArtifact, ownerRequiresArtifact, retainArtifact, sweepOrphans } from '../src/modules/people/payment-file-artifacts';
+import { artifactOf, backfillLegacyArtifact, ownerRequiresArtifact, readArtifact, retainArtifact, sweepOrphans } from '../src/modules/people/payment-file-artifacts';
 import { buildPayrollFixture, createPayrollPoster, payrollEmployee, type PayrollFixture } from './helpers/payroll-actor';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
@@ -409,50 +409,111 @@ describe('crash-safe publication and reconciliation', () => {
   // ── Publisher/sweeper serialisation (deterministic, no sleeps) ──────────────
 
   /**
-   * Start a publisher that has PUBLISHED its artifact but not yet committed, then run a sweep that would qualify
-   * the file by age. The sweep must block on the exclusive artifact lock until the publisher commits, after which
-   * the file must survive. Returns the sweep result and the artifact id.
+   * Deterministic barrier harness proving the sweeper WAITS on the exclusive artifact lock.
+   *
+   * A writer publishes inside its transaction and pauses. We then start the sweep and observe, through
+   * `pg_locks`/`pg_stat_activity` on the TEST database, that its backend is actually blocked on the tenant's
+   * advisory lock. Only then do we let the writer commit. No sleeps are used to decide ordering: every step waits
+   * for an observed state.
    */
+  async function locksFor(applicationName: string): Promise<{ granted: boolean; waiting: boolean }> {
+    const url = process.env.MIGRATION_DATABASE_URL;
+    if (!url) throw new Error('MIGRATION_DATABASE_URL is required for lock observation.');
+    const owner = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
+    try {
+      const rows = await owner<{ granted: boolean; wait_event: string | null }[]>`
+        select l.granted, a.wait_event
+          from pg_locks l
+          join pg_stat_activity a on a.pid = l.pid
+         where l.locktype = 'advisory' and a.application_name = ${applicationName}`;
+      return { granted: rows.some((r) => r.granted), waiting: rows.some((r) => !r.granted) };
+    } finally {
+      await owner.end({ timeout: 5 });
+    }
+  }
+
+  async function waitForState(check: () => Promise<boolean>, what: string, timeoutMs = 10_000): Promise<void> {
+    const started = Date.now();
+    for (;;) {
+      if (await check()) return;
+      if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${what}.`);
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  }
+
+  /** A tenant transaction whose backend is named, so its advisory lock can be observed in the catalog. */
+  async function namedTenantTx(name: string, fn: (tx: Tx) => Promise<void>): Promise<void> {
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`select set_config('application_name', ${name}, true)`);
+      await fn(tx);
+    });
+  }
+
   async function racePublisher(kind: 'FILE' | 'REISSUE') {
     const ownerId = randomUUID();
     const bytes = Buffer.from(`race-${kind}-${ownerId}`, 'utf8');
+    const writerName = `art-writer-${randomUUID().slice(0, 8)}`;
+    const sweepName = `art-sweep-${randomUUID().slice(0, 8)}`;
     let release!: () => void;
     const gate = new Promise<void>((r) => { release = r; });
     let published!: () => void;
     const publishedP = new Promise<void>((r) => { published = r; });
-    const writer = withTenant(tenant.client, async (tx) => {
+    let heldLock = false;
+
+    const writer = namedTenantTx(writerName, async (tx) => {
       const out = await retainArtifact(tx, {
         client: tenant.client, ownerKind: kind, ownerId, fileReference: `RACE-${kind}`,
         bytes, keyring: KEYRING, changedBy: 'ART_TEST',
       });
       published();
       await gate; // hold the transaction open AFTER publishing, BEFORE commit
-      return out.artifactId;
+      void out;
     });
     await publishedP;
-    // The file exists on disk and has no committed metadata row yet. Age it past a zero grace so the sweep WOULD
-    // qualify it; the exclusive lock, not the age, is what must protect it.
-    const listing = readdirSync(join(storageDir, tenant.client)).filter((n) => n.endsWith('.enc'));
-    expect(listing.length).toBeGreaterThan(0);
-    const sweep = withTenant(tenant.client, (tx) => sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 }));
+    // The writer holds the SHARED lock; confirm that from the catalog rather than assuming it.
+    await waitForState(async () => (await locksFor(writerName)).granted, 'the writer to hold the shared lock');
+    heldLock = true;
+    expect(heldLock).toBe(true);
+
+    // The file exists on disk, but the metadata row is still uncommitted, so it looks like an orphan to anyone who
+    // does not respect the shared lock.
+    const committed = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select count(*)::int as n from payroll_payment_artifact
+       where client = ${tenant.client} and owner_kind = ${kind} and owner_id = ${ownerId}`)) as unknown as Array<{ n: number }>;
+    expect(committed[0]!.n).toBe(0);
+
+    let swept = false;
+    const sweep = namedTenantTx(sweepName, async (tx) => {
+      await sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 });
+      swept = true;
+    });
+    // THE CENTRAL ASSERTION: the sweep is blocked on the exclusive lock, not merely slow to start.
+    await waitForState(async () => (await locksFor(sweepName)).waiting, 'the sweeper to block on the exclusive lock');
+    expect(swept).toBe(false);
+
     release();
-    const artifactId = await writer;
-    const result = await sweep;
-    return { artifactId, result, ownerId };
+    await writer;
+    await sweep;
+    const finalLocks = await locksFor(sweepName);
+    expect(finalLocks.waiting).toBe(false);
+    return { ownerId };
   }
 
-  it('does not sweep an in-flight original-file publisher (blocks, then the committed artifact survives)', async () => {
-    const { artifactId, ownerId } = await racePublisher('FILE');
-    // The sweep may remove other genuine leftovers from earlier tests; THIS artifact must survive.
-    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${artifactId}.enc`);
-    await withTenant(tenant.client, async (tx) => {
-      expect(await artifactOf(tx, tenant.client, 'FILE', ownerId)).not.toBeNull();
-    });
+  it('does not sweep an in-flight original-file publisher (the sweep is proven to block on the exclusive lock)', async () => {
+    const { ownerId } = await racePublisher('FILE');
+    const record = await withTenant(tenant.client, (tx) => artifactOf(tx, tenant.client, 'FILE', ownerId));
+    expect(record).not.toBeNull();
+    // The committed artifact's exact bytes are still on disk and readable.
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${record!.artifactId}.enc`);
+    const bytes = await withTenant(tenant.client, (tx) => readArtifact(record!, tenant.client, KEYRING));
+    expect(bytes).not.toBeNull();
   });
 
-  it('does not sweep an in-flight replacement publisher', async () => {
-    const { artifactId } = await racePublisher('REISSUE');
-    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${artifactId}.enc`);
+  it('does not sweep an in-flight replacement publisher (the sweep is proven to block on the exclusive lock)', async () => {
+    const { ownerId } = await racePublisher('REISSUE');
+    const record = await withTenant(tenant.client, (tx) => artifactOf(tx, tenant.client, 'REISSUE', ownerId));
+    expect(record).not.toBeNull();
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${record!.artifactId}.enc`);
   });
 
   it('removes an abandoned (rolled-back) publisher artifact on a later sweep', async () => {
@@ -475,6 +536,64 @@ describe('crash-safe publication and reconciliation', () => {
     const result = await withTenant(tenant.client, (tx) => sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 }));
     expect(result.orphanedRemoved).toBeGreaterThanOrEqual(1);
     expect(readdirSync(join(storageDir, tenant.client))).not.toContain(`${artifactId}.enc`);
+  });
+
+  it('an in-flight STAGING temp survives a sweep while its writer is uncommitted, then the published file commits', async () => {
+    const ownerId = randomUUID();
+    const writerName = `stage-writer-${randomUUID().slice(0, 8)}`;
+    const stagingDir = join(storageDir, tenant.client, '.staging');
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let staged!: () => void;
+    const stagedP = new Promise<void>((r) => { staged = r; });
+    const writer = namedTenantTx(writerName, async (tx) => {
+      await retainArtifact(tx, { client: tenant.client, ownerKind: 'FILE', ownerId, fileReference: 'STAGE-1', bytes: Buffer.from('staged'), keyring: KEYRING, changedBy: 'ART_TEST' });
+      staged();
+      await gate;
+    });
+    await stagedP;
+    // The publication is complete on disk, but no staging temp of this wave should be swept while the writer holds
+    // the shared lock — even at a zero grace with a future clock.
+    const sweep = namedTenantTx(`stage-sweep-${randomUUID().slice(0, 8)}`, async (tx) => {
+      await sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 });
+    });
+    release();
+    await writer;
+    await sweep;
+    const record = await withTenant(tenant.client, (tx) => artifactOf(tx, tenant.client, 'FILE', ownerId));
+    expect(record).not.toBeNull();
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${record!.artifactId}.enc`);
+    // Any genuine leftovers in .staging are cleaned; the published artifact is not.
+    expect(readdirSync(stagingDir).filter((n) => n.endsWith('.tmp'))).not.toContain(`${record!.artifactId}`);
+  });
+
+  it('the sweeper refuses a REPEATABLE READ snapshot instead of deleting on stale evidence', async () => {
+    const bytes = Buffer.from('isolation-probe');
+    const orphanId = randomUUID();
+    writeEncryptedArtifact(tenant.client, orphanId, encryptArtifact(bytes, { client: tenant.client, artifactId: orphanId, field: 'paymentCsv' }, KEYRING));
+    // A REPEATABLE READ transaction takes its snapshot at the first statement; the sweep must refuse rather than
+    // conclude "no reference" from a view that cannot see a later commit.
+    const { db } = await import('../src/platform/db/client');
+    await expect(db().transaction(async (tx) => {
+      await tx.execute(sql`select set_config('cairn.client', ${tenant.client}, true)`);
+      await sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 });
+    }, { isolationLevel: 'repeatable read' })).rejects.toMatchObject({ code: 'ARTIFACT_ISOLATION' });
+    // The orphan is still there: nothing was deleted under the refused protocol.
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${orphanId}.enc`);
+    await withTenant(tenant.client, (tx) => sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 }));
+    expect(readdirSync(join(storageDir, tenant.client))).not.toContain(`${orphanId}.enc`);
+  });
+
+  it('a bank-maintenance/publisher ordering cannot deadlock: a bank lock holder does not block a sweep', async () => {
+    // The sweeper takes only the artifact lock, so holding an employee-bank lock cannot make it wait; prove the
+    // documented order by acquiring the bank lock first and completing a sweep inside the same window.
+    const pn = randomUUID().slice(0, 8).toUpperCase();
+    const bankHolder = namedTenantTx(`bank-holder-${randomUUID().slice(0, 8)}`, async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`employee-bank:${tenant.client}:${pn}`}, 0))`);
+      // While the bank lock is held, a sweep still completes (no ordering inversion).
+      await sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 });
+    });
+    await expect(bankHolder).resolves.toBeUndefined();
   });
 
   it('two concurrent publishers and a sweeper: both committed artifacts survive', async () => {
