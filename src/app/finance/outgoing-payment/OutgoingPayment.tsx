@@ -1,7 +1,7 @@
 'use client';
 
 import { fmt, type CurrencyDecimals } from '@/ui/money';
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 
 import type { OutgoingPaymentView } from '@/modules/finance/outgoing-payment';
 import { postPaymentAction, type OutgoingPaymentActionState } from './actions';
@@ -38,6 +38,13 @@ export default function OutgoingPayment({ view, loadError, canEnter, today, deci
   const [discounts, setDiscounts] = useState<Record<string, string>>({});
   const [onAccount, setOnAccount] = useState('');
   const [bankAmount, setBankAmount] = useState('');
+  // A server-side source change (a different open item after reload) also invalidates a typed actual
+  // amount; field edits inside this form are handled by the form-level onChange below.
+  const sourceFingerprint = view
+    ? `${view.vendor}|${view.companyCode}|${view.openItems.map((i) =>
+      `${i.documentNumber}/${i.fiscalYear}/${i.lineNumber}/${i.currency}/${i.amount}`).join('|')}`
+    : '';
+  useEffect(() => { setBankAmount(''); }, [sourceFingerprint]);
 
   const toggle = (key: string) => setSelected((prev) => {
     const next = new Set(prev);

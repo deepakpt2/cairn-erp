@@ -14,7 +14,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import type { ReleaseAttributes } from '../foundation/release-strategy-definition';
 import {
   RELEASE_CAPABILITIES, assertDocumentReleased, assertReleaseAuthority, releaseDocumentForProvisioning, cancelDocumentReleaseForProvisioning, cancelDocumentRelease, getDocumentRelease,
-  releaseDocument, syncDocumentRelease, ReleaseError, type DocumentReleaseState,
+  getDocumentReleaseInTx, releaseDocument, syncDocumentRelease, ReleaseError, type DocumentReleaseState,
 } from '../purchasing/release';
 import { paymentRun } from './schema';
 import { assertNoActivePaymentOperation, type PaymentRunView } from './payment-run';
@@ -54,6 +54,13 @@ export async function assertPaymentRunReleased(tx: Tx, client: string, runDate: 
 
 export function getPaymentRunRelease(client: string, runDate: string, runId: string): Promise<DocumentReleaseState> {
   return getDocumentRelease(client, PAYMENT_RUN_RELEASE_CATEGORY, paymentRunReleaseKey(runDate, runId));
+}
+
+/** The release state inside the submission/execution transaction, for the instruction fingerprint. */
+export function getPaymentRunReleaseInTx(
+  tx: Tx, client: string, runDate: string, runId: string,
+): Promise<DocumentReleaseState> {
+  return getDocumentReleaseInTx(tx, client, PAYMENT_RUN_RELEASE_CATEGORY, paymentRunReleaseKey(runDate, runId));
 }
 
 async function proposedRun(client: string, runDate: string, runId: string) {

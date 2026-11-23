@@ -37,7 +37,11 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { assertActorCan, JobActorError, loadJobActor } from '../../platform/job/actor';
 import { enqueue, requestCancel } from '../../platform/job/queue';
 import { LeaseLostError, type ChunkResult, type JobContext } from '../../platform/job/types';
-import { activePaymentOperation, bankAmountSignature, executePaymentRun, loadRun, openItems, PAYMENT_RUN_CAPABILITY, PaymentRunError, RUN_CLASS, runKey, supplierMethods, type PaymentRunView } from './payment-run';
+import {
+  activePaymentOperation, bankAmountSignature, executePaymentRun, loadRun, openItems,
+  PAYMENT_RUN_CAPABILITY, paymentRunInstructionFingerprint, PaymentRunError, RUN_CLASS, runKey,
+  supplierMethods, type PaymentRunView,
+} from './payment-run';
 import { assertPaymentRunReleased, syncPaymentRunRelease } from './payment-run-release';
 import { bankAccount } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
@@ -68,6 +72,7 @@ type OpRow = {
   error_code: string | null; error_text: string | null; created_at: Date | string; finished_at: Date | string | null;
   requested_by: string; requested_by_user: string; job_run_id: string | null; house_bank_key: string | null; bank_account_id: string | null;
   bank_amounts: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> | null;
+  instruction_fingerprint: string | null;
   job_status?: string | null;
 };
 const iso = (v: Date | string | null): string | null => (v == null ? null : v instanceof Date ? v.toISOString() : String(v));
@@ -116,14 +121,16 @@ async function insertOperation(
     client: string; runDate: string; runId: string; kind: 'PROPOSAL' | 'EXECUTE';
     requestedBy: string; actorUserId: string; houseBankKey?: string; bankAccountId?: string;
     bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>;
+    instructionFingerprint?: string;
   },
 ): Promise<PaymentOperationView> {
   const operationId = randomUUID();
   await tx.execute(sql`
-    insert into payment_run_operation (client, operation_id, run_date, run_id, kind, status, request_key, requested_by, requested_by_user, house_bank_key, bank_account_id, bank_amounts)
+    insert into payment_run_operation (client, operation_id, run_date, run_id, kind, status, request_key, requested_by, requested_by_user, house_bank_key, bank_account_id, bank_amounts, instruction_fingerprint)
     values (${input.client}, ${operationId}, ${input.runDate}, ${input.runId}, ${input.kind}, 'QUEUED', ${`pay-${operationId}`}, ${input.requestedBy}, ${input.actorUserId},
             ${input.houseBankKey ?? null}, ${input.bankAccountId ?? null},
-            ${input.bankAmounts && input.bankAmounts.length > 0 ? JSON.stringify(input.bankAmounts) : null}::jsonb)
+            ${input.bankAmounts && input.bankAmounts.length > 0 ? JSON.stringify(input.bankAmounts) : null}::jsonb,
+            ${input.instructionFingerprint ?? null})
   `);
   // Only the operation id travels in the queue; the bank choice stays on the operation row.
   const job = await enqueue(tx, {
@@ -179,12 +186,17 @@ export async function submitPaymentExecution(input: SubmitExecutionInput): Promi
     }
     const houseBankKey = input.houseBankKey.trim().toUpperCase();
     const bankAccountId = input.bankAccountId.trim().toUpperCase();
+    const fingerprint = await paymentRunInstructionFingerprint(
+      tx, input.client, run, houseBankKey, bankAccountId, input.bankAmounts,
+    );
     const active = await activePaymentOperation(tx, input.client, input.runDate, input.runId);
     if (active) {
       if (active.kind === 'EXECUTE') {
-        const sameInstruction = active.houseBankKey === houseBankKey
-          && active.bankAccountId === bankAccountId
-          && bankAmountSignature(active.bankAmounts) === bankAmountSignature(input.bankAmounts);
+        const sameInstruction = active.instructionFingerprint
+          ? active.instructionFingerprint === fingerprint
+          : (active.houseBankKey === houseBankKey
+            && active.bankAccountId === bankAccountId
+            && bankAmountSignature(active.bankAmounts) === bankAmountSignature(input.bankAmounts));
         if (sameInstruction) return viewOfRow((await loadOp(tx, input.client, active.operationId))!);
         throw new PaymentRunError(
           `An execution is already queued for payment run ${runKey(input.runDate, input.runId)} with a different bank or actual-bank-amount instruction.`,
@@ -214,7 +226,7 @@ export async function submitPaymentExecution(input: SubmitExecutionInput): Promi
     return insertOperation(tx, {
       client: input.client, runDate: input.runDate, runId: input.runId, kind: 'EXECUTE',
       requestedBy: input.changedBy, actorUserId: actor.id, houseBankKey, bankAccountId,
-      bankAmounts: input.bankAmounts,
+      bankAmounts: input.bankAmounts, instructionFingerprint: fingerprint,
     });
   });
 }
@@ -469,6 +481,7 @@ export async function runPaymentExecuteChunk(ctx: JobContext): Promise<ChunkResu
       client, changedBy: op.requested_by, runDate, runId: op.run_id,
       houseBankKey: String(op.house_bank_key), bankAccountId: String(op.bank_account_id),
       bankAmounts: op.bank_amounts ?? undefined,
+      expectedFingerprint: op.instruction_fingerprint ?? undefined,
       exceptOperationId: operationId,
       beforeExecute: async (tx) => {
         await ctx.fence(tx);

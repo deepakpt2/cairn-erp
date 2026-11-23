@@ -756,6 +756,11 @@ export const paymentRunOperation = pgTable('payment_run_operation', {
   bankAmounts: jsonb('bank_amounts').$type<Array<{
     companyCode: string; supplier: string; currency: string; amount: string;
   }>>(),
+  /**
+   * SHA-256 of the canonical released proposal + bank + actual-bank evidence + release state.
+   * Frozen at submission; the worker recomputes it at the posting boundary.
+   */
+  instructionFingerprint: varchar('instruction_fingerprint', { length: 64 }),
   jobRunId: varchar('job_run_id', { length: 36 }),
   itemsTotal: integer('items_total').notNull().default(0),
   itemsDone: integer('items_done').notNull().default(0),

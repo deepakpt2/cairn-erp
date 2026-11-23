@@ -98,14 +98,15 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { MONEY_SCALE, divideRound, fromScaled, toScaled } from '../../platform/posting/decimal';
 import { moneyFor } from '../../platform/posting/money';
 import { accountDetermination, bankAccount } from '../foundation/schema';
-import { fxValuationItem, fxValuationRun, journalEntry, journalEntryLine } from './schema';
+import { clearingReset, fxValuationItem, fxValuationRun, journalEntry, journalEntryLine } from './schema';
 import {
   resolveExchangeRate, type ResolvedExchangeRate,
 } from './exchange-rate-lookup';
-import { activeValuationConflict, lockValuationSettlement } from './fx-settlement';
+import { lockValuationSettlement } from './fx-settlement';
 
 interface CandidateRow {
   document_number: string;
+  fiscal_year: number;
   line_number: number;
   gl_account: string;
   debit_credit: string;
@@ -115,6 +116,57 @@ interface CandidateRow {
   is_open_item: boolean;
   is_balance_sheet: boolean;
   clearing_document: string | null;
+  clearing_date: string | null;
+  status: string;
+  reversal_of: string | null;
+  posting_date: string;
+  reversal_posting_date: string | null;
+}
+
+interface ClearingInterval {
+  clearingDate: string;
+  resetDate: string;
+}
+
+async function loadClearingIntervals(
+  tx: Parameters<Parameters<typeof withTenant>[1]>[0],
+  client: string,
+  companyCode: string,
+): Promise<Map<string, ClearingInterval[]>> {
+  const rows = (await tx.execute(sql`
+    select clearing_date::text as clearing_date, created_at::date::text as reset_date, item_refs
+      from clearing_reset
+     where client = ${client} and company_code = ${companyCode}
+  `)) as unknown as Array<{ clearing_date: string; reset_date: string; item_refs: string }>;
+  const map = new Map<string, ClearingInterval[]>();
+  for (const row of rows) {
+    for (const ref of row.item_refs.split(',').map((part) => part.trim()).filter(Boolean)) {
+      const list = map.get(ref) ?? [];
+      list.push({ clearingDate: row.clearing_date, resetDate: row.reset_date });
+      map.set(ref, list);
+    }
+  }
+  return map;
+}
+
+function clearedAsOf(
+  row: CandidateRow,
+  keyDate: string,
+  intervals: Map<string, ClearingInterval[]>,
+): boolean {
+  if (row.clearing_document) {
+    if (!row.clearing_date) {
+      throw new FxValuationError(
+        `Line ${row.document_number}/${row.line_number} stands stamped by clearing document ${row.clearing_document} without a clearing date; its position at ${keyDate} cannot be proved.`,
+      );
+    }
+    return row.clearing_date <= keyDate;
+  }
+  const ref = `${row.document_number}/${row.fiscal_year}/${row.line_number}`;
+  for (const interval of intervals.get(ref) ?? []) {
+    if (interval.clearingDate <= keyDate && keyDate < interval.resetDate) return true;
+  }
+  return false;
 }
 
 async function loadRun(tx: Parameters<Parameters<typeof withTenant>[1]>[0], client: string, runId: string): Promise<FxValuationResult | null> {
@@ -199,6 +251,16 @@ export async function executeFxValuation(input: {
         `Posting date ${s.postingDate} belongs to fiscal year ${position.fiscalYear}, not ${s.fiscalYear}.`,
       );
     }
+    if (s.valuationKeyDate > s.postingDate) {
+      throw new FxValuationError(
+        `Valuation key date ${s.valuationKeyDate} stands after the posting date ${s.postingDate}. A valuation cannot post before the position it values.`,
+      );
+    }
+    if (s.reversalDate && s.reversalDate < s.postingDate) {
+      throw new FxValuationError(
+        `Valuation reversal date ${s.reversalDate} stands before the posting date ${s.postingDate}.`,
+      );
+    }
     const local = company.currency;
     const chart = company.chartOfAccounts ?? '';
     const localMoney = await moneyFor(tx, local);
@@ -226,11 +288,17 @@ export async function executeFxValuation(input: {
       bankByGl.set(key, list);
     }
 
+    const clearingIntervals = await loadClearingIntervals(tx, input.client, s.companyCode);
     const raw = await tx.execute(sql`
-      select l.document_number, l.line_number, l.gl_account, l.debit_credit,
+      select l.document_number, l.fiscal_year, l.line_number, l.gl_account, l.debit_credit,
              l.amount_document, l.amount_local, l.currency,
              g.is_open_item_managed as is_open_item, g.is_balance_sheet,
-             l.clearing_document
+             l.clearing_document, l.clearing_date::text as clearing_date,
+             h.status, h.reversal_of, h.posting_date::text as posting_date,
+             (select rev.posting_date::text from journal_entry rev
+               where rev.client = h.client and rev.document_number = h.reversed_by
+                 and rev.reversal_of = h.document_number and rev.status = 'POSTED'
+               order by rev.posting_date limit 1) as reversal_posting_date
       from journal_entry_line l
       join journal_entry h
         on h.client = l.client and h.document_number = l.document_number and h.fiscal_year = l.fiscal_year
@@ -239,7 +307,7 @@ export async function executeFxValuation(input: {
       where l.client = ${input.client}
         and h.company_code = ${s.companyCode}
         and h.posting_date <= ${s.valuationKeyDate}
-        and h.status = 'POSTED' and h.reversal_of is null
+        and h.status in ('POSTED', 'REVERSED')
         and h.is_fx_valuation = false
       order by l.gl_account, l.currency, l.document_number, l.line_number
     `);
@@ -255,8 +323,21 @@ export async function executeFxValuation(input: {
     for (const row of candidates) {
       const sign = row.debit_credit === 'S' ? 1 : -1;
       const lineCurrency = row.currency.trim().toUpperCase();
+      const reversalEffective = row.status === 'REVERSED'
+        && row.reversal_posting_date !== null && row.reversal_posting_date <= s.valuationKeyDate;
+      const reversalUnproven = row.status === 'REVERSED' && row.reversal_posting_date === null;
       if (row.is_open_item) {
-        if (!s.includeOpenItems || row.clearing_document) continue;
+        if (!s.includeOpenItems) continue;
+        // Mirrors are not open items. A reversed original is included only while its reversal is
+        // still in the future at the key date; after that the item no longer stood open.
+        if (row.reversal_of) continue;
+        if (reversalUnproven) {
+          throw new FxValuationError(
+            `Open item ${row.document_number}/${row.line_number} stands reversed without a provable mirror; its position at ${s.valuationKeyDate} cannot be valued.`,
+          );
+        }
+        if (reversalEffective) continue;
+        if (clearedAsOf(row, s.valuationKeyDate, clearingIntervals)) continue;
         if (lineCurrency === local) continue;
         work.push({
           itemNumber: 0, sourceKind: 'OPEN_ITEM', accountNumber: row.gl_account,
@@ -292,6 +373,14 @@ export async function executeFxValuation(input: {
         } else if (lineCurrency === local) {
           continue;
         }
+        if (reversalUnproven) {
+          throw new FxValuationError(
+            `Balance line ${row.document_number}/${row.line_number} stands reversed without a provable mirror; its position at ${s.valuationKeyDate} cannot be valued.`,
+          );
+        }
+        // Both the original and its mirror are dated movements. The query filters by posting date,
+        // so a reversal after the key date leaves only the original, while an effective reversal
+        // brings both and the pair nets to zero.
         const key = `${row.gl_account}|${exposureCurrency}`;
         const group = balanceGroups.get(key) ?? {
           itemNumber: 0, sourceKind: 'BALANCE' as const, accountNumber: row.gl_account,
@@ -311,25 +400,62 @@ export async function executeFxValuation(input: {
     }
     work.push(...balanceGroups.values());
 
-    // One coherent lifecycle: a new live valuation of the same open item or account/currency basis
-    // is refused while an earlier one is still effective on this posting date. A different area or
-    // key date cannot bypass it. Reversing the earlier posting (effectively by this date) permits the
-    // new run; a future-dated reversal does not.
+    // A new live valuation may not overlap an earlier live valuation of the same basis, in either
+    // time direction. Each posting is effective over [posting date, reversal date); a backdated run
+    // after a later one, or an earlier run whose reversal is future, would double-count. Different
+    // areas and key dates do not bypass the conflict.
     if (!s.testRun) {
+      const prior = (await tx.execute(sql`
+        select i.source_kind, i.source_document, i.source_line, i.account_number, i.currency,
+               r.run_id, r.valuation_key_date::text as valuation_key_date,
+               v.posting_date::text as posting_date,
+               (select rev.posting_date::text from journal_entry rev
+                 where rev.client = v.client and rev.document_number = v.reversed_by
+                   and rev.reversal_of = v.document_number and rev.status = 'POSTED'
+                 order by rev.posting_date limit 1) as reversal_date
+          from fx_valuation_item i
+          join fx_valuation_run r on r.client = i.client and r.run_id = i.run_id
+          join journal_entry v
+            on v.client = i.client and v.document_number = r.posting_document_number
+           and v.company_code = r.company_code
+         where i.client = ${input.client} and r.company_code = ${s.companyCode}
+           and r.is_test_run = false and i.status = 'POSTED'
+           and r.posting_document_number is not null
+           and v.status in ('POSTED', 'REVERSED')
+      `)) as unknown as Array<{
+        source_kind: string; source_document: string | null; source_line: number | null;
+        account_number: string; currency: string; run_id: string;
+        valuation_key_date: string; posting_date: string; reversal_date: string | null;
+      }>;
+      const openPrior = new Map<string, typeof prior>();
+      const balancePrior = new Map<string, typeof prior>();
+      for (const row of prior) {
+        if (row.source_kind === 'BALANCE') {
+          const key = `${row.account_number}|${row.currency}`;
+          balancePrior.set(key, [...(balancePrior.get(key) ?? []), row]);
+        } else {
+          const key = `${row.source_document}|${row.source_line}`;
+          openPrior.set(key, [...(openPrior.get(key) ?? []), row]);
+        }
+      }
+      const newStart = s.postingDate;
+      const newEnd = s.reversalDate ?? '9999-12-31';
       for (const item of work) {
-        const conflict = await activeValuationConflict(tx, input.client, s.companyCode, {
-          documentNumber: item.sourceDocument ?? undefined,
-          lineNumber: item.sourceLine ?? undefined,
-          accountNumber: item.accountNumber,
-          currency: item.currency,
-        }, s.postingDate);
-        if (conflict) {
-          const basis = item.sourceKind === 'BALANCE'
-            ? `balance ${item.accountNumber}/${item.currency}`
-            : `open item ${item.sourceDocument}/${item.sourceLine}`;
-          throw new FxValuationError(
-            `The ${basis} was already valued by run ${conflict.runId} (key date ${conflict.valuationKeyDate}), which is still effective on ${s.postingDate}. Reverse that valuation document first; a second live valuation would double-count the difference. Nothing was posted.`,
-          );
+        const basis = item.sourceKind === 'BALANCE'
+          ? `balance ${item.accountNumber}/${item.currency}`
+          : `open item ${item.sourceDocument}/${item.sourceLine}`;
+        const rows = item.sourceKind === 'BALANCE'
+          ? balancePrior.get(`${item.accountNumber}|${item.currency}`)
+          : openPrior.get(`${item.sourceDocument}|${item.sourceLine}`);
+        for (const row of rows ?? []) {
+          const priorEnd = row.reversal_date ?? '9999-12-31';
+          // A same-day posting and reversal is an empty interval: it adjusted nothing at any date.
+          if (row.posting_date >= priorEnd) continue;
+          if (newStart < priorEnd && row.posting_date < newEnd) {
+            throw new FxValuationError(
+              `The ${basis} overlaps valuation run ${row.run_id} (key date ${row.valuation_key_date}), which is effective ${row.posting_date} to ${row.reversal_date ?? 'open'}. Reverse or correct that valuation before posting an overlapping or backdated run; otherwise the same basis would be adjusted twice. Nothing was posted.`,
+            );
+          }
         }
       }
     }

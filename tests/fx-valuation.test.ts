@@ -122,7 +122,7 @@ describe('SCR-098 FX valuation FAGL_FC_VAL (R-146)', () => {
     // earlier rerun must refuse rather than double count.
     await expect(executeFxValuation({
       client, changedBy: ACTOR, selection: selection({ testRun: false }),
-    })).rejects.toThrow(/already valued/);
+    })).rejects.toThrow(/overlaps valuation run/);
 
     // Once the reversal is effective, the same basis can be valued again.
     const rerun = await executeFxValuation({
@@ -140,7 +140,7 @@ describe('SCR-098 FX valuation FAGL_FC_VAL (R-146)', () => {
       selection: selection({
         testRun: false, postingDate: '2026-05-02', valuationKeyDate: '2026-05-02',
       }),
-    })).rejects.toThrow(/already valued/);
+    })).rejects.toThrow(/overlaps valuation run/);
     expect(await journalCount()).toBe(journalsAfterRerun);
 
     // Make the second valuation ineffective before the later missing-rate test.

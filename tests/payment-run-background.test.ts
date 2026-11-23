@@ -10,6 +10,7 @@ import { eq, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
+import { reverseJournalEntry } from '../src/platform/posting';
 import { claimNext, runClaimed } from '../src/platform/job/execute';
 import { reapOrphans, requestCancel, retryRun } from '../src/platform/job/queue';
 import { clearJobRegistry, registerJob } from '../src/platform/job/registry';
@@ -312,7 +313,7 @@ describe('execution', () => {
     const first = (await getPaymentRun(client, RUN_DATE, runId))!.proposal.find((p) => !p.exceptionCode)!;
     await withTenant(client, (tx) => tx.execute(sql`update journal_entry_line set clearing_document = 'X-CLEARED' where client = ${client} and document_number = ${first.journalDocumentNumber} and fiscal_year = ${first.journalFiscalYear} and line_number = ${first.journalLineNumber}`));
     expect(await drive()).toEqual(['FAILED']);
-    expect((await getPaymentOperation(client, op.operationId))!.errorText).toMatch(/no longer stands open/);
+    expect((await getPaymentOperation(client, op.operationId))!.errorText).toMatch(/no longer stands/);
     expect(await payments(runId)).toBe(0);
     await withTenant(client, (tx) => tx.execute(sql`update journal_entry_line set clearing_document = null where client = ${client} and document_number = ${first.journalDocumentNumber} and fiscal_year = ${first.journalFiscalYear} and line_number = ${first.journalLineNumber}`));
 
@@ -322,7 +323,7 @@ describe('execution', () => {
     op = await execute(runId);
     await withTenant(client, (tx) => tx.execute(sql`update payment_run_operation set bank_account_id = 'GONE' where client = ${client} and operation_id = ${op.operationId}`));
     expect(await drive()).toEqual(['FAILED']);
-    expect((await getPaymentOperation(client, op.operationId))!.errorText).toMatch(/does not stand/);
+    expect((await getPaymentOperation(client, op.operationId))!.errorText).toMatch(/changed after this execution was queued|does not stand/);
     expect(await payments(runId)).toBe(0);
   });
 
@@ -490,11 +491,32 @@ describe('crash windows and leases', () => {
     const row = await opRow(first.operationId);
     expect(row.bank_account_id).toBe('MAIN');
     expect(JSON.stringify(row.bank_amounts)).toContain('550.0000');
+    expect(String(row.instruction_fingerprint)).toMatch(/^[a-f0-9]{64}$/);
 
     await cancelPaymentOperation({
       client, operationId: first.operationId, changedBy: planner.username, actorUserId: planner.userId,
     });
     await drive();
+  });
+
+  it('refuses a queued execution whose source was reversed before the worker ran', async () => {
+    const runId = await releasedRun();
+    const proposal = (await getPaymentRun(client, RUN_DATE, runId))!.proposal[0]!;
+    const before = await journals();
+    const op = await execute(runId);
+    await withTenant(client, (tx) => reverseJournalEntry(tx, {
+      client, documentNumber: proposal.journalDocumentNumber,
+      fiscalYear: proposal.journalFiscalYear, reversalDate: '2026-10-19',
+      reason: 'stale source before the worker', reversedBy: ACTOR,
+    }));
+    const statuses = await drive();
+    expect(statuses).toContain('FAILED');
+    expect(await payments(runId)).toBe(0);
+    expect(await journals()).toBe(before);
+    expect((await getPaymentRun(client, RUN_DATE, runId))!.status).toBe('PROPOSAL');
+    const row = await opRow(op.operationId);
+    expect(row.status).toBe('FAILED');
+    expect(String(row.error_text)).toContain('no longer stands posted and open');
   });
 });
 

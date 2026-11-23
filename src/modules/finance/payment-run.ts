@@ -6,6 +6,7 @@
  * lock and posts one balanced journal per supplier and bank,
  * clearing the paid lines in place. An executed run is history.
  */
+import { createHash } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
@@ -22,8 +23,10 @@ import { bankAccount, houseBank, paymentMethod } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { dropDocumentRelease } from '../purchasing/release';
 import {
-  PAYMENT_RUN_RELEASE_CATEGORY, assertPaymentRunReleased, paymentRunReleaseKey, syncPaymentRunRelease,
+  PAYMENT_RUN_RELEASE_CATEGORY, assertPaymentRunReleased, getPaymentRunReleaseInTx,
+  paymentRunReleaseKey, syncPaymentRunRelease,
 } from './payment-run-release';
+import { paymentInstructionCanonical } from './payment-run-instruction';
 import { activeBlockedInvoiceNumbers } from '../purchasing/blocked-invoice';
 import { supplierInvoice } from '../purchasing/schema';
 import {
@@ -52,20 +55,23 @@ export async function activePaymentOperation(tx: Tx, client: string, runDate: st
   operationId: string; kind: string; status: string;
   houseBankKey: string | null; bankAccountId: string | null;
   bankAmounts: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> | null;
+  instructionFingerprint: string | null;
 } | null> {
   const rows = (await tx.execute(sql`
-    select operation_id, kind, status, house_bank_key, bank_account_id, bank_amounts from payment_run_operation
+    select operation_id, kind, status, house_bank_key, bank_account_id, bank_amounts, instruction_fingerprint
+      from payment_run_operation
      where client = ${client} and run_date = ${runDate} and run_id = ${runId} and status in ('QUEUED', 'RUNNING')
      limit 1
   `)) as unknown as Array<{
     operation_id: string; kind: string; status: string; house_bank_key: string | null;
     bank_account_id: string | null;
     bank_amounts: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> | null;
+    instruction_fingerprint: string | null;
   }>;
   return rows[0] ? {
     operationId: rows[0].operation_id, kind: rows[0].kind, status: rows[0].status,
     houseBankKey: rows[0].house_bank_key, bankAccountId: rows[0].bank_account_id,
-    bankAmounts: rows[0].bank_amounts,
+    bankAmounts: rows[0].bank_amounts, instructionFingerprint: rows[0].instruction_fingerprint,
   } : null;
 }
 
@@ -170,6 +176,40 @@ export async function loadRun(tx: Tx, client: string, runDate: string, runId: st
 
 export async function getPaymentRun(client: string, runDate: string, runId: string): Promise<PaymentRunView | null> {
   return withTenant(client, (tx) => loadRun(tx, client, runDate, runId));
+}
+
+/**
+ * The durable binding of a queued execution: released proposal source identities and amounts,
+ * selected bank and its actual currency, actual-bank evidence, and release state. The worker
+ * recomputes it at the posting boundary, so a substituted invoice or changed bank cannot inherit it.
+ */
+export async function paymentRunInstructionFingerprint(
+  tx: Tx, client: string, run: PaymentRunView,
+  houseBankKey: string, bankAccountId: string,
+  bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>,
+): Promise<string> {
+  const bankCurrencies: Array<{ companyCode: string; currency: string; glAccount: string }> = [];
+  for (const company of run.companies) {
+    const [bank] = await tx.select({
+      currency: bankAccount.currency, glAccount: bankAccount.glAccount,
+    }).from(bankAccount).where(and(
+      eq(bankAccount.client, client),
+      eq(bankAccount.companyCode, company.companyCode),
+      eq(bankAccount.houseBankKey, houseBankKey.trim().toUpperCase()),
+      eq(bankAccount.accountId, bankAccountId.trim().toUpperCase()),
+    ));
+    bankCurrencies.push({
+      companyCode: company.companyCode,
+      currency: bank?.currency ?? '',
+      glAccount: bank?.glAccount ?? '',
+    });
+  }
+  const release = await getPaymentRunReleaseInTx(tx, client, run.runDate, run.runId);
+  const canonical = paymentInstructionCanonical({
+    runDate: run.runDate, runId: run.runId, houseBankKey, bankAccountId,
+    bankCurrencies, items: run.proposal, bankAmounts, release,
+  });
+  return createHash('sha256').update(canonical).digest('hex');
 }
 
 export async function listPaymentRuns(client: string): Promise<Array<{ runDate: string; runId: string; status: string; postingDate: string }>> {
@@ -427,6 +467,8 @@ export async function executePaymentRun(input: {
    * payment is in another currency; a missing or conflicting entry refuses the whole run.
    */
   bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>;
+  /** The fingerprint frozen when the queued execution was accepted. The worker must match it. */
+  expectedFingerprint?: string;
   /** The background execution operation that is itself the active one, so it does not block itself. */
   exceptOperationId?: string;
   /**
@@ -458,6 +500,17 @@ export async function executePaymentRun(input: {
       }
       throw error;
     });
+    if (input.expectedFingerprint) {
+      const current = await paymentRunInstructionFingerprint(
+        tx, input.client, run, input.houseBankKey, input.bankAccountId, input.bankAmounts,
+      );
+      if (current !== input.expectedFingerprint) {
+        throw new PaymentRunError(
+          'The released proposal, selected bank, actual-bank evidence or release state changed after this execution was queued.',
+          'Cancel the queued execution and submit the current instruction again. Nothing has been posted.',
+        );
+      }
+    }
 
     // Serialize with period-end valuation for every company the run touches. A stable order across
     // runs avoids a deadlock between two executions covering the same companies.
@@ -473,14 +526,56 @@ export async function executePaymentRun(input: {
     interface Group { company: string; supplier: string; currency: string; entries: Entry[] }
     const groups = new Map<string, Group>();
     for (const item of payable) {
-      const [line] = await tx.select().from(journalEntryLine).where(and(
+      const [line] = await tx.select({
+        glAccount: journalEntryLine.glAccount,
+        amountLocal: journalEntryLine.amountLocal,
+        amountDocument: journalEntryLine.amountDocument,
+        currency: journalEntryLine.currency,
+        businessPartner: journalEntryLine.businessPartner,
+        clearingDocument: journalEntryLine.clearingDocument,
+        status: journalEntry.status,
+        reversalOf: journalEntry.reversalOf,
+      }).from(journalEntryLine).innerJoin(journalEntry, and(
+        eq(journalEntry.client, journalEntryLine.client),
+        eq(journalEntry.documentNumber, journalEntryLine.documentNumber),
+        eq(journalEntry.fiscalYear, journalEntryLine.fiscalYear),
+      )).where(and(
         eq(journalEntryLine.client, input.client),
         eq(journalEntryLine.documentNumber, item.journalDocumentNumber),
         eq(journalEntryLine.fiscalYear, item.journalFiscalYear),
         eq(journalEntryLine.lineNumber, item.journalLineNumber),
       ));
-      if (!line || line.clearingDocument) {
-        throw new PaymentRunError(`The item for supplier ${item.accountId} no longer stands open.`, 'Regenerate the proposal, then execute.');
+      if (!line || line.status !== 'POSTED' || line.reversalOf || line.clearingDocument) {
+        throw new PaymentRunError(
+          `The item for supplier ${item.accountId} no longer stands posted and open.`,
+          'Regenerate the proposal, then execute. Nothing has been posted.',
+        );
+      }
+      if ((line.businessPartner ?? '').trim().toUpperCase() !== item.accountId.trim().toUpperCase()
+        || line.currency.trim().toUpperCase() !== item.currency.trim().toUpperCase()) {
+        throw new PaymentRunError(
+          `The proposal item for supplier ${item.accountId} no longer matches the source journal line (partner or currency changed).`,
+          'Regenerate the proposal, then execute. Nothing has been posted.',
+        );
+      }
+      const documentMoney = await moneyFor(tx, line.currency).catch((error: unknown) => {
+        if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
+        throw error;
+      });
+      let lineUnits: bigint;
+      let itemUnits: bigint;
+      try {
+        lineUnits = documentMoney.entered(line.amountDocument, 'The source item amount');
+        itemUnits = documentMoney.entered(item.amount, 'The proposed item amount');
+      } catch (error) {
+        if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
+        throw error;
+      }
+      if (lineUnits !== itemUnits) {
+        throw new PaymentRunError(
+          `The proposed amount for supplier ${item.accountId} differs from the source journal line.`,
+          'Regenerate the proposal, then execute. Nothing has been posted.',
+        );
       }
       const [supplier] = await tx.select().from(supplierCompany).where(and(
         eq(supplierCompany.client, input.client),

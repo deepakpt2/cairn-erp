@@ -110,6 +110,13 @@ export async function getDocumentRelease(
   return withTenant(client, (tx) => loadState(tx, client, category, number));
 }
 
+/** The release state inside a caller-owned transaction, for durable instruction binding. */
+export async function getDocumentReleaseInTx(
+  tx: Tx, client: string, category: string, number: string,
+): Promise<DocumentReleaseState> {
+  return loadState(tx, client, category, number);
+}
+
 export async function listDocumentReleases(
   client: string, category: string,
 ): Promise<Map<string, DocumentReleaseState>> {

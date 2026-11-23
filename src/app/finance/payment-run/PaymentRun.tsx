@@ -6,6 +6,7 @@ import { useActionState, useEffect, useState } from 'react';
 import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { BankChoice, PaymentRunView } from '@/modules/finance/payment-run';
+import { paymentInstructionCanonical } from '@/modules/finance/payment-run-instruction';
 import type { PaymentOperationView } from '@/modules/finance/payment-run-background';
 import type { DocumentReleaseState } from '@/modules/purchasing/release';
 import { ReleasePanel } from '@/ui/release/ReleasePanel';
@@ -27,6 +28,66 @@ function Message({ state }: { state: PaymentRunActionState }) {
 }
 
 const ACTIVE = ['QUEUED', 'RUNNING'];
+
+type BankGroup = PaymentRunView['proposal'][number];
+
+/**
+ * One actual-bank-amount field per company/supplier/currency group. This component is deliberately
+ * keyed by the complete instruction canonical: any bank, proposal, source-journal, amount or release
+ * change unmounts it, so returning to an earlier selection cannot resurrect an old amount.
+ */
+function ActualBankAmountFields({
+  groups, banks, houseBankKey, bankAccountId, instructionKey,
+}: {
+  groups: BankGroup[];
+  banks: BankChoice[];
+  houseBankKey: string;
+  bankAccountId: string;
+  instructionKey: string;
+}) {
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const bankFor = (companyCode: string) => banks.find((b) => b.companyCode === companyCode
+    && b.houseBankKey === houseBankKey && b.accountId === bankAccountId);
+  return (
+    <div className="contents" data-instruction-key={instructionKey}>
+      {groups.map((g) => {
+        const groupKey = `${g.companyCode}|${g.accountId}|${g.currency}`;
+        const bank = bankFor(g.companyCode);
+        const bankCurrency = bank?.currency?.trim().toUpperCase() ?? null;
+        const sameCurrency = bankCurrency !== null && bankCurrency === g.currency.trim().toUpperCase();
+        return (
+          <label
+            key={groupKey}
+            className="block"
+            data-bank-amount-group={groupKey}
+            data-bank-currency={bankCurrency ?? ''}
+            data-payment-currency={g.currency}
+          >
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">
+              Actual bank amount · {g.companyCode}/{g.accountId} · payment {g.currency} → bank {bankCurrency ?? 'select bank'}
+            </span>
+            {sameCurrency ? (
+              <span className="text-xs text-ink-soft" data-bank-same-currency>
+                Same currency — the bank movement is the payment amount; no separate entry.
+              </span>
+            ) : (
+              <input
+                name={`bankAmount~${g.companyCode}~${g.accountId}~${g.currency}`}
+                className="input w-40"
+                placeholder={`In ${bankCurrency ?? 'bank currency'}`}
+                aria-label={`Actual bank amount in ${bankCurrency ?? 'bank currency'} for supplier ${g.accountId} paying ${g.currency}`}
+                value={amounts[groupKey] ?? ''}
+                onChange={(event) => setAmounts((previous) => ({
+                  ...previous, [groupKey]: event.target.value,
+                }))}
+              />
+            )}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
 
 /**
  * The latest background operation of the run: status, real progress (the item count is frozen when a
@@ -112,18 +173,23 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
     : [];
   const [houseBankKey, setHouseBankKey] = useState('');
   const [bankAccountId, setBankAccountId] = useState('');
-  const proposalSignature = run
-    ? `${run.runDate}/${run.runId}|${run.proposal.map((p) => `${p.itemNumber}:${p.companyCode}:${p.accountId}:${p.currency}:${p.amount}:${p.exceptionCode ?? ''}`).join('|')}`
-    : '';
-  // A typed amount only exists for the exact instruction it was typed against. Changing the run,
-  // its released proposal, or the selected bank changes this key, so the old value is not rebound.
-  const instructionKey = `${proposalSignature}|${houseBankKey}|${bankAccountId}`;
-  const [typedAmounts, setTypedAmounts] = useState<{ key: string; values: Record<string, string> }>({
-    key: '', values: {},
-  });
-  const actualAmounts = typedAmounts.key === instructionKey ? typedAmounts.values : {};
   const bankFor = (companyCode: string) => banks.find((b) => b.companyCode === companyCode
     && b.houseBankKey === houseBankKey && b.accountId === bankAccountId);
+  // The complete material instruction, including every source journal identity and the release
+  // state. The amount component is keyed by this, so a same-looking replacement invoice, a changed
+  // bank, or an A→B→A bank switch starts from a fresh, empty confirmation.
+  const instructionKey = run
+    ? paymentInstructionCanonical({
+      runDate: run.runDate, runId: run.runId, houseBankKey, bankAccountId,
+      bankCurrencies: run.companies.map((company) => ({
+        companyCode: company.companyCode,
+        currency: bankFor(company.companyCode)?.currency ?? '',
+        glAccount: bankFor(company.companyCode)?.glAccount ?? '',
+      })),
+      items: run.proposal,
+      release,
+    })
+    : '';
   const editable = run && run.status !== 'EXECUTED' && run.status !== 'CANCELLED';
   const runLock = useChangeLock(
     'PAYMENT_RUN',
@@ -322,45 +388,14 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
                   data-bank-account
                 />
               </label>
-              {bankGroups.map((g) => {
-                const groupKey = `${g.companyCode}|${g.accountId}|${g.currency}`;
-                const bank = bankFor(g.companyCode);
-                const bankCurrency = bank?.currency?.trim().toUpperCase() ?? null;
-                const sameCurrency = bankCurrency !== null && bankCurrency === g.currency.trim().toUpperCase();
-                return (
-                  <label
-                    key={groupKey}
-                    className="block"
-                    data-bank-amount-group={groupKey}
-                    data-bank-currency={bankCurrency ?? ''}
-                    data-payment-currency={g.currency}
-                  >
-                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">
-                      Actual bank amount · {g.companyCode}/{g.accountId} · payment {g.currency} → bank {bankCurrency ?? 'select bank'}
-                    </span>
-                    {sameCurrency ? (
-                      <span className="text-xs text-ink-soft" data-bank-same-currency>
-                        Same currency — the bank movement is the payment amount; no separate entry.
-                      </span>
-                    ) : (
-                      <input
-                        name={`bankAmount~${g.companyCode}~${g.accountId}~${g.currency}`}
-                        className="input w-40"
-                        placeholder={`In ${bankCurrency ?? 'bank currency'}`}
-                        aria-label={`Actual bank amount in ${bankCurrency ?? 'bank currency'} for supplier ${g.accountId} paying ${g.currency}`}
-                        value={actualAmounts[groupKey] ?? ''}
-                        onChange={(event) => setTypedAmounts((previous) => ({
-                          key: instructionKey,
-                          values: {
-                            ...(previous.key === instructionKey ? previous.values : {}),
-                            [groupKey]: event.target.value,
-                          },
-                        }))}
-                      />
-                    )}
-                  </label>
-                );
-              })}
+              <ActualBankAmountFields
+                key={instructionKey}
+                instructionKey={instructionKey}
+                groups={bankGroups}
+                banks={banks}
+                houseBankKey={houseBankKey}
+                bankAccountId={bankAccountId}
+              />
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canExecute || executing || !runHeld || busy}>
                 Execute payments
               </button>

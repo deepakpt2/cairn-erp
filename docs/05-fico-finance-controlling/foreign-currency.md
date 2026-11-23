@@ -122,9 +122,15 @@ the confirmation message and in the payment-run result.
   validated before posting; a missing, duplicate or unknown group amount refuses the whole run and
   leaves nothing posted.
 - Changing the selected bank, the released proposal or any material payment field discards a
-  previously typed actual amount. It is not carried over to a different instruction. A repeated
-  execution submission with the same bank and evidence is a replay; a different bank or amount is a
-  conflict and is refused while the first execution is queued or running.
+  previously typed actual amount. Returning to an earlier bank or a same-looking replacement invoice
+  does not resurrect it; fresh entry is required. A repeated execution submission with the same bank
+  and evidence is a replay; a different bank or amount is a conflict and is refused while the first
+  execution is queued or running.
+- A queued execution stores a fingerprint of the exact released proposal source lines, allocated
+  amounts, bank identity/currency, actual-bank evidence and release state. The worker recomputes it
+  at the posting boundary and also rechecks that every source line is still posted, open and
+  unreversed with the same supplier, currency and amount. A substituted or invalidated source
+  refuses the whole execution and posts nothing.
 
 ## Period-end valuation: unrealized differences
 
@@ -155,11 +161,17 @@ same rule to every selected item and to the account/currency balance. A company-
 lock serializes valuation against payments, payment runs and clearings, so neither side can pass
 its check while the other is still uncommitted.
 
-A **second live valuation of the same open item or account/currency basis** is refused while an
-earlier one is still effective on the new posting date. A different valuation area or key date does
-not bypass the conflict. Reversing the earlier document effectively (by that date) permits the new
-run; a future-dated reversal does not. This prevents a later valuation from posting the whole
-original difference again instead of the increment.
+A **second live valuation of the same open item or account/currency basis** is refused when its
+effective interval overlaps an earlier valuation. Each posting is effective from its posting date
+until its reversal date; the check runs in both time directions, so a backdated run cannot slip
+under a later live one, and a different area or key date cannot bypass it. Reversing or correcting
+the conflicting valuation permits the new run. A same-day posting and reversal is an empty interval.
+
+Exposure is derived from the **key-date** position, not current status: a December receipt reversed
+in January is still valued in a run keyed to 31 December; an invoice cleared in February is included
+in a January run and excluded from a later February run. Clearing reset history is used to exclude
+an item that was cleared as of the key date even though a later reset reopened it. A reversed
+original with no provable mirror is refused rather than guessed.
 
 A valuation posting and its reversal are marked `is_fx_valuation`. That provenance is authoritative:
 on a foreign bank G/L the line is shown in reconciliation as a **local-only carrying adjustment**,
@@ -189,9 +201,11 @@ while the same lines keep their **local-currency carrying amount** separately.
 The original contributes before the reversal posting date; on and after it the mirror contributes
 the opposite sign. Opening, period movement and closing are therefore derived independently and
 correctly: a +100 receipt on 20 December reversed on 5 January shows opening +100, movement ?100 and
-closing zero for January. Before the reversal the original is matchable; after it the pair is not
-matchable. The mirror is never an independent bank statement movement and is never used to net away
-an outstanding statement line. Parked and future-dated documents never contribute.
+closing zero for January. Before the reversal the original is matchable; after it the original is not. The mirror is a dated
+movement and may be matched **explicitly** to a real refund/return statement line with the correct
+direction, amount, date and bank identity. It is never created or matched automatically from the
+internal reversal alone, and it is never used to net away an outstanding statement line without
+that independent evidence. Parked and future-dated documents never contribute.
 
 If a journal is reversed while a match still refers to it, the reconciliation shows a blocking
 `INVALID_MATCH` and requires the statement to be reopened and the match withdrawn. A reversal dated
@@ -201,9 +215,12 @@ as changed. The signed snapshot is never rewritten. A reversed journal with no m
 `REVERSAL_EVIDENCE` issue because its as-of effect cannot be proved.
 
 The same evidence rule is enforced by the match service, not only the screen. A foreign line on a
-local-currency bank without `USER_ACTUAL` evidence, a third-currency line, a mirror, a valuation
-line or an ineffective reversed original is refused before any match row is inserted. A mixed
-request with one ineligible allocation inserts nothing.
+local-currency bank without `USER_ACTUAL` evidence, a third-currency line, a valuation line, an
+ineffective reversed original or a line posted after the statement's as-of date is refused before
+any match row is inserted. A mixed request with one ineligible allocation inserts nothing. The
+service locks every named journal **before** reading the active allocation totals, so two statements
+cannot both consume the same movement; unmatch takes the same lock. A reused request key must name
+the same statement and allocation set, otherwise it is a conflict, not a replay.
 
 A `FX_VALUATION` line is shown with zero account-currency amount and its local carrying adjustment;
 it is not matchable. This applies before and after its reversal and does not create a permanent
@@ -238,9 +255,14 @@ a local-only line benign.
   document reversal. An active match blocks the reset with an unmatch/reopen remedy, and the lock
   prevents a concurrent match from slipping between the check and the reversal. A refusal leaves the
   clearing journal, stamps and open items untouched.
-- The clearing journal's own self-stamped lines keep their stamp as audit history. Only the items it
-  cleared are reopened. Reversal mirrors are never exposed as extra open receivables or payables, so
-  reopening a payment residual, partial or on-account line leaves exactly the original economic items.
+- The clearing journal's own **payment/clearing offset lines reopen with the source items**. Keeping
+  them self-stamped would leave the reopened invoice without its posted payment offset. Reversal
+  mirrors are excluded from open-item queries, so resets never expose mirrored duplicates.
+- Before reversing a payment journal with realized FX, the reset detects payment-side residual or
+  on-account lines that a **different later clearing** has consumed. It refuses atomically and names
+  the downstream clearing to reset first; resetting the original payment underneath that settlement
+  is not allowed. A reset without FX leaves the payment posted and simply reopens its source and
+  offset lines, so a genuine bank movement is never lost as a side effect.
 - A valuation's unrealized posting is undone by reversing its journal.
 
 ## Auditing historical postings

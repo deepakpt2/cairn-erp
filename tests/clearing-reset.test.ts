@@ -164,13 +164,20 @@ describe('SCR-071 reset cleared items (FBRA)', () => {
         and not (document_number = ${clearingDocument} and fiscal_year = 2026)
     `));
     expect((stamps as unknown as Array<{ n: number }>)[0].n).toBe(0);
-    // The clearing journal's own lines keep their self-stamp as audit history.
+    // The clearing journal's own payment-side offset lines reopen too, so the receipt remains
+    // available to settle the reopened invoices instead of disappearing behind a self-stamp.
     const selfStamps = await withTenant(c, (tx) => tx.execute(sql`
       select count(*)::int as n from journal_entry_line
       where client = ${c} and document_number = ${clearingDocument} and fiscal_year = 2026
         and clearing_document = ${clearingDocument}
     `));
-    expect((selfStamps as unknown as Array<{ n: number }>)[0].n).toBeGreaterThan(0);
+    expect((selfStamps as unknown as Array<{ n: number }>)[0].n).toBe(0);
+    const paymentOffsets = await withTenant(c, (tx) => tx.execute(sql`
+      select count(*)::int as n from journal_entry_line
+      where client = ${c} and document_number = ${clearingDocument} and fiscal_year = 2026
+        and business_partner = 'C10000' and debit_credit = 'H' and clearing_document is null
+    `));
+    expect((paymentOffsets as unknown as Array<{ n: number }>)[0].n).toBeGreaterThan(0);
 
     const record = await withTenant(c, (tx) => tx.execute(sql`
       select reset_number, clearing_date::text as cd, items_reset, reason from clearing_reset

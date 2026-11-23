@@ -42,7 +42,10 @@ const BANKS = [
   { companyCode: '1000', houseBankKey: 'HB02', accountId: 'USD1', currency: 'USD', glAccount: '102000' },
 ];
 
-function runView(amount = '100.0000'): PaymentRunView {
+function runView(
+  amount = '100.0000',
+  overrides: Partial<PaymentRunView['proposal'][number]> = {},
+): PaymentRunView {
   return {
     runDate: '2026-10-05', runId: 'FXR1', postingDate: '2026-10-16',
     documentCutoffDate: '2026-10-16', nextPaymentDate: '2026-11-16',
@@ -53,15 +56,16 @@ function runView(amount = '100.0000'): PaymentRunView {
       journalDocumentNumber: '1000/2026/1', journalFiscalYear: 2026, journalLineNumber: 1,
       invoiceNumber: 'INV-1', currency: 'USD', amount, dueDate: '2026-10-01',
       paymentMethod: 'T', exceptionCode: null, exceptionText: null,
+      ...overrides,
     }],
     payments: [], payableTotal: Number(amount), exceptionCount: 0,
   };
 }
 
-function renderRun(amount = '100.0000') {
+function renderRun(amount = '100.0000', overrides: Partial<PaymentRunView['proposal'][number]> = {}) {
   return render(
     <PaymentRun
-      run={runView(amount)}
+      run={runView(amount, overrides)}
       runs={[]}
       banks={BANKS as BankChoice[]}
       canExecute
@@ -88,6 +92,35 @@ describe('payment-run actual bank amount binding', () => {
     expect(await screen.findByText(/payment USD → bank USD/)).toBeTruthy();
     expect(screen.getByText(/Same currency — the bank movement is the payment amount/)).toBeTruthy();
     expect(screen.queryByLabelText('Actual bank amount in USD for supplier V10000 paying USD')).toBeNull();
+
+    // A→B→A must not resurrect A's old amount; the instruction component remounts each time.
+    await user.selectOptions(bankChoice, 'HB01/KWD1');
+    const returned = screen.getByLabelText('Actual bank amount in KWD for supplier V10000 paying USD') as HTMLInputElement;
+    expect(returned.value).toBe('');
+  });
+
+  it('requires fresh entry when a same-looking invoice is substituted', async () => {
+    const user = userEvent.setup();
+    const view = renderRun();
+    const bankChoice = view.container.querySelector('[data-bank-choice]') as HTMLSelectElement;
+    await user.selectOptions(bankChoice, 'HB01/KWD1');
+    const amount = screen.getByLabelText('Actual bank amount in KWD for supplier V10000 paying USD');
+    await user.type(amount, '32.500');
+    expect((amount as HTMLInputElement).value).toBe('32.500');
+
+    view.rerender(
+      <PaymentRun
+        run={runView('100.0000', { journalDocumentNumber: '1000/2026/2', journalLineNumber: 2 })}
+        runs={[]}
+        banks={BANKS as BankChoice[]}
+        canExecute
+        today="2026-10-05"
+        release={null}
+        canRelease={false}
+      />,
+    );
+    const refreshed = screen.getByLabelText('Actual bank amount in KWD for supplier V10000 paying USD') as HTMLInputElement;
+    expect(refreshed.value).toBe('');
   });
 
   it('discards a typed amount when the released proposal changes', async () => {
@@ -144,6 +177,12 @@ describe('payment-entry actual bank amount invalidation', () => {
 
     const paymentAmount = screen.getByLabelText('Incoming amount') as HTMLInputElement;
     await user.type(paymentAmount, '100');
+    expect(bankAmount.value).toBe('');
+
+    // Changing the bank account is also a material instruction change.
+    await user.type(bankAmount, '32.500');
+    expect(bankAmount.value).toBe('32.500');
+    await user.type(screen.getByPlaceholderText('101000'), '116000');
     expect(bankAmount.value).toBe('');
   });
 });
