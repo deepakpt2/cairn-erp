@@ -80,7 +80,7 @@ async function createActor(
   options: { capabilities?: readonly string[]; companyScopes?: readonly string[]; suffix?: string } = {},
 ): Promise<Actor> {
   const suffix = (options.suffix ?? randomUUID().replaceAll('-', '').slice(0, 8)).toUpperCase();
-  const capabilities = options.capabilities ?? [PAYMENT_FILE_CAPABILITY];
+  const capabilities = options.capabilities ?? [PAYMENT_FILE_CAPABILITY, 'PEOPLE.BANK.REVEAL'];
   const companies = options.companyScopes ?? ['1000'];
   const userId = randomUUID();
   const username = `PF.${suffix}`;
@@ -260,6 +260,15 @@ describe('csv cell escaping (pure)', () => {
 });
 
 describe('preparation service', () => {
+  it('refuses a caller holding only the file-export capability, without the bank reveal authority', async () => {
+    // The CSV carries each employee's full account identifier, so file export alone is not enough.
+    const exportOnly = await createActor(tenant.client, { capabilities: [PAYMENT_FILE_CAPABILITY], suffix: 'EXPORTONLY' });
+    await expectRefusal(
+      preparePaymentFile({ client: tenant.client, runId: postedRunId, intendedPaymentDate: '2025-04-01', changedBy: ACTOR }, { authorization: exportOnly.authorization }),
+      'FILE_BANK_AUTHORITY',
+    );
+  });
+
   it('refuses a run that is not posted', async () => {
     const proposed = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 5, changedBy: ACTOR }, RUN_AUTH);
     await expectRefusal(

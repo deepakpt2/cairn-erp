@@ -83,6 +83,19 @@ export interface PaymentFileAccess {
 }
 
 const READ = [PAYMENT_FILE_CAPABILITY] as const;
+/** The file embeds full account identifiers, so preparing or downloading it is a full-value bank operation. */
+const BANK_FOR_FILE = ['PEOPLE.BANK.REVEAL'] as const;
+
+/**
+ * Require the bank reveal authority in addition to file export: the CSV carries each employee's full IBAN or
+ * account number, so producing it must not be possible with the file capability alone. Two separate any-of
+ * judgements, because `judgePayrollAccess` is any-of — file export AND reveal are both needed.
+ */
+async function judgeFileAndBank(tx: Tx, client: string, access: PaymentFileAccess | undefined): Promise<PayrollGrant> {
+  const grant = await judgePayrollAccess(tx, client, access, READ, refuse, 'FILE_AUTHORITY');
+  await judgePayrollAccess(tx, client, access, BANK_FOR_FILE, refuse, 'FILE_BANK_AUTHORITY');
+  return grant;
+}
 
 export interface PaymentFileView {
   preparationId: string;
@@ -415,7 +428,7 @@ async function resolveDate(tx: Tx, client: string, run: RunRow, supplied: string
  */
 export async function preparePaymentFile(input: PreparePaymentFileInput, access: PaymentFileAccess): Promise<PaymentFileView> {
   return withTenant(input.client, async (tx) => {
-    const grant = await judgePayrollAccess(tx, input.client, access, READ, refuse, 'FILE_AUTHORITY');
+    const grant = await judgeFileAndBank(tx, input.client, access);
     const { run, money } = await loadRunForFile(tx, input.client, input.runId, grant);
     if (run.status !== 'POSTED') {
       refuse(
@@ -603,7 +616,7 @@ export async function downloadPaymentFile(
   access: PaymentFileAccess = { authorization: undefined },
 ): Promise<PaymentFileDownload> {
   return withTenant(client, async (tx) => {
-    const grant = await judgePayrollAccess(tx, client, access, READ, refuse, 'FILE_AUTHORITY');
+    const grant = await judgeFileAndBank(tx, client, access);
     const { run, money } = await loadRunForFile(tx, client, runIdInput, grant);
     await assertNotReversed(tx, client, run);
     const row = await preparedOf(tx, client, run.runId);

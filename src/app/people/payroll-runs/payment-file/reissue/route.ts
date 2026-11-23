@@ -72,7 +72,13 @@ export async function POST(request: Request): Promise<Response> {
       return json(preview);
     }
     if (action === 'request') {
-      const attestations = JSON.parse(String(form?.get('attestations') ?? '[]')) as unknown[];
+      let attestations: unknown[] = [];
+      try {
+        const parsed = JSON.parse(String(form?.get('attestations') ?? '[]'));
+        if (Array.isArray(parsed)) attestations = parsed;
+      } catch {
+        return refusal(400, 'The attestations could not be read. Nothing was saved.', 'Reload the screen and enter each employee’s original outcome again.');
+      }
       const view = await requestReissue({
         client: s.user.client,
         sourcePreparationId: String(form?.get('sourcePreparationId') ?? ''),

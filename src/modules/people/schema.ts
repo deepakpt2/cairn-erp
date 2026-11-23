@@ -1331,7 +1331,7 @@ export const payrollPaymentFile = pgTable(
   'payroll_payment_file',
   {
     client: tenant(),
-    preparationId: varchar('preparation_id', { length: 36 }).notNull(),
+    preparationId: uuid('preparation_id').notNull(),
     runId: varchar('run_id', { length: 36 }).notNull(),
     companyCode: varchar('company_code', { length: 4 }).notNull(),
     fiscalYear: integer('fiscal_year').notNull(),
@@ -1377,7 +1377,7 @@ export const payrollPaymentFile = pgTable(
 );
 
 /**
- * 9321: employee salary bank details (SAP infotype 0009).
+ * 9321: employee salary bank details.
  *
  * Account identifiers are stored only as AES-256-GCM envelopes (`accountCiphertext`), bound to tenant +
  * employee + record id + field — no plaintext column exists. One MAIN account per employee at any one time:

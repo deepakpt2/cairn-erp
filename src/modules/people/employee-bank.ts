@@ -1,5 +1,5 @@
 /**
- * Employee salary bank details (SAP infotype 0009), maintained on the employee screen.
+ * Employee salary bank details, maintained on the employee screen.
  *
  * Sensitive data with three deliberately separate authorities:
  * - `PEOPLE.BANK.VIEW` — read a record MASKED (fixed mask + last four). Never returns the full value.
@@ -60,6 +60,7 @@ export class EmployeeBankError extends Error {
   constructor(message: string, remedy?: string, code = 'EMPLOYEE_BANK') {
     super(message);
     this.name = 'EmployeeBankError';
+    this.remedy = remedy;
     this.code = code;
   }
 }
@@ -377,23 +378,27 @@ export async function revealEmployeeBank(
 ): Promise<{ accountKind: 'IBAN' | 'ACCOUNT'; accountValue: string }> {
   if (!isBankRecordId(bankRecordId)) refuse('BANK_UNAVAILABLE', 'That bank record does not exist, or is not available to you.', 'Open an employee you reach.');
   const purpose = String(options.purpose ?? '').trim().toUpperCase().slice(0, 40) || 'PAYROLL_SUPPORT';
-  return withTenant(client, async (tx) => {
+  // First transaction: authorize, decrypt, and record the terminal audit outcome. It must COMMIT before any
+  // plaintext leaves this function, so a failed reveal is still recorded rather than rolled back by a throw.
+  const outcome = await withTenant(client, async (tx) => {
     const [row] = await tx.select().from(employeeBankDetail)
       .where(and(eq(employeeBankDetail.client, client), eq(employeeBankDetail.bankRecordId, bankRecordId))).limit(1);
     if (!row) refuse('BANK_UNAVAILABLE', 'That bank record does not exist, or is not available to you.', 'Open an employee you reach.');
     await judgeForEmployee(tx, client, row.personnelNumber, row.validFrom, access, REVEAL);
-
-    let accountValue: string;
+    let value: string | null = null;
     try {
-      accountValue = decryptBankData(row.accountCiphertext, cipherContext(client, row.personnelNumber, row.bankRecordId), keyring);
+      value = decryptBankData(row.accountCiphertext, cipherContext(client, row.personnelNumber, row.bankRecordId), keyring);
     } catch {
-      // Keyring unavailable or envelope tampered: audit the failed reveal and refuse.
-      await auditReveal(tx, client, row, options.changedBy, purpose, access);
-      refuse('BANK_CRYPTO', 'The account value could not be decrypted; the bank-data keyring is unavailable or the record is unreadable.', 'Ask an administrator to check the bank-data keyring provisioning. Nothing was revealed.');
+      value = null;
     }
-    await auditReveal(tx, client, row, options.changedBy, purpose, access);
-    return { accountKind: row.accountKind as 'IBAN' | 'ACCOUNT', accountValue };
+    // Always record the outcome in this same (committing) transaction — success or denial.
+    await auditReveal(tx, client, row, options.changedBy, purpose, access, value !== null ? 'SUCCESS' : 'DENIED');
+    return { accountKind: row.accountKind as 'IBAN' | 'ACCOUNT', accountValue: value };
   });
+  if (outcome.accountValue === null) {
+    refuse('BANK_CRYPTO', 'The account value could not be decrypted; the bank-data keyring is unavailable or the record is unreadable.', 'Ask an administrator to check the bank-data keyring provisioning. Nothing was revealed.');
+  }
+  return { accountKind: outcome.accountKind, accountValue: outcome.accountValue };
 }
 
 async function auditReveal(
@@ -403,12 +408,13 @@ async function auditReveal(
   changedBy: string,
   purpose: string,
   access: EmployeeBankAccess | undefined,
+  outcome: 'SUCCESS' | 'DENIED',
 ): Promise<void> {
   const userId = access && !Array.isArray(access) ? (access as { authorization?: { userId?: string } }).authorization?.userId ?? null : null;
   await tx.execute(sql`
     insert into audit_access_log (id, client, user_id, username, event_type, transaction_code, object_type, object_key, detail)
     values (${randomUUID()}, ${client}, ${userId}, ${changedBy}, 'READ', ${BANK_REVEAL_CAPABILITY}, 'employee_bank_detail', ${row.bankRecordId},
-      ${JSON.stringify({ action: 'REVEAL', personnelNumber: row.personnelNumber, accountKind: row.accountKind, purpose })})`);
+      ${JSON.stringify({ action: 'REVEAL', outcome, personnelNumber: row.personnelNumber, accountKind: row.accountKind, purpose })})`);
 }
 
 // Re-exported so the screen and the payment-file service share one rule set.

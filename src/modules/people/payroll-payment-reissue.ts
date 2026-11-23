@@ -1,8 +1,8 @@
 /**
  * Controlled replacement of a generic salary payment file — all or selected employees.
  *
- * SAP-inspired in spirit (a replacement payment run), but this is generic manual-file processing: it never
- * reproduces a particular SAP localization, never recalculates wages, never posts or reverses accounting and
+ * A controlled replacement payment run, implemented as generic manual-file processing: it never reproduces a
+ * vendor-specific localization, never recalculates wages, never posts or reverses accounting and
  * never claims the bank paid anyone. It produces a new CSV instruction for manual conversion and upload.
  *
  * The process this file keeps:
@@ -272,6 +272,22 @@ async function assertNotReversed(tx: Tx, client: string, run: RunRow): Promise<v
       )).limit(1);
     if (reversal) refuse('RUN_REVERSED', `Payroll run ${run.runId} was reversed (document ${reversal.reversalDocumentNumber}); no replacement file is produced after a reversal.`, 'An administrator must resolve the reversal first.');
   }
+  // The salary payment (PY) is a second accounting document this instruction stands beside: a reversed salary
+  // payment refuses a replacement too, exactly as the ordinary file service does.
+  const [payment] = await tx.select().from(salaryPayment)
+    .where(and(eq(salaryPayment.client, client), eq(salaryPayment.runId, run.runId))).limit(1);
+  if (payment) {
+    const [paymentReversal] = await tx.select({ reversalDocumentNumber: accountingReversalLink.reversalDocumentNumber })
+      .from(accountingReversalLink).where(and(
+        eq(accountingReversalLink.client, client),
+        eq(accountingReversalLink.originalCompanyCode, payment.companyCode),
+        eq(accountingReversalLink.originalDocumentNumber, payment.documentNumber),
+        eq(accountingReversalLink.originalFiscalYear, payment.documentFiscalYear),
+      )).limit(1);
+    if (paymentReversal) {
+      refuse('PAYMENT_REVERSED', `The salary payment of run ${run.runId} was reversed (document ${paymentReversal.reversalDocumentNumber}); no replacement file is produced after a reversal.`, 'An administrator must resolve the reversal first.');
+    }
+  }
 }
 
 /** Is this employee's instruction in the source file superseded by an approved/live replacement? */
@@ -299,9 +315,59 @@ async function supersededAfter(tx: Tx, client: string, runId: string, personnelN
   return rows[0]?.reissue_id ?? null;
 }
 
-/** Every employee in a frozen file, with its net amount at the file's currency. */
+/**
+ * Every employee in a frozen file. A file with bank data carries `bankSnapshot`; a legacy file (pre-bank)
+ * carries only a plaintext CSV `body`, which is parsed back into rows so it stays eligible for replacement
+ * once account data is complete. Parsing never changes the stored file.
+ */
 function snapshotRowsOf(file: FileRow): PaymentFileBankRow[] {
-  return (file.bankSnapshot ?? []) as PaymentFileBankRow[];
+  if (file.bankDataIncluded) return (file.bankSnapshot ?? []) as PaymentFileBankRow[];
+  if (!file.body) return [];
+  return parseLegacyBody(Buffer.from(file.body).toString('utf8'));
+}
+
+/** Recover frozen rows from a legacy generic CSV body (same column order as `buildPaymentCsv`). */
+function parseLegacyBody(csv: string): PaymentFileBankRow[] {
+  const lines = csv.split(/\r\n|\n/).filter((l) => l.length > 0);
+  if (lines.length <= 1) return [];
+  const rows: PaymentFileBankRow[] = [];
+  for (const line of lines.slice(1)) {
+    const cols = parseCsvLine(line);
+    if (cols.length < 12) continue;
+    const personnelNumber = cols[2]!;
+    const kind = cols[9] && cols[9].length > 0 ? 'ACCOUNT' : 'IBAN';
+    rows.push({
+      personnelNumber,
+      beneficiaryName: cols[3] ?? personnelNumber,
+      amount: cols[4] ?? '0',
+      currency: cols[5] ?? '',
+      intendedPaymentDate: cols[6] ?? '',
+      bankName: cols[7] ?? '',
+      bankCode: cols[8] || null,
+      accountKind: kind,
+      accountCiphertext: '', // legacy rows carried no identifier; a replacement re-selects current details
+    });
+  }
+  return rows;
+}
+
+/** A minimal RFC 4180 line reader, enough to recover a frozen legacy row. */
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else cur += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
 }
 
 /** The one approved/live instruction attempt for an employee: a reissue if one supersedes, else the source. */
@@ -446,11 +512,18 @@ export async function requestReissue(rawInput: RequestReissueInput, access: Reis
     const money = await moneyForRun(tx, run);
     if (!isCalendarDate(input.intendedPaymentDate)) refuse('PAYMENT_DATE', `Intended payment date ${input.intendedPaymentDate} is not a calendar date.`, 'Enter the date as YYYY-MM-DD.');
 
-    // Idempotency: an identical request key replays its own draft; a different payload is refused.
+    // Idempotency: a repeated key replays only an IDENTICAL payload; a different payload is refused.
     if (input.requestKey) {
       const [replay] = await tx.select().from(payrollPaymentReissue)
         .where(and(eq(payrollPaymentReissue.client, input.client), eq(payrollPaymentReissue.requestKey, input.requestKey))).limit(1);
-      if (replay) return viewOf(tx, input.client, replay, money);
+      if (replay) {
+        const same = replay.sourcePreparationId === file.preparationId
+          && replay.selection === input.selection
+          && replay.intendedPaymentDate === input.intendedPaymentDate
+          && replay.reason === input.reason;
+        if (!same) refuse('REISSUE_KEY_REUSED', 'This request key was already used for a different replacement request.', 'Reload the screen to get a fresh request key.');
+        return viewOf(tx, input.client, replay, money);
+      }
     }
 
     const all = snapshotRowsOf(file);
@@ -638,8 +711,11 @@ export async function cancelReissue(
     const grant = await judge(tx, client, access, [...REQUEST, ...APPROVE]);
     const row = await loadReissue(tx, client, reissueId);
     if (!row) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    // Reach: the replacement's company and every included employee, judged live.
+    const run = await loadRun(tx, client, row.runId);
+    if (!reachesCompany(grant, run.companyCode)) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    await assertReachable(tx, client, grant, (row.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), row.intendedPaymentDate);
     if (row.status !== 'DRAFT') refuse('REISSUE_STATE', `Replacement ${row.reissueReference} is ${row.status.toLowerCase()}; a released or cancelled replacement is immutable.`, 'A released snapshot cannot be cancelled.');
-    void grant;
     const now = new Date();
     await tx.update(payrollPaymentReissue)
       .set({ status: 'CANCELLED', cancelledBy: input.changedBy, cancelledAt: now, cancelReason: reason, changedBy: input.changedBy, changedAt: now })
@@ -671,6 +747,9 @@ export async function downloadReissue(
     const grant = await judge(tx, client, access, DOWNLOAD);
     const row = await loadReissue(tx, client, reissueId);
     if (!row) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    const run = await loadRun(tx, client, row.runId);
+    if (!reachesCompany(grant, run.companyCode)) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    await assertNotReversed(tx, client, run);
     if (row.status !== 'APPROVED') refuse('REISSUE_NOT_APPROVED', `Replacement ${row.reissueReference} is ${row.status.toLowerCase()}; only an approved replacement downloads.`, 'An approver must release it first, or it was cancelled.');
     await assertReachable(tx, client, grant, (row.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), row.intendedPaymentDate);
     const keyring = keyringOrRefuse(`replacement ${row.reissueReference}`);
@@ -684,14 +763,16 @@ export async function downloadReissue(
       refuse('REISSUE_KEYRING', `The bank details of replacement ${row.reissueReference} cannot be decrypted; the bank-data keyring is unavailable.`, 'Ask a deployment administrator to provision the keyring. Nothing was downloaded.');
     }
     const csv = buildPaymentCsv({ fileReference: row.reissueReference, runReference: runRefOf(row) }, rows);
+    // Count prior downloads BEFORE writing this one, so the first download is not reported as a re-download.
+    const reused = (await downloadCount(tx, client, row.reissueId)) > 0;
     await auditReissue(tx, client, access, row.reissueId, 'Downloaded', { reissueReference: row.reissueReference, employeeCount: row.employeeCount, totalAmount: String(row.totalAmount) });
     return {
       filename: row.filename,
       body: Buffer.from(csv, 'utf8'),
       reissueReference: row.reissueReference,
       employeeCount: row.employeeCount,
-      totalAmount: (await moneyForRun(tx, await loadRun(tx, client, row.runId))).text(String(row.totalAmount)),
-      reused: (await downloadCount(tx, client, row.reissueId)) > 0,
+      totalAmount: (await moneyForRun(tx, run)).text(String(row.totalAmount)),
+      reused,
     };
   });
 }
@@ -733,11 +814,25 @@ export async function downloadHistoricalFile(
 
 // ── Reading history ─────────────────────────────────────────────────────────
 
+/** The employees of a source file (personnel number + frozen beneficiary name), for the selection UI. */
+export async function listReissueSourceEmployees(
+  client: string,
+  preparationId: string,
+  access: ReissueAccess | undefined,
+): Promise<Array<{ personnelNumber: string; beneficiaryName: string }>> {
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, VIEW);
+    const file = await loadSourceFile(tx, client, preparationId, grant);
+    return snapshotRowsOf(file).map((r) => ({ personnelNumber: r.personnelNumber, beneficiaryName: r.beneficiaryName }));
+  });
+}
+
 /** Every replacement of a run, newest version first, with its lines (masked). */
 export async function listReissues(client: string, runId: string, access: ReissueAccess | undefined): Promise<ReissueView[]> {
   return withTenant(client, async (tx) => {
-    await judge(tx, client, access, VIEW);
+    const grant = await judge(tx, client, access, VIEW);
     const run = await loadRun(tx, client, runId);
+    if (!reachesCompany(grant, run.companyCode)) refuse('REISSUE_UNAVAILABLE', 'That payroll run does not exist, or is not available to you.', 'Open a run you reach.');
     const money = await moneyForRun(tx, run);
     const rows = await tx.select().from(payrollPaymentReissue)
       .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.runId, runId)))
@@ -869,9 +964,14 @@ async function viewOf(tx: Tx, client: string, row: ReissueRow, money: Money): Pr
 
 async function auditReissue(tx: Tx, client: string, access: ReissueAccess | undefined, objectKey: string, verb: string, detail: Record<string, unknown>): Promise<void> {
   const userId = access && 'authorization' in (access as object) ? (access as { authorization?: { userId?: string } }).authorization?.userId ?? null : null;
+  // The audit transaction code names the authority the act actually exercised, not always REQUEST.
+  const code = verb === 'Approved' ? REISSUE_APPROVE_CAPABILITY
+    : verb === 'Downloaded' ? REISSUE_DOWNLOAD_CAPABILITY
+      : verb === 'Historical download' ? FILE_HISTORICAL_CAPABILITY
+        : REISSUE_REQUEST_CAPABILITY;
   await tx.execute(sql`
     insert into audit_access_log (id, client, user_id, username, event_type, transaction_code, object_type, object_key, detail)
-    values (${randomUUID()}, ${client}, ${userId}, ${null}, 'EXPORT', ${REISSUE_REQUEST_CAPABILITY}, 'payroll_payment_reissue', ${objectKey},
+    values (${randomUUID()}, ${client}, ${userId}, ${null}, 'EXPORT', ${code}, 'payroll_payment_reissue', ${objectKey},
       ${JSON.stringify({ verb, ...detail })})`);
 }
 

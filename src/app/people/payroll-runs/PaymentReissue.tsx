@@ -32,6 +32,7 @@ const blankAttestation = (): Attestation => ({ outcome: '', reason: '', verifica
 export function PaymentReissuePanel({
   preparationId,
   reissues,
+  sourceEmployees,
   canRequest,
   canApprove,
   canDownload,
@@ -41,6 +42,8 @@ export function PaymentReissuePanel({
 }: {
   preparationId: string;
   reissues: ReissueView[];
+  /** The employees in the source file, so a SELECTED request can name them. */
+  sourceEmployees: Array<{ personnelNumber: string; beneficiaryName: string }>;
   canRequest: boolean;
   canApprove: boolean;
   canDownload: boolean;
@@ -166,7 +169,32 @@ export function PaymentReissuePanel({
               <input className="field-input w-full" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="Why a replacement is needed" />
             </label>
           </div>
-          <button type="button" className="btn btn-default min-h-11 sm:min-h-8" disabled={pending || !date} onClick={runPreview}>Preview eligible employees</button>
+          {selection === 'SELECTED' && (
+            <div className="space-y-1 rounded border border-line p-3">
+              <p className="field-label">Employees to replace ({selected.length} selected)</p>
+              {sourceEmployees.length === 0 ? (
+                <p className="text-xs text-ink-soft">This file has no employees to select.</p>
+              ) : (
+                <div className="grid gap-1 sm:grid-cols-2">
+                  {sourceEmployees.map((e) => (
+                    <label key={e.personnelNumber} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(e.personnelNumber)}
+                        onChange={(ev) => {
+                          setPreview(null);
+                          setSelected((prev) => ev.target.checked ? [...prev, e.personnelNumber] : prev.filter((n) => n !== e.personnelNumber));
+                        }}
+                      />
+                      <span className="code">{e.personnelNumber}</span>
+                      <span className="text-xs text-ink-soft">{e.beneficiaryName}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button type="button" className="btn btn-default min-h-11 sm:min-h-8" disabled={pending || !date || (selection === 'SELECTED' && selected.length === 0)} onClick={runPreview}>Preview eligible employees</button>
 
           {preview && (
             <div className="space-y-3">

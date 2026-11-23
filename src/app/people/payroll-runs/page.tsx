@@ -29,6 +29,7 @@ import {
   REISSUE_APPROVE_CAPABILITY,
   REISSUE_DOWNLOAD_CAPABILITY,
   REISSUE_REQUEST_CAPABILITY,
+  listReissueSourceEmployees,
   listReissues,
 } from '@/modules/people/payroll-payment-reissue';
 import { listBankChoices } from '@/modules/finance/payment-run';
@@ -90,6 +91,9 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
   const mayHistorical = can(session, FILE_HISTORICAL_CAPABILITY);
   const reissues = paymentFile && (mayRequestReissue || mayApproveReissue || mayDownloadReissue || mayHistorical)
     ? await listReissues(client, selected!.runId, access).catch(() => [])
+    : [];
+  const reissueSources = paymentFile && mayRequestReissue
+    ? await listReissueSourceEmployees(client, paymentFile.preparationId, access).catch(() => [])
     : [];
   const banks = selected && selected.status === 'POSTED' && !payment && mayPay
     ? (await listBankChoices(client)).filter((b) => b.companyCode === selected.companyCode)
@@ -252,6 +256,7 @@ export default async function PayrollRunPage({ searchParams }: { searchParams: P
                 <PaymentReissuePanel
                   preparationId={paymentFile.preparationId}
                   reissues={reissues}
+                  sourceEmployees={reissueSources}
                   canRequest={mayRequestReissue}
                   canApprove={mayApproveReissue}
                   canDownload={mayDownloadReissue}

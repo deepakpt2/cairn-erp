@@ -45,6 +45,7 @@ import {
   cancelReissue,
   downloadHistoricalFile,
   downloadReissue,
+  listReissueSourceEmployees,
   listReissues,
   previewReissue,
   requestReissue,
@@ -135,7 +136,7 @@ beforeAll(async () => {
   for (const [component, kind, value] of [['BASIC', 'PERCENT_OF_BASE', '100'], ['HOUSING', 'FIXED', '200'], ['PENS', 'PERCENT_OF_BASE', '5']] as const) {
     await setStructureComponent({ client: tenant.client, structureCode: main, componentCode: component, amountKind: kind, amountValue: value, changedBy: ACTOR }, STRUCTURE_AUTH);
   }
-  requester = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY, REISSUE_APPROVE_CAPABILITY, REISSUE_DOWNLOAD_CAPABILITY, FILE_HISTORICAL_CAPABILITY, PAYMENT_FILE_CAPABILITY], suffix: 'REQ' });
+  requester = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY, REISSUE_APPROVE_CAPABILITY, REISSUE_DOWNLOAD_CAPABILITY, FILE_HISTORICAL_CAPABILITY, PAYMENT_FILE_CAPABILITY, 'PEOPLE.BANK.REVEAL'], suffix: 'REQ' });
   bankAdmin = await createActor(tenant.client, { capabilities: ['PEOPLE.BANK.MAINTAIN', 'PEOPLE.BANK.VIEW'], suffix: 'BANK' });
   approver = await createActor(tenant.client, { suffix: 'APP' });
   outsider = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY], companyScopes: ['ZZZZ'], suffix: 'OUT' });
@@ -247,13 +248,15 @@ describe('replacement content and safety', () => {
     expect(original[0]!.snap).toBe(originalSnapBefore);
   });
 
-  it('a re-download is byte-stable and flags reuse', async () => {
-    const reissues = await listReissues(tenant.client, runId, { authorization: approver.authorization });
-    const approved = reissues.find((r) => r.status === 'APPROVED')!;
-    const a = await downloadReissue(tenant.client, approved.reissueId, { requestedBy: 'RI.A' }, { authorization: approver.authorization });
-    const b = await downloadReissue(tenant.client, approved.reissueId, { requestedBy: 'RI.B' }, { authorization: approver.authorization });
-    expect(a.body.equals(b.body)).toBe(true);
-    expect(b.reused).toBe(true);
+  it('a fresh download is not a reuse, and a re-download is byte-stable and flagged', async () => {
+    // A brand-new approved replacement has never been downloaded, so the first download must not look reused.
+    const draft = await requestSelected([employees[2]!], requester, '2025-05-10');
+    await approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization });
+    const first = await downloadReissue(tenant.client, draft.reissueId, { requestedBy: 'RI.A' }, { authorization: approver.authorization });
+    const second = await downloadReissue(tenant.client, draft.reissueId, { requestedBy: 'RI.B' }, { authorization: approver.authorization });
+    expect(first.reused).toBe(false);
+    expect(second.reused).toBe(true);
+    expect(first.body.equals(second.body)).toBe(true);
   });
 
   it('no payroll recalculation and no accounting change on request/approve/download', async () => {
@@ -312,12 +315,94 @@ describe('traceability, blocking and concurrency', () => {
   });
 
   it('refuses an out-of-scope, missing-capability, unauthenticated and wrong-tenant caller', async () => {
-    const draft = await requestSelected([employees[0]!], requester).catch(() => null);
-    void draft;
     await expectRefusal(previewReissue(tenant.client, { sourcePreparationId: preparationId, selection: 'ALL', intendedPaymentDate: '2025-04-15' }, { authorization: undefined }), 'REISSUE_AUTHORITY');
     await expectRefusal(previewReissue(tenant.client, { sourcePreparationId: preparationId, selection: 'ALL', intendedPaymentDate: '2025-04-15' }, { authorization: outsider.authorization }), 'FILE_UNAVAILABLE');
     await expectRefusal(listReissues(otherTenant.client, runId, { authorization: otherTenantActor.authorization }), 'REISSUE_UNAVAILABLE');
   });
+
+  it('a caller who reaches no company cannot list or cancel a replacement', async () => {
+    const open = (await listReissues(tenant.client, runId, { authorization: requester.authorization })).find((r) => r.status === 'DRAFT');
+    expect(open).toBeTruthy();
+    const scopedOut = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY, REISSUE_APPROVE_CAPABILITY], companyScopes: ['ZZZZ'], suffix: 'SCOPE' });
+    await expectRefusal(listReissues(tenant.client, runId, { authorization: scopedOut.authorization }), 'REISSUE_UNAVAILABLE');
+    await expectRefusal(cancelReissue(tenant.client, open!.reissueId, { reason: 'x', changedBy: 'RI.SCOPE' }, { authorization: scopedOut.authorization }), 'REISSUE_UNAVAILABLE');
+  });
+
+  it('concurrent requests for the same employee create exactly one draft', async () => {
+    for (const r of (await listReissues(tenant.client, runId, { authorization: requester.authorization })).filter((x) => x.status === 'DRAFT')) {
+      await cancelReissue(tenant.client, r.reissueId, { reason: 'Test prep', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    }
+    const settle = await Promise.allSettled([
+      requestSelected([employees[0]!], requester, '2025-06-01'),
+      requestSelected([employees[0]!], requester, '2025-06-01'),
+    ]);
+    expect(settle.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rejected = settle.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    expect((rejected[0]!.reason as ReissueError).code).toBe('REISSUE_CONFLICT');
+    const rows = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select count(*)::int as n from payroll_payment_reissue_line where client = ${tenant.client} and run_id = ${runId} and personnel_number = ${employees[0]!} and state = 'DRAFT'`)) as unknown as Array<{ n: number }>;
+    expect(rows[0]!.n).toBe(1);
+  }, 60_000);
+
+  it('a legacy file (plaintext body, no snapshot) can still be replaced once accounts exist', async () => {
+    const run = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 6, changedBy: ACTOR }, RUN_AUTH);
+    expect(run.exceptions, JSON.stringify(run.exceptions)).toEqual([]);
+    await releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: ACTOR }, RUN_AUTH);
+    const poster = await createPayrollPoster(tenant.client);
+    await postPayrollRun({ client: tenant.client, runId: run.runId, changedBy: poster.username, authorization: poster.authorization });
+    for (const pn of (await withTenant(tenant.client, (tx) => tx.execute(sql`select personnel_number as pn from payroll_result where client = ${tenant.client} and run_id = ${run.runId}`)) as unknown as Array<{ pn: string }>).map((r) => r.pn)) {
+      await bankAccount(pn, { from: '2024-01-01' }).catch(() => null);
+    }
+    const prepared = await preparePaymentFile({ client: tenant.client, runId: run.runId, intendedPaymentDate: '2025-07-01', changedBy: ACTOR }, { authorization: requester.authorization });
+    const rows = await withTenant(tenant.client, (tx) => tx.execute(sql`select bank_snapshot::text as snap from payroll_payment_file where client = ${tenant.client} and preparation_id = ${prepared.preparationId}`)) as unknown as Array<{ snap: string }>;
+    const snap = JSON.parse(rows[0]!.snap) as Array<{ personnelNumber: string; beneficiaryName: string; amount: string; currency: string; intendedPaymentDate: string }>;
+    const legacyCsv = 'file_reference,run_reference,personnel_number,beneficiary_name,amount,currency,intended_payment_date,beneficiary_bank_name,beneficiary_bank_code,beneficiary_account,beneficiary_iban,remittance_information\r\n'
+      + snap.map((r) => `${prepared.fileReference},RUN,${r.personnelNumber},${r.beneficiaryName},${r.amount},${r.currency},${r.intendedPaymentDate},,,,,`).join('\r\n') + '\r\n';
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      update payroll_payment_file set body = ${Buffer.from(legacyCsv, 'utf8')}, bank_data_included = false, bank_snapshot = '[]'::jsonb
+       where client = ${tenant.client} and preparation_id = ${prepared.preparationId}`));
+    const sources = await listReissueSourceEmployees(tenant.client, prepared.preparationId, { authorization: requester.authorization });
+    expect(sources.length).toBe(3);
+    const draft = await requestReissue({
+      client: tenant.client, sourcePreparationId: prepared.preparationId, selection: 'ALL', intendedPaymentDate: '2025-07-10',
+      reason: 'Legacy file replaced', attestations: sources.map((s) => att(s.personnelNumber, 'NOT_UPLOADED', { confirmedNoSubmission: true })) as never,
+      requestKey: randomUUID(), changedBy: 'RI.REQ',
+    }, { authorization: requester.authorization });
+    expect(draft.employeeCount).toBe(3);
+    await cancelReissue(tenant.client, draft.reissueId, { reason: 'Test cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 120_000);
+
+  it('a reversed salary payment refuses a replacement', async () => {
+    const run = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 7, changedBy: ACTOR }, RUN_AUTH);
+    await releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: ACTOR }, RUN_AUTH);
+    const poster = await createPayrollPoster(tenant.client);
+    await postPayrollRun({ client: tenant.client, runId: run.runId, changedBy: poster.username, authorization: poster.authorization });
+    for (const pn of (await withTenant(tenant.client, (tx) => tx.execute(sql`select personnel_number as pn from payroll_result where client = ${tenant.client} and run_id = ${run.runId}`)) as unknown as Array<{ pn: string }>).map((r) => r.pn)) {
+      await bankAccount(pn, { from: '2024-01-01' }).catch(() => null);
+    }
+    const prepared = await preparePaymentFile({ client: tenant.client, runId: run.runId, intendedPaymentDate: '2025-08-01', changedBy: ACTOR }, { authorization: requester.authorization });
+    // A salary-payment row (PY) is test setup only; the guard under test is the reissue reversal check.
+    const doc = 'PY-REV-TEST';
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        insert into salary_payment (client, payment_id, run_id, company_code, fiscal_year, period, payment_date, currency,
+          house_bank_key, bank_account_id, bank_gl_account, net_pay_account, employee_count, total_amount,
+          document_number, document_fiscal_year, request_key, paid_by, paid_at, created_by)
+        values (${tenant.client}, ${randomUUID()}, ${run.runId}, ${fx.companyCode}, ${YEAR}, 7, '2025-08-01', ${fx.currency},
+          'HB001', 'ACC01', '120000', '251000', 3, 1, ${doc}, ${YEAR}, ${'PY-REQ-' + run.runId.slice(0, 8)}, ${ACTOR}, now(), ${ACTOR})`);
+      await tx.execute(sql`
+        insert into accounting_reversal_link (client, original_company_code, original_document_number, original_fiscal_year,
+          reversal_company_code, reversal_document_number, reversal_fiscal_year, reversal_reason, reversal_document_date,
+          reversal_posting_period, reversal_posting_date, reversed_by)
+        values (${tenant.client}, ${fx.companyCode}, ${doc}, ${YEAR}, ${fx.companyCode}, 'REV-SAL-1',
+          ${YEAR}, '01', '2025-09-30', 9, '2025-09-30', ${ACTOR})`);
+    });
+    const source = await listReissueSourceEmployees(tenant.client, prepared.preparationId, { authorization: requester.authorization });
+    await expectRefusal(requestReissue({
+      client: tenant.client, sourcePreparationId: prepared.preparationId, selection: 'ALL', intendedPaymentDate: '2025-09-05',
+      reason: 'After reversal', attestations: source.map((s) => att(s.personnelNumber)) as never, requestKey: randomUUID(), changedBy: 'RI.REQ',
+    }, { authorization: requester.authorization }), 'PAYMENT_REVERSED');
+  }, 120_000);
 });
 
 describe('the reissue endpoint', () => {
