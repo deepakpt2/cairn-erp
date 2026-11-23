@@ -24,6 +24,7 @@ import {
   downloadReissue,
   isReissueError,
   previewReissue,
+  reconcileReissueRequest,
   requestReissue,
 } from '@/modules/people/payroll-payment-reissue';
 
@@ -94,6 +95,18 @@ export async function POST(request: Request): Promise<Response> {
         changedBy: s.user.username,
       }, access);
       return json({ ...view, warning: REISSUE_WARNING }, 201);
+    }
+    if (action === 'reconcile') {
+      const result = await reconcileReissueRequest(
+        s.user.client,
+        {
+          requestKey: String(form?.get('requestKey') ?? ''),
+          sourcePreparationId: String(form?.get('sourcePreparationId') ?? ''),
+          requestedBy: s.user.username,
+        },
+        access,
+      );
+      return json(result);
     }
     if (action === 'approve') {
       // The approver asserts the review explicitly AND supplies the reviewed digest; both are required.

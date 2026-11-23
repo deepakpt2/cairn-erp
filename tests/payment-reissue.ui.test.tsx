@@ -166,6 +166,91 @@ describe('PaymentReissuePanel', () => {
     expect(screen.queryByRole('button', { name: /create replacement draft/i })).toBeNull();
   });
 
+  it('a 5xx after submit is UNKNOWN (never "nothing was saved") and keeps the key for a retry', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    replies.push(json(previewBody()));
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await attestAll(user, ['P1', 'P2']);
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'proxy loss');
+    // A reverse proxy can return 502 AFTER the application committed: this is NOT a definite refusal.
+    replies.push(() => Promise.resolve(new Response('bad gateway', { status: 502 })));
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/unknown outcome/i));
+    // No element may claim nothing was saved.
+    expect(screen.queryByText(/nothing was saved/i)).toBeNull();
+    const firstKey = ((fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.find((c) => (c[1] as { body: FormData }).body.get('action') === 'request')![1] as { body: FormData }).body.get('requestKey');
+    replies.push(json({ reissueId: 'r-502' }, 201));
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/draft created/i));
+    const reqs = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => (c[1] as { body: FormData }).body.get('action') === 'request');
+    expect((reqs.at(-1)![1] as { body: FormData }).body.get('requestKey')).toBe(firstKey);
+  });
+
+  it('after a reload, the recovered key and payload make a retry reuse the SAME key', async () => {
+    const user = userEvent.setup();
+    const first = renderPanel();
+    replies.push(json(previewBody()));
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await attestAll(user, ['P1', 'P2']);
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'reload test');
+    replies.push(network());
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/unknown outcome/i));
+    const firstKey = ((fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.find((c) => (c[1] as { body: FormData }).body.get('action') === 'request')![1] as { body: FormData }).body.get('requestKey');
+    first.unmount();
+
+    // Reload: the recovery record (same tab/sessionStorage) restores the key and exact payload.
+    renderPanel();
+    await screen.findByRole('alert');
+    expect(screen.getByRole('alert').textContent).toMatch(/unknown outcome/i);
+    // Re-enter the same preview and attestations (the user must still review), then submit.
+    replies.push(json(previewBody()));
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await attestAll(user, ['P1', 'P2']);
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'reload test');
+    replies.push(json({ reissueId: 'r-reload' }, 201));
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/draft created/i));
+    const reqs = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => (c[1] as { body: FormData }).body.get('action') === 'request');
+    expect(reqs).toHaveLength(2);
+    expect((reqs.at(-1)![1] as { body: FormData }).body.get('requestKey')).toBe(firstKey);
+  });
+
+  it('editing the inputs while an outcome is unresolved blocks a different submission', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    replies.push(json(previewBody()));
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await attestAll(user, ['P1', 'P2']);
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'first attempt');
+    replies.push(network());
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/unknown outcome/i));
+    const before = (fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
+
+    // Change the DATE and re-preview, then try a DIFFERENT request. Attestations typed for the first preview must
+    // survive the re-preview (they do not belong to the previewed set), so a submit is still possible.
+    const dateInput = screen.getByLabelText(/intended payment date/i);
+    await user.clear(dateInput);
+    await user.type(dateInput, '2025-06-15');
+    const sig = JSON.stringify({ v: 1, source: SOURCE, selection: 'ALL', selected: [], date: '2025-06-15' });
+    replies.push(json(previewBody({ intendedPaymentDate: '2025-06-15', inputSignature: sig })));
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByRole('button', { name: /create replacement draft/i });
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/unknown outcome/i));
+    // No request POST was attempted for the changed payload.
+    const requestPosts = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+      .filter((c) => (c[1] as { body: FormData }).body.get('action') === 'request');
+    expect(requestPosts).toHaveLength(1);
+    expect((fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBeGreaterThan(before);
+  });
+
   it('a lost response after submit shows UNKNOWN and retries with the SAME request key', async () => {
     const user = userEvent.setup();
     renderPanel();

@@ -837,6 +837,44 @@ export async function requestReissue(rawInput: RequestReissueInput, access: Reis
   });
 }
 
+// ── Reconciliation of an ambiguous request ───────────────────────────────────
+
+/**
+ * Report whether a request key created a draft, for the SAME requester after an ambiguous outcome (e.g. a lost
+ * response or a gateway 5xx). It serialises on the request-key lock — the same lock `requestReissue` takes — so it
+ * cannot race a still-in-flight identical submission. Only the user who created the key may see it; another key,
+ * another source, or a missing row all answer `{ found: false }` indistinguishably, so no one can probe another
+ * user's request. `found: false` is NOT proof that a delayed original can never commit; the caller must keep the
+ * warning until a draft is found or the user explicitly abandons the attempt.
+ */
+export async function reconcileReissueRequest(
+  client: string,
+  input: { requestKey: string; sourcePreparationId: string; requestedBy: string },
+  access: ReissueAccess | undefined,
+): Promise<{ found: false } | { found: true; reissueId: string; status: string; reissueReference: string }> {
+  const key = String(input.requestKey ?? '').trim();
+  const by = String(input.requestedBy ?? '').trim();
+  return withTenant(client, async (tx) => {
+    const grant = await judge(tx, client, access, REQUEST);
+    const file = await loadSourceFile(tx, client, input.sourcePreparationId, grant);
+    if (!key || key.length > 64 || !by) return { found: false } as const;
+    await lockRequestKey(tx, client, key);
+    const [row] = await tx.select().from(payrollPaymentReissue)
+      .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.requestKey, key))).limit(1);
+    if (!row) return { found: false } as const;
+    // Another source, or another user's key: indistinguishable from "not found".
+    if (row.sourcePreparationId !== file.preparationId) return { found: false } as const;
+    if (String(row.requestedBy ?? '').trim().toLowerCase() !== by.toLowerCase()) return { found: false } as const;
+    const run = await loadRun(tx, client, row.runId);
+    const pns = ((row.bankSnapshot ?? []) as PaymentFileBankRow[]).map((r) => r.personnelNumber);
+    if (!reachesCompany(grant, run.companyCode)
+      || !(await allReachable(tx, client, grant, pns, row.intendedPaymentDate))) {
+      return { found: false } as const;
+    }
+    return { found: true, reissueId: row.reissueId, status: row.status, reissueReference: row.reissueReference } as const;
+  });
+}
+
 // ── Approve / cancel ─────────────────────────────────────────────────────────
 
 /**

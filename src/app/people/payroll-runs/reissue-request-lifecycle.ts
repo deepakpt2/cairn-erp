@@ -95,6 +95,15 @@ export class SubmissionKey {
     return this.retained.key;
   }
 
+  /**
+   * Restore an unresolved submission after a reload: seed the SAME key, signature and exact payload, so a retry of
+   * that payload reuses the key and a changed payload is refused until the attempt is reconciled or abandoned.
+   */
+  seed(entry: { key: string; payload: Record<string, string> }): void {
+    this.retained = { signature: JSON.stringify(entry.payload), key: entry.key, payload: entry.payload };
+    this.unresolved = true;
+  }
+
   /** Mark that the request's outcome is unknown (network failure) — retain the key and payload. */
   markUnresolved(): void {
     if (this.retained) this.unresolved = true;
@@ -117,43 +126,63 @@ export class SubmissionKey {
   }
 }
 
-// ── Minimal, safe reload recovery ─────────────────────────────────────────────
+// ── Safe reload recovery ──────────────────────────────────────────────────────
 //
-// Only a request KEY and the fact that an outcome is unresolved are persisted, so a reload can warn the user and
-// offer a same-key retry. Never a bank identifier, an amount or an attestation. sessionStorage is per-tab and not
-// shared; if it is unavailable (SSR, private mode) recovery is simply unavailable.
+// A reload must be able to tell the truth: the SAME logical request is retried with the SAME key and the SAME
+// normalized payload. We persist, per-tab, a record keyed by the source preparation id so switching sources in one
+// tab never overwrites another source's unresolved attempt. The record holds only the request key and the exact
+// form payload — never a bank identifier or a salary-line amount. sessionStorage is per-tab and not shared between
+// tabs; if it is unavailable (SSR, private mode) recovery is simply unavailable, which is safe.
 
-const RECOVERY_KEY = 'cairn.paymentReissue.unresolved';
+const RECOVERY_KEY = 'cairn.paymentReissue.unresolved.v2';
 
 export interface RecoveryState {
   preparationId: string;
   key: string;
+  /** The exact request fields that produced `key`, so a same-key retry is byte-for-byte the same logical request. */
+  payload: Record<string, string>;
   at: string;
 }
 
-export function rememberUnresolved(preparationId: string, key: string, now: Date = new Date()): void {
+type RecoveryMap = Record<string, Omit<RecoveryState, 'preparationId'>>;
+
+function readMap(): RecoveryMap {
   try {
-    sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({ preparationId, key, at: now.toISOString() }));
+    const raw = sessionStorage.getItem(RECOVERY_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as RecoveryMap;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeMap(map: RecoveryMap): void {
+  try {
+    if (Object.keys(map).length === 0) sessionStorage.removeItem(RECOVERY_KEY);
+    else sessionStorage.setItem(RECOVERY_KEY, JSON.stringify(map));
   } catch {
     // No browser storage: recovery is unavailable, which is safe.
   }
 }
 
-export function readUnresolved(preparationId: string): RecoveryState | null {
-  try {
-    const raw = sessionStorage.getItem(RECOVERY_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as RecoveryState;
-    return parsed && parsed.preparationId === preparationId && typeof parsed.key === 'string' ? parsed : null;
-  } catch {
-    return null;
-  }
+export function rememberUnresolved(preparationId: string, key: string, payload: Record<string, string>, now: Date = new Date()): void {
+  if (!preparationId || !key) return;
+  const map = readMap();
+  map[preparationId] = { key, payload, at: now.toISOString() };
+  writeMap(map);
 }
 
-export function clearUnresolved(): void {
-  try {
-    sessionStorage.removeItem(RECOVERY_KEY);
-  } catch {
-    // Nothing to clear.
-  }
+export function readUnresolved(preparationId: string): RecoveryState | null {
+  if (!preparationId) return null;
+  const entry = readMap()[preparationId];
+  if (!entry || typeof entry.key !== 'string' || typeof entry.payload !== 'object' || entry.payload === null) return null;
+  return { preparationId, key: entry.key, payload: entry.payload, at: entry.at };
+}
+
+export function clearUnresolved(preparationId?: string): void {
+  if (!preparationId) { writeMap({}); return; }
+  const map = readMap();
+  delete map[preparationId];
+  writeMap(map);
 }

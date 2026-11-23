@@ -78,15 +78,23 @@ export function PaymentReissuePanel({
   inputsRef.current = { source: preparationId, selection, selected, date };
   const [unresolved, setUnresolved] = useState<{ key: string } | null>(null);
 
-  // Invalidate any in-flight preview when the SOURCE changes via props, and surface a reload-recovery warning
-  // if a prior submission's outcome was never confirmed (key only — never bank or salary data).
+  // Invalidate any in-flight preview when the SOURCE changes via props, and restore that source's unresolved
+  // submission (same key AND exact payload), so a reload retry is truthfully the same logical request. The record
+  // is per-source and per-tab, so switching sources or another tab cannot overwrite it.
   useEffect(() => {
     previewGen.current.invalidate();
     setPreview(null);
     previewSig.current = null;
     previewEmployees.current = [];
+    // A new source gets its own key; a prior source's untracked state stays in this tab's recovery map.
+    submission.current = new SubmissionKey(() => crypto.randomUUID());
     const recovered = readUnresolved(preparationId);
-    if (recovered) setUnresolved({ key: recovered.key });
+    if (recovered) {
+      submission.current.seed(recovered);
+      setUnresolved({ key: recovered.key });
+    } else {
+      setUnresolved(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preparationId]);
 
@@ -100,7 +108,7 @@ export function PaymentReissuePanel({
       if (!response.ok) { setMessage({ ok: false, text }); return null; }
       return JSON.parse(text);
     } catch {
-      setMessage({ ok: false, text: 'The request failed. Nothing was saved.' });
+      setMessage({ ok: false, text: 'The preview could not be loaded. No replacement request was sent.' });
       return null;
     } finally {
       setPending(false);
@@ -109,19 +117,29 @@ export function PaymentReissuePanel({
 
   const signature = () => previewSignature(inputsRef.current);
   /**
-   * Like `post`, but distinguishes a network/timeout failure (outcome UNKNOWN — the server may have committed)
-   * from a definite server refusal. An unknown outcome keeps the retained key so a retry replays safely and never
-   * claims "nothing was saved".
+   * A mutating POST. Only a 4xx with an application refusal is treated as a DEFINITE pre-commit refusal; a
+   * transport error, an unreadable body, a 5xx (a proxy can return it AFTER the app committed) or 408 is an
+   * UNKNOWN outcome. An unknown outcome never claims "nothing was saved" and keeps the retained key so a retry
+   * replays the same logical request.
    */
-  const submit = async (poster: typeof post, fields: Record<string, string>): Promise<{ ok: boolean; unknown?: boolean; data?: unknown }> => {
+  const submit = async (fields: Record<string, string>): Promise<{ ok: boolean; unknown?: boolean; data?: unknown }> => {
     setPending(true);
     try {
       const form = new FormData();
       for (const [k, v] of Object.entries(fields)) form.set(k, v);
       const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: form });
       const text = await response.text();
-      if (!response.ok) { setMessage({ ok: false, text }); return { ok: false }; }
-      return { ok: true, data: JSON.parse(text) };
+      if (!response.ok) {
+        if (response.status >= 500 || response.status === 408) return { ok: false, unknown: true };
+        setMessage({ ok: false, text });
+        return { ok: false };
+      }
+      try {
+        return { ok: true, data: JSON.parse(text) };
+      } catch {
+        // The server answered 2xx but the body is unreadable/truncated: the change may have committed.
+        return { ok: false, unknown: true };
+      }
     } catch {
       return { ok: false, unknown: true };
     } finally {
@@ -145,9 +163,13 @@ export function PaymentReissuePanel({
       previewSig.current = typed.inputSignature ?? sentSig;
       previewEmployees.current = typed.employees.map((e) => e.personnelNumber);
       setPreview(typed);
-      const map: Record<string, Attestation> = {};
-      for (const e of typed.employees) map[e.personnelNumber] = attest[e.personnelNumber] ?? blankAttestation();
-      setAttest(map);
+      // Functional update: keep anything already entered for these employees (a re-preview must not wipe typed
+      // attestations by reading a stale closure), and add a blank row for anyone new.
+      setAttest((prev) => {
+        const map: Record<string, Attestation> = {};
+        for (const e of typed.employees) map[e.personnelNumber] = prev[e.personnelNumber] ?? blankAttestation();
+        return map;
+      });
       setMessage(null);
     }
   };
@@ -193,10 +215,10 @@ export function PaymentReissuePanel({
       setMessage({ ok: false, text: 'An earlier replacement request has an unknown outcome. Reload to check the file history, or explicitly discard that attempt, before submitting a different one.' });
       return;
     }
-    const result = await submit(post, { ...fields, requestKey: key });
+    const result = await submit({ ...fields, requestKey: key });
     if (result.ok) {
       submission.current!.resolve();
-      clearUnresolved();
+      clearUnresolved(preparationId);
       setUnresolved(null);
       setMessage({ ok: true, text: 'Replacement draft created. A different authorized approver must release it.' });
       setPreview(null); previewSig.current = null; previewEmployees.current = []; setReason(''); router.refresh();
@@ -205,21 +227,57 @@ export function PaymentReissuePanel({
     if (result.unknown) {
       // Ambiguous: the server may have committed. Retain the key + payload; warn; offer a same-key retry.
       submission.current!.markUnresolved();
-      rememberUnresolved(preparationId, key);
+      rememberUnresolved(preparationId, key, fields);
       setUnresolved({ key });
     }
   };
 
   const abandonUnresolved = () => {
     submission.current!.abandon();
-    clearUnresolved();
+    clearUnresolved(preparationId);
     setUnresolved(null);
     setMessage({ ok: false, text: 'The earlier request was marked as abandoned locally. If it did create a draft, cancel it from the history above so it cannot be approved.' });
   };
 
+  /**
+   * Ask the server, under the same request-key lock, whether this key created a draft. Only the requester can see
+   * it; another user's key answers "not found". A "not found" is NOT proof that a delayed original cannot still
+   * commit, so the warning is kept unless a draft is actually found.
+   */
+  const reconcile = async () => {
+    if (!unresolved) return;
+    setPending(true);
+    try {
+      const form = new FormData();
+      form.set('action', 'reconcile');
+      form.set('sourcePreparationId', preparationId);
+      form.set('requestKey', unresolved.key);
+      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: form });
+      const text = await response.text();
+      if (!response.ok) {
+        setMessage({ ok: false, text: response.status >= 500 ? 'The outcome check failed (server error). The outcome is still unknown; check again later.' : text });
+        return;
+      }
+      const data = JSON.parse(text) as { found?: boolean; status?: string; reissueReference?: string };
+      if (data.found) {
+        submission.current!.resolve();
+        clearUnresolved(preparationId);
+        setUnresolved(null);
+        setMessage({ ok: true, text: `The earlier request was confirmed: ${data.reissueReference ?? 'the draft'} is ${String(data.status ?? '').toLowerCase()}. Reload the history to act on it.` });
+        router.refresh();
+      } else {
+        setMessage({ ok: false, text: 'No draft exists for this request key right now. A delayed attempt would still reuse this key, so the outcome remains unresolved: retry the same details (the same key is reused) or discard this attempt after checking the history.' });
+      }
+    } catch {
+      setMessage({ ok: false, text: 'The outcome check could not be completed. The outcome is still unknown; check again before retrying.' });
+    } finally {
+      setPending(false);
+    }
+  };
+
   const decide = async (reissueId: string, action: 'approve' | 'cancel', cancelReason = '', confirmDigest = '') => {
     // Use the unknown-aware path: a lost response after a commit must not claim "nothing was saved".
-    const result = await submit(post, { action, reissueId, reason: cancelReason, confirmDigest, confirmReviewed: action === 'approve' ? 'yes' : '' });
+    const result = await submit({ action, reissueId, reason: cancelReason, confirmDigest, confirmReviewed: action === 'approve' ? 'yes' : '' });
     if (result.ok) {
       setMessage({ ok: true, text: action === 'approve' ? 'Replacement approved.' : 'Draft cancelled.' });
       router.refresh();
@@ -310,9 +368,12 @@ export function PaymentReissuePanel({
 
       {unresolved && (
         <div role="alert" className="rounded border border-signal-warn/50 bg-signal-warn/10 p-3 text-xs">
-          <p>A previous replacement request has an <strong>unknown outcome</strong> (the response was lost). It may have created a draft. Retrying the same details reuses the same request key and will not create a second draft.</p>
-          <p className="mt-1">Request key <span className="code">{unresolved.key.slice(0, 8)}…</span>. Check the file history above; if a draft exists, approve or cancel it. Otherwise discard this attempt.</p>
-          <button type="button" className="btn btn-default mt-2 min-h-9" onClick={abandonUnresolved}>Discard this unknown attempt</button>
+          <p>A previous replacement request has an <strong>unknown outcome</strong>. It may have created a draft. If you retry <em>exactly</em> the same details, the same request key is reused and no second draft is created; a different request is blocked until this is resolved.</p>
+          <p className="mt-1">Request key <span className="code">{unresolved.key.slice(0, 8)}…</span>. Check the file history above, or ask the server to confirm this key.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={reconcile}>Check this request key</button>
+            <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={abandonUnresolved}>Discard this unknown attempt</button>
+          </div>
         </div>
       )}
 

@@ -7,10 +7,13 @@
  *      freezes every effective bank record those employees could gain or lose for the duration.
  *   2. `payment-reissue-state:<client>:<runId>` — approval, cancellation, replacement download and the
  *      original file's ordinary download.
+ *   3. `payment-artifact:<client>` — SHARED by every artifact publisher (original preparation, replacement
+ *      approval, backfill) for the whole publish+commit; EXCLUSIVE by the orphan sweeper. See below.
  *
- * Bank maintenance takes only lock (1); the file/reissue paths take (1) then (2). Because no path takes (2)
- * before (1), the ordering cannot deadlock: a bank write holds only the first class, every other writer holds
- * it before the second.
+ * Bank maintenance takes only lock (1); the file/reissue paths take (1) then (2); only the paths that publish an
+ * artifact take (3), always last. The sweeper takes only (3). Because no path takes a higher class before a lower
+ * one, the ordering cannot deadlock: a bank write holds only the first class, every other writer holds it before
+ * the second, and the artifact lock is only ever taken after both.
  */
 import { sql } from 'drizzle-orm';
 
@@ -35,4 +38,23 @@ export async function lockReissueState(tx: Tx, client: string, runId: string): P
  */
 export async function lockRequestKey(tx: Tx, client: string, requestKey: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payment-reissue-key:${client}:${requestKey}`}, 0))`);
+}
+
+/**
+ * Tenant-scoped SHARED artifact-store lock. A publisher takes it BEFORE writing any staging/published file and
+ * holds it (transaction-level) until commit or rollback, so the sweeper cannot observe a half-published artifact
+ * as an orphan. Safe for multiple app instances and for long or stalled transactions: the lock is released by
+ * PostgreSQL when the transaction ends, including on connection loss.
+ */
+export async function lockArtifactStoreShared(tx: Tx, client: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${`payment-artifact:${client}`}, 0))`);
+}
+
+/**
+ * Tenant-scoped EXCLUSIVE artifact-store lock for the sweeper. It waits for every in-flight publisher (shared) to
+ * commit or roll back, so a committed artifact is always visible when the sweep reads references. Must be the
+ * sweeper's first statement; the reference check that follows is a fresh READ COMMITTED statement.
+ */
+export async function lockArtifactStoreExclusive(tx: Tx, client: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payment-artifact:${client}`}, 0))`);
 }

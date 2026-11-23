@@ -12,7 +12,8 @@
  *     rename is atomic; every byte is written (a short write is retried) and the file is fsynced.
  *  2. Atomically rename it to `<tenant>/<artifactId>.enc`.
  *  3. fsync the TENANT DIRECTORY, so the rename's directory entry is durable too (a file fsync alone does not
- *     guarantee that a power loss preserves the name).
+ *     guarantee that a power loss preserves the name). Newly created tenant/staging directories also have their
+ *     PARENT flushed, so the directory entry itself survives (see the note on filesystem limits below).
  * A crash leaves at most a staging temp (never a partial published file) or a fully written `.enc`. Refusing to
  * overwrite means a retry can never corrupt a published artifact.
  *
@@ -89,8 +90,15 @@ export function writeEncryptedArtifact(client: string, artifactId: string, envel
   const absolute = join(root, relativePath);
   const staging = join(stagingDir, `${artifactId}.${process.pid}.${Date.now()}.tmp`);
   try {
+    // Create the tenant/staging directories and make their PARENT entries durable: flushing the tenant directory
+    // after a rename does not persist its own entry in the root. Flush each parent only when a directory was
+    // actually created, so the normal path stays cheap.
+    const tenantExisted = existsSync(tenantDir);
     mkdirSync(tenantDir, { recursive: true, mode: 0o700 });
+    if (!tenantExisted) fsyncDir(root);
+    const stagingExisted = existsSync(stagingDir);
     mkdirSync(stagingDir, { recursive: true, mode: 0o700 });
+    if (!stagingExisted) fsyncDir(tenantDir);
     if (existsSync(absolute)) throw new ArtifactStoreError('An artifact with this id already exists; refusing to overwrite it.', 'ARTIFACT_EXISTS');
     const fd = openSync(staging, 'wx', 0o600);
     try {

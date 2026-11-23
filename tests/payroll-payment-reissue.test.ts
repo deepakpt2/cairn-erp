@@ -51,6 +51,7 @@ import {
   downloadReissue,
   listReissueSourceEmployees, listReissues,
   previewReissue,
+  reconcileReissueRequest,
   requestReissue,
 } from '../src/modules/people/payroll-payment-reissue';
 import { buildPayrollFixture, createPayrollPoster, payrollEmployee, type PayrollFixture } from './helpers/payroll-actor';
@@ -489,14 +490,51 @@ describe('supersession, scope, review and idempotency guarantees', () => {
     await cancelReissue(tenant.client, first.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
   }, 60_000);
 
-  it('concurrent identical and different keyed retries never return the wrong draft', async () => {
+  it('two concurrent identical requests BOTH return the same single draft', async () => {
     const key = randomUUID();
-    const payload = { client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED' as const, personnelNumbers: [sEmployees[2]!], intendedPaymentDate: '2025-12-16', reason: 'concurrent key', attestations: [att(sEmployees[2]!)] as never, requestKey: key, changedBy: 'RI.REQ' };
+    const pn = sEmployees[2]!;
+    const payload = { client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED' as const, personnelNumbers: [pn], intendedPaymentDate: '2025-12-16', reason: 'concurrent key', attestations: [att(pn)] as never, requestKey: key, changedBy: 'RI.REQ' };
     const results = await Promise.allSettled([requestReissue(payload, { authorization: requester.authorization }), requestReissue(payload, { authorization: requester.authorization })]);
+    // The request-key lock serialises them; the second must replay the first's draft, not fail or create another.
     const ok = results.filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<{ reissueId: string }>[];
-    expect(ok.length).toBeGreaterThanOrEqual(1);
+    expect(results.every((r) => r.status === 'fulfilled'), JSON.stringify(results.map((r) => (r as PromiseRejectedResult).reason?.code ?? 'ok'))).toBe(true);
+    expect(ok).toHaveLength(2);
     expect(new Set(ok.map((r) => r.value.reissueId)).size).toBe(1);
+    // Exactly one draft row exists for that key.
+    const rows = await withTenant(tenant.client, (tx) => tx.execute(sql`select count(*)::int as n from payroll_payment_reissue where client = ${tenant.client} and request_key = ${key}`)) as unknown as Array<{ n: number }>;
+    expect(rows[0]!.n).toBe(1);
     await cancelReissue(tenant.client, ok[0]!.value.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 60_000);
+
+  it('the same key with different contents is a controlled conflict, even across runs', async () => {
+    const key = randomUUID();
+    const pn = sEmployees[2]!;
+    const first = await requestReissue({ client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED', personnelNumbers: [pn], intendedPaymentDate: '2025-12-17', reason: 'key scope', attestations: [att(pn)] as never, requestKey: key, changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    // A different reason with the same key → controlled conflict, never a second draft.
+    await expectRefusal(requestReissue({ client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED', personnelNumbers: [pn], intendedPaymentDate: '2025-12-17', reason: 'DIFFERENT', attestations: [att(pn)] as never, requestKey: key, changedBy: 'RI.REQ' }, { authorization: requester.authorization }), 'REISSUE_KEY_REUSED');
+    // The same key from a DIFFERENT source/run → still refused (the key is tenant-wide, not per-run).
+    await expectRefusal(requestReissue({ client: tenant.client, sourcePreparationId: preparationId, selection: 'SELECTED', personnelNumbers: [employees[0]!], intendedPaymentDate: '2025-12-17', reason: 'key scope', attestations: [att(employees[0]!)] as never, requestKey: key, changedBy: 'RI.REQ' }, { authorization: requester.authorization }), 'REISSUE_KEY_REUSED');
+    await cancelReissue(tenant.client, first.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 60_000);
+
+  it('reconcile reports a draft only to its own requester and source, indistinguishably otherwise', async () => {
+    const key = randomUUID();
+    const pn = sEmployees[2]!;
+    const draft = await requestReissue({ client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED', personnelNumbers: [pn], intendedPaymentDate: '2025-12-24', reason: 'reconcile', attestations: [att(pn)] as never, requestKey: key, changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    // The requester sees it for the right source.
+    const mine = await reconcileReissueRequest(tenant.client, { requestKey: key, sourcePreparationId: sPrep, requestedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    expect(mine).toMatchObject({ found: true, reissueId: draft.reissueId, status: 'DRAFT' });
+    // Wrong source → not found.
+    const wrongSource = await reconcileReissueRequest(tenant.client, { requestKey: key, sourcePreparationId: preparationId, requestedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    expect(wrongSource).toEqual({ found: false });
+    // A DIFFERENT user naming the same key → not found (no probing another user's request).
+    const other = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY, 'PEOPLE.BANK.REVEAL'], suffix: 'RECON' });
+    const theirs = await reconcileReissueRequest(tenant.client, { requestKey: key, sourcePreparationId: sPrep, requestedBy: 'RI.RECON' }, { authorization: other.authorization });
+    expect(theirs).toEqual({ found: false });
+    // An unknown key → not found.
+    const unknown = await reconcileReissueRequest(tenant.client, { requestKey: randomUUID(), sourcePreparationId: sPrep, requestedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    expect(unknown).toEqual({ found: false });
+    await cancelReissue(tenant.client, draft.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
   }, 60_000);
 
   it('approval is refused when the effective bank details changed since the draft was prepared', async () => {

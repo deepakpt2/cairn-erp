@@ -4,10 +4,11 @@
  * digest covers the whole instruction, not only the bank snapshot.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
+import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
@@ -20,7 +21,7 @@ import { PAYROLL_RUN_CAPABILITY, proposePayrollRun, releasePayrollRun } from '..
 import { postPayrollRun } from '../src/modules/people/payroll-posting';
 import { createEmployeeBank } from '../src/modules/people/employee-bank';
 import { PAYMENT_FILE_CAPABILITY, downloadPaymentFile, preparePaymentFile } from '../src/modules/people/payroll-payment-file';
-import { artifactOf, backfillLegacyArtifact, ownerRequiresArtifact, sweepOrphans } from '../src/modules/people/payment-file-artifacts';
+import { artifactOf, backfillLegacyArtifact, ownerRequiresArtifact, retainArtifact, sweepOrphans } from '../src/modules/people/payment-file-artifacts';
 import { buildPayrollFixture, createPayrollPoster, payrollEmployee, type PayrollFixture } from './helpers/payroll-actor';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
@@ -31,6 +32,45 @@ const STRUCTURE_AUTH: readonly string[] = [SALARY_STRUCTURE_CAPABILITY];
 const YEAR = 2025;
 const savedRing = process.env.CAIRN_BANK_DATA_KEYRING_JSON;
 const savedDir = process.env.CAIRN_PAYMENT_FILE_DIR;
+
+/**
+ * Delete a single artifact metadata row as the migration role. The runtime role deliberately has no DELETE on
+ * evidence; this simulates the row being lost while the owner and its required-marker remain. Fails loudly if the
+ * fixture did not produce exactly one row, so the test cannot pass vacuously.
+ */
+async function deleteArtifactRow(client: string, kind: 'FILE' | 'REISSUE', ownerId: string): Promise<void> {
+  const url = process.env.MIGRATION_DATABASE_URL;
+  if (!url) throw new Error('MIGRATION_DATABASE_URL is required to simulate a lost artifact metadata row.');
+  const owner = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
+  try {
+    await owner.begin(async (tx) => {
+      await tx`select set_config('cairn.client', ${client}, true)`;
+      const deleted = await tx`
+        delete from public.payroll_payment_artifact
+         where client = ${client} and owner_kind = ${kind} and owner_id = ${ownerId}
+        returning artifact_id`;
+      if (deleted.length !== 1) throw new Error(`Expected to delete exactly one metadata row, deleted ${deleted.length}.`);
+    });
+  } finally {
+    await owner.end({ timeout: 5 });
+  }
+}
+
+/** Delete an owner's required-marker as the migration role, to reproduce the pre-9327 state. */
+async function deleteArtifactStateRow(client: string, kind: 'FILE' | 'REISSUE', ownerId: string): Promise<void> {
+  const url = process.env.MIGRATION_DATABASE_URL;
+  if (!url) throw new Error('MIGRATION_DATABASE_URL is required to simulate a pre-9327 owner.');
+  const owner = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
+  try {
+    await owner.begin(async (tx) => {
+      await tx`select set_config('cairn.client', ${client}, true)`;
+      await tx`delete from public.payroll_payment_artifact_state
+                where client = ${client} and owner_kind = ${kind} and owner_id = ${ownerId}`;
+    });
+  } finally {
+    await owner.end({ timeout: 5 });
+  }
+}
 
 describe('artifact encryption (pure)', () => {
   it('round-trips and rejects a wrong context or key', () => {
@@ -230,18 +270,62 @@ describe('crash-safe publication and reconciliation', () => {
     if (savedDir === undefined) delete process.env.CAIRN_PAYMENT_FILE_DIR; else process.env.CAIRN_PAYMENT_FILE_DIR = savedDir;
   });
 
-  it('a NEW-format owner with missing metadata fails closed (marker present, artifact absent)', async () => {
+  it('a NEW-format owner whose metadata ROW is gone fails closed, even though the marker and owner remain', async () => {
     const view = await preparePaymentFile({ client: tenant.client, runId, intendedPaymentDate: '2025-05-31', changedBy: 'ART_TEST' }, { authorization: reader.authorization });
-    // The owner is marked new-format and its artifact metadata exists.
     await withTenant(tenant.client, async (tx) => {
       expect(await ownerRequiresArtifact(tx, tenant.client, 'FILE', view.preparationId)).toBe(true);
       expect(await artifactOf(tx, tenant.client, 'FILE', view.preparationId)).not.toBeNull();
     });
-    // Simulate a lost metadata row (as if the metadata commit never landed) while the marker remains: must fail.
+    // Delete ONLY the metadata row (as the migration role: the runtime role has no DELETE on evidence), leaving the
+    // owner row and its required-marker behind, and keep the encrypted file on disk.
+    await deleteArtifactRow(tenant.client, 'FILE', view.preparationId);
     const tenantDir = join(storageDir, tenant.client);
-    for (const f of readdirSync(tenantDir).filter((n) => n.endsWith('.enc'))) rmSync(join(tenantDir, f), { force: true });
+    expect(readdirSync(tenantDir).some((n) => n.endsWith('.enc'))).toBe(true);
+    await withTenant(tenant.client, async (tx) => {
+      expect(await ownerRequiresArtifact(tx, tenant.client, 'FILE', view.preparationId)).toBe(true);
+      expect(await artifactOf(tx, tenant.client, 'FILE', view.preparationId)).toBeNull();
+    });
     await expect(downloadPaymentFile(tenant.client, runId, { confirmReuse: true, requestedBy: 'ART.C' }, { authorization: reader.authorization }))
       .rejects.toMatchObject({ code: 'FILE_ARTIFACT_UNAVAILABLE' });
+  });
+
+  it('a NEW-format owner whose FILE is missing fails closed', async () => {
+    // A fresh run so its metadata row still stands (the previous test removed one for runId).
+    const runMissing = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 7, changedBy: 'ART_TEST' }, RUN_AUTH);
+    await releasePayrollRun({ client: tenant.client, runId: runMissing.runId, changedBy: 'ART_TEST' }, RUN_AUTH);
+    const poster7 = await createPayrollPoster(tenant.client);
+    await postPayrollRun({ client: tenant.client, runId: runMissing.runId, changedBy: poster7.username, authorization: poster7.authorization });
+    await preparePaymentFile({ client: tenant.client, runId: runMissing.runId, intendedPaymentDate: '2025-07-31', changedBy: 'ART_TEST' }, { authorization: reader.authorization });
+    const tenantDir = join(storageDir, tenant.client);
+    for (const f of readdirSync(tenantDir).filter((n) => n.endsWith('.enc'))) rmSync(join(tenantDir, f), { force: true });
+    await expect(downloadPaymentFile(tenant.client, runMissing.runId, { confirmReuse: true, requestedBy: 'ART.C' }, { authorization: reader.authorization }))
+      .rejects.toMatchObject({ code: 'FILE_ARTIFACT_UNAVAILABLE' });
+  });
+
+  it('a corrupt or undecryptable file fails closed', async () => {
+    const runCorrupt = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 8, changedBy: 'ART_TEST' }, RUN_AUTH);
+    await releasePayrollRun({ client: tenant.client, runId: runCorrupt.runId, changedBy: 'ART_TEST' }, RUN_AUTH);
+    const poster8 = await createPayrollPoster(tenant.client);
+    await postPayrollRun({ client: tenant.client, runId: runCorrupt.runId, changedBy: poster8.username, authorization: poster8.authorization });
+    const view = await preparePaymentFile({ client: tenant.client, runId: runCorrupt.runId, intendedPaymentDate: '2025-08-31', changedBy: 'ART_TEST' }, { authorization: reader.authorization });
+    const record = await withTenant(tenant.client, (tx) => artifactOf(tx, tenant.client, 'FILE', view.preparationId));
+    const tenantDir = join(storageDir, tenant.client);
+    // (a) corrupt bytes: overwrite the encrypted envelope.
+    const file = join(tenantDir, `${record!.artifactId}.enc`);
+    writeFileSync(file, 'not-an-envelope', 'utf8');
+    await expect(downloadPaymentFile(tenant.client, runCorrupt.runId, { confirmReuse: true, requestedBy: 'ART.C' }, { authorization: reader.authorization }))
+      .rejects.toMatchObject({ code: 'FILE_ARTIFACT_UNAVAILABLE' });
+    // (b) absent key: the same artifact cannot be decrypted with a keyring that lacks its key.
+    const env = encryptArtifact(Buffer.from('valid-bytes'), { client: tenant.client, artifactId: record!.artifactId, field: 'paymentCsv' }, KEYRING);
+    writeFileSync(file, env, 'utf8');
+    const saved = process.env.CAIRN_BANK_DATA_KEYRING_JSON;
+    process.env.CAIRN_BANK_DATA_KEYRING_JSON = JSON.stringify({ activeKeyId: 'k2', keys: { k2: randomBytes(32).toString('base64url') } });
+    try {
+      await expect(downloadPaymentFile(tenant.client, runCorrupt.runId, { confirmReuse: true, requestedBy: 'ART.C' }, { authorization: reader.authorization }))
+        .rejects.toMatchObject({ code: 'FILE_ARTIFACT_UNAVAILABLE' });
+    } finally {
+      if (saved === undefined) delete process.env.CAIRN_BANK_DATA_KEYRING_JSON; else process.env.CAIRN_BANK_DATA_KEYRING_JSON = saved;
+    }
   });
 
   it('sweeps an unpublished orphan but never a committed artifact', async () => {
@@ -291,6 +375,133 @@ describe('crash-safe publication and reconciliation', () => {
       bytes: Buffer.from('legacy-body'), expectedSha256: sha, keyring: KEYRING, changedBy: 'ART_OP', source: 'body',
     }));
     expect(again.result).toBe('already-retained');
+  });
+
+  it('9327 upgrade: 9325 artifact metadata without a marker is marked, and its later metadata loss fails closed', async () => {
+    // A fresh prepared file whose artifact metadata exists under 9325 semantics.
+    const run9 = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 9, changedBy: 'ART_TEST' }, RUN_AUTH);
+    await releasePayrollRun({ client: tenant.client, runId: run9.runId, changedBy: 'ART_TEST' }, RUN_AUTH);
+    const poster9 = await createPayrollPoster(tenant.client);
+    await postPayrollRun({ client: tenant.client, runId: run9.runId, changedBy: poster9.username, authorization: poster9.authorization });
+    const view = await preparePaymentFile({ client: tenant.client, runId: run9.runId, intendedPaymentDate: '2025-09-30', changedBy: 'ART_TEST' }, { authorization: reader.authorization });
+    // Reproduce pre-9327: artifact metadata present, required-marker absent.
+    await deleteArtifactStateRow(tenant.client, 'FILE', view.preparationId);
+    await withTenant(tenant.client, async (tx) => {
+      expect(await ownerRequiresArtifact(tx, tenant.client, 'FILE', view.preparationId)).toBe(false);
+      expect(await artifactOf(tx, tenant.client, 'FILE', view.preparationId)).not.toBeNull();
+    });
+    // Apply the 9327 statement (the same INSERT ... SELECT the migration runs).
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      insert into payroll_payment_artifact_state (client, owner_kind, owner_id, format, changed_by, changed_at)
+      select a.client, a.owner_kind, a.owner_id, a.storage_format, 'MIGRATION-9327', now()
+        from payroll_payment_artifact a
+       where a.client = ${tenant.client} and a.storage_format = 'cad1'
+      on conflict (client, owner_kind, owner_id) do nothing`));
+    await withTenant(tenant.client, async (tx) => {
+      expect(await ownerRequiresArtifact(tx, tenant.client, 'FILE', view.preparationId)).toBe(true);
+    });
+    // Now the marker exists: losing the metadata row must fail closed, never rebuild a substitute.
+    await deleteArtifactRow(tenant.client, 'FILE', view.preparationId);
+    await expect(downloadPaymentFile(tenant.client, run9.runId, { confirmReuse: true, requestedBy: 'ART.C' }, { authorization: reader.authorization }))
+      .rejects.toMatchObject({ code: 'FILE_ARTIFACT_UNAVAILABLE' });
+  });
+
+  // ── Publisher/sweeper serialisation (deterministic, no sleeps) ──────────────
+
+  /**
+   * Start a publisher that has PUBLISHED its artifact but not yet committed, then run a sweep that would qualify
+   * the file by age. The sweep must block on the exclusive artifact lock until the publisher commits, after which
+   * the file must survive. Returns the sweep result and the artifact id.
+   */
+  async function racePublisher(kind: 'FILE' | 'REISSUE') {
+    const ownerId = randomUUID();
+    const bytes = Buffer.from(`race-${kind}-${ownerId}`, 'utf8');
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let published!: () => void;
+    const publishedP = new Promise<void>((r) => { published = r; });
+    const writer = withTenant(tenant.client, async (tx) => {
+      const out = await retainArtifact(tx, {
+        client: tenant.client, ownerKind: kind, ownerId, fileReference: `RACE-${kind}`,
+        bytes, keyring: KEYRING, changedBy: 'ART_TEST',
+      });
+      published();
+      await gate; // hold the transaction open AFTER publishing, BEFORE commit
+      return out.artifactId;
+    });
+    await publishedP;
+    // The file exists on disk and has no committed metadata row yet. Age it past a zero grace so the sweep WOULD
+    // qualify it; the exclusive lock, not the age, is what must protect it.
+    const listing = readdirSync(join(storageDir, tenant.client)).filter((n) => n.endsWith('.enc'));
+    expect(listing.length).toBeGreaterThan(0);
+    const sweep = withTenant(tenant.client, (tx) => sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 }));
+    release();
+    const artifactId = await writer;
+    const result = await sweep;
+    return { artifactId, result, ownerId };
+  }
+
+  it('does not sweep an in-flight original-file publisher (blocks, then the committed artifact survives)', async () => {
+    const { artifactId, ownerId } = await racePublisher('FILE');
+    // The sweep may remove other genuine leftovers from earlier tests; THIS artifact must survive.
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${artifactId}.enc`);
+    await withTenant(tenant.client, async (tx) => {
+      expect(await artifactOf(tx, tenant.client, 'FILE', ownerId)).not.toBeNull();
+    });
+  });
+
+  it('does not sweep an in-flight replacement publisher', async () => {
+    const { artifactId } = await racePublisher('REISSUE');
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${artifactId}.enc`);
+  });
+
+  it('removes an abandoned (rolled-back) publisher artifact on a later sweep', async () => {
+    const ownerId = randomUUID();
+    let artifactId = '';
+    await expect(withTenant(tenant.client, async (tx) => {
+      const out = await retainArtifact(tx, {
+        client: tenant.client, ownerKind: 'FILE', ownerId, fileReference: 'ROLLBACK-1',
+        bytes: Buffer.from('rolled-back'), keyring: KEYRING, changedBy: 'ART_TEST',
+      });
+      artifactId = out.artifactId;
+      throw new Error('simulated crash before commit');
+    })).rejects.toThrow('simulated crash before commit');
+    // Rolled back: no metadata row and no marker, but the encrypted file remains.
+    await withTenant(tenant.client, async (tx) => {
+      expect(await artifactOf(tx, tenant.client, 'FILE', ownerId)).toBeNull();
+      expect(await ownerRequiresArtifact(tx, tenant.client, 'FILE', ownerId)).toBe(false);
+    });
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${artifactId}.enc`);
+    const result = await withTenant(tenant.client, (tx) => sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 }));
+    expect(result.orphanedRemoved).toBeGreaterThanOrEqual(1);
+    expect(readdirSync(join(storageDir, tenant.client))).not.toContain(`${artifactId}.enc`);
+  });
+
+  it('two concurrent publishers and a sweeper: both committed artifacts survive', async () => {
+    const mk = async (kind: 'FILE' | 'REISSUE') => {
+      const ownerId = randomUUID();
+      let release!: () => void;
+      const gate = new Promise<void>((r) => { release = r; });
+      let published!: () => void;
+      const publishedP = new Promise<void>((r) => { published = r; });
+      const writer = withTenant(tenant.client, async (tx) => {
+        const out = await retainArtifact(tx, { client: tenant.client, ownerKind: kind, ownerId, fileReference: `TWO-${kind}`, bytes: Buffer.from(`two-${kind}`), keyring: KEYRING, changedBy: 'ART_TEST' });
+        published();
+        await gate;
+        return out.artifactId;
+      });
+      await publishedP;
+      return { writer, release, id: ownerId };
+    };
+    const a = await mk('FILE');
+    const b = await mk('REISSUE');
+    const sweep = withTenant(tenant.client, (tx) => sweepOrphans(tx, tenant.client, { graceMs: 0, now: Date.now() + 60_000 }));
+    a.release(); b.release();
+    const [idA, idB] = await Promise.all([a.writer, b.writer]);
+    await sweep;
+    const files = readdirSync(join(storageDir, tenant.client));
+    expect(files).toContain(`${idA}.enc`);
+    expect(files).toContain(`${idB}.enc`);
   });
 });
 void createHash;

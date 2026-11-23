@@ -22,6 +22,7 @@ import {
   type StoredArtifactRef, readStoredArtifact, writeEncryptedArtifact, deleteArtifact,
   listTenantArtifacts, listStaleStaging, deleteStagingFile,
 } from '../../platform/security/artifact-store';
+import { lockArtifactStoreExclusive, lockArtifactStoreShared } from './payment-file-locks';
 import { payrollPaymentArtifact } from './schema';
 
 export class ArtifactError extends Error {
@@ -72,6 +73,9 @@ export async function retainArtifact(
     changedBy: string;
   },
 ): Promise<{ artifactId: string; stored: StoredArtifactRef }> {
+  // Serialise with the orphan sweeper: held (shared) until this transaction commits or rolls back, BEFORE any
+  // file is written, so a file this call publishes can never be seen as an orphan while it is in flight.
+  await lockArtifactStoreShared(tx, input.client);
   const artifactId = randomUUID();
   const plaintextSha256 = createHash('sha256').update(input.bytes).digest('hex');
   let envelope: string;
@@ -168,12 +172,22 @@ export interface SweepResult {
 }
 
 /**
- * Remove encrypted leftovers that no committed row references, and stale staging temps. A file is only removed
- * when it is OLDER than `graceMs` (so an in-flight transaction that has published a file but not yet committed
- * its metadata — which always happens within one request — is never touched) AND its artifact id has no
- * metadata row for this tenant. This never deletes a committed artifact.
+ * Remove encrypted leftovers that no committed row references, and stale staging temps.
+ *
+ * The SAFETY mechanism is the exclusive tenant-scoped advisory lock: acquiring it first waits until every
+ * publisher's shared lock has been released, i.e. every in-flight publish transaction has committed or rolled
+ * back. Only then does this transaction list the directory and read references. Under READ COMMITTED (the
+ * connection default) the reference `select` is a fresh statement that sees every commit made before the lock
+ * was granted, so a publisher that committed is never treated as an orphan. The grace period is kept only as an
+ * additional conservative condition (it lets an ordinary `.enc` published by a crashed transaction age out), and
+ * is NOT what protects an in-flight publisher.
+ *
+ * This never deletes a committed artifact, and a crashed publisher's orphan is removed on a later sweep. If the
+ * sweep transaction dies mid-way, its lock releases and any deletions already made were of unreferenced files.
  */
 export async function sweepOrphans(tx: Tx, client: string, options: { graceMs?: number; now?: number } = {}): Promise<SweepResult> {
+  // Must be the first statement of the sweep transaction: block until no publisher holds the shared lock.
+  await lockArtifactStoreExclusive(tx, client);
   const graceMs = options.graceMs ?? 60 * 60 * 1000;
   const now = options.now ?? Date.now();
   let orphanedRemoved = 0;
