@@ -26,6 +26,45 @@ interface Attestation {
 const blankAttestation = (): Attestation => ({ outcome: '', reason: '', verificationDate: '', evidenceReference: '', confirmedNoSubmission: false });
 
 /**
+ * The instruction an editable attestation belongs to: the source file plus the employee plus the exact predecessor
+ * (kind and immutable id). An attestation about one instruction must never be reused for another — above all a
+ * "not uploaded" claim — so the binding, not the employee number, is what the form state is keyed by.
+ */
+interface AttestationBinding {
+  sourcePreparationId: string;
+  personnelNumber: string;
+  predecessorKind: 'FILE' | 'REISSUE';
+  predecessorId: string;
+}
+
+interface BoundAttestation {
+  binding: AttestationBinding;
+  values: Attestation;
+}
+
+const bindingKey = (binding: Pick<AttestationBinding, 'sourcePreparationId' | 'personnelNumber'>) =>
+  `${binding.sourcePreparationId}|${binding.personnelNumber}`;
+
+const sameBinding = (a: AttestationBinding, b: AttestationBinding) =>
+  a.sourcePreparationId === b.sourcePreparationId
+  && a.personnelNumber === b.personnelNumber
+  && a.predecessorKind === b.predecessorKind
+  && a.predecessorId === b.predecessorId;
+
+const bindingOf = (preview: Pick<ReissuePreview, 'sourcePreparationId'>, e: ReissuePreview['employees'][number]): AttestationBinding => ({
+  sourcePreparationId: preview.sourcePreparationId,
+  personnelNumber: e.personnelNumber,
+  predecessorKind: e.predecessorKind,
+  predecessorId: e.predecessorId,
+});
+
+/** An entry is usable only when it was entered for exactly this instruction. */
+const entryValues = (entries: Record<string, BoundAttestation>, binding: AttestationBinding): Attestation => {
+  const entry = entries[bindingKey(binding)];
+  return entry && sameBinding(entry.binding, binding) ? entry.values : blankAttestation();
+};
+
+/**
  * The controlled reissue panel: choose all or selected employees, record an attested original outcome for each,
  * request a DRAFT (separate approver releases it), then download. All bank data is masked; all actions are
  * authorized and audited server-side.
@@ -59,7 +98,11 @@ export function PaymentReissuePanel({
   const [date, setDate] = useState(defaultDate);
   const [reason, setReason] = useState('');
   const [preview, setPreview] = useState<ReissuePreview | null>(null);
-  const [attest, setAttest] = useState<Record<string, Attestation>>({});
+  // Keyed by source + employee, each entry carrying the exact instruction it was entered for.
+  const [attest, setAttest] = useState<Record<string, BoundAttestation>>({});
+  // Mirrors the state so an accepted preview reconciles against the LATEST typed values, not a stale closure.
+  const attestRef = useRef<Record<string, BoundAttestation>>({});
+  attestRef.current = attest;
   const [pending, setPending] = useState(false);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -176,18 +219,38 @@ export function PaymentReissuePanel({
       previewSig.current = data.inputSignature ?? sentSig;
       previewEmployees.current = data.employees.map((e) => e.personnelNumber);
       setPreview(data);
-      // Functional update: keep anything already entered for these employees (a re-preview must not wipe typed
-      // attestations by reading a stale closure), and add a blank row for anyone new.
-      setAttest((prev) => {
-        const map: Record<string, Attestation> = {};
-        for (const e of data.employees) map[e.personnelNumber] = prev[e.personnelNumber] ?? blankAttestation();
-        return map;
-      });
-      setMessage(null);
+      // Reconcile the editable entries against the instruction THIS preview names, per employee. Only an accepted
+      // preview may do this, so an out-of-order or stale response cannot restore, clear or rebind anything.
+      //   - same full binding (source + employee + kind + id)  → keep the requester's work
+      //   - anything else                                      → clear EVERY field, including the no-submission tick
+      // Entries are rebuilt for the displayed employees only, so an employee dropped from the selection cannot have
+      // answers reused later. The key includes the source, so two sources never share an entry.
+      const prev = attestRef.current;
+      const next: Record<string, BoundAttestation> = {};
+      const cleared: string[] = [];
+      for (const e of data.employees) {
+        const binding = bindingOf(data, e);
+        const existing = prev[bindingKey(binding)];
+        if (existing && sameBinding(existing.binding, binding)) {
+          next[bindingKey(binding)] = existing;
+          continue;
+        }
+        // Different instruction: the old outcome, reason, date, evidence and "no copy submitted" claim are all
+        // discarded. Keeping the confirmation ticked would let an old "not uploaded" claim stand for a new one.
+        if (existing) cleared.push(e.personnelNumber);
+        next[bindingKey(binding)] = { binding, values: blankAttestation() };
+      }
+      attestRef.current = next;
+      setAttest(next);
+      setMessage(cleared.length > 0
+        ? { ok: false, text: `The instruction you are attesting to changed for: ${cleared.join(', ')}. The earlier answers were cleared. Check the outcome of the instruction now shown and record it again; a "not uploaded" claim must be made afresh.` }
+        : null);
     } catch {
       setMessage({ ok: false, text: 'The preview could not be loaded. No replacement request was sent.' });
     } finally {
-      setPending(false);
+      // Only the newest preview clears the busy flag; an older response must not re-enable controls while a newer
+      // request is still outstanding.
+      if (previewGen.current.isNewest(token)) setPending(false);
     }
   };
 
@@ -200,6 +263,7 @@ export function PaymentReissuePanel({
         : 'Replacement draft created. A different authorized approver must release it.',
     });
     setPreview(null); previewSig.current = null; previewEmployees.current = []; setReason('');
+    attestRef.current = {}; setAttest({});
     void refreshIntents();
     router.refresh();
   };
@@ -261,22 +325,35 @@ export function PaymentReissuePanel({
       return;
     }
     const previewPns = previewEmployees.current;
+    // FAIL CLOSED unless every selected employee's entry was entered for the SAME instruction this accepted
+    // preview names. A missing entry, or one recorded for another predecessor/source, is never reused: the whole
+    // request is refused and the requester must re-attest against what is now displayed.
+    const byBinding = new Map(preview.employees.map((e) => [e.personnelNumber, e]));
+    const unbound = previewPns.filter((pn) => {
+      const e = byBinding.get(pn);
+      if (!e) return true;
+      const binding = bindingOf(preview, e);
+      const entry = attest[bindingKey(binding)];
+      return !entry || !sameBinding(entry.binding, binding);
+    });
+    if (unbound.length > 0) {
+      setMessage({ ok: false, text: `The instruction changed for: ${unbound.join(', ')}. Review the current preview and record each outcome again; nothing was sent.` });
+      return;
+    }
     const incomplete = previewPns.filter((pn) => {
-      const a = attest[pn];
-      return !a || !a.outcome || !a.reason.trim() || !a.verificationDate || !(a.evidenceReference ?? '').trim()
+      const a = valuesFor(byBinding.get(pn)!);
+      return !a.outcome || !a.reason.trim() || !a.verificationDate || !(a.evidenceReference ?? '').trim()
         || (a.outcome === 'NOT_UPLOADED' && !a.confirmedNoSubmission);
     });
     if (incomplete.length > 0) {
       setMessage({ ok: false, text: `Record the full attested outcome (outcome, reason, verification date, evidence${incomplete.length ? ', and no-submission confirmation where needed' : ''}) for: ${incomplete.join(', ')}.` });
       return;
     }
-    const attestations = previewPns.map((pn) => ({ personnelNumber: pn, ...attest[pn] }));
-    // Bind each attestation to the EXACT instruction the preview showed for that employee. The server re-checks
-    // these against live state; this is a claim about what was reviewed, never proof that it is still current.
-    const byBinding = new Map(preview.employees.map((e) => [e.personnelNumber, e]));
+    // Both arrays come from the SAME verified entry: the answers and the predecessor they were entered for.
+    const attestations = previewPns.map((pn) => ({ personnelNumber: pn, ...valuesFor(byBinding.get(pn)!) }));
     const predecessors = previewPns.map((pn) => {
-      const e = byBinding.get(pn)!;
-      return { personnelNumber: pn, predecessorKind: e.predecessorKind, predecessorId: e.predecessorId };
+      const binding = bindingOf(preview, byBinding.get(pn)!);
+      return { personnelNumber: pn, predecessorKind: binding.predecessorKind, predecessorId: binding.predecessorId };
     });
     const fields: Record<string, string> = {
       action: 'request', sourcePreparationId: preview.sourcePreparationId, selection: preview.selection,
@@ -400,7 +477,25 @@ export function PaymentReissuePanel({
     setMessage({ ok: false, text: 'The outcome is unknown: the connection or a gateway failed after the request was sent. Reload the file history to confirm whether the replacement was released or cancelled; do not repeat the action blindly.' });
   };
 
-  const updateAttest = (pn: string, patch: Partial<Attestation>) => setAttest((prev) => ({ ...prev, [pn]: { ...(prev[pn] ?? blankAttestation()), ...patch } }));
+  /**
+   * Edits belong to the instruction the DISPLAYED, accepted preview names for that employee. The binding recorded
+   * here is what submission is checked against, so text can never be paired with a different predecessor.
+   */
+  const updateAttest = (pn: string, patch: Partial<Attestation>) => {
+    const employee = preview?.employees.find((e) => e.personnelNumber === pn);
+    if (!preview || !employee) return;
+    const binding = bindingOf(preview, employee);
+    setAttest((prev) => {
+      const key = bindingKey(binding);
+      const current = prev[key];
+      const values = { ...(current && sameBinding(current.binding, binding) ? current.values : blankAttestation()), ...patch };
+      return { ...prev, [key]: { binding, values } };
+    });
+  };
+
+  /** The values entered for exactly this displayed instruction, or blanks if none belong to it. */
+  const valuesFor = (e: ReissuePreview['employees'][number]): Attestation =>
+    preview ? entryValues(attest, bindingOf(preview, e)) : blankAttestation();
 
   const intentLabel = (status: ReissueIntentView['status']): string => ({
     REGISTERED: 'registered — not yet confirmed executed',
@@ -595,7 +690,7 @@ export function PaymentReissuePanel({
               )}
             </div>
           )}
-          <button type="button" className="btn btn-default min-h-11 sm:min-h-8" disabled={pending || !date || (selection === 'SELECTED' && selected.length === 0)} onClick={runPreview}>Preview eligible employees</button>
+          <button type="button" className="btn btn-default min-h-11 sm:min-h-8" disabled={!date || (selection === 'SELECTED' && selected.length === 0)} onClick={runPreview}>Preview eligible employees</button>
 
           {preview && (
             <div className="space-y-3">
@@ -604,7 +699,7 @@ export function PaymentReissuePanel({
                 intended {preview.intendedPaymentDate}.
                 {preview.ineligible.length > 0 && <span className="text-signal-error"> {preview.ineligible.length} ineligible and NOT included: {preview.ineligible.map((i) => `${i.personnelNumber} (${i.blocker})`).join('; ')}.</span>}
               </p>
-              <p className="text-xs text-ink-soft">For each selected employee, record the actual outcome <strong>of the instruction named beside them</strong> — your attestation, not a bank-verified status. If that instruction changes before this request is created, it is refused: preview and attest again. “Not uploaded” needs an explicit confirmation that no copy was submitted.</p>
+              <p className="text-xs text-ink-soft">For each selected employee, record the actual outcome <strong>of the instruction named beside them</strong> — your attestation, not a bank-verified status. If that instruction changes — during this preview or before the request is created — the answers you entered for the old one are cleared and you must record the new instruction's outcome again; submission is refused until you do. “Not uploaded” needs an explicit confirmation that no copy was submitted.</p>
               <div className="overflow-x-auto">
                 <table className="grid-table">
                   <thead><tr><th>Employee</th><th>Instruction attested</th><th>Amount</th><th>Bank (masked)</th><th>Outcome</th><th>Reason</th><th>Verified on</th><th>Evidence / reference</th><th>No copy submitted?</th></tr></thead>
@@ -619,15 +714,15 @@ export function PaymentReissuePanel({
                         <td className="code">{e.amount}</td>
                         <td className="text-xs">{e.bankName}<div className="code">{e.maskedAccount}</div></td>
                         <td>
-                          <select className="field-input" disabled={!e.eligible} value={attest[e.personnelNumber]?.outcome ?? ''} onChange={(ev) => updateAttest(e.personnelNumber, { outcome: ev.target.value })}>
+                          <select className="field-input" disabled={!e.eligible} value={valuesFor(e).outcome} onChange={(ev) => updateAttest(e.personnelNumber, { outcome: ev.target.value })}>
                             <option value="">Choose outcome…</option>
                             {OUTCOMES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </select>
                         </td>
-                        <td><input className="field-input" disabled={!e.eligible} value={attest[e.personnelNumber]?.reason ?? ''} onChange={(ev) => updateAttest(e.personnelNumber, { reason: ev.target.value })} /></td>
-                        <td><input type="date" className="field-input" disabled={!e.eligible} value={attest[e.personnelNumber]?.verificationDate ?? ''} onChange={(ev) => updateAttest(e.personnelNumber, { verificationDate: ev.target.value })} /></td>
-                        <td><input className="field-input" disabled={!e.eligible} value={attest[e.personnelNumber]?.evidenceReference ?? ''} onChange={(ev) => updateAttest(e.personnelNumber, { evidenceReference: ev.target.value })} placeholder="Bank/external reference or explanation" /></td>
-                        <td className="text-center">{attest[e.personnelNumber]?.outcome === 'NOT_UPLOADED' ? <input type="checkbox" checked={attest[e.personnelNumber]?.confirmedNoSubmission ?? false} onChange={(ev) => updateAttest(e.personnelNumber, { confirmedNoSubmission: ev.target.checked })} /> : '—'}</td>
+                        <td><input className="field-input" disabled={!e.eligible} value={valuesFor(e).reason} onChange={(ev) => updateAttest(e.personnelNumber, { reason: ev.target.value })} /></td>
+                        <td><input type="date" className="field-input" disabled={!e.eligible} value={valuesFor(e).verificationDate} onChange={(ev) => updateAttest(e.personnelNumber, { verificationDate: ev.target.value })} /></td>
+                        <td><input className="field-input" disabled={!e.eligible} value={valuesFor(e).evidenceReference} onChange={(ev) => updateAttest(e.personnelNumber, { evidenceReference: ev.target.value })} placeholder="Bank/external reference or explanation" /></td>
+                        <td className="text-center">{valuesFor(e).outcome === 'NOT_UPLOADED' ? <input type="checkbox" checked={valuesFor(e).confirmedNoSubmission} onChange={(ev) => updateAttest(e.personnelNumber, { confirmedNoSubmission: ev.target.checked })} /> : '—'}</td>
                       </tr>
                     ))}
                   </tbody>

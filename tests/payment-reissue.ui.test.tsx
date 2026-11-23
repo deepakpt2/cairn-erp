@@ -111,6 +111,331 @@ describe('PaymentReissuePanel', () => {
 
   const waitForRecovery = async () => waitFor(() => expect(actions('intents').length).toBeGreaterThan(0));
 
+  /** The attestation row for an employee in the displayed preview. */
+  const rowOf = (pn: string) => {
+    const table = screen.getByText('Outcome').closest('table')!;
+    return within(table).getByText(pn).closest('tr')!;
+  };
+
+  const fillRow = async (
+    user: ReturnType<typeof userEvent.setup>, pn: string,
+    values: { outcome: string; reason: string; date: string; evidence: string; confirm?: boolean },
+  ) => {
+    const row = rowOf(pn);
+    await user.selectOptions(row.querySelector('select')!, values.outcome);
+    const inputs = row.querySelectorAll('input');
+    await user.type(inputs[0]!, values.reason);
+    await user.type(inputs[1]!, values.date);
+    await user.type(inputs[2]!, values.evidence);
+    if (values.outcome === 'NOT_UPLOADED') {
+      await waitFor(() => expect(row.querySelectorAll('input')).toHaveLength(4));
+      if (values.confirm) await user.click(row.querySelectorAll('input')[3]!);
+    }
+  };
+
+  const rowValues = (pn: string) => {
+    const row = rowOf(pn);
+    const inputs = [...row.querySelectorAll('input')] as HTMLInputElement[];
+    return {
+      outcome: (row.querySelector('select') as HTMLSelectElement).value,
+      reason: inputs[0]?.value ?? '',
+      date: inputs[1]?.value ?? '',
+      evidence: inputs[2]?.value ?? '',
+      confirm: inputs[3]?.checked ?? false,
+      confirmShown: inputs.length === 4,
+    };
+  };
+
+  const registeredPayload = (index = 0) => {
+    const form = actions('register')[index]?.form;
+    expect(form).toBeDefined();
+    return {
+      attestations: JSON.parse(String(form!.get('attestations'))) as Array<Record<string, unknown>>,
+      predecessors: JSON.parse(String(form!.get('predecessors'))) as Array<Record<string, unknown>>,
+    };
+  };
+
+  const withPredecessor = (over: { pn: string; kind: 'FILE' | 'REISSUE'; id: string; label: string }) =>
+    previewBody({
+      employees: previewBody().employees.map((e) => (e.personnelNumber === over.pn
+        ? { ...e, predecessorKind: over.kind, predecessorId: over.id, predecessorLabel: over.label }
+        : e)),
+    });
+
+  it('clears every field, including the no-submission tick, when the instruction changes', async () => {
+    const user = userEvent.setup();
+    let n = 0;
+    handlers.preview = () => (n++ === 0 ? json(previewBody()) : json(withPredecessor({ pn: 'P1', kind: 'REISSUE', id: 'r-old', label: 'replacement SALPAY-1-R1 (v1)' })));
+    renderPanel();
+    await waitForRecovery();
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await fillRow(user, 'P1', { outcome: 'NOT_UPLOADED', reason: 'never uploaded', date: '2025-05-02', evidence: 'EV-A', confirm: true });
+    await fillRow(user, 'P2', { outcome: 'BANK_REJECTED', reason: 'rejected', date: '2025-05-03', evidence: 'EV-B' });
+    expect(rowValues('P1')).toMatchObject({ outcome: 'NOT_UPLOADED', confirm: true });
+
+    // The instruction for P1 changed between previews (a competing replacement was approved).
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await waitFor(() => expect(screen.getByTestId('predecessor-P1').textContent).toContain('SALPAY-1-R1'));
+    // EVERY field is cleared, including the previously ticked "no copy submitted" confirmation…
+    expect(rowValues('P1')).toEqual({ outcome: '', reason: '', date: '', evidence: '', confirm: false, confirmShown: false });
+    // …while the unchanged employee keeps their work.
+    expect(rowValues('P2')).toMatchObject({ outcome: 'BANK_REJECTED', reason: 'rejected', evidence: 'EV-B' });
+    expect(screen.getByRole('status').textContent).toMatch(/earlier answers were cleared/i);
+
+    // Submission cannot register while P1 is incomplete.
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'changed instruction');
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/record the full attested outcome.*P1/i));
+    expect(actions('register')).toHaveLength(0);
+
+    // Enter a FRESH attestation and submit: the payload pairs the new instruction with the new answers only.
+    await fillRow(user, 'P1', { outcome: 'RETURNED', reason: 'returned to sender', date: '2025-05-04', evidence: 'E-NEW' });
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(actions('register')).toHaveLength(1));
+    const { attestations, predecessors } = registeredPayload();
+    expect(predecessors).toContainEqual({ personnelNumber: 'P1', predecessorKind: 'REISSUE', predecessorId: 'r-old' });
+    const p1 = attestations.find((a) => a.personnelNumber === 'P1')!;
+    expect(p1).toMatchObject({ outcome: 'RETURNED', reason: 'returned to sender', evidenceReference: 'E-NEW', confirmedNoSubmission: false });
+    expect(JSON.stringify(attestations)).not.toContain('EV-A');
+    expect(JSON.stringify(attestations)).not.toContain('never uploaded');
+  });
+
+  it('clears on FILE→REISSUE and REISSUE→REISSUE in both ALL and SELECTED modes', async () => {
+    for (const selection of ['ALL', 'SELECTED'] as const) {
+      cleanup();
+      calls.length = 0;
+      const user = userEvent.setup();
+      const all = previewBody();
+      const selectedBody = (employees: typeof all.employees, predecessor?: { id: string }) => previewBody({
+        selection: 'SELECTED',
+        inputSignature: JSON.stringify({ v: 1, source: SOURCE, selection: 'SELECTED', selected: ['P1'], date: '2025-05-01' }),
+        employees: predecessor ? [{ ...employees[0]!, predecessorKind: 'REISSUE' as const, predecessorId: predecessor.id, predecessorLabel: `replacement ${predecessor.id}` }] : [employees[0]!],
+        employeeCount: 1,
+        totalAmount: '100.000',
+      });
+      // ALL keeps both employees; SELECTED previews only P1. The predecessor advances on each later preview.
+      const fileA = selection === 'ALL' ? all : selectedBody(all.employees);
+      const reissueV1 = selection === 'ALL'
+        ? previewBody({ employees: all.employees.map((e) => ({ ...e, predecessorKind: 'REISSUE' as const, predecessorId: 'r-v1', predecessorLabel: 'replacement SALPAY-1-R1 (v1)' })) })
+        : selectedBody(all.employees, { id: 'r-v1' });
+      const reissueV2 = selection === 'ALL'
+        ? previewBody({ employees: all.employees.map((e) => ({ ...e, predecessorKind: 'REISSUE' as const, predecessorId: 'r-v2', predecessorLabel: 'replacement SALPAY-1-R2 (v1)' })) })
+        : selectedBody(all.employees, { id: 'r-v2' });
+      const sequence = [fileA, reissueV1, reissueV2];
+      let n = 0;
+      handlers.preview = () => json(sequence[Math.min(n++, sequence.length - 1)]!);
+
+      renderPanel();
+      await waitForRecovery();
+      if (selection === 'SELECTED') {
+        await user.selectOptions(screen.getByLabelText(/which employees/i), 'SELECTED');
+        const box = screen.getAllByRole('checkbox').find((c) => c.closest('label')?.textContent?.includes('P1'))!;
+        await user.click(box);
+      }
+      await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+      await waitFor(() => expect(rowValues('P1').outcome).toBe(''));
+      await fillRow(user, 'P1', { outcome: 'NOT_UPLOADED', reason: 'not sent', date: '2025-05-02', evidence: 'E-1', confirm: true });
+      expect(rowValues('P1')).toMatchObject({ outcome: 'NOT_UPLOADED', confirm: true });
+
+      // FILE → approved replacement: cleared.
+      await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+      await waitFor(() => expect(screen.getByTestId('predecessor-P1').textContent).toMatch(/R1|r-v1/));
+      expect(rowValues('P1')).toMatchObject({ outcome: '', reason: '', date: '', evidence: '', confirm: false });
+
+      // REISSUE v1 → REISSUE v2: cleared again.
+      await fillRow(user, 'P1', { outcome: 'NOT_UPLOADED', reason: 'not sent 2', date: '2025-05-03', evidence: 'E-2', confirm: true });
+      await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+      await waitFor(() => expect(screen.getByTestId('predecessor-P1').textContent).toMatch(/R2|r-v2/));
+      expect(rowValues('P1')).toMatchObject({ outcome: '', reason: '', date: '', evidence: '', confirm: false });
+
+      // Still nothing registered without a fresh attestation.
+      await user.type(screen.getByPlaceholderText(/why a replacement/i), 'switch');
+      await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+      await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/record the full attested outcome.*P1/i));
+      expect(actions('register')).toHaveLength(0);
+      await fillRow(user, 'P1', { outcome: 'RETURNED', reason: 'returned', date: '2025-05-06', evidence: 'E-3' });
+      if (selection === 'ALL') await fillRow(user, 'P2', { outcome: 'RETURNED', reason: 'returned 2', date: '2025-05-06', evidence: 'E-4' });
+      await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+      await waitFor(() => expect(actions('register')).toHaveLength(1));
+      const { predecessors, attestations } = registeredPayload();
+      expect(predecessors).toContainEqual({ personnelNumber: 'P1', predecessorKind: 'REISSUE', predecessorId: 'r-v2' });
+      expect(attestations.find((a) => a.personnelNumber === 'P1')).toMatchObject({ outcome: 'RETURNED', evidenceReference: 'E-3' });
+    }
+  });
+
+  it('never carries an attestation or a no-submission tick across a source switch (away and back)', async () => {
+    const user = userEvent.setup();
+    handlers.preview = (form) => json(form.get('sourcePreparationId') === SOURCE
+      ? previewBody()
+      : previewBody({ sourcePreparationId: SOURCE2, inputSignature: JSON.stringify({ v: 1, source: SOURCE2, selection: 'ALL', selected: [], date: '2025-05-01' }) }));
+    const view = renderPanel();
+    await waitForRecovery();
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await fillRow(user, 'P1', { outcome: 'NOT_UPLOADED', reason: 'source A answer', date: '2025-05-02', evidence: 'A-EVIDENCE', confirm: true });
+    expect(rowValues('P1')).toMatchObject({ confirm: true, evidence: 'A-EVIDENCE' });
+
+    // Switch to a source that contains the SAME personnel number.
+    view.rerender(
+      <PaymentReissuePanel
+        preparationId={SOURCE2} reissues={[]}
+        sourceEmployees={[{ personnelNumber: 'P1', beneficiaryName: 'One' }]}
+        canRequest canApprove={false} canDownload={false} canHistorical={false}
+        currentUsername="RI.REQ" defaultDate="2025-05-01"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    // Same employee number, different source: NOTHING is inherited.
+    expect(rowValues('P1')).toEqual({ outcome: '', reason: '', date: '', evidence: '', confirm: false, confirmShown: false });
+
+    // And back again: still nothing inherits from the other source.
+    view.rerender(
+      <PaymentReissuePanel
+        preparationId={SOURCE} reissues={[]}
+        sourceEmployees={[{ personnelNumber: 'P1', beneficiaryName: 'One' }, { personnelNumber: 'P2', beneficiaryName: 'Two' }]}
+        canRequest canApprove={false} canDownload={false} canHistorical={false}
+        currentUsername="RI.REQ" defaultDate="2025-05-01"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    expect(rowValues('P1')).toEqual({ outcome: '', reason: '', date: '', evidence: '', confirm: false, confirmShown: false });
+  });
+
+  it('retains values on an identical re-preview and clears when a removed employee returns changed', async () => {
+    const user = userEvent.setup();
+    const base = previewBody();
+    const sequence = [
+      base, // 1st preview
+      base, // identical re-preview: values retained
+      previewBody({ employees: [base.employees[0]!] }), // P2 leaves the selection
+      previewBody({ employees: [base.employees[0]!, { ...base.employees[1]!, predecessorKind: 'REISSUE', predecessorId: 'r-9', predecessorLabel: 'replacement SALPAY-1-R9 (v1)' }] }),
+    ];
+    let n = 0;
+    handlers.preview = () => json(sequence[Math.min(n++, sequence.length - 1)]!);
+    renderPanel();
+    await waitForRecovery();
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await fillRow(user, 'P1', { outcome: 'NOT_UPLOADED', reason: 'kept', date: '2025-05-02', evidence: 'K-1', confirm: true });
+    // Identical binding: retained.
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await waitFor(() => expect(actions('preview')).toHaveLength(2));
+    await waitFor(() => expect(rowValues('P1').outcome).toBe('NOT_UPLOADED'));
+    expect(rowValues('P1')).toMatchObject({ reason: 'kept', evidence: 'K-1', confirm: true });
+    // P2 leaves the selection…
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await waitFor(() => expect(actions('preview')).toHaveLength(3));
+    await waitFor(() => expect(within(screen.getByText('Outcome').closest('table')!).queryByText('P2')).toBeNull());
+    // …and returns with a DIFFERENT predecessor: its old answers must not reappear.
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await waitFor(() => expect(actions('preview')).toHaveLength(4));
+    await screen.findByText('P2');
+    expect(rowValues('P2')).toEqual({ outcome: '', reason: '', date: '', evidence: '', confirm: false, confirmShown: false });
+  });
+
+  it('an out-of-order preview response cannot restore, clear or rebind the accepted entries', async () => {
+    const user = userEvent.setup();
+    let releaseHeld!: () => void;
+    const held = new Promise<void>((r) => { releaseHeld = r; });
+    let n = 0;
+    handlers.preview = (form) => {
+      if (form.get('sourcePreparationId') === SOURCE) {
+        // The first response for SOURCE is held back so it lands AFTER the source switch.
+        n += 1;
+        return held.then(() => json(withPredecessor({ pn: 'P1', kind: 'REISSUE', id: 'r-stale', label: 'replacement SALPAY-1-RSTALE (v1)' })));
+      }
+      return json(previewBody({ sourcePreparationId: SOURCE2, inputSignature: JSON.stringify({ v: 1, source: SOURCE2, selection: 'ALL', selected: [], date: '2025-05-01' }) }));
+    };
+    const view = renderPanel();
+    await waitForRecovery();
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await waitFor(() => expect(actions('preview')).toHaveLength(1));
+    // While that response is outstanding, the displayed source switches and its preview is accepted.
+    view.rerender(
+      <PaymentReissuePanel
+        preparationId={SOURCE2} reissues={[]}
+        sourceEmployees={[{ personnelNumber: 'P1', beneficiaryName: 'One' }, { personnelNumber: 'P2', beneficiaryName: 'Two' }]}
+        canRequest canApprove={false} canDownload={false} canHistorical={false}
+        currentUsername="RI.REQ" defaultDate="2025-05-01"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await waitFor(() => expect(actions('preview')).toHaveLength(2));
+    await waitFor(() => expect(screen.getByTestId('predecessor-P1').textContent).toContain('original file'));
+    await fillRow(user, 'P1', { outcome: 'NOT_UPLOADED', reason: 'current', date: '2025-05-02', evidence: 'CUR-1', confirm: true });
+    // The stale response now lands. It must change NOTHING: no rebound predecessor, no cleared or restored entry.
+    releaseHeld();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByTestId('predecessor-P1').textContent).toContain('original file');
+    expect(screen.getByTestId('predecessor-P1').textContent).not.toContain('RSTALE');
+    expect(rowValues('P1')).toMatchObject({ outcome: 'NOT_UPLOADED', reason: 'current', evidence: 'CUR-1', confirm: true });
+    // Submission uses the ACCEPTED preview only, so it can proceed with the current answers.
+    await fillRow(user, 'P2', { outcome: 'RETURNED', reason: 'other', date: '2025-05-03', evidence: 'CUR-2' });
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'out of order');
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(actions('register')).toHaveLength(1));
+    const { predecessors } = registeredPayload();
+    expect(predecessors.every((p) => p.predecessorId === 'pred-1' || p.predecessorId === 'pred-2')).toBe(true);
+  });
+
+  it('the closure scenario: evidence entered for A is never registered against B', async () => {
+    const user = userEvent.setup();
+    let n = 0;
+    handlers.preview = () => json(n++ === 0
+      ? previewBody()
+      : previewBody({ employees: previewBody().employees.map((e) => ({ ...e, predecessorKind: 'REISSUE' as const, predecessorId: 'r-approved', predecessorLabel: 'replacement SALPAY-1-R1 (v1)' })) }));
+    renderPanel();
+    await waitForRecovery();
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await fillRow(user, 'P1', { outcome: 'NOT_UPLOADED', reason: 'OLD-P1', date: '2025-05-02', evidence: 'OLD-EV', confirm: true });
+    await fillRow(user, 'P2', { outcome: 'NOT_UPLOADED', reason: 'OLD-P2', date: '2025-05-02', evidence: 'OLD-EV2', confirm: true });
+    // A competing approved replacement changed the instruction for BOTH employees while the form was open.
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await waitFor(() => expect(screen.getByTestId('predecessor-P1').textContent).toContain('SALPAY-1-R1'));
+    expect(rowValues('P1')).toMatchObject({ outcome: '', confirm: false });
+    expect(rowValues('P2')).toMatchObject({ outcome: '', confirm: false });
+    // Submitting the untouched form registers nothing.
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'closure');
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/record the full attested outcome/i));
+    expect(actions('register')).toHaveLength(0);
+    await fillRow(user, 'P1', { outcome: 'RETURNED', reason: 'NEW-P1', date: '2025-05-04', evidence: 'NEW-EV' });
+    await fillRow(user, 'P2', { outcome: 'RETURNED', reason: 'NEW-P2', date: '2025-05-04', evidence: 'NEW-EV2' });
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(actions('register')).toHaveLength(1));
+    const { attestations, predecessors } = registeredPayload();
+    expect(predecessors.every((p) => p.predecessorId === 'r-approved')).toBe(true);
+    const text = JSON.stringify(attestations);
+    expect(text).not.toContain('OLD-EV');
+    expect(text).not.toContain('OLD-P1');
+    expect(attestations.every((a) => a.outcome === 'RETURNED')).toBe(true);
+  });
+
+  it('a re-preview reset never abandons or mutates an unresolved registered intent', async () => {
+    const user = userEvent.setup();
+    let n = 0;
+    handlers.intents = () => json([intent({ status: 'REGISTERED' })]);
+    handlers.preview = () => json(n++ === 0
+      ? previewBody()
+      : previewBody({ employees: previewBody().employees.map((e) => ({ ...e, predecessorId: 'pred-changed' })) }));
+    renderPanel();
+    await screen.findByText(/registered — not yet confirmed executed/i);
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await fillRow(user, 'P1', { outcome: 'NOT_UPLOADED', reason: 'x', date: '2025-05-02', evidence: 'X-1', confirm: true });
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await waitFor(() => expect(rowValues('P1').outcome).toBe(''));
+    // Nothing about the durable attempt was touched by the editable-form reset.
+    expect(actions('abandon')).toHaveLength(0);
+    expect(actions('execute')).toHaveLength(0);
+    expect(actions('register')).toHaveLength(0);
+    expect(screen.getByText(/registered — not yet confirmed executed/i)).toBeTruthy();
+  });
+
   it('shows and submits the exact instruction each attestation is about', async () => {
     const user = userEvent.setup();
     renderPanel();
