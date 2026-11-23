@@ -527,6 +527,7 @@ export async function executePaymentRun(input: {
     const groups = new Map<string, Group>();
     for (const item of payable) {
       const [line] = await tx.select({
+        companyCode: journalEntryLine.companyCode,
         glAccount: journalEntryLine.glAccount,
         amountLocal: journalEntryLine.amountLocal,
         amountDocument: journalEntryLine.amountDocument,
@@ -551,10 +552,11 @@ export async function executePaymentRun(input: {
           'Regenerate the proposal, then execute. Nothing has been posted.',
         );
       }
-      if ((line.businessPartner ?? '').trim().toUpperCase() !== item.accountId.trim().toUpperCase()
+      if (line.companyCode !== item.companyCode
+        || (line.businessPartner ?? '').trim().toUpperCase() !== item.accountId.trim().toUpperCase()
         || line.currency.trim().toUpperCase() !== item.currency.trim().toUpperCase()) {
         throw new PaymentRunError(
-          `The proposal item for supplier ${item.accountId} no longer matches the source journal line (partner or currency changed).`,
+          `The proposal item for supplier ${item.accountId} no longer matches the source journal line (company, partner or currency changed).`,
           'Regenerate the proposal, then execute. Nothing has been posted.',
         );
       }

@@ -28,6 +28,7 @@ export interface InstructionRelease {
   strategyCode: string | null;
   steps: string[];
   currentStep: number;
+  changedAt?: string | null;
 }
 
 function canonicalAmount(value: string | number): string {
@@ -99,6 +100,7 @@ export function paymentInstructionCanonical(input: {
       strategyCode: input.release.strategyCode,
       steps: [...input.release.steps],
       currentStep: input.release.currentStep,
+      changedAt: input.release.changedAt ?? null,
     } : null,
   });
 }

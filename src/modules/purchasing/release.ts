@@ -73,10 +73,12 @@ export interface DocumentReleaseState {
   strategyCode: string | null;
   steps: string[];
   currentStep: number;
+  /** Last release-state change, so a re-release is distinguishable from the prior acts. */
+  changedAt?: string | null;
 }
 
 const NOT_REQUIRED: DocumentReleaseState = {
-  status: 'NOT_REQUIRED', groupCode: null, strategyCode: null, steps: [], currentStep: 0,
+  status: 'NOT_REQUIRED', groupCode: null, strategyCode: null, steps: [], currentStep: 0, changedAt: null,
 };
 
 async function strategySteps(tx: Tx, client: string, groupCode: string, strategyCode: string): Promise<string[]> {
@@ -101,6 +103,7 @@ async function loadState(tx: Tx, client: string, category: string, number: strin
     strategyCode: row.strategyCode,
     steps: await strategySteps(tx, client, row.groupCode, row.strategyCode),
     currentStep: row.currentStep,
+    changedAt: row.changedAt ? row.changedAt.toISOString() : null,
   };
 }
 
@@ -132,6 +135,7 @@ export async function listDocumentReleases(
         strategyCode: row.strategyCode,
         steps: await strategySteps(tx, client, row.groupCode, row.strategyCode),
         currentStep: row.currentStep,
+        changedAt: row.changedAt ? row.changedAt.toISOString() : null,
       });
     }
     return map;
