@@ -36,7 +36,9 @@ async function setup(): Promise<void> {
   tenant = await createTenant('fx-blockers', { currency: 'KWD' });
   await defineTestRanges(tenant, { fiscalYear: 2026 });
   await defineTestRanges(tenant, { fiscalYear: 2027 });
-  await seedAccounts(tenant, ['590100', '590200', '102000', '103000', '104000', '105000', '106000']);
+  await seedAccounts(tenant, [
+    '590100', '590200', '102000', '103000', '104000', '105000', '106000', '107000', '108000',
+  ]);
   await withTenant(tenant.client, async (tx) => {
     await defineRange(tx, { client: tenant.client, objectCode: 'CUSTINV', subObject: '*', prefix: 'CI', numberLength: 7, createdBy: ACTOR });
     await defineRange(tx, { client: tenant.client, objectCode: 'VENDINV', subObject: '*', prefix: 'VI', numberLength: 7, createdBy: ACTOR });
@@ -44,11 +46,13 @@ async function setup(): Promise<void> {
       insert into business_partner (client, partner_number, category, name, created_by) values
         (${tenant.client}, 'C10000', 'ORGANIZATION', 'Blocker Customer', ${ACTOR}),
         (${tenant.client}, 'V10000', 'ORGANIZATION', 'Blocker Vendor', ${ACTOR}),
-        (${tenant.client}, 'V20000', 'ORGANIZATION', 'Second Vendor', ${ACTOR})
+        (${tenant.client}, 'V20000', 'ORGANIZATION', 'Second Vendor', ${ACTOR}),
+        (${tenant.client}, 'C20000', 'ORGANIZATION', 'Balance-Valuation Customer', ${ACTOR})
       on conflict do nothing`);
     await tx.execute(sql`
       insert into bp_role (client, partner_number, role_code, created_by) values
         (${tenant.client}, 'C10000', 'CUSTOMER', ${ACTOR}),
+        (${tenant.client}, 'C20000', 'CUSTOMER', ${ACTOR}),
         (${tenant.client}, 'V10000', 'SUPPLIER', ${ACTOR}),
         (${tenant.client}, 'V20000', 'SUPPLIER', ${ACTOR}) on conflict do nothing`);
     await tx.execute(sql`
@@ -58,6 +62,10 @@ async function setup(): Promise<void> {
       insert into customer_company_code
         (client, partner_number, role_code, company_code, chart_of_accounts, reconciliation_account, payment_terms_code, created_by)
       values (${tenant.client}, 'C10000', 'CUSTOMER', '1000', 'CA01', '110000', 'NET30', ${ACTOR}) on conflict do nothing`);
+    await tx.execute(sql`
+      insert into customer_company_code
+        (client, partner_number, role_code, company_code, chart_of_accounts, reconciliation_account, payment_terms_code, created_by)
+      values (${tenant.client}, 'C20000', 'CUSTOMER', '1000', 'CA01', '108000', 'NET30', ${ACTOR}) on conflict do nothing`);
     for (const vendor of ['V10000', 'V20000']) {
       await tx.execute(sql`
         insert into supplier_company_code
@@ -80,7 +88,7 @@ async function setup(): Promise<void> {
       update gl_account set account_type = 'ASSET', gl_account_type = 'BALANCE_SHEET',
         is_balance_sheet = true, is_open_item_managed = false
       where client = ${tenant.client} and chart_of_accounts = 'CA01'
-        and account_number in ('102000', '103000', '104000', '105000', '106000')`);
+        and account_number in ('102000', '103000', '104000', '105000', '106000', '107000', '108000')`);
     // 0.300 until 15 Oct, 0.310 then, 0.320 from 20 Oct, 0.330 from December, and a dedicated
     // 0.30001 row used to carry exactly KWD 30.001 on USD 100.
     await tx.execute(sql`
@@ -106,6 +114,7 @@ async function setup(): Promise<void> {
       ['HB03', 'EUR1', 'EUR', '104000'],
       ['HB04', 'USD2', 'USD', '105000'],
       ['HB05', 'USD3', 'USD', '106000'],
+      ['HB06', 'KWD4', 'KWD', '107000'],
     ] as const) {
       await tx.execute(sql`
         insert into house_bank (client, company_code, house_bank_key, bank_country, bank_key, created_by)
@@ -278,6 +287,30 @@ describe('1. as-of treatment of reversed bank journals', () => {
     // Before the reversal date it stood at +100; from the reversal date the pair cancels, never ?100.
     expect(after.bridge!.ledgerClosing).toBe('0.00');
     expect(after.ledgerLines.some((l) => l.documentNumber === receiptDoc)).toBe(false);
+  });
+
+  it('applies the same as-of rule to a local-currency bank account', async () => {
+    const inv = await postCustomerInvoice(customerInvoice('KWD', 'ASOF-KWD', '2026-12-01', 100));
+    const open = (await getReceivables(tenant.client, 'C10000', COMPANY)).openItems
+      .find((i) => i.documentNumber === inv.journalDocumentNumber)!;
+    const receipt = await postIncomingPayment(receive('KWD', '2026-12-20', 100, [open], 'asof-kwd-receipt', '107000'));
+    const december = await statement({
+      houseBankKey: 'HB06', accountId: 'KWD4', currency: 'KWD', reference: 'ASOF-KWD-DEC',
+      fromDate: '2026-12-01', toDate: '2026-12-31', opening: '0', closing: '100',
+      lines: [{ direction: 'IN', amount: '100', valueDate: '2026-12-20' }],
+    });
+    expect((await reconciliation({ houseBankKey: 'HB06', accountId: 'KWD4', statementId: december.statementId }))
+      .bridge!.ledgerClosing).toBe('100.000');
+    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+      client: tenant.client, documentNumber: receipt.journalDocumentNumber, fiscalYear: 2026,
+      reversalDate: '2027-01-05', reason: 'local bank as-of reversal', reversedBy: ACTOR,
+    }));
+    const january = await statement({
+      houseBankKey: 'HB06', accountId: 'KWD4', currency: 'KWD', reference: 'ASOF-KWD-JAN',
+      fromDate: '2027-01-01', toDate: '2027-01-31', opening: '100', closing: '100',
+    });
+    expect((await reconciliation({ houseBankKey: 'HB06', accountId: 'KWD4', statementId: january.statementId }))
+      .bridge!.ledgerClosing).toBe('0.000');
   });
 });
 
@@ -636,6 +669,62 @@ describe('5. active valuation blocks customer and vendor clearing, and locks ser
     });
     expect((await journalLines(clearing.clearingDocumentNumber)).find((l) => l.gl_account === '590200'))
       .toMatchObject({ local: '1.0000', is_local_only: true });
+  }, 90_000);
+
+  it('refuses clearing over an account/currency balance valuation', async () => {
+    const debit = await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'BALCLR-D',
+      lines: [
+        { glAccount: '108000', debitCredit: 'S', amount: '100', amountLocal: '30.000', businessPartner: 'C20000' },
+        { glAccount: '300000', debitCredit: 'H', amount: '100', amountLocal: '30.000' },
+      ],
+    });
+    const credit = await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'BALCLR-C',
+      lines: [
+        { glAccount: '108000', debitCredit: 'H', amount: '100', amountLocal: '31.000', businessPartner: 'C20000' },
+        { glAccount: '300000', debitCredit: 'S', amount: '100', amountLocal: '31.000' },
+      ],
+    });
+    const refs = (await openRefs('C20000', '108000', [debit.documentNumber, credit.documentNumber]))
+      .map((r) => ({ documentNumber: r.document_number, fiscalYear: r.fiscal_year, lineNumber: r.line_number }));
+    expect(refs).toHaveLength(2);
+
+    const valuation = await executeFxValuation({
+      client: tenant.client, changedBy: ACTOR, authorization: actor.authorization,
+      selection: {
+        companyCode: COMPANY, valuationArea: 'BALCLR', valuationKeyDate: '2026-12-31',
+        postingDate: '2026-12-31', fiscalYear: 2026, valuationMethod: 'AVERAGE',
+        includeOpenItems: false, includeBalances: true, testRun: false,
+        documentType: 'SA', requestKey: 'balclr-1',
+      },
+    });
+    expect(valuation.postingDocument).toBeTruthy();
+    expect((await journalLines(valuation.postingDocument!)).some((l) => l.gl_account === '108000')).toBe(true);
+
+    const before = await withTenant(tenant.client, async (tx) => ((await tx.execute(sql`
+      select count(*)::int as n from journal_entry where client = ${tenant.client}`)) as unknown as Array<{ n: number }>)[0]!.n);
+    await expect(clearCustomerItems({
+      client: tenant.client, changedBy: ACTOR, customer: 'C20000', companyCode: COMPANY,
+      clearingDate: '2027-01-10', postingDate: '2027-01-10', documentDate: '2027-01-10',
+      confirmed: true, requestKey: 'balclr-refuse', items: refs,
+    })).rejects.toThrow(/valued at period end/);
+    const after = await withTenant(tenant.client, async (tx) => ((await tx.execute(sql`
+      select count(*)::int as n from journal_entry where client = ${tenant.client}`)) as unknown as Array<{ n: number }>)[0]!.n);
+    expect(after).toBe(before);
+    expect(await openRefs('C20000', '108000', [debit.documentNumber, credit.documentNumber])).toHaveLength(2);
+
+    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+      client: tenant.client, documentNumber: valuation.postingDocument!, fiscalYear: 2026,
+      reversalDate: '2027-01-05', reason: 'release balance valuation clearing', reversedBy: ACTOR,
+    }));
+    const clearing = await clearCustomerItems({
+      client: tenant.client, changedBy: ACTOR, customer: 'C20000', companyCode: COMPANY,
+      clearingDate: '2027-01-10', postingDate: '2027-01-10', documentDate: '2027-01-10',
+      confirmed: true, requestKey: 'balclr-ok', items: refs,
+    });
+    expect((await journalLines(clearing.clearingDocumentNumber)).find((l) => l.gl_account === '590100'))
+      .toMatchObject({ debit_credit: 'H', local: '1.0000', is_local_only: true });
   }, 90_000);
 
   it('serializes settlement with the company valuation lock', async () => {
