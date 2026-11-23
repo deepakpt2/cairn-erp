@@ -1,23 +1,27 @@
 /**
- * Retention of generated salary payment CSVs in private host storage, with safe metadata.
+ * Retention of generated salary payment CSVs in private host storage, with safe metadata, plus reconciliation of
+ * the filesystem/database gap and a conservative legacy backfill.
  *
- * `retainArtifact` encrypts the exact bytes, writes them durably (atomic rename) and records the metadata row
- * **after** the file is durable. It is called inside the same database transaction that commits the prepared
- * file / approved replacement, so a committed owner row always has an artifact; a failure leaves no published
- * file. Because the filesystem and the database commit are not one transaction, the write is published to a
- * unique artifact id and the transaction rolls back cleanly if anything later fails — an orphaned encrypted file
- * (never a partial one) may be left, and `deleteArtifact` removes it on the rollback path.
+ * Crash-safe ordering: `retainArtifact` encrypts, durably publishes the file (write → fsync → atomic rename →
+ * fsync dir), THEN inserts the metadata row inside the caller's transaction. A committed owner row therefore
+ * always has a durable file. If the transaction later fails, the metadata rolls back and an encrypted orphan
+ * `.enc` may remain; `sweepOrphans` removes such files safely after a grace period.
  *
- * `readArtifact` returns the exact plaintext bytes only after the caller has authorized the download; it verifies
- * the plaintext SHA-256. The artifact row is looked up by owner (FILE + preparation_id, or REISSUE + reissue_id).
+ * Why a marker, not "absent = legacy": an owner row that should have a NEW artifact but whose metadata is missing
+ * must FAIL CLOSED, not silently fall back to a rebuilt CSV. `payroll_payment_artifact_state` records, per owner,
+ * whether artifact retention applies (`cad1`) — a NEW owner is marked in the same transaction; only an owner with
+ * NO marker at all is genuinely legacy.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { type Tx } from '../../platform/db/client';
 import { type BankDataKeyring } from '../../platform/security/bank-data-encryption';
 import { ArtifactEncryptionError, decryptArtifact, encryptArtifact } from '../../platform/security/artifact-encryption';
-import { type StoredArtifactRef, readStoredArtifact, writeEncryptedArtifact } from '../../platform/security/artifact-store';
+import {
+  type StoredArtifactRef, readStoredArtifact, writeEncryptedArtifact, deleteArtifact,
+  listTenantArtifacts, listStaleStaging, deleteStagingFile,
+} from '../../platform/security/artifact-store';
 import { payrollPaymentArtifact } from './schema';
 
 export class ArtifactError extends Error {
@@ -30,13 +34,31 @@ export class ArtifactError extends Error {
 }
 
 export type ArtifactOwnerKind = 'FILE' | 'REISSUE';
+export const ARTIFACT_FORMAT = 'cad1' as const;
 
 const artifactField = 'paymentCsv';
 
+/** Marker table rows: `ownerKind + ownerId` has `format='cad1'` once retention applies to it. */
+async function markOwner(tx: Tx, client: string, ownerKind: ArtifactOwnerKind, ownerId: string, changedBy: string): Promise<void> {
+  await tx.execute(sql`
+    insert into payroll_payment_artifact_state (client, owner_kind, owner_id, format, changed_by, changed_at)
+    values (${client}, ${ownerKind}, ${ownerId}, ${ARTIFACT_FORMAT}, ${changedBy}, now())
+    on conflict (client, owner_kind, owner_id) do nothing`);
+}
+
+/** Whether artifact retention applies to this owner (a NEW-format row). False means genuinely legacy. */
+export async function ownerRequiresArtifact(tx: Tx, client: string, ownerKind: ArtifactOwnerKind, ownerId: string): Promise<boolean> {
+  const rows = await tx.execute(sql`
+    select 1 from payroll_payment_artifact_state
+     where client = ${client} and owner_kind = ${ownerKind} and owner_id = ${ownerId} and format = ${ARTIFACT_FORMAT}
+     limit 1`);
+  return (rows as unknown as unknown[]).length > 0;
+}
+
 /**
- * Encrypt and durably store the exact plaintext bytes, then insert the metadata row. Returns the artifact id.
- * The caller commits its owner row in the same transaction; a thrown error rolls back the metadata and the
- * caller may call `deleteArtifact` for the published orphan.
+ * Encrypt and durably store the exact bytes, mark the owner as new-format, then insert the metadata row. All in
+ * the caller's transaction. Throws if storage/encryption fails, so the caller rolls back (and never advertises a
+ * ready file whose artifact is missing).
  */
 export async function retainArtifact(
   tx: Tx,
@@ -59,14 +81,16 @@ export async function retainArtifact(
     if (error instanceof ArtifactEncryptionError) throw new ArtifactError('The payment file could not be encrypted for storage.', 'ARTIFACT_ENCRYPT');
     throw error;
   }
-  // Publish the file BEFORE the metadata row, so a committed row always points at a durable file.
   let stored: StoredArtifactRef;
   try {
     stored = writeEncryptedArtifact(input.client, artifactId, envelope);
   } catch (error) {
-    if (error instanceof Error) throw new ArtifactError(`${error.message}`, 'ARTIFACT_WRITE');
+    if (error instanceof Error) throw new ArtifactError(error.message, 'ARTIFACT_WRITE');
     throw error;
   }
+  // Mark the owner BEFORE the metadata insert, in this transaction, so a committed owner is known to require an
+  // artifact even if a later migration/reader sees the row and the metadata separately.
+  await markOwner(tx, input.client, input.ownerKind, input.ownerId, input.changedBy);
   await tx.insert(payrollPaymentArtifact).values({
     client: input.client,
     artifactId,
@@ -74,7 +98,7 @@ export async function retainArtifact(
     ownerId: input.ownerId,
     fileReference: input.fileReference,
     storagePath: stored.relativePath,
-    storageFormat: 'cad1',
+    storageFormat: ARTIFACT_FORMAT,
     keyId: input.keyring.activeKeyId,
     plaintextSha256,
     byteLength: input.bytes.length,
@@ -117,8 +141,8 @@ export async function artifactOf(tx: Tx, client: string, ownerKind: ArtifactOwne
 }
 
 /**
- * Read and verify the retained bytes. Returns null when the artifact row is absent or the file is missing or
- * unreadable — the caller fails closed. Never falls back to a freshly computed file: it is the retained original.
+ * Read and verify the retained bytes. Returns null when the artifact row is absent or the file is missing,
+ * unreadable or fails its integrity check — the caller fails closed. Never falls back to a freshly computed file.
  */
 export function readArtifact(record: ArtifactRecord, client: string, keyring: BankDataKeyring): Buffer | null {
   const envelope = readStoredArtifact(record.storagePath);
@@ -130,6 +154,109 @@ export function readArtifact(record: ArtifactRecord, client: string, keyring: Ba
     return null;
   }
   const sha = createHash('sha256').update(bytes).digest('hex');
-  if (sha !== record.plaintextSha256) return null; // integrity mismatch: never serve wrong bytes
+  if (sha !== record.plaintextSha256) return null;
   return bytes;
+}
+
+// ── Reconciliation ───────────────────────────────────────────────────────────
+
+export interface SweepResult {
+  /** Published `.enc` files with no committed metadata row, older than the grace period, removed. */
+  orphanedRemoved: number;
+  /** Stale staging temp files removed. */
+  stagingRemoved: number;
+}
+
+/**
+ * Remove encrypted leftovers that no committed row references, and stale staging temps. A file is only removed
+ * when it is OLDER than `graceMs` (so an in-flight transaction that has published a file but not yet committed
+ * its metadata — which always happens within one request — is never touched) AND its artifact id has no
+ * metadata row for this tenant. This never deletes a committed artifact.
+ */
+export async function sweepOrphans(tx: Tx, client: string, options: { graceMs?: number; now?: number } = {}): Promise<SweepResult> {
+  const graceMs = options.graceMs ?? 60 * 60 * 1000;
+  const now = options.now ?? Date.now();
+  let orphanedRemoved = 0;
+  let stagingRemoved = 0;
+
+  for (const temp of listStaleStaging(client, graceMs, now)) {
+    deleteStagingFile(temp);
+    stagingRemoved += 1;
+  }
+
+  const candidates = listTenantArtifacts(client).filter((f) => now - f.modifiedMs > graceMs);
+  if (candidates.length === 0) return { orphanedRemoved, stagingRemoved };
+  const ids = candidates.map((c) => c.artifactId);
+  const referenced = await tx.execute(sql`
+    select artifact_id::text as artifact_id from payroll_payment_artifact
+     where client = ${client} and artifact_id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`);
+  const known = new Set((referenced as unknown as Array<{ artifact_id: string }>).map((r) => r.artifact_id));
+  for (const candidate of candidates) {
+    if (known.has(candidate.artifactId)) continue; // committed: never delete
+    deleteArtifact(candidate.relativePath);
+    orphanedRemoved += 1;
+  }
+  return { orphanedRemoved, stagingRemoved };
+}
+
+// ── Legacy backfill ──────────────────────────────────────────────────────────
+
+export interface BackfillOutcome {
+  ownerKind: ArtifactOwnerKind;
+  ownerId: string;
+  result: 'already-retained' | 'backfilled-from-body' | 'backfilled-from-snapshot' | 'unverifiable' | 'not-found';
+  sha256?: string;
+}
+
+/**
+ * Retain EXACT legacy bytes where their integrity can be checked, without mutating the legacy evidence.
+ *
+ * - A legacy ORIGINAL with a stored plaintext body: verified against its stored checksum; if it matches, the
+ *   exact bytes are encrypted and retained (the body row is left untouched).
+ * - A legacy ORIGINAL with a bank snapshot but no body, or a legacy REISSUE: the caller must supply the bytes it
+ *   can deterministically reconstruct AND the checksum they must match. If they match the stored evidence, they
+ *   are retained; otherwise nothing is written and the outcome is `unverifiable` (no silent claim of equality).
+ *
+ * Never recalculates payroll, never rewrites old evidence, never stores plaintext. Repeatable: an owner already
+ * retained is reported and skipped.
+ */
+export async function backfillLegacyArtifact(
+  tx: Tx,
+  input: {
+    client: string;
+    ownerKind: ArtifactOwnerKind;
+    ownerId: string;
+    fileReference: string;
+    /** The exact bytes (already determined to be the issued file), and the stored checksum they must match. */
+    bytes: Buffer;
+    expectedSha256: string;
+    /** Where the bytes came from — for an operator-facing report, never derived from new calculation. */
+    source?: 'body' | 'snapshot';
+    keyring: BankDataKeyring;
+    changedBy: string;
+  },
+): Promise<BackfillOutcome> {
+  if (await artifactOf(tx, input.client, input.ownerKind, input.ownerId)) {
+    return { ownerKind: input.ownerKind, ownerId: input.ownerId, result: 'already-retained' };
+  }
+  const actualSha = createHash('sha256').update(input.bytes).digest('hex');
+  if (actualSha !== input.expectedSha256) {
+    return { ownerKind: input.ownerKind, ownerId: input.ownerId, result: 'unverifiable' };
+  }
+  await retainArtifact(tx, {
+    client: input.client, ownerKind: input.ownerKind, ownerId: input.ownerId, fileReference: input.fileReference,
+    bytes: input.bytes, keyring: input.keyring, changedBy: input.changedBy,
+  });
+  return {
+    ownerKind: input.ownerKind, ownerId: input.ownerId,
+    result: input.source === 'snapshot' ? 'backfilled-from-snapshot' : 'backfilled-from-body', sha256: actualSha,
+  };
+}
+
+/** Whether any owner among these ids has artifact metadata (used by a status view that must never read content). */
+export async function artifactIdsFor(tx: Tx, client: string, ownerKind: ArtifactOwnerKind, ownerIds: readonly string[]): Promise<Set<string>> {
+  if (ownerIds.length === 0) return new Set();
+  const rows = await tx.select({ ownerId: payrollPaymentArtifact.ownerId }).from(payrollPaymentArtifact)
+    .where(and(eq(payrollPaymentArtifact.client, client), eq(payrollPaymentArtifact.ownerKind, ownerKind), inArray(payrollPaymentArtifact.ownerId, [...ownerIds])));
+  return new Set(rows.map((r) => r.ownerId));
 }

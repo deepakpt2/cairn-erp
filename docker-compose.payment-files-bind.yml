@@ -1,0 +1,14 @@
+# Override: keep generated salary payment artifacts on a HOST directory instead of the named volume.
+#
+# Use only when the host directory:
+#   * is OUTSIDE the source checkout and web root,
+#   * exists and is owned by UID/GID 1001 with mode 700 (see docs/fresh-server-installation.md §3b), and
+#   * is shared/consistent if you run more than one app instance.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.payment-files-bind.yml up -d
+#
+# Set CAIRN_PAYMENT_FILE_HOST_DIR to an absolute host path before running.
+services:
+  app:
+    volumes:
+      - ${CAIRN_PAYMENT_FILE_HOST_DIR:?Set CAIRN_PAYMENT_FILE_HOST_DIR to an absolute host directory}:/app/payment-files

@@ -85,12 +85,16 @@ services:
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
       HOSTNAME: 0.0.0.0
       PORT: "3000"
-      # Private, durable location for generated salary payment CSVs (encrypted envelopes). The app requires it
-      # to retain and serve a payment file; point it at a mounted, non-web-root volume. For multiple app
-      # instances the volume must be shared/consistent across them.
+      # Private, durable location for generated salary payment CSVs (encrypted envelopes). The named volume
+      # below lives outside the source checkout and web root. To use a host bind mount, apply the documented
+      # override (docs/fresh-server-installation.md §3b) and initialise the directory to UID/GID 1001 (mode 700).
       CAIRN_PAYMENT_FILE_DIR: /app/payment-files
     volumes:
-      - ${CAIRN_PAYMENT_FILE_HOST_DIR:-./payment-files}:/app/payment-files
+      # Named volume owned by the app user: Docker copies the image's /app/payment-files (owned by cairn:cairn)
+      # into a fresh volume on first use. For a host bind mount, see the documented override.
+      - type: volume
+        source: payment_files
+        target: /app/payment-files
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -169,3 +173,4 @@ networks:
 
 volumes:
   postgres_data:
+  payment_files:

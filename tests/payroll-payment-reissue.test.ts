@@ -109,7 +109,7 @@ async function approveWithDigest(reissueId: string, approverName = 'RI.APP', act
   const runIdFor = runRows[0]!.run_id;
   const list = await listReissues(tenant.client, runIdFor, { authorization: approver.authorization });
   const confirmDigest = list.find((r) => r.reissueId === reissueId)?.snapshotDigest;
-  return approveReissue(tenant.client, reissueId, approverName, { authorization: actor.authorization }, { confirmDigest });
+  return approveReissue(tenant.client, reissueId, approverName, { authorization: actor.authorization }, { confirmDigest, reviewedAssertion: true });
 }
 
 async function employeeOn(): Promise<string> {
@@ -216,7 +216,7 @@ describe('attestation and approval', () => {
     expect(draft.status).toBe('DRAFT');
     expect(draft.version).toBe(1);
     expect(draft.lines).toHaveLength(1);
-    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.REQ', { authorization: requester.authorization }), 'FOUR_EYES');
+    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.REQ', { authorization: requester.authorization }, { confirmDigest: 'x', reviewedAssertion: true }), 'FOUR_EYES');
     const approved = await approveWithDigest(draft.reissueId);
     expect(approved.status).toBe('APPROVED');
     expect(approved.approvedBy).toBe('RI.APP');
@@ -554,6 +554,69 @@ describe('supersession, scope, review and idempotency guarantees', () => {
     }
     await expectRefusal(downloadHistoricalFile(tenant.client, sPrep, { authorization: noBank.authorization }), 'REISSUE_BANK_AUTHORITY');
   });
+
+  it('ordinary download, cancel and historical reads disclose nothing for an employee-out-of-scope caller', async () => {
+    // Prepare a fresh approved replacement to act on.
+    const pn = sEmployees[0]!;
+    const draft = await requestReissue({ client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED', personnelNumbers: [pn], intendedPaymentDate: '2025-12-22', reason: 'scope disclosure', attestations: [att(pn)] as never, requestKey: randomUUID(), changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    const approved = await approveWithDigest(draft.reissueId);
+    expect(approved.status).toBe('APPROVED');
+
+    // A real PLANT-limited caller: reaches the company, but not the employee's plant. It must NOT learn the
+    // reference/status; the response must be the SAME as for a target that does not exist.
+    const plantActor = await createActor(tenant.client, {
+      capabilities: [REISSUE_REQUEST_CAPABILITY, REISSUE_APPROVE_CAPABILITY, REISSUE_DOWNLOAD_CAPABILITY, FILE_HISTORICAL_CAPABILITY, 'PEOPLE.BANK.REVEAL'],
+      companyScopes: ['1000'],
+      suffix: 'PLANT0',
+    });
+    // Restrict the actor to a plant the employee is NOT in (company 1000 has CP100/CP200 in the fixture; the
+    // employee sits in the first). Adding a PLANT restriction the employee does not match narrows reach.
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      insert into auth_org_restriction (id, client, user_id, scope_type, scope_value, created_by)
+      values (${randomUUID()}, ${tenant.client}, ${plantActor.userId}, 'PLANT', 'CPNOTHERE', ${ACTOR})`));
+
+    const missing = randomUUID();
+    const outOfScope = await expectRefusal(downloadReissue(tenant.client, approved.reissueId, { requestedBy: 'RI.PL' }, { authorization: plantActor.authorization }), 'REISSUE_UNAVAILABLE');
+    const missingErr = await expectRefusal(downloadReissue(tenant.client, missing, { requestedBy: 'RI.PL' }, { authorization: plantActor.authorization }), 'REISSUE_UNAVAILABLE');
+    // Indistinguishable: same code and same message (no reference, no employee, no status).
+    expect(outOfScope.message).toBe(missingErr.message);
+    await expectRefusal(cancelReissue(tenant.client, approved.reissueId, { reason: 'x', changedBy: 'RI.PL' }, { authorization: plantActor.authorization }), 'REISSUE_UNAVAILABLE');
+    await expectRefusal(downloadHistoricalReissue(tenant.client, approved.reissueId, { authorization: plantActor.authorization }), 'REISSUE_UNAVAILABLE');
+
+    // The SAME actor via the HTTP route also gets a status indistinguishable from a missing target.
+    requestContext.cookie = encodeSessionCookie(tenant.client, (await (async () => plantActor)()).token);
+    const routeOut = await REISSUE_GET(new Request(`http://localhost/people/payroll-runs/payment-file/reissue?reissue=${approved.reissueId}`));
+    const routeMissing = await REISSUE_GET(new Request(`http://localhost/people/payroll-runs/payment-file/reissue?reissue=${missing}`));
+    expect(routeOut.status).toBe(routeMissing.status);
+    expect(await routeOut.text()).toBe(await routeMissing.text());
+    expect(routeOut.headers.get('cache-control')).toBe('private, no-store');
+  }, 90_000);
+
+  it('an employee moved to a company the caller does not reach is refused, indistinguishably from missing', async () => {
+    // A caller limited to company 1000. The employee's position is reassigned to a company the caller lacks.
+    const pn = sEmployees[1]!;
+    const draft = await requestReissue({ client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED', personnelNumbers: [pn], intendedPaymentDate: '2025-12-23', reason: 'moved company', attestations: [att(pn)] as never, requestKey: randomUUID(), changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    // Create a second company code (and a plant for it), then move the employee onto it.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        insert into company_code (client, company_code, name, chart_of_accounts, fiscal_year_variant, posting_period_variant, currency, country, created_by)
+        values (${tenant.client}, '2000', 'Second company',
+                (select chart_of_accounts from company_code where client = ${tenant.client} and company_code = '1000'),
+                'K4', 'C001', ${'USD'}, 'KW', ${ACTOR})
+        on conflict do nothing`);
+      await tx.execute(sql`update position_assignment set company_code = '2000'
+         where client = ${tenant.client} and personnel_number = ${pn}`);
+    });
+    const companyActor = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY, REISSUE_APPROVE_CAPABILITY, REISSUE_DOWNLOAD_CAPABILITY, 'PEOPLE.BANK.REVEAL'], companyScopes: ['1000'], suffix: 'MOVED1' });
+    const err = await expectRefusal(downloadReissue(tenant.client, draft.reissueId, { requestedBy: 'RI.MV' }, { authorization: companyActor.authorization }), 'REISSUE_UNAVAILABLE');
+    const missingErr = await expectRefusal(downloadReissue(tenant.client, randomUUID(), { requestedBy: 'RI.MV' }, { authorization: companyActor.authorization }), 'REISSUE_UNAVAILABLE');
+    expect(err.message).toBe(missingErr.message);
+    // Restore the assignment first so the requester below can still reach the draft to cancel it.
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      update position_assignment set company_code = '1000'
+       where client = ${tenant.client} and personnel_number = ${pn}`));
+    await cancelReissue(tenant.client, draft.reissueId, { reason: 'cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 90_000);
 });
 
 describe('destination checks, historical replacements, and deliberate approval', () => {
@@ -592,6 +655,20 @@ describe('destination checks, historical replacements, and deliberate approval',
     return createEmployeeBank({ client: tenant.client, personnelNumber: pn, beneficiaryName: beneficiary, bankName: 'Gulf Bank', bankCode: 'GBK01', accountKind: kind, accountValue: value, validFrom: '2026-01-10', changedBy: ACTOR }, { authorization: bankAdmin.authorization }, KEYRING);
   }
 
+  it('the service requires the explicit review assertion, in addition to the digest', async () => {
+    const pn = dEmployees[0]!;
+    const draft = await draftFor(pn);
+    const digest = (await listReissues(tenant.client, runId, { authorization: approver.authorization })).find((r) => r.reissueId === draft.reissueId)!.snapshotDigest;
+    // Missing assertion (digest supplied) → refused by the SERVICE, not only the HTTP route.
+    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: digest }), 'REISSUE_CONFIRMATION_REQUIRED');
+    // Explicit false assertion → same.
+    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: digest, reviewedAssertion: false }), 'REISSUE_CONFIRMATION_REQUIRED');
+    // With both, the distinct approver succeeds.
+    const ok = await approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: digest, reviewedAssertion: true });
+    expect(ok.status).toBe('APPROVED');
+    expect(ok.approvedBy).toBe('RI.APP');
+  }, 60_000);
+
   it('a changed beneficiary with the SAME account number is refused at approval', async () => {
     const pn = dEmployees[0]!;
     const draft = await draftFor(pn);
@@ -611,8 +688,9 @@ describe('destination checks, historical replacements, and deliberate approval',
   it('approval requires the reviewed snapshot digest (missing and stale are refused)', async () => {
     const pn = dEmployees[2]!;
     const draft = await draftFor(pn);
-    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }), 'REISSUE_CONFIRMATION_REQUIRED');
-    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: 'deadbeef' }), 'REISSUE_CONFIRMATION_STALE');
+    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { reviewedAssertion: true }), 'REISSUE_CONFIRMATION_REQUIRED');
+    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: 'x' }), 'REISSUE_CONFIRMATION_REQUIRED');
+    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: 'deadbeef', reviewedAssertion: true }), 'REISSUE_CONFIRMATION_STALE');
     const ok = await approveWithDigest(draft.reissueId);
     expect(ok.status).toBe('APPROVED');
     expect(ok.snapshotDigest).toBe(draft.snapshotDigest);
@@ -632,7 +710,7 @@ describe('destination checks, historical replacements, and deliberate approval',
     const tampered = (await listReissues(tenant.client, runId, { authorization: approver.authorization })).find((r) => r.reissueId === draft.reissueId)!;
     expect(tampered.snapshotDigest).not.toBe(digest);
     await expectRefusal(
-      approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: digest }),
+      approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: digest, reviewedAssertion: true }),
       'REISSUE_CONFIRMATION_STALE',
     );
     await cancelReissue(tenant.client, draft.reissueId, { reason: 'tamper test cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
@@ -717,6 +795,15 @@ describe('the reissue endpoint', () => {
     requestContext.cookie = encodeSessionCookie(tenant.client, noHist.token);
     const denied = await REISSUE_GET(new Request('http://localhost/people/payroll-runs/payment-file/reissue?historical=1&reissue=' + (superseded?.reissueId ?? randomUUID())));
     expect([403, 404]).toContain(denied.status);
+  });
+
+  it('the approve action over HTTP refuses without the review assertion', async () => {
+    // The route checks the explicit assertion BEFORE calling the service, so a missing assertion is a definite
+    // 400 regardless of the target. (The service's own requirement is proved in the destination suite.)
+    requestContext.cookie = encodeSessionCookie(tenant.client, approver.token);
+    const noAssert = await REISSUE_POST(post({ action: 'approve', reissueId: randomUUID(), confirmDigest: 'x' }));
+    expect(noAssert.status).toBe(400);
+    expect(await noAssert.text()).toMatch(/review/i);
   });
 
   it('the approve action over HTTP refuses without a confirm digest', async () => {

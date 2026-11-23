@@ -30,6 +30,9 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
 RUN groupadd --system --gid 1001 cairn && useradd --system --uid 1001 --gid cairn cairn
+# Mount point for private salary payment artifacts. Creating it here, owned by the app user, means a named volume
+# mounted here inherits cairn:cairn on first initialisation. Artifacts are never baked into the image.
+RUN mkdir -p /app/payment-files && chown cairn:cairn /app/payment-files && chmod 700 /app/payment-files
 COPY --from=builder --chown=cairn:cairn /app/.next/standalone ./
 COPY --from=builder --chown=cairn:cairn /app/.next/static ./.next/static
 COPY --from=builder --chown=cairn:cairn /app/public ./public

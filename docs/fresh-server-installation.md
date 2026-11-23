@@ -77,25 +77,39 @@ echo "$(id -u):$(id -g)"
 
 ---
 
-## 3b. Create the private payment-file storage directory
+## 3b. Payment-file storage (no manual step with the shipped Compose file)
+
+Generated salary payment CSVs are retained as encrypted envelopes in the named Docker volume `payment_files`,
+mounted at `/app/payment-files` — outside the source checkout and the web root, so they never enter a build
+context (`.dockerignore` also excludes any repository-local `payment-files/` as defence in depth). The `app`
+image creates `/app/payment-files` owned by the runtime user `cairn` (UID/GID **1001**), so a fresh named volume
+inherits that ownership and needs no manual preparation.
+
+**If you use a host bind mount instead** of the named volume, add the documented override:
 
 ```bash
-mkdir -p payment-files
-chmod 700 payment-files
+# Run once on the host, as a user who can chown. Never chmod 777.
+sudo install -d -o 1001 -g 1001 -m 700 /srv/cairn/payment-files
+# Then start with the bind override (it mounts the host directory at /app/payment-files):
+CAIRN_PAYMENT_FILE_HOST_DIR=/srv/cairn/payment-files \
+  docker compose -f docker-compose.yml -f docker-compose.payment-files-bind.yml up -d
 ```
 
-Generated salary payment CSVs are kept here as encrypted envelopes, outside the web root and the
-source checkout. `.dockerignore`/`.gitignore` exclude it, and the app mounts it at `/app/payment-files`
-via `CAIRN_PAYMENT_FILE_HOST_DIR` (default `./payment-files`). Mount a **durable** host volume here; if
-you run more than one app instance, every instance must see the same, consistent directory (a shared
-host-mounted volume), or a file retained by one cannot be downloaded from another. The app fails closed —
-it will not serve a substitute — if the directory is unset or an artifact is missing.
+If you cannot chown to 1001, add the deploy owner to group 1001 with directory mode `2770` instead. The app does
+**not** assume the deploying user's UID is 1001. If the directory is not writable, preparing a file or approving a
+replacement fails closed with an actionable storage error — it never reports success without a durable artifact.
 
 **Encryption and keys.** Artifacts are AES-256-GCM envelopes under the deployment keyring
-(`CAIRN_BANK_DATA_KEYRING_JSON`), bound to tenant + artifact id. Losing the key or the volume makes the
-retained files unreadable; there is no plaintext copy. **Back up** the directory and the keyring together,
-and test a restore. Rotating the keyring affects NEW artifacts; retained old envelopes stay readable only
-while their key id remains in the keyring.
+(`CAIRN_BANK_DATA_KEYRING_JSON`), bound to tenant + artifact id. Losing the key or the volume makes the retained
+files unreadable; there is no plaintext copy.
+
+**Backup and restore.** Back up the `payment_files` volume **together with the keyring**. Restore order: restore the
+keyring and the volume, then (optionally) run the orphan sweep and legacy backfill
+(`npm run …`, see the operations guide) — a missing artifact is never silently rebuilt as a substitute. Keep old
+key ids in the keyring for as long as historical artifacts must stay readable.
+
+**Multiple app instances.** Every instance that may serve a payment file must see the same, consistent volume
+(a shared host-mounted volume), or a file retained by one instance cannot be downloaded from another.
 
 ---
 

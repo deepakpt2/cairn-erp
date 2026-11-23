@@ -39,7 +39,7 @@ import { accountingReversalLink } from '../finance/schema';
 import { judgePayrollAccess, reachesCompany, type PayrollGrant } from './payroll-access';
 import { accountAsOf } from './employee-bank';
 import { lockReissueState } from './payment-file-locks';
-import { ArtifactError, artifactOf, readArtifact, retainArtifact } from './payment-file-artifacts';
+import { ArtifactError, artifactOf, ownerRequiresArtifact, readArtifact, retainArtifact } from './payment-file-artifacts';
 import { currencyDecimals } from './payroll-run';
 import { assertEmployeeScope, PAYROLL_RESULT_CAPABILITY, PayrollStructureError } from './payroll-structure';
 import { PAYROLL_RUN_CAPABILITY, employee, payrollPaymentFile, payrollResult, payrollRun, salaryPayment, type PaymentFileBankRow } from './schema';
@@ -667,8 +667,13 @@ export async function downloadPaymentFile(
     }
 
     // Prefer the exact retained artifact (byte-identical to the first generated file, even after later bank
-    // changes). Legitimate legacy rows (no artifact) fall back to the deterministic rebuild / stored legacy body.
+    // changes). A NEW-format row (marker present) whose artifact is missing FAILS CLOSED — never a rebuilt
+    // substitute. Only a genuinely LEGACY row (no marker at all) may use its stored body / deterministic rebuild.
     const artifact = await artifactOf(tx, client, 'FILE', row.preparationId);
+    const requiresArtifact = await ownerRequiresArtifact(tx, client, 'FILE', row.preparationId);
+    if (!artifact && requiresArtifact) {
+      refuse('FILE_ARTIFACT_UNAVAILABLE', `The retained payment file ${row.fileReference} is missing from private storage.`, 'Ask a deployment administrator to restore CAIRN_PAYMENT_FILE_DIR; do not upload a substitute.');
+    }
     let body: Buffer;
     if (artifact) {
       const retained = readArtifact(artifact, client, keyringFor(`run ${run.runId}`));

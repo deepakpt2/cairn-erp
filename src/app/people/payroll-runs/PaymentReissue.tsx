@@ -1,8 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
-import { PreviewGeneration, SubmissionKey, acceptsPreview, previewSignature } from './reissue-request-lifecycle';
+import { useEffect, useRef, useState } from 'react';
+import { PreviewGeneration, SubmissionKey, acceptsPreview, previewSignature, readUnresolved, rememberUnresolved, clearUnresolved } from './reissue-request-lifecycle';
 
 import type { ReissuePreview, ReissueView } from '@/modules/people/payroll-payment-reissue';
 
@@ -63,13 +63,32 @@ export function PaymentReissuePanel({
   const [pending, setPending] = useState(false);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
-  // A MUTABLE generation (a ref, not state): an input change bumps it immediately, so a late response captured
-  // with an older value is discarded. Kept in a ref so the in-flight closure sees the current value.
+  // A MUTABLE generation (a ref, not state): each preview request gets a NEW increasing token, so among
+  // overlapping requests the newest response wins. Any input change calls invalidate().
   const previewGen = useRef(new PreviewGeneration());
-  // One retained key per identical logical submission, so a lost-response retry reuses the key and replays the
-  // same draft; changed payloads mint a new key. Never regenerated per click.
+  // One retained key per logical submission, retained even across edits while its outcome is unknown.
   const submission = useRef<SubmissionKey | null>(null);
   if (!submission.current) submission.current = new SubmissionKey(() => crypto.randomUUID());
+  // The signature the currently displayed preview answered; submission requires it to still equal the inputs.
+  const previewSig = useRef<string | null>(null);
+  // The previewed normalized employee set, so a SELECTED submit sends exactly what was previewed.
+  const previewEmployees = useRef<string[]>([]);
+  // Current inputs in a ref, so an in-flight closure reads the LATEST values (not the render's captured ones).
+  const inputsRef = useRef({ source: preparationId, selection, selected, date });
+  inputsRef.current = { source: preparationId, selection, selected, date };
+  const [unresolved, setUnresolved] = useState<{ key: string } | null>(null);
+
+  // Invalidate any in-flight preview when the SOURCE changes via props, and surface a reload-recovery warning
+  // if a prior submission's outcome was never confirmed (key only — never bank or salary data).
+  useEffect(() => {
+    previewGen.current.invalidate();
+    setPreview(null);
+    previewSig.current = null;
+    previewEmployees.current = [];
+    const recovered = readUnresolved(preparationId);
+    if (recovered) setUnresolved({ key: recovered.key });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preparationId]);
 
   const post = async (fields: Record<string, string>) => {
     setPending(true);
@@ -88,13 +107,13 @@ export function PaymentReissuePanel({
     }
   };
 
-  const signature = () => previewSignature({ source: preparationId, selection, selected, date });
+  const signature = () => previewSignature(inputsRef.current);
   /**
    * Like `post`, but distinguishes a network/timeout failure (outcome UNKNOWN — the server may have committed)
    * from a definite server refusal. An unknown outcome keeps the retained key so a retry replays safely and never
    * claims "nothing was saved".
    */
-  const submit = async (poster: typeof post, fields: Record<string, string>): Promise<{ ok: boolean; data?: unknown }> => {
+  const submit = async (poster: typeof post, fields: Record<string, string>): Promise<{ ok: boolean; unknown?: boolean; data?: unknown }> => {
     setPending(true);
     try {
       const form = new FormData();
@@ -104,23 +123,30 @@ export function PaymentReissuePanel({
       if (!response.ok) { setMessage({ ok: false, text }); return { ok: false }; }
       return { ok: true, data: JSON.parse(text) };
     } catch {
-      setMessage({ ok: false, text: 'The outcome is unknown: the connection failed after the request was sent. The draft may exist. Retry with the same details to reuse the same request key, or reload to check the file history.' });
-      return { ok: false };
+      return { ok: false, unknown: true };
     } finally {
       setPending(false);
     }
   };
 
   const runPreview = async () => {
-    const gen = previewGen.current.begin();
-    const sig = signature();
-    const data = await post({ action: 'preview', sourcePreparationId: preparationId, selection, personnelNumbers: selected.join(','), intendedPaymentDate: date });
-    // Discard an in-flight response whose inputs have since changed (or that is out of order).
-    if (!acceptsPreview(gen, previewGen.current, sig, signature)) return;
+    const inputs = inputsRef.current;
+    const token = previewGen.current.issue();
+    const sentSig = previewSignature(inputs);
+    const data = await post({
+      action: 'preview', sourcePreparationId: inputs.source, selection: inputs.selection,
+      personnelNumbers: inputs.selection === 'SELECTED' ? inputs.selected.join(',') : '', intendedPaymentDate: inputs.date,
+    });
+    // Accept only the NEWEST response for the CURRENT inputs; a later request always wins, identical inputs or not.
+    if (!acceptsPreview(token, previewGen.current, sentSig, signature())) return;
     if (data) {
-      setPreview(data as ReissuePreview);
+      previewGen.current.accept(token);
+      const typed = data as ReissuePreview;
+      previewSig.current = typed.inputSignature ?? sentSig;
+      previewEmployees.current = typed.employees.map((e) => e.personnelNumber);
+      setPreview(typed);
       const map: Record<string, Attestation> = {};
-      for (const e of (data as ReissuePreview).employees) map[e.personnelNumber] = attest[e.personnelNumber] ?? blankAttestation();
+      for (const e of typed.employees) map[e.personnelNumber] = attest[e.personnelNumber] ?? blankAttestation();
       setAttest(map);
       setMessage(null);
     }
@@ -128,32 +154,78 @@ export function PaymentReissuePanel({
 
   const submitRequest = async () => {
     if (!preview) return;
-    // The submitted source/selection/date must be exactly the previewed ones; otherwise re-preview.
-    const previewSig = JSON.stringify({ source: preview.sourcePreparationId, selection: preview.selection, selected: [...preview.employees.map((e) => e.personnelNumber)].sort(), date: preview.intendedPaymentDate });
-    if (previewSig !== signature()) {
+    // Submit only the EXACT previewed inputs: source, mode, date and the previewed employee set. The preview's
+    // own signature (computed by the service on the same normalized inputs) must still equal the current inputs.
+    // In ALL mode the employee set is server-derived, so the client-side selected array is irrelevant.
+    if (previewSig.current === null || previewSig.current !== signature()) {
       setMessage({ ok: false, text: 'The selection or date changed since this preview. Review the current preview again before creating the draft.' });
-      setPreview(null);
+      setPreview(null); previewSig.current = null; previewEmployees.current = [];
       return;
     }
-    const eligible = preview.employees.filter((e) => e.eligible);
-    const attestations = eligible.map((e) => ({ personnelNumber: e.personnelNumber, ...attest[e.personnelNumber] }));
-    const payload = JSON.stringify({ sourcePreparationId: preparationId, selection, personnelNumbers: selected.join(','), intendedPaymentDate: date, reason, attestations });
-    // One key per identical logical submission: an ambiguous retry reuses it, the server replays the same draft.
-    const key = submission.current!.keyFor(payload);
-    const result = await submit(post, {
-      action: 'request', sourcePreparationId: preparationId, selection, personnelNumbers: selected.join(','),
-      intendedPaymentDate: date, reason, attestations: JSON.stringify(attestations), requestKey: key,
+    // Never silently drop an ineligible employee: refuse the whole request if the preview contains one.
+    const ineligible = preview.employees.filter((e) => !e.eligible);
+    if (ineligible.length > 0) {
+      setMessage({ ok: false, text: `Refusing the whole request: ${ineligible.map((e) => `${e.personnelNumber} (${e.blocker})`).join('; ')}. Resolve these first; no partial draft is created.` });
+      return;
+    }
+    const previewPns = previewEmployees.current;
+    // Attestations cover exactly the previewed employees; refuse locally if any is incomplete (server re-checks).
+    const incomplete = previewPns.filter((pn) => {
+      const a = attest[pn];
+      return !a || !a.outcome || !a.reason.trim() || !a.verificationDate || !(a.evidenceReference ?? '').trim()
+        || (a.outcome === 'NOT_UPLOADED' && !a.confirmedNoSubmission);
     });
+    if (incomplete.length > 0) {
+      setMessage({ ok: false, text: `Record the full attested outcome (outcome, reason, verification date, evidence${incomplete.length ? ', and no-submission confirmation where needed' : ''}) for: ${incomplete.join(', ')}.` });
+      return;
+    }
+    const attestations = previewPns.map((pn) => ({ personnelNumber: pn, ...attest[pn] }));
+    const fields: Record<string, string> = {
+      action: 'request', sourcePreparationId: preview.sourcePreparationId, selection: preview.selection,
+      personnelNumbers: preview.selection === 'SELECTED' ? previewPns.join(',') : '',
+      intendedPaymentDate: preview.intendedPaymentDate, reason, attestations: JSON.stringify(attestations),
+    };
+    const payload = JSON.stringify(fields);
+    let key: string;
+    try {
+      key = submission.current!.keyFor(payload, fields);
+    } catch {
+      setMessage({ ok: false, text: 'An earlier replacement request has an unknown outcome. Reload to check the file history, or explicitly discard that attempt, before submitting a different one.' });
+      return;
+    }
+    const result = await submit(post, { ...fields, requestKey: key });
     if (result.ok) {
-      submission.current!.clear();
+      submission.current!.resolve();
+      clearUnresolved();
+      setUnresolved(null);
       setMessage({ ok: true, text: 'Replacement draft created. A different authorized approver must release it.' });
-      setPreview(null); setReason(''); router.refresh();
+      setPreview(null); previewSig.current = null; previewEmployees.current = []; setReason(''); router.refresh();
+      return;
+    }
+    if (result.unknown) {
+      // Ambiguous: the server may have committed. Retain the key + payload; warn; offer a same-key retry.
+      submission.current!.markUnresolved();
+      rememberUnresolved(preparationId, key);
+      setUnresolved({ key });
     }
   };
 
+  const abandonUnresolved = () => {
+    submission.current!.abandon();
+    clearUnresolved();
+    setUnresolved(null);
+    setMessage({ ok: false, text: 'The earlier request was marked as abandoned locally. If it did create a draft, cancel it from the history above so it cannot be approved.' });
+  };
+
   const decide = async (reissueId: string, action: 'approve' | 'cancel', cancelReason = '', confirmDigest = '') => {
-    const data = await post({ action, reissueId, reason: cancelReason, confirmDigest, confirmReviewed: action === 'approve' ? 'yes' : '' });
-    if (data) { setMessage({ ok: true, text: action === 'approve' ? 'Replacement approved.' : 'Draft cancelled.' }); router.refresh(); }
+    // Use the unknown-aware path: a lost response after a commit must not claim "nothing was saved".
+    const result = await submit(post, { action, reissueId, reason: cancelReason, confirmDigest, confirmReviewed: action === 'approve' ? 'yes' : '' });
+    if (result.ok) {
+      setMessage({ ok: true, text: action === 'approve' ? 'Replacement approved.' : 'Draft cancelled.' });
+      router.refresh();
+    } else if (result.unknown) {
+      setMessage({ ok: false, text: 'The outcome is unknown: the connection failed after the request was sent. Reload the file history to confirm whether the replacement was released or cancelled; do not repeat the action blindly.' });
+    }
   };
 
   const updateAttest = (pn: string, patch: Partial<Attestation>) => setAttest((prev) => ({ ...prev, [pn]: { ...(prev[pn] ?? blankAttestation()), ...patch } }));
@@ -236,20 +308,28 @@ export function PaymentReissuePanel({
         </div>
       )}
 
+      {unresolved && (
+        <div role="alert" className="rounded border border-signal-warn/50 bg-signal-warn/10 p-3 text-xs">
+          <p>A previous replacement request has an <strong>unknown outcome</strong> (the response was lost). It may have created a draft. Retrying the same details reuses the same request key and will not create a second draft.</p>
+          <p className="mt-1">Request key <span className="code">{unresolved.key.slice(0, 8)}…</span>. Check the file history above; if a draft exists, approve or cancel it. Otherwise discard this attempt.</p>
+          <button type="button" className="btn btn-default mt-2 min-h-9" onClick={abandonUnresolved}>Discard this unknown attempt</button>
+        </div>
+      )}
+
       {canRequest && (
         <div className="space-y-3 border-t border-line pt-3">
           <h3 className="text-sm font-semibold">Request a replacement</h3>
           <div className="grid gap-3 sm:grid-cols-3">
             <label>
               <span className="field-label">Which employees</span>
-              <select className="field-input w-full" value={selection} onChange={(e) => { setSelection(e.target.value as 'ALL' | 'SELECTED'); setPreview(null); previewGen.current.bump(); submission.current!.clear(); }}>
+              <select className="field-input w-full" value={selection} onChange={(e) => { setSelection(e.target.value as 'ALL' | 'SELECTED'); setPreview(null); previewGen.current.invalidate(); previewSig.current = null; previewEmployees.current = []; }}>
                 <option value="ALL">All employees of the file</option>
                 <option value="SELECTED">Only selected employees</option>
               </select>
             </label>
             <label>
               <span className="field-label">Intended payment date</span>
-              <input type="date" className="field-input w-full" value={date} onChange={(e) => { setDate(e.target.value); setPreview(null); previewGen.current.bump(); submission.current!.clear(); }} />
+              <input type="date" className="field-input w-full" value={date} onChange={(e) => { setDate(e.target.value); setPreview(null); previewGen.current.invalidate(); previewSig.current = null; previewEmployees.current = []; }} />
             </label>
             <label>
               <span className="field-label">Reason</span>
@@ -269,7 +349,7 @@ export function PaymentReissuePanel({
                         type="checkbox"
                         checked={selected.includes(e.personnelNumber)}
                         onChange={(ev) => {
-                          setPreview(null); previewGen.current.bump(); submission.current!.clear();
+                          setPreview(null); previewGen.current.invalidate(); previewSig.current = null; previewEmployees.current = [];
                           setSelected((prev) => ev.target.checked ? [...prev, e.personnelNumber] : prev.filter((n) => n !== e.personnelNumber));
                         }}
                       />

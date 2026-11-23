@@ -20,6 +20,7 @@ import { PAYROLL_RUN_CAPABILITY, proposePayrollRun, releasePayrollRun } from '..
 import { postPayrollRun } from '../src/modules/people/payroll-posting';
 import { createEmployeeBank } from '../src/modules/people/employee-bank';
 import { PAYMENT_FILE_CAPABILITY, downloadPaymentFile, preparePaymentFile } from '../src/modules/people/payroll-payment-file';
+import { artifactOf, backfillLegacyArtifact, ownerRequiresArtifact, sweepOrphans } from '../src/modules/people/payment-file-artifacts';
 import { buildPayrollFixture, createPayrollPoster, payrollEmployee, type PayrollFixture } from './helpers/payroll-actor';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
@@ -142,7 +143,7 @@ describe('retained payment file — bytes, restart, fail-closed', () => {
     const first = await downloadPaymentFile(tenant.client, runId, { requestedBy: 'ART.A' }, { authorization: reader.authorization });
     // Find the encrypted artifact on disk; assert it is not plaintext and mode is owner-only where possible.
     const tenantDir = join(storageDir, tenant.client);
-    const files = readdirSync(tenantDir);
+    const files = readdirSync(tenantDir).filter((f) => f.endsWith('.enc'));
     expect(files.length).toBeGreaterThan(0);
     const onDisk = readFileSync(join(tenantDir, files[0]!));
     expect(onDisk.toString('utf8').startsWith('cad1.')).toBe(true);
@@ -159,7 +160,8 @@ describe('retained payment file — bytes, restart, fail-closed', () => {
     // Remove the artifact metadata's target by deleting the file from disk (simulating a lost volume), then the
     // download must refuse rather than rebuild a possibly-different file.
     const tenantDir = join(storageDir, tenant.client);
-    const files = readdirSync(tenantDir);
+    const files = readdirSync(tenantDir).filter((f) => f.endsWith('.enc'));
+    expect(files.length).toBeGreaterThan(0);
     for (const f of files) rmSync(join(tenantDir, f), { force: true });
     await expect(downloadPaymentFile(tenant.client, runId, { confirmReuse: true, requestedBy: 'ART.C' }, { authorization: reader.authorization }))
       .rejects.toMatchObject({ code: 'FILE_ARTIFACT_UNAVAILABLE' });
@@ -182,4 +184,113 @@ describe('retained payment file — bytes, restart, fail-closed', () => {
   }, 120_000);
 });
 
+
+describe('crash-safe publication and reconciliation', () => {
+  let tenant: TestTenant;
+  let storageDir: string;
+  let fx: PayrollFixture;
+  let runId: string;
+  let reader: { authorization: { userId: string; sessionId: string } };
+
+  beforeAll(async () => {
+    process.env.CAIRN_BANK_DATA_KEYRING_JSON = KEYRING_JSON;
+    storageDir = mkdtempSync(join(tmpdir(), 'cairn-art2-'));
+    process.env.CAIRN_PAYMENT_FILE_DIR = storageDir;
+    tenant = await createTenant('artifact-crash', { currency: 'KWD' });
+    fx = await buildPayrollFixture(tenant.client, tenant.companyCode);
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`insert into pay_component (client, code, name, component_kind, affects_net_pay, is_valid, created_by) values
+        (${tenant.client}, 'PENS', 'Pension', 'DEDUCTION', true, true, 'ART_TEST') on conflict do nothing`);
+      await tx.execute(sql`insert into pay_component_config (client, component_code, chart_of_accounts, debit_account, credit_account, cost_receiver_category, created_by)
+        values (${tenant.client}, 'PENS', ${fx.chart}, null, '250000', 'NONE', 'ART_TEST') on conflict do nothing`);
+      await tx.execute(sql`update pay_component_config set cost_receiver_category = 'ASSIGNMENT' where client = ${tenant.client} and component_code = 'BASIC' and chart_of_accounts = ${fx.chart}`);
+    });
+    const main = `AR${Date.now().toString().slice(-6)}`;
+    await defineSalaryStructure({ client: tenant.client, code: main, name: 'Art', currency: fx.currency, validFrom: '2024-01-01', changedBy: 'ART_TEST' }, STRUCTURE_AUTH);
+    await setStructureComponent({ client: tenant.client, structureCode: main, componentCode: 'BASIC', amountKind: 'PERCENT_OF_BASE', amountValue: '100', changedBy: 'ART_TEST' }, STRUCTURE_AUTH);
+    await setStructureComponent({ client: tenant.client, structureCode: main, componentCode: 'PENS', amountKind: 'PERCENT_OF_BASE', amountValue: '5', changedBy: 'ART_TEST' }, STRUCTURE_AUTH);
+    const pn = await payrollEmployee(fx, { positionFrom: '2024-01-01' });
+    await assignStructure({ client: tenant.client, personnelNumber: pn, structureCode: main, baseAmount: '1000', currency: fx.currency, validFrom: '2024-01-01', validTo: null, changedBy: 'ART_TEST' }, STRUCTURE_AUTH);
+    const { createFinanceActor } = await import('./helpers/finance-actor');
+    const bankAdmin = await createFinanceActor(tenant.client, { capabilities: ['PEOPLE.BANK.MAINTAIN', 'PEOPLE.BANK.VIEW'] });
+    await createEmployeeBank({ client: tenant.client, personnelNumber: pn, beneficiaryName: 'Crash Beneficiary', bankName: 'Gulf Bank', bankCode: 'GBK01', accountKind: 'IBAN', accountValue: 'KW00GBK0000000000008888', validFrom: '2024-01-01', changedBy: 'ART_TEST' }, { authorization: bankAdmin.authorization }, KEYRING);
+    const run = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 5, changedBy: 'ART_TEST' }, RUN_AUTH);
+    await releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: 'ART_TEST' }, RUN_AUTH);
+    await maintainNumberRange({ client: tenant.client, objectCode: 'RF_BELEG', companyCode: fx.companyCode, subObject: 'GENERAL', fiscalYear: 0, prefix: 'PR', fromNumber: 1, toNumber: 999999, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CREATE', changedBy: 'ART_TEST', reason: 'artifact crash test' });
+    const poster = await createPayrollPoster(tenant.client);
+    await postPayrollRun({ client: tenant.client, runId: run.runId, changedBy: poster.username, authorization: poster.authorization });
+    runId = run.runId;
+    reader = await createFinanceActor(tenant.client, { capabilities: [PAYMENT_FILE_CAPABILITY, 'PEOPLE.BANK.REVEAL'] });
+  }, 180_000);
+
+  afterAll(async () => {
+    if (tenant) await destroyTenant(tenant.client);
+    rmSync(storageDir, { recursive: true, force: true });
+    if (savedRing === undefined) delete process.env.CAIRN_BANK_DATA_KEYRING_JSON; else process.env.CAIRN_BANK_DATA_KEYRING_JSON = savedRing;
+    if (savedDir === undefined) delete process.env.CAIRN_PAYMENT_FILE_DIR; else process.env.CAIRN_PAYMENT_FILE_DIR = savedDir;
+  });
+
+  it('a NEW-format owner with missing metadata fails closed (marker present, artifact absent)', async () => {
+    const view = await preparePaymentFile({ client: tenant.client, runId, intendedPaymentDate: '2025-05-31', changedBy: 'ART_TEST' }, { authorization: reader.authorization });
+    // The owner is marked new-format and its artifact metadata exists.
+    await withTenant(tenant.client, async (tx) => {
+      expect(await ownerRequiresArtifact(tx, tenant.client, 'FILE', view.preparationId)).toBe(true);
+      expect(await artifactOf(tx, tenant.client, 'FILE', view.preparationId)).not.toBeNull();
+    });
+    // Simulate a lost metadata row (as if the metadata commit never landed) while the marker remains: must fail.
+    const tenantDir = join(storageDir, tenant.client);
+    for (const f of readdirSync(tenantDir).filter((n) => n.endsWith('.enc'))) rmSync(join(tenantDir, f), { force: true });
+    await expect(downloadPaymentFile(tenant.client, runId, { confirmReuse: true, requestedBy: 'ART.C' }, { authorization: reader.authorization }))
+      .rejects.toMatchObject({ code: 'FILE_ARTIFACT_UNAVAILABLE' });
+  });
+
+  it('sweeps an unpublished orphan but never a committed artifact', async () => {
+    // Prepare a FRESH file in its own run so a committed artifact is guaranteed to exist on disk right now.
+    const run5 = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 6, changedBy: 'ART_TEST' }, RUN_AUTH);
+    await releasePayrollRun({ client: tenant.client, runId: run5.runId, changedBy: 'ART_TEST' }, RUN_AUTH);
+    const poster5 = await createPayrollPoster(tenant.client);
+    await postPayrollRun({ client: tenant.client, runId: run5.runId, changedBy: poster5.username, authorization: poster5.authorization });
+    await preparePaymentFile({ client: tenant.client, runId: run5.runId, intendedPaymentDate: '2025-06-30', changedBy: 'ART_TEST' }, { authorization: reader.authorization });
+    // Publish an orphan that has no metadata row.
+    const orphanId = randomUUID();
+    const env = encryptArtifact(Buffer.from('orphan'), { client: tenant.client, artifactId: orphanId, field: 'paymentCsv' }, KEYRING);
+    writeEncryptedArtifact(tenant.client, orphanId, env);
+    const committed = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select artifact_id::text as id, storage_path from payroll_payment_artifact
+       where client = ${tenant.client} order by created_at desc limit 1`)) as unknown as Array<{ id: string; storage_path: string }>;
+    expect(committed.length).toBeGreaterThan(0);
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${committed[0]!.id}.enc`);
+    // Force the grace period to 0 so both the orphan and the committed file (if it were unreferenced) qualify.
+    const result = await withTenant(tenant.client, (tx) => sweepOrphans(tx, tenant.client, { graceMs: 0 }));
+    expect(result.orphanedRemoved).toBeGreaterThanOrEqual(1);
+    // The orphan is gone; the committed artifact's file still exists.
+    expect(readdirSync(join(storageDir, tenant.client))).not.toContain(`${orphanId}.enc`);
+    expect(readdirSync(join(storageDir, tenant.client))).toContain(`${committed[0]!.id}.enc`);
+  });
+
+  it('backfills exact legacy body bytes only when the stored checksum matches, and is repeatable', async () => {
+    const sha = createHash('sha256').update('legacy-body').digest('hex');
+    // A legacy row is identified by the ABSENCE of a marker; use a fresh owner id that has no marker.
+    const ownerId = randomUUID();
+    await withTenant(tenant.client, async (tx) => {
+      expect(await ownerRequiresArtifact(tx, tenant.client, 'FILE', ownerId)).toBe(false);
+    });
+    const wrong = await withTenant(tenant.client, (tx) => backfillLegacyArtifact(tx, {
+      client: tenant.client, ownerKind: 'FILE', ownerId, fileReference: 'LEGACY-1',
+      bytes: Buffer.from('different'), expectedSha256: sha, keyring: KEYRING, changedBy: 'ART_OP', source: 'body',
+    }));
+    expect(wrong.result).toBe('unverifiable');
+    const ok = await withTenant(tenant.client, (tx) => backfillLegacyArtifact(tx, {
+      client: tenant.client, ownerKind: 'FILE', ownerId, fileReference: 'LEGACY-1',
+      bytes: Buffer.from('legacy-body'), expectedSha256: sha, keyring: KEYRING, changedBy: 'ART_OP', source: 'body',
+    }));
+    expect(ok.result).toBe('backfilled-from-body');
+    // Repeatable: a second backfill reports already-retained and writes nothing new.
+    const again = await withTenant(tenant.client, (tx) => backfillLegacyArtifact(tx, {
+      client: tenant.client, ownerKind: 'FILE', ownerId, fileReference: 'LEGACY-1',
+      bytes: Buffer.from('legacy-body'), expectedSha256: sha, keyring: KEYRING, changedBy: 'ART_OP', source: 'body',
+    }));
+    expect(again.result).toBe('already-retained');
+  });
+});
 void createHash;

@@ -1559,3 +1559,23 @@ export const payrollPaymentArtifact = pgTable(
     check('payroll_payment_artifact_len_ck', sql`${t.byteLength} > 0`),
   ],
 );
+
+/**
+ * 9326: marks an owner as new-format (a retained `cad1` artifact is REQUIRED). Absence of a row means genuinely
+ * legacy (pre-host-storage), which may legitimately be served from its stored body or immutable snapshot.
+ */
+export const payrollPaymentArtifactState = pgTable(
+  'payroll_payment_artifact_state',
+  {
+    client: tenant(),
+    ownerKind: varchar('owner_kind', { length: 10 }).notNull(),
+    ownerId: varchar('owner_id', { length: 36 }).notNull(),
+    format: varchar('format', { length: 16 }).notNull(),
+    changedBy: varchar('changed_by', { length: 60 }).notNull().default('SYSTEM'),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.ownerKind, t.ownerId] }),
+    check('payroll_payment_artifact_state_kind_ck', sql`${t.ownerKind} in ('FILE', 'REISSUE')`),
+  ],
+);

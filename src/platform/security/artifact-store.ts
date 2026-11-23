@@ -7,19 +7,25 @@
  * id (`<tenant>/<artifactId>.enc`), never a client-supplied fragment, so there is no traversal surface. The
  * directory and files are created 0700/0600 where the platform permits.
  *
- * Crash-safety: the envelope is written to a private temp file in the same directory, fsynced, then atomically
- * renamed into place. A failure leaves no half-written published file; a retry overwrites nothing (the artifact
- * id is unique, and `existsSync` is used to refuse a silent overwrite). Filesystems and database commits are not
- * atomic together, so the database record is published only after the artifact is durable; a committed row with
- * a missing file fails closed at download with an actionable message.
+ * Durability/crash-safety of a single publish:
+ *  1. Write the envelope to a private STAGING file (`<tenant>/.staging/`), in the same filesystem so the later
+ *     rename is atomic; every byte is written (a short write is retried) and the file is fsynced.
+ *  2. Atomically rename it to `<tenant>/<artifactId>.enc`.
+ *  3. fsync the TENANT DIRECTORY, so the rename's directory entry is durable too (a file fsync alone does not
+ *     guarantee that a power loss preserves the name).
+ * A crash leaves at most a staging temp (never a partial published file) or a fully written `.enc`. Refusing to
+ * overwrite means a retry can never corrupt a published artifact.
  *
- * Persistence is NOT implied by a path: the deployment must mount a durable volume there, shared by every app
- * instance that may read the artifact (or use a shared host-mounted volume consistent across instances).
+ * The filesystem and the database commit are NOT one atomic transaction. The caller therefore publishes the file
+ * first and commits the metadata row afterwards; an orphan `.enc` (no metadata row) can remain if the commit
+ * fails. `payroll-payment-artifacts.ts` reconciles those safely (see `sweepOrphans`), and `deleteArtifact` is only
+ * ever called for a file proven unreferenced.
  */
-import { chmodSync, existsSync, mkdirSync, openSync, closeSync, fsyncSync, readFileSync, renameSync, statSync, unlinkSync, writeSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, fsyncSync, fstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const PAYMENT_FILE_STORAGE_ENV = 'CAIRN_PAYMENT_FILE_DIR';
+const STAGING_DIR = '.staging';
 
 export class ArtifactStoreError extends Error {
   readonly code: string;
@@ -38,12 +44,36 @@ export function paymentFileStorageDir(): string | null {
 
 function requireDir(): string {
   const dir = paymentFileStorageDir();
-  if (!dir) fail(`Payment-file storage is not configured.`, 'Set CAIRN_PAYMENT_FILE_DIR to a durable, host-mounted private directory (see the deployment guide), then retry.');
+  if (!dir) fail('Payment-file storage is not configured.', 'Set CAIRN_PAYMENT_FILE_DIR to a durable, host-mounted private directory (see the deployment guide), then retry.');
   return dir;
 }
 
 /** Plaintext never touches disk: the caller passes the ENCRYPTED envelope text. */
 export type StoredArtifactRef = { relativePath: string };
+
+/** Write every byte, retrying a short write, and confirm the on-disk length matches. */
+function writeFully(fd: number, data: string): void {
+  const buffer = Buffer.from(data, 'utf8');
+  let offset = 0;
+  while (offset < buffer.length) {
+    const written = writeSync(fd, buffer, offset, buffer.length - offset, null);
+    if (written <= 0) throw new ArtifactStoreError('The payment-file artifact could not be fully written.', 'ARTIFACT_WRITE');
+    offset += written;
+  }
+  const size = fstatSync(fd).size;
+  if (size !== buffer.length) throw new ArtifactStoreError('The payment-file artifact was written incompletely.', 'ARTIFACT_WRITE');
+}
+
+/** fsync a directory so a rename inside it is durable across power loss. */
+function fsyncDir(dir: string): void {
+  let fd: number | null = null;
+  try {
+    fd = openSync(dir, 'r');
+    fsyncSync(fd);
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
+}
 
 /**
  * Write an encrypted artifact durably and atomically. Refuses to overwrite an existing artifact. Returns the
@@ -54,24 +84,30 @@ export function writeEncryptedArtifact(client: string, artifactId: string, envel
   if (!/^[A-Za-z0-9]{2,4}$/.test(client)) fail('The tenant key is not valid for storage.');
   if (!/^[0-9a-f-]{36}$/.test(artifactId)) fail('The artifact id is not valid for storage.');
   const tenantDir = join(root, client);
+  const stagingDir = join(tenantDir, STAGING_DIR);
   const relativePath = join(client, `${artifactId}.enc`);
   const absolute = join(root, relativePath);
+  const staging = join(stagingDir, `${artifactId}.${process.pid}.${Date.now()}.tmp`);
   try {
-    if (!existsSync(tenantDir)) mkdirSync(tenantDir, { recursive: true, mode: 0o700 });
+    mkdirSync(tenantDir, { recursive: true, mode: 0o700 });
+    mkdirSync(stagingDir, { recursive: true, mode: 0o700 });
     if (existsSync(absolute)) throw new ArtifactStoreError('An artifact with this id already exists; refusing to overwrite it.', 'ARTIFACT_EXISTS');
-    const temporary = join(tenantDir, `.${artifactId}.${process.pid}.${Date.now()}.tmp`);
-    const fd = openSync(temporary, 'wx', 0o600);
+    const fd = openSync(staging, 'wx', 0o600);
     try {
-      writeSync(fd, envelope, null, 'utf8');
+      writeFully(fd, envelope);
       fsyncSync(fd);
     } finally {
       closeSync(fd);
     }
-    chmodSync(temporary, 0o600);
-    // Atomic publish: readers see the old state or the complete new file, never a partial one.
-    renameSync(temporary, absolute);
+    chmodSync(staging, 0o600);
+    // Atomic publish: readers see nothing or the complete file, never a partial one.
+    renameSync(staging, absolute);
+    // Make the rename durable: flush the directory entry, not just the file contents.
+    fsyncDir(tenantDir);
     return { relativePath };
   } catch (error) {
+    // Best-effort removal of a staging temp this attempt created; never touches a published file.
+    try { unlinkSync(staging); } catch { /* already gone */ }
     if (error instanceof ArtifactStoreError) throw error;
     throw new ArtifactStoreError('The payment-file artifact could not be stored.', 'ARTIFACT_WRITE');
   }
@@ -81,7 +117,6 @@ export function writeEncryptedArtifact(client: string, artifactId: string, envel
 export function readStoredArtifact(relativePath: string): string | null {
   const dir = paymentFileStorageDir();
   if (!dir) return null;
-  // Only ever a server-written relative path of the shape `<tenant>/<uuid>.enc`.
   if (!/^[A-Za-z0-9]{2,4}\/[0-9a-f-]{36}\.enc$/.test(relativePath.replaceAll('\\', '/'))) return null;
   const absolute = join(dir, relativePath);
   try {
@@ -104,7 +139,7 @@ export function artifactExists(relativePath: string): boolean {
   }
 }
 
-/** Remove an artifact (used only for orphan cleanup of a file a failed commit never referenced). */
+/** Remove an artifact. Only ever called for a file proven to have no committed reference. */
 export function deleteArtifact(relativePath: string): void {
   const dir = paymentFileStorageDir();
   if (!dir) return;
@@ -114,6 +149,66 @@ export function deleteArtifact(relativePath: string): void {
   } catch {
     // An already-missing orphan is the goal; nothing to do.
   }
+}
+
+export interface StoredFileEntry {
+  artifactId: string;
+  relativePath: string;
+  modifiedMs: number;
+}
+
+/** List the published `.enc` files of one tenant with their mtimes, for reconciliation. */
+export function listTenantArtifacts(client: string): StoredFileEntry[] {
+  const root = paymentFileStorageDir();
+  if (!root || !/^[A-Za-z0-9]{2,4}$/.test(client)) return [];
+  const tenantDir = join(root, client);
+  let names: string[];
+  try {
+    names = readdirSync(tenantDir);
+  } catch {
+    return [];
+  }
+  const entries: StoredFileEntry[] = [];
+  for (const name of names) {
+    const match = /^([0-9a-f-]{36})\.enc$/.exec(name);
+    if (!match) continue;
+    try {
+      const stat = statSync(join(tenantDir, name));
+      if (stat.isFile()) entries.push({ artifactId: match[1]!, relativePath: join(client, name), modifiedMs: stat.mtimeMs });
+    } catch {
+      // Vanished mid-scan: nothing to reconcile.
+    }
+  }
+  return entries;
+}
+
+/** List stale staging temp files of one tenant older than `olderThanMs`, for cleanup. */
+export function listStaleStaging(client: string, olderThanMs: number, now = Date.now()): string[] {
+  const root = paymentFileStorageDir();
+  if (!root || !/^[A-Za-z0-9]{2,4}$/.test(client)) return [];
+  const stagingDir = join(root, client, STAGING_DIR);
+  let names: string[];
+  try {
+    names = readdirSync(stagingDir);
+  } catch {
+    return [];
+  }
+  const stale: string[] = [];
+  for (const name of names) {
+    if (!name.endsWith('.tmp')) continue;
+    try {
+      const stat = statSync(join(stagingDir, name));
+      if (stat.isFile() && now - stat.mtimeMs > olderThanMs) stale.push(join(stagingDir, name));
+    } catch {
+      // Vanished: fine.
+    }
+  }
+  return stale;
+}
+
+/** Remove a stale staging temp file (never a published artifact). */
+export function deleteStagingFile(absolutePath: string): void {
+  try { unlinkSync(absolutePath); } catch { /* gone */ }
 }
 
 function fail(message: string, remedy?: string, code = 'ARTIFACT_STORE'): never {

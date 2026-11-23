@@ -22,3 +22,7 @@ credentials
 .netrc
 *.dump
 *.sql.gz
+
+# Repository-local payment-file fallback must never enter an image build context (encrypted salary artifacts).
+payment-files
+**/payment-files

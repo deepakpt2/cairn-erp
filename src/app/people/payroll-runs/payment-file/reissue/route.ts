@@ -101,7 +101,7 @@ export async function POST(request: Request): Promise<Response> {
         return refusal(400, 'Confirm that you reviewed the frozen instruction before approving.', 'Open Review on the draft and tick the acknowledgment.');
       }
       const confirmDigest = String(form?.get('confirmDigest') ?? '');
-      const view = await approveReissue(s.user.client, String(form?.get('reissueId') ?? ''), s.user.username, access, { confirmDigest });
+      const view = await approveReissue(s.user.client, String(form?.get('reissueId') ?? ''), s.user.username, access, { confirmDigest, reviewedAssertion: true });
       return json(view);
     }
     if (action === 'cancel') {
