@@ -68,7 +68,8 @@
     "smoke:browser:gl-accounts": "tsx scripts/browser-smoke.ts --target gl-accounts",
     "docs:check": "node scripts/docs-check.mjs",
     "payment-file:maintenance": "tsx scripts/payment-file-maintenance.ts",
-    "test:ui": "vitest run --config vitest.ui.config.ts"
+    "test:ui": "vitest run --config vitest.ui.config.ts",
+    "fx:audit": "tsx scripts/fx-rate-audit.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",

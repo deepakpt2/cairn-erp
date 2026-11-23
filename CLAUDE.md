@@ -86,6 +86,15 @@ Business logic must be built as **service functions in `src/modules/<module>/*.t
 
 Keep this split even for small features. When a new module/feature doc is needed, reflect it in `docs/codemap/modules/<module>.md`.
 
+## Foreign currency (finance)
+
+- The posting engine (`src/platform/posting/index.ts`) resolves a foreign rate from the tenant's `exchange_rate` master (`src/modules/finance/exchange-rate-lookup.ts`): newest `valid_from <= posting date`, AVERAGE unless a caller supplies a resolved rate, ratios and direct/indirect quotes honoured. **It never defaults a missing foreign rate to 1**; same-currency and explicitly maintained 1 are valid. Provenance is snapshotted on `journal_entry` (`rate_source`, `rate_type`, `rate_valid_from`, raw rate/ratios).
+- Every journal balances in **both** currencies. A realized exchange difference is a local-only line (`journal_entry_line.is_local_only`, `amount_document = 0`) so no fictitious foreign amount is written. Rounding-sized residuals are absorbed deterministically; stated local amounts must balance exactly.
+- Incoming/outgoing payments and payment runs relieve AR/AP at the open item's `amount_local` carrying amount and post the difference to `FXGAIN`/`FXLOSS`; a missing determination refuses atomically. Bank currency must equal the payment currency or the company local currency; a third currency is refused.
+- Settlement over an **active** period-end valuation is refused until that valuation document is reversed (`src/modules/finance/fx-settlement.ts`). Clearing reset reverses the clearing journal first when it posted realized FX, then lifts the stamps; a closed reversal period refuses the reset without reopening anything.
+- Bank reconciliation compares statements and ledger in the **bank account currency** (line amount when the line is in that currency, else the document local amount when the account is the local currency), preserves local carrying separately, and flags a line with no account-currency evidence as blocking `LEDGER_CURRENCY`; it never converts at today's rate. Shared bank G/Ls remain refused.
+- Historical foreign postings with rate 1 and no provenance are reported read-only by `npm run fx:audit`; correct them with adjusting documents, never by rewriting history. See `docs/05-fico-finance-controlling/foreign-currency.md`.
+
 ## Printable payslip (people / payroll)
 
 `/people/payroll-results` links **Print / Save as PDF** to the protected route handler `/people/payroll-results/payslip?result=…` (`src/app/people/payroll-results/payslip/route.ts`). The service is `getPayslip` in `src/modules/people/payroll-payslip.ts`; it is a read-only view of the stored result and its lines — never a recalculation, posting or payment.

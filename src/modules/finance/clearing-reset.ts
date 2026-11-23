@@ -1,18 +1,18 @@
 /**
  * Reset cleared items — SCR-071 / R-119.
  *
- * Reset only: the clearing stamp lifts from every line the named
- * clearing document cleared, so the items stand open again. No
- * journal posts, no amount changes, no document is edited. The
- * reset itself stands on the clearing_reset record — clearing
- * document, former clearing date, items reopened, mandatory
- * reason — written in the same transaction as the stamp clearing.
- * Reversing the clearing document is a separate later act.
+ * The clearing stamp lifts from every line the named clearing document cleared, so the items
+ * stand open again. When the clearing posted a realized exchange difference, the clearing journal
+ * is also reversed — an exact mirror at the original rates — because lifting the stamps alone
+ * would leave that difference posted. Otherwise no journal posts and no document is edited. The
+ * reset itself stands on the clearing_reset record — clearing document, former clearing date,
+ * items reopened, mandatory reason — written in the same transaction as the stamp clearing.
  */
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
+import { PostingError, reverseJournalEntry } from '../../platform/posting';
 import { clearingReset, glClearingAllocation, journalEntry, journalEntryLine } from './schema';
 
 export const CLEARING_RESET_CAPABILITY = 'FIN.CLEARING.RESET';
@@ -195,6 +195,17 @@ export async function resetClearingTx(
     );
   }
 
+  // A clearing that posted a realized exchange difference cannot be reset by lifting stamps alone:
+  // the local-only FX line would remain posted while the items reopen. Its journal is reversed
+  // below, as an exact mirror at the original rates.
+  const fxRows = await tx.execute(sql`
+    select count(*)::int as n from journal_entry_line
+     where client = ${input.client} and company_code = ${input.companyCode}
+       and document_number = ${input.clearingDocument} and fiscal_year = ${input.fiscalYear}
+       and is_local_only
+  `) as unknown as Array<{ n: number }>;
+  const hasRealizedFx = (fxRows[0]?.n ?? 0) > 0;
+
   // A clearing that generated residual items cannot simply be reset: the
   // residual line is a posted open item of the clearing document, so lifting
   // the stamps alone would leave it open beside the reopened originals.
@@ -210,6 +221,27 @@ export async function resetClearingTx(
   }
 
   const clearingDate = lines[0].clearingDate!;
+
+  if (hasRealizedFx) {
+    await reverseJournalEntry(tx, {
+      client: input.client,
+      documentNumber: input.clearingDocument,
+      fiscalYear: input.fiscalYear,
+      reversalDate: clearingDate,
+      reason: `Clearing reset: ${input.reason.trim()}`,
+      reversedBy: input.changedBy,
+      transactionCode: CLEARING_RESET_CAPABILITY,
+    }).catch((error: unknown) => {
+      if (error instanceof PostingError) {
+        throw new ClearingResetError(
+          `The clearing carries a realized exchange difference and its reversal was refused: ${error.message}`,
+          `${error.remedy} The items were not reopened.`,
+        );
+      }
+      throw error;
+    });
+  }
+
   const itemRefs = lines.map((l) => `${l.documentNumber}/${l.fiscalYear}/${l.lineNumber}`).join(',');
   const count = await tx.select({ n: sql<number>`count(*)::int` }).from(clearingReset)
     .where(eq(clearingReset.client, input.client));

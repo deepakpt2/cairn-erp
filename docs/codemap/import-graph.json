@@ -3842,6 +3842,9 @@
     "platform/auth/current.ts",
     "ui/kit/index.ts"
   ],
+  "app/people/employees/EmployeeBank.tsx": [
+    "app/people/employees/bank-actions.ts"
+  ],
   "app/people/employees/Employees.tsx": [
     "app/people/employees/actions.ts",
     "modules/people/employee-master.ts",
@@ -3861,6 +3864,12 @@
     "platform/db/client.ts",
     "platform/tables/security.ts"
   ],
+  "app/people/employees/bank-actions.ts": [
+    "modules/people/employee-bank.ts",
+    "modules/people/employee-master.ts",
+    "platform/auth/current.ts",
+    "platform/security/bank-data-keyring.ts"
+  ],
   "app/people/employees/component-actions.ts": [
     "modules/people/payroll-components.ts",
     "modules/people/payroll-run.ts",
@@ -3868,9 +3877,11 @@
     "platform/auth/current.ts"
   ],
   "app/people/employees/page.tsx": [
+    "app/people/employees/EmployeeBank.tsx",
     "app/people/employees/Employees.tsx",
     "app/people/employees/PayStructure.tsx",
     "app/people/employees/RecurringComponents.tsx",
+    "modules/people/employee-bank.ts",
     "modules/people/employee-master.ts",
     "modules/people/employee-tier.ts",
     "modules/people/org-structure.ts",
@@ -3879,6 +3890,7 @@
     "modules/people/payroll-structure.ts",
     "modules/people/record-types.ts",
     "platform/auth/current.ts",
+    "platform/security/bank-data-keyring.ts",
     "ui/kit/index.ts"
   ],
   "app/people/leave-live.ts": [
@@ -3905,14 +3917,23 @@
   ],
   "app/people/payroll-results/page.tsx": [
     "modules/people/payroll-components.ts",
+    "modules/people/payroll-payslip.ts",
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "ui/kit/index.ts"
   ],
+  "app/people/payroll-results/payslip/route.ts": [
+    "modules/people/payroll-payslip.ts",
+    "platform/auth/current.ts"
+  ],
   "app/people/payroll-runs/Adjustments.tsx": [
     "app/people/payroll-runs/adjustment-actions.ts"
+  ],
+  "app/people/payroll-runs/PaymentReissue.tsx": [
+    "app/people/payroll-runs/reissue-request-lifecycle.ts",
+    "modules/people/payroll-payment-reissue.ts"
   ],
   "app/people/payroll-runs/RunForms.tsx": [
     "app/people/payroll-runs/actions.ts",
@@ -3933,10 +3954,13 @@
   ],
   "app/people/payroll-runs/page.tsx": [
     "app/people/payroll-runs/Adjustments.tsx",
+    "app/people/payroll-runs/PaymentReissue.tsx",
     "app/people/payroll-runs/RunForms.tsx",
     "modules/finance/payment-run.ts",
     "modules/people/payroll-background.ts",
     "modules/people/payroll-components.ts",
+    "modules/people/payroll-payment-file.ts",
+    "modules/people/payroll-payment-reissue.ts",
     "modules/people/payroll-posting.ts",
     "modules/people/payroll-run.ts",
     "modules/people/payroll-structure.ts",
@@ -3944,6 +3968,17 @@
     "platform/auth/current.ts",
     "platform/i18n/index.ts",
     "ui/kit/index.ts"
+  ],
+  "app/people/payroll-runs/payment-file/reissue/route.ts": [
+    "modules/people/payroll-payment-reissue.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/people/payroll-runs/payment-file/route.ts": [
+    "modules/people/payroll-payment-file.ts",
+    "platform/auth/current.ts"
+  ],
+  "app/people/payroll-runs/reissue-request-lifecycle.ts": [
+    "modules/people/payment-reissue-inputs.ts"
   ],
   "app/people/salary-structures/StructureForms.tsx": [
     "app/people/salary-structures/actions.ts"
@@ -5527,6 +5562,7 @@
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
     "platform/posting/money.ts"
   ],
   "modules/finance/carryforward.ts": [
@@ -5562,7 +5598,8 @@
   "modules/finance/clearing-reset.ts": [
     "modules/finance/schema.ts",
     "platform/change/index.ts",
-    "platform/db/client.ts"
+    "platform/db/client.ts",
+    "platform/posting/index.ts"
   ],
   "modules/finance/close-cockpit.ts": [
     "modules/finance/accrual.ts",
@@ -5639,15 +5676,19 @@
     "platform/periods/index.ts"
   ],
   "modules/finance/customer-clearing.ts": [
+    "modules/finance/fx-settlement.ts",
     "modules/finance/schema.ts",
     "modules/foundation/customer-company-schema.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
     "platform/posting/index.ts",
     "platform/tables/audit-trail.ts"
   ],
   "modules/finance/customer-credit-memo.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/finance/fx-settlement.ts",
     "modules/foundation/customer-company-schema.ts",
     "modules/foundation/payment-terms-schema.ts",
     "modules/foundation/schema.ts",
@@ -5658,6 +5699,7 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
     "platform/posting/index.ts",
     "platform/posting/money.ts"
   ],
@@ -5692,6 +5734,8 @@
     "platform/posting/index.ts"
   ],
   "modules/finance/customer-invoice.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/finance/fx-settlement.ts",
     "modules/foundation/customer-company-schema.ts",
     "modules/foundation/payment-terms-schema.ts",
     "modules/foundation/schema.ts",
@@ -5700,6 +5744,7 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
     "platform/posting/index.ts",
     "platform/posting/money.ts"
   ],
@@ -5733,14 +5778,28 @@
     "platform/db/client.ts",
     "platform/periods/index.ts"
   ],
+  "modules/finance/exchange-rate-lookup.ts": [
+    "modules/foundation/schema.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
+  ],
+  "modules/finance/fx-settlement.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/foundation/schema.ts",
+    "platform/db/client.ts",
+    "platform/posting/decimal.ts"
+  ],
   "modules/finance/fx-valuation.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
     "platform/auth/company-scope.ts",
     "platform/auth/service-authority.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
-    "platform/posting/index.ts"
+    "platform/posting/decimal.ts",
+    "platform/posting/index.ts",
+    "platform/posting/money.ts"
   ],
   "modules/finance/gl-account-group-maintenance.ts": [
     "modules/finance/gl-account-group-schema.ts",
@@ -5771,6 +5830,7 @@
     "platform/posting/decimal.ts"
   ],
   "modules/finance/gl-clearing.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
     "modules/purchasing/schema.ts",
@@ -5802,6 +5862,8 @@
     "platform/posting/index.ts"
   ],
   "modules/finance/incoming-payment.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/finance/fx-settlement.ts",
     "modules/finance/schema.ts",
     "modules/foundation/customer-company-schema.ts",
     "modules/foundation/payment-terms-schema.ts",
@@ -5817,6 +5879,7 @@
     "platform/posting/money.ts"
   ],
   "modules/finance/intercompany.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
     "platform/auth/company-scope.ts",
@@ -5841,6 +5904,8 @@
   ],
   "modules/finance/ledger-journal.ts": [],
   "modules/finance/outgoing-payment.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/finance/fx-settlement.ts",
     "modules/finance/schema.ts",
     "modules/foundation/payment-terms-schema.ts",
     "modules/foundation/schema.ts",
@@ -5893,6 +5958,8 @@
     "platform/db/client.ts"
   ],
   "modules/finance/payment-run.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/finance/fx-settlement.ts",
     "modules/finance/payment-run-release.ts",
     "modules/finance/schema.ts",
     "modules/foundation/schema.ts",
@@ -5976,14 +6043,18 @@
     "platform/periods/index.ts"
   ],
   "modules/finance/vendor-clearing.ts": [
+    "modules/finance/fx-settlement.ts",
     "modules/finance/schema.ts",
     "modules/foundation/supplier-company-schema.ts",
     "platform/change/index.ts",
     "platform/db/client.ts",
     "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
     "platform/posting/index.ts"
   ],
   "modules/finance/vendor-credit-memo.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/finance/fx-settlement.ts",
     "modules/finance/schema.ts",
     "modules/finance/vendor-invoice.ts",
     "modules/foundation/payment-terms-schema.ts",
@@ -5993,6 +6064,7 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
     "platform/posting/index.ts",
     "platform/posting/money.ts"
   ],
@@ -6028,6 +6100,8 @@
     "platform/posting/index.ts"
   ],
   "modules/finance/vendor-invoice.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/finance/fx-settlement.ts",
     "modules/finance/schema.ts",
     "modules/foundation/payment-terms-schema.ts",
     "modules/foundation/schema.ts",
@@ -6036,6 +6110,7 @@
     "platform/db/client.ts",
     "platform/numbering/index.ts",
     "platform/periods/index.ts",
+    "platform/posting/decimal.ts",
     "platform/posting/index.ts",
     "platform/posting/money.ts"
   ],
@@ -7519,6 +7594,16 @@
     "platform/db/client.ts",
     "platform/tables/security.ts"
   ],
+  "modules/people/employee-bank.ts": [
+    "modules/people/payment-file-locks.ts",
+    "modules/people/payroll-access.ts",
+    "modules/people/payroll-structure.ts",
+    "modules/people/schema.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/security/bank-data-encryption.ts",
+    "platform/security/bank-record-id.ts"
+  ],
   "modules/people/employee-master.ts": [
     "modules/people/employee-reach.ts",
     "modules/people/employee-tier.ts",
@@ -7633,6 +7718,18 @@
     "platform/change/index.ts",
     "platform/db/client.ts"
   ],
+  "modules/people/payment-file-artifacts.ts": [
+    "modules/people/payment-file-locks.ts",
+    "modules/people/schema.ts",
+    "platform/db/client.ts",
+    "platform/security/artifact-encryption.ts",
+    "platform/security/artifact-store.ts",
+    "platform/security/bank-data-encryption.ts"
+  ],
+  "modules/people/payment-file-locks.ts": [
+    "platform/db/client.ts"
+  ],
+  "modules/people/payment-reissue-inputs.ts": [],
   "modules/people/payroll-access.ts": [
     "platform/auth/service-authority.ts",
     "platform/auth/session.ts",
@@ -7657,6 +7754,49 @@
     "modules/people/schema.ts",
     "platform/change/index.ts",
     "platform/db/client.ts"
+  ],
+  "modules/people/payroll-payment-file.ts": [
+    "modules/finance/schema.ts",
+    "modules/people/employee-bank.ts",
+    "modules/people/payment-file-artifacts.ts",
+    "modules/people/payment-file-locks.ts",
+    "modules/people/payroll-access.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
+    "modules/people/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/db/client.ts",
+    "platform/posting/money.ts",
+    "platform/security/bank-data-encryption.ts",
+    "platform/security/bank-data-keyring.ts"
+  ],
+  "modules/people/payroll-payment-reissue.ts": [
+    "modules/finance/schema.ts",
+    "modules/people/employee-bank.ts",
+    "modules/people/payment-file-artifacts.ts",
+    "modules/people/payment-file-locks.ts",
+    "modules/people/payment-reissue-inputs.ts",
+    "modules/people/payroll-access.ts",
+    "modules/people/payroll-payment-file.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/payroll-structure.ts",
+    "modules/people/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/change/index.ts",
+    "platform/db/client.ts",
+    "platform/posting/money.ts",
+    "platform/security/bank-data-encryption.ts",
+    "platform/security/bank-data-keyring.ts"
+  ],
+  "modules/people/payroll-payslip.ts": [
+    "modules/foundation/schema.ts",
+    "modules/people/payroll-access.ts",
+    "modules/people/payroll-components.ts",
+    "modules/people/payroll-run.ts",
+    "modules/people/schema.ts",
+    "platform/auth/service-authority.ts",
+    "platform/db/client.ts",
+    "platform/posting/money.ts"
   ],
   "modules/people/payroll-posting.ts": [
     "modules/finance/gl-document.ts",
@@ -8271,6 +8411,7 @@
     "platform/auth/pattern.ts"
   ],
   "modules/purchasing/follow-on.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
     "modules/foundation/schema.ts",
     "modules/foundation/supplier-purchasing-schema.ts",
     "modules/inventory/unit-conversion.ts",
@@ -8320,6 +8461,8 @@
   "modules/purchasing/invoice-verification.ts": [
     "modules/finance/asset-acquisition.ts",
     "modules/finance/clearing-reset.ts",
+    "modules/finance/exchange-rate-lookup.ts",
+    "modules/finance/fx-settlement.ts",
     "modules/finance/schema.ts",
     "modules/finance/vendor-down-payment-clearing.ts",
     "modules/foundation/payment-terms-schema.ts",
@@ -9308,6 +9451,7 @@
   "platform/periods/windows.ts": [],
   "platform/posting/decimal.ts": [],
   "platform/posting/index.ts": [
+    "modules/finance/exchange-rate-lookup.ts",
     "modules/finance/gl-account-vocabulary.ts",
     "modules/finance/schema.ts",
     "modules/foundation/company-code-assignments.ts",
@@ -9345,6 +9489,10 @@
     "modules/sales/schema.ts",
     "platform/tables/index.ts"
   ],
+  "platform/security/artifact-encryption.ts": [
+    "platform/security/bank-data-encryption.ts"
+  ],
+  "platform/security/artifact-store.ts": [],
   "platform/security/bank-data-encryption.ts": [
     "platform/security/bank-record-id.ts"
   ],

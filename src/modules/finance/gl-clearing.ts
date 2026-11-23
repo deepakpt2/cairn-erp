@@ -87,7 +87,8 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { changeDocument, changeDocumentItem } from '../../platform/tables/audit-trail';
-import { accountDetermination, documentType, employeeToleranceGroup, exchangeRate } from '../foundation/schema';
+import { accountDetermination, documentType, employeeToleranceGroup } from '../foundation/schema';
+import { resolveExchangeRate } from './exchange-rate-lookup';
 import {
   glAccount, glAccountCompany, glClearingAllocation, glClearingResidual,
   journalEntry, journalEntryLine, residualReason, vendorInvoice,
@@ -329,15 +330,8 @@ async function standingClearingForRequestKey(
 async function rateToLocal(
   tx: Tx, client: string, currency: string, localCurrency: string, onDate: string,
 ): Promise<number | null> {
-  if (currency === localCurrency) return 1;
-  const [row] = await tx.select().from(exchangeRate).where(and(
-    eq(exchangeRate.client, client),
-    eq(exchangeRate.rateType, 'AVERAGE'),
-    eq(exchangeRate.fromCurrency, currency),
-    eq(exchangeRate.toCurrency, localCurrency),
-  )).orderBy(sql`${exchangeRate.validFrom} desc`);
-  if (!row || row.validFrom > onDate) return null;
-  return Number(row.rate) * row.ratioTo / row.ratioFrom;
+  const resolved = await resolveExchangeRate(tx, client, currency, localCurrency, onDate, 'AVERAGE');
+  return resolved ? Number(resolved.effectiveRate) : null;
 }
 
 export async function clearGlItems(input: {
@@ -767,7 +761,7 @@ export async function clearGlItems(input: {
       };
       lines.push({
         glAccount: account, debitCredit: fxLine.debitCredit,
-        amount: documentCurrency === localCurrency ? fxLine.amountLocal : round4(fxLine.amountLocal / (rates.get(documentCurrency) ?? 1)),
+        amount: documentCurrency === localCurrency ? fxLine.amountLocal : round4(fxLine.amountLocal / rates.get(documentCurrency)!),
         amountLocal: fxLine.amountLocal,
       });
     }
@@ -789,8 +783,8 @@ export async function clearGlItems(input: {
       lines: lines.map((l) => ({
         glAccount: l.glAccount,
         debitCredit: l.debitCredit,
-        amount: Math.abs(l.amount).toFixed(2),
-        amountLocal: Math.abs(l.amountLocal).toFixed(2),
+        amount: Math.abs(l.amount).toFixed(4),
+        amountLocal: Math.abs(l.amountLocal).toFixed(4),
         ...(l.businessPartner ? { businessPartner: l.businessPartner } : {}),
         ...(l.assignment ? { assignment: l.assignment } : {}),
         ...(l.paymentTerms ? { paymentTerms: l.paymentTerms } : {}),

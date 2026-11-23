@@ -157,7 +157,7 @@ HR: employees, org assignments, time/leave, pay components, salary structures & 
 absence, delegation, delegation_approval, delegation_scope, employee, employee_bank_detail, employee_pay_component, employee_record, job, leave_quota, org_hierarchy, org_unit, pay_component, pay_component_config, payroll_adjustment, payroll_calc_stage, payroll_payment_artifact, payroll_payment_artifact_state, payroll_payment_file, payroll_payment_reissue, payroll_payment_reissue_intent, payroll_payment_reissue_intent_line, payroll_payment_reissue_line, payroll_result, payroll_result_line, payroll_run, payroll_run_exception, payroll_run_operation, position, position_assignment, record_field, record_field_value, record_type, salary_payment, salary_structure, salary_structure_assignment, salary_structure_component, time_recording, time_type
 
 ## Depends on
-finance, foundation, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/notification, platform/numbering, platform/periods, platform/posting, platform/tables, ui/kit
+finance, foundation, platform/auth, platform/change, platform/db, platform/i18n, platform/job, platform/notification, platform/numbering, platform/periods, platform/posting, platform/security, platform/tables, ui/kit
 
 ## Used by
 dev/walkthrough-volume.ts, platform, platform/auth, platform/notification, platform/tenancy, purchasing, worker/jobs.ts

@@ -155,7 +155,9 @@ export default function CustomerInvoice({ invoice, taxes, canPost, today }: {
           <Message state={cancelState} />
           <p className="mt-2 text-sm">
             Invoice <strong>{shownInvoice.invoiceNumber}</strong> for customer {shownInvoice.customerNumber} stands{' '}
-            <strong>{shownInvoice.status}</strong>: gross {shownInvoice.grossAmount} {shownInvoice.currency},
+            <strong>{shownInvoice.status}</strong>: gross {shownInvoice.grossAmount} {shownInvoice.currency}
+            {Number(shownInvoice.exchangeRate) !== 1
+              ? ` at ${shownInvoice.exchangeRate} (${shownInvoice.localGrossAmount} local)` : ''},
             tax {shownInvoice.taxAmount}, journal {shownInvoice.journalDocumentNumber}
             {shownInvoice.dueDate ? `, due ${shownInvoice.dueDate}` : ''}
             {shownInvoice.cancelledBy ? `, cancelled by ${shownInvoice.cancelledBy}` : ''}

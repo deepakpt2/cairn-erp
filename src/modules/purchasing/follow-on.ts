@@ -17,8 +17,8 @@ import { and, eq, sql } from 'drizzle-orm';
 import { type Tx, withTenant as withTenantScoped } from '../../platform/db/client';
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { plantDocumentInReach, purchasingActor } from '../../platform/auth/scope-actor';
-import { exchangeRate } from '../foundation/schema';
 import { companyCode, plant, purchasingOrgPlant } from '../foundation/schema';
+import { resolveExchangeRate } from '../finance/exchange-rate-lookup';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import {
@@ -87,28 +87,12 @@ export async function convertMoney(
   const from = fromCurrency.trim().toUpperCase();
   const to = toCurrency.trim().toUpperCase();
   if (from === to) return amount;
-  const direct = await rate(tx, client, from, to, onDate);
-  if (direct != null) return amount * direct;
-  const inverse = await rate(tx, client, to, from, onDate);
-  if (inverse != null && inverse !== 0) return amount / inverse;
+  const resolved = await resolveExchangeRate(tx, client, from, to, onDate, 'AVERAGE');
+  if (resolved) return amount * Number(resolved.effectiveRate);
   throw new FollowOnError(
     `No exchange rate from ${from} to ${to} stands on ${onDate}.`,
     'Maintain an average exchange rate for that pair, then save again.',
   );
-}
-
-async function rate(
-  tx: Tx, client: string, from: string, to: string, onDate: string,
-): Promise<number | null> {
-  const [row] = await tx.select().from(exchangeRate).where(and(
-    eq(exchangeRate.client, client),
-    eq(exchangeRate.rateType, 'AVERAGE'),
-    eq(exchangeRate.fromCurrency, from),
-    eq(exchangeRate.toCurrency, to),
-  )).orderBy(sql`${exchangeRate.validFrom} desc`);
-  if (!row || row.validFrom > onDate) return null;
-  const quoted = Number(row.rate) * row.ratioTo / row.ratioFrom;
-  return row.isIndirectQuote && quoted !== 0 ? 1 / quoted : quoted;
 }
 
 async function baseQuantity(

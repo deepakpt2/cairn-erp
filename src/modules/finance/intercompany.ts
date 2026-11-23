@@ -25,7 +25,8 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
-import { companyCode as companyMaster, documentType, exchangeRate } from '../foundation/schema';
+import { companyCode as companyMaster, documentType } from '../foundation/schema';
+import { resolveExchangeRate } from './exchange-rate-lookup';
 import {
   glAccount, glAccountCompany, intercompanyClearingConfig, intercompanyDocumentHeader, journalEntryLine,
 } from './schema';
@@ -85,20 +86,9 @@ export interface IntercompanyPostingResult {
 export async function rateToLocal(
   tx: Tx, client: string, currency: string, localCurrency: string, onDate: string,
 ): Promise<number | null> {
-  if (currency === localCurrency) return 1;
-  const [row] = await tx.select().from(exchangeRate).where(and(
-    eq(exchangeRate.client, client),
-    eq(exchangeRate.rateType, 'AVERAGE'),
-    eq(exchangeRate.fromCurrency, currency),
-    eq(exchangeRate.toCurrency, localCurrency),
-    sql`${exchangeRate.validFrom} <= ${onDate}`,
-  )).orderBy(sql`${exchangeRate.validFrom} desc`).limit(1);
-  if (!row) return null;
-  const quoted = Number(row.rate) * row.ratioTo / ratio(row.ratioFrom);
-  return row.isIndirectQuote && quoted !== 0 ? 1 / quoted : quoted;
+  const resolved = await resolveExchangeRate(tx, client, currency, localCurrency, onDate, 'AVERAGE');
+  return resolved ? Number(resolved.effectiveRate) : null;
 }
-
-const ratio = (n: number) => (n === 0 ? 1 : n);
 
 /** Pairs the caller may see: both companies of a pair must lie inside the caller's Company Code scope. */
 export async function listIntercompanyConfigs(

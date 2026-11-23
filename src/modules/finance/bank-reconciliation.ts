@@ -11,10 +11,11 @@
  * is negative. The ledger side uses the same sign: a debit to the bank asset is positive and a credit
  * is negative. Overdrawn balances are therefore ordinary negative numbers.
  *
- * Reconciliation is supported in the bank account's own currency only when that is also the company
- * local currency. A foreign-currency bank account is refused explicitly because the current posting
- * model supplies no authoritative comparable balance for it; nothing is guessed and no FX rate is
- * invented.
+ * Reconciliation happens in the bank account's own currency. A posted bank line is comparable when
+ * the line itself is in that currency, or when it is in the company local currency (the document's
+ * local amount is then the carrying amount). A line in any other currency — a legacy entry with no
+ * trustworthy account-currency evidence — is a blocking issue and is never converted at today's
+ * rate. Local-currency carrying amounts are preserved beside the account-currency movement.
  */
 import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
@@ -29,6 +30,7 @@ import type { ServiceAuthorityContext } from '../../platform/auth/service-author
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { getCompanyCode } from '../../platform/periods';
+import { divideRound } from '../../platform/posting/decimal';
 import { type Money, MoneyError, moneyFor } from '../../platform/posting/money';
 import { bankAccount } from '../foundation/schema';
 import {
@@ -124,7 +126,10 @@ export interface BankMatchView {
   ledgerDocumentNumber: string;
   ledgerFiscalYear: number;
   ledgerLineNumber: number;
+  /** The allocation in the bank account currency. */
   amount: string;
+  /** The same allocation as a local-currency carrying amount. */
+  localAmount: string;
   isActive: boolean;
   matchedBy: string;
   matchedAt: string;
@@ -159,6 +164,7 @@ export interface BankLedgerLineView {
   originClass: string | null;
   originKey: string | null;
   businessPartner: string | null;
+  /** 'IN'/'OUT' and amounts are in the bank account currency. */
   direction: 'IN' | 'OUT';
   amount: string;
   signedAmount: string;
@@ -166,6 +172,9 @@ export interface BankLedgerLineView {
   remainingAmount: string;
   /** Remaining amount when only matches up to the statement's as-of date count. */
   asOfRemainingAmount: string;
+  /** The movement's local-currency carrying amount, preserved separately. */
+  localCurrency: string;
+  localAmount: string;
   matches: BankMatchView[];
 }
 
@@ -277,8 +286,10 @@ interface LedgerRow {
   reference: string | null;
   assignment: string | null;
   currency: string;
+  local_currency: string;
   debit_credit: string;
   amount_document: string;
+  amount_local: string;
   origin_class: string | null;
   origin_key: string | null;
   business_partner: string | null;
@@ -293,6 +304,7 @@ interface MatchRow {
   ledger_fiscal_year: number;
   ledger_line_number: number;
   allocated_amount: string;
+  allocated_local_amount: string;
   currency: string;
   is_active: boolean;
   matched_by: string;
@@ -381,12 +393,6 @@ async function loadCompanyAndAccount(
   }
   const currency = account.currency.trim().toUpperCase();
   const companyCurrency = company.currency.trim().toUpperCase();
-  if (currency !== companyCurrency) {
-    fail(
-      `Bank account ${houseBankKey}/${accountId} is held in ${currency}, while company ${companyCode} keeps its books in ${companyCurrency}.`,
-      'Foreign-currency bank reconciliation is not available: the posted bank lines do not carry an authoritative comparable amount in the account currency. Reconcile a bank account held in the company local currency, or post the foreign balance through an existing supported path first.',
-    );
-  }
   const shared = (await tx.execute(sql`
     select count(*)::int as n
       from bank_account
@@ -459,6 +465,7 @@ function matchView(row: MatchRow): BankMatchView {
     ledgerFiscalYear: row.ledger_fiscal_year,
     ledgerLineNumber: row.ledger_line_number,
     amount: row.allocated_amount,
+    localAmount: row.allocated_local_amount,
     isActive: row.is_active,
     matchedBy: row.matched_by,
     matchedAt: toIso(row.matched_at)!,
@@ -500,6 +507,7 @@ async function calculate(
   statementRow: typeof bankStatement.$inferSelect | null,
 ): Promise<Calculation> {
   const money = await moneyOrThrow(tx, account.currency);
+  const localMoney = await moneyOrThrow(tx, account.companyCurrency);
   const issues: BankReconciliationIssue[] = [];
   const changeReasons: string[] = [];
 
@@ -576,9 +584,9 @@ async function calculate(
   // opposite indicator, so this filter reproduces the real balance without double counting.
   const ledgerRows = (await tx.execute(sql`
     select l.document_number, l.fiscal_year, l.line_number, e.posting_date::text as posting_date,
-           e.document_type, e.reference, l.assignment, l.currency, l.debit_credit,
-           l.amount_document::text as amount_document, e.origin_class, e.origin_key,
-           l.business_partner, l.line_text
+           e.document_type, e.reference, l.assignment, l.currency, e.local_currency, l.debit_credit,
+           l.amount_document::text as amount_document, l.amount_local::text as amount_local,
+           e.origin_class, e.origin_key, l.business_partner, l.line_text
       from journal_entry_line l
       join journal_entry e
         on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
@@ -591,7 +599,8 @@ async function calculate(
   const matchRows = (await tx.execute(sql`
     select m.match_id, m.statement_id, m.statement_line_id,
            m.ledger_document_number, m.ledger_fiscal_year, m.ledger_line_number,
-           m.allocated_amount::text as allocated_amount, m.currency, m.is_active,
+           m.allocated_amount::text as allocated_amount,
+           m.allocated_local_amount::text as allocated_local_amount, m.currency, m.is_active,
            m.matched_by, m.matched_at, m.unmatched_by, m.unmatched_at, m.unmatch_reason,
            s.to_date::text as statement_to_date, s.status as statement_status
       from bank_reconciliation_match m
@@ -654,17 +663,27 @@ async function calculate(
   let ledgerOpening = 0n;
   let ledgerClosing = 0n;
   for (const row of ledgerRows) {
-    const amountUnits = row.currency.trim().toUpperCase() === account.currency
-      ? entered(money, row.amount_document, `Ledger line ${row.document_number}/${row.line_number}`)
-      : (() => {
-          issues.push({
-            code: 'LEDGER_CURRENCY',
-            message: `Ledger line ${row.document_number}/${row.line_number} stands in ${row.currency}, not in the account currency ${account.currency}. Its amount is shown converted nowhere and the reconciliation cannot be signed off.`,
-            blocking: true,
-          });
-          return money.units(row.amount_document);
-        })();
+    const lineCurrency = row.currency.trim().toUpperCase();
+    const rowLocalCurrency = row.local_currency.trim().toUpperCase();
+    // The account-currency movement is authoritative only when the line itself or the document's
+    // local currency is the account currency. A third currency has no comparable amount: it is
+    // flagged, never converted at today's rate.
+    let amountUnits: bigint;
+    if (lineCurrency === account.currency) {
+      amountUnits = entered(money, row.amount_document, `Ledger line ${row.document_number}/${row.line_number}`);
+    } else if (rowLocalCurrency === account.currency) {
+      amountUnits = entered(money, row.amount_local, `Ledger line ${row.document_number}/${row.line_number}`);
+    } else {
+      issues.push({
+        code: 'LEDGER_CURRENCY',
+        message: `Ledger line ${row.document_number}/${row.line_number} carries no amount in the account currency ${account.currency} (line ${row.currency}, local ${row.local_currency}). It cannot be matched or signed off without fabricating a rate.`,
+        blocking: true,
+      });
+      amountUnits = 0n;
+    }
+    const localUnits = entered(localMoney, row.amount_local, `Ledger line ${row.document_number}/${row.line_number}`);
     const direction = row.debit_credit === 'S' ? 1n : -1n;
+    const signedLocal = localUnits * direction;
     const signed = amountUnits * direction;
     const key = `${row.document_number}|${row.fiscal_year}|${row.line_number}`;
     const globalAllocations = allocationTotal(allocationsByLedger.get(key));
@@ -691,6 +710,8 @@ async function calculate(
       matchedAmount: money.fromUnits(asOfAllocations),
       remainingAmount: money.fromUnits(remaining),
       asOfRemainingAmount: money.fromUnits(remaining),
+      localCurrency: account.companyCurrency,
+      localAmount: localMoney.fromUnits(signedLocal < 0n ? -signedLocal : signedLocal),
       matches: (historyByLedger.get(key) ?? []).map(matchView),
     });
     // Global remaining is only used by matching validation; report it through a side field later if
@@ -1400,8 +1421,10 @@ interface LedgerLineForMatch {
   company_code: string;
   gl_account: string;
   currency: string;
+  local_currency: string;
   debit_credit: string;
   amount_document: string;
+  amount_local: string;
   status: string;
 }
 
@@ -1427,6 +1450,7 @@ export async function matchBankStatement(
       tx, input.client, statement.companyCode, statement.houseBankKey, statement.accountId,
     );
     const money = await moneyOrThrow(tx, account.currency);
+    const localMoney = await moneyOrThrow(tx, account.companyCurrency);
 
     if (input.requestKey) {
       const replay = (await tx.execute(sql`
@@ -1477,7 +1501,8 @@ export async function matchBankStatement(
     const newByLine = new Map<string, bigint>();
     const newByLedger = new Map<string, bigint>();
     const prepared: Array<{
-      statementLineId: string; ledger: LedgerLineForMatch; ledgerKey: string; amount: bigint; signed: bigint;
+      statementLineId: string; ledger: LedgerLineForMatch; ledgerKey: string; amount: bigint;
+      signed: bigint; allocatedLocal: bigint;
     }> = [];
 
     for (const [index, allocation] of input.allocations.entries()) {
@@ -1490,7 +1515,8 @@ export async function matchBankStatement(
       // Row lock: a competing match, from this or another statement, cannot read the same remaining amount.
       const locked = (await tx.execute(sql`
         select l.document_number, l.fiscal_year, l.line_number, l.company_code, l.gl_account,
-               l.currency, l.debit_credit, l.amount_document::text as amount_document, e.status
+               l.currency, e.local_currency, l.debit_credit,
+               l.amount_document::text as amount_document, l.amount_local::text as amount_local, e.status
           from journal_entry_line l
           join journal_entry e
             on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
@@ -1512,15 +1538,25 @@ export async function matchBankStatement(
           'A reversed or parked journal cannot be matched.',
         );
       }
-      if (ledger.currency.trim().toUpperCase() !== account.currency) {
+      // The comparable amount is the line's own amount when it is in the account currency, or the
+      // document's local amount when the account is held in the company local currency. Anything
+      // else has no authoritative account-currency amount and is refused rather than converted.
+      const lineCurrency = ledger.currency.trim().toUpperCase();
+      const ledgerLocalCurrency = ledger.local_currency.trim().toUpperCase();
+      let ledgerAmount: bigint;
+      if (lineCurrency === account.currency) {
+        ledgerAmount = entered(money, ledger.amount_document, 'The ledger amount');
+      } else if (ledgerLocalCurrency === account.currency) {
+        ledgerAmount = entered(money, ledger.amount_local, 'The ledger local amount');
+      } else {
         fail(
-          `Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} stands in ${ledger.currency}, not ${account.currency}.`,
-          'Match only lines in the bank account currency.',
+          `Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} carries no amount in ${account.currency} (line ${ledger.currency}, local ${ledger.local_currency}).`,
+          'Match only a line whose own or local amount is in the bank account currency. A rate is never invented to make it comparable.',
         );
       }
       const amount = entered(money, allocation.amount, `Allocation ${index + 1} amount`);
       if (amount <= 0n) fail(`Allocation ${index + 1} must be a positive amount.`);
-      const ledgerSigned = entered(money, ledger.amount_document, 'The ledger amount') * (ledger.debit_credit === 'S' ? 1n : -1n);
+      const ledgerSigned = ledgerAmount * (ledger.debit_credit === 'S' ? 1n : -1n);
       const statementSigned = signedUnits(money, statementLine.amount);
       if ((ledgerSigned > 0n) !== (statementSigned > 0n)) {
         fail(
@@ -1548,9 +1584,16 @@ export async function matchBankStatement(
       }
       newByLine.set(allocation.statementLineId, (newByLine.get(allocation.statementLineId) ?? 0n) + amount);
       newByLedger.set(ledgerKey, (newByLedger.get(ledgerKey) ?? 0n) + amount);
+      // Preserve the local carrying amount this allocation relieves, proportionally to the
+      // account-currency movement. Both stay on the evidence row.
+      const ledgerLocalUnits = entered(localMoney, ledger.amount_local, 'The ledger local amount');
+      const allocatedLocal = ledgerAmount === 0n
+        ? 0n
+        : divideRound(ledgerLocalUnits * amount, ledgerAmount);
       prepared.push({
         statementLineId: allocation.statementLineId, ledger, ledgerKey, amount,
         signed: statementSigned > 0n ? amount : -amount,
+        allocatedLocal,
       });
     }
 
@@ -1570,6 +1613,7 @@ export async function matchBankStatement(
         ledgerFiscalYear: item.ledger.fiscal_year,
         ledgerLineNumber: item.ledger.line_number,
         allocatedAmount: money.fromUnits(item.amount),
+        allocatedLocalAmount: localMoney.fromUnits(item.allocatedLocal),
         currency: account.currency,
         isActive: true,
         matchedBy: authority.username,
@@ -1592,6 +1636,7 @@ export async function matchBankStatement(
           ledgerFiscalYear: item.ledger.fiscal_year,
           ledgerLineNumber: item.ledger.line_number,
           allocatedAmount: money.fromUnits(item.amount),
+          allocatedLocalAmount: localMoney.fromUnits(item.allocatedLocal),
           currency: account.currency,
           signedAmount: money.fromUnits(item.signed),
         },
@@ -1874,18 +1919,20 @@ export async function bankReconciliationCsv(
   }
   push('');
   push('Bank G/L lines');
-  push('Document', 'Year', 'Line', 'Posting date', 'Document type', 'Reference', 'Direction', 'Amount', 'Matched', 'Remaining');
+  push('Document', 'Year', 'Line', 'Posting date', 'Document type', 'Reference', 'Direction', 'Amount',
+    'Matched', 'Remaining', 'Local currency', 'Local amount');
   for (const line of view.ledgerLines) {
     push(line.documentNumber, String(line.fiscalYear), String(line.lineNumber), line.postingDate, line.documentType,
-      line.reference, line.direction, line.amount, line.matchedAmount, line.remainingAmount);
+      line.reference, line.direction, line.amount, line.matchedAmount, line.remainingAmount,
+      line.localCurrency, line.localAmount);
   }
   push('');
   push('Matches');
-  push('Statement line', 'Ledger document', 'Year', 'Ledger line', 'Amount', 'Matched by', 'Matched at', 'Active');
+  push('Statement line', 'Ledger document', 'Year', 'Ledger line', 'Amount', 'Local amount', 'Matched by', 'Matched at', 'Active');
   for (const line of view.statement.lines) {
     for (const match of line.matches) {
       push(String(line.lineNumber), match.ledgerDocumentNumber, String(match.ledgerFiscalYear), String(match.ledgerLineNumber),
-        match.amount, match.matchedBy, match.matchedAt, match.isActive ? 'yes' : 'no');
+        match.amount, match.localAmount, match.matchedBy, match.matchedAt, match.isActive ? 'yes' : 'no');
     }
   }
   return rows.join('\r\n');

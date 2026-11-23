@@ -11,8 +11,10 @@ import { and, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
-import { MONEY_SCALE, fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { MONEY_SCALE, fromScaled, roundToScale, toScaled } from '../../platform/posting/decimal';
 import { MoneyError, moneyFor } from '../../platform/posting/money';
+import { requireExchangeRate } from './exchange-rate-lookup';
+import { activeValuationConflict, fxDifferenceAccount, localUnitsOf } from './fx-settlement';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { bankAccount, houseBank, paymentMethod } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
@@ -419,7 +421,7 @@ export async function executePaymentRun(input: {
     });
 
     // Revalidate every item against its standing journal line.
-    interface Entry { item: (typeof payable)[number]; glAccount: string }
+    interface Entry { item: (typeof payable)[number]; glAccount: string; amountLocal: string }
     interface Group { company: string; supplier: string; currency: string; entries: Entry[] }
     const groups = new Map<string, Group>();
     for (const item of payable) {
@@ -440,7 +442,7 @@ export async function executePaymentRun(input: {
       if (supplier?.isBlocked) throw new PaymentRunError(`Supplier ${item.accountId} is blocked.`, 'Regenerate the proposal, then execute.');
       const key = `${item.companyCode}|${item.accountId}|${item.currency}`;
       const group = groups.get(key) ?? { company: item.companyCode, supplier: item.accountId, currency: item.currency, entries: [] as Entry[] };
-      group.entries.push({ item, glAccount: line.glAccount });
+      group.entries.push({ item, glAccount: line.glAccount, amountLocal: line.amountLocal });
       groups.set(key, group);
     }
 
@@ -458,10 +460,14 @@ export async function executePaymentRun(input: {
           'Choose a standing house-bank account for the paying company.',
         );
       }
-      if (bank.currency !== group.currency) {
+      const company = await getCompanyCode(tx, input.client, group.company);
+      if (!company?.fiscalYearVariant) throw new PaymentRunError(`Company code ${group.company} is not configured.`);
+      // The account must be held in the payment currency or in the company local currency; a third
+      // currency would need a bank movement the journal cannot state.
+      if (bank.currency !== group.currency && bank.currency !== company.currency) {
         throw new PaymentRunError(
-          `Bank account currency ${bank.currency} does not agree with the payment currency ${group.currency}.`,
-          'Choose a bank account in the payment currency.',
+          `Bank account currency ${bank.currency} is neither the payment currency ${group.currency} nor the company local currency ${company.currency}.`,
+          'Choose a bank account in the payment currency or the local currency.',
         );
       }
       const [bankStanding] = await tx.select().from(houseBank).where(and(
@@ -471,15 +477,76 @@ export async function executePaymentRun(input: {
       ));
       if (!bankStanding) throw new PaymentRunError(`House bank ${input.houseBankKey} does not stand for company ${group.company}.`);
 
-      const company = await getCompanyCode(tx, input.client, group.company);
-      if (!company?.fiscalYearVariant) throw new PaymentRunError(`Company code ${group.company} is not configured.`);
       const position = await derivePosition(tx, input.client, company.fiscalYearVariant, run.postingDate);
       // Exact at the payment currency's decimals: each item is rounded once, the bank line is their exact sum.
       const money = await moneyFor(tx, group.currency).catch((error: unknown) => {
         if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
         throw error;
       });
+      const localMoney = await moneyFor(tx, company.currency).catch((error: unknown) => {
+        if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
+        throw error;
+      });
+      const rate = await requireExchangeRate(
+        tx, input.client, group.currency, company.currency, run.postingDate,
+      ).catch((error: unknown) => {
+        if (error instanceof Error && 'remedy' in error) {
+          throw new PaymentRunError(error.message, (error as { remedy?: string }).remedy);
+        }
+        throw error;
+      });
       const totalUnits = group.entries.reduce((s, e) => s + money.units(e.item.amount), 0n);
+
+      for (const entry of group.entries) {
+        const conflict = await activeValuationConflict(tx, input.client, group.company, {
+          documentNumber: entry.item.journalDocumentNumber,
+          lineNumber: entry.item.journalLineNumber,
+          accountNumber: entry.glAccount,
+          currency: group.currency,
+        });
+        if (conflict) {
+          throw new PaymentRunError(
+            `Item ${entry.item.invoiceNumber} was valued at period end by run ${conflict.runId} (key date ${conflict.valuationKeyDate}).`,
+            'Reverse that FX valuation document first, then execute the run. Settling over an active valuation would count the same exchange difference twice.',
+          );
+        }
+      }
+
+      const lines: Array<{
+        glAccount: string; debitCredit: 'S' | 'H'; amount: string; amountLocal: string;
+        localOnly?: boolean; businessPartner?: string; lineText?: string;
+      }> = group.entries.map((e) => ({
+        glAccount: e.glAccount, debitCredit: 'S' as const,
+        amount: money.text(e.item.amount), amountLocal: e.amountLocal,
+        businessPartner: e.item.accountId,
+      }));
+      lines.push({
+        glAccount: bank.glAccount, debitCredit: 'H' as const, amount: money.fromUnits(totalUnits),
+        amountLocal: fromScaled(localUnitsOf(totalUnits, money.scale, localMoney.scale, rate)),
+      });
+      const localSigned = lines.reduce(
+        (total, line) => total + (line.debitCredit === 'S' ? toScaled(line.amountLocal) : -toScaled(line.amountLocal)),
+        0n,
+      );
+      if (localSigned !== 0n) {
+        const event = localSigned > 0n ? 'FXGAIN' : 'FXLOSS';
+        const account = await fxDifferenceAccount(tx, input.client, company.chartOfAccounts ?? '', event);
+        if (!account) {
+          throw new PaymentRunError(
+            `Account determination for ${event} does not stand in chart ${company.chartOfAccounts ?? ''}, so the realized exchange difference cannot be posted.`,
+            `Maintain the ${event} account determination, then execute the run. Nothing has been posted.`,
+          );
+        }
+        lines.push({
+          glAccount: account,
+          debitCredit: localSigned > 0n ? 'H' : 'S',
+          amount: '0',
+          amountLocal: fromScaled(localSigned < 0n ? -localSigned : localSigned),
+          localOnly: true,
+          lineText: localSigned > 0n ? 'Realized exchange gain' : 'Realized exchange loss',
+        });
+      }
+
       const journal = await postJournalEntry(tx, {
         client: input.client,
         companyCode: group.company,
@@ -490,15 +557,10 @@ export async function executePaymentRun(input: {
         postingPeriod: position.period,
         currency: group.currency,
         localCurrency: company.currency,
+        rate,
         reference: runKey(run.runDate, run.runId),
         headerText: `Payment run ${runKey(run.runDate, run.runId)}`,
-        lines: [
-          ...group.entries.map((e) => ({
-            glAccount: e.glAccount, debitCredit: 'S' as const,
-            amount: money.text(e.item.amount), businessPartner: e.item.accountId,
-          })),
-          { glAccount: bank.glAccount, debitCredit: 'H' as const, amount: money.fromUnits(totalUnits) },
-        ],
+        lines,
         origin: { documentClass: RUN_CLASS, documentKey: runKey(run.runDate, run.runId) },
         postedBy: input.changedBy,
         transactionCode: PAYMENT_RUN_CAPABILITY,

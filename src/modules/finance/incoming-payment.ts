@@ -13,7 +13,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
-import { MONEY_SCALE, fromScaled, roundToScale } from '../../platform/posting/decimal';
+import { MONEY_SCALE, fromScaled, roundToScale, toScaled } from '../../platform/posting/decimal';
 import { MoneyError, moneyFor, type Money } from '../../platform/posting/money';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { customerCompany } from '../foundation/customer-company-schema';
@@ -21,6 +21,11 @@ import { accountDetermination, employeeToleranceGroup } from '../foundation/sche
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { customerInvoice } from '../purchasing/schema';
 import { incomingPayment, journalEntry, journalEntryLine } from './schema';
+import { requireExchangeRate } from './exchange-rate-lookup';
+import {
+  activeValuationConflict, bankCurrencyForGl, bankCurrencyRefusal,
+  fxDifferenceAccount, localUnitsOf, proportionalLocal,
+} from './fx-settlement';
 
 import { hasOrgAccess } from '../../platform/auth/session';
 import {
@@ -274,7 +279,8 @@ export async function postIncomingPayment(input: {
     if (!company?.fiscalYearVariant) throw new IncomingPaymentError(`Company code ${input.companyCode} is not configured.`);
 
     interface Held {
-      ref: PaymentItemRef; amount: string; currency: string;
+      ref: PaymentItemRef; amount: string; amountLocal: string; currency: string;
+      reconAccount: string;
       termsCode: string | null; baseline: string | null;
     }
     const held: Held[] = [];
@@ -313,7 +319,10 @@ export async function postIncomingPayment(input: {
           baseline = inv.baselineDate ?? inv.documentDate;
         }
       }
-      held.push({ ref, amount: line.amountDocument, currency: line.currency, termsCode, baseline });
+      held.push({
+        ref, amount: line.amountDocument, amountLocal: line.amountLocal, currency: line.currency,
+        reconAccount: line.glAccount, termsCode, baseline,
+      });
     }
 
     const currencies = [...new Set([...held.map((h) => h.currency), input.currency.toUpperCase()])];
@@ -337,6 +346,55 @@ export async function postIncomingPayment(input: {
       if (error instanceof MoneyError) throw new IncomingPaymentError(error.message, error.remedy);
       throw error;
     });
+    // What the money is worth in the company's books on the posting date. A foreign receipt without
+    // a maintained rate is refused; it is never booked at 1.
+    const rate = await requireExchangeRate(
+      tx, input.client, currencies[0]!, company.currency, input.postingDate,
+    ).catch((error: unknown) => {
+      if (error instanceof Error && 'remedy' in error) {
+        throw new IncomingPaymentError(error.message, (error as { remedy?: string }).remedy);
+      }
+      throw error;
+    });
+    const localMoney = await moneyFor(tx, company.currency).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new IncomingPaymentError(error.message, error.remedy);
+      throw error;
+    });
+    const localScale = localMoney.scale;
+    const sameCurrency = currencies[0]!.toUpperCase() === company.currency.toUpperCase();
+
+    // Which bank account owns the G/L, and whether its currency can be represented by this journal.
+    const bank = await bankCurrencyForGl(tx, input.client, input.companyCode, input.bankGlAccount);
+    if (bank.kind === 'ambiguous') {
+      throw new IncomingPaymentError(
+        `G/L account ${input.bankGlAccount} belongs to ${bank.count} bank accounts in company ${input.companyCode}.`,
+        'Give each bank account its own bank G/L account, then enter the payment.',
+      );
+    }
+    if (bank.kind === 'unique') {
+      const refusal = bankCurrencyRefusal(company.currency, currencies[0]!, bank.currency);
+      if (refusal) {
+        throw new IncomingPaymentError(
+          refusal,
+          'Receive through a bank account held in the payment currency or in the company local currency. A third-currency bank movement cannot be represented safely by one journal.',
+        );
+      }
+    }
+
+    // A period-end valuation already adjusted this item (or its account/currency). Settling it now
+    // would count the same difference twice.
+    for (const h of held) {
+      const conflict = await activeValuationConflict(tx, input.client, input.companyCode, {
+        documentNumber: h.ref.documentNumber, lineNumber: h.ref.lineNumber,
+        accountNumber: h.reconAccount, currency: h.currency,
+      });
+      if (conflict) {
+        throw new IncomingPaymentError(
+          `Document ${h.ref.documentNumber} line ${h.ref.lineNumber} was valued at period end by run ${conflict.runId} (key date ${conflict.valuationKeyDate}).`,
+          'Reverse that FX valuation document first, then settle the item. Settling over an active valuation would count the same exchange difference twice.',
+        );
+      }
+    }
     const enter = (value: number, label: string): bigint => {
       try { return money.entered(value, label); } catch (error) {
         if (error instanceof MoneyError) throw new IncomingPaymentError(error.message, error.remedy);
@@ -348,6 +406,8 @@ export async function postIncomingPayment(input: {
     interface Settled {
       h: Held; open: bigint; applied: bigint; discount: bigint;
       outcome: 'FULL' | 'RESIDUAL' | 'PARTIAL'; residual: bigint;
+      /** The item's local carrying amount, and the parts of it this payment relieves. */
+      openLocal: bigint; releasedLocal: bigint; discountLocal: bigint; residualLocal: bigint;
     }
     const settled: Settled[] = [];
     for (const h of held) {
@@ -399,7 +459,16 @@ export async function postIncomingPayment(input: {
       const outcome: Settled['outcome'] = shortfall <= 0n
         ? 'FULL'
         : (h.ref.outcome === 'PARTIAL' ? 'PARTIAL' : 'RESIDUAL');
-      settled.push({ h, open, applied, discount, outcome, residual: outcome === 'RESIDUAL' ? shortfall : 0n });
+      const openLocal = toScaled(h.amountLocal);
+      // The portion actually settled (cash applied plus discount), at its original carrying rate.
+      const releasedLocal = proportionalLocal(openLocal, open, applied + discount);
+      const discountLocal = discount > 0n ? proportionalLocal(openLocal, open, discount) : 0n;
+      settled.push({
+        h, open, applied, discount, outcome,
+        residual: outcome === 'RESIDUAL' ? shortfall : 0n,
+        openLocal, releasedLocal, discountLocal,
+        residualLocal: outcome === 'RESIDUAL' ? openLocal - releasedLocal : 0n,
+      });
     }
 
     const cashApplied = settled.reduce((s, x) => s + x.applied, 0n);
@@ -451,32 +520,53 @@ export async function postIncomingPayment(input: {
 
     const recon = customer.reconciliationAccount!;
     type Line = {
-      glAccount: string; debitCredit: 'S' | 'H'; amount: string;
-      businessPartner?: string; lineText?: string;
+      glAccount: string; debitCredit: 'S' | 'H'; amount: string; amountLocal: string;
+      localOnly?: boolean; businessPartner?: string; lineText?: string;
     };
+    // Same currency means the local amount is the document amount exactly; only a foreign document
+    // is translated. This also keeps proportional rounding from masquerading as an exchange
+    // difference in a same-currency partial or residual settlement.
+    const localText = (unitsDocument: bigint) => sameCurrency
+      ? money.fromUnits(unitsDocument)
+      : fromScaled(localUnitsOf(unitsDocument, money.scale, localScale, rate));
     const lines: Line[] = [
-      { glAccount: input.bankGlAccount, debitCredit: 'S', amount: money.fromUnits(paymentUnits) },
+      {
+        glAccount: input.bankGlAccount, debitCredit: 'S',
+        amount: money.fromUnits(paymentUnits), amountLocal: localText(paymentUnits),
+      },
     ];
     if (discountAccount && discountTotal > 0n) {
-      lines.push({ glAccount: discountAccount, debitCredit: 'S', amount: money.fromUnits(discountTotal), lineText: 'Cash discount granted' });
+      lines.push({
+        glAccount: discountAccount, debitCredit: 'S', amount: money.fromUnits(discountTotal),
+        amountLocal: sameCurrency
+          ? money.fromUnits(discountTotal)
+          : fromScaled(settled.reduce((s, x) => s + x.discountLocal, 0n)),
+        lineText: 'Cash discount granted',
+      });
     }
     if (differenceAccount && differenceLine?.debitCredit === 'S') {
-      lines.push({ glAccount: differenceAccount, debitCredit: 'S', amount: money.fromUnits(differenceLine.amount), lineText: 'Payment difference' });
+      lines.push({
+        glAccount: differenceAccount, debitCredit: 'S', amount: money.fromUnits(differenceLine.amount),
+        amountLocal: localText(differenceLine.amount), lineText: 'Payment difference',
+      });
     }
     for (const x of settled) {
       if (x.outcome === 'PARTIAL') {
         lines.push({
           glAccount: recon, debitCredit: 'H', amount: money.fromUnits(x.applied + x.discount),
+          amountLocal: sameCurrency ? money.fromUnits(x.applied + x.discount) : fromScaled(x.releasedLocal),
           businessPartner: input.customerNumber, lineText: `Partial payment for ${x.h.ref.documentNumber}`,
         });
       } else {
         lines.push({
           glAccount: recon, debitCredit: 'H', amount: money.fromUnits(x.open),
+          amountLocal: sameCurrency ? money.fromUnits(x.open) : fromScaled(x.openLocal),
           businessPartner: input.customerNumber, lineText: `Settles ${x.h.ref.documentNumber}`,
         });
         if (x.outcome === 'RESIDUAL') {
           lines.push({
             glAccount: recon, debitCredit: 'S', amount: money.fromUnits(x.residual),
+            amountLocal: sameCurrency ? money.fromUnits(x.residual) : fromScaled(x.residualLocal),
             businessPartner: input.customerNumber, lineText: `Residual of ${x.h.ref.documentNumber}`,
           });
         }
@@ -485,11 +575,49 @@ export async function postIncomingPayment(input: {
     if (onAccount > 0n) {
       lines.push({
         glAccount: recon, debitCredit: 'H', amount: money.fromUnits(onAccount),
+        amountLocal: localText(onAccount),
         businessPartner: input.customerNumber, lineText: 'On account',
       });
     }
     if (differenceAccount && differenceLine?.debitCredit === 'H') {
-      lines.push({ glAccount: differenceAccount, debitCredit: 'H', amount: money.fromUnits(differenceLine.amount), lineText: 'Payment difference' });
+      lines.push({
+        glAccount: differenceAccount, debitCredit: 'H', amount: money.fromUnits(differenceLine.amount),
+        amountLocal: localText(differenceLine.amount), lineText: 'Payment difference',
+      });
+    }
+
+    // The realized exchange difference: the bank moved at the payment rate, the receivable is
+    // relieved at its carrying amount. Whatever remains is a gain (credit) or a loss (debit), and a
+    // local-only line represents it without inventing a document-currency amount.
+    const localSigned = lines.reduce(
+      (total, line) => total + (line.debitCredit === 'S' ? toScaled(line.amountLocal) : -toScaled(line.amountLocal)),
+      0n,
+    );
+    let realizedLocal = 0n;
+    if (sameCurrency && localSigned !== 0n) {
+      throw new IncomingPaymentError(
+        'The same-currency payment does not balance in the local currency.',
+        'Reload the open items and try again; nothing has been posted.',
+      );
+    }
+    if (!sameCurrency && localSigned !== 0n) {
+      realizedLocal = localSigned < 0n ? -localSigned : localSigned;
+      const event = localSigned > 0n ? 'FXGAIN' : 'FXLOSS';
+      const account = await fxDifferenceAccount(tx, input.client, chart, event);
+      if (!account) {
+        throw new IncomingPaymentError(
+          `Account determination for ${event} does not stand in chart ${chart}, so the realized exchange difference cannot be posted.`,
+          `Maintain the ${event} account determination, then post again. Nothing has been posted.`,
+        );
+      }
+      lines.push({
+        glAccount: account,
+        debitCredit: localSigned > 0n ? 'H' : 'S',
+        amount: '0',
+        amountLocal: fromScaled(realizedLocal),
+        localOnly: true,
+        lineText: localSigned > 0n ? 'Realized exchange gain' : 'Realized exchange loss',
+      });
     }
 
     const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
@@ -503,6 +631,7 @@ export async function postIncomingPayment(input: {
       postingPeriod: position.period,
       currency: currencies[0],
       localCurrency: company.currency,
+      rate,
       reference: input.reference,
       headerText: `Incoming payment ${input.customerNumber}`,
       lines,
@@ -547,7 +676,8 @@ export async function postIncomingPayment(input: {
       documentDate: input.documentDate, postingDate: input.postingDate, clearingDate: input.clearingDate,
       bankGlAccount: input.bankGlAccount, amount: money.fromUnits(paymentUnits),
       discountAmount: money.fromUnits(discountTotal), onAccountAmount: money.fromUnits(onAccount),
-      currency: currencies[0], reference: input.reference ?? null,
+      currency: currencies[0], exchangeRate: rate.effectiveRate,
+      localAmount: localText(paymentUnits), reference: input.reference ?? null,
       journalDocumentNumber: journal.documentNumber, itemsCleared: clearedCount,
       requestKey: input.requestKey, createdBy: input.changedBy,
     });
@@ -555,7 +685,11 @@ export async function postIncomingPayment(input: {
       client: input.client, objectClass: PAYMENT_CLASS,
       objectKey: `${input.companyCode}/${input.customerNumber}/${paymentNumber}`,
       changeType: 'CREATE', changedBy: input.changedBy, transactionCode: INCOMING_PAYMENT_CAPABILITY,
-      after: { journal: journal.documentNumber, amount: money.fromUnits(paymentUnits), items: held.length },
+      after: {
+        journal: journal.documentNumber, amount: money.fromUnits(paymentUnits),
+        localAmount: localText(paymentUnits), exchangeRate: rate.effectiveRate,
+        realizedDifference: fromScaled(realizedLocal), items: held.length,
+      },
     });
     return (await byRequestKey(tx, input.client, input.requestKey))!;
   });

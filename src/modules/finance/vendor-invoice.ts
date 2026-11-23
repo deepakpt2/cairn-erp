@@ -17,10 +17,13 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { MoneyError, moneyFor, refusing } from '../../platform/posting/money';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
+import { fromScaled } from '../../platform/posting/decimal';
 import { accountDetermination, costCenter, profitCenter, taxCode } from '../foundation/schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { vendorInvoice, vendorInvoiceLine } from './schema';
+import { requireExchangeRate } from './exchange-rate-lookup';
+import { localUnitsOf } from './fx-settlement';
 
 export const VENDOR_INVOICE_CAPABILITY = 'FIN.AP.INVOICE.POST';
 const JOURNAL_DOCUMENT_TYPE = 'KR';
@@ -48,7 +51,9 @@ export interface VendorInvoiceView {
   postingDate: string;
   reference: string;
   currency: string;
+  exchangeRate: string;
   grossAmount: string;
+  localGrossAmount: string;
   taxAmount: string;
   paymentTerms: string | null;
   baselineDate: string | null;
@@ -74,7 +79,9 @@ function toView(
     vendorNumber: header.vendorNumber, companyCode: header.companyCode,
     documentDate: header.documentDate, postingDate: header.postingDate,
     reference: header.reference, currency: header.currency,
-    grossAmount: header.grossAmount, taxAmount: header.taxAmount,
+    exchangeRate: header.exchangeRate,
+    grossAmount: header.grossAmount, localGrossAmount: header.localGrossAmount,
+    taxAmount: header.taxAmount,
     paymentTerms: header.paymentTerms, baselineDate: header.baselineDate, dueDate: header.dueDate,
     status: header.status, journalDocumentNumber: header.journalDocumentNumber,
     cancelledBy: header.cancelledBy, cancellationOf: header.cancellationOf,
@@ -198,6 +205,17 @@ export async function postVendorInvoice(input: PostVendorInvoiceInput): Promise<
         throw error;
       }
     };
+    const rate = await requireExchangeRate(
+      tx, input.client, input.currency, company.currency, input.postingDate,
+    ).catch((error: unknown) => {
+      if (error instanceof Error && 'remedy' in error) {
+        throw new VendorInvoiceError(error.message, (error as { remedy?: string }).remedy);
+      }
+      throw error;
+    });
+    const localScale = company.currency.toUpperCase() === input.currency.toUpperCase()
+      ? money.scale
+      : (await moneyFor(tx, company.currency)).scale;
 
     const duplicates = await tx.select().from(vendorInvoice).where(and(
       eq(vendorInvoice.client, input.client),
@@ -339,6 +357,7 @@ export async function postVendorInvoice(input: PostVendorInvoiceInput): Promise<
       postingPeriod: position.period,
       currency: input.currency.toUpperCase(),
       localCurrency: company.currency,
+      rate,
       reference: input.reference,
       headerText: input.headerText,
       lines: journalLines,
@@ -357,7 +376,10 @@ export async function postVendorInvoice(input: PostVendorInvoiceInput): Promise<
       vendorNumber: input.vendorNumber, companyCode: input.companyCode,
       documentDate: input.documentDate, postingDate: input.postingDate,
       reference: input.reference, currency: input.currency.toUpperCase(),
-      grossAmount: money.fromUnits(grossUnits), taxAmount: money.fromUnits(taxUnits),
+      exchangeRate: rate.effectiveRate,
+      grossAmount: money.fromUnits(grossUnits),
+      localGrossAmount: fromScaled(localUnitsOf(grossUnits, money.scale, localScale, rate)),
+      taxAmount: money.fromUnits(taxUnits),
       paymentTerms: termsCode ?? null, baselineDate: baseline, dueDate: due,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
@@ -427,7 +449,8 @@ export async function cancelVendorInvoice(input: {
       vendorNumber: original.vendorNumber, companyCode: original.companyCode,
       documentDate: original.documentDate, postingDate: input.postingDate,
       reference: original.reference, currency: original.currency,
-      grossAmount: original.grossAmount, taxAmount: original.taxAmount,
+      exchangeRate: original.exchangeRate, grossAmount: original.grossAmount,
+      localGrossAmount: original.localGrossAmount, taxAmount: original.taxAmount,
       paymentTerms: original.paymentTerms, baselineDate: original.baselineDate,
       dueDate: original.dueDate, headerText: `Cancellation of ${original.invoiceNumber}`,
       status: 'POSTED', journalDocumentNumber: reversal.documentNumber,

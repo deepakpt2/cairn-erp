@@ -154,6 +154,14 @@ export const journalEntry = pgTable(
     localCurrency: char('local_currency', { length: 3 }).notNull(),
     /** Stored on the document so it is self-contained and reproducible (§14.4). */
     exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+    /** Provenance of the stored rate: which master row it came from, and how it was quoted. */
+    rateType: varchar('rate_type', { length: 12 }),
+    rateSource: varchar('rate_source', { length: 24 }),
+    rateValidFrom: date('rate_valid_from', { mode: 'string' }),
+    rateRaw: numeric('rate_raw', { precision: 18, scale: 8 }),
+    rateRatioFrom: integer('rate_ratio_from'),
+    rateRatioTo: integer('rate_ratio_to'),
+    rateIsIndirectQuote: boolean('rate_is_indirect_quote').notNull().default(false),
     reference: varchar('reference', { length: 60 }),
     headerText: text('header_text'),
     /** POSTED | PARKED | REVERSED */
@@ -225,12 +233,18 @@ export const journalEntryLine = pgTable(
     /** Clearing state for open item management. */
     clearingDocument: varchar('clearing_document', { length: 40 }),
     clearingDate: date('clearing_date'),
+    /**
+     * A local-currency-only line: a realized exchange difference or a rounding adjustment has no
+     * document-currency amount, and writing a fictitious one would break the document balance.
+     * Such a line carries amount_document = 0 and is excluded from the document-currency totals.
+     */
+    isLocalOnly: boolean('is_local_only').notNull().default(false),
     postedAt: timestamp('posted_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.client, t.documentNumber, t.fiscalYear, t.lineNumber] }),
     check('journal_entry_line_dc_ck', sql`${t.debitCredit} in ('S', 'H')`),
-    check('journal_entry_line_amount_ck', sql`${t.amountDocument} > 0 and ${t.amountLocal} > 0`),
+    check('journal_entry_line_amount_ck', sql`(${t.amountDocument} > 0 or ${t.isLocalOnly}) and ${t.amountLocal} > 0`),
     index('jel_account_idx').on(t.client, t.glAccount, t.fiscalYear),
     index('jel_company_account_idx').on(t.client, t.companyCode, t.glAccount, t.fiscalYear, t.documentNumber, t.lineNumber),
     index('jel_costcenter_idx').on(t.client, t.costCenter),
@@ -849,6 +863,8 @@ export const outgoingPayment = pgTable('outgoing_payment', {
   discountAmount: numeric('discount_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   onAccountAmount: numeric('on_account_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   currency: char('currency', { length: 3 }).notNull(),
+  exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+  localAmount: numeric('local_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   reference: varchar('reference', { length: 16 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
   itemsCleared: integer('items_cleared').notNull(),
@@ -1557,6 +1573,8 @@ export const incomingPayment = pgTable('incoming_payment', {  client: tenantClie
   discountAmount: numeric('discount_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   onAccountAmount: numeric('on_account_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   currency: char('currency', { length: 3 }).notNull(),
+  exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+  localAmount: numeric('local_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   reference: varchar('reference', { length: 16 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
   itemsCleared: integer('items_cleared').notNull(),
@@ -1735,7 +1753,9 @@ export const vendorInvoice = pgTable('vendor_invoice', {
   postingDate: date('posting_date', { mode: 'string' }).notNull(),
   reference: varchar('reference', { length: 40 }).notNull(),
   currency: char('currency', { length: 3 }).notNull(),
+  exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
   grossAmount: numeric('gross_amount', { precision: 23, scale: 4 }).notNull(),
+  localGrossAmount: numeric('local_gross_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   paymentTerms: varchar('payment_terms', { length: 12 }),
   baselineDate: date('baseline_date', { mode: 'string' }),
@@ -2652,6 +2672,8 @@ export const bankReconciliationMatch = pgTable('bank_reconciliation_match', {
   ledgerFiscalYear: integer('ledger_fiscal_year').notNull(),
   ledgerLineNumber: integer('ledger_line_number').notNull(),
   allocatedAmount: numeric('allocated_amount', { precision: 23, scale: 4 }).notNull(),
+  /** The same allocation as a local-currency carrying amount (preserved separately). */
+  allocatedLocalAmount: numeric('allocated_local_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   currency: char('currency', { length: 3 }).notNull(),
   isActive: boolean('is_active').notNull().default(true),
   matchedBy: varchar('matched_by', { length: 60 }).notNull(),

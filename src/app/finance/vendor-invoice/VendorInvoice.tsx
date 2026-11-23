@@ -159,7 +159,9 @@ export default function VendorInvoice({ invoice, taxes, canPost, today }: {
           <Message state={cancelState} />
           <p className="mt-2 text-sm">
             Invoice <strong>{invoice.invoiceNumber}</strong> for vendor {invoice.vendorNumber} stands{' '}
-            <strong>{invoice.status}</strong>: gross {invoice.grossAmount} {invoice.currency},
+            <strong>{invoice.status}</strong>: gross {invoice.grossAmount} {invoice.currency}
+            {Number(invoice.exchangeRate) !== 1
+              ? ` at ${invoice.exchangeRate} (${invoice.localGrossAmount} local)` : ''},
             tax {invoice.taxAmount}, journal {invoice.journalDocumentNumber}
             {invoice.dueDate ? `, due ${invoice.dueDate}` : ''}
             {invoice.cancelledBy ? `, cancelled by ${invoice.cancelledBy}` : ''}

@@ -82,7 +82,8 @@ A posted document is **never edited or deleted**. A mistake is corrected by **re
 
 1. [FICO master data](master-data.md) — chart of accounts, G/L accounts, cost centres, banks, periods, tax, payment terms.
 2. [FICO daily transactions](daily-transactions.md).
-3. [FICO reports and troubleshooting](reports-and-troubleshooting.md).
+3. [Foreign currency, realized/unrealized FX and bank reconciliation](foreign-currency.md).
+4. [FICO reports and troubleshooting](reports-and-troubleshooting.md).
 
 ---
 

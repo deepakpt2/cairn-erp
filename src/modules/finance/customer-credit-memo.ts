@@ -18,12 +18,15 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { MoneyError, moneyFor, refusing } from '../../platform/posting/money';
 import { postJournalEntry, PostingError } from '../../platform/posting';
+import { fromScaled } from '../../platform/posting/decimal';
 import { accountDetermination, profitCenter, taxCode as taxCodeTable } from '../foundation/schema';
 import { customerCompany } from '../foundation/customer-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { customerInvoice, customerInvoiceLine } from '../purchasing/schema';
 import { billingDocument } from '../sales/schema';
 import { documentPartners } from '../sales/partners';
+import { requireExchangeRate } from './exchange-rate-lookup';
+import { localUnitsOf } from './fx-settlement';
 
 export const CUSTOMER_CREDIT_MEMO_CAPABILITY = 'FIN.AR.CREDITMEMO.POST';
 const JOURNAL_DOCUMENT_TYPE = 'DR';
@@ -213,6 +216,17 @@ export async function postCustomerCreditMemo(input: PostCustomerCreditMemoInput)
         throw error;
       }
     };
+    const rate = await requireExchangeRate(
+      tx, input.client, input.currency, company.currency, input.postingDate,
+    ).catch((error: unknown) => {
+      if (error instanceof Error && 'remedy' in error) {
+        throw new CustomerCreditMemoError(error.message, (error as { remedy?: string }).remedy);
+      }
+      throw error;
+    });
+    const localScale = company.currency.toUpperCase() === input.currency.toUpperCase()
+      ? money.scale
+      : (await moneyFor(tx, company.currency)).scale;
     const chart = customer.chartOfAccounts;
 
     // The optional original billing document link: validate it stands posted for this customer and company.
@@ -451,6 +465,7 @@ export async function postCustomerCreditMemo(input: PostCustomerCreditMemoInput)
       postingPeriod: position.period,
       currency: input.currency.toUpperCase(),
       localCurrency: company.currency,
+      rate,
       reference: input.reference,
       headerText: input.headerText,
       lines: journalLines,
@@ -468,7 +483,10 @@ export async function postCustomerCreditMemo(input: PostCustomerCreditMemoInput)
       category: 'CREDIT_MEMO', customerNumber: input.customerNumber, companyCode: input.companyCode,
       documentDate: input.documentDate, postingDate: input.postingDate,
       reference: input.reference, currency: input.currency.toUpperCase(),
-      grossAmount: money.fromUnits(grossUnits), taxAmount: money.fromUnits(taxUnits),
+      exchangeRate: rate.effectiveRate,
+      grossAmount: money.fromUnits(grossUnits),
+      localGrossAmount: fromScaled(localUnitsOf(grossUnits, money.scale, localScale, rate)),
+      taxAmount: money.fromUnits(taxUnits),
       paymentTerms: termsCode ?? null, baselineDate: baseline, dueDate: due,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,

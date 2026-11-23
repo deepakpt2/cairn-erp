@@ -77,10 +77,13 @@ import { authorizeCompaniesInTx, verifyCompanyAuthorityInTx, refuseCompaniesOuts
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
-import { accountDetermination, exchangeRate } from '../foundation/schema';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { moneyFor } from '../../platform/posting/money';
+import { accountDetermination } from '../foundation/schema';
 import { fxValuationItem, fxValuationRun, journalEntry, journalEntryLine } from './schema';
-
-const round2 = (n: number) => Math.round(n * 100) / 100;
+import {
+  resolveExchangeRate, translateAmount, type ResolvedExchangeRate,
+} from './exchange-rate-lookup';
 
 interface CandidateRow {
   document_number: string;
@@ -179,6 +182,9 @@ export async function executeFxValuation(input: {
     }
     const local = company.currency;
     const chart = company.chartOfAccounts ?? '';
+    const localMoney = await moneyFor(tx, local);
+    const roundLocal = (n: number) => localMoney.round(n);
+    const foreignMoney = new Map<string, Awaited<ReturnType<typeof moneyFor>>>();
 
     const raw = await tx.execute(sql`
       select l.document_number, l.line_number, l.gl_account, l.debit_credit,
@@ -199,7 +205,11 @@ export async function executeFxValuation(input: {
     `);
     const candidates = raw as unknown as CandidateRow[];
 
-    interface WorkItem extends FxValuationItem { signedForeign: number; signedCarrying: number }
+    interface WorkItem extends FxValuationItem {
+      signedForeign: number; signedCarrying: number;
+      signedForeignUnits: bigint; signedCarryingUnits: bigint;
+      signedAdjustmentUnits?: bigint;
+    }
     const work: WorkItem[] = [];
     const balanceGroups = new Map<string, WorkItem>();
     for (const row of candidates) {
@@ -214,6 +224,8 @@ export async function executeFxValuation(input: {
           adjustmentAmount: null, classification: null, status: 'CALCULATED',
           error: null, postingDocument: null,
           signedForeign: sign * Number(row.amount_document), signedCarrying: sign * Number(row.amount_local),
+          signedForeignUnits: BigInt(sign) * toScaled(row.amount_document),
+          signedCarryingUnits: BigInt(sign) * toScaled(row.amount_local),
         });
       } else if (row.is_balance_sheet) {
         if (!s.includeBalances) continue;
@@ -225,26 +237,31 @@ export async function executeFxValuation(input: {
           rateType: s.valuationMethod, requiredAmount: null, adjustmentAmount: null,
           classification: null, status: 'CALCULATED' as FxItemStatus, error: null,
           postingDocument: null, signedForeign: 0, signedCarrying: 0,
+          signedForeignUnits: 0n, signedCarryingUnits: 0n,
         };
         group.signedForeign += sign * Number(row.amount_document);
         group.signedCarrying += sign * Number(row.amount_local);
+        group.signedForeignUnits += BigInt(sign) * toScaled(row.amount_document);
+        group.signedCarryingUnits += BigInt(sign) * toScaled(row.amount_local);
         balanceGroups.set(key, group);
       }
     }
     work.push(...balanceGroups.values());
 
-    // Rates: latest validity on or before the key date, per currency.
-    const rateByCurrency = new Map<string, number>();
+    // Rates: the newest validity on or before the key date, honouring ratios and direct/indirect
+    // quotation. A future-dated row never hides an earlier valid one.
+    const rateByCurrency = new Map<string, ResolvedExchangeRate>();
     const missingRates = new Set<string>();
     for (const item of work) {
       if (rateByCurrency.has(item.currency) || missingRates.has(item.currency)) continue;
-      const [rate] = await tx.select().from(exchangeRate).where(and(
-        eq(exchangeRate.client, input.client), eq(exchangeRate.rateType, s.valuationMethod),
-        eq(exchangeRate.fromCurrency, item.currency), eq(exchangeRate.toCurrency, local),
-      )).orderBy(sql`${exchangeRate.validFrom} desc`);
-      const valid = rate && rate.validFrom <= s.valuationKeyDate ? rate : null;
-      if (!valid) missingRates.add(item.currency);
-      else rateByCurrency.set(item.currency, Number(valid.rate) * valid.ratioTo / valid.ratioFrom);
+      const resolved = await resolveExchangeRate(
+        tx, input.client, item.currency, local, s.valuationKeyDate, s.valuationMethod,
+      );
+      if (!resolved) missingRates.add(item.currency);
+      else rateByCurrency.set(item.currency, resolved);
+    }
+    for (const item of work) {
+      if (!foreignMoney.has(item.currency)) foreignMoney.set(item.currency, await moneyFor(tx, item.currency));
     }
 
     // Duplicate live valuation guard, per source item.
@@ -260,36 +277,39 @@ export async function executeFxValuation(input: {
       r.source_kind === 'BALANCE' ? `B|${r.account_number}|${r.currency}` : `O|${r.source_document}|${r.source_line}`));
 
     const warnings: string[] = [];
-    let totalGain = 0;
-    let totalLoss = 0;
+    let totalGainUnits = 0n;
+    let totalLossUnits = 0n;
     work.forEach((item, index) => {
       item.itemNumber = index + 1;
-      item.foreignAmount = round2(Math.abs(item.signedForeign));
-      item.carryingAmount = round2(Math.abs(item.signedCarrying));
+      const foreign = foreignMoney.get(item.currency)!;
+      item.foreignAmount = foreign.round(Math.abs(item.signedForeign));
+      item.carryingAmount = roundLocal(Math.abs(item.signedCarrying));
       const rate = rateByCurrency.get(item.currency);
       if (rate === undefined) {
         item.status = 'ERROR';
         item.error = `No ${s.valuationMethod} rate for ${item.currency}/${local} stands valid on or before ${s.valuationKeyDate}.`;
         return;
       }
-      item.valuationRate = rate;
-      const requiredSigned = round2(item.signedForeign * rate);
-      item.requiredAmount = round2(Math.abs(requiredSigned));
-      const adjustmentSigned = round2(requiredSigned - item.signedCarrying);
-      item.adjustmentAmount = adjustmentSigned;
-      item.classification = adjustmentSigned > 0 ? 'GAIN' : adjustmentSigned < 0 ? 'LOSS' : 'NONE';
-      if (adjustmentSigned > 0) totalGain = round2(totalGain + adjustmentSigned);
-      if (adjustmentSigned < 0) totalLoss = round2(totalLoss - adjustmentSigned);
+      item.valuationRate = Number(rate.effectiveRate);
+      // One exact rational multiplication, rounded once at the local currency's 4 stored decimals.
+      const requiredUnits = translateAmount(item.signedForeignUnits, 4, 4, rate);
+      const adjustmentUnits = requiredUnits - item.signedCarryingUnits;
+      item.requiredAmount = roundLocal(Number(fromScaled(requiredUnits < 0n ? -requiredUnits : requiredUnits, 4)));
+      item.adjustmentAmount = roundLocal(Number(fromScaled(adjustmentUnits < 0n ? -adjustmentUnits : adjustmentUnits, 4)));
+      if (adjustmentUnits < 0n) item.adjustmentAmount = -item.adjustmentAmount!;
+      item.classification = adjustmentUnits > 0n ? 'GAIN' : adjustmentUnits < 0n ? 'LOSS' : 'NONE';
+      if (adjustmentUnits > 0n) totalGainUnits += adjustmentUnits;
+      if (adjustmentUnits < 0n) totalLossUnits += -adjustmentUnits;
+      item.signedAdjustmentUnits = adjustmentUnits;
       const key = item.sourceKind === 'BALANCE'
         ? `B|${item.accountNumber}|${item.currency}` : `O|${item.sourceDocument}|${item.sourceLine}`;
       if (!s.testRun && priorKeys.has(key)) {
         item.status = 'SKIPPED';
         item.error = 'Already valued live for this area and key date; reverse the earlier posting to rerun.';
       }
-      // Signed amounts ride on the item for posting; display keeps magnitudes.
-      (item as unknown as { signedAdjustment: number }).signedAdjustment = adjustmentSigned;
-      (item as unknown as { signedRequired: number }).signedRequired = requiredSigned;
     });
+    const totalGain = roundLocal(Number(fromScaled(totalGainUnits, 4)));
+    const totalLoss = roundLocal(Number(fromScaled(totalLossUnits, 4)));
     if (missingRates.size > 0) {
       warnings.push(`No valuation rate stands for: ${[...missingRates].join(', ')}. Those items are errors, never valued at a substituted rate.`);
     }
@@ -310,7 +330,8 @@ export async function executeFxValuation(input: {
     let postingDocument: string | null = null;
     let reversalDocument: string | null = null;
     if (!s.testRun) {
-      const postable = work.filter((i) => i.status === 'CALCULATED' && (i.adjustmentAmount ?? 0) !== 0);
+      const postable = work.filter((i) => i.status === 'CALCULATED'
+        && i.signedAdjustmentUnits !== undefined && i.signedAdjustmentUnits !== 0n);
       const failed = work.filter((i) => i.status === 'ERROR');
       if (failed.length > 0) {
         throw new FxValuationError(
@@ -331,9 +352,9 @@ export async function executeFxValuation(input: {
         const gainAccount = totalGain > 0 ? await determination('FXGAIN') : null;
         const lossAccount = totalLoss > 0 ? await determination('FXLOSS') : null;
         for (const item of postable) {
-          const adj = (item as unknown as { signedAdjustment: number }).signedAdjustment;
-          const amount = Math.abs(adj).toFixed(2);
-          if (adj > 0) {
+          const units = item.signedAdjustmentUnits!;
+          const amount = fromScaled(units < 0n ? -units : units, 4);
+          if (units > 0n) {
             lines.push({ glAccount: item.accountNumber, debitCredit: 'S', amount, lineText: `FX valuation ${item.currency}` });
             lines.push({ glAccount: gainAccount!, debitCredit: 'H', amount, lineText: 'FX gain' });
           } else {

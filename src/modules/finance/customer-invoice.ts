@@ -16,11 +16,14 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
+import { fromScaled } from '../../platform/posting/decimal';
 import { MoneyError, moneyFor, refusing } from '../../platform/posting/money';
 import { accountDetermination, profitCenter, taxCode } from '../foundation/schema';
 import { customerCompany } from '../foundation/customer-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { customerInvoice, customerInvoiceLine } from '../purchasing/schema';
+import { requireExchangeRate } from './exchange-rate-lookup';
+import { localUnitsOf } from './fx-settlement';
 import { sql } from 'drizzle-orm';
 
 export const CUSTOMER_INVOICE_CAPABILITY = 'FIN.AR.INVOICE.POST';
@@ -48,7 +51,9 @@ export interface CustomerInvoiceView {
   postingDate: string;
   reference: string;
   currency: string;
+  exchangeRate: string;
   grossAmount: string;
+  localGrossAmount: string;
   taxAmount: string;
   paymentTerms: string | null;
   baselineDate: string | null;
@@ -73,7 +78,9 @@ function toView(
     customerNumber: header.customerNumber,
     companyCode: header.companyCode, documentDate: header.documentDate,
     postingDate: header.postingDate, reference: header.reference,
-    currency: header.currency, grossAmount: header.grossAmount, taxAmount: header.taxAmount,
+    currency: header.currency, exchangeRate: header.exchangeRate,
+    grossAmount: header.grossAmount, localGrossAmount: header.localGrossAmount,
+    taxAmount: header.taxAmount,
     paymentTerms: header.paymentTerms, baselineDate: header.baselineDate, dueDate: header.dueDate,
     status: header.status, journalDocumentNumber: header.journalDocumentNumber,
     cancelledBy: header.cancelledBy, cancellationOf: header.cancellationOf,
@@ -239,6 +246,19 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
         throw error;
       }
     };
+    // The rate is the newest AVERAGE master row on or before the posting date. A foreign invoice
+    // without one is refused here, before anything is written; it is never posted at 1.
+    const rate = await requireExchangeRate(
+      tx, input.client, input.currency, company.currency, input.postingDate,
+    ).catch((error: unknown) => {
+      if (error instanceof Error && 'remedy' in error) {
+        throw new CustomerInvoiceError(error.message, (error as { remedy?: string }).remedy);
+      }
+      throw error;
+    });
+    const localScale = company.currency.toUpperCase() === input.currency.toUpperCase()
+      ? money.scale
+      : (await moneyFor(tx, company.currency)).scale;
 
     const duplicates = await tx.select().from(customerInvoice).where(and(
       eq(customerInvoice.client, input.client),
@@ -431,6 +451,7 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       postingPeriod: position.period,
       currency: input.currency.toUpperCase(),
       localCurrency: company.currency,
+      rate,
       reference: input.reference,
       headerText: input.headerText,
       lines: journalLines,
@@ -448,7 +469,10 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
       category: input.category ?? 'INVOICE', customerNumber: input.customerNumber, companyCode: input.companyCode,
       documentDate: input.documentDate, postingDate: input.postingDate,
       reference: input.reference, currency: input.currency.toUpperCase(),
-      grossAmount: money.text(input.grossAmount), taxAmount: money.fromUnits(taxUnits),
+      exchangeRate: rate.effectiveRate,
+      grossAmount: money.text(input.grossAmount),
+      localGrossAmount: fromScaled(localUnitsOf(grossUnits, money.scale, localScale, rate)),
+      taxAmount: money.fromUnits(taxUnits),
       paymentTerms: termsCode ?? null, baselineDate: baseline, dueDate: due,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
@@ -518,7 +542,9 @@ export async function cancelCustomerInvoice(input: {
       category: original.category, customerNumber: original.customerNumber,
       companyCode: original.companyCode, documentDate: original.documentDate,
       postingDate: input.postingDate, reference: original.reference,
-      currency: original.currency, grossAmount: original.grossAmount, taxAmount: original.taxAmount,
+      currency: original.currency, exchangeRate: original.exchangeRate,
+      grossAmount: original.grossAmount, localGrossAmount: original.localGrossAmount,
+      taxAmount: original.taxAmount,
       paymentTerms: original.paymentTerms, baselineDate: original.baselineDate,
       dueDate: original.dueDate, headerText: `Cancellation of ${original.invoiceNumber}`,
       status: 'POSTED', journalDocumentNumber: reversal.documentNumber,

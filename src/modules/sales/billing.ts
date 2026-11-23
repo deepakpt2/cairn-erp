@@ -2310,6 +2310,8 @@ export async function linkPostedInvoice(
       journalDocumentNumber: invoice.journalDocumentNumber,
       taxValue: invoice.taxAmount,
       grossValue: invoice.grossAmount,
+      exchangeRate: invoice.exchangeRate,
+      localGrossValue: invoice.localGrossAmount,
       version: header.version + 1,
       changedBy,
       changedAt: new Date(),

@@ -85,7 +85,14 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, mism
               <div><dt className={labelCls}>Status</dt><dd>{document.status}</dd></div>
               <div><dt className={labelCls}>Document currency</dt><dd>{document.documentCurrency}</dd></div>
               <div><dt className={labelCls}>Local currency</dt><dd>{document.localCurrency}</dd></div>
-              <div><dt className={labelCls}>Exchange rate</dt><dd>{document.exchangeRate}</dd></div>
+              <div>
+                <dt className={labelCls}>Exchange rate</dt>
+                <dd>
+                  {document.exchangeRate}
+                  {document.rateSource ? ` · ${document.rateSource}` : ''}
+                  {document.rateValidFrom ? ` from ${document.rateValidFrom}` : ''}
+                </dd>
+              </div>
               <div><dt className={labelCls}>Reference</dt><dd>{document.reference ?? '—'}</dd></div>
               <div><dt className={labelCls}>Header text</dt><dd>{document.headerText ?? '—'}</dd></div>
               <div><dt className={labelCls}>Posted by</dt><dd>{document.postedBy} · {document.postedAt}</dd></div>

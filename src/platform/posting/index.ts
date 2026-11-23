@@ -33,8 +33,15 @@ import {
   recordStatusChange,
   type DocumentRef,
 } from '../document';
-import { fromScaled, multiplyScaled, toScaled } from './decimal';
+import { MONEY_SCALE, fromScaled, multiplyScaled, toScaled } from './decimal';
 import { MoneyError, moneyFor, type Money } from './money';
+import {
+  identityRate,
+  resolveExchangeRate,
+  suppliedRate,
+  translateAmount,
+  type ResolvedExchangeRate,
+} from '../../modules/finance/exchange-rate-lookup';
 import {
   derivePosition,
   checkPostingAllowed,
@@ -52,6 +59,12 @@ export interface PostingLineInput {
   amount: string;
   /** Exact local-currency amount when a mirror must preserve it rather than translate it again. */
   amountLocal?: string;
+  /**
+   * A local-currency-only line (a realized exchange difference or a rounding adjustment). It has no
+   * document-currency amount — amount must be '0' — and is excluded from the document-currency
+   * totals while it still takes part in the local-currency balance.
+   */
+  localOnly?: boolean;
   /** Account assignments — any of these may be present on a line. */
   costCenter?: string;
   profitCenter?: string;
@@ -80,6 +93,14 @@ export interface PostJournalInput {
   postingPeriod: number;
   currency: string;
   localCurrency: string;
+  /**
+   * The already-resolved rate, with its provenance. Preferred over the bare `exchangeRate`: it
+   * carries the exact rational the master row states. When both are absent and the document is in
+   * a foreign currency, the engine resolves the latest AVERAGE master rate on or before the posting
+   * date and refuses if none stands. It never falls back to 1.
+   */
+  rate?: ResolvedExchangeRate;
+  /** A rate the caller resolved itself (a mirror, or a caller that already read the master). */
   exchangeRate?: string;
   reference?: string;
   headerText?: string;
@@ -127,6 +148,14 @@ export async function postJournalEntry(
   const totals = computeTotals(input.lines);
   assertBalanced(totals);
   assertAccountsPresent(input.lines);
+
+  const rate = await resolvePostingRate(tx, input);
+  const localScale = money?.local.scale
+    ?? (input.currency.trim().toUpperCase() === input.localCurrency.trim().toUpperCase()
+      ? MONEY_SCALE
+      : (await moneyFor(tx, input.localCurrency)).scale);
+  const amountLocalByLine = computeLocalAmounts(input.lines, input, rate, localScale);
+  assertLocalBalanced(input.lines, amountLocalByLine, localScale);
 
   // Protect the Controlling Area's financial settings for the full transaction.
   // Configuration maintenance takes FOR UPDATE; every journal posting takes
@@ -176,7 +205,7 @@ export async function postJournalEntry(
   const documentNumber = `${input.companyCode}/${input.fiscalYear}/${allocated.value}`;
 
   // ── Phase 6 · Document creation ─────────────────────────────────────────────
-  const exchangeRate = input.exchangeRate ?? '1';
+  const exchangeRate = rate.effectiveRate;
 
   await tx.insert(journalEntry).values({
     client: input.client,
@@ -191,6 +220,13 @@ export async function postJournalEntry(
     documentCurrency: input.currency,
     localCurrency: input.localCurrency,
     exchangeRate,
+    rateType: rate.source === 'IDENTITY' ? null : rate.rateType,
+    rateSource: rate.source,
+    rateValidFrom: rate.validFrom,
+    rateRaw: rate.rawRate,
+    rateRatioFrom: rate.source === 'IDENTITY' ? null : rate.ratioFrom,
+    rateRatioTo: rate.source === 'IDENTITY' ? null : rate.ratioTo,
+    rateIsIndirectQuote: rate.isIndirectQuote,
     reference: input.reference,
     headerText: input.headerText,
     status: 'POSTED',
@@ -203,12 +239,7 @@ export async function postJournalEntry(
 
   await tx.insert(journalEntryLine).values(
     input.lines.map((line, index) => {
-      const amountLocal = line.amountLocal ?? (
-        input.currency === input.localCurrency
-          ? line.amount
-          : money
-            ? fromScaled(multiplyScaled(toScaled(line.amount), exchangeRate, money.local.scale), money.local.scale)
-            : fromScaled(multiplyScaled(toScaled(line.amount), exchangeRate)));
+      const localOnly = line.localOnly === true;
       return {
         client: input.client,
         documentNumber,
@@ -217,9 +248,10 @@ export async function postJournalEntry(
         glAccount: line.glAccount,
         companyCode: input.companyCode,
         debitCredit: line.debitCredit,
-        amountLocal,
-        amountDocument: line.amount,
-        currency: input.currency,
+        amountLocal: fromScaled(amountLocalByLine[index]!),
+        amountDocument: localOnly ? '0' : line.amount,
+        currency: localOnly ? input.localCurrency : input.currency,
+        isLocalOnly: localOnly,
         costCenter: line.costCenter,
         profitCenter: line.profitCenter,
         internalOrder: line.internalOrder,
@@ -391,7 +423,15 @@ export async function reverseJournalEntry(
     postingPeriod: reversalPosition.period,
     currency: header.documentCurrency,
     localCurrency: header.localCurrency,
-    exchangeRate: header.exchangeRate,
+    rate: suppliedRate(header.documentCurrency, header.localCurrency, header.exchangeRate, {
+      rateType: header.rateType ?? 'AVERAGE',
+      source: (header.rateSource as ResolvedExchangeRate['source']) ?? 'SUPPLIED',
+      validFrom: header.rateValidFrom ?? undefined,
+      rawRate: header.rateRaw ?? undefined,
+      ratioFrom: header.rateRatioFrom ?? 1,
+      ratioTo: header.rateRatioTo ?? 1,
+      isIndirectQuote: header.rateIsIndirectQuote,
+    }),
     reference: input.documentNumber,
     headerText: `Reversal of ${input.documentNumber}: ${input.reason}`,
     origin: {
@@ -410,6 +450,7 @@ export async function reverseJournalEntry(
         debitCredit: line.debitCredit === 'S' ? ('H' as const) : ('S' as const),
         amount: line.amountDocument,
         amountLocal: line.amountLocal,
+        localOnly: line.isLocalOnly,
         costCenter: line.costCenter ?? undefined,
         profitCenter: line.profitCenter ?? undefined,
         internalOrder: line.internalOrder ?? undefined,
@@ -483,6 +524,12 @@ function assertLinesPresent(lines: PostingLineInput[]) {
       'A single-line entry cannot balance. Add the corresponding debit or credit.',
     );
   }
+  if (!lines.some((line) => line.localOnly !== true)) {
+    throw new PostingError(
+      'The document has only local-currency adjustment lines.',
+      'Add the document-currency debit and credit the adjustment belongs to.',
+    );
+  }
 }
 
 /**
@@ -495,7 +542,7 @@ async function judgePrecision(tx: Tx, input: PostJournalInput): Promise<{ docume
     const document = await moneyFor(tx, input.currency);
     const local = input.localCurrency === input.currency ? document : await moneyFor(tx, input.localCurrency);
     input.lines.forEach((line, index) => {
-      document.entered(line.amount, `Line ${index + 1} amount`);
+      if (line.localOnly !== true) document.entered(line.amount, `Line ${index + 1} amount`);
       if (line.amountLocal !== undefined) local.entered(line.amountLocal, `Line ${index + 1} local amount`);
     });
     return { document, local };
@@ -507,6 +554,22 @@ async function judgePrecision(tx: Tx, input: PostJournalInput): Promise<{ docume
 
 function assertPositiveAmounts(lines: PostingLineInput[]) {
   lines.forEach((line, index) => {
+    if (line.localOnly === true) {
+      if (line.amount !== '0' && line.amount !== '0.0' && toScaled(line.amount) !== 0n) {
+        throw new PostingError(
+          `Line ${index + 1} is a local-currency adjustment but carries a document amount (${line.amount}).`,
+          'A local-currency-only line has no document-currency amount; leave it at 0.',
+        );
+      }
+      const local = line.amountLocal === undefined ? 0n : toScaled(line.amountLocal);
+      if (local <= 0n) {
+        throw new PostingError(
+          `Line ${index + 1} is a local-currency adjustment without a positive local amount.`,
+          'Enter the local-currency difference the adjustment represents.',
+        );
+      }
+      return;
+    }
     const scaled = toScaled(line.amount);
     if (scaled === 0n) {
       throw new PostingError(
@@ -536,13 +599,153 @@ function assertAccountsPresent(lines: PostingLineInput[]) {
 }
 
 export function computeTotals(lines: PostingLineInput[]) {
-  const debit = lines
+  const documentLines = lines.filter((line) => line.localOnly !== true);
+  const debit = documentLines
     .filter((line) => line.debitCredit === 'S')
     .reduce((total, line) => total + toScaled(line.amount), 0n);
-  const credit = lines
+  const credit = documentLines
     .filter((line) => line.debitCredit === 'H')
     .reduce((total, line) => total + toScaled(line.amount), 0n);
   return { debit: fromScaled(debit), credit: fromScaled(credit) };
+}
+
+/**
+ * The rate a document is translated at.
+ *
+ * Same currency is an identity, and only an identity. A foreign document uses the rate the caller
+ * resolved (which must itself have come from the master or from the document being mirrored), or
+ * the engine reads the master. There is no fourth path: a missing foreign rate is refused, never
+ * defaulted to 1.
+ */
+async function resolvePostingRate(tx: Tx, input: PostJournalInput): Promise<ResolvedExchangeRate> {
+  const from = input.currency.trim().toUpperCase();
+  const to = input.localCurrency.trim().toUpperCase();
+  if (from === to) {
+    if (input.rate) return input.rate;
+    if (input.exchangeRate !== undefined && input.exchangeRate.trim() !== '') {
+      let supplied: ResolvedExchangeRate;
+      try { supplied = suppliedRate(from, to, input.exchangeRate); } catch (error) {
+        throw new PostingError(
+          (error as Error).message,
+          'A same-currency document translates at 1; correct the rate.',
+        );
+      }
+      if (supplied.numerator !== supplied.denominator) {
+        throw new PostingError(
+          `Document currency and local currency are both ${from}, but a rate of ${input.exchangeRate} was supplied.`,
+          'A same-currency document translates at 1. Remove the rate.',
+        );
+      }
+    }
+    return identityRate(from, to);
+  }
+  if (input.rate) return input.rate;
+  if (input.exchangeRate !== undefined && input.exchangeRate.trim() !== '') {
+    let supplied: ResolvedExchangeRate;
+    try {
+      supplied = suppliedRate(from, to, input.exchangeRate);
+    } catch (error) {
+      throw new PostingError((error as Error).message, 'Correct the exchange rate and post again.');
+    }
+    // A caller that resolved the master itself keeps the master's provenance on the document. A
+    // different rate (a mirror, or a fixture) is stored as supplied, never replaced.
+    try {
+      const master = await resolveExchangeRate(tx, input.client, from, to, input.postingDate, 'AVERAGE');
+      if (master && master.effectiveRate === supplied.effectiveRate) return master;
+    } catch {
+      // A malformed master row must not turn a supplied rate into a refusal; it will be refused by
+      // the path that relies on the master if that path is actually used.
+    }
+    return supplied;
+  }
+  let resolved: ResolvedExchangeRate | null;
+  try {
+    resolved = await resolveExchangeRate(tx, input.client, from, to, input.postingDate, 'AVERAGE');
+  } catch (error) {
+    throw new PostingError((error as Error).message, 'Correct the maintained exchange rates and post again.');
+  }
+  if (!resolved) {
+    throw new PostingError(
+      `No AVERAGE exchange rate stands from ${from} to ${to} on or before ${input.postingDate}, so ${from} cannot be translated into ${to}.`,
+      `Maintain the AVERAGE rate in Exchange Rates (CFG.FIN.EXRATE.MAINTAIN) with a Valid From date on or before ${input.postingDate}. A missing rate is never posted at 1.`,
+    );
+  }
+  return resolved;
+}
+
+/** Each line's local amount at the ledger's 4 decimals. */
+function computeLocalAmounts(
+  lines: PostingLineInput[],
+  input: PostJournalInput,
+  rate: ResolvedExchangeRate,
+  localScale: number,
+): bigint[] {
+  const minorFactor = 10n ** BigInt(MONEY_SCALE - localScale);
+  const sameCurrency = input.currency.trim().toUpperCase() === input.localCurrency.trim().toUpperCase();
+  return lines.map((line) => {
+    if (line.localOnly === true) return toScaled(line.amountLocal ?? '0');
+    if (line.amountLocal !== undefined) return toScaled(line.amountLocal);
+    const amountUnits = toScaled(line.amount);
+    if (sameCurrency) return amountUnits;
+    return translateAmount(amountUnits, MONEY_SCALE, localScale, rate) * minorFactor;
+  });
+}
+
+/**
+ * Every document balances in each of its two currencies.
+ *
+ * A translated line rounds once, at the local currency's minor unit, so a set of lines may leave a
+ * residual smaller than one minor unit per line. That residual is absorbed into the largest line on
+ * the surplus side — deterministically, and only when it is genuinely rounding-sized. A caller that
+ * states its own local amounts (a mirror, a settlement, a clearing) must balance them exactly; a
+ * material difference is never hidden.
+ */
+function assertLocalBalanced(
+  lines: PostingLineInput[],
+  amounts: bigint[],
+  localScale: number,
+): void {
+  const signed = lines.reduce(
+    (total, line, index) => total + (line.debitCredit === 'S' ? amounts[index]! : -amounts[index]!),
+    0n,
+  );
+  if (signed === 0n) return;
+
+  const anyStated = lines.some((line) => line.localOnly === true || line.amountLocal !== undefined);
+  const remedy = 'Check the exchange rate and the stated local amounts; every journal must balance in both its document and local currency.';
+  if (anyStated) {
+    throw new PostingError(
+      `The document does not balance in local currency: debits exceed credits by ${fromScaled(signed < 0n ? -signed : signed)} (or the reverse).`,
+      remedy,
+    );
+  }
+
+  const minor = 10n ** BigInt(MONEY_SCALE - localScale);
+  const differenceMinor = signed / minor;
+  if (signed % minor !== 0n || (differenceMinor < 0n ? -differenceMinor : differenceMinor) > BigInt(lines.length)) {
+    throw new PostingError(
+      `The document does not balance in local currency by more than rounding: ${fromScaled(signed < 0n ? -signed : signed)}.`,
+      remedy,
+    );
+  }
+
+  const side = signed > 0n ? 'S' : 'H';
+  let target = -1;
+  let largest = -1n;
+  lines.forEach((line, index) => {
+    if (line.localOnly !== true && line.debitCredit === side && amounts[index]! > largest) {
+      largest = amounts[index]!;
+      target = index;
+    }
+  });
+  const adjustment = signed < 0n ? -signed : signed;
+  if (target < 0 || amounts[target]! <= adjustment) {
+    throw new PostingError(
+      `The document's local-currency rounding difference of ${fromScaled(adjustment)} cannot be placed on a line.`,
+      remedy,
+    );
+  }
+  amounts[target] = amounts[target]! - adjustment;
 }
 
 function assertBalanced(totals: { debit: string; credit: string }) {

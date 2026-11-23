@@ -975,6 +975,8 @@ export const billingDocument = pgTable('billing_document', {
   customerNumber: varchar('customer_number', { length: 40 }).notNull(),
   companyCode: varchar('company_code', { length: 10 }).notNull(),
   currency: char('currency', { length: 3 }).notNull().references(() => currency.code),
+  exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+  localGrossValue: numeric('local_gross_value', { precision: 23, scale: 4 }).notNull().default('0'),
   billingDate: date('billing_date', { mode: 'string' }).notNull(),
   postingDate: date('posting_date', { mode: 'string' }),
   status: varchar('status', { length: 16 }).notNull().default('OPEN'),

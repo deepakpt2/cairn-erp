@@ -33,7 +33,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | platform/posting | finance, foundation, inventory, people, platform/tenancy, production, purchasing, sales, ui/money.ts |
 | platform/registry | app/command.ts, app/registry, app/search |
 | platform/schema.ts | platform/db |
-| platform/security | foundation, platform/auth, platform/mail |
+| platform/security | foundation, people, platform/auth, platform/mail |
 | platform/tables | audit, finance, foundation, inventory, people, platform, platform/attention, platform/auth, platform/change, platform/document, platform/job, platform/lock, platform/mail, platform/notification, platform/numbering, platform/posting, platform/registry, platform/security, platform/tenancy, production, purchasing, quality, sales |
 | platform/tenancy | app/clients, app/config, app/page.tsx, finance, foundation, inventory, platform, production, purchasing |
 | ui/attention | app/page.tsx |

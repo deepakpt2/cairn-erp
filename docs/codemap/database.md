@@ -139,7 +139,7 @@
 | employee | people | platform, platform/auth, platform/notification, platform/tenancy, purchasing |
 | employee_tolerance_group | foundation | finance, platform/tenancy |
 | enqueue_entry | platform/tables | platform/auth, platform/job, platform/lock |
-| exchange_rate | foundation | finance, platform/tenancy, purchasing |
+| exchange_rate | foundation | finance, platform/tenancy |
 | factory_calendar | foundation | production |
 | financial_statement_assignment | finance | foundation |
 | financial_statement_node | finance | foundation |

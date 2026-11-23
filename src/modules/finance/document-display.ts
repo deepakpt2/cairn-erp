@@ -86,6 +86,8 @@ export interface JournalDocumentView {
   documentCurrency: string;
   localCurrency: string;
   exchangeRate: number;
+  rateSource: string | null;
+  rateValidFrom: string | null;
   reference: string | null;
   headerText: string | null;
   status: string;
@@ -310,6 +312,7 @@ export async function getJournalDocument(
         postingPeriod: header.postingPeriod,
         documentCurrency: header.documentCurrency, localCurrency: header.localCurrency,
         exchangeRate: Number(header.exchangeRate),
+        rateSource: header.rateSource, rateValidFrom: header.rateValidFrom,
         reference: header.reference, headerText: header.headerText,
         status: header.status,
         originClass: header.originClass, originKey: header.originKey,

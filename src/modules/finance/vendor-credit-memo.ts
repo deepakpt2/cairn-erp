@@ -19,11 +19,14 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { MoneyError, moneyFor, refusing } from '../../platform/posting/money';
 import { postJournalEntry, PostingError } from '../../platform/posting';
+import { fromScaled } from '../../platform/posting/decimal';
 import { accountDetermination, costCenter, profitCenter, taxCode } from '../foundation/schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { vendorInvoice, vendorInvoiceLine } from './schema';
 import { type VendorInvoiceView } from './vendor-invoice';
+import { requireExchangeRate } from './exchange-rate-lookup';
+import { localUnitsOf } from './fx-settlement';
 
 export const VENDOR_CREDIT_MEMO_CAPABILITY = 'FIN.AP.CREDITMEMO.POST';
 const JOURNAL_DOCUMENT_TYPE = 'KG';
@@ -54,7 +57,9 @@ async function loadView(tx: Tx, client: string, number: string): Promise<VendorI
     vendorNumber: header.vendorNumber, companyCode: header.companyCode,
     documentDate: header.documentDate, postingDate: header.postingDate,
     reference: header.reference, currency: header.currency,
-    grossAmount: header.grossAmount, taxAmount: header.taxAmount,
+    exchangeRate: header.exchangeRate,
+    grossAmount: header.grossAmount, localGrossAmount: header.localGrossAmount,
+    taxAmount: header.taxAmount,
     paymentTerms: header.paymentTerms, baselineDate: header.baselineDate, dueDate: header.dueDate,
     status: header.status, journalDocumentNumber: header.journalDocumentNumber,
     cancelledBy: header.cancelledBy, cancellationOf: header.cancellationOf,
@@ -154,6 +159,17 @@ export async function postVendorCreditMemo(input: PostVendorCreditMemoInput): Pr
         throw error;
       }
     };
+    const rate = await requireExchangeRate(
+      tx, input.client, input.currency, company.currency, input.postingDate,
+    ).catch((error: unknown) => {
+      if (error instanceof Error && 'remedy' in error) {
+        throw new VendorCreditMemoError(error.message, (error as { remedy?: string }).remedy);
+      }
+      throw error;
+    });
+    const localScale = company.currency.toUpperCase() === input.currency.toUpperCase()
+      ? money.scale
+      : (await moneyFor(tx, company.currency)).scale;
     const chart = vendor.chartOfAccounts;
 
     const duplicates = await tx.select().from(vendorInvoice).where(and(
@@ -324,6 +340,7 @@ export async function postVendorCreditMemo(input: PostVendorCreditMemoInput): Pr
       postingPeriod: position.period,
       currency: input.currency.toUpperCase(),
       localCurrency: company.currency,
+      rate,
       reference: input.reference,
       headerText: input.headerText,
       lines: journalLines,
@@ -342,7 +359,10 @@ export async function postVendorCreditMemo(input: PostVendorCreditMemoInput): Pr
       vendorNumber: input.vendorNumber, companyCode: input.companyCode,
       documentDate: input.documentDate, postingDate: input.postingDate,
       reference: input.reference, currency: input.currency.toUpperCase(),
-      grossAmount: money.fromUnits(grossUnits), taxAmount: money.fromUnits(taxUnits),
+      exchangeRate: rate.effectiveRate,
+      grossAmount: money.fromUnits(grossUnits),
+      localGrossAmount: fromScaled(localUnitsOf(grossUnits, money.scale, localScale, rate)),
+      taxAmount: money.fromUnits(taxUnits),
       paymentTerms: termsCode ?? null, baselineDate: baseline, dueDate: due,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,

@@ -309,16 +309,20 @@ export default function BankReconciliation({
               </section>
 
               <section aria-labelledby="bank-ledger" className="border border-line bg-surface p-4">
-                <h2 id="bank-ledger" className="text-sm font-semibold">Posted bank G/L lines as of {view.statement.toDate}</h2>
+                <h2 id="bank-ledger" className="text-sm font-semibold">
+                  Posted bank G/L lines as of {view.statement.toDate} · {view.currency}
+                </h2>
                 <p className="mt-1 text-sm text-ink-soft">
-                  Debit to the bank asset is money in (positive); credit is money out (negative).
+                  Debit to the bank asset is money in (positive); credit is money out (negative). Matching is
+                  in the bank account currency; the local carrying amount is kept separately in {view.companyCurrency}.
                 </p>
                 <div className="mt-3 overflow-x-auto">
                   <table className="grid-table text-left text-sm">
                     <thead>
                       <tr className="text-xs uppercase tracking-wide text-ink-faint">
                         <th>Document</th><th>Date</th><th>Type</th><th>Reference</th><th>Assignment</th>
-                        <th>Origin</th><th>Direction</th><th>Amount</th><th>Matched</th><th>Remaining</th>
+                        <th>Origin</th><th>Direction</th><th>Amount ({view.currency})</th><th>Matched</th>
+                        <th>Remaining</th><th>Local ({view.companyCurrency})</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -334,6 +338,7 @@ export default function BankReconciliation({
                           <td className="num">{line.amount}</td>
                           <td className="num">{line.matchedAmount}</td>
                           <td className="num">{line.remainingAmount}</td>
+                          <td className="num">{line.localAmount}</td>
                         </tr>
                       ))}
                     </tbody>

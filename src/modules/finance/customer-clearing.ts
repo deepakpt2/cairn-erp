@@ -15,9 +15,11 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { changeDocument, changeDocumentItem } from '../../platform/tables/audit-trail';
 import { customerCompany } from '../foundation/customer-company-schema';
 import { journalEntry, journalEntryLine } from './schema';
+import { fxDifferenceAccount } from './fx-settlement';
 
 export const CUSTOMER_CLEARING_CAPABILITY = 'FIN.AR.CLEAR';
 const JOURNAL_DOCUMENT_TYPE = 'DZ';
@@ -195,7 +197,11 @@ export async function clearCustomerItems(input: {
     const company = await getCompanyCode(tx, input.client, input.companyCode);
     if (!company?.fiscalYearVariant) throw new CustomerClearingError(`Company code ${input.companyCode} is not configured.`);
 
-    interface Held { ref: ClearingItemRef; glAccount: string; currency: string; amount: string; signed: number }
+    interface Held {
+      ref: ClearingItemRef; glAccount: string; currency: string;
+      documentAmount: string; localAmount: string;
+      signedDocument: number; signedLocal: number;
+    }
     const held: Held[] = [];
     for (const ref of input.items) {
       const [line] = await tx.select().from(journalEntryLine).where(and(
@@ -224,9 +230,12 @@ export async function clearCustomerItems(input: {
       if (!journal || journal.status !== 'POSTED') {
         throw new CustomerClearingError(`Document ${ref.documentNumber} does not stand posted.`, 'Reload the open items, then clear.');
       }
+      const directionSign = line.debitCredit === 'S' ? 1 : -1;
       held.push({
-        ref, glAccount: line.glAccount, currency: line.currency, amount: line.amountLocal,
-        signed: line.debitCredit === 'S' ? Number(line.amountLocal) : -Number(line.amountLocal),
+        ref, glAccount: line.glAccount, currency: line.currency,
+        documentAmount: line.amountDocument, localAmount: line.amountLocal,
+        signedDocument: directionSign * Number(line.amountDocument),
+        signedLocal: directionSign * Number(line.amountLocal),
       });
     }
 
@@ -237,15 +246,51 @@ export async function clearCustomerItems(input: {
         'Select items in a single currency.',
       );
     }
-    const difference = round4(held.reduce((s, h) => s + h.signed, 0));
+    // The items must net in their document currency; their local carrying differences (invoices
+    // posted at different rates) are a realized exchange difference, not a reason to refuse.
+    const difference = round4(held.reduce((s, h) => s + h.signedDocument, 0));
     if (difference !== 0) {
       throw new CustomerClearingError(
         `The selected items do not balance: the difference stands at ${Math.abs(difference).toFixed(2)} ${currencies[0]}.`,
-        'Select items whose signed sum stands at zero; partial and residual clearing stand deferred.',
+        'Select items whose signed document-currency sum stands at zero; partial and residual clearing stand deferred.',
       );
     }
 
     const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
+    const lines: Array<{
+      glAccount: string; debitCredit: 'S' | 'H'; amount: string; amountLocal: string;
+      localOnly?: boolean; businessPartner?: string; lineText?: string;
+    }> = held.map((h) => ({
+      glAccount: h.glAccount,
+      debitCredit: h.signedDocument > 0 ? 'H' as const : 'S' as const,
+      amount: Number(h.documentAmount).toFixed(2),
+      amountLocal: h.localAmount,
+      localOnly: toScaled(h.documentAmount) === 0n,
+      businessPartner: input.customer,
+    }));
+    const localSigned = lines.reduce(
+      (total, line) => total + (line.debitCredit === 'S' ? toScaled(line.amountLocal) : -toScaled(line.amountLocal)),
+      0n,
+    );
+    if (localSigned !== 0n) {
+      const event = localSigned > 0n ? 'FXGAIN' : 'FXLOSS';
+      const account = await fxDifferenceAccount(tx, input.client, company.chartOfAccounts ?? '', event);
+      if (!account) {
+        throw new CustomerClearingError(
+          `Account determination for ${event} does not stand in chart ${company.chartOfAccounts ?? ''}, so the realized exchange difference cannot be posted.`,
+          `Maintain the ${event} account determination, then clear again. Nothing has been posted.`,
+        );
+      }
+      lines.push({
+        glAccount: account,
+        debitCredit: localSigned > 0n ? 'H' : 'S',
+        amount: '0',
+        amountLocal: fromScaled(localSigned < 0n ? -localSigned : localSigned),
+        localOnly: true,
+        lineText: localSigned > 0n ? 'Realized exchange gain' : 'Realized exchange loss',
+      });
+    }
+
     const journal = await postJournalEntry(tx, {
       client: input.client,
       companyCode: input.companyCode,
@@ -258,12 +303,7 @@ export async function clearCustomerItems(input: {
       localCurrency: company.currency,
       reference: input.customer,
       headerText: `Customer clearing ${input.customer}`,
-      lines: held.map((h) => ({
-        glAccount: h.glAccount,
-        debitCredit: h.signed > 0 ? 'H' as const : 'S' as const,
-        amount: Number(h.amount).toFixed(2),
-        businessPartner: input.customer,
-      })),
+      lines,
       origin: { documentClass: CLEARING_CLASS, documentKey: `${input.companyCode}/${input.customer}` },
       postedBy: input.changedBy,
       transactionCode: CUSTOMER_CLEARING_CAPABILITY,
