@@ -97,6 +97,8 @@ const REQUEST = [REISSUE_REQUEST_CAPABILITY] as const;
 const APPROVE = [REISSUE_APPROVE_CAPABILITY] as const;
 const DOWNLOAD = [REISSUE_DOWNLOAD_CAPABILITY] as const;
 const VIEW = [REISSUE_REQUEST_CAPABILITY, REISSUE_APPROVE_CAPABILITY, REISSUE_DOWNLOAD_CAPABILITY, FILE_HISTORICAL_CAPABILITY] as const;
+/** A full-identifier download also needs the live bank-reveal authority, exactly as the original file does. */
+const BANK_REVEAL = ['PEOPLE.BANK.REVEAL'] as const;
 
 const ATTESTATION_OUTCOMES: readonly ReissueAttestationOutcome[] = ['NOT_UPLOADED', 'BANK_REJECTED', 'CANCELLED_BEFORE_EXECUTION', 'RETURNED'];
 
@@ -244,8 +246,37 @@ function canonicalJson(value: unknown): string {
 const reissueCipherContext = (client: string, personnelNumber: string, reissueId: string) =>
   ({ client, partnerNumber: personnelNumber, bankRecordId: reissueId as never, field: 'paymentFileAccount' });
 
+/** The frozen account value of one replacement row, or null if it cannot be decrypted (keyring unavailable). */
+function frozenSnapshotAccount(frozen: PaymentFileBankRow, client: string, reissueId: string): string | null {
+  try {
+    return decryptBankData(frozen.accountCiphertext, reissueCipherContext(client, frozen.personnelNumber, reissueId), keyringOrRefuse(`employee ${frozen.personnelNumber}`));
+  } catch {
+    return null;
+  }
+}
+
 async function judge(tx: Tx, client: string, access: ReissueAccess | undefined, capabilities: readonly string[], code = 'REISSUE_AUTHORITY'): Promise<PayrollGrant> {
   return judgePayrollAccess(tx, client, access, capabilities, refuse, code);
+}
+
+/** A full-identifier download: the named reissue/historical authority AND the live bank-reveal authority. */
+async function judgeFullDownload(tx: Tx, client: string, access: ReissueAccess | undefined, capabilities: readonly string[]): Promise<PayrollGrant> {
+  const grant = await judge(tx, client, access, capabilities);
+  await judge(tx, client, access, BANK_REVEAL, 'REISSUE_BANK_AUTHORITY');
+  return grant;
+}
+
+/** Does the grant reach every one of these employees? Used to avoid disclosing out-of-reach data. */
+async function allReachable(tx: Tx, client: string, grant: PayrollGrant, personnelNumbers: readonly string[], onDate: string): Promise<boolean> {
+  for (const pn of personnelNumbers) {
+    try {
+      await assertEmployeeScope(tx, client, grant, pn, onDate);
+    } catch (error) {
+      if (error instanceof PayrollStructureError) return false;
+      throw error;
+    }
+  }
+  return true;
 }
 
 async function assertReachable(tx: Tx, client: string, grant: PayrollGrant, personnelNumbers: readonly string[], onDate: string, code = 'EMPLOYEE_SCOPE'): Promise<void> {
@@ -313,6 +344,38 @@ async function supersededAfter(tx: Tx, client: string, runId: string, personnelN
      order by r.approved_at desc limit 1
   `)) as unknown as Array<{ reissue_id: string }>;
   return rows[0]?.reissue_id ?? null;
+}
+
+/** The latest APPROVED replacement per employee in a run: personnel number → reissue id. */
+async function latestApprovedByEmployee(tx: Tx, client: string, runId: string): Promise<Map<string, string>> {
+  const rows = (await tx.execute(sql`
+    select distinct on (l.personnel_number) l.personnel_number, r.reissue_id
+      from payroll_payment_reissue_line l
+      join payroll_payment_reissue r on r.client = l.client and r.reissue_id = l.reissue_id
+     where l.client = ${client} and l.run_id = ${runId} and l.state = 'APPROVED' and r.status = 'APPROVED'
+     order by l.personnel_number, r.approved_at desc, r.version desc
+  `)) as unknown as Array<{ personnel_number: string; reissue_id: string }>;
+  return new Map(rows.map((r) => [r.personnel_number, r.reissue_id]));
+}
+
+/**
+ * Refuse to release or download an old replacement if ANY of its employees is now superseded by a later
+ * approved attempt. Returns the first offending employee so the caller can explain without leaking data
+ * beyond the caller's reach (the caller already has the reissue's own snapshot).
+ */
+async function assertNotSuperseded(tx: Tx, client: string, row: ReissueRow, verb: string): Promise<void> {
+  const latest = await latestApprovedByEmployee(tx, client, row.runId);
+  const tail = verb === 'download' ? 'This file must not be uploaded; use the current replacement.' : 'Cancel this draft; a stale attempt is never released.';
+  for (const line of await linesOf(tx, client, row.reissueId)) {
+    const newest = latest.get(line.personnelNumber);
+    if (newest && newest !== row.reissueId) {
+      refuse(
+        'REISSUE_SUPERSEDED',
+        `Employee ${line.personnelNumber} in ${row.reissueReference} has a later approved replacement; this ${verb === 'download' ? 'file' : 'draft'} is superseded.`,
+        `${verb === 'download' ? 'Download the current replacement, or read this one as historical evidence (do not upload).' : tail}`,
+      );
+    }
+  }
 }
 
 /**
@@ -417,6 +480,17 @@ export async function previewReissue(
 
     const all = snapshotRowsOf(file);
     const wanted = input.selection === 'ALL' ? all.map((r) => r.personnelNumber) : normaliseSelection(input.personnelNumbers);
+
+    // Scope before disclosure. A whole-file (ALL) preview fails closed if any employee is outside reach; a
+    // selected preview proves every named employee is reachable before returning any of their details. This
+    // keeps out-of-scope existence indistinguishable from a missing file.
+    const toCheck = input.selection === 'ALL'
+      ? all.map((r) => r.personnelNumber)
+      : wanted.filter((pn) => all.some((r) => r.personnelNumber === pn));
+    if (!(await allReachable(tx, client, grant, toCheck, input.intendedPaymentDate))) {
+      refuse('FILE_UNAVAILABLE', 'That file does not exist, or is not available to you.', 'Open a file whose employees are all within your Company Code or Plant scope.');
+    }
+
     const employees: ReissuePreview['employees'] = [];
     const ineligible: ReissuePreview['ineligible'] = [];
 
@@ -465,10 +539,10 @@ export async function previewReissue(
 
 async function employeeEligibility(
   tx: Tx, client: string, grant: PayrollGrant, file: FileRow, personnelNumber: string, intendedPaymentDate: string, money: Money,
-): Promise<{ amount: string; maskedAccount: string; bankName: string; blocker: string | null; accountValue: string; accountKind: 'IBAN' | 'ACCOUNT'; bankCode: string | null }> {
+): Promise<{ amount: string; maskedAccount: string; bankName: string; blocker: string | null; accountValue: string; accountKind: 'IBAN' | 'ACCOUNT'; bankCode: string | null; beneficiaryName: string | null }> {
   const source = snapshotRowsOf(file).find((r) => r.personnelNumber === personnelNumber);
   const amount = source ? money.text(source.amount) : '';
-  const blank = { accountValue: '', accountKind: 'ACCOUNT' as const, bankCode: null };
+  const blank = { accountValue: '', accountKind: 'ACCOUNT' as const, bankCode: null, beneficiaryName: null };
   if (!source) return { amount, maskedAccount: '••••', bankName: '', blocker: 'Not in this file', ...blank };
   // Reach is required for every selected employee (fail closed).
   try {
@@ -492,7 +566,7 @@ async function employeeEligibility(
     if (isReissueError(error)) throw error;
     return { amount, maskedAccount: '••••', bankName: account.bankName, blocker: 'Bank details could not be decrypted (keyring unavailable or record unreadable)', ...blank };
   }
-  return { amount, maskedAccount: mask(accountValue), bankName: account.bankName, blocker: null, accountValue, accountKind: account.accountKind as 'IBAN' | 'ACCOUNT', bankCode: account.bankCode ?? null };
+  return { amount, maskedAccount: mask(accountValue), bankName: account.bankName, blocker: null, accountValue, accountKind: account.accountKind as 'IBAN' | 'ACCOUNT', bankCode: account.bankCode ?? null, beneficiaryName: account.beneficiaryName };
 }
 
 function isBankAmbiguous(error: unknown): boolean {
@@ -512,16 +586,33 @@ export async function requestReissue(rawInput: RequestReissueInput, access: Reis
     const money = await moneyForRun(tx, run);
     if (!isCalendarDate(input.intendedPaymentDate)) refuse('PAYMENT_DATE', `Intended payment date ${input.intendedPaymentDate} is not a calendar date.`, 'Enter the date as YYYY-MM-DD.');
 
-    // Idempotency: a repeated key replays only an IDENTICAL payload; a different payload is refused.
+    // Idempotency: a repeated key replays only an IDENTICAL normalized request. The fingerprint covers the
+    // source, the all/selected set, the intended date, the reason and every attestation field. It is computed
+    // BEFORE any disclosure, so the replay path never returns employee data outside the caller's reach.
+    const sourceId = file.preparationId;
+    const selectionSet = (input.selection === 'ALL'
+      ? snapshotRowsOf(file).map((r) => r.personnelNumber)
+      : normaliseSelection(input.personnelNumbers));
+    const attestationsNormalized = [...input.attestations]
+      .map((a) => ({ personnelNumber: a.personnelNumber.toUpperCase(), outcome: a.outcome, reason: a.reason, verificationDate: a.verificationDate, evidenceReference: a.evidenceReference, confirmedNoSubmission: a.confirmedNoSubmission ?? false }))
+      .sort((a, b) => a.personnelNumber.localeCompare(b.personnelNumber));
+    const fingerprint = createHash('sha256').update(canonicalJson({
+      source: sourceId, selection: input.selection, employees: [...selectionSet].sort(), intendedPaymentDate: input.intendedPaymentDate,
+      reason: input.reason, attestations: attestationsNormalized,
+    }), 'utf8').digest('hex');
     if (input.requestKey) {
       const [replay] = await tx.select().from(payrollPaymentReissue)
         .where(and(eq(payrollPaymentReissue.client, input.client), eq(payrollPaymentReissue.requestKey, input.requestKey))).limit(1);
       if (replay) {
-        const same = replay.sourcePreparationId === file.preparationId
-          && replay.selection === input.selection
-          && replay.intendedPaymentDate === input.intendedPaymentDate
-          && replay.reason === input.reason;
-        if (!same) refuse('REISSUE_KEY_REUSED', 'This request key was already used for a different replacement request.', 'Reload the screen to get a fresh request key.');
+        // A legacy draft has no fingerprint: never guess — refuse rather than risk returning the wrong draft.
+        if (!replay.requestFingerprint) {
+          refuse('REISSUE_KEY_REUSED', 'This request key belongs to an older draft that cannot be verified as identical.', 'Reload the screen to get a fresh request key.');
+        }
+        if (replay.requestFingerprint !== fingerprint) {
+          refuse('REISSUE_KEY_REUSED', 'This request key was already used for a different replacement request.', 'Reload the screen to get a fresh request key.');
+        }
+        // Recheck live scope before any replay leaves the service.
+        await assertReachable(tx, input.client, grant, (replay.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), replay.intendedPaymentDate);
         return viewOf(tx, input.client, replay, money);
       }
     }
@@ -596,7 +687,8 @@ export async function requestReissue(rawInput: RequestReissueInput, access: Reis
       totalUnits += money.units(elig.amount);
       snapshot.push({
         personnelNumber: pn,
-        beneficiaryName: sourceRow.beneficiaryName,
+        // The effective bank record's beneficiary name for the intended date, not the employee master.
+        beneficiaryName: elig.beneficiaryName ?? sourceRow.beneficiaryName,
         amount: elig.amount,
         currency: String(file.currency).trim(),
         intendedPaymentDate: input.intendedPaymentDate,
@@ -622,7 +714,7 @@ export async function requestReissue(rawInput: RequestReissueInput, access: Reis
       companyCode: file.companyCode, fiscalYear: file.fiscalYear, period: file.period, currency: file.currency,
       version, reissueReference, filename, intendedPaymentDate: input.intendedPaymentDate, selection: input.selection,
       employeeCount: selected.length, totalAmount, status: 'DRAFT', reason: input.reason,
-      bankSnapshot: snapshot, checksum, requestKey: input.requestKey ?? null,
+      bankSnapshot: snapshot, checksum, requestKey: input.requestKey ?? null, requestFingerprint: fingerprint,
       requestedBy: input.changedBy, createdBy: input.changedBy,
     });
     await tx.insert(payrollPaymentReissueLine).values(lines);
@@ -656,43 +748,64 @@ export async function approveReissue(
     const grant = await judge(tx, client, access, APPROVE);
     const row = await loadReissue(tx, client, reissueId);
     if (!row) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
-    if (row.status !== 'DRAFT') refuse('REISSUE_STATE', `Replacement ${row.reissueReference} is ${row.status.toLowerCase()}; only a draft can be approved.`, 'Reload the file history.');
-    if (approverName.toLowerCase() === row.requestedBy.toLowerCase()) {
+    // Serialise approval/cancellation per run: a concurrent approve/approve or approve/cancel cannot both win.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payment-reissue-state:${client}:${row.runId}`}, 0))`);
+    // Re-read under the lock so a racing action that already moved the state is observed.
+    const locked = await loadReissue(tx, client, reissueId);
+    if (!locked) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    if (locked.status !== 'DRAFT') refuse('REISSUE_STATE', `Replacement ${locked.reissueReference} is ${locked.status.toLowerCase()}; only a draft can be approved.`, 'Reload the file history.');
+    if (approverName.toLowerCase() === locked.requestedBy.toLowerCase()) {
       refuse('FOUR_EYES', 'You requested this replacement; a different person must approve it.', 'Ask another authorized approver.');
     }
-    const run = await loadRun(tx, client, row.runId);
+    const run = await loadRun(tx, client, locked.runId);
     await assertNotReversed(tx, client, run);
     const money = await moneyForRun(tx, run);
-    const lines = await linesOf(tx, client, row.reissueId);
+    const lines = await linesOf(tx, client, locked.reissueId);
     // Re-check the exact frozen snapshot and eligibility for every line.
-    const snapshot = (row.bankSnapshot ?? []) as PaymentFileBankRow[];
+    const snapshot = (locked.bankSnapshot ?? []) as PaymentFileBankRow[];
     const expected = createHash('sha256').update(canonicalJson(snapshot), 'utf8').digest('hex');
-    if (expected !== row.checksum) refuse('REISSUE_TAMPERED', `Replacement ${row.reissueReference} failed its integrity check.`, 'Do not release it; report it to an administrator.');
-    if (snapshot.length !== lines.length) refuse('REISSUE_TAMPERED', `Replacement ${row.reissueReference} does not match its lines.`, 'Do not release it; report it to an administrator.');
-    await assertReachable(tx, client, grant, lines.map((l) => l.personnelNumber), row.intendedPaymentDate);
+    if (expected !== locked.checksum) refuse('REISSUE_TAMPERED', `Replacement ${locked.reissueReference} failed its integrity check.`, 'Do not release it; report it to an administrator.');
+    if (snapshot.length !== lines.length) refuse('REISSUE_TAMPERED', `Replacement ${locked.reissueReference} does not match its lines.`, 'Do not release it; report it to an administrator.');
+    await assertReachable(tx, client, grant, lines.map((l) => l.personnelNumber), locked.intendedPaymentDate);
     for (const l of lines) {
       // Stale means a DIFFERENT replacement was approved for this employee AFTER this draft was requested.
       // An older approved attempt is the predecessor this draft supersedes, not a blocker.
-      const sup = await supersededAfter(tx, client, row.runId, l.personnelNumber, row.requestedAt, row.reissueId);
+      const sup = await supersededAfter(tx, client, locked.runId, l.personnelNumber, locked.requestedAt, locked.reissueId);
       if (sup) refuse('REISSUE_STALE', `Employee ${l.personnelNumber} has been replaced by a newer approved attempt (${sup}).`, 'Cancel this draft; a stale attempt is never released.');
-      const account = await accountAsOf(tx, client, l.personnelNumber, row.intendedPaymentDate);
-      if (!account) refuse('REISSUE_INELIGIBLE', `Employee ${l.personnelNumber} has no bank account effective on ${row.intendedPaymentDate}.`, 'This draft can no longer be released; cancel it and request a fresh replacement.');
+      const account = await accountAsOf(tx, client, l.personnelNumber, locked.intendedPaymentDate);
+      if (!account) refuse('REISSUE_INELIGIBLE', `Employee ${l.personnelNumber} has no bank account effective on ${locked.intendedPaymentDate}.`, 'This draft can no longer be released; cancel it and request a fresh replacement.');
+      // The frozen destination must still be the effective one: if the bank details changed since the draft
+      // was prepared, do not silently approve an obsolete account — cancel and review a fresh replacement.
+      const frozen = snapshot.find((s) => s.personnelNumber === l.personnelNumber);
+      let currentValue: string | null = null;
+      try {
+        currentValue = decryptBankData(account.accountCiphertext, { client, partnerNumber: l.personnelNumber, bankRecordId: account.bankRecordId as never, field: 'employeeAccount' }, keyringOrRefuse(`employee ${l.personnelNumber}`));
+      } catch (error) {
+        if (isReissueError(error)) throw error;
+      }
+      const frozenValue = frozen ? frozenSnapshotAccount(frozen, client, locked.reissueId) : null;
+      if (frozenValue !== null && currentValue !== null && frozenValue !== currentValue) {
+        refuse('REISSUE_BANK_CHANGED', `The bank details for employee ${l.personnelNumber} changed after this draft was prepared.`, 'Cancel this draft and request a new replacement so the destination can be reviewed again.');
+      }
     }
 
     const now = new Date();
-    await tx.update(payrollPaymentReissue)
+    // Conditional transition: only a still-DRAFT row moves. A losing concurrent action changes no row.
+    const moved = await tx.update(payrollPaymentReissue)
       .set({ status: 'APPROVED', approvedBy: approverName, approvedAt: now, changedBy: approverName, changedAt: now })
-      .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, row.reissueId)));
+      .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, locked.reissueId), eq(payrollPaymentReissue.status, 'DRAFT')))
+      .returning({ id: payrollPaymentReissue.reissueId });
+    if (moved.length === 0) refuse('REISSUE_CONFLICT', `Replacement ${locked.reissueReference} changed while you were approving it.`, 'Reload the file history and try again.');
     await tx.update(payrollPaymentReissueLine).set({ state: 'APPROVED', changedBy: approverName, changedAt: now })
-      .where(and(eq(payrollPaymentReissueLine.client, client), eq(payrollPaymentReissueLine.reissueId, row.reissueId)));
+      .where(and(eq(payrollPaymentReissueLine.client, client), eq(payrollPaymentReissueLine.reissueId, locked.reissueId), eq(payrollPaymentReissueLine.state, 'DRAFT')));
     await recordChange(tx, {
-      client, objectClass: 'payroll_payment_reissue', objectKey: row.reissueId, changeType: 'CHANGE',
+      client, objectClass: 'payroll_payment_reissue', objectKey: locked.reissueId, changeType: 'CHANGE',
       changedBy: approverName, transactionCode: REISSUE_APPROVE_CAPABILITY,
       before: { status: 'DRAFT' }, after: { status: 'APPROVED' },
     });
-    await auditReissue(tx, client, access, row.reissueId, 'Approved', { reissueReference: row.reissueReference, employeeCount: row.employeeCount, totalAmount: String(row.totalAmount) });
+    await auditReissue(tx, client, access, locked.reissueId, 'Approved', { reissueReference: locked.reissueReference, employeeCount: locked.employeeCount, totalAmount: String(locked.totalAmount) });
 
-    const updated = await loadReissue(tx, client, row.reissueId);
+    const updated = await loadReissue(tx, client, locked.reissueId);
     return viewOf(tx, client, updated!, money);
   });
 }
@@ -711,25 +824,32 @@ export async function cancelReissue(
     const grant = await judge(tx, client, access, [...REQUEST, ...APPROVE]);
     const row = await loadReissue(tx, client, reissueId);
     if (!row) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    // Serialise with approval: an approve/cancel race cannot both succeed from the same DRAFT.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payment-reissue-state:${client}:${row.runId}`}, 0))`);
+    const locked = await loadReissue(tx, client, reissueId);
+    if (!locked) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
     // Reach: the replacement's company and every included employee, judged live.
-    const run = await loadRun(tx, client, row.runId);
+    const run = await loadRun(tx, client, locked.runId);
     if (!reachesCompany(grant, run.companyCode)) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
-    await assertReachable(tx, client, grant, (row.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), row.intendedPaymentDate);
-    if (row.status !== 'DRAFT') refuse('REISSUE_STATE', `Replacement ${row.reissueReference} is ${row.status.toLowerCase()}; a released or cancelled replacement is immutable.`, 'A released snapshot cannot be cancelled.');
+    await assertReachable(tx, client, grant, (locked.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), locked.intendedPaymentDate);
+    if (locked.status !== 'DRAFT') refuse('REISSUE_STATE', `Replacement ${locked.reissueReference} is ${locked.status.toLowerCase()}; a released or cancelled replacement is immutable.`, 'A released snapshot cannot be cancelled.');
     const now = new Date();
-    await tx.update(payrollPaymentReissue)
+    // Conditional transition: only a still-DRAFT row moves. A racing approve/cancel leaves this one untouched.
+    const moved = await tx.update(payrollPaymentReissue)
       .set({ status: 'CANCELLED', cancelledBy: input.changedBy, cancelledAt: now, cancelReason: reason, changedBy: input.changedBy, changedAt: now })
-      .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, row.reissueId)));
+      .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, locked.reissueId), eq(payrollPaymentReissue.status, 'DRAFT')))
+      .returning({ id: payrollPaymentReissue.reissueId });
+    if (moved.length === 0) refuse('REISSUE_CONFLICT', `Replacement ${locked.reissueReference} changed while you were cancelling it.`, 'Reload the file history.');
     await tx.update(payrollPaymentReissueLine).set({ state: 'CANCELLED', changedBy: input.changedBy, changedAt: now })
-      .where(and(eq(payrollPaymentReissueLine.client, client), eq(payrollPaymentReissueLine.reissueId, row.reissueId)));
+      .where(and(eq(payrollPaymentReissueLine.client, client), eq(payrollPaymentReissueLine.reissueId, locked.reissueId), eq(payrollPaymentReissueLine.state, 'DRAFT')));
     await recordChange(tx, {
-      client, objectClass: 'payroll_payment_reissue', objectKey: row.reissueId, changeType: 'CHANGE',
+      client, objectClass: 'payroll_payment_reissue', objectKey: locked.reissueId, changeType: 'CHANGE',
       changedBy: input.changedBy, transactionCode: REISSUE_REQUEST_CAPABILITY,
       before: { status: 'DRAFT' }, after: { status: 'CANCELLED', reason },
     });
-    await auditReissue(tx, client, access, row.reissueId, 'Cancelled', { reissueReference: row.reissueReference, reason });
-    const updated = await loadReissue(tx, client, row.reissueId);
-    const money = await moneyForRun(tx, await loadRun(tx, client, row.runId));
+    await auditReissue(tx, client, access, locked.reissueId, 'Cancelled', { reissueReference: locked.reissueReference, reason });
+    const updated = await loadReissue(tx, client, locked.reissueId);
+    const money = await moneyForRun(tx, await loadRun(tx, client, locked.runId));
     return viewOf(tx, client, updated!, money);
   });
 }
@@ -744,14 +864,19 @@ export async function downloadReissue(
   access: ReissueAccess | undefined = { authorization: undefined },
 ): Promise<ReissueDownload> {
   return withTenant(client, async (tx) => {
-    const grant = await judge(tx, client, access, DOWNLOAD);
+    // Full-identifier download: its own authority AND the live bank-reveal authority.
+    const grant = await judgeFullDownload(tx, client, access, DOWNLOAD);
     const row = await loadReissue(tx, client, reissueId);
     if (!row) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    // Serialise with approval so a concurrent approval cannot bypass the supersession guard.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payment-reissue-state:${client}:${row.runId}`}, 0))`);
     const run = await loadRun(tx, client, row.runId);
     if (!reachesCompany(grant, run.companyCode)) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
     await assertNotReversed(tx, client, run);
     if (row.status !== 'APPROVED') refuse('REISSUE_NOT_APPROVED', `Replacement ${row.reissueReference} is ${row.status.toLowerCase()}; only an approved replacement downloads.`, 'An approver must release it first, or it was cancelled.');
     await assertReachable(tx, client, grant, (row.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber), row.intendedPaymentDate);
+    // A later approved replacement of ANY of these employees makes this whole file unsafe to upload.
+    await assertNotSuperseded(tx, client, row, 'download');
     const keyring = keyringOrRefuse(`replacement ${row.reissueReference}`);
     const snapshot = (row.bankSnapshot ?? []) as PaymentFileBankRow[];
     const expected = createHash('sha256').update(canonicalJson(snapshot), 'utf8').digest('hex');
@@ -787,7 +912,8 @@ export async function downloadHistoricalFile(
   access: ReissueAccess | undefined,
 ): Promise<{ filename: string; body: Buffer; fileReference: string; historical: true; warning: string }> {
   return withTenant(client, async (tx) => {
-    const grant = await judge(tx, client, access, [FILE_HISTORICAL_CAPABILITY]);
+    // Full-identifier historical download: FILE_HISTORICAL AND the live bank-reveal authority.
+    const grant = await judgeFullDownload(tx, client, access, [FILE_HISTORICAL_CAPABILITY]);
     const [file] = await tx.select().from(payrollPaymentFile)
       .where(and(eq(payrollPaymentFile.client, client), eq(payrollPaymentFile.preparationId, preparationId))).limit(1);
     if (!file || !reachesCompany(grant, file.companyCode)) refuse('FILE_UNAVAILABLE', 'That file does not exist, or is not available to you.', 'Open a file you reach.');
@@ -823,7 +949,12 @@ export async function listReissueSourceEmployees(
   return withTenant(client, async (tx) => {
     const grant = await judge(tx, client, access, VIEW);
     const file = await loadSourceFile(tx, client, preparationId, grant);
-    return snapshotRowsOf(file).map((r) => ({ personnelNumber: r.personnelNumber, beneficiaryName: r.beneficiaryName }));
+    const all = snapshotRowsOf(file);
+    // Whole-file view: fail closed if any included employee is outside the caller's reach (no partial list).
+    if (!(await allReachable(tx, client, grant, all.map((r) => r.personnelNumber), file.intendedPaymentDate))) {
+      refuse('FILE_UNAVAILABLE', 'That file does not exist, or is not available to you.', 'Open a file whose employees are all within your Company Code or Plant scope.');
+    }
+    return all.map((r) => ({ personnelNumber: r.personnelNumber, beneficiaryName: r.beneficiaryName }));
   });
 }
 
@@ -837,6 +968,14 @@ export async function listReissues(client: string, runId: string, access: Reissu
     const rows = await tx.select().from(payrollPaymentReissue)
       .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.runId, runId)))
       .orderBy(asc(payrollPaymentReissue.version));
+    // Whole-file history: fail closed if any replacement includes an employee outside the caller's reach,
+    // so the list never discloses names, amounts, masks or attestations the caller may not see.
+    for (const r of rows) {
+      const pns = ((r.bankSnapshot ?? []) as PaymentFileBankRow[]).map((x) => x.personnelNumber);
+      if (pns.length > 0 && !(await allReachable(tx, client, grant, pns, r.intendedPaymentDate))) {
+        refuse('REISSUE_UNAVAILABLE', 'That payroll run does not exist, or is not available to you.', 'Open a run whose replacements are all within your Company Code or Plant scope.');
+      }
+    }
     const out: ReissueView[] = [];
     for (const r of rows) out.push(await viewOf(tx, client, r, money));
     return out.reverse();

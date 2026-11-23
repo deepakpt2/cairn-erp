@@ -41,9 +41,10 @@ function refusal(status: number, message: string, remedy?: string): Response {
 }
 
 function statusOf(code: string): number {
-  if (code === 'REISSUE_AUTHORITY' || code === 'FOUR_EYES') return code === 'FOUR_EYES' ? 409 : 403;
+  if (code === 'REISSUE_AUTHORITY' || code === 'REISSUE_BANK_AUTHORITY' || code === 'FOUR_EYES') return code === 'FOUR_EYES' ? 409 : 403;
   if (code === 'REISSUE_UNAVAILABLE' || code === 'FILE_UNAVAILABLE' || code === 'REISSUE_NOT_APPROVED') return 404;
-  if (code === 'REISSUE_CONFLICT' || code === 'REISSUE_STATE') return 409;
+  if (code === 'REISSUE_SUPERSEDED' || code === 'REISSUE_BANK_CHANGED') return 409;
+  if (code === 'REISSUE_CONFLICT' || code === 'REISSUE_STATE' || code === 'REISSUE_KEY_REUSED') return 409;
   return 400;
 }
 

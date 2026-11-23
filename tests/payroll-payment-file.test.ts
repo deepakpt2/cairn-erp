@@ -135,9 +135,9 @@ async function employeeOn(structureCode: string, from = '2024-01-01'): Promise<s
 }
 
 /** A bank account effective from `from`, created through the real service with a bank-maintainer actor. */
-async function bankAccount(pn: string, options: { bankName?: string; value?: string; kind?: 'IBAN' | 'ACCOUNT'; from?: string } = {}) {
+async function bankAccount(pn: string, options: { bankName?: string; value?: string; kind?: 'IBAN' | 'ACCOUNT'; from?: string; beneficiary?: string } = {}) {
   return createEmployeeBank({
-    client: tenant.client, personnelNumber: pn, beneficiaryName: `Beneficiary ${pn}`,
+    client: tenant.client, personnelNumber: pn, beneficiaryName: options.beneficiary ?? `Beneficiary ${pn}`,
     bankName: options.bankName ?? 'Gulf Bank', bankCode: 'GBK01',
     accountKind: options.kind ?? 'IBAN', accountValue: options.value ?? `KW00GBK000000000000${pn.slice(-4)}`,
     validFrom: options.from ?? '2024-01-01', changedBy: ACTOR,
@@ -187,11 +187,6 @@ beforeAll(async () => {
   const plain = await employeeOn(main);
   const quoted = await employeeOn(main);
   const hostile = await employeeOn(main);
-  await withTenant(tenant.client, async (tx) => {
-    await tx.execute(sql`update employee set full_name = 'O''Brien, "Pat"' where client = ${tenant.client} and personnel_number = ${quoted}`);
-    await tx.execute(sql`update employee set full_name = '=HYPERLINK("http://evil")' where client = ${tenant.client} and personnel_number = ${hostile}`);
-  });
-
   const run = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 3, changedBy: ACTOR }, RUN_AUTH);
   expect(run.exceptions, JSON.stringify(run.exceptions)).toEqual([]);
   await releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: ACTOR }, RUN_AUTH);
@@ -210,8 +205,11 @@ beforeAll(async () => {
   elsewhere = await createActor(tenant.client, { companyScopes: ['ZZZZ'], suffix: 'OTHER' });
   bankAdmin = await createActor(tenant.client, { capabilities: [BANK_MAINTAIN_CAPABILITY, 'PEOPLE.BANK.VIEW'], suffix: 'BANKADM' });
 
-  // A valid effective main account for each payable employee, dated before the intended payment date.
-  for (const pn of [plain, quoted, hostile]) await bankAccount(pn);
+  // The beneficiary name now comes from the effective bank record (not the employee master), so the hostile
+  // names belong on the bank record.
+  await bankAccount(quoted, { beneficiary: `O'Brien, "Pat"` });
+  await bankAccount(hostile, { beneficiary: '=HYPERLINK("http://evil")' });
+  await bankAccount(plain);
 
   otherTenant = await createTenant('payroll-payment-file-other', { withConfiguration: false });
   otherTenantActor = await createActor(otherTenant.client, { suffix: 'TENANT' });

@@ -483,7 +483,7 @@ export async function preparePaymentFile(input: PreparePaymentFileInput, access:
     // Missing or ambiguous details refuse the whole file with an employee-level list — never a partial file.
     const missing: string[] = [];
     const ambiguous: string[] = [];
-    const selected = new Map<string, { bankName: string; bankCode: string | null; accountKind: 'IBAN' | 'ACCOUNT'; accountValue: string }>();
+    const selected = new Map<string, { bankName: string; bankCode: string | null; accountKind: 'IBAN' | 'ACCOUNT'; accountValue: string; beneficiaryName: string }>();
     for (const r of payable) {
       try {
         const account = await accountAsOf(tx, input.client, r.personnelNumber, intendedPaymentDate);
@@ -496,6 +496,7 @@ export async function preparePaymentFile(input: PreparePaymentFileInput, access:
           bankCode: account.bankCode ?? null,
           accountKind: account.accountKind as 'IBAN' | 'ACCOUNT',
           accountValue: decryptAccount(account.accountCiphertext, input.client, r.personnelNumber, account.bankRecordId),
+          beneficiaryName: account.beneficiaryName,
         });
       } catch (error) {
         if (isPaymentFileError(error) && error.code === 'BANK_AMBIGUOUS') ambiguous.push(r.personnelNumber);
@@ -542,7 +543,8 @@ export async function preparePaymentFile(input: PreparePaymentFileInput, access:
       const bank = selected.get(r.personnelNumber)!;
       return {
         personnelNumber: r.personnelNumber,
-        beneficiaryName: r.fullName ?? r.personnelNumber,
+        // The effective bank record's beneficiary name for the intended date, not the employee master.
+        beneficiaryName: bank.beneficiaryName || r.fullName || r.personnelNumber,
         amount: money.text(String(r.netPay)),
         currency: run.currency,
         intendedPaymentDate,

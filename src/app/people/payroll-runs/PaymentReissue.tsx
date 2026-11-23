@@ -60,6 +60,8 @@ export function PaymentReissuePanel({
   const [preview, setPreview] = useState<ReissuePreview | null>(null);
   const [attest, setAttest] = useState<Record<string, Attestation>>({});
   const [pending, setPending] = useState(false);
+  const [reviewId, setReviewId] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
 
   const post = async (fields: Record<string, string>) => {
     setPending(true);
@@ -136,10 +138,39 @@ export function PaymentReissuePanel({
                       <a className="btn btn-default min-h-9" href={`${REISSUE_ENDPOINT}?reissue=${encodeURIComponent(r.reissueId)}`}>Download</a>
                     )}
                     {r.status === 'DRAFT' && canApprove && r.requestedBy.toLowerCase() !== currentUsername.toLowerCase() && (
-                      <button type="button" className="btn btn-primary min-h-9" disabled={pending} onClick={() => decide(r.reissueId, 'approve')}>Approve</button>
+                      <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={() => { setReviewId(reviewId === r.reissueId ? null : r.reissueId); setConfirmed(false); }}>{reviewId === r.reissueId ? 'Hide review' : 'Review'}</button>
                     )}
                     {r.status === 'DRAFT' && (canRequest || canApprove) && (
                       <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={() => decide(r.reissueId, 'cancel', 'Cancelled before approval')}>Cancel</button>
+                    )}
+                    {reviewId === r.reissueId && (
+                      <div className="mt-3 space-y-2 rounded border border-line p-3 text-xs" aria-label="Approver review">
+                        <p className="font-semibold">Review this frozen replacement before approval</p>
+                        <p>Intended payment date <span className="code">{r.intendedPaymentDate}</span> · {r.employeeCount} employee{r.employeeCount === 1 ? '' : 's'} · total <span className="code">{r.totalAmount} {r.currency}</span> · source {r.sourcePreparationId.slice(0, 8)} · requested by {r.requestedBy}</p>
+                        <div className="overflow-x-auto">
+                          <table className="grid-table">
+                            <thead><tr><th>Employee</th><th>Amount</th><th>Bank (masked)</th><th>Predecessor</th><th>Attested original outcome</th><th>Verified</th><th>Evidence</th></tr></thead>
+                            <tbody>
+                              {r.lines.map((l) => (
+                                <tr key={l.lineNo}>
+                                  <td className="code">{l.personnelNumber}</td>
+                                  <td className="code">{l.amount} {l.currency}</td>
+                                  <td className="text-xs">{l.bankName}<div className="code">{l.maskedAccount}</div></td>
+                                  <td className="code text-xs">{l.predecessorKind} {l.predecessorId.slice(0, 8)}</td>
+                                  <td className="text-xs">{l.attestationOutcome.toLowerCase().replaceAll('_', ' ')}<div className="text-ink-soft">{l.attestationReason}</div></td>
+                                  <td className="text-xs">{l.verificationDate}</td>
+                                  <td className="text-xs">{l.evidenceReference}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <label className="flex items-start gap-2">
+                          <input type="checkbox" className="mt-1" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+                          <span>I have reviewed the frozen employees, amounts, masked bank details, intended date and each attested outcome above, and I approve this snapshot.</span>
+                        </label>
+                        <button type="button" className="btn btn-primary min-h-9" disabled={pending || !confirmed} onClick={() => decide(r.reissueId, 'approve')}>Approve snapshot</button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -162,7 +193,7 @@ export function PaymentReissuePanel({
             </label>
             <label>
               <span className="field-label">Intended payment date</span>
-              <input type="date" className="field-input w-full" value={date} onChange={(e) => setDate(e.target.value)} />
+              <input type="date" className="field-input w-full" value={date} onChange={(e) => { setDate(e.target.value); setPreview(null); }} />
             </label>
             <label>
               <span className="field-label">Reason</span>

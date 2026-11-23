@@ -1456,6 +1456,8 @@ export const payrollPaymentReissue = pgTable(
     bankSnapshot: jsonb('bank_snapshot').$type<PaymentFileBankRow[]>().notNull().default(sql`'[]'::jsonb`),
     checksum: varchar('checksum', { length: 64 }).notNull(),
     requestKey: varchar('request_key', { length: 64 }),
+    /** Canonical hash of the normalized request; a repeated key replays only an identical request. */
+    requestFingerprint: varchar('request_fingerprint', { length: 64 }),
     requestedBy: varchar('requested_by', { length: 60 }).notNull(),
     requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
     approvedBy: varchar('approved_by', { length: 60 }),
