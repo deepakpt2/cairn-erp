@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { PreviewGeneration, SubmissionKey, acceptsPreview, previewSignature } from './reissue-request-lifecycle';
 
 import type { ReissuePreview, ReissueView } from '@/modules/people/payroll-payment-reissue';
 
@@ -62,8 +63,13 @@ export function PaymentReissuePanel({
   const [pending, setPending] = useState(false);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
-  // Changes on any input that affects the preview; a response from an older generation is discarded.
-  const [previewGen, setPreviewGen] = useState(0);
+  // A MUTABLE generation (a ref, not state): an input change bumps it immediately, so a late response captured
+  // with an older value is discarded. Kept in a ref so the in-flight closure sees the current value.
+  const previewGen = useRef(new PreviewGeneration());
+  // One retained key per identical logical submission, so a lost-response retry reuses the key and replays the
+  // same draft; changed payloads mint a new key. Never regenerated per click.
+  const submission = useRef<SubmissionKey | null>(null);
+  if (!submission.current) submission.current = new SubmissionKey(() => crypto.randomUUID());
 
   const post = async (fields: Record<string, string>) => {
     setPending(true);
@@ -82,11 +88,35 @@ export function PaymentReissuePanel({
     }
   };
 
+  const signature = () => previewSignature({ source: preparationId, selection, selected, date });
+  /**
+   * Like `post`, but distinguishes a network/timeout failure (outcome UNKNOWN — the server may have committed)
+   * from a definite server refusal. An unknown outcome keeps the retained key so a retry replays safely and never
+   * claims "nothing was saved".
+   */
+  const submit = async (poster: typeof post, fields: Record<string, string>): Promise<{ ok: boolean; data?: unknown }> => {
+    setPending(true);
+    try {
+      const form = new FormData();
+      for (const [k, v] of Object.entries(fields)) form.set(k, v);
+      const response = await fetch(REISSUE_ENDPOINT, { method: 'POST', body: form });
+      const text = await response.text();
+      if (!response.ok) { setMessage({ ok: false, text }); return { ok: false }; }
+      return { ok: true, data: JSON.parse(text) };
+    } catch {
+      setMessage({ ok: false, text: 'The outcome is unknown: the connection failed after the request was sent. The draft may exist. Retry with the same details to reuse the same request key, or reload to check the file history.' });
+      return { ok: false };
+    } finally {
+      setPending(false);
+    }
+  };
+
   const runPreview = async () => {
-    const gen = previewGen;
+    const gen = previewGen.current.begin();
+    const sig = signature();
     const data = await post({ action: 'preview', sourcePreparationId: preparationId, selection, personnelNumbers: selected.join(','), intendedPaymentDate: date });
-    // Discard an in-flight response whose inputs have since changed, so an obsolete preview cannot repopulate.
-    if (gen !== previewGen) return;
+    // Discard an in-flight response whose inputs have since changed (or that is out of order).
+    if (!acceptsPreview(gen, previewGen.current, sig, signature)) return;
     if (data) {
       setPreview(data as ReissuePreview);
       const map: Record<string, Attestation> = {};
@@ -98,17 +128,31 @@ export function PaymentReissuePanel({
 
   const submitRequest = async () => {
     if (!preview) return;
+    // The submitted source/selection/date must be exactly the previewed ones; otherwise re-preview.
+    const previewSig = JSON.stringify({ source: preview.sourcePreparationId, selection: preview.selection, selected: [...preview.employees.map((e) => e.personnelNumber)].sort(), date: preview.intendedPaymentDate });
+    if (previewSig !== signature()) {
+      setMessage({ ok: false, text: 'The selection or date changed since this preview. Review the current preview again before creating the draft.' });
+      setPreview(null);
+      return;
+    }
     const eligible = preview.employees.filter((e) => e.eligible);
     const attestations = eligible.map((e) => ({ personnelNumber: e.personnelNumber, ...attest[e.personnelNumber] }));
-    const data = await post({
+    const payload = JSON.stringify({ sourcePreparationId: preparationId, selection, personnelNumbers: selected.join(','), intendedPaymentDate: date, reason, attestations });
+    // One key per identical logical submission: an ambiguous retry reuses it, the server replays the same draft.
+    const key = submission.current!.keyFor(payload);
+    const result = await submit(post, {
       action: 'request', sourcePreparationId: preparationId, selection, personnelNumbers: selected.join(','),
-      intendedPaymentDate: date, reason, attestations: JSON.stringify(attestations), requestKey: crypto.randomUUID(),
+      intendedPaymentDate: date, reason, attestations: JSON.stringify(attestations), requestKey: key,
     });
-    if (data) { setMessage({ ok: true, text: 'Replacement draft created. A different authorized approver must release it.' }); setPreview(null); setReason(''); router.refresh(); }
+    if (result.ok) {
+      submission.current!.clear();
+      setMessage({ ok: true, text: 'Replacement draft created. A different authorized approver must release it.' });
+      setPreview(null); setReason(''); router.refresh();
+    }
   };
 
   const decide = async (reissueId: string, action: 'approve' | 'cancel', cancelReason = '', confirmDigest = '') => {
-    const data = await post({ action, reissueId, reason: cancelReason, confirmDigest });
+    const data = await post({ action, reissueId, reason: cancelReason, confirmDigest, confirmReviewed: action === 'approve' ? 'yes' : '' });
     if (data) { setMessage({ ok: true, text: action === 'approve' ? 'Replacement approved.' : 'Draft cancelled.' }); router.refresh(); }
   };
 
@@ -198,14 +242,14 @@ export function PaymentReissuePanel({
           <div className="grid gap-3 sm:grid-cols-3">
             <label>
               <span className="field-label">Which employees</span>
-              <select className="field-input w-full" value={selection} onChange={(e) => { setSelection(e.target.value as 'ALL' | 'SELECTED'); setPreview(null); setPreviewGen((g) => g + 1); }}>
+              <select className="field-input w-full" value={selection} onChange={(e) => { setSelection(e.target.value as 'ALL' | 'SELECTED'); setPreview(null); previewGen.current.bump(); submission.current!.clear(); }}>
                 <option value="ALL">All employees of the file</option>
                 <option value="SELECTED">Only selected employees</option>
               </select>
             </label>
             <label>
               <span className="field-label">Intended payment date</span>
-              <input type="date" className="field-input w-full" value={date} onChange={(e) => { setDate(e.target.value); setPreview(null); setPreviewGen((g) => g + 1); }} />
+              <input type="date" className="field-input w-full" value={date} onChange={(e) => { setDate(e.target.value); setPreview(null); previewGen.current.bump(); submission.current!.clear(); }} />
             </label>
             <label>
               <span className="field-label">Reason</span>
@@ -225,7 +269,7 @@ export function PaymentReissuePanel({
                         type="checkbox"
                         checked={selected.includes(e.personnelNumber)}
                         onChange={(ev) => {
-                          setPreview(null); setPreviewGen((g) => g + 1);
+                          setPreview(null); previewGen.current.bump(); submission.current!.clear();
                           setSelected((prev) => ev.target.checked ? [...prev, e.personnelNumber] : prev.filter((n) => n !== e.personnelNumber));
                         }}
                       />
@@ -280,8 +324,9 @@ export function PaymentReissuePanel({
       {canHistorical && (
         <p className="text-xs text-ink-soft">
           A file with superseded instructions is blocked from ordinary download but stays readable as protected
-          historical evidence (marked do-not-upload) for authorized auditors at{' '}
-          <span className="code">{REISSUE_ENDPOINT}?historical=1&amp;file=…</span>.
+          historical evidence (marked do-not-upload):{' '}
+          <a className="underline" href={`${REISSUE_ENDPOINT}?historical=1&file=${encodeURIComponent(preparationId)}`}>historical copy of the original file</a>.
+          Labels cannot prevent a manual upload; copies already downloaded or converted cannot be recalled.
         </p>
       )}
 

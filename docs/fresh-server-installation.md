@@ -77,6 +77,28 @@ echo "$(id -u):$(id -g)"
 
 ---
 
+## 3b. Create the private payment-file storage directory
+
+```bash
+mkdir -p payment-files
+chmod 700 payment-files
+```
+
+Generated salary payment CSVs are kept here as encrypted envelopes, outside the web root and the
+source checkout. `.dockerignore`/`.gitignore` exclude it, and the app mounts it at `/app/payment-files`
+via `CAIRN_PAYMENT_FILE_HOST_DIR` (default `./payment-files`). Mount a **durable** host volume here; if
+you run more than one app instance, every instance must see the same, consistent directory (a shared
+host-mounted volume), or a file retained by one cannot be downloaded from another. The app fails closed —
+it will not serve a substitute — if the directory is unset or an artifact is missing.
+
+**Encryption and keys.** Artifacts are AES-256-GCM envelopes under the deployment keyring
+(`CAIRN_BANK_DATA_KEYRING_JSON`), bound to tenant + artifact id. Losing the key or the volume makes the
+retained files unreadable; there is no plaintext copy. **Back up** the directory and the keyring together,
+and test a restore. Rotating the keyring affects NEW artifacts; retained old envelopes stay readable only
+while their key id remains in the keyring.
+
+---
+
 ## 4. Create the environment file
 
 ```bash

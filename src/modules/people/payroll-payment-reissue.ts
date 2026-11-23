@@ -38,6 +38,7 @@ import { accountAsOf } from './employee-bank';
 import { currencyDecimals } from './payroll-run';
 import { assertEmployeeScope, PayrollStructureError } from './payroll-structure';
 import { lockEmployeeBank, lockRequestKey, lockReissueState } from './payment-file-locks';
+import { ArtifactError, artifactOf, readArtifact, retainArtifact } from './payment-file-artifacts';
 import {
   PAYROLL_RUN_CAPABILITY,
   employee,
@@ -308,6 +309,40 @@ function sameDestination(a: Destination, b: Destination): boolean {
     && (a.bankCode ?? '') === (b.bankCode ?? '')
     && a.accountKind === b.accountKind
     && a.accountValue === b.accountValue;
+}
+
+/** The retained approved-replacement bytes, or a fail-closed refusal when the artifact is missing/unreadable. */
+async function retainedReissueBytes(tx: Tx, client: string, row: ReissueRow, keyring: BankDataKeyring): Promise<Buffer> {
+  const artifact = await artifactOf(tx, client, 'REISSUE', row.reissueId);
+  if (!artifact) {
+    refuse('REISSUE_ARTIFACT_UNAVAILABLE', `The retained file for replacement ${row.reissueReference} is missing from private storage.`, 'Ask a deployment administrator to restore CAIRN_PAYMENT_FILE_DIR; do not upload a substitute.');
+  }
+  const bytes = readArtifact(artifact, client, keyring);
+  if (!bytes) {
+    refuse('REISSUE_ARTIFACT_UNAVAILABLE', `The retained file for replacement ${row.reissueReference} is missing or unreadable in private storage.`, 'Ask a deployment administrator to restore the storage volume or keyring; do not upload a substitute.');
+  }
+  return bytes;
+}
+
+/**
+ * Compatibility path for a replacement approved before host storage existed (no artifact row): rebuild exactly
+ * from the immutable encrypted snapshot, byte-identical to the original generated file because nothing recalculates.
+ */
+function deterministicReissueBytes(tx: Tx, client: string, row: ReissueRow, snapshot: PaymentFileBankRow[], keyring: BankDataKeyring): Buffer {
+  void tx;
+  let rows: PaymentFileRow[];
+  try {
+    rows = paymentRowsFromSnapshot(snapshot, (r) => ({ client, partnerNumber: r.personnelNumber, bankRecordId: row.reissueId }), keyring);
+  } catch {
+    refuse('REISSUE_KEYRING', `The bank details of replacement ${row.reissueReference} cannot be decrypted; the bank-data keyring is unavailable.`, 'Ask a deployment administrator to provision the keyring. Nothing was downloaded.');
+  }
+  return Buffer.from(buildPaymentCsv({ fileReference: row.reissueReference, runReference: runRefOf(row) }, rows), 'utf8');
+}
+
+/** Prefer the exact retained bytes; fall back to a deterministic legacy rebuild when no artifact row exists. */
+async function reissueBodyBytes(tx: Tx, client: string, row: ReissueRow, snapshot: PaymentFileBankRow[], keyring: BankDataKeyring): Promise<Buffer> {
+  const artifact = await artifactOf(tx, client, 'REISSUE', row.reissueId);
+  return artifact ? retainedReissueBytes(tx, client, row, keyring) : deterministicReissueBytes(tx, client, row, snapshot, keyring);
 }
 
 async function judge(tx: Tx, client: string, access: ReissueAccess | undefined, capabilities: readonly string[], code = 'REISSUE_AUTHORITY'): Promise<PayrollGrant> {
@@ -819,11 +854,18 @@ export async function approveReissue(
     // Re-read under both locks so a racing action that already moved the state or the bank data is observed.
     const locked = await loadReissue(tx, client, reissueId);
     if (!locked) refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    // Scope BEFORE disclosing reference, status, holder or four-eyes: establish the original run's company and
+    // live reach for every included employee first. An out-of-scope target and a missing one answer identically.
+    const run = await loadRun(tx, client, locked.runId);
+    const lockedPns = (locked.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber);
+    if (!reachesCompany(grant, run.companyCode)
+      || !(await allReachable(tx, client, grant, lockedPns, locked.intendedPaymentDate))) {
+      refuse('REISSUE_UNAVAILABLE', 'That replacement does not exist, or is not available to you.', 'Open a file you reach.');
+    }
     if (locked.status !== 'DRAFT') refuse('REISSUE_STATE', `Replacement ${locked.reissueReference} is ${locked.status.toLowerCase()}; only a draft can be approved.`, 'Reload the file history.');
     if (approverName.toLowerCase() === locked.requestedBy.toLowerCase()) {
       refuse('FOUR_EYES', 'You requested this replacement; a different person must approve it.', 'Ask another authorized approver.');
     }
-    const run = await loadRun(tx, client, locked.runId);
     await assertNotReversed(tx, client, run);
     const money = await moneyForRun(tx, run);
     const lines = await linesOf(tx, client, locked.reissueId);
@@ -838,8 +880,8 @@ export async function approveReissue(
     if (!confirmed) {
       refuse('REISSUE_CONFIRMATION_REQUIRED', 'Approve only after reviewing the frozen snapshot; the confirmation is missing or stale.', 'Open Review on the draft, check the employees and destination, then approve.');
     }
-    if (confirmed !== locked.checksum) {
-      refuse('REISSUE_CONFIRMATION_STALE', 'The reviewed snapshot no longer matches this draft (it may have been superseded or altered).', 'Reload the file history and review the draft again.');
+    if (confirmed !== reviewDigest(locked, lines)) {
+      refuse('REISSUE_CONFIRMATION_STALE', 'The reviewed instruction no longer matches this draft (a line, reason, attestation or destination may have changed, or it was superseded).', 'Reload the file history and review the draft again.');
     }
     for (const l of lines) {
       // Stale means a DIFFERENT replacement was approved for this employee AFTER this draft was requested.
@@ -866,6 +908,19 @@ export async function approveReissue(
       .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, locked.reissueId), eq(payrollPaymentReissue.status, 'DRAFT')))
       .returning({ id: payrollPaymentReissue.reissueId });
     if (moved.length === 0) refuse('REISSUE_CONFLICT', `Replacement ${locked.reissueReference} changed while you were approving it.`, 'Reload the file history and try again.');
+    // Retain the exact approved bytes in private host storage in this transaction, so an APPROVED row always
+    // has an artifact. A storage/encryption failure rolls the approval back.
+    try {
+      const keyring = keyringOrRefuse(`replacement ${locked.reissueReference}`);
+      const rows = paymentRowsFromSnapshot(snapshot, (r) => ({ client, partnerNumber: r.personnelNumber, bankRecordId: locked.reissueId }), keyring);
+      const bytes = Buffer.from(buildPaymentCsv({ fileReference: locked.reissueReference, runReference: runRefOf(locked) }, rows), 'utf8');
+      await retainArtifact(tx, { client, ownerKind: 'REISSUE', ownerId: locked.reissueId, fileReference: locked.reissueReference, bytes, keyring, changedBy: approverName });
+    } catch (error) {
+      if (error instanceof ArtifactError || isReissueError(error)) {
+        refuse('REISSUE_STORAGE', 'The approved replacement could not be retained in private storage, so it was not released.', 'Ask a deployment administrator to configure CAIRN_PAYMENT_FILE_DIR, then approve again.');
+      }
+      throw error;
+    }
     await tx.update(payrollPaymentReissueLine).set({ state: 'APPROVED', changedBy: approverName, changedAt: now })
       .where(and(eq(payrollPaymentReissueLine.client, client), eq(payrollPaymentReissueLine.reissueId, locked.reissueId), eq(payrollPaymentReissueLine.state, 'DRAFT')));
     await recordChange(tx, {
@@ -873,7 +928,7 @@ export async function approveReissue(
       changedBy: approverName, transactionCode: REISSUE_APPROVE_CAPABILITY,
       before: { status: 'DRAFT' }, after: { status: 'APPROVED' },
     });
-    await auditReissue(tx, client, access, locked.reissueId, 'Approved', { reissueReference: locked.reissueReference, employeeCount: locked.employeeCount, totalAmount: String(locked.totalAmount), confirmedSnapshotDigest: locked.checksum });
+    await auditReissue(tx, client, access, locked.reissueId, 'Approved', { reissueReference: locked.reissueReference, employeeCount: locked.employeeCount, totalAmount: String(locked.totalAmount), confirmedReviewDigest: confirmed });
 
     const updated = await loadReissue(tx, client, locked.reissueId);
     return viewOf(tx, client, updated!, money);
@@ -951,19 +1006,13 @@ export async function downloadReissue(
     const snapshot = (row.bankSnapshot ?? []) as PaymentFileBankRow[];
     const expected = createHash('sha256').update(canonicalJson(snapshot), 'utf8').digest('hex');
     if (expected !== row.checksum) refuse('REISSUE_TAMPERED', `Replacement ${row.reissueReference} failed its integrity check.`, 'Do not upload it; report it to an administrator.');
-    let rows: PaymentFileRow[];
-    try {
-      rows = paymentRowsFromSnapshot(snapshot, (r) => ({ client, partnerNumber: r.personnelNumber, bankRecordId: row.reissueId }), keyring);
-    } catch {
-      refuse('REISSUE_KEYRING', `The bank details of replacement ${row.reissueReference} cannot be decrypted; the bank-data keyring is unavailable.`, 'Ask a deployment administrator to provision the keyring. Nothing was downloaded.');
-    }
-    const csv = buildPaymentCsv({ fileReference: row.reissueReference, runReference: runRefOf(row) }, rows);
+    const bodyBytes = await reissueBodyBytes(tx, client, row, snapshot, keyring);
     // Count prior downloads BEFORE writing this one, so the first download is not reported as a re-download.
     const reused = (await downloadCount(tx, client, row.reissueId)) > 0;
     await auditReissue(tx, client, access, row.reissueId, 'Downloaded', { reissueReference: row.reissueReference, employeeCount: row.employeeCount, totalAmount: String(row.totalAmount) });
     return {
       filename: row.filename,
-      body: Buffer.from(csv, 'utf8'),
+      body: bodyBytes,
       reissueReference: row.reissueReference,
       employeeCount: row.employeeCount,
       totalAmount: (await moneyForRun(tx, run)).text(String(row.totalAmount)),
@@ -988,8 +1037,14 @@ export async function downloadHistoricalFile(
       .where(and(eq(payrollPaymentFile.client, client), eq(payrollPaymentFile.preparationId, preparationId))).limit(1);
     if (!file || !reachesCompany(grant, file.companyCode)) refuse('FILE_UNAVAILABLE', 'That file does not exist, or is not available to you.', 'Open a file you reach.');
     await assertReachable(tx, client, grant, (file.beneficiaries as string[]) ?? [], file.intendedPaymentDate);
+    // Prefer the exact retained original artifact; legacy rows rebuild/return stored body.
+    const fileArtifact = await artifactOf(tx, client, 'FILE', file.preparationId);
     let body: Buffer;
-    if (file.bankDataIncluded) {
+    if (fileArtifact) {
+      const retained = readArtifact(fileArtifact, client, keyringOrRefuse(`file ${file.fileReference}`));
+      if (!retained) refuse('FILE_ARTIFACT_UNAVAILABLE', `The retained file ${file.fileReference} is missing or unreadable in private storage.`, 'Ask a deployment administrator to restore CAIRN_PAYMENT_FILE_DIR or the keyring.');
+      body = retained;
+    } else if (file.bankDataIncluded) {
       const snapshot = snapshotRowsOf(file);
       const keyring = keyringOrRefuse(`file ${file.fileReference}`);
       let rows: PaymentFileRow[];
@@ -1032,14 +1087,9 @@ export async function downloadHistoricalReissue(
     const expected = createHash('sha256').update(canonicalJson(snapshot), 'utf8').digest('hex');
     if (expected !== row.checksum) refuse('REISSUE_TAMPERED', `Replacement ${row.reissueReference} failed its integrity check.`, 'Do not rely on it; report it to an administrator.');
     const keyring = keyringOrRefuse(`replacement ${row.reissueReference}`);
-    let rows: PaymentFileRow[];
-    try {
-      rows = paymentRowsFromSnapshot(snapshot, (r) => ({ client, partnerNumber: r.personnelNumber, bankRecordId: row.reissueId }), keyring);
-    } catch {
-      refuse('REISSUE_KEYRING', `The bank details of replacement ${row.reissueReference} cannot be decrypted.`, 'Ask a deployment administrator to provision the keyring.');
-    }
-    // Rebuild EXACTLY as the ordinary download did, so historical bytes equal the earlier issued file.
-    const body = Buffer.from(buildPaymentCsv({ fileReference: row.reissueReference, runReference: runRefOf(row) }, rows), 'utf8');
+    // Exact retained bytes preferred (byte-identical to the earlier issued file); legacy rows rebuild from the
+    // immutable snapshot. The CONTENT is unchanged — only the filename marks it historical.
+    const body = await reissueBodyBytes(tx, client, row, snapshot, keyring);
     await auditReissue(tx, client, access, row.reissueId, 'Historical download', { reissueReference: row.reissueReference, historical: true });
     return { filename: `HISTORICAL-DO-NOT-UPLOAD-${row.filename}`, body, reissueReference: row.reissueReference, historical: true, warning: HISTORICAL_WARNING };
   });
@@ -1175,6 +1225,35 @@ function isCalendarDate(value: string): boolean {
   return probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === d;
 }
 
+/**
+ * The opaque review digest the approver acknowledges: a canonical hash of the immutable reviewed header AND every
+ * line (frozen destination, amount, predecessor and full attestation — reason, date, evidence, no-submission).
+ * It incorporates the encrypted-snapshot checksum rather than exposing any account data. It is recomputed at
+ * approval from the stored row and must equal the submitted value exactly.
+ */
+function reviewDigest(row: ReissueRow, lines: ReadonlyArray<typeof payrollPaymentReissueLine.$inferSelect>): string {
+  const header = {
+    checksum: row.checksum,
+    sourcePreparationId: row.sourcePreparationId,
+    runId: row.runId,
+    selection: row.selection,
+    intendedPaymentDate: row.intendedPaymentDate,
+    employeeCount: row.employeeCount,
+    totalAmount: String(row.totalAmount),
+    currency: String(row.currency).trim(),
+    reason: row.reason,
+  };
+  const linesCanonical = [...lines]
+    .sort((a, b) => a.lineNo - b.lineNo)
+    .map((l) => ({
+      lineNo: l.lineNo, personnelNumber: l.personnelNumber, amount: String(l.amount), currency: String(l.currency).trim(),
+      predecessorKind: l.predecessorKind, predecessorId: l.predecessorId, attestationOutcome: l.attestationOutcome,
+      attestationReason: l.attestationReason, verificationDate: l.verificationDate, evidenceReference: l.evidenceReference,
+      confirmedNoSubmission: l.confirmedNoSubmission,
+    }));
+  return createHash('sha256').update(canonicalJson({ header, lines: linesCanonical }), 'utf8').digest('hex');
+}
+
 async function viewOf(tx: Tx, client: string, row: ReissueRow, money: Money): Promise<ReissueView> {
   const keyring = (() => { try { return loadBankDataKeyring(); } catch { return null; } })();
   const snapshot = (row.bankSnapshot ?? []) as PaymentFileBankRow[];
@@ -1210,7 +1289,7 @@ async function viewOf(tx: Tx, client: string, row: ReissueRow, money: Money): Pr
     cancelReason: row.cancelReason ?? null,
     downloadable: row.status === 'APPROVED' && !superseded,
     superseded,
-    snapshotDigest: row.checksum,
+    snapshotDigest: reviewDigest(row, lines),
     lines: lineViews,
   };
 }

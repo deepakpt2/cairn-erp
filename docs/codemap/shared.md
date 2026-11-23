@@ -47,7 +47,7 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | worker/config.ts | worker/index.ts |
 | worker/jobs.ts | worker/index.ts |
 
-## Files (190)
+## Files (192)
 | file | exports | tables |
 |---|---|---|
 | **app/** | | |
@@ -174,6 +174,8 @@ Cross-cutting code: `src/platform/*`, `src/ui/*`, `src/worker/*`, `src/dev/*`, a
 | index.ts | resolveTerm, searchRegistry, suggestRegistry, aliasesFor, coverageLabel | term_alias, term_registry |
 | suggest.ts | compactCode, suggestionWords, equallyNear, exactOwnIdentifier, rankSuggestions, rankRegistry |  |
 | **platform/security/** | | |
+| artifact-encryption.ts | ArtifactEncryptionError, encryptArtifact, decryptArtifact, ARTIFACT_KEY_ID_PATTERN |  |
+| artifact-store.ts | PAYMENT_FILE_STORAGE_ENV, ArtifactStoreError, paymentFileStorageDir, writeEncryptedArtifact, readStoredArtifact, artifactExists, deleteArtifact |  |
 | bank-data-encryption.ts | isBankDataKeyId, BankDataEncryptionError, encryptBankData, decryptBankData, reencryptBankData, reencryptBankDataBatch, verifyBankDataBatchOnActiveKey |  |
 | bank-data-keyring.ts | BANK_DATA_KEYRING_ENV, BankDataKeyringConfigError, loadBankDataKeyring, parseBankDataKeyring |  |
 | bank-data-reveal.ts | PARTNER_DISPLAY_CAPABILITY, PARTNER_BANK_REVEAL_CAPABILITY, BANK_REVEAL_FIELDS, BANK_REVEAL_PURPOSES, authorizeAndRecordBankRevealAttempt, recordBankRevealOutcome | audit_access_log |

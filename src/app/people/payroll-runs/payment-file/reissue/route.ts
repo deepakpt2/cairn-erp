@@ -96,7 +96,10 @@ export async function POST(request: Request): Promise<Response> {
       return json({ ...view, warning: REISSUE_WARNING }, 201);
     }
     if (action === 'approve') {
-      // The review panel sends the frozen snapshot digest the approver acknowledged; the service requires it.
+      // The approver asserts the review explicitly AND supplies the reviewed digest; both are required.
+      if (String(form?.get('confirmReviewed') ?? '') !== 'yes') {
+        return refusal(400, 'Confirm that you reviewed the frozen instruction before approving.', 'Open Review on the draft and tick the acknowledgment.');
+      }
       const confirmDigest = String(form?.get('confirmDigest') ?? '');
       const view = await approveReissue(s.user.client, String(form?.get('reissueId') ?? ''), s.user.username, access, { confirmDigest });
       return json(view);

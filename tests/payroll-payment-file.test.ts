@@ -54,6 +54,9 @@ import { GET, POST } from '../src/app/people/payroll-runs/payment-file/route';
 import { parseBankDataKeyring } from '../src/platform/security/bank-data-keyring';
 import { BANK_MAINTAIN_CAPABILITY, createEmployeeBank, endEmployeeBank, listEmployeeBank } from '../src/modules/people/employee-bank';
 import { createHash, randomBytes } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /** A deployment-shaped keyring, set in the process environment for the service's on-demand loader. */
 const KEYRING_JSON = JSON.stringify({ activeKeyId: 'k1', keys: { k1: randomBytes(32).toString('base64url') } });
@@ -153,9 +156,12 @@ let otherTenantActor: Actor;
 let bankAdmin: Actor;
 const POST_DATE = '2025-03-31';
 const savedRing = process.env.CAIRN_BANK_DATA_KEYRING_JSON;
+const savedStorageDir = process.env.CAIRN_PAYMENT_FILE_DIR;
+const storageDir = mkdtempSync(join(tmpdir(), 'cairn-pf-'));
 
 beforeAll(async () => {
   process.env.CAIRN_BANK_DATA_KEYRING_JSON = KEYRING_JSON;
+  process.env.CAIRN_PAYMENT_FILE_DIR = storageDir;
   tenant = await createTenant('payroll-payment-file', { currency: 'KWD' });
   fx = await buildPayrollFixture(tenant.client, tenant.companyCode);
   await withTenant(tenant.client, async (tx) => {
@@ -218,6 +224,9 @@ beforeAll(async () => {
 afterAll(async () => {
   if (savedRing === undefined) delete process.env.CAIRN_BANK_DATA_KEYRING_JSON;
   else process.env.CAIRN_BANK_DATA_KEYRING_JSON = savedRing;
+  if (savedStorageDir === undefined) delete process.env.CAIRN_PAYMENT_FILE_DIR;
+  else process.env.CAIRN_PAYMENT_FILE_DIR = savedStorageDir;
+  rmSync(storageDir, { recursive: true, force: true });
   if (tenant) await destroyTenant(tenant.client);
   if (otherTenant) await destroyTenant(otherTenant.client);
 });
@@ -415,22 +424,26 @@ describe('preparation service', () => {
   }, 120_000);
 
   it('a legacy file (pre-bank) with a plaintext body downloads byte-for-byte and is not regenerated', async () => {
-    // A different posted run, whose prepared row is overwritten to look like a pre-9322 file: body set, no snapshot.
+    // A posted run whose file row is written directly as a pre-9322 legacy file: a plaintext body, no snapshot and
+    // NO host artifact. This is the compatibility path — it must return the stored bytes unchanged.
     const run = await proposePayrollRun({ client: tenant.client, companyCode: fx.companyCode, fiscalYear: YEAR, period: 11, changedBy: ACTOR }, RUN_AUTH);
     await releasePayrollRun({ client: tenant.client, runId: run.runId, changedBy: ACTOR }, RUN_AUTH);
     const poster = await createPayrollPoster(tenant.client);
     await postPayrollRun({ client: tenant.client, runId: run.runId, changedBy: poster.username, authorization: poster.authorization });
-    const view = await preparePaymentFile({ client: tenant.client, runId: run.runId, intendedPaymentDate: '2025-12-01', changedBy: ACTOR }, { authorization: reader.authorization });
     const legacyCsv = `file_reference,run_reference,personnel_number,beneficiary_name,amount,currency,intended_payment_date,beneficiary_bank_name,beneficiary_bank_code,beneficiary_account,beneficiary_iban,remittance_information\r\nLEGACY,,,Plan,,,,,,,,\r\n`;
     const legacyBody = Buffer.from(legacyCsv, 'utf8');
     const legacyChecksum = createHash('sha256').update(legacyBody).digest('hex');
+    const prepId = randomUUID();
     await withTenant(tenant.client, (tx) => tx.execute(sql`
-      update payroll_payment_file set body = ${legacyBody}, checksum = ${legacyChecksum},
-        bank_data_included = false, bank_snapshot = '[]'::jsonb
-       where client = ${tenant.client} and run_id = ${run.runId}`));
+      insert into payroll_payment_file
+        (client, preparation_id, run_id, company_code, fiscal_year, period, currency, intended_payment_date,
+         file_reference, filename, row_count, total_amount, body, checksum, beneficiaries,
+         bank_snapshot, bank_data_included, prepared_by, created_by)
+      values (${tenant.client}, ${prepId}, ${run.runId}, ${fx.companyCode}, ${YEAR}, 11, ${fx.currency}, '2025-12-01',
+         ${`LEGACY-${run.runId.slice(0, 8)}`}, ${`legacy-${run.runId.slice(0, 8)}.csv`}, 1, '0.0001', ${legacyBody}, ${legacyChecksum},
+         '[]'::jsonb, '[]'::jsonb, false, ${ACTOR}, ${ACTOR})`));
     const download = await downloadPaymentFile(tenant.client, run.runId, { requestedBy: 'PF.LEGACY' }, { authorization: reader.authorization });
     expect(download.body.toString('utf8')).toBe(legacyCsv);
-    expect(view.bankDataIncluded).toBe(true); // the earlier prepared view flagged bank data; the row is now legacy.
   }, 120_000);
 
   it('selects payable rows exactly: positive only, zero dropped, negative split out, ordered', () => {

@@ -1528,3 +1528,34 @@ export const payrollPaymentReissueLine = pgTable(
     check('payroll_payment_reissue_line_amount_ck', sql`${t.amount} > 0`),
   ],
 );
+
+/**
+ * 9325: a generated salary payment CSV kept in private host storage.
+ *
+ * The row is metadata only: an opaque artifact id and a relative storage path; the encrypted bytes live under
+ * `CAIRN_PAYMENT_FILE_DIR`. The plaintext SHA-256 lets a download verify integrity after decryption.
+ */
+export const payrollPaymentArtifact = pgTable(
+  'payroll_payment_artifact',
+  {
+    client: tenant(),
+    artifactId: uuid('artifact_id').notNull(),
+    ownerKind: varchar('owner_kind', { length: 10 }).notNull(),
+    ownerId: varchar('owner_id', { length: 36 }).notNull(),
+    fileReference: varchar('file_reference', { length: 60 }).notNull(),
+    storagePath: varchar('storage_path', { length: 120 }).notNull(),
+    storageFormat: varchar('storage_format', { length: 16 }).notNull().default('cad1'),
+    keyId: varchar('key_id', { length: 32 }).notNull(),
+    plaintextSha256: varchar('plaintext_sha256', { length: 64 }).notNull(),
+    byteLength: integer('byte_length').notNull(),
+    generation: integer('generation').notNull().default(1),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.artifactId] }),
+    uniqueIndex('payroll_payment_artifact_owner_uq').on(t.client, t.ownerKind, t.ownerId),
+    index('payroll_payment_artifact_owner_idx').on(t.client, t.ownerKind, t.ownerId),
+    check('payroll_payment_artifact_kind_ck', sql`${t.ownerKind} in ('FILE', 'REISSUE')`),
+    check('payroll_payment_artifact_len_ck', sql`${t.byteLength} > 0`),
+  ],
+);

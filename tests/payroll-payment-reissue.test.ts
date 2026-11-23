@@ -10,6 +10,9 @@
  * are byte-stable; and no accounting is posted or reversed.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -61,6 +64,8 @@ const STRUCTURE_AUTH: readonly string[] = [SALARY_STRUCTURE_CAPABILITY];
 const YEAR = 2025;
 const ACTOR = 'REISSUE_TEST';
 const savedRing = process.env.CAIRN_BANK_DATA_KEYRING_JSON;
+const savedStorageDir = process.env.CAIRN_PAYMENT_FILE_DIR;
+const storageDir = mkdtempSync(join(tmpdir(), 'cairn-pf-'));
 
 let tenant: TestTenant;
 let fx: PayrollFixture;
@@ -99,8 +104,11 @@ async function expectRefusal(promise: Promise<unknown>, wanted: string): Promise
 
 /** Approve a draft, supplying the frozen snapshot digest the approver acknowledged in review. */
 async function approveWithDigest(reissueId: string, approverName = 'RI.APP', actor = approver) {
-  const rows = await withTenant(tenant.client, (tx) => tx.execute(sql`select checksum from payroll_payment_reissue where client = ${tenant.client} and reissue_id = ${reissueId}`)) as unknown as Array<{ checksum: string }>;
-  const confirmDigest = rows[0]?.checksum;
+  // The review digest (header + every line) is exposed on the view; fetch it for this exact draft.
+  const runRows = await withTenant(tenant.client, (tx) => tx.execute(sql`select run_id from payroll_payment_reissue where client = ${tenant.client} and reissue_id = ${reissueId}`)) as unknown as Array<{ run_id: string }>;
+  const runIdFor = runRows[0]!.run_id;
+  const list = await listReissues(tenant.client, runIdFor, { authorization: approver.authorization });
+  const confirmDigest = list.find((r) => r.reissueId === reissueId)?.snapshotDigest;
   return approveReissue(tenant.client, reissueId, approverName, { authorization: actor.authorization }, { confirmDigest });
 }
 
@@ -129,6 +137,7 @@ let employees: string[] = [];
 
 beforeAll(async () => {
   process.env.CAIRN_BANK_DATA_KEYRING_JSON = KEYRING_JSON;
+  process.env.CAIRN_PAYMENT_FILE_DIR = storageDir;
   tenant = await createTenant('payroll-reissue', { currency: 'KWD' });
   fx = await buildPayrollFixture(tenant.client, tenant.companyCode);
   await withTenant(tenant.client, async (tx) => {
@@ -607,6 +616,26 @@ describe('destination checks, historical replacements, and deliberate approval',
     const ok = await approveWithDigest(draft.reissueId);
     expect(ok.status).toBe('APPROVED');
     expect(ok.snapshotDigest).toBe(draft.snapshotDigest);
+  }, 60_000);
+
+  it('the review digest covers the header and every line: changing reason or attestation invalidates it', async () => {
+    const pn = dEmployees[0]!;
+    const draft = await draftFor(pn);
+    // Compute the digest the approver would acknowledge: the view's snapshotDigest.
+    const before = (await listReissues(tenant.client, runId, { authorization: approver.authorization })).find((r) => r.reissueId === draft.reissueId)!;
+    const digest = before.snapshotDigest;
+    // Tamper with a stored attestation reason directly: the recomputed review digest no longer matches, so the
+    // approver's acknowledged digest is now stale and approval is refused.
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      update payroll_payment_reissue_line set attestation_reason = 'changed after review'
+       where client = ${tenant.client} and reissue_id = ${draft.reissueId}`));
+    const tampered = (await listReissues(tenant.client, runId, { authorization: approver.authorization })).find((r) => r.reissueId === draft.reissueId)!;
+    expect(tampered.snapshotDigest).not.toBe(digest);
+    await expectRefusal(
+      approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: digest }),
+      'REISSUE_CONFIRMATION_STALE',
+    );
+    await cancelReissue(tenant.client, draft.reissueId, { reason: 'tamper test cleanup', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
   }, 60_000);
 
   it('the review view exposes a frozen beneficiary name and masks the account', async () => {

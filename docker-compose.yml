@@ -85,6 +85,12 @@ services:
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/${CAIRN_DATABASE_NAME:-cairn}
       HOSTNAME: 0.0.0.0
       PORT: "3000"
+      # Private, durable location for generated salary payment CSVs (encrypted envelopes). The app requires it
+      # to retain and serve a payment file; point it at a mounted, non-web-root volume. For multiple app
+      # instances the volume must be shared/consistent across them.
+      CAIRN_PAYMENT_FILE_DIR: /app/payment-files
+    volumes:
+      - ${CAIRN_PAYMENT_FILE_HOST_DIR:-./payment-files}:/app/payment-files
     depends_on:
       migrate:
         condition: service_completed_successfully
