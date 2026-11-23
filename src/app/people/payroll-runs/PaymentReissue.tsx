@@ -62,6 +62,8 @@ export function PaymentReissuePanel({
   const [pending, setPending] = useState(false);
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  // Changes on any input that affects the preview; a response from an older generation is discarded.
+  const [previewGen, setPreviewGen] = useState(0);
 
   const post = async (fields: Record<string, string>) => {
     setPending(true);
@@ -81,7 +83,10 @@ export function PaymentReissuePanel({
   };
 
   const runPreview = async () => {
+    const gen = previewGen;
     const data = await post({ action: 'preview', sourcePreparationId: preparationId, selection, personnelNumbers: selected.join(','), intendedPaymentDate: date });
+    // Discard an in-flight response whose inputs have since changed, so an obsolete preview cannot repopulate.
+    if (gen !== previewGen) return;
     if (data) {
       setPreview(data as ReissuePreview);
       const map: Record<string, Attestation> = {};
@@ -102,8 +107,8 @@ export function PaymentReissuePanel({
     if (data) { setMessage({ ok: true, text: 'Replacement draft created. A different authorized approver must release it.' }); setPreview(null); setReason(''); router.refresh(); }
   };
 
-  const decide = async (reissueId: string, action: 'approve' | 'cancel', cancelReason = '') => {
-    const data = await post({ action, reissueId, reason: cancelReason });
+  const decide = async (reissueId: string, action: 'approve' | 'cancel', cancelReason = '', confirmDigest = '') => {
+    const data = await post({ action, reissueId, reason: cancelReason, confirmDigest });
     if (data) { setMessage({ ok: true, text: action === 'approve' ? 'Replacement approved.' : 'Draft cancelled.' }); router.refresh(); }
   };
 
@@ -134,8 +139,14 @@ export function PaymentReissuePanel({
                   <td className="text-xs">{r.status.toLowerCase()}</td>
                   <td className="text-xs">{r.requestedBy}{r.approvedBy ? ` / ${r.approvedBy}` : ''}</td>
                   <td className="space-x-2">
-                    {r.status === 'APPROVED' && canDownload && (
+                    {r.status === 'APPROVED' && canDownload && r.downloadable && (
                       <a className="btn btn-default min-h-9" href={`${REISSUE_ENDPOINT}?reissue=${encodeURIComponent(r.reissueId)}`}>Download</a>
+                    )}
+                    {r.status === 'APPROVED' && r.superseded && (
+                      <span className="chip chip-warn" title="A later approved replacement supersedes at least one employee in this file">superseded — do not upload</span>
+                    )}
+                    {r.status === 'APPROVED' && r.superseded && canHistorical && (
+                      <a className="btn btn-default min-h-9" href={`${REISSUE_ENDPOINT}?historical=1&reissue=${encodeURIComponent(r.reissueId)}`}>Historical evidence</a>
                     )}
                     {r.status === 'DRAFT' && canApprove && r.requestedBy.toLowerCase() !== currentUsername.toLowerCase() && (
                       <button type="button" className="btn btn-default min-h-9" disabled={pending} onClick={() => { setReviewId(reviewId === r.reissueId ? null : r.reissueId); setConfirmed(false); }}>{reviewId === r.reissueId ? 'Hide review' : 'Review'}</button>
@@ -146,14 +157,15 @@ export function PaymentReissuePanel({
                     {reviewId === r.reissueId && (
                       <div className="mt-3 space-y-2 rounded border border-line p-3 text-xs" aria-label="Approver review">
                         <p className="font-semibold">Review this frozen replacement before approval</p>
-                        <p>Intended payment date <span className="code">{r.intendedPaymentDate}</span> · {r.employeeCount} employee{r.employeeCount === 1 ? '' : 's'} · total <span className="code">{r.totalAmount} {r.currency}</span> · source {r.sourcePreparationId.slice(0, 8)} · requested by {r.requestedBy}</p>
+                        <p>Intended payment date <span className="code">{r.intendedPaymentDate}</span> · {r.employeeCount} employee{r.employeeCount === 1 ? '' : 's'} · total <span className="code">{r.totalAmount} {r.currency}</span> · source {r.sourcePreparationId.slice(0, 8)} · requested by {r.requestedBy} · reason: {r.reason}</p>
                         <div className="overflow-x-auto">
                           <table className="grid-table">
-                            <thead><tr><th>Employee</th><th>Amount</th><th>Bank (masked)</th><th>Predecessor</th><th>Attested original outcome</th><th>Verified</th><th>Evidence</th></tr></thead>
+                            <thead><tr><th>Employee</th><th>Frozen beneficiary</th><th>Amount</th><th>Bank (masked)</th><th>Predecessor</th><th>Attested original outcome</th><th>Verified</th><th>Evidence</th></tr></thead>
                             <tbody>
                               {r.lines.map((l) => (
                                 <tr key={l.lineNo}>
                                   <td className="code">{l.personnelNumber}</td>
+                                  <td className="text-xs">{l.beneficiaryName}</td>
                                   <td className="code">{l.amount} {l.currency}</td>
                                   <td className="text-xs">{l.bankName}<div className="code">{l.maskedAccount}</div></td>
                                   <td className="code text-xs">{l.predecessorKind} {l.predecessorId.slice(0, 8)}</td>
@@ -169,7 +181,7 @@ export function PaymentReissuePanel({
                           <input type="checkbox" className="mt-1" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
                           <span>I have reviewed the frozen employees, amounts, masked bank details, intended date and each attested outcome above, and I approve this snapshot.</span>
                         </label>
-                        <button type="button" className="btn btn-primary min-h-9" disabled={pending || !confirmed} onClick={() => decide(r.reissueId, 'approve')}>Approve snapshot</button>
+                        <button type="button" className="btn btn-primary min-h-9" disabled={pending || !confirmed} onClick={() => decide(r.reissueId, 'approve', '', r.snapshotDigest)}>Approve snapshot</button>
                       </div>
                     )}
                   </td>
@@ -186,14 +198,14 @@ export function PaymentReissuePanel({
           <div className="grid gap-3 sm:grid-cols-3">
             <label>
               <span className="field-label">Which employees</span>
-              <select className="field-input w-full" value={selection} onChange={(e) => { setSelection(e.target.value as 'ALL' | 'SELECTED'); setPreview(null); }}>
+              <select className="field-input w-full" value={selection} onChange={(e) => { setSelection(e.target.value as 'ALL' | 'SELECTED'); setPreview(null); setPreviewGen((g) => g + 1); }}>
                 <option value="ALL">All employees of the file</option>
                 <option value="SELECTED">Only selected employees</option>
               </select>
             </label>
             <label>
               <span className="field-label">Intended payment date</span>
-              <input type="date" className="field-input w-full" value={date} onChange={(e) => { setDate(e.target.value); setPreview(null); }} />
+              <input type="date" className="field-input w-full" value={date} onChange={(e) => { setDate(e.target.value); setPreview(null); setPreviewGen((g) => g + 1); }} />
             </label>
             <label>
               <span className="field-label">Reason</span>
@@ -213,7 +225,7 @@ export function PaymentReissuePanel({
                         type="checkbox"
                         checked={selected.includes(e.personnelNumber)}
                         onChange={(ev) => {
-                          setPreview(null);
+                          setPreview(null); setPreviewGen((g) => g + 1);
                           setSelected((prev) => ev.target.checked ? [...prev, e.personnelNumber] : prev.filter((n) => n !== e.personnelNumber));
                         }}
                       />

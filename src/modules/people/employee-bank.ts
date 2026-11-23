@@ -39,6 +39,7 @@ import {
   judgePayrollAccess,
 } from './payroll-access';
 import { EMPLOYEE_ROUTE, assertEmployeeScope, PayrollStructureError } from './payroll-structure';
+import { lockEmployeeBank } from './payment-file-locks';
 import { employeeBankDetail } from './schema';
 
 export const BANK_VIEW_CAPABILITY = 'PEOPLE.BANK.VIEW';
@@ -274,7 +275,7 @@ export async function createEmployeeBank(
     }
     // Serialise per employee so two concurrent inserts cannot both pass a pre-check; the gist constraint is the
     // final backstop and translates to a friendly message.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`employee-bank:${parsed.client}:${parsed.personnelNumber}`}, 0))`);
+    await lockEmployeeBank(tx, parsed.client, [parsed.personnelNumber]);
 
     const bankRecordId = randomUUID();
     const accountCiphertext = encryptBankData(
@@ -340,7 +341,7 @@ export async function endEmployeeBank(
       .where(and(eq(employeeBankDetail.client, parsed.client), eq(employeeBankDetail.bankRecordId, parsed.bankRecordId))).limit(1);
     if (!standing) refuse('BANK_UNAVAILABLE', 'That bank record does not exist, or is not available to you.', 'Open an employee you reach.');
     await judgeForEmployee(tx, parsed.client, standing.personnelNumber, standing.validFrom, access, MAINTAIN);
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`employee-bank:${parsed.client}:${standing.personnelNumber}`}, 0))`);
+    await lockEmployeeBank(tx, parsed.client, [standing.personnelNumber]);
     if (!standing.isActive) refuse('BANK_ENDED', 'That bank record is already ended.', 'Add a new record for the dates you need.');
     if (validTo < standing.validFrom) refuse('BANK_DATE', `Valid to ${validTo} precedes the record's valid from ${standing.validFrom}.`, 'Choose a date on or after the start.');
     await tx.update(employeeBankDetail)

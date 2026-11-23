@@ -16,6 +16,8 @@
 import { getSession } from '@/platform/auth/current';
 import {
   REISSUE_WARNING,
+  HISTORICAL_WARNING,
+  downloadHistoricalReissue,
   cancelReissue,
   approveReissue,
   downloadHistoricalFile,
@@ -94,7 +96,9 @@ export async function POST(request: Request): Promise<Response> {
       return json({ ...view, warning: REISSUE_WARNING }, 201);
     }
     if (action === 'approve') {
-      const view = await approveReissue(s.user.client, String(form?.get('reissueId') ?? ''), s.user.username, access);
+      // The review panel sends the frozen snapshot digest the approver acknowledged; the service requires it.
+      const confirmDigest = String(form?.get('confirmDigest') ?? '');
+      const view = await approveReissue(s.user.client, String(form?.get('reissueId') ?? ''), s.user.username, access, { confirmDigest });
       return json(view);
     }
     if (action === 'cancel') {
@@ -120,14 +124,18 @@ export async function GET(request: Request): Promise<Response> {
   const access = { authorization: { userId: s.user.userId, sessionId: s.sessionId ?? '' } };
   try {
     if (params.get('historical') === '1') {
-      const file = await downloadHistoricalFile(s.user.client, params.get('file') ?? '', access);
-      return new Response(new Uint8Array(file.body), {
+      // An original file (file=) or a replacement (reissue=). Both are protected historical evidence.
+      const historical = params.get('reissue')
+        ? await downloadHistoricalReissue(s.user.client, params.get('reissue') ?? '', access)
+        : await downloadHistoricalFile(s.user.client, params.get('file') ?? '', access);
+      return new Response(new Uint8Array(historical.body), {
         status: 200,
         headers: {
           ...HEADERS,
           'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${file.filename}"`,
+          'Content-Disposition': `attachment; filename="${historical.filename}"`,
           'X-Payment-File-Historical': 'do-not-upload',
+          'X-Payment-File-Warning': encodeURIComponent(HISTORICAL_WARNING),
         },
       });
     }

@@ -38,6 +38,7 @@ import { loadBankDataKeyring } from '../../platform/security/bank-data-keyring';
 import { accountingReversalLink } from '../finance/schema';
 import { judgePayrollAccess, reachesCompany, type PayrollGrant } from './payroll-access';
 import { accountAsOf } from './employee-bank';
+import { lockReissueState } from './payment-file-locks';
 import { currencyDecimals } from './payroll-run';
 import { assertEmployeeScope, PAYROLL_RESULT_CAPABILITY, PayrollStructureError } from './payroll-structure';
 import { PAYROLL_RUN_CAPABILITY, employee, payrollPaymentFile, payrollResult, payrollRun, salaryPayment, type PaymentFileBankRow } from './schema';
@@ -630,6 +631,9 @@ export async function downloadPaymentFile(
       );
     }
     await assertAllReachable(tx, client, grant, (row.beneficiaries as string[]) ?? [], run.periodTo);
+    // Take the same per-run state lock as replacement approval/download so the supersession check and this
+    // download are serialised with them: an approval that wins the lock first makes this refuse.
+    await lockReissueState(tx, client, run.runId);
     // An old file with a superseded instruction is dangerous even if other employees remain active: block its
     // ordinary payment-ready re-download. It stays readable as protected historical evidence (9323).
     const superseded = (await tx.execute(sql`

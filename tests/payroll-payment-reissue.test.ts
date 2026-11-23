@@ -44,6 +44,7 @@ import {
   approveReissue,
   cancelReissue,
   downloadHistoricalFile,
+  downloadHistoricalReissue,
   downloadReissue,
   listReissueSourceEmployees, listReissues,
   previewReissue,
@@ -94,6 +95,13 @@ async function expectRefusal(promise: Promise<unknown>, wanted: string): Promise
     return error as Error;
   }
   throw new Error(`Expected refusal ${wanted}, nothing was thrown.`);
+}
+
+/** Approve a draft, supplying the frozen snapshot digest the approver acknowledged in review. */
+async function approveWithDigest(reissueId: string, approverName = 'RI.APP', actor = approver) {
+  const rows = await withTenant(tenant.client, (tx) => tx.execute(sql`select checksum from payroll_payment_reissue where client = ${tenant.client} and reissue_id = ${reissueId}`)) as unknown as Array<{ checksum: string }>;
+  const confirmDigest = rows[0]?.checksum;
+  return approveReissue(tenant.client, reissueId, approverName, { authorization: actor.authorization }, { confirmDigest });
 }
 
 async function employeeOn(): Promise<string> {
@@ -200,7 +208,7 @@ describe('attestation and approval', () => {
     expect(draft.version).toBe(1);
     expect(draft.lines).toHaveLength(1);
     await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.REQ', { authorization: requester.authorization }), 'FOUR_EYES');
-    const approved = await approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization });
+    const approved = await approveWithDigest(draft.reissueId);
     expect(approved.status).toBe('APPROVED');
     expect(approved.approvedBy).toBe('RI.APP');
   });
@@ -228,7 +236,7 @@ describe('replacement content and safety', () => {
     const originalSnapBefore = originalBefore[0]!.snap;
 
     const draft = await requestSelected([employees[0]!], requester, '2025-04-20');
-    await approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization });
+    await approveWithDigest(draft.reissueId);
     const download = await downloadReissue(tenant.client, draft.reissueId, { requestedBy: 'RI.APP' }, { authorization: approver.authorization });
     const csv = download.body.toString('utf8');
     // The corrected (new) account, at the replacement's effective date.
@@ -250,7 +258,7 @@ describe('replacement content and safety', () => {
   it('a fresh download is not a reuse, and a re-download is byte-stable and flagged', async () => {
     // A brand-new approved replacement has never been downloaded, so the first download must not look reused.
     const draft = await requestSelected([employees[2]!], requester, '2025-05-10');
-    await approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization });
+    await approveWithDigest(draft.reissueId);
     const first = await downloadReissue(tenant.client, draft.reissueId, { requestedBy: 'RI.A' }, { authorization: approver.authorization });
     const second = await downloadReissue(tenant.client, draft.reissueId, { requestedBy: 'RI.B' }, { authorization: approver.authorization });
     expect(first.reused).toBe(false);
@@ -266,7 +274,7 @@ describe('replacement content and safety', () => {
     });
     const before = await snapshot();
     const draft = await requestSelected([employees[2]!], requester);
-    await approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization });
+    await approveWithDigest(draft.reissueId);
     await downloadReissue(tenant.client, draft.reissueId, { requestedBy: 'RI.APP' }, { authorization: approver.authorization });
     expect(await snapshot()).toEqual(before);
   });
@@ -277,7 +285,7 @@ describe('traceability, blocking and concurrency', () => {
     const draft = await requestSelected([employees[2]!], requester);
     // A second draft for the same employee while the first is unapproved is refused.
     await expectRefusal(requestSelected([employees[2]!], requester), 'REISSUE_CONFLICT');
-    await approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization });
+    await approveWithDigest(draft.reissueId);
     // A second version for the same employee now links to the first reissue as its predecessor.
     const second = await requestSelected([employees[2]!], requester, '2025-04-25');
     expect(second.lines[0]!.predecessorKind).toBe('REISSUE');
@@ -426,12 +434,12 @@ describe('supersession, scope, review and idempotency guarantees', () => {
   it('v1 → v2 supersession of one employee in a multi-employee file blocks the old replacement and original', async () => {
     const target = sEmployees[0]!;
     const v1 = await requestReissue({ client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED', personnelNumbers: [target], intendedPaymentDate: '2025-12-12', reason: 'v1', attestations: [att(target)] as never, requestKey: randomUUID(), changedBy: 'RI.REQ' }, { authorization: requester.authorization });
-    await approveReissue(tenant.client, v1.reissueId, 'RI.APP', { authorization: approver.authorization });
+    await approveWithDigest(v1.reissueId);
     const v1dl = await downloadReissue(tenant.client, v1.reissueId, { requestedBy: 'RI.A' }, { authorization: approver.authorization });
     expect(v1dl.body.length).toBeGreaterThan(0);
     // v2 for the same employee, approved → v1 is now superseded.
     const v2 = await requestReissue({ client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED', personnelNumbers: [target], intendedPaymentDate: '2025-12-20', reason: 'v2', attestations: [att(target, 'RETURNED')] as never, requestKey: randomUUID(), changedBy: 'RI.REQ' }, { authorization: requester.authorization });
-    await approveReissue(tenant.client, v2.reissueId, 'RI.APP', { authorization: approver.authorization });
+    await approveWithDigest(v2.reissueId);
     // The old replacement may no longer be downloaded; the current one may.
     const err = await expectRefusal(downloadReissue(tenant.client, v1.reissueId, { requestedBy: 'RI.A' }, { authorization: approver.authorization }), 'REISSUE_SUPERSEDED');
     expect((err as ReissueError).message).toMatch(/later approved replacement/);
@@ -490,7 +498,7 @@ describe('supersession, scope, review and idempotency guarantees', () => {
       if (rec.isActive && !rec.validTo) await endEmployeeBank({ client: tenant.client, bankRecordId: rec.bankRecordId, validTo: '2025-12-17', changedBy: ACTOR }, { authorization: bankAdmin.authorization }, KEYRING);
     }
     await bankAccount(target, { from: '2025-12-18', value: 'KW00GBKCHANGED0000007777' });
-    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }), 'REISSUE_BANK_CHANGED');
+    await expectRefusal(approveWithDigest(draft.reissueId), 'REISSUE_BANK_CHANGED');
     await cancelReissue(tenant.client, draft.reissueId, { reason: 'obsolete destination', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
   }, 60_000);
 
@@ -503,7 +511,7 @@ describe('supersession, scope, review and idempotency guarantees', () => {
     const draft = await requestReissue({ client: tenant.client, sourcePreparationId: sPrep, selection: 'SELECTED', personnelNumbers: [target], intendedPaymentDate: '2025-12-19', reason: 'race', attestations: [att(target)] as never, requestKey: randomUUID(), changedBy: 'RI.REQ' }, { authorization: requester.authorization });
     // approve vs cancel concurrently
     const race = await Promise.allSettled([
-      approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }),
+      approveWithDigest(draft.reissueId),
       cancelReissue(tenant.client, draft.reissueId, { reason: 'race cancel', changedBy: 'RI.REQ' }, { authorization: requester.authorization }),
     ]);
     const won = race.filter((r) => r.status === 'fulfilled');
@@ -539,6 +547,101 @@ describe('supersession, scope, review and idempotency guarantees', () => {
   });
 });
 
+describe('destination checks, historical replacements, and deliberate approval', () => {
+  // Reuse the outer 3-employee source file, but normalise every employee's bank history to a late, unambiguous
+  // window so these tests are independent of what earlier tests left behind.
+  const D = { endOld: '2025-12-31', start: '2026-01-01', payment: '2026-01-15', draft: '2026-01-20' };
+  let dPrep: string;
+  let dEmployees: string[] = [];
+
+  beforeAll(async () => {
+    dPrep = preparationId;
+    dEmployees = [...employees];
+    for (const pn of dEmployees) {
+      for (const rec of await listEmployeeBank(tenant.client, pn, { authorization: bankAdmin.authorization }, KEYRING)) {
+        if (rec.isActive && !rec.validTo && rec.validFrom <= D.endOld) {
+          await endEmployeeBank({ client: tenant.client, bankRecordId: rec.bankRecordId, validTo: D.endOld, changedBy: ACTOR }, { authorization: bankAdmin.authorization }, KEYRING).catch(() => null);
+        }
+      }
+      await bankAccount(pn, { beneficiary: `Bank ${pn}`, from: D.start }).catch(() => null);
+    }
+    // A replacement source snapshot taken at the late payment date, so its rows carry the normalised accounts.
+    dPrep = (await preparePaymentFile({ client: tenant.client, runId, intendedPaymentDate: D.payment, changedBy: ACTOR }, { authorization: requester.authorization }).catch(() => null))?.preparationId ?? preparationId;
+  }, 120_000);
+
+  async function draftFor(pn: string, date = D.draft) {
+    // Free any standing draft for the obligation first.
+    for (const r of (await listReissues(tenant.client, runId, { authorization: approver.authorization })).filter((x) => x.status === 'DRAFT')) {
+      await cancelReissue(tenant.client, r.reissueId, { reason: 'prep', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    }
+    return requestReissue({ client: tenant.client, sourcePreparationId: dPrep, selection: 'SELECTED', personnelNumbers: [pn], intendedPaymentDate: date, reason: 'dest test', attestations: [att(pn)] as never, requestKey: randomUUID(), changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }
+  async function replaceAccount(pn: string, beneficiary: string, value: string, kind: 'IBAN' | 'ACCOUNT' = 'IBAN') {
+    for (const rec of await listEmployeeBank(tenant.client, pn, { authorization: bankAdmin.authorization }, KEYRING)) {
+      if (rec.isActive && !rec.validTo) await endEmployeeBank({ client: tenant.client, bankRecordId: rec.bankRecordId, validTo: '2026-01-09', changedBy: ACTOR }, { authorization: bankAdmin.authorization }, KEYRING).catch(() => null);
+    }
+    return createEmployeeBank({ client: tenant.client, personnelNumber: pn, beneficiaryName: beneficiary, bankName: 'Gulf Bank', bankCode: 'GBK01', accountKind: kind, accountValue: value, validFrom: '2026-01-10', changedBy: ACTOR }, { authorization: bankAdmin.authorization }, KEYRING);
+  }
+
+  it('a changed beneficiary with the SAME account number is refused at approval', async () => {
+    const pn = dEmployees[0]!;
+    const draft = await draftFor(pn);
+    await replaceAccount(pn, 'A Different Beneficiary', `KW00GBK000000000000${pn.slice(-4)}`);
+    await expectRefusal(approveWithDigest(draft.reissueId), 'REISSUE_BANK_CHANGED');
+    await cancelReissue(tenant.client, draft.reissueId, { reason: 'changed', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 60_000);
+
+  it('a changed account kind is refused at approval', async () => {
+    const pn = dEmployees[1]!;
+    const d1 = await draftFor(pn);
+    await replaceAccount(pn, `Bank ${pn}`, `0099887766554433`, 'ACCOUNT');
+    await expectRefusal(approveWithDigest(d1.reissueId), 'REISSUE_BANK_CHANGED');
+    await cancelReissue(tenant.client, d1.reissueId, { reason: 'kind changed', changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+  }, 60_000);
+
+  it('approval requires the reviewed snapshot digest (missing and stale are refused)', async () => {
+    const pn = dEmployees[2]!;
+    const draft = await draftFor(pn);
+    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }), 'REISSUE_CONFIRMATION_REQUIRED');
+    await expectRefusal(approveReissue(tenant.client, draft.reissueId, 'RI.APP', { authorization: approver.authorization }, { confirmDigest: 'deadbeef' }), 'REISSUE_CONFIRMATION_STALE');
+    const ok = await approveWithDigest(draft.reissueId);
+    expect(ok.status).toBe('APPROVED');
+    expect(ok.snapshotDigest).toBe(draft.snapshotDigest);
+  }, 60_000);
+
+  it('the review view exposes a frozen beneficiary name and masks the account', async () => {
+    const reissues = await listReissues(tenant.client, runId, { authorization: approver.authorization });
+    const approved = reissues.find((r) => r.status === 'APPROVED')!;
+    for (const l of approved.lines) {
+      expect(l.beneficiaryName.length).toBeGreaterThan(0);
+      expect(l.maskedAccount.startsWith('••••')).toBe(true);
+    }
+    expect(JSON.stringify(approved)).not.toMatch(/KW00GBK\d{10}/);
+  });
+
+  it('v1 (two employees) superseded by v2 (one) is blocked, readable historically, and its bytes match the earlier download', async () => {
+    const [a, b] = [dEmployees[0]!, dEmployees[1]!];
+    // Both a and b already have an effective account from the tests above (effective 2026-01-10 onward).
+    const v1 = await requestReissue({ client: tenant.client, sourcePreparationId: dPrep, selection: 'SELECTED', personnelNumbers: [a, b], intendedPaymentDate: '2026-01-15', reason: 'v1 two', attestations: [att(a), att(b)] as never, requestKey: randomUUID(), changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    await approveWithDigest(v1.reissueId);
+    const v1Bytes = (await downloadReissue(tenant.client, v1.reissueId, { requestedBy: 'RI.A' }, { authorization: approver.authorization })).body;
+    const v2 = await requestReissue({ client: tenant.client, sourcePreparationId: dPrep, selection: 'SELECTED', personnelNumbers: [a], intendedPaymentDate: '2026-01-20', reason: 'v2 one', attestations: [att(a, 'RETURNED')] as never, requestKey: randomUUID(), changedBy: 'RI.REQ' }, { authorization: requester.authorization });
+    await approveWithDigest(v2.reissueId);
+    await expectRefusal(downloadReissue(tenant.client, v1.reissueId, { requestedBy: 'RI.A' }, { authorization: approver.authorization }), 'REISSUE_SUPERSEDED');
+    const view1 = (await listReissues(tenant.client, runId, { authorization: approver.authorization })).find((r) => r.reissueId === v1.reissueId)!;
+    expect(view1.superseded).toBe(true);
+    expect(view1.downloadable).toBe(false);
+    const v2dl = await downloadReissue(tenant.client, v2.reissueId, { requestedBy: 'RI.A' }, { authorization: approver.authorization });
+    expect(v2dl.body.length).toBeGreaterThan(0);
+    const hist = await downloadHistoricalReissue(tenant.client, v1.reissueId, { authorization: approver.authorization });
+    expect(hist.filename.startsWith('HISTORICAL-DO-NOT-UPLOAD-')).toBe(true);
+    expect(hist.body.equals(v1Bytes)).toBe(true);
+    const noHist = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY, REISSUE_APPROVE_CAPABILITY, REISSUE_DOWNLOAD_CAPABILITY, 'PEOPLE.BANK.REVEAL'], suffix: 'DNOHIST' });
+    await expectRefusal(downloadHistoricalReissue(tenant.client, v1.reissueId, { authorization: noHist.authorization }), 'REISSUE_AUTHORITY');
+    expect(v2.lines.some((l) => l.personnelNumber === b)).toBe(false);
+  }, 90_000);
+});
+
 describe('the reissue endpoint', () => {
   const post = (fields: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(fields)) f.set(k, v); return new Request('http://localhost/people/payroll-runs/payment-file/reissue', { method: 'POST', body: f }); };
 
@@ -567,6 +670,35 @@ describe('the reissue endpoint', () => {
     const response = await REISSUE_GET(new Request(`http://localhost/people/payroll-runs/payment-file/reissue?reissue=${approved.reissueId}`));
     expect(response.status).toBe(403);
     expect(await response.text()).toContain('PEOPLE.BANK.REVEAL');
+  });
+
+  it('the endpoint serves a historical replacement with do-not-upload headers, and requires bank authority', async () => {
+    const all = await listReissues(tenant.client, runId, { authorization: approver.authorization });
+    const superseded = all.find((r) => r.status === 'APPROVED' && r.superseded);
+    if (superseded) {
+      requestContext.cookie = encodeSessionCookie(tenant.client, approver.token);
+      const ok = await REISSUE_GET(new Request(`http://localhost/people/payroll-runs/payment-file/reissue?historical=1&reissue=${superseded.reissueId}`));
+      expect(ok.status).toBe(200);
+      expect(ok.headers.get('x-payment-file-historical')).toBe('do-not-upload');
+      expect(ok.headers.get('content-disposition')).toContain('HISTORICAL-DO-NOT-UPLOAD-');
+      expect(ok.headers.get('cache-control')).toBe('private, no-store');
+    }
+    // Without the historical capability the same route is refused.
+    const noHist = await createActor(tenant.client, { capabilities: [REISSUE_REQUEST_CAPABILITY, 'PEOPLE.BANK.REVEAL'], suffix: 'EPNOHIST' });
+    requestContext.cookie = encodeSessionCookie(tenant.client, noHist.token);
+    const denied = await REISSUE_GET(new Request('http://localhost/people/payroll-runs/payment-file/reissue?historical=1&reissue=' + (superseded?.reissueId ?? randomUUID())));
+    expect([403, 404]).toContain(denied.status);
+  });
+
+  it('the approve action over HTTP refuses without a confirm digest', async () => {
+    const all = await listReissues(tenant.client, runId, { authorization: approver.authorization });
+    const draft = all.find((r) => r.status === 'DRAFT');
+    if (draft) {
+      requestContext.cookie = encodeSessionCookie(tenant.client, approver.token);
+      const response = await REISSUE_POST(post({ action: 'approve', reissueId: draft.reissueId }));
+      expect(response.status).toBe(400);
+      expect(await response.text()).toContain('review');
+    }
   });
 
   it('downloads an approved replacement with private, no-store', async () => {
