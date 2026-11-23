@@ -67,6 +67,7 @@ type OpRow = {
   operation_id: string; run_date: string; run_id: string; kind: string; status: string; items_total: number; items_done: number;
   error_code: string | null; error_text: string | null; created_at: Date | string; finished_at: Date | string | null;
   requested_by: string; requested_by_user: string; job_run_id: string | null; house_bank_key: string | null; bank_account_id: string | null;
+  bank_amounts: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> | null;
   job_status?: string | null;
 };
 const iso = (v: Date | string | null): string | null => (v == null ? null : v instanceof Date ? v.toISOString() : String(v));
@@ -111,13 +112,18 @@ function refuse(error: unknown): never {
 
 async function insertOperation(
   tx: Tx,
-  input: { client: string; runDate: string; runId: string; kind: 'PROPOSAL' | 'EXECUTE'; requestedBy: string; actorUserId: string; houseBankKey?: string; bankAccountId?: string },
+  input: {
+    client: string; runDate: string; runId: string; kind: 'PROPOSAL' | 'EXECUTE';
+    requestedBy: string; actorUserId: string; houseBankKey?: string; bankAccountId?: string;
+    bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>;
+  },
 ): Promise<PaymentOperationView> {
   const operationId = randomUUID();
   await tx.execute(sql`
-    insert into payment_run_operation (client, operation_id, run_date, run_id, kind, status, request_key, requested_by, requested_by_user, house_bank_key, bank_account_id)
+    insert into payment_run_operation (client, operation_id, run_date, run_id, kind, status, request_key, requested_by, requested_by_user, house_bank_key, bank_account_id, bank_amounts)
     values (${input.client}, ${operationId}, ${input.runDate}, ${input.runId}, ${input.kind}, 'QUEUED', ${`pay-${operationId}`}, ${input.requestedBy}, ${input.actorUserId},
-            ${input.houseBankKey ?? null}, ${input.bankAccountId ?? null})
+            ${input.houseBankKey ?? null}, ${input.bankAccountId ?? null},
+            ${input.bankAmounts && input.bankAmounts.length > 0 ? JSON.stringify(input.bankAmounts) : null}::jsonb)
   `);
   // Only the operation id travels in the queue; the bank choice stays on the operation row.
   const job = await enqueue(tx, {
@@ -153,7 +159,12 @@ export async function submitPaymentProposal(input: SubmitProposalInput): Promise
   });
 }
 
-export interface SubmitExecutionInput extends SubmitProposalInput { houseBankKey: string; bankAccountId: string }
+export interface SubmitExecutionInput extends SubmitProposalInput {
+  houseBankKey: string;
+  bankAccountId: string;
+  /** The complete actual bank-account-currency evidence, one entry per resulting group. */
+  bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>;
+}
 
 /** Queue the execution of a proposal that stands RELEASED. Nothing is posted until the job commits. */
 export async function submitPaymentExecution(input: SubmitExecutionInput): Promise<PaymentOperationView> {
@@ -194,6 +205,7 @@ export async function submitPaymentExecution(input: SubmitExecutionInput): Promi
     return insertOperation(tx, {
       client: input.client, runDate: input.runDate, runId: input.runId, kind: 'EXECUTE',
       requestedBy: input.changedBy, actorUserId: actor.id, houseBankKey, bankAccountId,
+      bankAmounts: input.bankAmounts,
     });
   });
 }
@@ -447,6 +459,7 @@ export async function runPaymentExecuteChunk(ctx: JobContext): Promise<ChunkResu
     await executePaymentRun({
       client, changedBy: op.requested_by, runDate, runId: op.run_id,
       houseBankKey: String(op.house_bank_key), bankAccountId: String(op.bank_account_id),
+      bankAmounts: op.bank_amounts ?? undefined,
       exceptOperationId: operationId,
       beforeExecute: async (tx) => {
         await ctx.fence(tx);

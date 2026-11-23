@@ -58,6 +58,7 @@ export async function postPaymentAction(
       bankGlAccount: text(form, 'bankAccount'),
       amount: Number(text(form, 'amount')),
       currency: text(form, 'currency').toUpperCase(),
+      bankAmount: text(form, 'bankAmount') || undefined,
       reference: text(form, 'reference') || undefined,
       onAccountAmount: Number(text(form, 'onAccount')) || 0,
       valueDate: text(form, 'valueDate') || undefined,
@@ -67,7 +68,7 @@ export async function postPaymentAction(
     revalidatePath(ROUTE);
     return {
       ok: true,
-      message: `Payment posted as document ${result.journalDocumentNumber}: ${result.itemsCleared} items cleared on ${result.clearingDate}.`,
+      message: `Payment posted as document ${result.journalDocumentNumber}: ${result.itemsCleared} items cleared on ${result.clearingDate}. Bank movement ${result.bankAmount} ${result.bankCurrency ?? result.amount}.`,
     };
   } catch (error) {
     return wrap(error);

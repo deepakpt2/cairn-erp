@@ -175,19 +175,23 @@ describe('SCR-080 outgoing payment completion (F-53)', () => {
     const partial = await postOutgoingPayment(payment({
       amount: 40, items: [{ ...residualRef, applied: 40, outcome: 'PARTIAL' }],
     }));
-    expect(partial.itemsCleared).toBe(0);
+    expect(partial.itemsCleared).toBe(1);
     view = await getPayables(c, 'V10000', '1000');
-    // The original 100 stands beside the payment's own 40 debit line.
-    expect(view.openItems.map((i) => i.signed)).toEqual([100, -40]);
+    // The original 100 is closed; the unpaid remainder stands as one residual open item of 60.
+    expect(view.openItems.map((i) => i.signed)).toEqual([60]);
     expect(view.openBalance).toBe(60);
     const partialLine = await withTenant(c, (tx) => tx.execute(sql`
-      select debit_credit, clearing_document from journal_entry_line
+      select debit_credit, clearing_document, line_text from journal_entry_line
       where client = ${c} and document_number = ${partial.journalDocumentNumber}
         and business_partner = 'V10000'
+      order by line_number
     `));
-    const prow = (partialLine as unknown as Array<Record<string, unknown>>)[0];
-    expect(prow.debit_credit).toBe('S');
-    expect(prow.clearing_document).toBeNull();
+    const rows = partialLine as unknown as Array<Record<string, unknown>>;
+    const settled = rows.find((row) => String(row.line_text).startsWith('Settles'))!;
+    expect(settled.debit_credit).toBe('S');
+    expect(settled.clearing_document).not.toBeNull();
+    const residual = rows.find((row) => String(row.line_text).startsWith('Residual'))!;
+    expect(residual.clearing_document).toBeNull();
   });
 
   it('posts an on-account amount with a tolerated difference, and on-account alone', async () => {
@@ -196,7 +200,7 @@ describe('SCR-080 outgoing payment completion (F-53)', () => {
     const last = view.openItems[0];
     const ref = { documentNumber: last.documentNumber, fiscalYear: last.fiscalYear, lineNumber: last.lineNumber };
     const posted = await postOutgoingPayment(payment({
-      amount: 150, onAccountAmount: 45, items: [ref],
+      amount: 110, onAccountAmount: 45, items: [ref],
     }));
     const lines = await withTenant(c, (tx) => tx.execute(sql`
       select gl_account, debit_credit, amount_local::text as amount, line_text from journal_entry_line

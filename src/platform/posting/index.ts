@@ -110,6 +110,11 @@ export interface PostJournalInput {
   /** Set only by the reversal engine so the mirror itself stands marked as a reversal. */
   reversalOf?: string;
   reversalReason?: string;
+  /**
+   * A period-end FX valuation document: a local-only carrying adjustment on a foreign position.
+   * The reversal engine copies this marker so both the posting and its mirror stay provable.
+   */
+  isFxValuation?: boolean;
   postedBy: string;
   transactionCode?: string;
   /**
@@ -230,6 +235,7 @@ export async function postJournalEntry(
     reference: input.reference,
     headerText: input.headerText,
     status: 'POSTED',
+    isFxValuation: input.isFxValuation ?? false,
     reversalOf: input.reversalOf,
     reversalReason: input.reversalReason,
     originClass: input.origin?.documentClass,
@@ -440,6 +446,7 @@ export async function reverseJournalEntry(
     },
     reversalOf: input.documentNumber,
     reversalReason: input.reason,
+    isFxValuation: header.isFxValuation,
     postedBy: input.reversedBy,
     transactionCode: input.transactionCode,
     lines: lines

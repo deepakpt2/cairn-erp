@@ -321,7 +321,7 @@ export default function BankReconciliation({
                     <thead>
                       <tr className="text-xs uppercase tracking-wide text-ink-faint">
                         <th>Document</th><th>Date</th><th>Type</th><th>Reference</th><th>Assignment</th>
-                        <th>Origin</th><th>Direction</th><th>Amount ({view.currency})</th><th>Matched</th>
+                        <th>Origin</th><th>Kind</th><th>Direction</th><th>Amount ({view.currency})</th><th>Matched</th>
                         <th>Remaining</th><th>Local ({view.companyCurrency})</th>
                       </tr>
                     </thead>
@@ -334,6 +334,7 @@ export default function BankReconciliation({
                           <td>{line.reference}</td>
                           <td>{line.assignment}</td>
                           <td>{line.originClass ? `${line.originClass} ${line.originKey ?? ''}` : ''}</td>
+                          <td>{line.kind === 'FX_VALUATION' ? 'FX valuation (local only)' : 'Bank movement'}</td>
                           <td>{line.direction === 'IN' ? 'Money in' : 'Money out'}</td>
                           <td className="num">{line.amount}</td>
                           <td className="num">{line.matchedAmount}</td>
@@ -557,7 +558,8 @@ function MatchPanel({
 }) {
   const statement = view.statement!;
   const [statementLineId, setStatementLineId] = useState(statement.lines[0]?.lineId ?? '');
-  const available = view.ledgerLines.filter((line) => Number(line.remainingAmount.replace('-', '')) > 0);
+  const available = view.ledgerLines.filter((line) => line.matchable
+    && Number(line.remainingAmount.replace('-', '')) > 0);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
 
   const selectedLine = statement.lines.find((line) => line.lineId === statementLineId);

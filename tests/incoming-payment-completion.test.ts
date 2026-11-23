@@ -181,22 +181,26 @@ describe('SCR-079 incoming payment completion (F-28)', () => {
     let view = await getReceivables(c, 'C10000', '1000');
     expect(view.openItems.map((i) => i.signed)).toEqual([100]);
 
-    // Partial: 40 against the residual 100 → both stand; nothing clears.
+    // Partial: 40 against the residual 100 → the original closes and 60 stands as one residual.
     const residualRef = await refOf(100);
     const partial = await postIncomingPayment(await payment({
       amount: 40, items: [{ ...residualRef, applied: 40, outcome: 'PARTIAL' }],
     }));
-    expect(partial.itemsCleared).toBe(0);
+    expect(partial.itemsCleared).toBe(1);
     view = await getReceivables(c, 'C10000', '1000');
-    expect(view.openItems.map((i) => i.signed)).toEqual([100]);
+    expect(view.openItems.map((i) => i.signed)).toEqual([60]);
     const partialLine = await withTenant(c, (tx) => tx.execute(sql`
-      select debit_credit, clearing_document from journal_entry_line
+      select debit_credit, clearing_document, line_text from journal_entry_line
       where client = ${c} and document_number = ${partial.journalDocumentNumber}
         and business_partner = 'C10000'
+      order by line_number
     `));
-    const prow = (partialLine as unknown as Array<Record<string, unknown>>)[0];
-    expect(prow.debit_credit).toBe('H');
-    expect(prow.clearing_document).toBeNull();
+    const rows = partialLine as unknown as Array<Record<string, unknown>>;
+    const settled = rows.find((row) => String(row.line_text).startsWith('Settles'))!;
+    expect(settled.debit_credit).toBe('H');
+    expect(settled.clearing_document).not.toBeNull();
+    const residual = rows.find((row) => String(row.line_text).startsWith('Residual'))!;
+    expect(residual.clearing_document).toBeNull();
   });
 
   it('posts an on-account amount and a tolerated difference, refusing beyond tolerance', async () => {
@@ -204,9 +208,9 @@ describe('SCR-079 incoming payment completion (F-28)', () => {
     const view = await getReceivables(c, 'C10000', '1000');
     const last = view.openItems[0];
     const ref = { documentNumber: last.documentNumber, fiscalYear: last.fiscalYear, lineNumber: last.lineNumber };
-    // Settle the last 100 in full, 45 on account, 5 unassigned within tolerance.
+    // Settle the remaining 60 in full, 45 on account, 5 unassigned within tolerance.
     const posted = await postIncomingPayment(await payment({
-      amount: 150, onAccountAmount: 45, items: [ref],
+      amount: 110, onAccountAmount: 45, items: [ref],
     }));
     const lines = await withTenant(c, (tx) => tx.execute(sql`
       select gl_account, debit_credit, amount_local::text as amount, line_text from journal_entry_line

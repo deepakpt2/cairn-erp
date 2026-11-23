@@ -14,7 +14,9 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { MONEY_SCALE, fromScaled, roundToScale, toScaled } from '../../platform/posting/decimal';
 import { MoneyError, moneyFor } from '../../platform/posting/money';
 import { requireExchangeRate } from './exchange-rate-lookup';
-import { activeValuationConflict, fxDifferenceAccount, localUnitsOf } from './fx-settlement';
+import {
+  activeValuationConflict, fxDifferenceAccount, localUnitsOf, lockValuationSettlement,
+} from './fx-settlement';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { bankAccount, houseBank, paymentMethod } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
@@ -88,6 +90,7 @@ export interface PaymentRunView {
     itemNumber: number; accountId: string; currency: string; amount: string;
     journalDocumentNumber: string; journalFiscalYear: number; journalLineNumber: number; invoiceNumber: string | null;
     houseBankKey: string; bankAccountId: string;
+    bankAmount: string; bankCurrency: string | null; bankAmountSource: string;
   }>;
   payableTotal: number;
   exceptionCount: number;
@@ -129,6 +132,8 @@ export async function loadRun(tx: Tx, client: string, runDate: string, runId: st
       amount: p.amount, journalDocumentNumber: p.journalDocumentNumber,
       journalFiscalYear: p.journalFiscalYear, journalLineNumber: p.journalLineNumber,
       invoiceNumber: p.invoiceNumber, houseBankKey: p.houseBankKey, bankAccountId: p.bankAccountId,
+      bankAmount: p.bankAmount, bankCurrency: p.bankCurrency?.trim() ?? null,
+      bankAmountSource: p.bankAmountSource,
     })),
     // A sum across the proposed items is exact at the storage scale (a run can span currencies, so no single minor unit applies).
     payableTotal: Number(fromScaled(proposal.filter((p) => !p.exceptionCode).reduce((s, p) => s + roundToScale(p.amount, MONEY_SCALE), 0n))),
@@ -388,6 +393,12 @@ export async function generateProposal(input: {
 export async function executePaymentRun(input: {
   client: string; changedBy: string; runDate: string; runId: string;
   houseBankKey: string; bankAccountId: string;
+  /**
+   * The complete actual bank-account-currency evidence, one entry per resulting bank movement.
+   * Required for every group when the bank account is held in the company local currency and the
+   * payment is in another currency; a missing or conflicting entry refuses the whole run.
+   */
+  bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>;
   /** The background execution operation that is itself the active one, so it does not block itself. */
   exceptOperationId?: string;
   /**
@@ -420,6 +431,15 @@ export async function executePaymentRun(input: {
       throw error;
     });
 
+    // Serialize with period-end valuation for every company the run touches. A stable order across
+    // runs avoids a deadlock between two executions covering the same companies.
+    for (const companyCode of [...new Set(payable.map((p) => p.companyCode))].sort()) {
+      await lockValuationSettlement(tx, input.client, companyCode);
+    }
+
+    const groupKeyOf = (companyCode: string, supplier: string, currency: string) =>
+      `${companyCode.trim().toUpperCase()}|${supplier.trim().toUpperCase()}|${currency.trim().toUpperCase()}`;
+
     // Revalidate every item against its standing journal line.
     interface Entry { item: (typeof payable)[number]; glAccount: string; amountLocal: string }
     interface Group { company: string; supplier: string; currency: string; entries: Entry[] }
@@ -440,13 +460,48 @@ export async function executePaymentRun(input: {
         eq(supplierCompany.companyCode, item.companyCode),
       ));
       if (supplier?.isBlocked) throw new PaymentRunError(`Supplier ${item.accountId} is blocked.`, 'Regenerate the proposal, then execute.');
-      const key = `${item.companyCode}|${item.accountId}|${item.currency}`;
+      const key = groupKeyOf(item.companyCode, item.accountId, item.currency);
       const group = groups.get(key) ?? { company: item.companyCode, supplier: item.accountId, currency: item.currency, entries: [] as Entry[] };
       group.entries.push({ item, glAccount: line.glAccount, amountLocal: line.amountLocal });
       groups.set(key, group);
     }
 
-    let paymentNumber = 0;
+    // The complete actual-bank-amount set, keyed unambiguously to a resulting movement (company,
+    // supplier, currency). Duplicates and unknown keys are refused before anything is posted.
+    const evidence = new Map<string, string>();
+    for (const row of input.bankAmounts ?? []) {
+      const key = groupKeyOf(row.companyCode, row.supplier, row.currency);
+      if (evidence.has(key)) {
+        throw new PaymentRunError(
+          `The actual bank amount for ${row.companyCode}/${row.supplier}/${row.currency} was stated more than once.`,
+          'State exactly one actual bank amount for each resulting bank movement.',
+        );
+      }
+      evidence.set(key, String(row.amount));
+    }
+    for (const key of evidence.keys()) {
+      if (!groups.has(key)) {
+        throw new PaymentRunError(
+          `The actual bank amount for ${key.replaceAll('|', '/')} names no proposed payment group.`,
+          'Reload the proposal and state the actual bank amounts against its groups.',
+        );
+      }
+    }
+
+    interface Prepared {
+      group: Group;
+      bank: typeof bankAccount.$inferSelect;
+      company: NonNullable<Awaited<ReturnType<typeof getCompanyCode>>>;
+      money: Awaited<ReturnType<typeof moneyFor>>;
+      localMoney: Awaited<ReturnType<typeof moneyFor>>;
+      rate: Awaited<ReturnType<typeof requireExchangeRate>>;
+      totalUnits: bigint;
+      bankLocalUnits: bigint;
+      bankAccountAmount: string;
+      bankAccountCurrency: string;
+      bankAmountSource: string;
+    }
+    const prepared: Prepared[] = [];
     for (const group of groups.values()) {
       const [bank] = await tx.select().from(bankAccount).where(and(
         eq(bankAccount.client, input.client),
@@ -462,14 +517,6 @@ export async function executePaymentRun(input: {
       }
       const company = await getCompanyCode(tx, input.client, group.company);
       if (!company?.fiscalYearVariant) throw new PaymentRunError(`Company code ${group.company} is not configured.`);
-      // The account must be held in the payment currency or in the company local currency; a third
-      // currency would need a bank movement the journal cannot state.
-      if (bank.currency !== group.currency && bank.currency !== company.currency) {
-        throw new PaymentRunError(
-          `Bank account currency ${bank.currency} is neither the payment currency ${group.currency} nor the company local currency ${company.currency}.`,
-          'Choose a bank account in the payment currency or the local currency.',
-        );
-      }
       const [bankStanding] = await tx.select().from(houseBank).where(and(
         eq(houseBank.client, input.client),
         eq(houseBank.companyCode, group.company),
@@ -477,18 +524,28 @@ export async function executePaymentRun(input: {
       ));
       if (!bankStanding) throw new PaymentRunError(`House bank ${input.houseBankKey} does not stand for company ${group.company}.`);
 
-      const position = await derivePosition(tx, input.client, company.fiscalYearVariant, run.postingDate);
+      const groupCurrency = group.currency.trim().toUpperCase();
+      const bankCurrency = bank.currency.trim().toUpperCase();
+      const localCurrency = company.currency.trim().toUpperCase();
+      // The account must be held in the payment currency or in the company local currency; a third
+      // currency would need a bank movement the journal cannot state.
+      if (bankCurrency !== groupCurrency && bankCurrency !== localCurrency) {
+        throw new PaymentRunError(
+          `Bank account currency ${bankCurrency} is neither the payment currency ${groupCurrency} nor the company local currency (${localCurrency}).`,
+          'Choose a bank account in the payment currency or the local currency.',
+        );
+      }
       // Exact at the payment currency's decimals: each item is rounded once, the bank line is their exact sum.
-      const money = await moneyFor(tx, group.currency).catch((error: unknown) => {
+      const money = await moneyFor(tx, groupCurrency).catch((error: unknown) => {
         if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
         throw error;
       });
-      const localMoney = await moneyFor(tx, company.currency).catch((error: unknown) => {
+      const localMoney = await moneyFor(tx, localCurrency).catch((error: unknown) => {
         if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
         throw error;
       });
       const rate = await requireExchangeRate(
-        tx, input.client, group.currency, company.currency, run.postingDate,
+        tx, input.client, groupCurrency, localCurrency, run.postingDate,
       ).catch((error: unknown) => {
         if (error instanceof Error && 'remedy' in error) {
           throw new PaymentRunError(error.message, (error as { remedy?: string }).remedy);
@@ -496,6 +553,59 @@ export async function executePaymentRun(input: {
         throw error;
       });
       const totalUnits = group.entries.reduce((s, e) => s + money.units(e.item.amount), 0n);
+      const key = groupKeyOf(group.company, group.supplier, group.currency);
+      const stated = evidence.get(key);
+      let bankLocalUnits: bigint;
+      let bankAccountAmount: string;
+      let bankAmountSource: string;
+      if (bankCurrency === localCurrency && groupCurrency !== localCurrency) {
+        if (stated === undefined || stated.trim() === '') {
+          throw new PaymentRunError(
+            `Bank account ${input.houseBankKey}/${input.bankAccountId} is held in ${localCurrency}, but group ${group.company}/${group.supplier} pays in ${groupCurrency}. The actual bank amount is required.`,
+            `Enter the amount the bank actually moves for ${group.supplier}, in ${localCurrency}. Nothing has been posted.`,
+          );
+        }
+        let enteredUnits: bigint;
+        try {
+          enteredUnits = localMoney.entered(stated, `The actual bank amount for ${group.supplier}`);
+        } catch (error) {
+          if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
+          throw error;
+        }
+        if (enteredUnits <= 0n) {
+          throw new PaymentRunError(`The actual bank amount for ${group.supplier} must stand above zero.`);
+        }
+        bankLocalUnits = enteredUnits * 10n ** BigInt(MONEY_SCALE - localMoney.scale);
+        bankAccountAmount = localMoney.fromUnits(enteredUnits);
+        bankAmountSource = 'USER_ACTUAL';
+      } else {
+        if (stated !== undefined && stated.trim() !== '') {
+          let statedUnits: bigint;
+          try { statedUnits = money.entered(stated, `The actual bank amount for ${group.supplier}`); } catch (error) {
+            if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
+            throw error;
+          }
+          if (statedUnits !== totalUnits) {
+            throw new PaymentRunError(
+              `The actual bank amount for ${group.supplier} (${money.fromUnits(statedUnits)} ${groupCurrency}) does not equal the proposed ${money.fromUnits(totalUnits)} ${groupCurrency}.`,
+              'When the bank is held in the payment currency, its movement is the proposal total; do not restate it.',
+            );
+          }
+        }
+        bankLocalUnits = localUnitsOf(totalUnits, money.scale, localMoney.scale, rate);
+        bankAccountAmount = money.fromUnits(totalUnits);
+        bankAmountSource = bankCurrency === localCurrency ? 'SAME_CURRENCY' : 'PAYMENT_CURRENCY';
+      }
+      prepared.push({
+        group, bank, company, money, localMoney, rate, totalUnits, bankLocalUnits,
+        bankAccountAmount, bankAccountCurrency: bankCurrency, bankAmountSource,
+      });
+    }
+
+    let paymentNumber = 0;
+    for (const p of prepared) {
+      const { group, bank, company, money, localMoney, rate, totalUnits, bankLocalUnits } = p;
+      const position = await derivePosition(tx, input.client, company.fiscalYearVariant!, run.postingDate);
 
       for (const entry of group.entries) {
         const conflict = await activeValuationConflict(tx, input.client, group.company, {
@@ -503,7 +613,7 @@ export async function executePaymentRun(input: {
           lineNumber: entry.item.journalLineNumber,
           accountNumber: entry.glAccount,
           currency: group.currency,
-        });
+        }, run.postingDate);
         if (conflict) {
           throw new PaymentRunError(
             `Item ${entry.item.invoiceNumber} was valued at period end by run ${conflict.runId} (key date ${conflict.valuationKeyDate}).`,
@@ -522,7 +632,7 @@ export async function executePaymentRun(input: {
       }));
       lines.push({
         glAccount: bank.glAccount, debitCredit: 'H' as const, amount: money.fromUnits(totalUnits),
-        amountLocal: fromScaled(localUnitsOf(totalUnits, money.scale, localMoney.scale, rate)),
+        amountLocal: fromScaled(bankLocalUnits),
       });
       const localSigned = lines.reduce(
         (total, line) => total + (line.debitCredit === 'S' ? toScaled(line.amountLocal) : -toScaled(line.amountLocal)),
@@ -578,12 +688,15 @@ export async function executePaymentRun(input: {
           eq(journalEntryLine.documentNumber, entry.item.journalDocumentNumber),
           eq(journalEntryLine.fiscalYear, entry.item.journalFiscalYear),
           eq(journalEntryLine.lineNumber, entry.item.journalLineNumber),
-        ));        paymentNumber += 1;
+        ));
+        paymentNumber += 1;
         await tx.insert(paymentDocument).values({
           client: input.client, runDate: input.runDate, runId: input.runId,
           itemNumber: paymentNumber, companyCode: group.company,
           payingCompanyCode: group.company, accountId: group.supplier,
           currency: group.currency, amount: entry.item.amount,
+          bankAmount: p.bankAccountAmount, bankCurrency: p.bankAccountCurrency,
+          bankAmountSource: p.bankAmountSource,
           journalDocumentNumber: journal.documentNumber,
           journalFiscalYear: journal.fiscalYear, journalLineNumber: index + 1,
           invoiceNumber: entry.item.invoiceNumber,

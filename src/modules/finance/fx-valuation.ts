@@ -84,6 +84,7 @@ import { fxValuationItem, fxValuationRun, journalEntry, journalEntryLine } from 
 import {
   resolveExchangeRate, translateAmount, type ResolvedExchangeRate,
 } from './exchange-rate-lookup';
+import { lockValuationSettlement } from './fx-settlement';
 
 interface CandidateRow {
   document_number: string;
@@ -183,6 +184,9 @@ export async function executeFxValuation(input: {
     const local = company.currency;
     const chart = company.chartOfAccounts ?? '';
     const localMoney = await moneyFor(tx, local);
+    // Serialize valuation and settlement for this company: neither may pass its "no active
+    // valuation" check while the other is still inside its transaction.
+    await lockValuationSettlement(tx, input.client, s.companyCode);
     const roundLocal = (n: number) => localMoney.round(n);
     const foreignMoney = new Map<string, Awaited<ReturnType<typeof moneyFor>>>();
 
@@ -369,6 +373,7 @@ export async function executeFxValuation(input: {
           currency: local, localCurrency: local,
           headerText: `FX valuation ${s.valuationArea} ${s.valuationKeyDate}`,
           lines, postedBy: actor, transactionCode: FX_VALUATION_CAPABILITY,
+          isFxValuation: true,
         }).catch((error: unknown) => {
           if (error instanceof PostingError) throw new FxValuationError(`${error.message} ${error.remedy}`);
           throw error;

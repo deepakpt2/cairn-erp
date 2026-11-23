@@ -115,6 +115,15 @@ export default function IncomingPayment({ view, loadError, canEnter, today, deci
                   <ConstrainedField kind="currency" name="currency" required />
                 </label>
                 <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Actual bank amount</span>
+                  <input name="bankAmount" className="input w-full" placeholder="Only if the bank is held in local currency" />
+                  <span className="mt-1 block text-xs text-ink-soft">
+                    The amount the bank actually credited, in the bank account currency. Required when the
+                    account is held in the company local currency and the receipt is foreign; leave blank
+                    when the bank and payment currencies match.
+                  </span>
+                </label>
+                <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reference</span>
                   <input name="reference" className="input w-full" placeholder="BANK-REF-001" />
                 </label>

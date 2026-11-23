@@ -104,6 +104,12 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
   const [executeState, executeActionState, executing] = useActionState(executeAction, INITIAL);
   const [cancelState, cancelActionState, cancelling] = useActionState(cancelRunAction, INITIAL);
   const busy = operation ? ACTIVE.includes(operation.status) : false;
+  // One bank movement per proposal group (company, supplier, currency). The actual bank amount is
+  // only required when that group's currency differs from the local-currency bank account.
+  const bankGroups = run
+    ? [...new Map(run.proposal.filter((p) => !p.exceptionCode)
+      .map((p) => [`${p.companyCode}|${p.accountId}|${p.currency}`, p])).values()]
+    : [];
   const editable = run && run.status !== 'EXECUTED' && run.status !== 'CANCELLED';
   const runLock = useChangeLock(
     'PAYMENT_RUN',
@@ -282,9 +288,26 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Account ID</span>
                 <input name="bankAccountId" className="input w-24" placeholder="MAIN" required />
               </label>
+              {bankGroups.map((g) => (
+                <label key={`${g.companyCode}|${g.accountId}|${g.currency}`} className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">
+                    Actual bank amount · {g.accountId} {g.currency}
+                  </span>
+                  <input
+                    name={`bankAmount~${g.companyCode}~${g.accountId}~${g.currency}`}
+                    className="input w-40"
+                    placeholder="Only if bank is local"
+                  />
+                </label>
+              ))}
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canExecute || executing || !runHeld || busy}>
                 Execute payments
               </button>
+              <p className="w-full text-xs text-ink-soft">
+                State one actual bank amount per group when the bank account is held in the company local
+                currency and the payment currency differs. A missing or conflicting amount refuses the
+                whole run; same-currency groups need no entry.
+              </p>
             </form>
           )}
           {run.payments.length > 0 && (
@@ -293,7 +316,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
                     <th>Supplier</th><th>Invoice</th>
-                    <th>Amount</th><th>Journal</th>
+                    <th>Amount</th><th>Bank movement</th><th>Journal</th>
                     <th>Bank</th>
                   </tr>
                 </thead>
@@ -303,6 +326,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
                       <td>{p.accountId}</td>
                       <td>{p.invoiceNumber ?? '—'}</td>
                       <td>{p.amount} {p.currency}</td>
+                      <td>{p.bankAmount} {p.bankCurrency ?? p.currency} <span className="text-ink-faint">({p.bankAmountSource})</span></td>
                       <td>{p.journalDocumentNumber}</td>
                       <td>{p.houseBankKey}/{p.bankAccountId}</td>
                     </tr>

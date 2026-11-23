@@ -15,10 +15,11 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
-import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { MONEY_SCALE, fromScaled } from '../../platform/posting/decimal';
+import { MoneyError, moneyFor } from '../../platform/posting/money';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { journalEntry, journalEntryLine } from './schema';
-import { fxDifferenceAccount } from './fx-settlement';
+import { activeValuationConflict, fxDifferenceAccount, lockValuationSettlement } from './fx-settlement';
 
 export const VENDOR_CLEARING_CAPABILITY = 'FIN.AP.CLEAR';
 const JOURNAL_DOCUMENT_TYPE = 'KZ';
@@ -150,11 +151,14 @@ export async function clearVendorItems(input: {
     await judgeSupplier(tx, input.client, input.supplier, input.companyCode);
     const company = await getCompanyCode(tx, input.client, input.companyCode);
     if (!company?.fiscalYearVariant) throw new VendorClearingError(`Company code ${input.companyCode} is not configured.`);
+    await lockValuationSettlement(tx, input.client, input.companyCode);
 
     interface Held {
       ref: ClearingItemRef; glAccount: string; currency: string;
       documentAmount: string; localAmount: string;
-      signedDocument: number; signedLocal: number;
+      direction: 1n | -1n;
+      documentUnits: bigint;
+      localUnits: bigint;
     }
     const held: Held[] = [];
     for (const ref of input.items) {
@@ -184,12 +188,11 @@ export async function clearVendorItems(input: {
       if (!journal || journal.status !== 'POSTED') {
         throw new VendorClearingError(`Document ${ref.documentNumber} does not stand posted.`, 'Reload the open items, then clear.');
       }
-      const directionSign = line.debitCredit === 'S' ? 1 : -1;
       held.push({
         ref, glAccount: line.glAccount, currency: line.currency,
         documentAmount: line.amountDocument, localAmount: line.amountLocal,
-        signedDocument: directionSign * Number(line.amountDocument),
-        signedLocal: directionSign * Number(line.amountLocal),
+        direction: line.debitCredit === 'S' ? 1n : -1n,
+        documentUnits: 0n, localUnits: 0n,
       });
     }
 
@@ -200,12 +203,51 @@ export async function clearVendorItems(input: {
         'Select items in a single currency.',
       );
     }
-    const difference = round4(held.reduce((s, h) => s + h.signedDocument, 0));
-    if (difference !== 0) {
+    const documentMoney = await moneyFor(tx, currencies[0]!).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new VendorClearingError(error.message, error.remedy);
+      throw error;
+    });
+    const localMoney = await moneyFor(tx, company.currency).catch((error: unknown) => {
+      if (error instanceof MoneyError) throw new VendorClearingError(error.message, error.remedy);
+      throw error;
+    });
+    for (const h of held) {
+      try {
+        h.documentUnits = documentMoney.entered(h.documentAmount, `Document ${h.ref.documentNumber} amount`);
+      } catch (error) {
+        if (error instanceof MoneyError) throw new VendorClearingError(error.message, error.remedy);
+        throw error;
+      }
+      let localAtScale: bigint;
+      try {
+        localAtScale = localMoney.entered(h.localAmount, `Document ${h.ref.documentNumber} local amount`);
+      } catch (error) {
+        if (error instanceof MoneyError) throw new VendorClearingError(error.message, error.remedy);
+        throw error;
+      }
+      h.localUnits = localAtScale * 10n ** BigInt(MONEY_SCALE - localMoney.scale);
+    }
+
+    const differenceUnits = held.reduce((s, h) => s + h.direction * h.documentUnits, 0n);
+    if (differenceUnits !== 0n) {
+      const magnitude = differenceUnits < 0n ? -differenceUnits : differenceUnits;
       throw new VendorClearingError(
-        `The selected items do not balance: the difference stands at ${Math.abs(difference).toFixed(2)} ${currencies[0]}.`,
+        `The selected items do not balance: the difference stands at ${documentMoney.fromUnits(magnitude)} ${currencies[0]}.`,
         'Select items whose signed document-currency sum stands at zero; partial and residual clearing stand deferred.',
       );
+    }
+
+    for (const h of held) {
+      const conflict = await activeValuationConflict(tx, input.client, input.companyCode, {
+        documentNumber: h.ref.documentNumber, lineNumber: h.ref.lineNumber,
+        accountNumber: h.glAccount, currency: h.currency,
+      }, input.postingDate);
+      if (conflict) {
+        throw new VendorClearingError(
+          `Document ${h.ref.documentNumber} line ${h.ref.lineNumber} was valued at period end by run ${conflict.runId} (key date ${conflict.valuationKeyDate}).`,
+          'Reverse that FX valuation document first, then clear. Clearing over an active valuation would count the same exchange difference twice. Nothing has been posted.',
+        );
+      }
     }
 
     const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
@@ -214,16 +256,14 @@ export async function clearVendorItems(input: {
       localOnly?: boolean; businessPartner?: string; lineText?: string;
     }> = held.map((h) => ({
       glAccount: h.glAccount,
-      debitCredit: h.signedDocument > 0 ? 'H' as const : 'S' as const,
-      amount: Number(h.documentAmount).toFixed(2),
-      amountLocal: h.localAmount,
-      localOnly: toScaled(h.documentAmount) === 0n,
+      debitCredit: h.direction > 0n ? 'H' as const : 'S' as const,
+      amount: documentMoney.fromUnits(h.documentUnits),
+      amountLocal: fromScaled(h.localUnits),
+      localOnly: h.documentUnits === 0n,
       businessPartner: input.supplier,
     }));
-    const localSigned = lines.reduce(
-      (total, line) => total + (line.debitCredit === 'S' ? toScaled(line.amountLocal) : -toScaled(line.amountLocal)),
-      0n,
-    );
+    // The clearing line stands opposite the open item: a debit item is credited, and vice versa.
+    const localSigned = held.reduce((total, h) => total - h.direction * h.localUnits, 0n);
     if (localSigned !== 0n) {
       const event = localSigned > 0n ? 'FXGAIN' : 'FXLOSS';
       const account = await fxDifferenceAccount(tx, input.client, company.chartOfAccounts ?? '', event);

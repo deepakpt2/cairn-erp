@@ -166,6 +166,11 @@ export const journalEntry = pgTable(
     headerText: text('header_text'),
     /** POSTED | PARKED | REVERSED */
     status: varchar('status', { length: 16 }).notNull().default('POSTED'),
+    /**
+     * A period-end FX valuation document (and, copied by reversal, its mirror). Such a posting
+     * changes a foreign position's local carrying amount only; it is never a bank movement.
+     */
+    isFxValuation: boolean('is_fx_valuation').notNull().default(false),
     /** Reversal chain — the original is never touched except for this link. */
     reversalOf: varchar('reversal_of', { length: 40 }),
     reversedBy: varchar('reversed_by', { length: 40 }),
@@ -744,6 +749,13 @@ export const paymentRunOperation = pgTable('payment_run_operation', {
   requestedByUser: varchar('requested_by_user', { length: 36 }).notNull(),
   houseBankKey: varchar('house_bank_key', { length: 5 }),
   bankAccountId: varchar('bank_account_id', { length: 5 }),
+  /**
+   * The complete actual bank-account-currency evidence for an execution, one entry per resulting
+   * bank movement group. Frozen at submission; the worker validates all of it before posting.
+   */
+  bankAmounts: jsonb('bank_amounts').$type<Array<{
+    companyCode: string; supplier: string; currency: string; amount: string;
+  }>>(),
   jobRunId: varchar('job_run_id', { length: 36 }),
   itemsTotal: integer('items_total').notNull().default(0),
   itemsDone: integer('items_done').notNull().default(0),
@@ -835,6 +847,10 @@ export const paymentDocument = pgTable('payment_document', {
   accountId: varchar('account_id', { length: 20 }).notNull(),
   currency: varchar('currency', { length: 3 }).notNull(),
   amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  /** The actual movement on the bank account, in `bankCurrency`, and where it came from. */
+  bankAmount: numeric('bank_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  bankCurrency: char('bank_currency', { length: 3 }),
+  bankAmountSource: varchar('bank_amount_source', { length: 24 }).notNull().default('NOT_RECORDED'),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
   journalFiscalYear: integer('journal_fiscal_year').notNull(),
   journalLineNumber: integer('journal_line_number').notNull(),
@@ -865,6 +881,10 @@ export const outgoingPayment = pgTable('outgoing_payment', {
   currency: char('currency', { length: 3 }).notNull(),
   exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
   localAmount: numeric('local_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  /** The actual movement on the bank account, in `bankCurrency`, and where it came from. */
+  bankAmount: numeric('bank_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  bankCurrency: char('bank_currency', { length: 3 }),
+  bankAmountSource: varchar('bank_amount_source', { length: 24 }).notNull().default('NOT_RECORDED'),
   reference: varchar('reference', { length: 16 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
   itemsCleared: integer('items_cleared').notNull(),
@@ -1575,6 +1595,10 @@ export const incomingPayment = pgTable('incoming_payment', {  client: tenantClie
   currency: char('currency', { length: 3 }).notNull(),
   exchangeRate: numeric('exchange_rate', { precision: 18, scale: 8 }).notNull().default('1'),
   localAmount: numeric('local_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  /** The actual movement on the bank account, in `bankCurrency`, and where it came from. */
+  bankAmount: numeric('bank_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  bankCurrency: char('bank_currency', { length: 3 }),
+  bankAmountSource: varchar('bank_amount_source', { length: 24 }).notNull().default('NOT_RECORDED'),
   reference: varchar('reference', { length: 16 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
   itemsCleared: integer('items_cleared').notNull(),

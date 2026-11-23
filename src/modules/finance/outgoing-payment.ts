@@ -35,7 +35,7 @@ import {
 import { requireExchangeRate } from './exchange-rate-lookup';
 import {
   activeValuationConflict, bankCurrencyForGl, bankCurrencyRefusal,
-  fxDifferenceAccount, localUnitsOf, proportionalLocal,
+  fxDifferenceAccount, localUnitsOf, lockValuationSettlement, proportionalLocal,
 } from './fx-settlement';
 
 export const OUTGOING_PAYMENT_CAPABILITY = 'FIN.AP.PAYMENT.POST';
@@ -232,6 +232,10 @@ export interface PostedOutgoingPayment {
   amount: string;
   itemsCleared: number;
   clearingDate: string;
+  bankGlAccount: string;
+  bankAmount: string;
+  bankCurrency: string | null;
+  bankAmountSource: string;
 }
 
 async function byRequestKey(tx: Tx, client: string, requestKey: string): Promise<PostedOutgoingPayment | null> {
@@ -241,7 +245,29 @@ async function byRequestKey(tx: Tx, client: string, requestKey: string): Promise
   return row ? {
     paymentNumber: row.paymentNumber, journalDocumentNumber: row.journalDocumentNumber,
     amount: row.amount, itemsCleared: row.itemsCleared, clearingDate: row.clearingDate,
+    bankGlAccount: row.bankGlAccount, bankAmount: row.bankAmount,
+    bankCurrency: row.bankCurrency?.trim() ?? null, bankAmountSource: row.bankAmountSource,
   } : null;
+}
+
+function assertReplayEvidence(
+  replay: PostedOutgoingPayment,
+  input: { bankGlAccount: string; bankAmount?: string | number },
+): void {
+  if (replay.bankGlAccount.trim().toUpperCase() !== input.bankGlAccount.trim().toUpperCase()) {
+    throw new OutgoingPaymentError(
+      `Request key ${replay.paymentNumber} was already used for bank G/L ${replay.bankGlAccount}.`,
+      'Use a new request key for a different bank account.',
+    );
+  }
+  if (input.bankAmount === undefined || String(input.bankAmount).trim() === '') return;
+  if (replay.bankAmountSource === 'NOT_RECORDED') return;
+  if (toScaled(String(input.bankAmount)) !== toScaled(replay.bankAmount)) {
+    throw new OutgoingPaymentError(
+      `Request key ${replay.paymentNumber} was already used with actual bank amount ${replay.bankAmount} ${replay.bankCurrency ?? ''}.`,
+      'Use a new request key when the actual bank amount differs.',
+    );
+  }
 }
 
 export async function postOutgoingPayment(input: {
@@ -249,6 +275,8 @@ export async function postOutgoingPayment(input: {
   vendorNumber: string; companyCode: string;
   documentDate: string; postingDate: string; clearingDate: string;
   bankGlAccount: string; amount: number; currency: string;
+  /** The actual amount the bank account moved, in its own currency (required when it is local). */
+  bankAmount?: string | number;
   reference?: string; valueDate?: string; requestKey: string;
   /** Remainder of the payment left standing as an open vendor debit. */
   onAccountAmount?: number;
@@ -285,14 +313,15 @@ export async function postOutgoingPayment(input: {
       );
     }
 
-    if (replay) return replay;
+    if (replay) { assertReplayEvidence(replay, input); return replay; }
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/outpay/${input.companyCode}/${input.vendorNumber}`}, 0))`);
     const replayLocked = await byRequestKey(tx, input.client, input.requestKey);
-    if (replayLocked) return replayLocked;
+    if (replayLocked) { assertReplayEvidence(replayLocked, input); return replayLocked; }
 
     const vendor = await judgeVendor(tx, input.client, input.vendorNumber, input.companyCode);
     const company = await getCompanyCode(tx, input.client, input.companyCode);
     if (!company?.fiscalYearVariant) throw new OutgoingPaymentError(`Company code ${input.companyCode} is not configured.`);
+    await lockValuationSettlement(tx, input.client, input.companyCode);
 
     interface Held {
       ref: PaymentItemRef; amount: string; amountLocal: string; currency: string; debitCredit: 'S' | 'H';
@@ -401,7 +430,7 @@ export async function postOutgoingPayment(input: {
       const conflict = await activeValuationConflict(tx, input.client, input.companyCode, {
         documentNumber: h.ref.documentNumber, lineNumber: h.ref.lineNumber,
         accountNumber: h.reconAccount, currency: h.currency,
-      });
+      }, input.postingDate);
       if (conflict) {
         throw new OutgoingPaymentError(
           `Document ${h.ref.documentNumber} line ${h.ref.lineNumber} was valued at period end by run ${conflict.runId} (key date ${conflict.valuationKeyDate}).`,
@@ -416,6 +445,71 @@ export async function postOutgoingPayment(input: {
       }
     };
     const paymentUnits = enter(input.amount, 'The outgoing amount');
+
+    // The bank account's own movement. A local-currency bank paying a foreign invoice can debit a
+    // different local amount than the master rate implies; the clerk states it. Same-currency
+    // accounts need no second entry, and a third currency is refused above.
+    const bankCurrency = bank.kind === 'unique' ? bank.currency.trim().toUpperCase() : null;
+    let bankLocalUnits: bigint;
+    let bankAccountAmount: string;
+    let bankAccountCurrency: string | null;
+    let bankAmountSource: 'SAME_CURRENCY' | 'PAYMENT_CURRENCY' | 'USER_ACTUAL' | 'BANK_NOT_IDENTIFIED';
+    const statedBankAmount = input.bankAmount === undefined || String(input.bankAmount).trim() === ''
+      ? null : input.bankAmount;
+    if (bankCurrency !== null && bankCurrency === company.currency.trim().toUpperCase() && !sameCurrency) {
+      if (statedBankAmount === null) {
+        throw new OutgoingPaymentError(
+          `Bank account ${input.bankGlAccount} is held in ${bankCurrency}, but the payment stands in ${currencies[0]}. The actual bank amount is required.`,
+          `Enter the amount the bank actually debited, in ${bankCurrency}. The posting-date rate is used for the payable, not invented as the bank movement.`,
+        );
+      }
+      let enteredUnits: bigint;
+      try {
+        enteredUnits = localMoney.entered(statedBankAmount, 'The actual bank amount');
+      } catch (error) {
+        if (error instanceof MoneyError) throw new OutgoingPaymentError(error.message, error.remedy);
+        throw error;
+      }
+      if (enteredUnits <= 0n) throw new OutgoingPaymentError('The actual bank amount must stand above zero.');
+      bankLocalUnits = enteredUnits * 10n ** BigInt(MONEY_SCALE - localScale);
+      bankAccountAmount = localMoney.fromUnits(enteredUnits);
+      bankAccountCurrency = bankCurrency;
+      bankAmountSource = 'USER_ACTUAL';
+    } else if (bankCurrency !== null && bankCurrency === currencies[0]!.trim().toUpperCase()) {
+      if (statedBankAmount !== null) {
+        let stated: bigint;
+        try { stated = money.entered(statedBankAmount, 'The actual bank amount'); } catch (error) {
+          if (error instanceof MoneyError) throw new OutgoingPaymentError(error.message, error.remedy);
+          throw error;
+        }
+        if (stated !== paymentUnits) {
+          throw new OutgoingPaymentError(
+            `The actual bank amount ${money.fromUnits(stated)} ${bankCurrency} does not equal the payment of ${money.fromUnits(paymentUnits)} ${currencies[0]}.`,
+            'When the bank account is held in the payment currency its movement is the payment amount; do not restate it.',
+          );
+        }
+      }
+      bankLocalUnits = localUnitsOf(paymentUnits, money.scale, localScale, rate);
+      bankAccountAmount = money.fromUnits(paymentUnits);
+      bankAccountCurrency = bankCurrency;
+      bankAmountSource = sameCurrency ? 'SAME_CURRENCY' : 'PAYMENT_CURRENCY';
+    } else if (bankCurrency === null) {
+      if (statedBankAmount !== null) {
+        throw new OutgoingPaymentError(
+          `G/L account ${input.bankGlAccount} is not identified as a bank account, so the actual bank amount ${statedBankAmount} cannot be validated.`,
+          'Maintain the bank account for this G/L (one bank account per G/L), then enter the actual amount.',
+        );
+      }
+      bankLocalUnits = localUnitsOf(paymentUnits, money.scale, localScale, rate);
+      bankAccountAmount = money.fromUnits(paymentUnits);
+      bankAccountCurrency = null;
+      bankAmountSource = 'BANK_NOT_IDENTIFIED';
+    } else {
+      throw new OutgoingPaymentError(
+        `Bank currency ${bankCurrency} is neither the payment currency nor the local currency.`,
+        'Pay through a bank account held in the payment currency or in the company local currency.',
+      );
+    }
 
     interface Settled {
       h: Held; open: bigint; applied: bigint; discount: bigint;
@@ -485,12 +579,12 @@ export async function postOutgoingPayment(input: {
         }
       }
       const shortfall = open - applied - discount;
-      const outcome: Settled['outcome'] = shortfall <= 0n
-        ? 'FULL'
-        : (h.ref.outcome === 'PARTIAL' ? 'PARTIAL' : 'RESIDUAL');
+      // A part-settlement closes the original and carries the remainder as a residual open item;
+      // leaving the original fully open would relieve the same carrying amount twice later.
+      const outcome: Settled['outcome'] = shortfall <= 0n ? 'FULL' : 'RESIDUAL';
       const openLocal = toScaled(h.amountLocal);
-      const releasedLocal = proportionalLocal(openLocal, open, applied + discount);
-      const discountLocal = discount > 0n ? proportionalLocal(openLocal, open, discount) : 0n;
+      const releasedLocal = proportionalLocal(openLocal, open, applied + discount, localScale);
+      const discountLocal = discount > 0n ? proportionalLocal(openLocal, open, discount, localScale) : 0n;
       settled.push({
         h, open, applied, discount, outcome,
         residual: outcome === 'RESIDUAL' ? shortfall : 0n,
@@ -562,12 +656,6 @@ export async function postOutgoingPayment(input: {
           amountLocal: sameCurrency ? money.fromUnits(-x.open) : fromScaled(x.openLocal),
           businessPartner: input.vendorNumber, lineText: `Settles ${x.h.ref.documentNumber}`,
         });
-      } else if (x.outcome === 'PARTIAL') {
-        lines.push({
-          glAccount: recon, debitCredit: 'S', amount: money.fromUnits(x.applied + x.discount),
-          amountLocal: sameCurrency ? money.fromUnits(x.applied + x.discount) : fromScaled(x.releasedLocal),
-          businessPartner: input.vendorNumber, lineText: `Partial payment for ${x.h.ref.documentNumber}`,
-        });
       } else {
         lines.push({
           glAccount: recon, debitCredit: 'S', amount: money.fromUnits(x.open),
@@ -608,7 +696,7 @@ export async function postOutgoingPayment(input: {
     }
     lines.push({
       glAccount: input.bankGlAccount, debitCredit: 'H', amount: money.fromUnits(paymentUnits),
-      amountLocal: localText(paymentUnits),
+      amountLocal: fromScaled(bankLocalUnits),
     });
 
     // Realized exchange difference: paying more local than the payable carried is a loss; paying
@@ -672,7 +760,6 @@ export async function postOutgoingPayment(input: {
     // on-account lines of the payment itself stand open.
     let clearedCount = 0;
     for (const x of settled) {
-      if (x.outcome === 'PARTIAL') continue;
       clearedCount += 1;
       await tx.update(journalEntryLine).set({
         clearingDocument: journal.documentNumber, clearingDate: input.clearingDate,
@@ -702,7 +789,9 @@ export async function postOutgoingPayment(input: {
       bankGlAccount: input.bankGlAccount, amount: money.fromUnits(paymentUnits),
       discountAmount: money.fromUnits(discountTotal), onAccountAmount: money.fromUnits(onAccount),
       currency: currencies[0], exchangeRate: rate.effectiveRate,
-      localAmount: localText(paymentUnits), reference: input.reference ?? null,
+      localAmount: localText(paymentUnits),
+      bankAmount: bankAccountAmount, bankCurrency: bankAccountCurrency, bankAmountSource,
+      reference: input.reference ?? null,
       journalDocumentNumber: journal.documentNumber, itemsCleared: clearedCount,
       requestKey: input.requestKey, createdBy: input.changedBy,
     });
@@ -714,6 +803,7 @@ export async function postOutgoingPayment(input: {
         journal: journal.documentNumber, amount: money.fromUnits(paymentUnits),
         localAmount: localText(paymentUnits), exchangeRate: rate.effectiveRate,
         realizedDifference: fromScaled(realizedLocal), items: held.length,
+        bankAmount: bankAccountAmount, bankCurrency: bankAccountCurrency, bankAmountSource,
       },
     });
     return (await byRequestKey(tx, input.client, input.requestKey))!;

@@ -122,10 +122,23 @@ export async function executeAction(
   if (denied) return denied;
   try {
     await assertRun(session, form);
+    // Each group's actual bank amount travels under a key that names the resulting movement.
+    const bankAmounts: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> = [];
+    for (const [name, value] of form.entries()) {
+      if (!name.startsWith('bankAmount~')) continue;
+      const parts = name.split('~');
+      if (parts.length !== 4) continue;
+      const amount = String(value).trim();
+      if (amount === '') continue;
+      bankAmounts.push({
+        companyCode: parts[1]!, supplier: parts[2]!, currency: parts[3]!, amount,
+      });
+    }
     const op = await submitPaymentExecution({
       client: session.user.client, changedBy: session.user.username, actorUserId: session.user.userId,
       runDate: text(form, 'runDate'), runId: text(form, 'runId'),
       houseBankKey: text(form, 'houseBankKey'), bankAccountId: text(form, 'bankAccountId'),
+      bankAmounts,
     });
     revalidatePath(ROUTE);
     return {
