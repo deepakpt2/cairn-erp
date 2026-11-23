@@ -2,6 +2,8 @@
  * Shared transaction-level locks for the salary payment file and its controlled replacement.
  *
  * Lock protocol (acquire in this order, always):
+ *   0. `payment-reissue-key:<client>:<requestKey>` — idempotency. Taken FIRST by every path that consults or
+ *      writes a request key, before any bank or state lock, so the key is never acquired inside a lower class.
  *   1. `employee-bank:<client>:<personnelNumber>` — sorted ascending across the employees involved. The bank
  *      maintenance services (`createEmployeeBank`, `endEmployeeBank`) take exactly this lock, so holding it
  *      freezes every effective bank record those employees could gain or lose for the duration.
@@ -14,6 +16,11 @@
  * artifact take (3), always last. The sweeper takes only (3). Because no path takes a higher class before a lower
  * one, the ordering cannot deadlock: a bank write holds only the first class, every other writer holds it before
  * the second, and the artifact lock is only ever taken after both.
+ *
+ * Predecessor validation (9329) runs under (1)+(2) in the SAME transaction that writes the draft: the decisive
+ * re-read of each employee's current instruction and the insert cannot be separated by an approval, because
+ * approval takes exactly those locks. The intent row's own `for update` lock (a row lock, not an advisory one) is
+ * what makes abandon wait for an in-flight execution; nothing takes it while holding (2).
  */
 import { sql } from 'drizzle-orm';
 

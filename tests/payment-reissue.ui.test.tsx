@@ -18,8 +18,8 @@ const LEGACY_KEY = 'cairn.paymentReissue.unresolved.v2';
 
 function previewBody(over: Partial<Record<string, unknown>> = {}) {
   const employees = [
-    { personnelNumber: 'P1', beneficiaryName: 'One', amount: '100.000', maskedAccount: '••••0001', bankName: 'Bank A', predecessorKind: 'FILE', predecessorId: 'pred-1', eligible: true },
-    { personnelNumber: 'P2', beneficiaryName: 'Two', amount: '200.000', maskedAccount: '••••0002', bankName: 'Bank B', predecessorKind: 'FILE', predecessorId: 'pred-2', eligible: true },
+    { personnelNumber: 'P1', beneficiaryName: 'One', amount: '100.000', maskedAccount: '••••0001', bankName: 'Bank A', predecessorKind: 'FILE', predecessorId: 'pred-1', predecessorLabel: 'original file SALPAY-1', predecessorStatus: 'prepared', eligible: true },
+    { personnelNumber: 'P2', beneficiaryName: 'Two', amount: '200.000', maskedAccount: '••••0002', bankName: 'Bank B', predecessorKind: 'FILE', predecessorId: 'pred-2', predecessorLabel: 'original file SALPAY-1', predecessorStatus: 'prepared', eligible: true },
   ];
   return {
     sourcePreparationId: SOURCE,
@@ -110,6 +110,59 @@ describe('PaymentReissuePanel', () => {
   });
 
   const waitForRecovery = async () => waitFor(() => expect(actions('intents').length).toBeGreaterThan(0));
+
+  it('shows and submits the exact instruction each attestation is about', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await waitForRecovery();
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    expect(screen.getByTestId('predecessor-P1').textContent).toContain('original file SALPAY-1');
+    expect(screen.getByTestId('predecessor-P2').textContent).toContain('original file SALPAY-1');
+
+    await attestAll(user, ['P1', 'P2']);
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'binding');
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/replacement draft/i));
+    const predecessors = JSON.parse(String(actions('register')[0]!.form.get('predecessors'))) as Array<{ personnelNumber: string; predecessorKind: string; predecessorId: string }>;
+    expect(predecessors).toEqual([
+      { personnelNumber: 'P1', predecessorKind: 'FILE', predecessorId: 'pred-1' },
+      { personnelNumber: 'P2', predecessorKind: 'FILE', predecessorId: 'pred-2' },
+    ]);
+  });
+
+  it('a registered intent blocks a different overlapping submission before dispatch', async () => {
+    const user = userEvent.setup();
+    handlers.intents = () => json([intent({ status: 'REGISTERED' })]);
+    renderPanel();
+    await screen.findByText(/registered — not yet confirmed executed/i);
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await attestAll(user, ['P1', 'P2']);
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'overlap');
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/still registered or executing/i));
+    expect(actions('register')).toHaveLength(0);
+    expect(actions('execute')).toHaveLength(0);
+  });
+
+  it('a server-side overlap refusal is shown truthfully and creates nothing', async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await waitForRecovery();
+    await user.click(screen.getByRole('button', { name: /preview eligible/i }));
+    await screen.findByText('P1');
+    await attestAll(user, ['P1', 'P2']);
+    await user.type(screen.getByPlaceholderText(/why a replacement/i), 'server overlap');
+    // Another requester's unresolved attempt wins the race: registration is refused by the server.
+    handlers.register = () => new Response('Another replacement request is already unresolved for at least one of these employees.', { status: 409 });
+    handlers.intents = () => json([]);
+    await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/already unresolved/i));
+    expect(actions('execute')).toHaveLength(0);
+    // The message does not leak who holds it.
+    expect(screen.getByRole('status').textContent).not.toMatch(/RI\./);
+  });
 
   it('ALL: previews every employee, then registers and executes the exact request', async () => {
     const user = userEvent.setup();
@@ -293,7 +346,8 @@ describe('PaymentReissuePanel', () => {
     await user.click(screen.getByRole('button', { name: /preview eligible/i }));
     await screen.findByRole('button', { name: /create replacement draft/i });
     await user.click(screen.getByRole('button', { name: /create replacement draft/i }));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/unknown outcome/i));
+    // A different overlapping request is refused before dispatch, naming the unresolved attempt.
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/still registered or executing/i));
     expect(actions('register')).toHaveLength(1);
   });
 
@@ -333,13 +387,20 @@ describe('PaymentReissuePanel', () => {
     const draft = {
       reissueId: 'r-appr', reissueReference: 'SALPAY-1-R2', version: 2, sourcePreparationId: SOURCE, selection: 'SELECTED' as const,
       employeeCount: 1, totalAmount: '100.000', currency: 'KWD', intendedPaymentDate: '2025-05-01', status: 'DRAFT' as const,
-      reason: 'x', requestedBy: 'RI.OTH', approvedBy: null, superseded: false, downloadable: false, snapshotDigest: 'd', lines: [],
+      reason: 'x', requestedBy: 'RI.OTH', approvedBy: null, superseded: false, downloadable: false, snapshotDigest: 'd',
+      lines: [{
+        lineNo: 1, personnelNumber: 'P1', beneficiaryName: 'One', maskedAccount: '••••0001', bankName: 'Bank A',
+        amount: '100.000', currency: 'KWD', attestationOutcome: 'BANK_REJECTED' as const, attestationReason: 'rejected',
+        verificationDate: '2025-05-02', evidenceReference: 'REF-1', predecessorKind: 'FILE' as const,
+        predecessorId: 'pred-1', predecessorLabel: 'original file SALPAY-1',
+      }],
     };
     renderPanel({ canApprove: true, reissues: [draft] });
     await waitForRecovery();
+    await user.click(screen.getByRole('button', { name: /^review$/i }));
+    expect(screen.getByTestId('line-predecessor-P1').textContent).toContain('original file SALPAY-1');
     handlers.approve = () => new Response('bad gateway', { status: 502 });
     handlers.reissueStatus = () => json({ found: true, status: 'APPROVED' });
-    await user.click(screen.getByRole('button', { name: /^review$/i }));
     const check = screen.getByRole('checkbox');
     await user.click(check);
     await user.click(screen.getByRole('button', { name: /approve snapshot/i }));

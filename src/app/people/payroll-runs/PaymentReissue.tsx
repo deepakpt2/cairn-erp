@@ -235,9 +235,18 @@ export function PaymentReissuePanel({
 
   const submitRequest = async () => {
     if (!preview) return;
-    // Never dispatch without knowing whether an earlier attempt for this source is unresolved.
+    // Never dispatch without knowing whether an earlier attempt for this source is unresolved. The server enforces
+    // this independently — this is only the same answer, in time to avoid a confusing refusal.
     if (recovery !== 'ready') {
       setMessage({ ok: false, text: 'The recovery check for this file could not be completed. Reload the screen before submitting; no request was sent.' });
+      return;
+    }
+    const blocking = intents.find((i) => i.status === 'REGISTERED' || i.status === 'RUNNING');
+    if (blocking) {
+      setMessage({
+        ok: false,
+        text: `A previous replacement request for this file (${blocking.intentId.slice(0, 8)}…) is still registered or executing. Resolve it in the recovery panel below before starting a different request.`,
+      });
       return;
     }
     // Submit only the EXACT previewed inputs. In ALL mode the employee set is server-derived.
@@ -262,10 +271,18 @@ export function PaymentReissuePanel({
       return;
     }
     const attestations = previewPns.map((pn) => ({ personnelNumber: pn, ...attest[pn] }));
+    // Bind each attestation to the EXACT instruction the preview showed for that employee. The server re-checks
+    // these against live state; this is a claim about what was reviewed, never proof that it is still current.
+    const byBinding = new Map(preview.employees.map((e) => [e.personnelNumber, e]));
+    const predecessors = previewPns.map((pn) => {
+      const e = byBinding.get(pn)!;
+      return { personnelNumber: pn, predecessorKind: e.predecessorKind, predecessorId: e.predecessorId };
+    });
     const fields: Record<string, string> = {
       action: 'request', sourcePreparationId: preview.sourcePreparationId, selection: preview.selection,
       personnelNumbers: preview.selection === 'SELECTED' ? previewPns.join(',') : '',
       intendedPaymentDate: preview.intendedPaymentDate, reason, attestations: JSON.stringify(attestations),
+      predecessors: JSON.stringify(predecessors),
     };
     const payload = JSON.stringify(fields);
     let key: string;
@@ -394,8 +411,8 @@ export function PaymentReissuePanel({
   })[status];
 
   const intentGuidance = (status: ReissueIntentView['status']): string => ({
-    REGISTERED: 'Registration creates no draft. Retrying execution is safe and reuses the exact registered request.',
-    RUNNING: 'The draft may still be created by the earlier attempt. A retry reuses the same request and cannot create a second draft; do not start a different one.',
+    REGISTERED: 'Registration creates no draft. Retrying execution is safe and reuses the exact registered request. No other request for these employees can be started until this one is resolved.',
+    RUNNING: 'The draft may still be created by the earlier attempt. A retry reuses the same request and cannot create a second draft; a different request for these employees is refused until this one is resolved.',
     COMPLETED: 'This request already created the draft shown. Approve or cancel it in the history above.',
     REFUSED: 'The original request was refused before any draft was created. Start a new request if the situation has changed.',
     ABANDONED: 'You discarded this attempt locally. That does not undo it: if a draft exists, cancel it in the history above.',
@@ -447,7 +464,7 @@ export function PaymentReissuePanel({
                         <p>Intended payment date <span className="code">{r.intendedPaymentDate}</span> · {r.employeeCount} employee{r.employeeCount === 1 ? '' : 's'} · total <span className="code">{r.totalAmount} {r.currency}</span> · source {r.sourcePreparationId.slice(0, 8)} · requested by {r.requestedBy} · reason: {r.reason}</p>
                         <div className="overflow-x-auto">
                           <table className="grid-table">
-                            <thead><tr><th>Employee</th><th>Frozen beneficiary</th><th>Amount</th><th>Bank (masked)</th><th>Predecessor</th><th>Attested original outcome</th><th>Verified</th><th>Evidence</th></tr></thead>
+                            <thead><tr><th>Employee</th><th>Frozen beneficiary</th><th>Amount</th><th>Bank (masked)</th><th>Instruction attested</th><th>Attested original outcome</th><th>Verified</th><th>Evidence</th></tr></thead>
                             <tbody>
                               {r.lines.map((l) => (
                                 <tr key={l.lineNo}>
@@ -455,7 +472,7 @@ export function PaymentReissuePanel({
                                   <td className="text-xs">{l.beneficiaryName}</td>
                                   <td className="code">{l.amount} {l.currency}</td>
                                   <td className="text-xs">{l.bankName}<div className="code">{l.maskedAccount}</div></td>
-                                  <td className="code text-xs">{l.predecessorKind} {l.predecessorId.slice(0, 8)}</td>
+                                  <td className="text-xs" data-testid={`line-predecessor-${l.personnelNumber}`}>{l.predecessorLabel || `${l.predecessorKind} ${l.predecessorId.slice(0, 8)}`}</td>
                                   <td className="text-xs">{l.attestationOutcome.toLowerCase().replaceAll('_', ' ')}<div className="text-ink-soft">{l.attestationReason}</div></td>
                                   <td className="text-xs">{l.verificationDate}</td>
                                   <td className="text-xs">{l.evidenceReference}</td>
@@ -587,14 +604,18 @@ export function PaymentReissuePanel({
                 intended {preview.intendedPaymentDate}.
                 {preview.ineligible.length > 0 && <span className="text-signal-error"> {preview.ineligible.length} ineligible and NOT included: {preview.ineligible.map((i) => `${i.personnelNumber} (${i.blocker})`).join('; ')}.</span>}
               </p>
-              <p className="text-xs text-ink-soft">For each selected employee, record the actual original outcome — your attestation, not a bank-verified status. “Not uploaded” needs an explicit confirmation that no copy was submitted.</p>
+              <p className="text-xs text-ink-soft">For each selected employee, record the actual outcome <strong>of the instruction named beside them</strong> — your attestation, not a bank-verified status. If that instruction changes before this request is created, it is refused: preview and attest again. “Not uploaded” needs an explicit confirmation that no copy was submitted.</p>
               <div className="overflow-x-auto">
                 <table className="grid-table">
-                  <thead><tr><th>Employee</th><th>Amount</th><th>Bank (masked)</th><th>Outcome</th><th>Reason</th><th>Verified on</th><th>Evidence / reference</th><th>No copy submitted?</th></tr></thead>
+                  <thead><tr><th>Employee</th><th>Instruction attested</th><th>Amount</th><th>Bank (masked)</th><th>Outcome</th><th>Reason</th><th>Verified on</th><th>Evidence / reference</th><th>No copy submitted?</th></tr></thead>
                   <tbody>
                     {preview.employees.map((e) => (
                       <tr key={e.personnelNumber} className={e.eligible ? '' : 'opacity-60'}>
                         <td className="code">{e.personnelNumber}{!e.eligible && <div className="text-xs text-signal-error">{e.blocker}</div>}</td>
+                        <td className="text-xs" data-testid={`predecessor-${e.personnelNumber}`}>
+                          {e.predecessorLabel}
+                          <div className="text-ink-soft">{e.predecessorStatus}</div>
+                        </td>
                         <td className="code">{e.amount}</td>
                         <td className="text-xs">{e.bankName}<div className="code">{e.maskedAccount}</div></td>
                         <td>

@@ -565,6 +565,15 @@ describe('future-table grant policy', () => {
     }
   });
 
+  it('9329 declares the overlap guard: a partial unique index on unresolved intent coverage', () => {
+    const text = readFileSync(join(MIGRATION_DIR, '9329_payroll_payment_reissue_intent_line.sql'), 'utf8');
+    // The overlap guarantee IS the index; without the `where unresolved` predicate a resolved attempt would keep
+    // blocking, and without UNIQUE two simultaneous registrations could both pass.
+    expect(text).toMatch(/create unique index[^;]*payroll_payment_reissue_intent_line_unresolved_uq[^;]*\bwhere\s+unresolved\b/i);
+    expect(text).toMatch(/grant select, insert, update on table public\.payroll_payment_reissue_intent_line to cairn_app/i);
+    expect(text).toMatch(/revoke delete, truncate on table public\.payroll_payment_reissue_intent_line from cairn_app/i);
+  });
+
   it('the declaration check rejects an undeclared mutable table and accepts an explicit one', () => {
     const undeclared = `create table public.widget_ledger (
   client varchar(4) not null,

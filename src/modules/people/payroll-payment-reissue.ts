@@ -23,7 +23,7 @@
  *    protected historical evidence, clearly marked do-not-upload.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { recordChange } from '../../platform/change';
@@ -46,12 +46,14 @@ import {
   payrollPaymentFile,
   payrollPaymentReissue,
   payrollPaymentReissueIntent,
+  payrollPaymentReissueIntentLine,
   payrollPaymentReissueLine,
   payrollRun,
   salaryPayment,
   type PaymentFileBankRow,
   type ReissueAttestationOutcome,
   type ReissueIntentPayload,
+  type ReissuePredecessorBinding,
 } from './schema';
 import {
   type PaymentFileRow,
@@ -123,6 +125,14 @@ const attestationInput = z.object({
 });
 export type AttestationInput = z.input<typeof attestationInput>;
 
+const predecessorInput = z.object({
+  personnelNumber: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{1,20}$/, 'A personnel number is one to twenty capitals or digits.'),
+  /** The instruction the attestation is ABOUT: the source file, or a specific approved replacement. */
+  predecessorKind: z.enum(['FILE', 'REISSUE'], { message: 'Name the instruction as the original file or a replacement.' }),
+  predecessorId: z.string().trim().min(1).max(36),
+});
+export type PredecessorInput = z.input<typeof predecessorInput>;
+
 const requestInput = z.object({
   client: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,4}$/, 'A tenant is two to four capitals or digits.'),
   sourcePreparationId: z.string().trim().min(1).max(36),
@@ -132,6 +142,11 @@ const requestInput = z.object({
   intendedPaymentDate: isoDate,
   reason: text(200, 'A reason for the replacement is required.'),
   attestations: z.array(attestationInput).min(1, 'At least one employee attestation is required.'),
+  /**
+   * Exactly one binding per attested employee: WHICH instruction that outcome is about. Optional only so a caller
+   * that omits it receives an actionable refusal instead of a schema error; it is never optional in effect.
+   */
+  predecessors: z.array(predecessorInput).optional(),
   requestKey: z.string().trim().max(64).optional(),
   changedBy: z.string().trim().min(1).max(60),
 });
@@ -156,6 +171,8 @@ export interface ReissueLineView {
   evidenceReference: string;
   predecessorKind: 'FILE' | 'REISSUE';
   predecessorId: string;
+  /** The safe reference of the instruction this line's attestation is about (e.g. "replacement X-R1 (v1)"). */
+  predecessorLabel: string;
 }
 
 export interface ReissueView {
@@ -209,9 +226,13 @@ export interface ReissuePreview {
     /** Masked bank identifier chosen for the replacement. */
     maskedAccount: string;
     bankName: string;
-    /** The attempt this replacement would replace. */
+    /** The instruction whose outcome is being attested: its kind, immutable id and a safe label. */
     predecessorKind: 'FILE' | 'REISSUE';
     predecessorId: string;
+    /** Human-readable reference, e.g. "original file SALPAY-1" or "replacement SALPAY-1-R1 (v1)". */
+    predecessorLabel: string;
+    /** That instruction's status at preview time, so the requester can tell attempts apart. */
+    predecessorStatus: string;
     eligible: boolean;
     blocker: string | null;
   }>;
@@ -541,6 +562,28 @@ async function predecessorOf(tx: Tx, client: string, file: FileRow, personnelNum
 }
 
 /**
+ * Safe, human-readable name for the instruction an attestation is about: the source file's reference (with its
+ * state), or a replacement's reference and version. No employee, amount, account value or path is involved, and
+ * the caller has already established reach before this is called.
+ */
+async function predecessorLabel(tx: Tx, client: string, file: FileRow, kind: 'FILE' | 'REISSUE', id: string): Promise<{ label: string; status: string }> {
+  if (kind === 'FILE') {
+    return { label: `original file ${file.fileReference}`, status: 'prepared' };
+  }
+  const [replacement] = await tx.select({
+    reference: payrollPaymentReissue.reissueReference, version: payrollPaymentReissue.version,
+    status: payrollPaymentReissue.status, sourceId: payrollPaymentReissue.sourcePreparationId,
+  }).from(payrollPaymentReissue)
+    .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, id))).limit(1);
+  // A binding that names another tenant's / another run's replacement is not a disclosure: it is named only as
+  // "an unavailable instruction", never by its reference.
+  if (!replacement || replacement.sourceId !== file.preparationId) {
+    return { label: 'an unavailable instruction', status: 'unavailable' };
+  }
+  return { label: `replacement ${replacement.reference} (v${replacement.version})`, status: String(replacement.status ?? '').toLowerCase() };
+}
+
+/**
  * Resolve each employee's original frozen amount from a source attempt: the source file's snapshot, or one of
  * its approved reissues. Amount/currency come from the frozen snapshot — never recalculated.
  */
@@ -606,6 +649,7 @@ export async function previewReissue(
       let blocker = eligibility.blocker;
       if (!blocker && activeDraft) blocker = `A replacement draft ${activeDraft} already exists for this employee; approve or cancel it first.`;
       const predecessor = await predecessorOf(tx, client, file, pn);
+      const described = await predecessorLabel(tx, client, file, predecessor.kind, predecessor.id);
       employees.push({
         personnelNumber: pn,
         beneficiaryName: inFile.beneficiaryName,
@@ -614,6 +658,8 @@ export async function previewReissue(
         bankName: eligibility.bankName,
         predecessorKind: predecessor.kind,
         predecessorId: predecessor.id,
+        predecessorLabel: described.label,
+        predecessorStatus: described.status,
         eligible: !blocker,
         blocker,
       });
@@ -681,6 +727,7 @@ function isBankAmbiguous(error: unknown): boolean {
 function normalizeRequest(input: ParsedRequestInput, file: FileRow): {
   selectionSet: string[];
   attestationsNormalized: ReissueIntentPayload['attestations'];
+  predecessorsNormalized: NonNullable<ReissueIntentPayload['predecessors']>;
   fingerprint: string;
 } {
   const selectionSet = (input.selection === 'ALL'
@@ -689,11 +736,75 @@ function normalizeRequest(input: ParsedRequestInput, file: FileRow): {
   const attestationsNormalized = [...input.attestations]
     .map((a) => ({ personnelNumber: a.personnelNumber.toUpperCase(), outcome: a.outcome, reason: a.reason, verificationDate: a.verificationDate, evidenceReference: a.evidenceReference, confirmedNoSubmission: a.confirmedNoSubmission ?? false }))
     .sort((a, b) => a.personnelNumber.localeCompare(b.personnelNumber));
+  // Every bound instruction is part of the request's identity: a retry that names a different predecessor must be
+  // a conflict, never a silent substitution.
+  const predecessorsNormalized = [...(input.predecessors ?? [])]
+    .map((p) => ({ personnelNumber: p.personnelNumber.toUpperCase(), predecessorKind: p.predecessorKind, predecessorId: p.predecessorId }))
+    .sort((a, b) => a.personnelNumber.localeCompare(b.personnelNumber));
   const fingerprint = createHash('sha256').update(canonicalJson({
     source: file.preparationId, selection: input.selection, employees: [...selectionSet].sort(), intendedPaymentDate: input.intendedPaymentDate,
-    reason: input.reason, attestations: attestationsNormalized,
+    reason: input.reason, attestations: attestationsNormalized, predecessors: predecessorsNormalized,
   }), 'utf8').digest('hex');
-  return { selectionSet, attestationsNormalized, fingerprint };
+  return { selectionSet, attestationsNormalized, predecessorsNormalized, fingerprint };
+}
+
+/**
+ * Validate the requested predecessor bindings against the employees and attestations being submitted, WITHOUT
+ * consulting live state. Exactly one well-formed binding per attested/selected employee, no duplicates, no extras.
+ * A legacy caller that supplies none is refused here, so no reissue path can create a draft with an unbound
+ * attestation.
+ */
+function assertBindingShape(
+  selected: readonly string[], attestations: ReissueIntentPayload['attestations'],
+  predecessors: readonly { personnelNumber: string; predecessorKind: 'FILE' | 'REISSUE'; predecessorId: string }[],
+): Map<string, { kind: 'FILE' | 'REISSUE'; id: string }> {
+  const wanted = [...new Set(selected)].sort();
+  if (predecessors.length === 0) {
+    refuse('PREDECESSOR_BINDING_REQUIRED', 'This request does not say which instruction each attestation is about.', 'Preview the eligible employees again and record each outcome against a current instruction.');
+  }
+  const byPn = new Map<string, { kind: 'FILE' | 'REISSUE'; id: string }>();
+  for (const p of predecessors) {
+    if (byPn.has(p.personnelNumber)) refuse('PREDECESSOR_BINDING_INVALID', `Employee ${p.personnelNumber} has more than one instruction binding.`, 'Preview again and bind each recipient to exactly one current instruction.');
+    byPn.set(p.personnelNumber, { kind: p.predecessorKind, id: p.predecessorId });
+  }
+  const attested = new Set(attestations.map((a) => a.personnelNumber));
+  const missing = wanted.filter((pn) => !byPn.has(pn));
+  if (missing.length > 0) {
+    refuse('PREDECESSOR_BINDING_REQUIRED', `No instruction binding was given for: ${missing.join(', ')}.`, 'Preview the eligible employees again and record each outcome against a current instruction.');
+  }
+  const extra = [...byPn.keys()].filter((pn) => !wanted.includes(pn));
+  if (extra.length > 0) {
+    refuse('PREDECESSOR_BINDING_INVALID', `The request binds an instruction for an employee it does not select: ${extra.join(', ')}.`, 'Preview again and select exactly the employees you are replacing.');
+  }
+  const unattested = [...byPn.keys()].filter((pn) => !attested.has(pn));
+  if (unattested.length > 0) {
+    refuse('ATTESTATION_REQUIRED', `Record the actual original outcome for: ${unattested.join(', ')}.`, 'Every bound employee needs an attested outcome, a reason, a verification date and an evidence reference.');
+  }
+  return byPn;
+}
+
+/**
+ * Compare every bound predecessor with the LIVE current instruction for that employee. MUST be called inside the
+ * transaction that holds the run state lock, immediately before any draft row is written: an approval that changed
+ * the current instruction cannot slip between this read and the insert.
+ */
+async function assertPredecessorsCurrent(
+  tx: Tx, client: string, file: FileRow, selected: readonly string[],
+  bound: ReadonlyMap<string, { kind: 'FILE' | 'REISSUE'; id: string }>,
+): Promise<void> {
+  const stale: string[] = [];
+  for (const pn of selected) {
+    const current = await predecessorOf(tx, client, file, pn);
+    const want = bound.get(pn);
+    if (!want || want.kind !== current.kind || want.id !== current.id) stale.push(pn);
+  }
+  if (stale.length > 0) {
+    refuse(
+      'REISSUE_PREDECESSOR_CHANGED',
+      `The instruction you attested to has changed since you reviewed it for: ${stale.join(', ')}.`,
+      'Preview the employees again and record the attested outcome against the instruction that now stands; no replacement was created.',
+    );
+  }
 }
 
 /**
@@ -722,18 +833,44 @@ async function replayKeyedDraft(
   return viewOf(tx, client, replay, money);
 }
 
+/**
+ * Refuse when ANOTHER unresolved intent already covers one of these employees for this run. Combined with the
+ * partial unique index (which no two registrations can both pass), this keeps every creation path inside one
+ * overlap protocol: registrations are refused by the index, and a direct draft is refused here because the claim
+ * exists. The intent's own execution excludes its own claims.
+ */
+async function assertNoOverlappingClaim(
+  tx: Tx, client: string, runId: string, selected: readonly string[], exceptIntentId: string | null,
+): Promise<void> {
+  const rows = await tx.select({ personnelNumber: payrollPaymentReissueIntentLine.personnelNumber })
+    .from(payrollPaymentReissueIntentLine)
+    .where(and(
+      eq(payrollPaymentReissueIntentLine.client, client),
+      eq(payrollPaymentReissueIntentLine.runId, runId),
+      eq(payrollPaymentReissueIntentLine.unresolved, true),
+      inArray(payrollPaymentReissueIntentLine.personnelNumber, [...selected]),
+      exceptIntentId ? ne(payrollPaymentReissueIntentLine.intentId, exceptIntentId) : sql`true`,
+    ));
+  if (rows.length > 0) {
+    refuse('REISSUE_OVERLAP', 'Another replacement request is still unresolved for at least one of these employees.', 'Resolve that request first — wait for it to finish, or ask its requester to check and discard it — then preview again.');
+  }
+}
+
 /** Create (or replay) the DRAFT inside an existing transaction. Shared by requestReissue and intent execution. */
 async function createDraftInTx(
   tx: Tx, input: ParsedRequestInput, grant: PayrollGrant, file: FileRow, run: Awaited<ReturnType<typeof loadRun>>, money: Money,
-  access: ReissueAccess | undefined,
+  access: ReissueAccess | undefined, intentId: string | null = null,
 ): Promise<ReissueView> {
-  const { selectionSet, attestationsNormalized, fingerprint } = normalizeRequest(input, file);
+  const { selectionSet, attestationsNormalized, predecessorsNormalized, fingerprint } = normalizeRequest(input, file);
   const replay = await replayKeyedDraft(tx, input.client, grant, input.requestKey, fingerprint, money);
   if (replay) return replay;
 
   const all = snapshotRowsOf(file);
   const selected = selectionSet;
   if (selected.length === 0) refuse('NO_SELECTION', 'No employee was selected.', 'Choose all employees of the file, or select at least one employee.');
+  // Every attestation must name the instruction it is about. Checked before any state read so a caller that
+  // omits the binding gets an actionable refusal rather than a draft with an unbound outcome.
+  const bound = assertBindingShape(selected, attestationsNormalized, predecessorsNormalized);
     // Reach BEFORE membership: an out-of-scope number and a number missing from the file answer the same way, so
     // neither the employee's existence nor file membership is disclosed.
     if (!(await allReachable(tx, input.client, grant, selected, input.intendedPaymentDate))) {
@@ -777,8 +914,11 @@ async function createDraftInTx(
       refuse('REISSUE_INELIGIBLE', `No replacement was created; these employees are not eligible: ${inaccessible.join('; ')}.`, 'Resolve each (bank details or scope), then request again. No partial file is produced.');
     }
 
-    // Serialise per run so a concurrent request cannot form a second draft set for the same employees.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payment-reissue:${input.client}:${file.runId}`}, 0))`);
+    // Serialise on the SAME state lock approval/cancellation/download take, so an approval that changes the
+    // current instruction cannot interleave with the re-read + insert below. Bank locks come first (documented
+    // order), then the run state lock; nothing here takes them the other way round.
+    await lockEmployeeBank(tx, input.client, selected);
+    await lockReissueState(tx, input.client, file.runId);
     const again = [];
     for (const pn of selected) {
       const draft = await activeDraftFor(tx, input.client, file.runId, pn);
@@ -787,6 +927,11 @@ async function createDraftInTx(
     if (again.length > 0) {
       refuse('REISSUE_CONFLICT', `Another replacement draft already exists for: ${again.join(', ')}.`, 'Approve or cancel the existing draft first. Nothing was created.');
     }
+    // Refuse a draft while another unresolved request covers any of these employees.
+    await assertNoOverlappingClaim(tx, input.client, file.runId, selected, intentId);
+    // DECISIVE CHECK. Under the state lock, re-read each employee's current instruction and refuse if it differs
+    // from the one the requester attested to. Nothing is substituted: no partial lines, no rebinding.
+    await assertPredecessorsCurrent(tx, input.client, file, selected, bound);
 
     const version = await nextVersion(tx, input.client, file.runId);
     const reissueId = randomUUID();
@@ -801,7 +946,8 @@ async function createDraftInTx(
       const pn = selected[i]!;
       const elig = await employeeEligibility(tx, input.client, grant, file, pn, input.intendedPaymentDate, money);
       const att = attestByPn.get(pn)!;
-      const predecessor = await predecessorOf(tx, input.client, file, pn);
+      // Written from the VERIFIED binding, not from whatever is current at insert time.
+      const predecessor = { kind: bound.get(pn)!.kind, id: bound.get(pn)!.id };
       const sourceRow = snapshotRowsOf(file).find((r) => r.personnelNumber === pn)!;
       totalUnits += money.units(elig.amount);
       snapshot.push({
@@ -885,7 +1031,19 @@ export interface ReissueIntentView {
 const FINAL_INTENT_REFUSALS = new Set([
   'PAYMENT_DATE', 'NO_SELECTION', 'NOT_IN_FILE', 'ATTESTATION_REQUIRED', 'ATTESTATION_INVALID',
   'ATTESTATION_DATE', 'NO_SUBMISSION_UNCONFIRMED', 'REISSUE_KEY_REUSED',
+  'PREDECESSOR_BINDING_REQUIRED', 'PREDECESSOR_BINDING_INVALID', 'REISSUE_PREDECESSOR_CHANGED',
 ]);
+
+/**
+ * Release an intent's per-employee coverage once no further draft can be created under it. Called only at a
+ * transition that PROVES that: COMPLETED (the draft blocks on its own), REFUSED (final), or ABANDONED (whose
+ * transition holds the intent row lock, so no execution transaction is in flight).
+ */
+async function releaseIntentClaims(tx: Tx, client: string, intentId: string, changedBy: string): Promise<void> {
+  await tx.update(payrollPaymentReissueIntentLine)
+    .set({ unresolved: false, changedBy, changedAt: new Date() })
+    .where(and(eq(payrollPaymentReissueIntentLine.client, client), eq(payrollPaymentReissueIntentLine.intentId, intentId), eq(payrollPaymentReissueIntentLine.unresolved, true)));
+}
 
 type IntentRow = typeof payrollPaymentReissueIntent.$inferSelect;
 
@@ -946,12 +1104,20 @@ export async function registerReissueIntent(rawInput: RequestReissueInput, acces
     for (const pn of selected) {
       if (!all.includes(pn)) refuse('NOT_IN_FILE', `Employee ${pn} is not in this file.`, 'Select employees from the file you are replacing.');
     }
+    // The binding is mandatory and must match live state: a stale preview is refused here, with an actionable
+    // instruction, rather than being registered and only discovered at execution time.
+    const bound = assertBindingShape(selected, normalized.attestationsNormalized, normalized.predecessorsNormalized);
+    await lockEmployeeBank(tx, input.client, selected);
+    await lockReissueState(tx, input.client, file.runId);
+    await assertPredecessorsCurrent(tx, input.client, file, selected, bound);
+
     const payload: ReissueIntentPayload = {
       selection: input.selection,
       personnelNumbers: selected,
       intendedPaymentDate: input.intendedPaymentDate,
       reason: input.reason,
       attestations: normalized.attestationsNormalized,
+      predecessors: normalized.predecessorsNormalized,
     };
     const intentId = randomUUID();
     const [row] = await tx.insert(payrollPaymentReissueIntent).values({
@@ -959,6 +1125,16 @@ export async function registerReissueIntent(rawInput: RequestReissueInput, acces
       requestFingerprint: normalized.fingerprint, requestedBy: input.changedBy, status: 'REGISTERED',
       payload, createdBy: input.changedBy,
     }).returning();
+    // Claim every employee for this run. The partial unique index refuses a second unresolved claim, so two
+    // simultaneous registrations cannot both pass — the guarantee does not depend on reading a list first. A
+    // conflict is detected by comparing the rows actually inserted, so the transaction stays usable and the whole
+    // registration (intent header included) rolls back as one unit.
+    const claims = await tx.insert(payrollPaymentReissueIntentLine).values(selected.map((pn) => ({
+      client: input.client, intentId, runId: file.runId, personnelNumber: pn, unresolved: true, createdBy: input.changedBy,
+    }))).onConflictDoNothing().returning({ pn: payrollPaymentReissueIntentLine.personnelNumber });
+    if (claims.length !== selected.length) {
+      refuse('REISSUE_OVERLAP', 'Another replacement request is already unresolved for at least one of these employees.', 'Wait for that request to finish, or ask its requester to check and discard it; then preview again.');
+    }
     return intentView(row!);
   });
 }
@@ -1023,23 +1199,41 @@ export async function executeReissueIntent(
     if (row.status === 'REFUSED') refuse(row.refusalCode ?? 'REISSUE_REFUSED', 'This replacement request was refused and cannot be executed.', 'Start a new request if the situation has changed.');
     if (row.status === 'ABANDONED') refuse('REISSUE_ABANDONED', 'This replacement request was explicitly abandoned. A draft may still exist.', 'Check the file history; if a draft exists, cancel it.');
 
+    // An intent registered before 9329 carries no reviewed-instruction binding. Its attestation cannot be tied to
+    // any specific instruction, so it must never be executed against whatever is current. Refuse it finally.
+    if (!row.payload.predecessors || row.payload.predecessors.length === 0) {
+      refusal = new ReissueError(
+        'This replacement request was recorded before each attestation was tied to a specific instruction, so it cannot be executed safely.',
+        'Discard it, then preview the employees again and record the outcome against the instruction that now stands.',
+        'PREDECESSOR_BINDING_REQUIRED',
+      );
+      await tx.update(payrollPaymentReissueIntent)
+        .set({ status: 'REFUSED', refusalCode: 'PREDECESSOR_BINDING_REQUIRED', changedBy, changedAt: new Date() })
+        .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, id)));
+      return;
+    }
+
     // Reconstruct the EXACT normalized request that was registered; never the editable form.
     const parsed = requestInput.parse({
       client, sourcePreparationId: row.sourcePreparationId, requestKey: row.requestKey, changedBy: row.requestedBy,
       selection: row.payload.selection, personnelNumbers: row.payload.personnelNumbers,
-      intendedPaymentDate: row.payload.intendedPaymentDate, reason: row.payload.reason, attestations: row.payload.attestations,
+      intendedPaymentDate: row.payload.intendedPaymentDate, reason: row.payload.reason,
+      attestations: row.payload.attestations, predecessors: row.payload.predecessors,
     });
     try {
-      view = await createDraftInTx(tx, parsed, grant, file, run, money, access);
+      view = await createDraftInTx(tx, parsed, grant, file, run, money, access, id);
       await tx.update(payrollPaymentReissueIntent)
         .set({ status: 'COMPLETED', reissueId: view.reissueId, changedBy, changedAt: new Date() })
         .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, id)));
+      // The draft now blocks a new request on its own for these employees, so release the overlap claim.
+      await releaseIntentClaims(tx, client, id, changedBy);
     } catch (error) {
       if (error instanceof ReissueError && FINAL_INTENT_REFUSALS.has(error.code)) {
         refusal = error;
         await tx.update(payrollPaymentReissueIntent)
           .set({ status: 'REFUSED', refusalCode: error.code, changedBy, changedAt: new Date() })
           .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, id)));
+        await releaseIntentClaims(tx, client, id, changedBy);
       } else {
         throw error;
       }
@@ -1101,9 +1295,13 @@ export async function abandonReissueIntent(
       refuse('REISSUE_STATE', 'This request already created a draft.', 'Cancel the draft from the file history instead.');
     }
     if (row.status === 'REGISTERED' || row.status === 'RUNNING') {
+      // FOR UPDATE above is what makes this safe: an execution transaction holds the same row lock for its whole
+      // decisive phase, so either it committed first (COMPLETED, refused above) or it has already rolled back and
+      // can no longer create a draft. Only then may the overlap claim be released.
       const [updated] = await tx.update(payrollPaymentReissueIntent)
         .set({ status: 'ABANDONED', changedBy, changedAt: new Date() })
         .where(and(eq(payrollPaymentReissueIntent.client, client), eq(payrollPaymentReissueIntent.intentId, row.intentId))).returning();
+      await releaseIntentClaims(tx, client, row.intentId, changedBy);
       return intentView(updated ?? row);
     }
     return intentView(row);
@@ -1177,6 +1375,7 @@ export async function approveReissue(
     // Scope BEFORE disclosing reference, status, holder or four-eyes: establish the original run's company and
     // live reach for every included employee first. An out-of-scope target and a missing one answer identically.
     const run = await loadRun(tx, client, locked.runId);
+    const sourceFile = await loadSourceFile(tx, client, locked.sourcePreparationId, grant);
     const lockedPns = (locked.bankSnapshot as PaymentFileBankRow[]).map((r) => r.personnelNumber);
     if (!reachesCompany(grant, run.companyCode)
       || !(await allReachable(tx, client, grant, lockedPns, locked.intendedPaymentDate))) {
@@ -1212,6 +1411,17 @@ export async function approveReissue(
       // An older approved attempt is the predecessor this draft supersedes, not a blocker.
       const sup = await supersededAfter(tx, client, locked.runId, l.personnelNumber, locked.requestedAt, locked.reissueId);
       if (sup) refuse('REISSUE_STALE', `Employee ${l.personnelNumber} has been replaced by a newer approved attempt (${sup}).`, 'Cancel this draft; a stale attempt is never released.');
+      // LINEAGE: the instruction this draft says it replaces must still be the one that stands. If an approval
+      // changed it, the attestation on this line no longer describes the current instruction and the draft must
+      // never be released — even though it was created a moment earlier. Checked under the run state lock that
+      // every approval also takes, so a competing approval cannot interleave between this check and the commit.
+      if (!l.predecessorId) {
+        refuse('REISSUE_STALE', `Replacement ${locked.reissueReference} does not record which instruction it replaces.`, 'Cancel it and request a fresh replacement that names the instruction.');
+      }
+      const currentPredecessor = await predecessorOf(tx, client, sourceFile, l.personnelNumber);
+      if (currentPredecessor.kind !== l.predecessorKind || currentPredecessor.id !== l.predecessorId) {
+        refuse('REISSUE_STALE', `Employee ${l.personnelNumber}: the instruction this replacement was attested against is no longer the current one.`, 'Cancel this draft; preview and attest again against the instruction that now stands.');
+      }
       // Compare the WHOLE payment destination, not only the account number. Missing, ambiguous, unreadable or
       // changed data all fail closed — never "unchanged" by omission. Bank maintenance holds the same
       // per-employee lock, so nothing can change between this check and the commit below.
@@ -1619,6 +1829,26 @@ async function viewOf(tx: Tx, client: string, row: ReissueRow, money: Money): Pr
   const keyring = (() => { try { return loadBankDataKeyring(); } catch { return null; } })();
   const snapshot = (row.bankSnapshot ?? []) as PaymentFileBankRow[];
   const lines = await linesOf(tx, client, row.reissueId);
+  // Safe labels for each line's predecessor, computed once per view (the approver must see WHICH instruction was
+  // attested to, not an opaque id). Scoped to this reissue's own source file.
+  const [sourceFile] = await tx.select({ preparationId: payrollPaymentFile.preparationId, fileReference: payrollPaymentFile.fileReference })
+    .from(payrollPaymentFile)
+    .where(and(eq(payrollPaymentFile.client, client), eq(payrollPaymentFile.preparationId, row.sourcePreparationId))).limit(1);
+  const predecessorLabels = new Map<string, string>();
+  for (const l of lines) {
+    const cacheKey = `${l.predecessorKind}:${l.predecessorId}`;
+    if (predecessorLabels.has(cacheKey)) continue;
+    let label = 'an unavailable instruction';
+    if (l.predecessorKind === 'FILE' && sourceFile && l.predecessorId === sourceFile.preparationId) {
+      label = `original file ${sourceFile.fileReference}`;
+    } else if (l.predecessorKind === 'REISSUE') {
+      const [prior] = await tx.select({ reference: payrollPaymentReissue.reissueReference, version: payrollPaymentReissue.version })
+        .from(payrollPaymentReissue)
+        .where(and(eq(payrollPaymentReissue.client, client), eq(payrollPaymentReissue.reissueId, l.predecessorId))).limit(1);
+      if (prior) label = `replacement ${prior.reference} (v${prior.version})`;
+    }
+    predecessorLabels.set(cacheKey, label);
+  }
   const lineViews: ReissueLineView[] = lines.map((l) => {
     const snap = snapshot.find((s) => s.personnelNumber === l.personnelNumber);
     let masked = '••••';
@@ -1633,6 +1863,7 @@ async function viewOf(tx: Tx, client: string, row: ReissueRow, money: Money): Pr
       attestationOutcome: l.attestationOutcome as ReissueAttestationOutcome, attestationReason: l.attestationReason,
       verificationDate: l.verificationDate, evidenceReference: l.evidenceReference,
       predecessorKind: l.predecessorKind as 'FILE' | 'REISSUE', predecessorId: l.predecessorId,
+      predecessorLabel: predecessorLabels.get(`${l.predecessorKind}:${l.predecessorId}`) ?? '',
     };
   });
   // A replacement is superseded (as a whole) if ANY line has a later approved attempt. Computed here so the

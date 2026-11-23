@@ -1564,6 +1564,16 @@ export const payrollPaymentArtifact = pgTable(
  * 9326: marks an owner as new-format (a retained `cad1` artifact is REQUIRED). Absence of a row means genuinely
  * legacy (pre-host-storage), which may legitimately be served from its stored body or immutable snapshot.
  */
+/**
+ * One employee's binding to the instruction its attestation is about. `predecessorId` is the source file's
+ * preparation id (kind FILE) or a specific approved replacement's id (kind REISSUE) — never a payroll run.
+ */
+export interface ReissuePredecessorBinding {
+  personnelNumber: string;
+  predecessorKind: 'FILE' | 'REISSUE';
+  predecessorId: string;
+}
+
 /** The normalized request fields retained server-side for an exact, idempotent retry. Never sent to the browser. */
 export interface ReissueIntentPayload {
   selection: 'ALL' | 'SELECTED';
@@ -1578,7 +1588,54 @@ export interface ReissueIntentPayload {
     evidenceReference: string;
     confirmedNoSubmission: boolean;
   }>;
+  /**
+   * Absent on intents registered before 9329. Such an intent has no trustworthy reviewed instruction and is
+   * REFUSED rather than executed against whatever happens to be current.
+   */
+  predecessors?: ReissuePredecessorBinding[];
 }
+
+/**
+ * 9329: per-employee coverage of an unresolved submission intent.
+ *
+ * The partial unique index on unresolved `(client, runId, personnelNumber)` — created by the migration — is the
+ * server-side overlap guard: two simultaneous registrations for the same obligation cannot both pass, because
+ * PostgreSQL refuses the second insert. `unresolved` becomes false only on a transition that proves no further
+ * draft can appear under that intent.
+ */
+export const payrollPaymentReissueIntentLine = pgTable(
+  'payroll_payment_reissue_intent_line',
+  {
+    client: tenant(),
+    intentId: uuid('intent_id').notNull(),
+    runId: varchar('run_id', { length: 36 }).notNull(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    unresolved: boolean('unresolved').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.intentId, t.personnelNumber] }),
+    index('payroll_payment_reissue_intent_line_intent_idx').on(t.client, t.intentId),
+    uniqueIndex('payroll_payment_reissue_intent_line_unresolved_uq')
+      .on(t.client, t.runId, t.personnelNumber)
+      .where(sql`${t.unresolved}`),
+    foreignKey({
+      name: 'payroll_payment_reissue_intent_line_intent_fk',
+      columns: [t.client, t.intentId],
+      foreignColumns: [payrollPaymentReissueIntent.client, payrollPaymentReissueIntent.intentId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'payroll_payment_reissue_intent_line_run_fk',
+      columns: [t.client, t.runId],
+      foreignColumns: [payrollRun.client, payrollRun.runId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'payroll_payment_reissue_intent_line_employee_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+  ],
+);
 
 /**
  * 9328: durable two-step submission intent for a controlled payment-file replacement.

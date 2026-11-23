@@ -53,7 +53,9 @@ function statusOf(code: string): number {
   if (code === 'REISSUE_UNAVAILABLE' || code === 'FILE_UNAVAILABLE' || code === 'REISSUE_NOT_APPROVED') return 404;
   if (code === 'REISSUE_SUPERSEDED' || code === 'REISSUE_BANK_CHANGED') return 409;
   if (code === 'REISSUE_CONFLICT' || code === 'REISSUE_STATE' || code === 'REISSUE_KEY_REUSED'
-    || code === 'REISSUE_ABANDONED' || code === 'REISSUE_REFUSED') return 409;
+    || code === 'REISSUE_ABANDONED' || code === 'REISSUE_REFUSED'
+    || code === 'REISSUE_PREDECESSOR_CHANGED' || code === 'REISSUE_OVERLAP'
+    || code === 'PREDECESSOR_BINDING_REQUIRED' || code === 'PREDECESSOR_BINDING_INVALID') return 409;
   return 400;
 }
 
@@ -83,9 +85,12 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (action === 'request') {
       let attestations: unknown[] = [];
+      let predecessors: unknown[] = [];
       try {
         const parsed = JSON.parse(String(form?.get('attestations') ?? '[]'));
         if (Array.isArray(parsed)) attestations = parsed;
+        const parsedPred = JSON.parse(String(form?.get('predecessors') ?? '[]'));
+        if (Array.isArray(parsedPred)) predecessors = parsedPred;
       } catch {
         return refusal(400, 'The attestations could not be read. Nothing was saved.', 'Reload the screen and enter each employee’s original outcome again.');
       }
@@ -97,6 +102,7 @@ export async function POST(request: Request): Promise<Response> {
         intendedPaymentDate: String(form?.get('intendedPaymentDate') ?? ''),
         reason: String(form?.get('reason') ?? ''),
         attestations: attestations as never,
+        predecessors: predecessors as never,
         requestKey: String(form?.get('requestKey') ?? '') || undefined,
         changedBy: s.user.username,
       }, access);
@@ -104,10 +110,13 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (action === 'register' || action === 'execute') {
       let attestations: unknown[] = [];
+      let predecessors: unknown[] = [];
       if (action === 'register') {
         try {
           const parsed = JSON.parse(String(form?.get('attestations') ?? '[]'));
           if (Array.isArray(parsed)) attestations = parsed;
+          const parsedPred = JSON.parse(String(form?.get('predecessors') ?? '[]'));
+          if (Array.isArray(parsedPred)) predecessors = parsedPred;
         } catch {
           return refusal(400, 'The attestations could not be read. Nothing was saved.', 'Reload the screen and enter each employee’s original outcome again.');
         }
@@ -121,6 +130,7 @@ export async function POST(request: Request): Promise<Response> {
           intendedPaymentDate: String(form?.get('intendedPaymentDate') ?? ''),
           reason: String(form?.get('reason') ?? ''),
           attestations: attestations as never,
+          predecessors: predecessors as never,
           requestKey: String(form?.get('requestKey') ?? '') || undefined,
           changedBy: s.user.username,
         }, access);
