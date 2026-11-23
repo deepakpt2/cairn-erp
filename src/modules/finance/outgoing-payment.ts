@@ -181,6 +181,7 @@ export async function getPayables(
         eq(journalEntryLine.businessPartner, vendorNumber),
         eq(journalEntryLine.glAccount, vendor.reconciliationAccount!),
         eq(journalEntry.status, 'POSTED'),
+        sql`${journalEntry.reversalOf} is null`,
         sql`${journalEntryLine.clearingDocument} is null`,
       ))
       .orderBy(journalEntry.postingDate, journalEntryLine.documentNumber);

@@ -48,13 +48,40 @@ export class PaymentRunError extends Error {
 export const runKey = (runDate: string, runId: string) => `${runDate}/${runId}`;
 
 /** The proposal or execution currently queued or running for a run. At most one can exist (unique index). */
-export async function activePaymentOperation(tx: Tx, client: string, runDate: string, runId: string): Promise<{ operationId: string; kind: string; status: string } | null> {
+export async function activePaymentOperation(tx: Tx, client: string, runDate: string, runId: string): Promise<{
+  operationId: string; kind: string; status: string;
+  houseBankKey: string | null; bankAccountId: string | null;
+  bankAmounts: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> | null;
+} | null> {
   const rows = (await tx.execute(sql`
-    select operation_id, kind, status from payment_run_operation
+    select operation_id, kind, status, house_bank_key, bank_account_id, bank_amounts from payment_run_operation
      where client = ${client} and run_date = ${runDate} and run_id = ${runId} and status in ('QUEUED', 'RUNNING')
      limit 1
-  `)) as unknown as Array<{ operation_id: string; kind: string; status: string }>;
-  return rows[0] ? { operationId: rows[0].operation_id, kind: rows[0].kind, status: rows[0].status } : null;
+  `)) as unknown as Array<{
+    operation_id: string; kind: string; status: string; house_bank_key: string | null;
+    bank_account_id: string | null;
+    bank_amounts: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> | null;
+  }>;
+  return rows[0] ? {
+    operationId: rows[0].operation_id, kind: rows[0].kind, status: rows[0].status,
+    houseBankKey: rows[0].house_bank_key, bankAccountId: rows[0].bank_account_id,
+    bankAmounts: rows[0].bank_amounts,
+  } : null;
+}
+
+/** Canonical evidence signature, so a replay is distinguished from a materially different request. */
+export function bankAmountSignature(rows: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> | null | undefined): string {
+  const normalized = (rows ?? []).map((row) => {
+    let amount = String(row.amount).trim();
+    try { amount = fromScaled(toScaled(amount)); } catch { /* judged at execution */ }
+    return {
+      companyCode: row.companyCode.trim().toUpperCase(),
+      supplier: row.supplier.trim().toUpperCase(),
+      currency: row.currency.trim().toUpperCase(),
+      amount,
+    };
+  }).sort((a, b) => `${a.companyCode}|${a.supplier}|${a.currency}`.localeCompare(`${b.companyCode}|${b.supplier}|${b.currency}`));
+  return JSON.stringify(normalized);
 }
 
 /** Refuse while a background proposal or execution is queued or running for this run. */
@@ -282,6 +309,7 @@ export async function openItems(tx: Tx, client: string, run: PaymentRunView): Pr
       eq(journalEntryLine.client, client),
       eq(journalEntryLine.debitCredit, 'H'),
       eq(journalEntry.status, 'POSTED'),
+      sql`${journalEntry.reversalOf} is null`,
       sql`${journalEntryLine.businessPartner} is not null`,
       sql`${journalEntryLine.clearingDocument} is null`,
     ));

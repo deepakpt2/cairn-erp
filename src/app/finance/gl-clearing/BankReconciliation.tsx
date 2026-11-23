@@ -334,7 +334,9 @@ export default function BankReconciliation({
                           <td>{line.reference}</td>
                           <td>{line.assignment}</td>
                           <td>{line.originClass ? `${line.originClass} ${line.originKey ?? ''}` : ''}</td>
-                          <td>{line.kind === 'FX_VALUATION' ? 'FX valuation (local only)' : 'Bank movement'}</td>
+                          <td>{line.kind === 'FX_VALUATION'
+                            ? 'FX valuation (local only)'
+                            : line.kind === 'REVERSAL' ? 'Reversal movement' : 'Bank movement'}</td>
                           <td>{line.direction === 'IN' ? 'Money in' : 'Money out'}</td>
                           <td className="num">{line.amount}</td>
                           <td className="num">{line.matchedAmount}</td>

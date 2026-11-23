@@ -13,6 +13,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
+import { activeBankMatchForJournal } from './bank-reconciliation';
 import { clearingReset, glClearingAllocation, journalEntry, journalEntryLine } from './schema';
 
 export const CLEARING_RESET_CAPABILITY = 'FIN.CLEARING.RESET';
@@ -67,12 +68,15 @@ interface Tx {
 
 async function loadCleared(
   tx: Parameters<Parameters<typeof withTenant>[1]>[0],
-  client: string, companyCode: string, clearingDocument: string,
+  client: string, companyCode: string, clearingDocument: string, fiscalYear: number,
 ): Promise<Array<typeof journalEntryLine.$inferSelect>> {
   return tx.select().from(journalEntryLine).where(and(
     eq(journalEntryLine.client, client),
     eq(journalEntryLine.companyCode, companyCode),
     eq(journalEntryLine.clearingDocument, clearingDocument),
+    // The clearing journal's own self-stamped lines are not cleared items; their stamp is audit
+    // history and must survive a reset.
+    sql`not (${journalEntryLine.documentNumber} = ${clearingDocument} and ${journalEntryLine.fiscalYear} = ${fiscalYear})`,
   ));
 }
 
@@ -104,11 +108,13 @@ export async function getClearingDocument(client: string, input: {
         'Name the clearing document exactly as it stands stamped on the cleared items.',
       );
     }
-    if (journal.status !== 'POSTED') {
+    const reset = await loadReset(tx, client, input.companyCode, input.clearingDocument, input.fiscalYear);
+    // A reset that carried realized FX reverses the clearing journal; the reset record is then the
+    // authoritative evidence and the view must still open, not claim the document vanished.
+    if (journal.status !== 'POSTED' && !reset) {
       throw new ClearingResetError(`Clearing document ${input.clearingDocument} does not stand posted.`);
     }
-    const lines = await loadCleared(tx, client, input.companyCode, input.clearingDocument);
-    const reset = await loadReset(tx, client, input.companyCode, input.clearingDocument, input.fiscalYear);
+    const lines = await loadCleared(tx, client, input.companyCode, input.clearingDocument, input.fiscalYear);
     if (lines.length === 0 && !reset) {
       throw new ClearingResetError(
         `Document ${input.clearingDocument} cleared no items in company ${input.companyCode}.`,
@@ -180,7 +186,7 @@ export async function resetClearingTx(
       'Name the clearing document exactly as it stands stamped on the cleared items.',
     );
   }
-  const lines = await loadCleared(tx, input.client, input.companyCode, input.clearingDocument);
+  const lines = await loadCleared(tx, input.client, input.companyCode, input.clearingDocument, input.fiscalYear);
   if (lines.length === 0) {
     const reset = await loadReset(tx, input.client, input.companyCode, input.clearingDocument, input.fiscalYear);
     if (reset) {
@@ -206,6 +212,25 @@ export async function resetClearingTx(
   `) as unknown as Array<{ n: number }>;
   const hasRealizedFx = (fxRows[0]?.n ?? 0) > 0;
 
+  // A cleared item whose own journal is reversed (or is a reversal mirror) is invalid evidence: the
+  // reset would reopen a line that no longer stands as a genuine open item. Surface it, never guess.
+  const staleItems = await tx.execute(sql`
+    select count(*)::int as n
+      from journal_entry_line l
+      join journal_entry e
+        on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
+     where l.client = ${input.client} and l.company_code = ${input.companyCode}
+       and l.clearing_document = ${input.clearingDocument}
+       and l.document_number <> ${input.clearingDocument}
+       and (e.status <> 'POSTED' or e.reversal_of is not null)
+  `) as unknown as Array<{ n: number }>;
+  if ((staleItems[0]?.n ?? 0) > 0) {
+    throw new ClearingResetError(
+      `Clearing document ${input.clearingDocument} stamped ${staleItems[0]!.n} item line(s) whose journal is reversed or is a reversal mirror.`,
+      'Correct the clearing evidence explicitly; the reset will not reopen a reversed or mirrored item as if it still stood open.',
+    );
+  }
+
   // A clearing that generated residual items cannot simply be reset: the
   // residual line is a posted open item of the clearing document, so lifting
   // the stamps alone would leave it open beside the reopened originals.
@@ -223,6 +248,17 @@ export async function resetClearingTx(
   const clearingDate = lines[0].clearingDate!;
 
   if (hasRealizedFx) {
+    // The same authoritative bank-match guard as the ordinary document reversal. It also takes the
+    // journal-scoped lock, so a concurrent match cannot slip between this check and the reversal.
+    const bankMatch = await activeBankMatchForJournal(
+      tx, input.client, input.clearingDocument, input.fiscalYear,
+    );
+    if (bankMatch) {
+      throw new ClearingResetError(
+        `Clearing document ${input.clearingDocument} line ${bankMatch.lineNumber} stands in bank reconciliation match ${bankMatch.matchId} on statement ${bankMatch.statementReference}.`,
+        'Reopen the bank statement and unmatch the line first; then the reset can reverse the clearing journal and reopen the items explicitly.',
+      );
+    }
     await reverseJournalEntry(tx, {
       client: input.client,
       documentNumber: input.clearingDocument,
@@ -251,6 +287,8 @@ export async function resetClearingTx(
     eq(journalEntryLine.client, input.client),
     eq(journalEntryLine.companyCode, input.companyCode),
     eq(journalEntryLine.clearingDocument, input.clearingDocument),
+    // The clearing journal's own lines keep their self-stamp; only the items it cleared reopen.
+    sql`not (${journalEntryLine.documentNumber} = ${input.clearingDocument} and ${journalEntryLine.fiscalYear} = ${input.fiscalYear})`,
   ));
   // Allocations lift as history, never as a delete: the rows stand inactive
   // and the source items' remaining balances restore.

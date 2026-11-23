@@ -130,6 +130,7 @@ export async function getReceivables(
         eq(journalEntryLine.businessPartner, customerNumber),
         eq(journalEntryLine.debitCredit, 'S'),
         eq(journalEntry.status, 'POSTED'),
+        sql`${journalEntry.reversalOf} is null`,
         sql`${journalEntryLine.clearingDocument} is null`,
       ))
       .orderBy(journalEntry.postingDate, journalEntryLine.documentNumber);

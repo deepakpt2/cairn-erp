@@ -105,11 +105,25 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
   const [cancelState, cancelActionState, cancelling] = useActionState(cancelRunAction, INITIAL);
   const busy = operation ? ACTIVE.includes(operation.status) : false;
   // One bank movement per proposal group (company, supplier, currency). The actual bank amount is
-  // only required when that group's currency differs from the local-currency bank account.
+  // only required when that group's currency differs from the selected bank account's currency.
   const bankGroups = run
     ? [...new Map(run.proposal.filter((p) => !p.exceptionCode)
       .map((p) => [`${p.companyCode}|${p.accountId}|${p.currency}`, p])).values()]
     : [];
+  const [houseBankKey, setHouseBankKey] = useState('');
+  const [bankAccountId, setBankAccountId] = useState('');
+  const proposalSignature = run
+    ? `${run.runDate}/${run.runId}|${run.proposal.map((p) => `${p.itemNumber}:${p.companyCode}:${p.accountId}:${p.currency}:${p.amount}:${p.exceptionCode ?? ''}`).join('|')}`
+    : '';
+  // A typed amount only exists for the exact instruction it was typed against. Changing the run,
+  // its released proposal, or the selected bank changes this key, so the old value is not rebound.
+  const instructionKey = `${proposalSignature}|${houseBankKey}|${bankAccountId}`;
+  const [typedAmounts, setTypedAmounts] = useState<{ key: string; values: Record<string, string> }>({
+    key: '', values: {},
+  });
+  const actualAmounts = typedAmounts.key === instructionKey ? typedAmounts.values : {};
+  const bankFor = (companyCode: string) => banks.find((b) => b.companyCode === companyCode
+    && b.houseBankKey === houseBankKey && b.accountId === bankAccountId);
   const editable = run && run.status !== 'EXECUTED' && run.status !== 'CANCELLED';
   const runLock = useChangeLock(
     'PAYMENT_RUN',
@@ -272,41 +286,89 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
               <input type="hidden" name="runId" value={run.runId} />
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">House bank / account</span>
-                <select name="bankChoice" className="input" disabled>
-                  {banks.map((b) => (
-                    <option key={`${b.companyCode}-${b.houseBankKey}-${b.accountId}`}>
-                      {b.companyCode} · {b.houseBankKey}/{b.accountId} ({b.currency})
+                <select
+                  className="input"
+                  value={houseBankKey && bankAccountId ? `${houseBankKey}/${bankAccountId}` : ''}
+                  onChange={(event) => {
+                    const [key, account] = event.target.value.split('/');
+                    setHouseBankKey(key ?? '');
+                    setBankAccountId(account ?? '');
+                  }}
+                  data-bank-choice
+                >
+                  <option value="">Choose a house bank account</option>
+                  {[...new Map(banks.map((b) => [`${b.houseBankKey}/${b.accountId}`, b])).values()].map((b) => (
+                    <option key={`${b.houseBankKey}-${b.accountId}`} value={`${b.houseBankKey}/${b.accountId}`}>
+                      {b.houseBankKey}/{b.accountId} ({b.currency})
                     </option>
                   ))}
                 </select>
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">House bank</span>
-                <input name="houseBankKey" className="input w-24" placeholder="HB01" required />
+                <input
+                  name="houseBankKey" className="input w-24" placeholder="HB01" required
+                  value={houseBankKey}
+                  onChange={(event) => setHouseBankKey(event.target.value.toUpperCase())}
+                  data-bank-key
+                />
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Account ID</span>
-                <input name="bankAccountId" className="input w-24" placeholder="MAIN" required />
+                <input
+                  name="bankAccountId" className="input w-24" placeholder="MAIN" required
+                  value={bankAccountId}
+                  onChange={(event) => setBankAccountId(event.target.value.toUpperCase())}
+                  data-bank-account
+                />
               </label>
-              {bankGroups.map((g) => (
-                <label key={`${g.companyCode}|${g.accountId}|${g.currency}`} className="block">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">
-                    Actual bank amount · {g.accountId} {g.currency}
-                  </span>
-                  <input
-                    name={`bankAmount~${g.companyCode}~${g.accountId}~${g.currency}`}
-                    className="input w-40"
-                    placeholder="Only if bank is local"
-                  />
-                </label>
-              ))}
+              {bankGroups.map((g) => {
+                const groupKey = `${g.companyCode}|${g.accountId}|${g.currency}`;
+                const bank = bankFor(g.companyCode);
+                const bankCurrency = bank?.currency?.trim().toUpperCase() ?? null;
+                const sameCurrency = bankCurrency !== null && bankCurrency === g.currency.trim().toUpperCase();
+                return (
+                  <label
+                    key={groupKey}
+                    className="block"
+                    data-bank-amount-group={groupKey}
+                    data-bank-currency={bankCurrency ?? ''}
+                    data-payment-currency={g.currency}
+                  >
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">
+                      Actual bank amount · {g.companyCode}/{g.accountId} · payment {g.currency} → bank {bankCurrency ?? 'select bank'}
+                    </span>
+                    {sameCurrency ? (
+                      <span className="text-xs text-ink-soft" data-bank-same-currency>
+                        Same currency — the bank movement is the payment amount; no separate entry.
+                      </span>
+                    ) : (
+                      <input
+                        name={`bankAmount~${g.companyCode}~${g.accountId}~${g.currency}`}
+                        className="input w-40"
+                        placeholder={`In ${bankCurrency ?? 'bank currency'}`}
+                        aria-label={`Actual bank amount in ${bankCurrency ?? 'bank currency'} for supplier ${g.accountId} paying ${g.currency}`}
+                        value={actualAmounts[groupKey] ?? ''}
+                        onChange={(event) => setTypedAmounts((previous) => ({
+                          key: instructionKey,
+                          values: {
+                            ...(previous.key === instructionKey ? previous.values : {}),
+                            [groupKey]: event.target.value,
+                          },
+                        }))}
+                      />
+                    )}
+                  </label>
+                );
+              })}
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canExecute || executing || !runHeld || busy}>
                 Execute payments
               </button>
               <p className="w-full text-xs text-ink-soft">
-                State one actual bank amount per group when the bank account is held in the company local
-                currency and the payment currency differs. A missing or conflicting amount refuses the
-                whole run; same-currency groups need no entry.
+                Each entry is in the <strong>bank account currency</strong>, not the payment currency. It is
+                required when the selected bank is held in the company local currency and a group pays in
+                another currency. Changing the bank or the proposal discards previously typed amounts. A
+                missing or conflicting amount refuses the whole run; same-currency groups need no entry.
               </p>
             </form>
           )}

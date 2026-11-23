@@ -161,8 +161,16 @@ describe('SCR-071 reset cleared items (FBRA)', () => {
     const stamps = await withTenant(c, (tx) => tx.execute(sql`
       select count(*)::int as n from journal_entry_line
       where client = ${c} and clearing_document = ${clearingDocument}
+        and not (document_number = ${clearingDocument} and fiscal_year = 2026)
     `));
     expect((stamps as unknown as Array<{ n: number }>)[0].n).toBe(0);
+    // The clearing journal's own lines keep their self-stamp as audit history.
+    const selfStamps = await withTenant(c, (tx) => tx.execute(sql`
+      select count(*)::int as n from journal_entry_line
+      where client = ${c} and document_number = ${clearingDocument} and fiscal_year = 2026
+        and clearing_document = ${clearingDocument}
+    `));
+    expect((selfStamps as unknown as Array<{ n: number }>)[0].n).toBeGreaterThan(0);
 
     const record = await withTenant(c, (tx) => tx.execute(sql`
       select reset_number, clearing_date::text as cd, items_reset, reason from clearing_reset

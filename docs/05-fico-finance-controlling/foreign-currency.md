@@ -117,8 +117,14 @@ the confirmation message and in the payment-run result.
   amount in that currency.
 - A bank account in a **third currency** is refused.
 - A payment run requires one actual amount for every group whose currency differs from a local bank
-  account. The complete set is validated before posting; a missing, duplicate or unknown group
-  amount refuses the whole run and leaves nothing posted.
+  account. The field is labelled in the **selected bank account currency**, beside the company,
+  supplier and payment currency; it is not labelled in the payment currency. The complete set is
+  validated before posting; a missing, duplicate or unknown group amount refuses the whole run and
+  leaves nothing posted.
+- Changing the selected bank, the released proposal or any material payment field discards a
+  previously typed actual amount. It is not carried over to a different instruction. A repeated
+  execution submission with the same bank and evidence is a replay; a different bank or amount is a
+  conflict and is refused while the first execution is queued or running.
 
 ## Period-end valuation: unrealized differences
 
@@ -126,6 +132,19 @@ Open FX items and foreign-currency balance-sheet accounts can be valued at a key
 (**Finance → Period-end close → Foreign currency valuation**, `/finance/fx/valuation`). The run
 uses the rate method you choose, the newest valid row on or before the key date, and posts one
 balanced adjustment to `FXGAIN` / `FXLOSS`. A test run only records the protocol.
+
+**Bank exposure follows the bank account, not the payment document.** A KWD bank account is not a
+USD position merely because a USD payment touched it; it is skipped. A USD bank account is valued
+from its USD balance and local carrying amount. A bank G/L shared by two bank accounts, a
+third-currency line on a foreign bank, or a line with no provable account-currency amount refuses
+the affected valuation rather than guessing. Non-bank foreign balance-sheet accounts and open items
+continue to be valued normally.
+
+The posted required value and adjustment are calculated with exact rational arithmetic and rounded
+**once** at the local currency's configured minor unit (KWD 0.001, USD 0.01, JPY 1). The protocol,
+totals, classification and journal agree; the posting engine's currency-precision check rejects any
+fourth-decimal leak. A carrying amount that already violates the local precision is surfaced as an
+error, never silently rounded.
 
 Settlement refuses an item that an **active** valuation has already adjusted **as of the settlement
 date**, with a remedy to reverse that valuation document first. This prevents the same difference
@@ -135,6 +154,12 @@ reversing it before settling is the controlled remedy. Clearing (customer and ve
 same rule to every selected item and to the account/currency balance. A company-scoped transaction
 lock serializes valuation against payments, payment runs and clearings, so neither side can pass
 its check while the other is still uncommitted.
+
+A **second live valuation of the same open item or account/currency basis** is refused while an
+earlier one is still effective on the new posting date. A different valuation area or key date does
+not bypass the conflict. Reversing the earlier document effectively (by that date) permits the new
+run; a future-dated reversal does not. This prevents a later valuation from posting the whole
+original difference again instead of the increment.
 
 A valuation posting and its reversal are marked `is_fx_valuation`. That provenance is authoritative:
 on a foreign bank G/L the line is shown in reconciliation as a **local-only carrying adjustment**,
@@ -160,14 +185,25 @@ while the same lines keep their **local-currency carrying amount** separately.
    local carrying amount.
 4. Finalize only when the bridge is explained; earlier snapshots are never rewritten.
 
-**As-of and reversals.** Ledger movements are included by their actual posting dates. An original
-receipt contributes its full amount to an as-of date before its reversal; from the reversal's
-posting date the original and its mirror cancel, so the as-of balance is zero, not the opposite
-movement. Parked documents never contribute. The mirror itself is not an independent bank movement
-and is not counted on its own. If a journal is reversed while a match still refers to it, the
-reconciliation shows a blocking `INVALID_MATCH` and requires the statement to be reopened and the
-match withdrawn; the historical as-of balance is not silently rewritten. A reversed journal with no
-mirror is a blocking `REVERSAL_EVIDENCE` issue because its as-of effect cannot be proved.
+**As-of and reversals.** Both the original and its mirror are kept as dated accounting movements.
+The original contributes before the reversal posting date; on and after it the mirror contributes
+the opposite sign. Opening, period movement and closing are therefore derived independently and
+correctly: a +100 receipt on 20 December reversed on 5 January shows opening +100, movement ?100 and
+closing zero for January. Before the reversal the original is matchable; after it the pair is not
+matchable. The mirror is never an independent bank statement movement and is never used to net away
+an outstanding statement line. Parked and future-dated documents never contribute.
+
+If a journal is reversed while a match still refers to it, the reconciliation shows a blocking
+`INVALID_MATCH` and requires the statement to be reopened and the match withdrawn. A reversal dated
+**after** a statement's as-of date does not invalidate that historical match; a backdated reversal
+inside the signed period changes the ledger closing, marks the match invalid and flags the snapshot
+as changed. The signed snapshot is never rewritten. A reversed journal with no mirror is a blocking
+`REVERSAL_EVIDENCE` issue because its as-of effect cannot be proved.
+
+The same evidence rule is enforced by the match service, not only the screen. A foreign line on a
+local-currency bank without `USER_ACTUAL` evidence, a third-currency line, a mirror, a valuation
+line or an ineffective reversed original is refused before any match row is inserted. A mixed
+request with one ineligible allocation inserts nothing.
 
 A `FX_VALUATION` line is shown with zero account-currency amount and its local carrying adjustment;
 it is not matchable. This applies before and after its reversal and does not create a permanent
@@ -198,6 +234,13 @@ a local-only line benign.
   (an exact mirror at the original rates), then lifts the clearing stamps. The items stand open
   again and the FX line is undone; no rate is looked up. If the reversal period is closed, the
   reset is refused with that reason and nothing is reopened.
+- Before that reversal the reset applies the **same journal-scoped bank-match guard** as the ordinary
+  document reversal. An active match blocks the reset with an unmatch/reopen remedy, and the lock
+  prevents a concurrent match from slipping between the check and the reversal. A refusal leaves the
+  clearing journal, stamps and open items untouched.
+- The clearing journal's own self-stamped lines keep their stamp as audit history. Only the items it
+  cleared are reopened. Reversal mirrors are never exposed as extra open receivables or payables, so
+  reopening a payment residual, partial or on-account line leaves exactly the original economic items.
 - A valuation's unrealized posting is undone by reversing its journal.
 
 ## Auditing historical postings
@@ -232,6 +275,9 @@ rate; never rewrite the original. The audit changes nothing and assumes no old p
   backfilled**. On a foreign bank G/L they remain a blocking `LEDGER_CURRENCY` until finance reviews
   them and corrects the record with an explicit adjusting document; they are never guessed benign
   from their text or from being local-currency.
+- A historical line whose local amount is not at the local currency's precision is surfaced as a
+  valuation error. It is not rounded into a plausible adjustment; correct the source document or
+  use the controlled cutover procedure.
 - Cross-currency **G/L residual** clearing remains refused: a residual must re-stand in its source
   currency, which a single-currency journal line cannot represent.
 

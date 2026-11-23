@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { postJournalEntry } from '../src/platform/posting';
+import { postJournalEntry, reverseJournalEntry } from '../src/platform/posting';
 import { executeFxValuation as executeFxValuationService } from '../src/modules/finance/fx-valuation';
 import { createTenant, defineTestRanges, destroyTenant, seedAccounts } from './helpers';
 
@@ -118,19 +118,36 @@ describe('SCR-098 FX valuation FAGL_FC_VAL (R-146)', () => {
     expect(live.items.every((i) => i.status === 'POSTED')).toBe(true);
     expect(await journalCount()).toBe(journals + 2);
 
-    const rerun = await executeFxValuation({
+    // The first run's reversal is dated 2026-05-01, so on 2026-04-30 it is still effective: an
+    // earlier rerun must refuse rather than double count.
+    await expect(executeFxValuation({
       client, changedBy: ACTOR, selection: selection({ testRun: false }),
+    })).rejects.toThrow(/already valued/);
+
+    // Once the reversal is effective, the same basis can be valued again.
+    const rerun = await executeFxValuation({
+      client, changedBy: ACTOR,
+      selection: selection({
+        testRun: false, postingDate: '2026-05-02', valuationKeyDate: '2026-05-02',
+      }),
     });
     expect(rerun.status).toBe('COMPLETED');
     expect(rerun.postingDocument).toBeTruthy();
 
     const journalsAfterRerun = await journalCount();
-    const third = await executeFxValuation({
-      client, changedBy: ACTOR, selection: selection({ testRun: false }),
-    });
-    expect(third.items.every((i) => i.status === 'SKIPPED')).toBe(true);
-    expect(third.postingDocument).toBeNull();
+    await expect(executeFxValuation({
+      client, changedBy: ACTOR,
+      selection: selection({
+        testRun: false, postingDate: '2026-05-02', valuationKeyDate: '2026-05-02',
+      }),
+    })).rejects.toThrow(/already valued/);
     expect(await journalCount()).toBe(journalsAfterRerun);
+
+    // Make the second valuation ineffective before the later missing-rate test.
+    await withTenant(client, (tx) => reverseJournalEntry(tx, {
+      client, documentNumber: rerun.postingDocument!, fiscalYear: 2026,
+      reversalDate: '2026-05-03', reason: 'release later valuation test', reversedBy: ACTOR,
+    }));
   });
 
   it('names a missing rate as an error and blocks the live post', async () => {
@@ -143,7 +160,8 @@ describe('SCR-098 FX valuation FAGL_FC_VAL (R-146)', () => {
     expect(gbp?.status).toBe('ERROR');
     expect(gbp?.error).toContain('No AVERAGE rate for GBP/USD');
     await expect(executeFxValuation({
-      client, changedBy: ACTOR, selection: selection({ testRun: false }),
+      client, changedBy: ACTOR,
+      selection: selection({ testRun: false, postingDate: '2026-05-04', valuationKeyDate: '2026-05-04' }),
     })).rejects.toThrow('cannot post');
   });
 

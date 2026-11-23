@@ -37,7 +37,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { assertActorCan, JobActorError, loadJobActor } from '../../platform/job/actor';
 import { enqueue, requestCancel } from '../../platform/job/queue';
 import { LeaseLostError, type ChunkResult, type JobContext } from '../../platform/job/types';
-import { activePaymentOperation, executePaymentRun, loadRun, openItems, PAYMENT_RUN_CAPABILITY, PaymentRunError, RUN_CLASS, runKey, supplierMethods, type PaymentRunView } from './payment-run';
+import { activePaymentOperation, bankAmountSignature, executePaymentRun, loadRun, openItems, PAYMENT_RUN_CAPABILITY, PaymentRunError, RUN_CLASS, runKey, supplierMethods, type PaymentRunView } from './payment-run';
 import { assertPaymentRunReleased, syncPaymentRunRelease } from './payment-run-release';
 import { bankAccount } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
@@ -177,9 +177,20 @@ export async function submitPaymentExecution(input: SubmitExecutionInput): Promi
     if (run.proposal.filter((p) => !p.exceptionCode).length === 0) {
       throw new PaymentRunError('The proposal carries no payable items.', 'Resolve the exceptions or widen the selection.');
     }
+    const houseBankKey = input.houseBankKey.trim().toUpperCase();
+    const bankAccountId = input.bankAccountId.trim().toUpperCase();
     const active = await activePaymentOperation(tx, input.client, input.runDate, input.runId);
     if (active) {
-      if (active.kind === 'EXECUTE') return viewOfRow((await loadOp(tx, input.client, active.operationId))!);
+      if (active.kind === 'EXECUTE') {
+        const sameInstruction = active.houseBankKey === houseBankKey
+          && active.bankAccountId === bankAccountId
+          && bankAmountSignature(active.bankAmounts) === bankAmountSignature(input.bankAmounts);
+        if (sameInstruction) return viewOfRow((await loadOp(tx, input.client, active.operationId))!);
+        throw new PaymentRunError(
+          `An execution is already queued for payment run ${runKey(input.runDate, input.runId)} with a different bank or actual-bank-amount instruction.`,
+          'Cancel that execution or wait for it to finish. A different instruction is not a replay and is not accepted by the queued operation.',
+        );
+      }
       throw new PaymentRunError(`Payment run ${runKey(input.runDate, input.runId)} has a background proposal in progress.`, 'Wait for it to finish.');
     }
     // Early, kind refusals. The job checks all of this again, at the posting boundary.
@@ -188,8 +199,6 @@ export async function submitPaymentExecution(input: SubmitExecutionInput): Promi
       throw error;
     });
     const actor = await assertPaymentAuthority(tx, input.client, input.actorUserId, run);
-    const houseBankKey = input.houseBankKey.trim().toUpperCase();
-    const bankAccountId = input.bankAccountId.trim().toUpperCase();
     for (const company of new Set(run.proposal.filter((p) => !p.exceptionCode).map((p) => p.companyCode))) {
       const [bank] = await tx.select().from(bankAccount).where(and(
         eq(bankAccount.client, input.client), eq(bankAccount.companyCode, company),

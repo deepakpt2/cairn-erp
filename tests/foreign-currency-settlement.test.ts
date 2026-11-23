@@ -177,18 +177,26 @@ describe('foreign-currency invoice, settlement and realized FX', () => {
     expect(Number(header.rate)).toBeCloseTo(0.31, 8);
   });
 
-  it('reverses the receipt exactly, keeping the original rate and the FX line', async () => {
-    const reversal = await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
-      client: tenant.client, documentNumber: receiptJournal, fiscalYear: 2026,
-      reversalDate: '2026-10-17', reason: 'FX reversal test', reversedBy: ACTOR,
-    }));
-    const lines = await journalLines(tenant.client, reversal.documentNumber);
+  it('resets the receipt clearing exactly, keeping the original rate and the FX line', async () => {
+    // A receipt that cleared an item cannot be reversed behind its stamps; the supported workflow is
+    // the clearing reset, which reverses the clearing journal and reopens the item in one movement.
+    await resetClearing({
+      client: tenant.client, changedBy: ACTOR, companyCode: COMPANY,
+      clearingDocument: receiptJournal, fiscalYear: 2026,
+      reason: 'FX reversal test', requestKey: 'fx-receipt-reset-1',
+    });
+    const reversalRows = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
+      select document_number from journal_entry
+       where client = ${tenant.client} and reversal_of = ${receiptJournal}
+    `)) as unknown as Array<{ document_number: string }>);
+    expect(reversalRows).toHaveLength(1);
+    const lines = await journalLines(tenant.client, reversalRows[0]!.document_number);
     expect(lines.find((l) => l.gl_account === '101000')).toMatchObject({ debit_credit: 'H', doc: '100.0000', local: '31.0000' });
     expect(lines.find((l) => l.gl_account === '110000')).toMatchObject({ debit_credit: 'S', doc: '100.0000', local: '30.0000' });
     expect(lines.find((l) => l.gl_account === '590100')).toMatchObject({ debit_credit: 'S', doc: '0.0000', local: '1.0000', is_local_only: true });
-    const header = await journalHeader(tenant.client, reversal.documentNumber);
+    const header = await journalHeader(tenant.client, reversalRows[0]!.document_number);
     expect(Number(header.rate)).toBeCloseTo(0.31, 8);
-    // The original open item is restored, not re-priced.
+    // The original open item is restored, not re-priced, and the mirror is not a second open item.
     expect((await getReceivables(tenant.client, 'C10000', COMPANY)).openItems).toHaveLength(1);
   });
 

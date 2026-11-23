@@ -37,6 +37,7 @@ export default function OutgoingPayment({ view, loadError, canEnter, today, deci
   const [applied, setApplied] = useState<Record<string, string>>({});
   const [discounts, setDiscounts] = useState<Record<string, string>>({});
   const [onAccount, setOnAccount] = useState('');
+  const [bankAmount, setBankAmount] = useState('');
 
   const toggle = (key: string) => setSelected((prev) => {
     const next = new Set(prev);
@@ -84,7 +85,15 @@ export default function OutgoingPayment({ view, loadError, canEnter, today, deci
           {items.length === 0 ? (
             <p className="mt-2 text-sm text-ink-soft">No open items stand for this vendor and company.</p>
           ) : (
-            <form action={action}>
+            <form
+              action={action}
+              onChange={(event) => {
+                const name = (event.target as unknown as HTMLInputElement).name;
+                // Changing the bank, currency, amount or source items invalidates the prior actual
+                // bank amount rather than carrying it over to a different instruction.
+                if (name && name !== 'bankAmount') setBankAmount('');
+              }}
+            >
               <input type="hidden" name="vendor" value={view.vendor} />
               <input type="hidden" name="companyCode" value={view.companyCode} />
               <input type="hidden" name="requestKey" value="" />
@@ -116,7 +125,13 @@ export default function OutgoingPayment({ view, loadError, canEnter, today, deci
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Actual bank amount</span>
-                  <input name="bankAmount" className="input w-full" placeholder="Only if the bank is held in local currency" />
+                  <input
+                    name="bankAmount" className="input w-full"
+                    placeholder="Only if the bank is held in local currency"
+                    value={bankAmount}
+                    onChange={(event) => setBankAmount(event.target.value)}
+                    data-bank-amount
+                  />
                   <span className="mt-1 block text-xs text-ink-soft">
                     The amount the bank actually debited, in the bank account currency. Required when the
                     account is held in the company local currency and the payment is foreign; leave blank

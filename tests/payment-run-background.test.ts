@@ -469,6 +469,33 @@ describe('crash windows and leases', () => {
     expect(reaped).toEqual([]);
     expect((await getPaymentRun(client, RUN_DATE, runId))!.status).toBe('EXECUTED');
   });
+
+  it('distinguishes a same-instruction replay from a different bank or actual-amount instruction', async () => {
+    const runId = await releasedRun();
+    const instruction = { companyCode: '1000', supplier: 'V10000', currency: 'USD', amount: '550.0000' };
+    const submit = (over: Partial<Parameters<typeof submitPaymentExecution>[0]> = {}) => submitPaymentExecution({
+      client, changedBy: planner.username, actorUserId: planner.userId,
+      runDate: RUN_DATE, runId, houseBankKey: 'HB01', bankAccountId: 'MAIN',
+      bankAmounts: [instruction], ...over,
+    });
+
+    const first = await submit();
+    const replay = await submit();
+    expect(replay.operationId).toBe(first.operationId);
+
+    await expect(submit({ bankAccountId: 'OTHER' })).rejects.toThrow(/different bank or actual-bank-amount/);
+    await expect(submit({ bankAmounts: [{ ...instruction, amount: '551.0000' }] }))
+      .rejects.toThrow(/different bank or actual-bank-amount/);
+    // The queued operation keeps the evidence it was submitted with.
+    const row = await opRow(first.operationId);
+    expect(row.bank_account_id).toBe('MAIN');
+    expect(JSON.stringify(row.bank_amounts)).toContain('550.0000');
+
+    await cancelPaymentOperation({
+      client, operationId: first.operationId, changedBy: planner.username, actorUserId: planner.userId,
+    });
+    await drive();
+  });
 });
 
 describe('what the generic job tables hold', () => {

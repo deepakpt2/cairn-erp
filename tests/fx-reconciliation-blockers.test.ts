@@ -12,9 +12,10 @@ import { getPayables, postOutgoingPayment } from '../src/modules/finance/outgoin
 import { clearCustomerItems } from '../src/modules/finance/customer-clearing';
 import { clearVendorItems } from '../src/modules/finance/vendor-clearing';
 import { resetClearing } from '../src/modules/finance/clearing-reset';
-import { executeFxValuation } from '../src/modules/finance/fx-valuation';
+import { executeFxValuation, type FxValuationSelection } from '../src/modules/finance/fx-valuation';
 import {
   finalizeBankStatement, getBankReconciliation, matchBankStatement, saveBankStatement,
+  unmatchBankStatement,
 } from '../src/modules/finance/bank-reconciliation';
 import {
   createPaymentRun, executePaymentRun, generateProposal, getPaymentRun,
@@ -38,6 +39,7 @@ async function setup(): Promise<void> {
   await defineTestRanges(tenant, { fiscalYear: 2027 });
   await seedAccounts(tenant, [
     '590100', '590200', '102000', '103000', '104000', '105000', '106000', '107000', '108000',
+    '109000', '111000', '112000', '113000', '114000', '115000', '116000', '117000', '118000', '119000',
   ]);
   await withTenant(tenant.client, async (tx) => {
     await defineRange(tx, { client: tenant.client, objectCode: 'CUSTINV', subObject: '*', prefix: 'CI', numberLength: 7, createdBy: ACTOR });
@@ -47,12 +49,14 @@ async function setup(): Promise<void> {
         (${tenant.client}, 'C10000', 'ORGANIZATION', 'Blocker Customer', ${ACTOR}),
         (${tenant.client}, 'V10000', 'ORGANIZATION', 'Blocker Vendor', ${ACTOR}),
         (${tenant.client}, 'V20000', 'ORGANIZATION', 'Second Vendor', ${ACTOR}),
-        (${tenant.client}, 'C20000', 'ORGANIZATION', 'Balance-Valuation Customer', ${ACTOR})
+        (${tenant.client}, 'C20000', 'ORGANIZATION', 'Balance-Valuation Customer', ${ACTOR}),
+        (${tenant.client}, 'C30000', 'ORGANIZATION', 'Reset Safety Customer', ${ACTOR})
       on conflict do nothing`);
     await tx.execute(sql`
       insert into bp_role (client, partner_number, role_code, created_by) values
         (${tenant.client}, 'C10000', 'CUSTOMER', ${ACTOR}),
         (${tenant.client}, 'C20000', 'CUSTOMER', ${ACTOR}),
+        (${tenant.client}, 'C30000', 'CUSTOMER', ${ACTOR}),
         (${tenant.client}, 'V10000', 'SUPPLIER', ${ACTOR}),
         (${tenant.client}, 'V20000', 'SUPPLIER', ${ACTOR}) on conflict do nothing`);
     await tx.execute(sql`
@@ -66,6 +70,10 @@ async function setup(): Promise<void> {
       insert into customer_company_code
         (client, partner_number, role_code, company_code, chart_of_accounts, reconciliation_account, payment_terms_code, created_by)
       values (${tenant.client}, 'C20000', 'CUSTOMER', '1000', 'CA01', '108000', 'NET30', ${ACTOR}) on conflict do nothing`);
+    await tx.execute(sql`
+      insert into customer_company_code
+        (client, partner_number, role_code, company_code, chart_of_accounts, reconciliation_account, payment_terms_code, created_by)
+      values (${tenant.client}, 'C30000', 'CUSTOMER', '1000', 'CA01', '110000', 'NET30', ${ACTOR}) on conflict do nothing`);
     for (const vendor of ['V10000', 'V20000']) {
       await tx.execute(sql`
         insert into supplier_company_code
@@ -88,7 +96,8 @@ async function setup(): Promise<void> {
       update gl_account set account_type = 'ASSET', gl_account_type = 'BALANCE_SHEET',
         is_balance_sheet = true, is_open_item_managed = false
       where client = ${tenant.client} and chart_of_accounts = 'CA01'
-        and account_number in ('102000', '103000', '104000', '105000', '106000', '107000', '108000')`);
+        and account_number in ('102000', '103000', '104000', '105000', '106000', '107000', '108000',
+          '109000', '111000', '112000', '113000', '114000', '115000', '116000', '117000', '118000', '119000')`);
     // 0.300 until 15 Oct, 0.310 then, 0.320 from 20 Oct, 0.330 from December, and a dedicated
     // 0.30001 row used to carry exactly KWD 30.001 on USD 100.
     await tx.execute(sql`
@@ -115,6 +124,17 @@ async function setup(): Promise<void> {
       ['HB04', 'USD2', 'USD', '105000'],
       ['HB05', 'USD3', 'USD', '106000'],
       ['HB06', 'KWD4', 'KWD', '107000'],
+      ['HB07', 'USD4', 'USD', '109000'],
+      ['HB08', 'USD5', 'USD', '111000'],
+      ['HB09', 'USD6', 'USD', '112000'],
+      ['HB10', 'USD7', 'USD', '112000'],
+      ['HB11', 'USD8', 'USD', '113000'],
+      ['HB12', 'USD9', 'USD', '114000'],
+      ['HB13', 'USD10', 'USD', '115000'],
+      ['HB14', 'USD11', 'USD', '116000'],
+      ['HB15', 'KWD5', 'KWD', '117000'],
+      ['HB16', 'KWD6', 'KWD', '118000'],
+      ['HB17', 'USD12', 'USD', '119000'],
     ] as const) {
       await tx.execute(sql`
         insert into house_bank (client, company_code, house_bank_key, bank_country, bank_key, created_by)
@@ -136,13 +156,19 @@ async function setup(): Promise<void> {
 beforeAll(async () => { await setup(); }, 180_000);
 afterAll(async () => { if (tenant?.client) await destroyTenant(tenant.client); }, 300_000);
 
-function customerInvoice(currency: string, reference: string, date: string, gross = 100) {
+function customerInvoiceFor(
+  customerNumber: string, currency: string, reference: string, date: string, gross = 100,
+) {
   return {
-    client: tenant.client, changedBy: ACTOR, customerNumber: 'C10000', companyCode: COMPANY,
+    client: tenant.client, changedBy: ACTOR, customerNumber, companyCode: COMPANY,
     documentDate: date, postingDate: date, reference, currency, grossAmount: gross,
     requestKey: `ci-${reference}`,
     lines: [{ glAccount: '300000', netAmount: gross }],
   };
+}
+
+function customerInvoice(currency: string, reference: string, date: string, gross = 100) {
+  return customerInvoiceFor('C10000', currency, reference, date, gross);
 }
 
 function vendorInvoice(currency: string, reference: string, date: string, vendor = 'V10000', gross = 100) {
@@ -154,6 +180,22 @@ function vendorInvoice(currency: string, reference: string, date: string, vendor
   };
 }
 
+function receiveFor(
+  customerNumber: string, currency: string, date: string, amount: number,
+  items: Array<{
+    documentNumber: string; fiscalYear: number; lineNumber: number;
+    applied?: number; discount?: number; outcome?: 'RESIDUAL' | 'PARTIAL';
+  }>,
+  key: string, bankGlAccount = '101000', extra: Record<string, unknown> = {},
+) {
+  return {
+    client: tenant.client, changedBy: ACTOR, customerNumber, companyCode: COMPANY,
+    documentDate: date, postingDate: date, clearingDate: date,
+    bankGlAccount, amount, currency, requestKey: key, items,
+    authorization: actor.authorization, ...extra,
+  };
+}
+
 function receive(
   currency: string, date: string, amount: number,
   items: Array<{
@@ -162,12 +204,7 @@ function receive(
   }>,
   key: string, bankGlAccount = '101000', extra: Record<string, unknown> = {},
 ) {
-  return {
-    client: tenant.client, changedBy: ACTOR, customerNumber: 'C10000', companyCode: COMPANY,
-    documentDate: date, postingDate: date, clearingDate: date,
-    bankGlAccount, amount, currency, requestKey: key, items,
-    authorization: actor.authorization, ...extra,
-  };
+  return receiveFor('C10000', currency, date, amount, items, key, bankGlAccount, extra);
 }
 
 function pay(
@@ -182,6 +219,13 @@ function pay(
   };
 }
 
+async function journalCount(): Promise<number> {
+  return withTenant(tenant.client, async (tx) => {
+    const rows = await tx.execute(sql`select count(*)::int as n from journal_entry where client = ${tenant.client}`);
+    return Number((rows as unknown as Array<{ n: number }>)[0]?.n ?? 0);
+  });
+}
+
 async function journalLines(documentNumber: string) {
   return withTenant(tenant.client, async (tx) => (await tx.execute(sql`
     select l.gl_account, l.line_number, l.debit_credit, l.amount_document::text as doc,
@@ -194,10 +238,13 @@ async function journalLines(documentNumber: string) {
 
 async function openRefs(partner: string, glAccount: string, documentNumbers: string[]) {
   const rows = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
-    select document_number, fiscal_year, line_number, debit_credit, amount_local::text as local
-      from journal_entry_line
-     where client = ${tenant.client} and business_partner = ${partner}
-       and gl_account = ${glAccount} and clearing_document is null`)) as unknown as Array<{
+    select l.document_number, l.fiscal_year, l.line_number, l.debit_credit, l.amount_local::text as local
+      from journal_entry_line l
+      join journal_entry e
+        on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
+     where l.client = ${tenant.client} and l.business_partner = ${partner}
+       and l.gl_account = ${glAccount} and l.clearing_document is null
+       and e.status = 'POSTED' and e.reversal_of is null`)) as unknown as Array<{
     document_number: string; fiscal_year: number; line_number: number; debit_credit: string; local: string;
   }>);
   return rows.filter((r) => documentNumbers.includes(r.document_number));
@@ -270,23 +317,44 @@ describe('1. as-of treatment of reversed bank journals', () => {
     }, { authorization: actor.authorization });
     await finalizeBankStatement({ client: tenant.client, statementId, confirmed: true }, { authorization: actor.authorization });
 
-    // The reversal posts in fiscal year 2027; the December as-of balance must not change.
-    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+    // The reversal posts in fiscal year 2027; the December as-of balance must not change, and a
+    // reversal dated after the statement must not invalidate the signed historical match.
+    const reversal = await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
       client: tenant.client, documentNumber: receiptDoc, fiscalYear: 2026,
       reversalDate: '2027-01-05', reason: 'as-of reversal test', reversedBy: ACTOR,
     }));
     const december = await reconciliation({ houseBankKey: 'HB05', accountId: 'USD3', statementId });
     expect(december.bridge!.ledgerClosing).toBe('100.00');
-    expect(december.issues.some((i) => i.code === 'INVALID_MATCH' && i.blocking)).toBe(true);
+    expect(december.issues.some((i) => i.code === 'INVALID_MATCH')).toBe(false);
+    expect(december.ledgerLines.find((l) => l.documentNumber === receiptDoc))
+      .toMatchObject({ kind: 'BANK', matchable: true, matchedAmount: '100.00' });
 
     const january = await statement({
       houseBankKey: 'HB05', accountId: 'USD3', currency: 'USD', reference: 'ASOF-2027-01',
-      fromDate: '2027-01-01', toDate: '2027-01-31', opening: '100', closing: '100',
+      fromDate: '2027-01-01', toDate: '2027-01-31', opening: '100', closing: '0',
+      lines: [{ direction: 'OUT', amount: '100', valueDate: '2027-01-05' }],
     });
     const after = await reconciliation({ houseBankKey: 'HB05', accountId: 'USD3', statementId: january.statementId });
-    // Before the reversal date it stood at +100; from the reversal date the pair cancels, never ?100.
+    // Opening +100, the dated mirror -100, closing zero. Both identities remain visible.
+    expect(after.bridge!.ledgerOpening).toBe('100.00');
     expect(after.bridge!.ledgerClosing).toBe('0.00');
-    expect(after.ledgerLines.some((l) => l.documentNumber === receiptDoc)).toBe(false);
+    expect(after.ledgerLines.find((l) => l.documentNumber === receiptDoc))
+      .toMatchObject({ kind: 'BANK', amount: '100.00', matchable: false });
+    expect(after.ledgerLines.find((l) => l.documentNumber === reversal.documentNumber))
+      .toMatchObject({ kind: 'REVERSAL', amount: '100.00', matchable: false });
+    // The reversal mirror stays in the closing balance but cannot explain the statement's OUT line,
+    // so the remaining statement item blocks sign-off instead of being silently netted away.
+    expect(after.issues.some((i) => i.code === 'UNEXPLAINED' && i.blocking)).toBe(true);
+    expect(after.bridge!.unexplainedDifference).toBe('100.00');
+    // A statement line is not matched merely because an internal journal was reversed.
+    await expect(matchBankStatement({
+      client: tenant.client, statementId: january.statementId, requestKey: 'asof-jan-match',
+      allocations: [{
+        statementLineId: after.statement!.lines[0]!.lineId,
+        ledgerDocumentNumber: reversal.documentNumber, ledgerFiscalYear: reversal.fiscalYear,
+        ledgerLineNumber: 1, amount: '100',
+      }],
+    }, { authorization: actor.authorization })).rejects.toThrow(/not an independent bank movement/);
   });
 
   it('applies the same as-of rule to a local-currency bank account', async () => {
@@ -301,16 +369,53 @@ describe('1. as-of treatment of reversed bank journals', () => {
     });
     expect((await reconciliation({ houseBankKey: 'HB06', accountId: 'KWD4', statementId: december.statementId }))
       .bridge!.ledgerClosing).toBe('100.000');
-    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+    const reversal = await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
       client: tenant.client, documentNumber: receipt.journalDocumentNumber, fiscalYear: 2026,
       reversalDate: '2027-01-05', reason: 'local bank as-of reversal', reversedBy: ACTOR,
     }));
     const january = await statement({
       houseBankKey: 'HB06', accountId: 'KWD4', currency: 'KWD', reference: 'ASOF-KWD-JAN',
-      fromDate: '2027-01-01', toDate: '2027-01-31', opening: '100', closing: '100',
+      fromDate: '2027-01-01', toDate: '2027-01-31', opening: '100', closing: '0',
+      lines: [{ direction: 'OUT', amount: '100', valueDate: '2027-01-05' }],
     });
-    expect((await reconciliation({ houseBankKey: 'HB06', accountId: 'KWD4', statementId: january.statementId }))
-      .bridge!.ledgerClosing).toBe('0.000');
+    const view = await reconciliation({ houseBankKey: 'HB06', accountId: 'KWD4', statementId: january.statementId });
+    expect(view.bridge!.ledgerOpening).toBe('100.000');
+    expect(view.bridge!.ledgerClosing).toBe('0.000');
+    expect(view.ledgerLines.find((l) => l.documentNumber === reversal.documentNumber))
+      .toMatchObject({ kind: 'REVERSAL', matchable: false });
+    expect(view.issues.some((i) => i.code === 'UNEXPLAINED' && i.blocking)).toBe(true);
+  });
+
+  it('shows a backdated reversal inside a finalized period as a change and an invalid match', async () => {
+    const inv = await postCustomerInvoice(customerInvoiceFor('C30000', 'USD', 'BACKDATE-INV', '2026-12-01', 100));
+    const item = (await getReceivables(tenant.client, 'C30000', COMPANY)).openItems
+      .find((i) => i.documentNumber === inv.journalDocumentNumber)!;
+    const receipt = await postIncomingPayment(receiveFor('C30000', 'USD', '2026-12-10', 100, [item], 'backdate-receipt', '119000'));
+    const saved = await statement({
+      houseBankKey: 'HB17', accountId: 'USD12', currency: 'USD', reference: 'BACKDATE-STMT',
+      fromDate: '2026-12-01', toDate: '2026-12-31', opening: '0', closing: '100',
+      lines: [{ direction: 'IN', amount: '100', valueDate: '2026-12-10' }],
+    });
+    const view = await reconciliation({ houseBankKey: 'HB17', accountId: 'USD12', statementId: saved.statementId });
+    await matchBankStatement({
+      client: tenant.client, statementId: saved.statementId, requestKey: 'backdate-match',
+      allocations: [{
+        statementLineId: view.statement!.lines[0]!.lineId,
+        ledgerDocumentNumber: receipt.journalDocumentNumber, ledgerFiscalYear: 2026,
+        ledgerLineNumber: 1, amount: '100',
+      }],
+    }, { authorization: actor.authorization });
+    await finalizeBankStatement({ client: tenant.client, statementId: saved.statementId, confirmed: true }, { authorization: actor.authorization });
+
+    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+      client: tenant.client, documentNumber: receipt.journalDocumentNumber, fiscalYear: 2026,
+      reversalDate: '2026-12-20', reason: 'backdated reversal', reversedBy: ACTOR,
+    }));
+    const changed = await reconciliation({ houseBankKey: 'HB17', accountId: 'USD12', statementId: saved.statementId });
+    expect(changed.changedSinceSnapshot).toBe(true);
+    expect(changed.bridge!.ledgerClosing).toBe('0.00');
+    expect(changed.issues.some((i) => i.code === 'INVALID_MATCH' && i.blocking)).toBe(true);
+    expect(changed.issues.some((i) => i.code === 'UNEXPLAINED' && i.blocking)).toBe(true);
   });
 });
 
@@ -359,26 +464,19 @@ describe('2. period-end FX valuation on a foreign bank G/L', () => {
       }],
     }, { authorization: actor.authorization })).rejects.toThrow(/FX valuation adjustment/);
 
-    // Reversal: the adjustment disappears as of its date, with no permanent blocker.
-    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+    // Reversal: both dated valuation movements stay visible, net to zero in local carrying, and
+    // neither creates an account-currency movement or a permanent blocker.
+    const reversal = await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
       client: tenant.client, documentNumber: valuation.postingDocument!, fiscalYear: 2026,
       reversalDate: '2026-12-31', reason: 'reverse bank valuation', reversedBy: ACTOR,
     }));
     const reversed = await reconciliation({ houseBankKey: 'HB04', accountId: 'USD2', statementId: saved.statementId });
-    expect(reversed.ledgerLines.some((l) => l.documentNumber === valuation.postingDocument)).toBe(false);
+    const valuationMovements = reversed.ledgerLines.filter((l) => l.kind === 'FX_VALUATION');
+    expect(valuationMovements.map((l) => l.documentNumber).sort())
+      .toEqual([valuation.postingDocument!, reversal.documentNumber].sort());
+    expect(valuationMovements.every((l) => l.matchable === false && l.amount === '0.00')).toBe(true);
     expect(reversed.bridge!.ledgerClosing).toBe('100.00');
     expect(reversed.issues.some((i) => i.code === 'LEDGER_CURRENCY')).toBe(false);
-
-    // An ordinary local-currency manual line is still not evidence and still blocks.
-    await manualEntry({
-      currency: 'KWD', date: '2026-12-28', reference: 'VALBANK-LEGACY',
-      lines: [
-        { glAccount: '105000', debitCredit: 'S', amount: '5.000', amountLocal: '5.000' },
-        { glAccount: '400000', debitCredit: 'H', amount: '5.000', amountLocal: '5.000' },
-      ],
-    });
-    const legacy = await reconciliation({ houseBankKey: 'HB04', accountId: 'USD2', statementId: saved.statementId });
-    expect(legacy.issues.some((i) => i.code === 'LEDGER_CURRENCY' && i.blocking)).toBe(true);
   });
 });
 
@@ -642,11 +740,13 @@ describe('5. active valuation blocks customer and vendor clearing, and locks ser
     const refs = (await openRefs('V10000', '200000', [inv.journalDocumentNumber!, debit.documentNumber]))
       .map((r) => ({ documentNumber: r.document_number, fiscalYear: r.fiscal_year, lineNumber: r.line_number }));
     expect(refs).toHaveLength(2);
+    // The customer valuation's reversal is effective 2027-01-05, so this later run can value the
+    // same basis without double counting.
     const valuation = await executeFxValuation({
       client: tenant.client, changedBy: ACTOR, authorization: actor.authorization,
       selection: {
-        companyCode: COMPANY, valuationArea: 'CLRVL2', valuationKeyDate: '2026-12-31',
-        postingDate: '2026-12-31', fiscalYear: 2026, valuationMethod: 'AVERAGE',
+        companyCode: COMPANY, valuationArea: 'CLRVL2', valuationKeyDate: '2027-01-08',
+        postingDate: '2027-01-08', fiscalYear: 2027, valuationMethod: 'AVERAGE',
         includeOpenItems: true, includeBalances: false, testRun: false,
         documentType: 'SA', requestKey: 'clrval-2',
       },
@@ -659,8 +759,8 @@ describe('5. active valuation blocks customer and vendor clearing, and locks ser
     })).rejects.toThrow(/valued at period end/);
     expect(await openRefs('V10000', '200000', [inv.journalDocumentNumber!, debit.documentNumber])).toHaveLength(2);
     await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
-      client: tenant.client, documentNumber: valuation.postingDocument!, fiscalYear: 2026,
-      reversalDate: '2027-01-05', reason: 'release vendor clearing valuation', reversedBy: ACTOR,
+      client: tenant.client, documentNumber: valuation.postingDocument!, fiscalYear: 2027,
+      reversalDate: '2027-01-09', reason: 'release vendor clearing valuation', reversedBy: ACTOR,
     }));
     const clearing = await clearVendorItems({
       client: tenant.client, changedBy: ACTOR, supplier: 'V10000', companyCode: COMPANY,
@@ -800,4 +900,440 @@ describe('6. configured document precision in clearing', () => {
     expect(await openRefs('C10000', '110000', [a.documentNumber, b.documentNumber, c.documentNumber]))
       .toHaveLength(3);
   }, 60_000);
+});
+
+describe('7. legacy evidence remains blocking', () => {
+  it('flags an ordinary local-currency line on a foreign bank G/L', async () => {
+    await manualEntry({
+      currency: 'KWD', date: '2026-12-28', reference: 'VALBANK-LEGACY',
+      lines: [
+        { glAccount: '105000', debitCredit: 'S', amount: '5.000', amountLocal: '5.000' },
+        { glAccount: '400000', debitCredit: 'H', amount: '5.000', amountLocal: '5.000' },
+      ],
+    });
+    const saved = await statement({
+      houseBankKey: 'HB04', accountId: 'USD2', currency: 'USD', reference: 'VALBANK-LEGACY-STMT',
+      fromDate: '2026-10-01', toDate: '2026-12-31', opening: '0', closing: '100',
+      lines: [{ direction: 'IN', amount: '100', valueDate: '2026-10-16' }],
+    });
+    const legacy = await reconciliation({ houseBankKey: 'HB04', accountId: 'USD2', statementId: saved.statementId });
+    expect(legacy.issues.some((i) => i.code === 'LEDGER_CURRENCY' && i.blocking)).toBe(true);
+  });
+});
+
+describe('8. valuation exposure, repeated runs and precision', () => {
+  const valuation = (
+    area: string, keyDate: string, overrides: Partial<FxValuationSelection> = {},
+  ) => executeFxValuation({
+    client: tenant.client, changedBy: ACTOR, authorization: actor.authorization,
+    selection: {
+      companyCode: COMPANY, valuationArea: area, valuationKeyDate: keyDate,
+      postingDate: keyDate, fiscalYear: 2026, valuationMethod: 'AVERAGE',
+      includeOpenItems: false, includeBalances: true, testRun: false,
+      documentType: 'SA', requestKey: `${area}-${keyDate}`, ...overrides,
+    },
+  });
+
+  it('does not revalue a local-currency bank because its payment document is foreign', async () => {
+    // A USD document line on the KWD bank must not create USD exposure; a genuine USD bank beside
+    // it must still be valued.
+    await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'EXPO-LOCAL-BANK',
+      lines: [
+        { glAccount: '103000', debitCredit: 'S', amount: '10', amountLocal: '3.000' },
+        { glAccount: '400000', debitCredit: 'H', amount: '10', amountLocal: '3.000' },
+      ],
+    });
+    await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'EXPO-USD-BANK',
+      lines: [
+        { glAccount: '115000', debitCredit: 'S', amount: '100', amountLocal: '30.000' },
+        { glAccount: '400000', debitCredit: 'H', amount: '100', amountLocal: '30.000' },
+      ],
+    });
+    const result = await valuation('EXPO', '2026-10-31');
+    expect(result.items.some((i) => i.accountNumber === '103000')).toBe(false);
+    const usdBank = result.items.find((i) => i.accountNumber === '115000')!;
+    expect(usdBank).toMatchObject({ sourceKind: 'BALANCE', currency: 'USD', adjustmentAmount: 2 });
+    const lines = await journalLines(result.postingDocument!);
+    expect(lines.some((l) => l.gl_account === '103000')).toBe(false);
+    expect(lines.some((l) => l.gl_account === '115000')).toBe(true);
+    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+      client: tenant.client, documentNumber: result.postingDocument!, fiscalYear: 2026,
+      reversalDate: '2026-10-31', reason: 'release exposure test', reversedBy: ACTOR,
+    }));
+  }, 60_000);
+
+  it('refuses a second live valuation before the earlier one is effective-reversed, then values incrementally', async () => {
+    await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'REPEAT-BANK',
+      lines: [
+        { glAccount: '109000', debitCredit: 'S', amount: '100', amountLocal: '30.000' },
+        { glAccount: '400000', debitCredit: 'H', amount: '100', amountLocal: '30.000' },
+      ],
+    });
+    const first = await valuation('REPEAT', '2026-10-31');
+    expect(first.items.find((i) => i.accountNumber === '109000')).toMatchObject({ adjustmentAmount: 2 });
+    const before = await journalCount();
+    await expect(valuation('REPEAT', '2026-11-30')).rejects.toThrow(/already valued/);
+    // A different area cannot bypass the conflict on the same accounting basis.
+    await expect(valuation('OTHER', '2026-11-05')).rejects.toThrow(/already valued/);
+    expect(await journalCount()).toBe(before);
+
+    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+      client: tenant.client, documentNumber: first.postingDocument!, fiscalYear: 2026,
+      reversalDate: '2026-10-31', reason: 'release repeat valuation', reversedBy: ACTOR,
+    }));
+    // The carrying stands back at 30; a later valuation to 33 posts 3, not an incremental double.
+    const second = await valuation('REPEAT', '2026-12-02');
+    expect(second.items.find((i) => i.accountNumber === '109000')).toMatchObject({
+      carryingAmount: 30, requiredAmount: 33, adjustmentAmount: 3,
+    });
+    expect((await journalLines(second.postingDocument!)).find((l) => l.gl_account === '109000'))
+      .toMatchObject({ local: '3.0000' });
+    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+      client: tenant.client, documentNumber: second.postingDocument!, fiscalYear: 2026,
+      reversalDate: '2026-12-03', reason: 'release second valuation', reversedBy: ACTOR,
+    }));
+  }, 60_000);
+
+  it('posts the valuation adjustment at KWD minor units (30.003 carrying, USD 100.01 at 0.32)', async () => {
+    await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'ROUND-BANK',
+      lines: [
+        { glAccount: '111000', debitCredit: 'S', amount: '100.01', amountLocal: '30.003' },
+        { glAccount: '400000', debitCredit: 'H', amount: '100.01', amountLocal: '30.003' },
+      ],
+    });
+    const result = await valuation('ROUND', '2026-10-31');
+    expect(result.items.find((i) => i.accountNumber === '111000')).toMatchObject({
+      foreignAmount: 100.01, carryingAmount: 30.003,
+      requiredAmount: 32.003, adjustmentAmount: 2, classification: 'GAIN',
+    });
+    expect((await journalLines(result.postingDocument!)).find((l) => l.gl_account === '111000'))
+      .toMatchObject({ local: '2.0000' });
+    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+      client: tenant.client, documentNumber: result.postingDocument!, fiscalYear: 2026,
+      reversalDate: '2026-10-31', reason: 'release rounding valuation', reversedBy: ACTOR,
+    }));
+  }, 60_000);
+
+  it('handles a negative balance and a value that rounds to zero', async () => {
+    await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'NEG-BANK',
+      lines: [
+        { glAccount: '113000', debitCredit: 'H', amount: '100.01', amountLocal: '30.003' },
+        { glAccount: '400000', debitCredit: 'S', amount: '100.01', amountLocal: '30.003' },
+      ],
+    });
+    await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'ZERO-BANK',
+      lines: [
+        { glAccount: '114000', debitCredit: 'S', amount: '0.01', amountLocal: '0.003' },
+        { glAccount: '400000', debitCredit: 'H', amount: '0.01', amountLocal: '0.003' },
+      ],
+    });
+    const result = await valuation('SIGNS', '2026-10-31');
+    expect(result.items.find((i) => i.accountNumber === '113000')).toMatchObject({
+      adjustmentAmount: -2, classification: 'LOSS',
+    });
+    expect(result.items.find((i) => i.accountNumber === '114000')).toMatchObject({
+      requiredAmount: 0.003, adjustmentAmount: 0, classification: 'NONE',
+    });
+    const lines = await journalLines(result.postingDocument!);
+    expect(lines.find((l) => l.gl_account === '113000')).toMatchObject({ debit_credit: 'H', local: '2.0000' });
+    expect(lines.some((l) => l.gl_account === '114000')).toBe(false);
+    await withTenant(tenant.client, (tx) => reverseJournalEntry(tx, {
+      client: tenant.client, documentNumber: result.postingDocument!, fiscalYear: 2026,
+      reversalDate: '2026-10-31', reason: 'release sign valuation', reversedBy: ACTOR,
+    }));
+  }, 60_000);
+
+  it('refuses a shared bank G/L and a third-currency line on a foreign bank G/L', async () => {
+    await manualEntry({
+      currency: 'USD', date: '2026-10-16', reference: 'SHARED-BANK',
+      lines: [
+        { glAccount: '112000', debitCredit: 'S', amount: '100', amountLocal: '30.000' },
+        { glAccount: '400000', debitCredit: 'H', amount: '100', amountLocal: '30.000' },
+      ],
+    });
+    await expect(valuation('SHARED', '2026-10-31')).rejects.toThrow(/shared by 2 bank accounts/);
+
+    await manualEntry({
+      currency: 'KWD', date: '2026-10-16', reference: 'THIRD-BANK',
+      lines: [
+        { glAccount: '109000', debitCredit: 'S', amount: '5.000', amountLocal: '5.000' },
+        { glAccount: '400000', debitCredit: 'H', amount: '5.000', amountLocal: '5.000' },
+      ],
+    });
+    await expect(valuation('THIRD', '2026-10-31')).rejects.toThrow(/held in USD, but line .* KWD/);
+  }, 60_000);
+});
+
+describe('9. clearing reset and reversal safety', () => {
+  it('refuses an FX payment reset behind an active bank match, then permits it after unmatch', async () => {
+    const inv = await postCustomerInvoice(customerInvoiceFor('C30000', 'USD', 'RESET-MATCH-INV', '2026-06-01', 100));
+    const item = (await getReceivables(tenant.client, 'C30000', COMPANY)).openItems
+      .find((i) => i.documentNumber === inv.journalDocumentNumber)!;
+    const receipt = await postIncomingPayment(receiveFor('C30000', 'USD', '2026-10-16', 100, [item], 'reset-match-receipt', '116000'));
+    const saved = await statement({
+      houseBankKey: 'HB14', accountId: 'USD11', currency: 'USD', reference: 'RESET-MATCH-STMT',
+      fromDate: '2026-10-01', toDate: '2026-10-31', opening: '0', closing: '100',
+      lines: [{ direction: 'IN', amount: '100', valueDate: '2026-10-16' }],
+    });
+    const view = await reconciliation({ houseBankKey: 'HB14', accountId: 'USD11', statementId: saved.statementId });
+    const matched = await matchBankStatement({
+      client: tenant.client, statementId: saved.statementId, requestKey: 'reset-match-link',
+      allocations: [{
+        statementLineId: view.statement!.lines[0]!.lineId,
+        ledgerDocumentNumber: receipt.journalDocumentNumber, ledgerFiscalYear: 2026,
+        ledgerLineNumber: 1, amount: '100',
+      }],
+    }, { authorization: actor.authorization });
+
+    await expect(resetClearing({
+      client: tenant.client, changedBy: ACTOR, companyCode: COMPANY,
+      clearingDocument: receipt.journalDocumentNumber, fiscalYear: 2026,
+      reason: 'should be blocked by the bank match', requestKey: 'reset-match-1',
+    })).rejects.toThrow(/bank reconciliation match/);
+    const noReset = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
+      select count(*)::int as n from clearing_reset
+       where client = ${tenant.client} and clearing_document = ${receipt.journalDocumentNumber}`)) as unknown as Array<{ n: number }>);
+    expect(noReset[0]!.n).toBe(0);
+    const stillPosted = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
+      select status from journal_entry where client = ${tenant.client}
+        and document_number = ${receipt.journalDocumentNumber} and fiscal_year = 2026`)) as unknown as Array<{ status: string }>);
+    expect(stillPosted[0]!.status).toBe('POSTED');
+    expect(await openRefs('C30000', '110000', [inv.journalDocumentNumber!])).toHaveLength(0);
+
+    await unmatchBankStatement({
+      client: tenant.client, matchId: matched.matchIds[0]!, reason: 'reviewed before reset',
+    }, { authorization: actor.authorization });
+    await resetClearing({
+      client: tenant.client, changedBy: ACTOR, companyCode: COMPANY,
+      clearingDocument: receipt.journalDocumentNumber, fiscalYear: 2026,
+      reason: 'unmatched and authorised reset', requestKey: 'reset-match-2',
+    });
+    const reversed = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
+      select status from journal_entry where client = ${tenant.client}
+        and document_number = ${receipt.journalDocumentNumber} and fiscal_year = 2026`)) as unknown as Array<{ status: string }>);
+    expect(reversed[0]!.status).toBe('REVERSED');
+    expect(await openRefs('C30000', '110000', [inv.journalDocumentNumber!])).toHaveLength(1);
+    // Neither the payment's self-stamped line nor its mirror becomes a second open item.
+    expect(await openRefs('C30000', '110000', [receipt.journalDocumentNumber])).toHaveLength(0);
+    const reversalDoc = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
+      select document_number from journal_entry where client = ${tenant.client}
+        and reversal_of = ${receipt.journalDocumentNumber}`)) as unknown as Array<{ document_number: string }>);
+    const reversalLines = await journalLines(reversalDoc[0]!.document_number);
+    expect(reversalLines.find((l) => l.gl_account === '116000'))
+      .toMatchObject({ debit_credit: 'H', local: '31.0000' });
+  }, 90_000);
+
+  it('reopens a downstream-settled payment residual without duplicating mirrored items or bank movement', async () => {
+    const inv = await postCustomerInvoice(customerInvoiceFor('C30000', 'USD', 'RESET-RES-INV', '2026-06-02', 100));
+    const item = (await getReceivables(tenant.client, 'C30000', COMPANY)).openItems
+      .find((i) => i.documentNumber === inv.journalDocumentNumber)!;
+    const receipt = await postIncomingPayment(receiveFor('C30000', 'USD', '2026-10-16', 60, [{
+      ...item, applied: 60, outcome: 'RESIDUAL',
+    }], 'reset-residual-receipt', '103000', { bankAmount: '18.600' }));
+    const residual = (await getReceivables(tenant.client, 'C30000', COMPANY)).openItems
+      .find((i) => i.documentNumber === receipt.journalDocumentNumber && i.signed > 0)!;
+    expect(residual.amount).toBe('40.0000');
+    const credit = await manualEntry({
+      currency: 'USD', date: '2026-10-20', reference: 'RESET-RES-CREDIT',
+      lines: [
+        { glAccount: '110000', debitCredit: 'H', amount: '40', amountLocal: '12.800', businessPartner: 'C30000' },
+        { glAccount: '300000', debitCredit: 'S', amount: '40', amountLocal: '12.800' },
+      ],
+    });
+    const residualRef = { documentNumber: residual.documentNumber, fiscalYear: residual.fiscalYear, lineNumber: residual.lineNumber };
+    const creditRef = { documentNumber: credit.documentNumber, fiscalYear: credit.fiscalYear, lineNumber: 1 };
+    const clearing = await clearCustomerItems({
+      client: tenant.client, changedBy: ACTOR, customer: 'C30000', companyCode: COMPANY,
+      clearingDate: '2026-10-25', postingDate: '2026-10-25', documentDate: '2026-10-25',
+      confirmed: true, requestKey: 'reset-residual-clear', items: [residualRef, creditRef],
+    });
+    expect((await journalLines(clearing.clearingDocumentNumber)).find((l) => l.gl_account === '590100'))
+      .toMatchObject({ debit_credit: 'H', local: '0.8000', is_local_only: true });
+
+    await resetClearing({
+      client: tenant.client, changedBy: ACTOR, companyCode: COMPANY,
+      clearingDocument: clearing.clearingDocumentNumber, fiscalYear: 2026,
+      reason: 'downstream residual reset', requestKey: 'reset-residual-reset',
+    });
+    const reopened = await openRefs('C30000', '110000', [residual.documentNumber, credit.documentNumber]);
+    expect(reopened).toHaveLength(2);
+    expect(reopened.find((r) => r.document_number === residual.documentNumber)).toMatchObject({ local: '12.0000' });
+    expect(reopened.find((r) => r.document_number === credit.documentNumber)).toMatchObject({ local: '12.8000' });
+    // The clearing journal's self-stamp and its mirror are not additional open items.
+    expect(await openRefs('C30000', '110000', [clearing.clearingDocumentNumber])).toHaveLength(0);
+
+    // The payment and its genuine bank movement stay posted.
+    const receiptHeader = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
+      select status from journal_entry where client = ${tenant.client}
+        and document_number = ${receipt.journalDocumentNumber} and fiscal_year = 2026`)) as unknown as Array<{ status: string }>);
+    expect(receiptHeader[0]!.status).toBe('POSTED');
+    const receiptLines = await journalLines(receipt.journalDocumentNumber);
+    expect(receiptLines.find((l) => l.gl_account === '103000')).toMatchObject({ local: '18.6000' });
+    expect(receiptLines.find((l) => l.gl_account === '590100')).toMatchObject({ local: '0.6000', is_local_only: true });
+  }, 90_000);
+
+  it('serializes a reset with the journal-scoped bank-match lock', async () => {
+    const inv = await postCustomerInvoice(customerInvoiceFor('C30000', 'USD', 'RESET-LOCK-INV', '2026-06-03', 100));
+    const item = (await getReceivables(tenant.client, 'C30000', COMPANY)).openItems
+      .find((i) => i.documentNumber === inv.journalDocumentNumber)!;
+    const receipt = await postIncomingPayment(receiveFor('C30000', 'USD', '2026-10-16', 100, [item], 'reset-lock-receipt', '116000'));
+
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let acquired!: () => void;
+    const gotLock = new Promise<void>((resolve) => { acquired = resolve; });
+    const holder = withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${tenant.client}/bankline/${receipt.journalDocumentNumber}/2026`}, 0))`);
+      acquired();
+      await held;
+    });
+    await gotLock;
+    const reset = resetClearing({
+      client: tenant.client, changedBy: ACTOR, companyCode: COMPANY,
+      clearingDocument: receipt.journalDocumentNumber, fiscalYear: 2026,
+      reason: 'concurrent reset', requestKey: 'reset-lock-1',
+    });
+    const outcome = await Promise.race([
+      reset.then(() => 'done', () => 'failed'),
+      new Promise((resolve) => setTimeout(() => resolve('blocked'), 400)),
+    ]);
+    expect(outcome).toBe('blocked');
+    release();
+    await holder;
+    const result = await reset;
+    expect(result.clearingDocument).toBe(receipt.journalDocumentNumber);
+    const status = await withTenant(tenant.client, async (tx) => (await tx.execute(sql`
+      select status from journal_entry where client = ${tenant.client}
+        and document_number = ${receipt.journalDocumentNumber} and fiscal_year = 2026`)) as unknown as Array<{ status: string }>);
+    expect(status[0]!.status).toBe('REVERSED');
+  }, 60_000);
+});
+
+describe('10. match-service evidence', () => {
+  it('refuses unverified, wrong-account and wrong-currency lines before inserting any match', async () => {
+    const inv = await postCustomerInvoice(customerInvoiceFor('C30000', 'KWD', 'MATCH-EVID-INV', '2026-11-01', 100));
+    const item = (await getReceivables(tenant.client, 'C30000', COMPANY)).openItems
+      .find((i) => i.documentNumber === inv.journalDocumentNumber)!;
+    const receipt = await postIncomingPayment(receiveFor('C30000', 'KWD', '2026-11-05', 100, [item], 'match-evidence-receipt', '117000'));
+    const unverified = await manualEntry({
+      currency: 'USD', date: '2026-11-05', reference: 'MATCH-EVID-USD',
+      lines: [
+        { glAccount: '117000', debitCredit: 'S', amount: '10', amountLocal: '3.000' },
+        { glAccount: '400000', debitCredit: 'H', amount: '10', amountLocal: '3.000' },
+      ],
+    });
+    const saved = await statement({
+      houseBankKey: 'HB15', accountId: 'KWD5', currency: 'KWD', reference: 'MATCH-EVIDENCE-STMT',
+      fromDate: '2026-11-01', toDate: '2026-11-30', opening: '0', closing: '103',
+      lines: [
+        { direction: 'IN', amount: '100', valueDate: '2026-11-05' },
+        { direction: 'IN', amount: '3', valueDate: '2026-11-05' },
+      ],
+    });
+    const view = await reconciliation({ houseBankKey: 'HB15', accountId: 'KWD5', statementId: saved.statementId });
+    const line100 = view.statement!.lines.find((l) => l.amount === '100.000')!;
+    const line3 = view.statement!.lines.find((l) => l.amount === '3.000')!;
+
+    const matchRows = async (requestKey: string) => withTenant(tenant.client, async (tx) => (await tx.execute(sql`
+      select match_id from bank_reconciliation_match
+       where client = ${tenant.client} and request_key = ${requestKey}`)) as unknown as Array<{ match_id: string }>);
+
+    // A mixed batch with one valid and one invalid allocation inserts nothing.
+    await expect(matchBankStatement({
+      client: tenant.client, statementId: saved.statementId, requestKey: 'match-mixed',
+      allocations: [
+        {
+          statementLineId: line100.lineId, ledgerDocumentNumber: receipt.journalDocumentNumber,
+          ledgerFiscalYear: 2026, ledgerLineNumber: 1, amount: '100',
+        },
+        {
+          statementLineId: line3.lineId, ledgerDocumentNumber: unverified.documentNumber,
+          ledgerFiscalYear: 2026, ledgerLineNumber: 1, amount: '3',
+        },
+      ],
+    }, { authorization: actor.authorization })).rejects.toThrow(/no actual KWD bank movement/);
+    expect(await matchRows('match-mixed')).toHaveLength(0);
+
+    // The genuine same-currency movement still matches.
+    const valid = await matchBankStatement({
+      client: tenant.client, statementId: saved.statementId, requestKey: 'match-valid',
+      allocations: [{
+        statementLineId: line100.lineId, ledgerDocumentNumber: receipt.journalDocumentNumber,
+        ledgerFiscalYear: 2026, ledgerLineNumber: 1, amount: '100',
+      }],
+    }, { authorization: actor.authorization });
+    expect(valid.matchIds).toHaveLength(1);
+
+    await expect(matchBankStatement({
+      client: tenant.client, statementId: saved.statementId, requestKey: 'match-invalid',
+      allocations: [{
+        statementLineId: line3.lineId, ledgerDocumentNumber: unverified.documentNumber,
+        ledgerFiscalYear: 2026, ledgerLineNumber: 1, amount: '3',
+      }],
+    }, { authorization: actor.authorization })).rejects.toThrow(/no actual KWD bank movement/);
+    expect(await matchRows('match-invalid')).toHaveLength(0);
+
+    // A line on another bank G/L is refused before any evidence comparison.
+    const otherBank = await manualEntry({
+      currency: 'USD', date: '2026-11-05', reference: 'MATCH-EVID-OTH',
+      lines: [
+        { glAccount: '114000', debitCredit: 'S', amount: '1', amountLocal: '0.300' },
+        { glAccount: '400000', debitCredit: 'H', amount: '1', amountLocal: '0.300' },
+      ],
+    });
+    await expect(matchBankStatement({
+      client: tenant.client, statementId: saved.statementId, requestKey: 'match-wrong-account',
+      allocations: [{
+        statementLineId: line3.lineId, ledgerDocumentNumber: otherBank.documentNumber,
+        ledgerFiscalYear: 2026, ledgerLineNumber: 1, amount: '3',
+      }],
+    }, { authorization: actor.authorization })).rejects.toThrow(/does not stand on bank G\/L/);
+
+    // A third-currency line on a foreign bank G/L is refused rather than converted.
+    const eur = await manualEntry({
+      currency: 'EUR', date: '2026-10-16', reference: 'MATCH-EVID-EUR',
+      lines: [
+        { glAccount: '116000', debitCredit: 'S', amount: '10', amountLocal: '3.000' },
+        { glAccount: '400000', debitCredit: 'H', amount: '10', amountLocal: '3.000' },
+      ],
+    });
+    const fxStatement = await statement({
+      houseBankKey: 'HB14', accountId: 'USD11', currency: 'USD', reference: 'MATCH-EVIDENCE-FX',
+      fromDate: '2026-10-01', toDate: '2026-10-31', opening: '0', closing: '10',
+      lines: [{ direction: 'IN', amount: '10', valueDate: '2026-10-16' }],
+    });
+    await expect(matchBankStatement({
+      client: tenant.client, statementId: fxStatement.statementId, requestKey: 'match-wrong-currency',
+      allocations: [{
+        statementLineId: (await reconciliation({
+          houseBankKey: 'HB14', accountId: 'USD11', statementId: fxStatement.statementId,
+        })).statement!.lines[0]!.lineId,
+        ledgerDocumentNumber: eur.documentNumber, ledgerFiscalYear: 2026,
+        ledgerLineNumber: 1, amount: '1',
+      }],
+    }, { authorization: actor.authorization })).rejects.toThrow(/carries no amount in the account currency USD/);
+    expect(await matchRows('match-wrong-currency')).toHaveLength(0);
+
+    // A finalized statement still refuses matching outright.
+    const finalStatement = await statement({
+      houseBankKey: 'HB16', accountId: 'KWD6', currency: 'KWD', reference: 'MATCH-FINAL-STMT',
+      fromDate: '2026-11-01', toDate: '2026-11-30', opening: '0', closing: '0',
+    });
+    await finalizeBankStatement({
+      client: tenant.client, statementId: finalStatement.statementId, confirmed: true,
+    }, { authorization: actor.authorization });
+    await expect(matchBankStatement({
+      client: tenant.client, statementId: finalStatement.statementId, requestKey: 'match-finalized',
+      allocations: [{
+        statementLineId: 'none', ledgerDocumentNumber: 'none', ledgerFiscalYear: 2026,
+        ledgerLineNumber: 1, amount: '1',
+      }],
+    }, { authorization: actor.authorization })).rejects.toThrow(/finalized/);
+  }, 90_000);
 });

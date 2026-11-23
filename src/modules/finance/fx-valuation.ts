@@ -33,6 +33,24 @@ export interface FxValuationSelection {
 
 export type FxItemStatus = 'CALCULATED' | 'POSTED' | 'SKIPPED' | 'ERROR';
 
+/**
+ * The required local value of a foreign amount, expressed at the four-decimal storage scale but
+ * rounded once at the local currency's configured minor unit. Exact rational arithmetic; no binary
+ * floating point and no use of the storage scale as the currency scale.
+ */
+export function valuationRequiredUnits(
+  foreignUnits: bigint,
+  rate: ResolvedExchangeRate,
+  localScale: number,
+): bigint {
+  const minor = 10n ** BigInt(MONEY_SCALE - localScale);
+  const requiredMinor = divideRound(
+    foreignUnits * rate.numerator * 10n ** BigInt(localScale),
+    rate.denominator * 10n ** BigInt(MONEY_SCALE),
+  );
+  return requiredMinor * minor;
+}
+
 export interface FxValuationItem {
   itemNumber: number;
   sourceKind: 'OPEN_ITEM' | 'BALANCE';
@@ -77,14 +95,14 @@ import { authorizeCompaniesInTx, verifyCompanyAuthorityInTx, refuseCompaniesOuts
 import type { ServiceAuthorityContext } from '../../platform/auth/service-authority';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
-import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { MONEY_SCALE, divideRound, fromScaled, toScaled } from '../../platform/posting/decimal';
 import { moneyFor } from '../../platform/posting/money';
-import { accountDetermination } from '../foundation/schema';
+import { accountDetermination, bankAccount } from '../foundation/schema';
 import { fxValuationItem, fxValuationRun, journalEntry, journalEntryLine } from './schema';
 import {
-  resolveExchangeRate, translateAmount, type ResolvedExchangeRate,
+  resolveExchangeRate, type ResolvedExchangeRate,
 } from './exchange-rate-lookup';
-import { lockValuationSettlement } from './fx-settlement';
+import { activeValuationConflict, lockValuationSettlement } from './fx-settlement';
 
 interface CandidateRow {
   document_number: string;
@@ -187,8 +205,26 @@ export async function executeFxValuation(input: {
     // Serialize valuation and settlement for this company: neither may pass its "no active
     // valuation" check while the other is still inside its transaction.
     await lockValuationSettlement(tx, input.client, s.companyCode);
-    const roundLocal = (n: number) => localMoney.round(n);
+    const roundLocal = (value: string | number) => localMoney.round(value);
+    const localScale = localMoney.scale;
+    const minor = 10n ** BigInt(MONEY_SCALE - localScale);
     const foreignMoney = new Map<string, Awaited<ReturnType<typeof moneyFor>>>();
+
+    // Bank G/L ownership and currency, so exposure is judged by the money the account actually
+    // holds, not by the currency of the document that happened to touch it.
+    const bankRows = await tx.select({
+      glAccount: bankAccount.glAccount, currency: bankAccount.currency,
+    }).from(bankAccount).where(and(
+      eq(bankAccount.client, input.client),
+      eq(bankAccount.companyCode, s.companyCode),
+    ));
+    const bankByGl = new Map<string, string[]>();
+    for (const bank of bankRows) {
+      const key = bank.glAccount.trim();
+      const list = bankByGl.get(key) ?? [];
+      list.push(bank.currency.trim().toUpperCase());
+      bankByGl.set(key, list);
+    }
 
     const raw = await tx.execute(sql`
       select l.document_number, l.line_number, l.gl_account, l.debit_credit,
@@ -204,7 +240,7 @@ export async function executeFxValuation(input: {
         and h.company_code = ${s.companyCode}
         and h.posting_date <= ${s.valuationKeyDate}
         and h.status = 'POSTED' and h.reversal_of is null
-        and l.currency <> ${local}
+        and h.is_fx_valuation = false
       order by l.gl_account, l.currency, l.document_number, l.line_number
     `);
     const candidates = raw as unknown as CandidateRow[];
@@ -218,12 +254,14 @@ export async function executeFxValuation(input: {
     const balanceGroups = new Map<string, WorkItem>();
     for (const row of candidates) {
       const sign = row.debit_credit === 'S' ? 1 : -1;
+      const lineCurrency = row.currency.trim().toUpperCase();
       if (row.is_open_item) {
         if (!s.includeOpenItems || row.clearing_document) continue;
+        if (lineCurrency === local) continue;
         work.push({
           itemNumber: 0, sourceKind: 'OPEN_ITEM', accountNumber: row.gl_account,
           sourceDocument: row.document_number, sourceLine: row.line_number,
-          currency: row.currency, foreignAmount: 0, carryingAmount: 0,
+          currency: lineCurrency, foreignAmount: 0, carryingAmount: 0,
           valuationRate: null, rateType: s.valuationMethod, requiredAmount: null,
           adjustmentAmount: null, classification: null, status: 'CALCULATED',
           error: null, postingDocument: null,
@@ -233,10 +271,31 @@ export async function executeFxValuation(input: {
         });
       } else if (row.is_balance_sheet) {
         if (!s.includeBalances) continue;
-        const key = `${row.gl_account}|${row.currency}`;
+        const bankCurrencies = bankByGl.get(row.gl_account);
+        let exposureCurrency = lineCurrency;
+        if (bankCurrencies) {
+          if (bankCurrencies.length > 1) {
+            throw new FxValuationError(
+              `Bank G/L ${row.gl_account} is shared by ${bankCurrencies.length} bank accounts in company ${s.companyCode}, so its currency exposure cannot be attributed. Give each bank account its own G/L before valuing.`,
+            );
+          }
+          const bankCurrency = bankCurrencies[0]!;
+          // A local-currency bank is not a foreign position merely because a foreign document touched
+          // it; its actual KWD movement is already the carrying amount.
+          if (bankCurrency === local) continue;
+          if (lineCurrency !== bankCurrency) {
+            throw new FxValuationError(
+              `Bank G/L ${row.gl_account} is held in ${bankCurrency}, but line ${row.document_number}/${row.line_number} stands in ${lineCurrency}. A third-currency bank movement cannot be valued without inventing an account-currency amount.`,
+            );
+          }
+          exposureCurrency = bankCurrency;
+        } else if (lineCurrency === local) {
+          continue;
+        }
+        const key = `${row.gl_account}|${exposureCurrency}`;
         const group = balanceGroups.get(key) ?? {
           itemNumber: 0, sourceKind: 'BALANCE' as const, accountNumber: row.gl_account,
-          sourceDocument: null, sourceLine: null, currency: row.currency,
+          sourceDocument: null, sourceLine: null, currency: exposureCurrency,
           foreignAmount: 0, carryingAmount: 0, valuationRate: null,
           rateType: s.valuationMethod, requiredAmount: null, adjustmentAmount: null,
           classification: null, status: 'CALCULATED' as FxItemStatus, error: null,
@@ -251,6 +310,29 @@ export async function executeFxValuation(input: {
       }
     }
     work.push(...balanceGroups.values());
+
+    // One coherent lifecycle: a new live valuation of the same open item or account/currency basis
+    // is refused while an earlier one is still effective on this posting date. A different area or
+    // key date cannot bypass it. Reversing the earlier posting (effectively by this date) permits the
+    // new run; a future-dated reversal does not.
+    if (!s.testRun) {
+      for (const item of work) {
+        const conflict = await activeValuationConflict(tx, input.client, s.companyCode, {
+          documentNumber: item.sourceDocument ?? undefined,
+          lineNumber: item.sourceLine ?? undefined,
+          accountNumber: item.accountNumber,
+          currency: item.currency,
+        }, s.postingDate);
+        if (conflict) {
+          const basis = item.sourceKind === 'BALANCE'
+            ? `balance ${item.accountNumber}/${item.currency}`
+            : `open item ${item.sourceDocument}/${item.sourceLine}`;
+          throw new FxValuationError(
+            `The ${basis} was already valued by run ${conflict.runId} (key date ${conflict.valuationKeyDate}), which is still effective on ${s.postingDate}. Reverse that valuation document first; a second live valuation would double-count the difference. Nothing was posted.`,
+          );
+        }
+      }
+    }
 
     // Rates: the newest validity on or before the key date, honouring ratios and direct/indirect
     // quotation. A future-dated row never hides an earlier valid one.
@@ -268,18 +350,6 @@ export async function executeFxValuation(input: {
       if (!foreignMoney.has(item.currency)) foreignMoney.set(item.currency, await moneyFor(tx, item.currency));
     }
 
-    // Duplicate live valuation guard, per source item.
-    const priorLive = await tx.execute(sql`
-      select i.source_document, i.source_line, i.account_number, i.currency, i.source_kind
-      from fx_valuation_item i
-      join fx_valuation_run r on r.client = i.client and r.run_id = i.run_id
-      where i.client = ${input.client} and r.company_code = ${s.companyCode}
-        and r.valuation_area = ${s.valuationArea} and r.valuation_key_date = ${s.valuationKeyDate}
-        and r.is_test_run = false and r.status <> 'REVERSED' and i.status = 'POSTED'
-    `);
-    const priorKeys = new Set((priorLive as unknown as Array<Record<string, unknown>>).map((r) =>
-      r.source_kind === 'BALANCE' ? `B|${r.account_number}|${r.currency}` : `O|${r.source_document}|${r.source_line}`));
-
     const warnings: string[] = [];
     let totalGainUnits = 0n;
     let totalLossUnits = 0n;
@@ -295,25 +365,26 @@ export async function executeFxValuation(input: {
         return;
       }
       item.valuationRate = Number(rate.effectiveRate);
-      // One exact rational multiplication, rounded once at the local currency's 4 stored decimals.
-      const requiredUnits = translateAmount(item.signedForeignUnits, 4, 4, rate);
+      // The existing carrying amount must already stand at the local currency's minor unit; a legacy
+      // fourth decimal is surfaced, never silently rounded away or posted.
+      if (item.signedCarryingUnits % minor !== 0n) {
+        item.status = 'ERROR';
+        item.error = `The carrying amount ${fromScaled(item.signedCarryingUnits < 0n ? -item.signedCarryingUnits : item.signedCarryingUnits, 4)} has more decimals than ${local} allows (${localScale}); correct the source document before valuing.`;
+        return;
+      }
+      // One exact rational calculation, rounded once at the local currency's configured minor unit.
+      const requiredUnits = valuationRequiredUnits(item.signedForeignUnits, rate, localScale);
       const adjustmentUnits = requiredUnits - item.signedCarryingUnits;
-      item.requiredAmount = roundLocal(Number(fromScaled(requiredUnits < 0n ? -requiredUnits : requiredUnits, 4)));
-      item.adjustmentAmount = roundLocal(Number(fromScaled(adjustmentUnits < 0n ? -adjustmentUnits : adjustmentUnits, 4)));
+      item.requiredAmount = roundLocal(fromScaled(requiredUnits < 0n ? -requiredUnits : requiredUnits, MONEY_SCALE));
+      item.adjustmentAmount = roundLocal(fromScaled(adjustmentUnits < 0n ? -adjustmentUnits : adjustmentUnits, MONEY_SCALE));
       if (adjustmentUnits < 0n) item.adjustmentAmount = -item.adjustmentAmount!;
       item.classification = adjustmentUnits > 0n ? 'GAIN' : adjustmentUnits < 0n ? 'LOSS' : 'NONE';
       if (adjustmentUnits > 0n) totalGainUnits += adjustmentUnits;
       if (adjustmentUnits < 0n) totalLossUnits += -adjustmentUnits;
       item.signedAdjustmentUnits = adjustmentUnits;
-      const key = item.sourceKind === 'BALANCE'
-        ? `B|${item.accountNumber}|${item.currency}` : `O|${item.sourceDocument}|${item.sourceLine}`;
-      if (!s.testRun && priorKeys.has(key)) {
-        item.status = 'SKIPPED';
-        item.error = 'Already valued live for this area and key date; reverse the earlier posting to rerun.';
-      }
     });
-    const totalGain = roundLocal(Number(fromScaled(totalGainUnits, 4)));
-    const totalLoss = roundLocal(Number(fromScaled(totalLossUnits, 4)));
+    const totalGain = roundLocal(fromScaled(totalGainUnits, MONEY_SCALE));
+    const totalLoss = roundLocal(fromScaled(totalLossUnits, MONEY_SCALE));
     if (missingRates.size > 0) {
       warnings.push(`No valuation rate stands for: ${[...missingRates].join(', ')}. Those items are errors, never valued at a substituted rate.`);
     }
@@ -357,7 +428,7 @@ export async function executeFxValuation(input: {
         const lossAccount = totalLoss > 0 ? await determination('FXLOSS') : null;
         for (const item of postable) {
           const units = item.signedAdjustmentUnits!;
-          const amount = fromScaled(units < 0n ? -units : units, 4);
+          const amount = fromScaled(units < 0n ? -units : units, MONEY_SCALE);
           if (units > 0n) {
             lines.push({ glAccount: item.accountNumber, debitCredit: 'S', amount, lineText: `FX valuation ${item.currency}` });
             lines.push({ glAccount: gainAccount!, debitCredit: 'H', amount, lineText: 'FX gain' });
@@ -373,7 +444,7 @@ export async function executeFxValuation(input: {
           currency: local, localCurrency: local,
           headerText: `FX valuation ${s.valuationArea} ${s.valuationKeyDate}`,
           lines, postedBy: actor, transactionCode: FX_VALUATION_CAPABILITY,
-          isFxValuation: true,
+          isFxValuation: true, precision: 'CURRENCY',
         }).catch((error: unknown) => {
           if (error instanceof PostingError) throw new FxValuationError(`${error.message} ${error.remedy}`);
           throw error;

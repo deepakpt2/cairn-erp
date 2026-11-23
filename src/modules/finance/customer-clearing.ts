@@ -101,6 +101,7 @@ async function loadItems(
       eq(journalEntryLine.companyCode, companyCode),
       eq(journalEntryLine.businessPartner, customer),
       eq(journalEntry.status, 'POSTED'),
+      sql`${journalEntry.reversalOf} is null`,
       cleared
         ? sql`${journalEntryLine.clearingDocument} is not null`
         : sql`${journalEntryLine.clearingDocument} is null`,

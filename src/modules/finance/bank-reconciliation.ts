@@ -177,10 +177,12 @@ export interface BankLedgerLineView {
   localAmount: string;
   /**
    * BANK: a real movement in the account currency, matchable to a statement line.
+   * REVERSAL: the mirror of a reversed journal. It is a dated accounting movement, but never an
+   * independent bank statement movement.
    * FX_VALUATION: a proven period-end valuation adjustment in local currency only. It changes the
    * bank G/L's local carrying amount but never the account-currency balance, so it is not matchable.
    */
-  kind: 'BANK' | 'FX_VALUATION';
+  kind: 'BANK' | 'REVERSAL' | 'FX_VALUATION';
   matchable: boolean;
   matches: BankMatchView[];
 }
@@ -302,6 +304,10 @@ interface LedgerRow {
   business_partner: string | null;
   line_text: string | null;
   is_fx_valuation: boolean;
+  status: string;
+  reversal_of: string | null;
+  /** Posting date of the mirror, for an original journal. */
+  reversal_posting_date: string | null;
   /** Actual-bank-amount evidence from the payment/run record that posted this line, if any. */
   incoming_bank_source: string | null;
   outgoing_bank_source: string | null;
@@ -488,7 +494,122 @@ function matchView(row: MatchRow): BankMatchView {
 }
 
 function signedUnits(money: Money, signed: string): bigint {
-  return entered(money, signed, 'The amount');
+  return entered(money, signed, 'The signed amount');
+}
+
+/** One transaction-scoped lock per journal; matching and reversal eligibility share it. */
+async function lockBankLine(
+  tx: Tx, client: string, documentNumber: string, fiscalYear: number,
+): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/bankline/${documentNumber}/${fiscalYear}`}, 0))`);
+}
+
+/** The authoritative actual-bank-amount source recorded for a payment/run document, if any. */
+async function bankAmountSourceForDocument(
+  tx: Tx, client: string, documentNumber: string,
+): Promise<string | null> {
+  const rows = (await tx.execute(sql`
+    select coalesce(
+      (select ip.bank_amount_source from incoming_payment ip
+        where ip.client = ${client} and ip.journal_document_number = ${documentNumber} limit 1),
+      (select op.bank_amount_source from outgoing_payment op
+        where op.client = ${client} and op.journal_document_number = ${documentNumber} limit 1),
+      (select pd.bank_amount_source from payment_document pd
+        where pd.client = ${client} and pd.journal_document_number = ${documentNumber} limit 1)
+    ) as source
+  `)) as unknown as Array<{ source: string | null }>;
+  return rows[0]?.source ?? null;
+}
+
+interface BankLineFacts {
+  document_number: string;
+  fiscal_year: number;
+  line_number: number;
+  currency: string;
+  local_currency: string;
+  debit_credit: string;
+  amount_document: string;
+  amount_local: string;
+  status: string;
+  reversal_of: string | null;
+  reversal_posting_date: string | null;
+  is_fx_valuation: boolean;
+}
+
+type BankLineVerdict =
+  | { kind: 'FX_VALUATION'; localSigned: bigint }
+  | { kind: 'BLOCKED'; code: 'BANK_EVIDENCE' | 'LEDGER_CURRENCY' | 'VALUATION_CURRENCY' | 'INELIGIBLE'; message: string; localSigned: bigint }
+  | { kind: 'BANK'; amountUnits: bigint; localSigned: bigint; matchable: boolean; mirror: boolean };
+
+/**
+ * The one authoritative rule for whether a posted line on a bank G/L is a comparable, matchable
+ * movement. It is used both by the reconciliation view and by the match service, so a line that is
+ * shown as evidence-deficient cannot be matched through a direct service call.
+ */
+function classifyBankLine(input: {
+  account: LoadedAccount;
+  row: BankLineFacts;
+  evidenceSource: string | null;
+  money: Money;
+  localMoney: Money;
+  asOfDate: string;
+}): BankLineVerdict {
+  const { account, row, evidenceSource, money, localMoney, asOfDate } = input;
+  const lineCurrency = row.currency.trim().toUpperCase();
+  const rowLocalCurrency = row.local_currency.trim().toUpperCase();
+  const localUnits = entered(localMoney, row.amount_local, `Ledger line ${row.document_number}/${row.line_number}`);
+  const direction = row.debit_credit === 'S' ? 1n : -1n;
+  const localSigned = localUnits * direction;
+  const mirror = row.reversal_of !== null;
+
+  // Provenance, not text, identifies a local-only valuation adjustment and its mirror.
+  if (row.is_fx_valuation) {
+    if (lineCurrency !== rowLocalCurrency) {
+      return {
+        kind: 'BLOCKED', code: 'VALUATION_CURRENCY', localSigned,
+        message: `FX valuation line ${row.document_number}/${row.line_number} is not local-only (line ${row.currency}, local ${row.local_currency}); its account-currency effect cannot be established.`,
+      };
+    }
+    return { kind: 'FX_VALUATION', localSigned };
+  }
+
+  if (row.status !== 'POSTED' && row.status !== 'REVERSED') {
+    return {
+      kind: 'BLOCKED', code: 'INELIGIBLE', localSigned,
+      message: `Ledger line ${row.document_number}/${row.line_number} belongs to a journal that stands ${row.status}.`,
+    };
+  }
+  // An original is effective as-of until its linked mirror posts. A missing mirror cannot be proved.
+  const reversalStillFuture = row.status === 'REVERSED'
+    && row.reversal_posting_date !== null && row.reversal_posting_date > asOfDate;
+  const originalEffective = row.status === 'POSTED' || reversalStillFuture;
+
+  if (lineCurrency === account.currency) {
+    return {
+      kind: 'BANK',
+      amountUnits: entered(money, row.amount_document, `Ledger line ${row.document_number}/${row.line_number}`),
+      localSigned, matchable: !mirror && originalEffective, mirror,
+    };
+  }
+  if (rowLocalCurrency === account.currency) {
+    // A foreign document on a local-currency bank G/L has a local amount that may be a rate
+    // conversion. Only a payment/run record that says the actual amount was user-stated proves it.
+    if (lineCurrency !== account.currency && evidenceSource !== 'USER_ACTUAL') {
+      return {
+        kind: 'BLOCKED', code: 'BANK_EVIDENCE', localSigned,
+        message: `Ledger line ${row.document_number}/${row.line_number} is a ${lineCurrency} document on local-currency bank G/L ${account.glAccount}, but no actual ${account.currency} bank movement was recorded (source ${evidenceSource ?? 'none'}). The local amount is not proof of what the bank moved.`,
+      };
+    }
+    return {
+      kind: 'BANK',
+      amountUnits: entered(money, row.amount_local, `Ledger line ${row.document_number}/${row.line_number}`),
+      localSigned, matchable: !mirror && originalEffective, mirror,
+    };
+  }
+  return {
+    kind: 'BLOCKED', code: 'LEDGER_CURRENCY', localSigned,
+    message: `Ledger line ${row.document_number}/${row.line_number} carries no amount in the account currency ${account.currency} (line ${row.currency}, local ${row.local_currency}). It cannot be matched or signed off without fabricating a rate.`,
+  };
 }
 
 interface Calculation {
@@ -592,40 +713,37 @@ async function calculate(
     );
   }
 
-  // Ledger lines by their actual posting dates. An original counts until its reversal is effective:
-  // a journal reversed on 1 February contributes to a 31 January as-of balance and cancels itself
-  // afterwards. The mirror document is never counted on its own (the pair nets to zero), so the
-  // series is neither double counted nor lost. Parked documents never contribute.
+  // Ledger lines by their actual posting dates. Both the original and its mirror are kept as dated
+  // accounting movements: the original contributes before the reversal date, the mirror contributes
+  // on/after it, and the pair nets correctly in every opening, movement and closing. Parked and
+  // future-dated documents never contribute. The mirror is evidence of a reversal, never a bank
+  // statement movement of its own.
   const ledgerRows = (await tx.execute(sql`
     select l.document_number, l.fiscal_year, l.line_number, e.posting_date::text as posting_date,
            e.document_type, e.reference, l.assignment, l.currency, e.local_currency, l.debit_credit,
            l.amount_document::text as amount_document, l.amount_local::text as amount_local,
            e.origin_class, e.origin_key, l.business_partner, l.line_text, e.is_fx_valuation,
+           e.status, e.reversal_of,
+           (select rev.posting_date::text from journal_entry rev
+             where rev.client = e.client and rev.document_number = e.reversed_by
+               and rev.reversal_of = e.document_number and rev.status = 'POSTED'
+             order by rev.posting_date limit 1) as reversal_posting_date,
            (select ip.bank_amount_source from incoming_payment ip
-             where ip.client = l.client and ip.journal_document_number = l.document_number limit 1) as incoming_bank_source,
+             where ip.client = l.client
+               and ip.journal_document_number = coalesce(e.reversal_of, l.document_number) limit 1) as incoming_bank_source,
            (select op.bank_amount_source from outgoing_payment op
-             where op.client = l.client and op.journal_document_number = l.document_number limit 1) as outgoing_bank_source,
+             where op.client = l.client
+               and op.journal_document_number = coalesce(e.reversal_of, l.document_number) limit 1) as outgoing_bank_source,
            (select pd.bank_amount_source from payment_document pd
-             where pd.client = l.client and pd.journal_document_number = l.document_number limit 1) as run_bank_source
+             where pd.client = l.client
+               and pd.journal_document_number = coalesce(e.reversal_of, l.document_number) limit 1) as run_bank_source
       from journal_entry_line l
       join journal_entry e
         on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
      where l.client = ${client} and l.company_code = ${account.companyCode}
        and l.gl_account = ${account.glAccount}
-       and e.reversal_of is null
        and e.posting_date <= ${asOf}
-       and (
-         e.status = 'POSTED'
-         or (
-           e.status = 'REVERSED'
-           and not exists (
-             select 1 from journal_entry rev
-              where rev.client = e.client and rev.document_number = e.reversed_by
-                and rev.reversal_of = e.document_number
-                and rev.status = 'POSTED' and rev.posting_date <= ${asOf}
-           )
-         )
-       )
+       and e.status in ('POSTED', 'REVERSED')
      order by e.posting_date, l.document_number, l.line_number
   `)) as unknown as LedgerRow[];
 
@@ -720,22 +838,17 @@ async function calculate(
   let ledgerOpening = 0n;
   let ledgerClosing = 0n;
   for (const row of ledgerRows) {
-    const lineCurrency = row.currency.trim().toUpperCase();
-    const rowLocalCurrency = row.local_currency.trim().toUpperCase();
-    const localUnits = entered(localMoney, row.amount_local, `Ledger line ${row.document_number}/${row.line_number}`);
     const direction = row.debit_credit === 'S' ? 1n : -1n;
-    const signedLocal = localUnits * direction;
     const key = `${row.document_number}|${row.fiscal_year}|${row.line_number}`;
-    // A period-end FX valuation is proven by its persisted provenance, not by its text. It changes
-    // only the local carrying amount; it is never an account-currency bank movement and is never
-    // matchable. A valuation line that is not local-only is an accounting error, so it blocks.
-    if (row.is_fx_valuation) {
-      if (lineCurrency !== rowLocalCurrency) {
-        issues.push({
-          code: 'VALUATION_CURRENCY',
-          message: `FX valuation line ${row.document_number}/${row.line_number} is not local-only (line ${row.currency}, local ${row.local_currency}); its account-currency effect cannot be established.`,
-          blocking: true,
-        });
+    const evidenceSource = row.incoming_bank_source ?? row.outgoing_bank_source ?? row.run_bank_source;
+    const verdict = classifyBankLine({
+      account, row, evidenceSource, money, localMoney, asOfDate: asOf,
+    });
+    const localSigned = verdict.localSigned;
+    const displayKind = row.is_fx_valuation ? 'FX_VALUATION' : row.reversal_of ? 'REVERSAL' : 'BANK';
+    if (verdict.kind !== 'BANK') {
+      if (verdict.kind === 'BLOCKED') {
+        issues.push({ code: verdict.code, message: verdict.message, blocking: true });
       }
       ledgerLines.push({
         documentNumber: row.document_number,
@@ -755,66 +868,14 @@ async function calculate(
         remainingAmount: money.fromUnits(0n),
         asOfRemainingAmount: money.fromUnits(0n),
         localCurrency: account.companyCurrency,
-        localAmount: localMoney.fromUnits(signedLocal < 0n ? -signedLocal : signedLocal),
-        kind: 'FX_VALUATION',
+        localAmount: localMoney.fromUnits(localSigned < 0n ? -localSigned : localSigned),
+        kind: displayKind,
         matchable: false,
         matches: (historyByLedger.get(key) ?? []).map(matchView),
       });
       continue;
     }
-    // A foreign document on a local-currency bank G/L has a local amount, but that amount may be a
-    // master-rate conversion rather than what the bank moved. Only a payment record that says the
-    // actual amount was user-stated proves the movement; a historical or manual line is flagged.
-    const bankEvidenceSource = row.incoming_bank_source ?? row.outgoing_bank_source ?? row.run_bank_source;
-    if (rowLocalCurrency === account.currency && lineCurrency !== account.currency
-      && bankEvidenceSource !== 'USER_ACTUAL') {
-      issues.push({
-        code: 'BANK_EVIDENCE',
-        message: `Ledger line ${row.document_number}/${row.line_number} is a ${lineCurrency} document on local-currency bank G/L ${account.glAccount}, but no actual ${account.currency} bank movement was recorded (source ${bankEvidenceSource ?? 'none'}). The local amount is not proof of what the bank moved.`,
-        blocking: true,
-      });
-      ledgerLines.push({
-        documentNumber: row.document_number,
-        fiscalYear: row.fiscal_year,
-        lineNumber: row.line_number,
-        postingDate: row.posting_date,
-        documentType: row.document_type,
-        reference: row.reference ?? '',
-        assignment: row.assignment ?? '',
-        originClass: row.origin_class,
-        originKey: row.origin_key,
-        businessPartner: row.business_partner,
-        direction: direction > 0n ? 'IN' : 'OUT',
-        amount: money.fromUnits(0n),
-        signedAmount: money.fromUnits(0n),
-        matchedAmount: money.fromUnits(0n),
-        remainingAmount: money.fromUnits(0n),
-        asOfRemainingAmount: money.fromUnits(0n),
-        localCurrency: account.companyCurrency,
-        localAmount: localMoney.fromUnits(signedLocal < 0n ? -signedLocal : signedLocal),
-        kind: 'BANK',
-        matchable: false,
-        matches: (historyByLedger.get(key) ?? []).map(matchView),
-      });
-      continue;
-    }
-    // The account-currency movement is authoritative only when the line itself or the document's
-    // local currency is the account currency. A third currency has no comparable amount: it is
-    // flagged, never converted at today's rate.
-    let amountUnits: bigint;
-    if (lineCurrency === account.currency) {
-      amountUnits = entered(money, row.amount_document, `Ledger line ${row.document_number}/${row.line_number}`);
-    } else if (rowLocalCurrency === account.currency) {
-      amountUnits = entered(money, row.amount_local, `Ledger line ${row.document_number}/${row.line_number}`);
-    } else {
-      issues.push({
-        code: 'LEDGER_CURRENCY',
-        message: `Ledger line ${row.document_number}/${row.line_number} carries no amount in the account currency ${account.currency} (line ${row.currency}, local ${row.local_currency}). It cannot be matched or signed off without fabricating a rate.`,
-        blocking: true,
-      });
-      amountUnits = 0n;
-    }
-    const signed = amountUnits * direction;
+    const signed = verdict.amountUnits * direction;
     const globalAllocations = allocationTotal(allocationsByLedger.get(key));
     const asOfAllocations = allocationTotal(asOfAllocationsByLedger.get(key));
     const matched = direction * asOfAllocations;
@@ -834,15 +895,15 @@ async function calculate(
       originKey: row.origin_key,
       businessPartner: row.business_partner,
       direction: direction > 0n ? 'IN' : 'OUT',
-      amount: money.fromUnits(amountUnits),
+      amount: money.fromUnits(verdict.amountUnits),
       signedAmount: money.fromUnits(signed),
       matchedAmount: money.fromUnits(asOfAllocations),
       remainingAmount: money.fromUnits(remaining),
       asOfRemainingAmount: money.fromUnits(remaining),
       localCurrency: account.companyCurrency,
-      localAmount: localMoney.fromUnits(signedLocal < 0n ? -signedLocal : signedLocal),
-      kind: 'BANK',
-      matchable: true,
+      localAmount: localMoney.fromUnits(localSigned < 0n ? -localSigned : localSigned),
+      kind: verdict.mirror ? 'REVERSAL' : 'BANK',
+      matchable: verdict.matchable,
       matches: (historyByLedger.get(key) ?? []).map(matchView),
     });
     // Global remaining is only used by matching validation; report it through a side field later if
@@ -937,6 +998,10 @@ async function calculate(
 
   let unmatchedLedger = 0n;
   for (const line of ledgerLines) {
+    // Only matchable movements can explain an outstanding statement line. A reversal mirror or a
+    // valuation adjustment remains part of the closing balance but is never netted against a
+    // statement item, because it is not proof that the bank moved money.
+    if (!line.matchable) continue;
     unmatchedLedger += signedUnits(money, line.remainingAmount);
   }
   for (const line of statementLines) unmatchedStatement += signedUnits(money, line.remainingAmount);
@@ -990,10 +1055,16 @@ async function calculate(
     }
   }
 
-  // A match whose ledger line was reversed (or otherwise no longer POSTED) is invalid evidence.
+  // A match is invalid when its line is a mirror/valuation, no longer posts, or was reversed on or
+  // before this statement's as-of date. A reversal dated after this statement does not invalidate a
+  // historically valid match; it changed the later ledger, not what this statement signed.
   const invalidMatches = (await tx.execute(sql`
     select m.match_id, m.ledger_document_number, m.ledger_fiscal_year, m.ledger_line_number,
-           e.status, e.reversal_of, e.is_fx_valuation
+           e.status, e.reversal_of, e.is_fx_valuation,
+           (select rev.posting_date::text from journal_entry rev
+             where rev.client = e.client and rev.document_number = e.reversed_by
+               and rev.reversal_of = e.document_number and rev.status = 'POSTED'
+             order by rev.posting_date limit 1) as reversal_posting_date
       from bank_reconciliation_match m
       join journal_entry_line l
         on l.client = m.client and l.document_number = m.ledger_document_number
@@ -1001,18 +1072,34 @@ async function calculate(
       join journal_entry e
         on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
      where m.client = ${client} and m.statement_id = ${statementRow.statementId} and m.is_active
-       and (e.status <> 'POSTED' or e.reversal_of is not null or e.is_fx_valuation = true)
+       and (
+         e.reversal_of is not null
+         or e.is_fx_valuation = true
+         or e.status not in ('POSTED', 'REVERSED')
+         or (
+           e.status = 'REVERSED'
+           and not exists (
+             select 1 from journal_entry rev
+              where rev.client = e.client and rev.document_number = e.reversed_by
+                and rev.reversal_of = e.document_number
+                and rev.status = 'POSTED' and rev.posting_date > ${asOf}
+           )
+         )
+       )
      order by m.ledger_document_number, m.ledger_line_number
   `)) as unknown as Array<{
     match_id: string; ledger_document_number: string; ledger_fiscal_year: number;
     ledger_line_number: number; status: string; reversal_of: string | null; is_fx_valuation: boolean;
+    reversal_posting_date: string | null;
   }>;
   for (const row of invalidMatches) {
     const why = row.is_fx_valuation
       ? 'a period-end FX valuation adjustment, not a bank movement'
       : row.reversal_of
         ? `a reversal of ${row.reversal_of}, not an independent movement`
-        : `a journal standing ${row.status}`;
+        : row.status === 'REVERSED'
+          ? `a journal reversed${row.reversal_posting_date ? ` on ${row.reversal_posting_date}` : ''} within this statement's as-of evidence`
+          : `a journal standing ${row.status}`;
     issues.push({
       code: 'INVALID_MATCH',
       message: `Match ${row.match_id} refers to ledger line ${row.ledger_document_number}/${row.ledger_line_number}, which is ${why}. Reopen the statement and unmatch it.`,
@@ -1564,6 +1651,7 @@ interface LedgerLineForMatch {
   amount_local: string;
   status: string;
   reversal_of: string | null;
+  reversal_posting_date: string | null;
   is_fx_valuation: boolean;
 }
 
@@ -1637,6 +1725,15 @@ export async function matchBankStatement(
       row.statement_line_id, entered(money, row.allocated, 'A standing allocation'),
     ]));
 
+    // Lock every journal named by this atomic request before any line is read or any match is
+    // inserted, in a stable order, so a concurrent reversal cannot slip between allocations.
+    const lockKeys = [...new Set(input.allocations.map((allocation) =>
+      `${allocation.ledgerDocumentNumber}|${allocation.ledgerFiscalYear}`))].sort();
+    for (const key of lockKeys) {
+      const [documentNumber, fiscalYear] = key.split('|');
+      await lockBankLine(tx, input.client, documentNumber!, Number(fiscalYear));
+    }
+
     const newByLine = new Map<string, bigint>();
     const newByLedger = new Map<string, bigint>();
     const prepared: Array<{
@@ -1656,13 +1753,17 @@ export async function matchBankStatement(
         select l.document_number, l.fiscal_year, l.line_number, l.company_code, l.gl_account,
                l.currency, e.local_currency, l.debit_credit,
                l.amount_document::text as amount_document, l.amount_local::text as amount_local,
-               e.status, e.reversal_of, e.is_fx_valuation
+               e.status, e.reversal_of, e.is_fx_valuation,
+               (select rev.posting_date::text from journal_entry rev
+                 where rev.client = e.client and rev.document_number = e.reversed_by
+                   and rev.reversal_of = e.document_number and rev.status = 'POSTED'
+                 order by rev.posting_date limit 1) as reversal_posting_date
           from journal_entry_line l
           join journal_entry e
             on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
          where l.client = ${input.client} and l.document_number = ${allocation.ledgerDocumentNumber}
            and l.fiscal_year = ${allocation.ledgerFiscalYear} and l.line_number = ${allocation.ledgerLineNumber}
-         for update of l
+         for update of l, e
       `)) as unknown as LedgerLineForMatch[];
       const ledger = locked[0];
       if (!ledger) fail(`Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} does not exist.`, 'Reload the posted bank lines.');
@@ -1672,40 +1773,41 @@ export async function matchBankStatement(
           'Choose a posted line of the account being reconciled.',
         );
       }
-      if (ledger.status !== 'POSTED') {
-        fail(
-          `Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} belongs to a journal that stands ${ledger.status}.`,
-          'A reversed or parked journal cannot be matched.',
-        );
-      }
-      if (ledger.reversal_of) {
-        fail(
-          `Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} is a reversal of ${ledger.reversal_of}, not an independent bank movement.`,
-          'Match the original movement; a reversal is evidence that it no longer stands, not a second statement item.',
-        );
-      }
-      if (ledger.is_fx_valuation) {
+      const evidenceSource = await bankAmountSourceForDocument(
+        tx, input.client, ledger.reversal_of ?? ledger.document_number,
+      );
+      const verdict = classifyBankLine({
+        account, row: ledger, evidenceSource, money, localMoney, asOfDate: statement.toDate,
+      });
+      if (verdict.kind === 'FX_VALUATION') {
         fail(
           `Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} is a period-end FX valuation adjustment on the bank G/L, not a bank movement.`,
           'It changes local carrying only. Match an actual account-currency receipt or payment instead.',
         );
       }
-      // The comparable amount is the line's own amount when it is in the account currency, or the
-      // document's local amount when the account is held in the company local currency. Anything
-      // else has no authoritative account-currency amount and is refused rather than converted.
-      const lineCurrency = ledger.currency.trim().toUpperCase();
-      const ledgerLocalCurrency = ledger.local_currency.trim().toUpperCase();
-      let ledgerAmount: bigint;
-      if (lineCurrency === account.currency) {
-        ledgerAmount = entered(money, ledger.amount_document, 'The ledger amount');
-      } else if (ledgerLocalCurrency === account.currency) {
-        ledgerAmount = entered(money, ledger.amount_local, 'The ledger local amount');
-      } else {
+      if (verdict.kind === 'BLOCKED') {
+        const remedy = verdict.code === 'BANK_EVIDENCE'
+          ? 'Record the actual bank-amount evidence for the payment/run, or correct the line through the controlled cutover workflow. Do not match the unverified local amount.'
+          : verdict.code === 'LEDGER_CURRENCY'
+            ? 'Match only a line whose own or local amount is in the bank account currency. A rate is never invented to make it comparable.'
+            : verdict.code === 'VALUATION_CURRENCY'
+              ? 'Correct the valuation document; only a local-only valuation adjustment is recognised.'
+              : 'Only a posted original movement that is effective as of this statement can be matched.';
+        fail(verdict.message, remedy);
+      }
+      if (verdict.mirror) {
         fail(
-          `Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} carries no amount in ${account.currency} (line ${ledger.currency}, local ${ledger.local_currency}).`,
-          'Match only a line whose own or local amount is in the bank account currency. A rate is never invented to make it comparable.',
+          `Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} is a reversal of ${ledger.reversal_of}, not an independent bank movement.`,
+          'A reversal changes the accounting after its own posting date; it is not proof that the bank moved money. Match the original statement movement where it is eligible, or correct the bank evidence explicitly.',
         );
       }
+      if (!verdict.matchable) {
+        fail(
+          `Ledger line ${allocation.ledgerDocumentNumber}/${allocation.ledgerLineNumber} is not effective as of ${statement.toDate}: the journal stands ${ledger.status}${ledger.reversal_posting_date ? ` and was reversed on ${ledger.reversal_posting_date}` : ' without a provable reversal date'}.`,
+          'Reopen/unmatch historical evidence as needed. Only a movement that was still effective on this statement date can be matched; an internal reversal is not bank proof.',
+        );
+      }
+      const ledgerAmount = verdict.amountUnits;
       const amount = entered(money, allocation.amount, `Allocation ${index + 1} amount`);
       if (amount <= 0n) fail(`Allocation ${index + 1} must be a positive amount.`);
       const ledgerSigned = ledgerAmount * (ledger.debit_credit === 'S' ? 1n : -1n);
@@ -2017,6 +2119,10 @@ export async function reopenBankStatement(input: {
 export async function activeBankMatchForJournal(
   tx: Tx, client: string, documentNumber: string, fiscalYear: number,
 ): Promise<{ matchId: string; statementReference: string; lineNumber: number } | null> {
+  // Serialize with the match service: both take this same journal-scoped lock before reading or
+  // inserting matches, so a reversal eligibility check and a concurrent match cannot both pass on
+  // stale evidence.
+  await lockBankLine(tx, client, documentNumber, fiscalYear);
   const rows = (await tx.execute(sql`
     select m.match_id, s.statement_reference, m.ledger_line_number
       from bank_reconciliation_match m
@@ -2025,6 +2131,7 @@ export async function activeBankMatchForJournal(
        and m.ledger_document_number = ${documentNumber} and m.ledger_fiscal_year = ${fiscalYear}
      order by m.ledger_line_number
      limit 1
+     for update of m
   `)) as unknown as Array<{ match_id: string; statement_reference: string; ledger_line_number: number }>;
   const row = rows[0];
   return row ? { matchId: row.match_id, statementReference: row.statement_reference, lineNumber: row.ledger_line_number } : null;
