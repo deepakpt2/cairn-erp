@@ -1001,10 +1001,10 @@ async function calculate(
 
   let unmatchedLedger = 0n;
   for (const line of ledgerLines) {
-    // Only matchable movements can explain an outstanding statement line. A reversal mirror or a
-    // valuation adjustment remains part of the closing balance but is never netted against a
-    // statement item, because it is not proof that the bank moved money.
-    if (!line.matchable) continue;
+    // Include both sides of a reversal pair. If neither movement was matched, the original and its
+    // mirror net to zero and no unexplained difference is invented. If one side was matched, the
+    // other's genuinely outstanding amount remains visible. Valuation lines carry zero account
+    // currency amount; blocked lines are zero and separately block sign-off.
     unmatchedLedger += signedUnits(money, line.remainingAmount);
   }
   for (const line of statementLines) unmatchedStatement += signedUnits(money, line.remainingAmount);

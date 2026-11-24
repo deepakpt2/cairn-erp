@@ -39,8 +39,8 @@ import { enqueue, requestCancel } from '../../platform/job/queue';
 import { LeaseLostError, type ChunkResult, type JobContext } from '../../platform/job/types';
 import {
   activePaymentOperation, bankAmountSignature, executePaymentRun, loadRun, openItems,
-  PAYMENT_RUN_CAPABILITY, paymentRunInstructionFingerprint, PaymentRunError, RUN_CLASS, runKey,
-  supplierMethods, type PaymentRunView,
+  PAYMENT_RUN_CAPABILITY, paymentRunInstructionFingerprint, paymentRunInstructionKey,
+  PaymentRunError, RUN_CLASS, runKey, supplierMethods, type PaymentRunView,
 } from './payment-run';
 import { assertPaymentRunReleased, syncPaymentRunRelease } from './payment-run-release';
 import { bankAccount } from '../foundation/schema';
@@ -171,6 +171,8 @@ export interface SubmitExecutionInput extends SubmitProposalInput {
   bankAccountId: string;
   /** The complete actual bank-account-currency evidence, one entry per resulting group. */
   bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>;
+  /** The exact instruction key the submitting page displayed. A stale page must not bind to a new proposal. */
+  expectedInstructionKey?: string;
 }
 
 /** Queue the execution of a proposal that stands RELEASED. Nothing is posted until the job commits. */
@@ -186,6 +188,17 @@ export async function submitPaymentExecution(input: SubmitExecutionInput): Promi
     }
     const houseBankKey = input.houseBankKey.trim().toUpperCase();
     const bankAccountId = input.bankAccountId.trim().toUpperCase();
+    if (input.expectedInstructionKey) {
+      const currentKey = await paymentRunInstructionKey(
+        tx, input.client, run, houseBankKey, bankAccountId,
+      );
+      if (currentKey !== input.expectedInstructionKey) {
+        throw new PaymentRunError(
+          'The released proposal, selected bank or release changed after this payment run page was loaded.',
+          'Reload the payment run and enter the actual bank amounts again. Nothing has been queued.',
+        );
+      }
+    }
     const fingerprint = await paymentRunInstructionFingerprint(
       tx, input.client, run, houseBankKey, bankAccountId, input.bankAmounts,
     );

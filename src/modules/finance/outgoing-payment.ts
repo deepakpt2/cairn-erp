@@ -183,6 +183,22 @@ export async function getPayables(
         eq(journalEntry.status, 'POSTED'),
         sql`${journalEntry.reversalOf} is null`,
         sql`${journalEntryLine.clearingDocument} is null`,
+        sql`not exists (
+          select 1 from journal_entry_line off
+          join journal_entry offh
+            on offh.client = off.client and offh.document_number = off.document_number
+           and offh.fiscal_year = off.fiscal_year
+          where off.client = journal_entry_line.client
+            and off.company_code = journal_entry_line.company_code
+            and off.business_partner = journal_entry_line.business_partner
+            and off.gl_account = journal_entry_line.gl_account
+            and off.currency = journal_entry_line.currency
+            and off.debit_credit = 'S'
+            and off.clearing_document is null
+            and offh.status = 'POSTED' and offh.reversal_of is null
+            and off.line_text = concat('Settles ', journal_entry_line.document_number)
+            and off.amount_document = journal_entry_line.amount_document
+        )`,
       ))
       .orderBy(journalEntry.postingDate, journalEntryLine.documentNumber);
     // Each item's discount is rounded at its own currency's decimals.

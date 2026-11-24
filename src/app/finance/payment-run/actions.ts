@@ -122,6 +122,14 @@ export async function executeAction(
   if (denied) return denied;
   try {
     await assertRun(session, form);
+    const instructionKey = text(form, 'instructionKey');
+    if (!instructionKey) {
+      return {
+        ok: false,
+        message: 'The payment run page is stale; reload it before executing.',
+        remedy: 'Reload the page, review the current proposal, and enter the actual bank amounts again.',
+      };
+    }
     // Each group's actual bank amount travels under a key that names the resulting movement.
     const bankAmounts: Array<{ companyCode: string; supplier: string; currency: string; amount: string }> = [];
     for (const [name, value] of form.entries()) {
@@ -138,7 +146,7 @@ export async function executeAction(
       client: session.user.client, changedBy: session.user.username, actorUserId: session.user.userId,
       runDate: text(form, 'runDate'), runId: text(form, 'runId'),
       houseBankKey: text(form, 'houseBankKey'), bankAccountId: text(form, 'bankAccountId'),
-      bankAmounts,
+      bankAmounts, expectedInstructionKey: instructionKey,
     });
     revalidatePath(ROUTE);
     return {

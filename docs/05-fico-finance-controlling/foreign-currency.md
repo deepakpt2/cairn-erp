@@ -127,10 +127,13 @@ the confirmation message and in the payment-run result.
   and evidence is a replay; a different bank or amount is a conflict and is refused while the first
   execution is queued or running.
 - A queued execution stores a fingerprint of the exact released proposal source lines, allocated
-  amounts, bank identity/currency, actual-bank evidence and release state. The worker recomputes it
-  at the posting boundary and also rechecks that every source line is still posted, open and
-  unreversed with the same supplier, currency and amount. A substituted or invalidated source
-  refuses the whole execution and posts nothing.
+  amounts, bank identity/G-L/currency, actual-bank evidence and release state. The worker recomputes
+  it at the posting boundary and also rechecks that every source line is still posted, open and
+  unreversed with the same company, supplier, currency and amount. A substituted or invalidated
+  source refuses the whole execution and posts nothing.
+- The submit form also carries the **instruction key the page actually displayed**. The server
+  recomputes the current instruction key at submission and refuses a stale page whose proposal,
+  bank or release changed since it was loaded, before any amount is bound or queued.
 
 ## Period-end valuation: unrealized differences
 
@@ -170,8 +173,12 @@ the conflicting valuation permits the new run. A same-day posting and reversal i
 Exposure is derived from the **key-date** position, not current status: a December receipt reversed
 in January is still valued in a run keyed to 31 December; an invoice cleared in February is included
 in a January run and excluded from a later February run. Clearing reset history is used to exclude
-an item that was cleared as of the key date even though a later reset reopened it. A reversed
-original with no provable mirror is refused rather than guessed.
+an item that was cleared as of the key date even though a later reset reopened it. The current
+stamp and every earlier cleared/reset interval are checked together, so an item cleared, reset and
+cleared again is still treated as cleared for a key date inside the first interval. A reversal
+mirror's effective date, not the reset transaction timestamp, ends the FX-reset interval; a
+same-day reversal leaves no cleared interval. A reversed original with no provable mirror is
+refused rather than guessed.
 
 A valuation posting and its reversal are marked `is_fx_valuation`. That provenance is authoritative:
 on a foreign bank G/L the line is shown in reconciliation as a **local-only carrying adjustment**,
@@ -204,8 +211,10 @@ correctly: a +100 receipt on 20 December reversed on 5 January shows opening +10
 closing zero for January. Before the reversal the original is matchable; after it the original is not. The mirror is a dated
 movement and may be matched **explicitly** to a real refund/return statement line with the correct
 direction, amount, date and bank identity. It is never created or matched automatically from the
-internal reversal alone, and it is never used to net away an outstanding statement line without
-that independent evidence. Parked and future-dated documents never contribute.
+internal reversal alone. Both sides of a reversal pair remain in the outstanding-ledger bridge, so
+if neither movement reached the bank they net to zero and invent no unexplained difference; if one
+side was matched, the other's genuinely outstanding amount remains visible. Parked and future-dated
+documents never contribute.
 
 If a journal is reversed while a match still refers to it, the reconciliation shows a blocking
 `INVALID_MATCH` and requires the statement to be reopened and the match withdrawn. A reversal dated
@@ -258,6 +267,12 @@ a local-only line benign.
 - The clearing journal's own **payment/clearing offset lines reopen with the source items**. Keeping
   them self-stamped would leave the reopened invoice without its posted payment offset. Reversal
   mirrors are excluded from open-item queries, so resets never expose mirrored duplicates.
+- Payment-run and payment-screen open-item lists net an open `Settles <document>` offset against the
+  source invoice. A fully reset payment therefore leaves no payable/receivable to propose again;
+  a partial reset leaves only the residual. The offset itself is not mistaken for a new item.
+- Reset takes the same company-scoped clearing/valuation lock **before** reading dependencies, so a
+  concurrent clearing or valuation cannot read a residual as open and then attach to evidence the
+  reset is about to reverse.
 - Before reversing a payment journal with realized FX, the reset detects payment-side residual or
   on-account lines that a **different later clearing** has consumed. It refuses atomically and names
   the downstream clearing to reset first; resetting the original payment underneath that settlement

@@ -14,6 +14,7 @@ import { recordChange } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
 import { activeBankMatchForJournal } from './bank-reconciliation';
+import { lockValuationSettlement } from './fx-settlement';
 import { clearingReset, glClearingAllocation, journalEntry, journalEntryLine } from './schema';
 
 export const CLEARING_RESET_CAPABILITY = 'FIN.CLEARING.RESET';
@@ -172,6 +173,10 @@ export async function resetClearingTx(
     }
   }
 
+  // Serialize with customer/vendor clearing, payment posting and period-end valuation for this
+  // company before reading any dependency. A concurrent clearing must not read a residual as open
+  // while this reset decides it has no downstream use, and then attach itself to reversed evidence.
+  await lockValuationSettlement(tx, input.client, input.companyCode);
   const [journal] = await tx.select().from(journalEntry).where(and(
     eq(journalEntry.client, input.client),
     eq(journalEntry.documentNumber, input.clearingDocument),

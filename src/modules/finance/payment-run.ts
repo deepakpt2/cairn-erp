@@ -183,11 +183,10 @@ export async function getPaymentRun(client: string, runDate: string, runId: stri
  * selected bank and its actual currency, actual-bank evidence, and release state. The worker
  * recomputes it at the posting boundary, so a substituted invoice or changed bank cannot inherit it.
  */
-export async function paymentRunInstructionFingerprint(
+async function paymentRunBankCurrencies(
   tx: Tx, client: string, run: PaymentRunView,
   houseBankKey: string, bankAccountId: string,
-  bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>,
-): Promise<string> {
+): Promise<Array<{ companyCode: string; currency: string; glAccount: string }>> {
   const bankCurrencies: Array<{ companyCode: string; currency: string; glAccount: string }> = [];
   for (const company of run.companies) {
     const [bank] = await tx.select({
@@ -204,6 +203,28 @@ export async function paymentRunInstructionFingerprint(
       glAccount: bank?.glAccount ?? '',
     });
   }
+  return bankCurrencies;
+}
+
+/** The instruction the page displayed, without the actual-bank evidence. */
+export async function paymentRunInstructionKey(
+  tx: Tx, client: string, run: PaymentRunView,
+  houseBankKey: string, bankAccountId: string,
+): Promise<string> {
+  const bankCurrencies = await paymentRunBankCurrencies(tx, client, run, houseBankKey, bankAccountId);
+  const release = await getPaymentRunReleaseInTx(tx, client, run.runDate, run.runId);
+  return paymentInstructionCanonical({
+    runDate: run.runDate, runId: run.runId, houseBankKey, bankAccountId,
+    bankCurrencies, items: run.proposal, release,
+  });
+}
+
+export async function paymentRunInstructionFingerprint(
+  tx: Tx, client: string, run: PaymentRunView,
+  houseBankKey: string, bankAccountId: string,
+  bankAmounts?: Array<{ companyCode: string; supplier: string; currency: string; amount: string }>,
+): Promise<string> {
+  const bankCurrencies = await paymentRunBankCurrencies(tx, client, run, houseBankKey, bankAccountId);
   const release = await getPaymentRunReleaseInTx(tx, client, run.runDate, run.runId);
   const canonical = paymentInstructionCanonical({
     runDate: run.runDate, runId: run.runId, houseBankKey, bankAccountId,
@@ -352,6 +373,25 @@ export async function openItems(tx: Tx, client: string, run: PaymentRunView): Pr
       sql`${journalEntry.reversalOf} is null`,
       sql`${journalEntryLine.businessPartner} is not null`,
       sql`${journalEntryLine.clearingDocument} is null`,
+      // The payment journal's own `Settles <document>` debit line is the offset of this invoice.
+      // While that offset is open (a reset payment), the invoice must not be proposed again. The
+      // residual line has a different text and remains a genuine payable.
+      sql`not exists (
+        select 1 from journal_entry_line off
+        join journal_entry offh
+          on offh.client = off.client and offh.document_number = off.document_number
+         and offh.fiscal_year = off.fiscal_year
+        where off.client = journal_entry_line.client
+          and off.company_code = journal_entry_line.company_code
+          and off.business_partner = journal_entry_line.business_partner
+          and off.gl_account = journal_entry_line.gl_account
+          and off.currency = journal_entry_line.currency
+          and off.debit_credit = 'S'
+          and off.clearing_document is null
+          and offh.status = 'POSTED' and offh.reversal_of is null
+          and off.line_text = concat('Settles ', journal_entry_line.document_number)
+          and off.amount_document = journal_entry_line.amount_document
+      )`,
     ));
   const invoices = new Map<string, { dueDate: string | null }>();
   for (const inv of await tx.select().from(supplierInvoice).where(eq(supplierInvoice.client, client))) {

@@ -21,7 +21,8 @@ import { postSupplierInvoice as postSupplierInvoiceRaw } from '../src/modules/pu
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { cancelDocumentReleaseForProvisioning as cancelDocumentRelease } from '../src/modules/purchasing/release';
 import {
-  PAYMENT_RUN_CAPABILITY, cancelPaymentRun, createPaymentRun, executePaymentRun, generateProposal, getPaymentRun, PaymentRunError,
+  PAYMENT_RUN_CAPABILITY, cancelPaymentRun, createPaymentRun, executePaymentRun, generateProposal,
+  getPaymentRun, paymentRunInstructionKey, PaymentRunError,
 } from '../src/modules/finance/payment-run';
 import { cancelPaymentRunReleaseForProvisioning as cancelPaymentRunRelease, getPaymentRunRelease, releasePaymentRunForProvisioning as releasePaymentRun } from '../src/modules/finance/payment-run-release';
 import {
@@ -495,6 +496,44 @@ describe('crash windows and leases', () => {
 
     await cancelPaymentOperation({
       client, operationId: first.operationId, changedBy: planner.username, actorUserId: planner.userId,
+    });
+    await drive();
+  });
+
+  it('refuses a stale page that submits evidence for a superseded proposal', async () => {
+    const runId = await releasedRun();
+    const run = (await getPaymentRun(client, RUN_DATE, runId))!;
+    const staleKey = await withTenant(client, (tx) =>
+      paymentRunInstructionKey(tx, client, run, 'HB01', 'MAIN'));
+    // The proposal is replaced after the page was loaded; its release also starts over.
+    useHandlers();
+    await propose(runId);
+    expect(await drive()).toEqual(['SUCCEEDED']);
+    await approve(runId);
+    const after = (await getPaymentRun(client, RUN_DATE, runId))!;
+    const currentKey = await withTenant(client, (tx) =>
+      paymentRunInstructionKey(tx, client, after, 'HB01', 'MAIN'));
+    expect(currentKey).not.toBe(staleKey);
+
+    const before = await payments(runId);
+    await expect(submitPaymentExecution({
+      client, changedBy: planner.username, actorUserId: planner.userId,
+      runDate: RUN_DATE, runId, houseBankKey: 'HB01', bankAccountId: 'MAIN',
+      bankAmounts: [{ companyCode: '1000', supplier: 'V10000', currency: 'USD', amount: '550.0000' }],
+      expectedInstructionKey: staleKey,
+    })).rejects.toThrow(/changed after this payment run page was loaded/);
+    expect(await payments(runId)).toBe(before);
+
+    // The same page keyed to the current instruction is accepted.
+    const op = await submitPaymentExecution({
+      client, changedBy: planner.username, actorUserId: planner.userId,
+      runDate: RUN_DATE, runId, houseBankKey: 'HB01', bankAccountId: 'MAIN',
+      bankAmounts: [{ companyCode: '1000', supplier: 'V10000', currency: 'USD', amount: '550.0000' }],
+      expectedInstructionKey: currentKey,
+    });
+    expect(op.status).toBe('QUEUED');
+    await cancelPaymentOperation({
+      client, operationId: op.operationId, changedBy: planner.username, actorUserId: planner.userId,
     });
     await drive();
   });

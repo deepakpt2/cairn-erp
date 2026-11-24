@@ -134,9 +134,22 @@ async function loadClearingIntervals(
   companyCode: string,
 ): Promise<Map<string, ClearingInterval[]>> {
   const rows = (await tx.execute(sql`
-    select clearing_date::text as clearing_date, created_at::date::text as reset_date, item_refs
-      from clearing_reset
-     where client = ${client} and company_code = ${companyCode}
+    select cr.clearing_date::text as clearing_date,
+           coalesce(
+             (select rev.posting_date::text
+                from journal_entry orig
+                join journal_entry rev
+                  on rev.client = orig.client and rev.document_number = orig.reversed_by
+                 and rev.reversal_of = orig.document_number and rev.status = 'POSTED'
+               where orig.client = cr.client and orig.document_number = cr.clearing_document
+                 and orig.fiscal_year = cr.fiscal_year
+               order by rev.posting_date
+               limit 1),
+             cr.created_at::date::text
+           ) as reset_date,
+           cr.item_refs
+      from clearing_reset cr
+     where cr.client = ${client} and cr.company_code = ${companyCode}
   `)) as unknown as Array<{ clearing_date: string; reset_date: string; item_refs: string }>;
   const map = new Map<string, ClearingInterval[]>();
   for (const row of rows) {
@@ -154,19 +167,20 @@ function clearedAsOf(
   keyDate: string,
   intervals: Map<string, ClearingInterval[]>,
 ): boolean {
+  const ref = `${row.document_number}/${row.fiscal_year}/${row.line_number}`;
+  const candidates = [...(intervals.get(ref) ?? [])];
   if (row.clearing_document) {
     if (!row.clearing_date) {
       throw new FxValuationError(
         `Line ${row.document_number}/${row.line_number} stands stamped by clearing document ${row.clearing_document} without a clearing date; its position at ${keyDate} cannot be proved.`,
       );
     }
-    return row.clearing_date <= keyDate;
+    // The current clearing is the latest open-ended interval. Earlier cleared/reset intervals are
+    // still relevant: an item cleared, reset and cleared again was cleared during the first
+    // interval even though its current stamp is later.
+    candidates.push({ clearingDate: row.clearing_date, resetDate: '9999-12-31' });
   }
-  const ref = `${row.document_number}/${row.fiscal_year}/${row.line_number}`;
-  for (const interval of intervals.get(ref) ?? []) {
-    if (interval.clearingDate <= keyDate && keyDate < interval.resetDate) return true;
-  }
-  return false;
+  return candidates.some((interval) => interval.clearingDate <= keyDate && keyDate < interval.resetDate);
 }
 
 async function loadRun(tx: Parameters<Parameters<typeof withTenant>[1]>[0], client: string, runId: string): Promise<FxValuationResult | null> {

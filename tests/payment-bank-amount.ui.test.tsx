@@ -107,6 +107,8 @@ describe('payment-run actual bank amount binding', () => {
     const amount = screen.getByLabelText('Actual bank amount in KWD for supplier V10000 paying USD');
     await user.type(amount, '32.500');
     expect((amount as HTMLInputElement).value).toBe('32.500');
+    const keyBefore = (view.container.querySelector('input[name="instructionKey"]') as HTMLInputElement).value;
+    expect(keyBefore).not.toBe('');
 
     view.rerender(
       <PaymentRun
@@ -121,6 +123,8 @@ describe('payment-run actual bank amount binding', () => {
     );
     const refreshed = screen.getByLabelText('Actual bank amount in KWD for supplier V10000 paying USD') as HTMLInputElement;
     expect(refreshed.value).toBe('');
+    const keyAfter = (view.container.querySelector('input[name="instructionKey"]') as HTMLInputElement).value;
+    expect(keyAfter).not.toBe(keyBefore);
   });
 
   it('discards a typed amount when the released proposal changes', async () => {

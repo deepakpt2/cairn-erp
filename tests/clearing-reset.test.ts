@@ -154,9 +154,11 @@ describe('SCR-071 reset cleared items (FBRA)', () => {
     expect(reset.clearingDate).toBe('2026-11-21');
     expect(reset.itemsReset).toBeGreaterThanOrEqual(2);
 
+    // The source invoices and the receipt's own `Settles` offsets are both open, so the net
+    // receivable position is zero: the paid invoices must not be proposed for collection again.
     const open = await getReceivables(c, 'C10000', '1000');
-    expect(open.openItems).toHaveLength(2);
-    expect(open.openBalance).toBe(850);
+    expect(open.openItems).toHaveLength(0);
+    expect(open.openBalance).toBe(0);
 
     const stamps = await withTenant(c, (tx) => tx.execute(sql`
       select count(*)::int as n from journal_entry_line

@@ -350,6 +350,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today, releas
             <form action={executeActionState} className="mt-3 flex flex-wrap items-end gap-3">
               <input type="hidden" name="runDate" value={run.runDate} />
               <input type="hidden" name="runId" value={run.runId} />
+              <input type="hidden" name="instructionKey" value={instructionKey} />
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">House bank / account</span>
                 <select
