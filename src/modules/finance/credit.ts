@@ -48,6 +48,9 @@ export interface CreditCheckResult {
   creditLimit: number | null;
   availableCredit: number | null;
   utilizationPercent: number | null;
+  /** The rate the judged amount was translated at, and the date that rate took effect. */
+  rateUsed: string | null;
+  rateDate: string | null;
 }
 
 export interface CreditAuditView {
@@ -115,6 +118,27 @@ const todayUtc = () => new Date().toISOString().slice(0, 10);
  * posted.
  */
 export const CREDIT_CHECK_RATE_TYPE = 'AVERAGE';
+
+/**
+ * How old an AVERAGE rate may be before a credit check refuses to use it, in days.
+ *
+ * 45 is the default: a rate older than a quarter is not a rate the limit can be judged against, and a
+ * stale row silently accepted is how an exposure slowly stops meaning anything. Configured per tenant in
+ * `client_settings.flags` (`CREDIT_MAX_RATE_AGE_DAYS`), the same no-migration path the self-service
+ * password switch uses; absent means the 45-day default stands.
+ */
+export const CREDIT_MAX_RATE_AGE_DAYS = 45;
+export const CREDIT_MAX_RATE_AGE_FLAG = 'CREDIT_MAX_RATE_AGE_DAYS';
+
+/** The configured maximum age, in days. Absent or unusable means the default. */
+async function maxRateAgeDays(tx: Tx, client: string): Promise<number> {
+  const rows = await tx.execute(sql`
+    select flags from client_settings where client = ${client} limit 1
+  `);
+  const flags = (rows as unknown as Array<{ flags: Record<string, unknown> | null }>)[0]?.flags ?? {};
+  const configured = Number(flags[CREDIT_MAX_RATE_AGE_FLAG]);
+  return Number.isInteger(configured) && configured > 0 ? configured : CREDIT_MAX_RATE_AGE_DAYS;
+}
 
 interface AreaRow { credit_control_area: string; currency: string; warning_threshold_percent: number; is_active: boolean }
 
@@ -193,11 +217,20 @@ async function exposureIn(tx: Tx, client: string, customer: string, area: string
  * replaced did, and translating at 1 would understate a strong currency as badly. The currency pair and
  * the date are named, with the remedy, so an operator can maintain the rate and retry.
  */
+interface ConvertedAmount {
+  /** Scaled at MONEY_SCALE, in the area currency. */
+  units: bigint;
+  /** The effective rate applied, at the ledger's 8 decimals. */
+  rate: string;
+  /** The rate row's `valid_from`, the date the rate took effect. Null for an identity rate. */
+  rateDate: string | null;
+}
+
 async function judgedAmountInAreaCurrency(
   tx: Tx,
   client: string,
   input: { amount: string; amountCurrency: string; documentDate: string; areaCurrency: string },
-): Promise<bigint> {
+): Promise<ConvertedAmount> {
   let amountUnits: bigint;
   try {
     amountUnits = toScaled(input.amount);
@@ -206,7 +239,8 @@ async function judgedAmountInAreaCurrency(
   }
   const from = input.amountCurrency.trim().toUpperCase();
   const to = input.areaCurrency.trim().toUpperCase();
-  if (from === to) return amountUnits;
+  // One currency needs no rate and therefore has no rate date to record or age to judge.
+  if (from === to) return { units: amountUnits, rate: '1.00000000', rateDate: null };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.documentDate)) {
     fail(`Document date ${input.documentDate} is not a calendar date, so the rate for ${from} to ${to} cannot be selected.`,
       'Give the document a calendar date.');
@@ -218,11 +252,27 @@ async function judgedAmountInAreaCurrency(
     if (error instanceof ExchangeRateLookupError) throw new CreditError(error.message, error.remedy);
     throw error;
   }
+  if (rate.validFrom) {
+    const ageDays = Math.round(
+      (Date.parse(`${input.documentDate}T00:00:00Z`) - Date.parse(`${rate.validFrom}T00:00:00Z`)) / 86_400_000,
+    );
+    const limit = await maxRateAgeDays(tx, client);
+    if (ageDays > limit) {
+      fail(
+        `The ${CREDIT_CHECK_RATE_TYPE} rate from ${from} to ${to} in force on ${input.documentDate} dates from ${rate.validFrom}, ${ageDays} days old, which exceeds the ${limit}-day maximum this tenant allows.`,
+        `Maintain a ${CREDIT_CHECK_RATE_TYPE} rate for ${from} to ${to} valid on or after ${input.documentDate.slice(0, 10)} (Exchange Rates, CFG.FIN.EXRATE.MAINTAIN), then retry. A stale rate is never used to judge a credit limit.`,
+      );
+    }
+  }
   // Rounded at the area currency's own decimals, so a KWD (3) comparison is judged in fils and a
   // two-decimal currency in cents, rather than at the ledger's storage scale.
   const targetScale = (await moneyFor(tx, to)).scale;
   const translated = translateAmount(amountUnits, MONEY_SCALE, targetScale, rate);
-  return translated * 10n ** BigInt(MONEY_SCALE - targetScale);
+  return {
+    units: translated * 10n ** BigInt(MONEY_SCALE - targetScale),
+    rate: rate.effectiveRate,
+    rateDate: rate.validFrom,
+  };
 }
 
 export async function getCreditExposure(client: string, customer: string, area: string): Promise<{ exposure: number; currency: string }> {
@@ -473,6 +523,8 @@ export async function evaluateCreditCheck(input: {
     // The amount under judgement is compared in the area's currency, never in its document currency:
     // a limit stated in KWD cannot be judged against a number that is a count of USD.
     let amount = 0n;
+    let rateUsed: string | null = null;
+    let rateDate: string | null = null;
     if (input.amount) {
       if (!input.amountCurrency) {
         fail(
@@ -486,15 +538,19 @@ export async function evaluateCreditCheck(input: {
           'Pass the document date with the amount.',
         );
       }
-      amount = await judgedAmountInAreaCurrency(tx, input.client, {
+      const converted = await judgedAmountInAreaCurrency(tx, input.client, {
         amount: input.amount, amountCurrency: input.amountCurrency,
         documentDate: input.documentDate, areaCurrency: areaRow.currency,
       });
+      amount = converted.units;
+      rateUsed = converted.rate;
+      rateDate = converted.rateDate;
     }
     if (!record) {
       return {
         decision: 'BLOCK' as const, reason: 'NO_CREDIT_RECORD',
         exposure: Number(fromScaled(exposure)), creditLimit: null, availableCredit: null, utilizationPercent: null,
+        rateUsed, rateDate,
       };
     }
     const limit = toScaled(record.credit_limit);
@@ -503,6 +559,7 @@ export async function evaluateCreditCheck(input: {
       exposure: Number(fromScaled(exposure)), creditLimit: Number(fromScaled(limit)),
       availableCredit: Number(fromScaled(available)),
       utilizationPercent: limit === 0n ? null : Number(exposure) / Number(limit) * 100,
+      rateUsed, rateDate,
     };
     if (record.is_on_hold) return { decision: 'BLOCK' as const, reason: 'MANUAL_HOLD', ...base };
     if (record.credit_limit_valid_to && record.credit_limit_valid_to < todayUtc()) {
@@ -864,6 +921,10 @@ export interface CreditDeterminationView {
   creditControlArea: string;
   orderValue: number;
   orderCurrency: string;
+  /** The effective rate the order value was translated at; null when judged in the area's currency. */
+  rateUsed: number | null;
+  /** The `valid_from` of that rate row: which rate date decided this document. */
+  rateDate: string | null;
   status: DeterminationStatus;
   reason: string;
   exposureAtCheck: number;
@@ -964,10 +1025,12 @@ export async function checkSalesDocumentCredit(input: {
     await tx.execute(sql`
       insert into credit_determination
         (client, determination_id, sales_document, document_date, sales_org, customer, credit_control_area,
-         order_value, order_currency, status, reason, exposure_at_check, limit_at_check, supersedes, created_by)
+         order_value, order_currency, status, reason, exposure_at_check, limit_at_check,
+         rate_used, rate_date, supersedes, created_by)
       values (${input.client}, ${determinationId}, ${document}, ${input.documentDate}, ${input.salesOrg ?? null},
               ${input.customer}, ${input.creditControlArea}, ${fromScaled(value)}, ${input.orderCurrency},
               ${status}, ${check.reason}, ${check.exposure.toFixed(4)}, ${check.creditLimit?.toFixed(4) ?? null},
+              ${check.rateUsed}, ${check.rateDate},
               ${previous?.determination_id ?? null}, ${input.changedBy})
     `);
     await recordReleaseEvent(tx, input.client, determinationId, document, 'CHECK', input.changedBy,
@@ -1034,6 +1097,8 @@ export async function listCreditDeterminations(client: string, filter: CreditRel
         customer: String(r.customer), customerName: String(r.customer_name),
         creditControlArea: String(r.credit_control_area),
         orderValue: Number(r.order_value), orderCurrency: String(r.order_currency),
+        rateUsed: r.rate_used === null || r.rate_used === undefined ? null : Number(r.rate_used),
+        rateDate: r.rate_date ? String(r.rate_date) : null,
         status: r.status as DeterminationStatus, reason: String(r.reason),
         exposureAtCheck: Number(r.exposure_at_check), limitAtCheck: limit,
         currentExposure, currentLimit,
@@ -1128,11 +1193,13 @@ export async function releaseDocument(input: {
       insert into credit_determination
         (client, determination_id, sales_document, document_date, sales_org, customer, credit_control_area,
          order_value, order_currency, status, reason, exposure_at_check, limit_at_check,
+         rate_used, rate_date,
          released_by, released_at, is_override, approval_ref, supersedes, created_by)
       values (${client}, ${determinationId}, ${current.sales_document}, ${current.document_date}, ${current.sales_org},
               ${current.customer}, ${current.credit_control_area}, ${current.order_value}, ${current.order_currency},
               'RELEASED', ${stillBlocked ? `OVERRIDE_${check.reason}` : 'RELEASED_AFTER_CHECK'},
               ${check.exposure.toFixed(4)}, ${check.creditLimit?.toFixed(4) ?? null},
+              ${check.rateUsed}, ${check.rateDate},
               ${changedBy}, now(), ${stillBlocked}, ${input.override?.approvalRef ?? null},
               ${current.determination_id}, ${changedBy})
     `);
@@ -1228,10 +1295,12 @@ export async function reblockDocument(input: {
     await tx.execute(sql`
       insert into credit_determination
         (client, determination_id, sales_document, document_date, sales_org, customer, credit_control_area,
-         order_value, order_currency, status, reason, exposure_at_check, limit_at_check, supersedes, created_by)
+         order_value, order_currency, status, reason, exposure_at_check, limit_at_check,
+         rate_used, rate_date, supersedes, created_by)
       values (${input.client}, ${determinationId}, ${current.sales_document}, ${current.document_date}, ${current.sales_org},
               ${current.customer}, ${current.credit_control_area}, ${current.order_value}, ${current.order_currency},
               'BLOCKED', ${reason}, ${check.exposure.toFixed(4)}, ${check.creditLimit?.toFixed(4) ?? null},
+              ${check.rateUsed}, ${check.rateDate},
               ${current.determination_id}, ${input.changedBy})
     `);
     await recordReleaseEvent(tx, input.client, determinationId, input.salesDocument,

@@ -1947,6 +1947,10 @@ export const creditDetermination = pgTable('credit_determination', {
   reason: varchar('reason', { length: 24 }).notNull(),
   exposureAtCheck: numeric('exposure_at_check', { precision: 23, scale: 4 }).notNull().default('0'),
   limitAtCheck: numeric('limit_at_check', { precision: 23, scale: 4 }),
+  /** The effective rate the order value was translated at; null when judged in the area's own currency. */
+  rateUsed: numeric('rate_used', { precision: 18, scale: 8 }),
+  /** The `valid_from` of that rate row, so a determination says which rate decided it. */
+  rateDate: date('rate_date', { mode: 'string' }),
   releasedBy: varchar('released_by', { length: 60 }),
   releasedAt: timestamp('released_at', { withTimezone: true }),
   isOverride: boolean('is_override').notNull().default(false),
