@@ -2,7 +2,9 @@ import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
-import { CREDIT_MAX_RATE_AGE_DAYS, evaluateCreditCheck } from '../src/modules/finance/credit';
+import {
+  CREDIT_MAX_RATE_AGE_DAYS, evaluateCreditCheck, listCreditMonitor,
+} from '../src/modules/finance/credit';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -113,24 +115,104 @@ async function maxRateAge(fixture: Fixture, days: number): Promise<void> {
   });
 }
 
+let multi: Fixture;
 let stale: Fixture;
 
 beforeAll(async () => {
+  multi = await buildFixture('credit-basis-multi', 'KWD');
   stale = await buildFixture('credit-basis-stale', 'KWD');
 }, 300_000);
 
 afterAll(async () => {
+  if (multi) await destroyTenant(multi.tenant.client);
   if (stale) await destroyTenant(stale.tenant.client);
 }, 300_000);
 
+describe('option A — foreign commitments are in the basis, converted at their own date', () => {
+  it('sums KWD + USD + EUR commitments as their converted amounts', async () => {
+    // KWD local. KWD 100 stays 100; USD 1000 at 0.300 is KWD 300; EUR 500 at 0.330 is KWD 165.
+    // All three dates carry a rate within the staleness window of their own date.
+    await setRate(multi, 'USD', 'KWD', '2026-10-01', 0.300);
+    await setRate(multi, 'EUR', 'KWD', '2026-10-01', 0.330);
+    await openOrder(multi, 'KWD', 100, '2026-10-05', 'SO-KWD');
+    await openOrder(multi, 'USD', 1000, '2026-10-05', 'SO-USD');
+    await openOrder(multi, 'EUR', 500, '2026-10-05', 'SO-EUR');
+    await setLimit(multi, 1_000_000);
+
+    const check = await evaluateCreditCheck({
+      client: multi.tenant.client, customer: 'C100', creditControlArea: AREA,
+    });
+    // Exposure is the receivable half (zero here) plus every converted commitment: 100 + 300 + 165 = 565.
+    expect(check.exposure).toBeCloseTo(565, 4);
+    expect(check.decision).toBe('OK');
+
+    const monitor = await listCreditMonitor(multi.tenant.client, {});
+    const row = monitor.rows.find((r) => r.customer === 'C100')!;
+    expect(row.orderExposure).toBeCloseTo(565, 4);
+    expect(row.totalExposure).toBeCloseTo(565, 4);
+    // The breakdown is per currency, each with its own rate and rate date — never only a total.
+    const byCurrency = new Map(row.commitmentBreakdown.map((b) => [b.currency, b]));
+    expect([...byCurrency.keys()].sort()).toEqual(['EUR', 'KWD', 'USD']);
+    expect(byCurrency.get('USD')!.originalAmount).toBe(1000);
+    expect(byCurrency.get('USD')!.rate).toBeCloseTo(0.3, 8);
+    expect(byCurrency.get('USD')!.rateDate).toBe('2026-10-01');
+    expect(byCurrency.get('USD')!.convertedAmount).toBeCloseTo(300, 4);
+    expect(byCurrency.get('EUR')!.convertedAmount).toBeCloseTo(165, 4);
+    expect(byCurrency.get('KWD')!.convertedAmount).toBeCloseTo(100, 4);
+    // The local-currency bucket is the identity: no rate, no rate date.
+    expect(byCurrency.get('KWD')!.rate).toBeNull();
+    expect(byCurrency.get('KWD')!.rateDate).toBeNull();
+  }, 120_000);
+
+  it('refuses by name when a currency in the basis has no rate', async () => {
+    // A JPY order with no JPY→KWD rate: the basis cannot be valued, so the check refuses.
+    await openOrder(multi, 'JPY', 50_000, '2026-10-06', 'SO-JPY');
+    await expect(evaluateCreditCheck({
+      client: multi.tenant.client, customer: 'C100', creditControlArea: AREA,
+    })).rejects.toThrow(/No AVERAGE exchange rate stands from JPY to KWD/);
+    // The basis is never silently short: the same refusal reaches the monitor.
+    await expect(listCreditMonitor(multi.tenant.client, {})).rejects.toThrow(/JPY/);
+    await withTenant(multi.tenant.client, async (tx) => {
+      await tx.execute(sql`delete from sales_order_line where client = ${multi.tenant.client} and order_number = 'SO-JPY'`);
+      await tx.execute(sql`delete from sales_order where client = ${multi.tenant.client} and order_number = 'SO-JPY'`);
+    });
+  }, 120_000);
+
+  it('makes a standing commitment block the next document, and releasing re-reads the same basis', async () => {
+    // DI-019's own criterion, applied to the converted basis. This customer already stands at KWD 565:
+    // KWD 100 + USD 1,000 (KWD 300) + EUR 500 (KWD 165).
+    await setLimit(multi, 600);
+    const next = await evaluateCreditCheck({
+      client: multi.tenant.client, customer: 'C100', creditControlArea: AREA,
+      amount: '800', amountCurrency: 'USD', documentDate: '2026-10-08',
+      excludeSalesDocument: 'SO-NEXT',
+    });
+    // 565 standing + KWD 240 for the new document = 805, over the KWD 600 limit.
+    expect(next.decision).toBe('BLOCK');
+    expect(next.reason).toBe('LIMIT_EXCEEDED');
+
+    // Raising the limit re-reads the same basis and the same document now passes: releasing a block
+    // re-judges against the live basis, not against a remembered figure.
+    await setLimit(multi, 50_000);
+    const released = await evaluateCreditCheck({
+      client: multi.tenant.client, customer: 'C100', creditControlArea: AREA,
+      amount: '800', amountCurrency: 'USD', documentDate: '2026-10-08',
+      excludeSalesDocument: 'SO-NEXT',
+    });
+    expect(released.decision).toBe('OK');
+    expect(released.exposure).toBeCloseTo(565, 4);
+    await setLimit(multi, 1_000_000);
+  }, 120_000);
+});
+
 describe('item 3 — a stale rate is refused, and the age is configurable', () => {
   it('refuses a rate older than the 45-day default, naming the rate date and the age', async () => {
-    // A USD document dated 2026-12-01 whose only USD rate dates from 2026-10-01: 61 days old.
+    // A USD order dated 2026-12-01 whose only USD rate dates from 2026-10-01: 61 days old.
     await setRate(stale, 'USD', 'KWD', '2026-10-01', 0.300);
+    await openOrder(stale, 'USD', 1000, '2026-12-01', 'SO-STALE');
     await setLimit(stale, 1_000_000);
     await expect(evaluateCreditCheck({
       client: stale.tenant.client, customer: 'C100', creditControlArea: AREA,
-      amount: '1000', amountCurrency: 'USD', documentDate: '2026-12-01',
     })).rejects.toThrow(/dates from 2026-10-01, 61 days old, which exceeds the 45-day maximum/);
   }, 120_000);
 
@@ -138,7 +220,6 @@ describe('item 3 — a stale rate is refused, and the age is configurable', () =
     await maxRateAge(stale, 90);
     const check = await evaluateCreditCheck({
       client: stale.tenant.client, customer: 'C100', creditControlArea: AREA,
-      amount: '1000', amountCurrency: 'USD', documentDate: '2026-12-01',
     });
     expect(check.decision).toBe('OK');
     // Restore the default for any later case.

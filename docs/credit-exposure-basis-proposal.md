@@ -1,116 +1,103 @@
-# Proposal — foreign-currency commitments in the credit exposure basis
+# Decision — foreign-currency commitments in the credit exposure basis
 
-**Status:** proposal for the product owner. Nothing here is implemented, and nothing in the repair this
-accompanies depends on it. Recorded against DI-019, which stays open.
+**Status:** DECIDED — **Option A** is implemented. Foreign-currency open commitments are converted into
+the credit control area's currency and counted in the basis. Recorded against DI-019.
 
 **Date:** 2026-11-24 · **Branch:** `development`
 
 ---
 
-## The question
+## The question this settles
 
-The credit check compares a customer's exposure with a limit, both in the credit control area's currency
-(the company's local currency). The exposure has two halves:
+The credit check compares a customer's exposure with a limit, both in the credit control area's currency.
+The exposure has two halves:
 
-| Half | Source | Currency today |
+| Half | Source | Currency |
 |---|---|---|
-| Open receivables | `journal_entry_line.amount_local` — posted, uncleared | Area currency ✅ |
-| Open sales commitments | `openSalesCommitments` — undelivered order value + delivered-not-billed | **Area currency only; foreign documents are dropped** |
+| Open receivables | `journal_entry_line.amount_local` — posted, uncleared | Area currency |
+| Open sales commitments | `openSalesCommitmentBuckets` — undelivered order value + delivered-not-billed | Each document's own currency, converted |
 
-The second half filters `o.currency = areaCurrency` (`src/modules/sales/exposure.ts`). A USD order on a KWD
-company adds **nothing** to exposure — deliberately, because adding a document-currency number to a
-local-currency limit without a rate rule would invent one the credit master does not state. But the
-exclusion was invisible until this repair, and a monitor showing a smaller exposure reads as "this customer
-is fine".
-
-Since `sales-order.ts` accepts any currency, and `createDelivery`/billing accept it too, foreign
-commitments are reachable in normal use.
-
-**What the repair changed (and did not):** the *judged* amount is now translated, so a foreign order is
-compared correctly. What still is not translated is the *accumulated* foreign commitment. So the ladder's
-first order is judged properly; the basis it is judged against under-counts.
-
-**What was added for visibility:** the monitor now derives `orderExposure` and states
-`foreignCommitmentExclusion` — the count of excluded documents and their value **per currency**, never
-summed across currencies.
+Before this change the second half counted **only documents in the area's own currency**. A USD order on a
+KWD company added nothing to exposure. That was deliberate — adding a document-currency number to a
+local-currency limit without a rate rule would invent one — but it left a permanent under-count in a control
+that now blocks goods issues and billing.
 
 ---
 
-## Option A — convert foreign commitments into the basis
+## The decision, and why
 
-Translate each excluded document into the area currency at its own document date, AVERAGE rate, and add it
-to exposure.
+**Option A: convert foreign commitments into the basis.**
 
-**For**
-- Exposure becomes the real commitment: one number, in one currency, matching the limit.
-- Consistent with how the judged amount is now handled — both sides of the comparison translated at the
-  same rate type on the same date.
-- Removes a class of under-blocking: today a customer with only foreign orders shows zero exposure.
+Option B (keep them excluded, but visible on the monitor) had been recommended while the impact on live
+customers was unknown. **There is no production database.** The app is in development, no customer holds a
+limit, and no document has been judged. The cost that made B attractive does not exist yet; the under-count
+that made B bad does. Shipping B would leave a control that under-counts *by construction* — silently passing
+a customer whose commitments are all foreign — and nothing later would force it to be revisited.
 
-**Against**
-- **It changes a live control that has a screen, an audit trail and tests.** Customers currently passing
-  may start blocking the moment it lands.
-- A rate that moves after the order date restates past exposure; the ledger's own `amount_local` is fixed
-  at posting, so the two halves would drift whenever rates move between the order and the invoice.
-- A missing rate would make *the basis* unavailable, not just one judgement — the monitor and every check
-  in the area would refuse until the rate is maintained. That is a harder failure than a single refusal.
-- Choosing the rate (document date vs key date vs month-end average) is itself a policy decision.
+> Option B leaves a permanent under-count in a control that blocks goods issues. With no live data to
+> protect, there is no reason to accept that.
 
-**Effect on current customers:** cannot be stated from the database until the impact report is run against
-production-shaped data. On a tenant with no foreign open orders (every test tenant, and the demo), the
-effect is exactly zero. Where foreign orders exist, every affected customer's exposure rises, and those
-whose translated commitment crosses the limit start blocking. **This is the number to collect before
-deciding.**
+### What is now true
 
----
+- Every open commitment is counted, whatever its currency.
+- Each document is converted at **its own date** — the order date, or the delivery date — using
+  `CREDIT_CHECK_RATE_TYPE` (AVERAGE), the same rate type and date rule the judged amount uses. An order
+  raised in March is judged at March's rate, not today's.
+- A missing rate is a **refusal naming the currency pair, the date and the maintenance path**. A document is
+  never dropped from the basis and never translated at 1.
+- A rate older than the tenant's **maximum rate age** (default 45 days, configurable in
+  `client_settings.flags.CREDIT_MAX_RATE_AGE_DAYS`) is **refused by name**. A stale rate is never used.
+- `totalExposure`, `availableCredit` and `utilizationPercent` all use the converted basis.
+- The monitor shows a **per-currency breakdown** — original amount, rate, rate date, converted amount — and
+  never only a converted total.
+- Every determination records `rate_used` and `rate_date`, so a blocked or released document can say which
+  rate decided it.
 
-## Option B — keep them excluded, but visible (current state)
+### What this does not change
 
-Leave the basis as it is; keep the monitor's `orderExposure` and the per-currency
-`foreignCommitmentExclusion` indicator.
+- Receivables exposure: it is already local (`amount_local`), and `refuseAreaCurrencyMismatch` refuses by
+  name if a company's local currency ever differs from its area's.
+- A same-currency customer sees exactly the same arithmetic as before: the identity rate applies, and the
+  converted figure is the original figure.
 
-**For**
-- No change to a live control; no customer starts or stops blocking.
-- The figure is honest: it is labelled a floor, not a total. A reader sees "exposure 400, 3 foreign
-  documents excluded worth 50,000 JPY and 1,200 USD" and can judge for themselves.
-- No new failure mode from a missing rate.
-- Cheap: already done.
+### Accepted consequence
 
-**Against**
-- A customer whose commitments are all foreign still reads as zero exposure. Visibility is not a block —
-  the goods ship unless a human notices.
-- It pushes the judgement onto whoever reads the monitor, which is exactly what a control is supposed
-  to remove.
+A customer whose commitment stands in a currency with no maintained rate **cannot be judged at all** — the
+order, the delivery and the monitor all refuse until the rate exists. That is intentional: an unjudgeable
+commitment is a maintenance task, not a silent pass. The remedy names the pair and the date, so the fix is
+one screen. This is the sharp edge of Option A and the reason Option B existed; with no live data, accepting
+it is the cheaper error.
 
 ---
 
-## Recommendation
+## Before enabling credit blocks on real data
 
-**Option B now, Option A once the impact is measured.** The reason is asymmetry: Option A's downside is a
-live control that suddenly blocks real customers on a rate-driven number, and that cost lands on the
-business immediately; Option B's downside is a known, stated under-count, and it is now visible on the
-screen. A control that under-counts visibly is a truthful control; a control that silently under-counts
-was the actual defect, and it is closed.
+`scripts/credit-currency-impact.sql` is the go-live check: read-only, changes nothing. Run it with the
+migration role against the target database **before** credit blocks are relied on, and read both parts:
 
-Before Option A is adopted, run `scripts/credit-currency-impact.sql` against production-shaped data and
-collect, per option:
+- **Part A** — open documents whose determination would change under the converted basis, in both
+  directions (`PASSED → BLOCKED` and `BLOCKED → PASSED`), with customer, document, currency, document
+  amount, converted amount, the rate and its date, and old and new verdicts.
+- **Part B** — open foreign-currency documents that would be **refused right now** because no rate stands
+  for their currency pair on their document date.
 
-- how many open documents are excluded, per currency;
-- how many customers have **only** foreign commitments (they show zero exposure today);
-- for those with both, how much their exposure rises and how many would newly block.
+Expected on an empty or development database: **no rows in either part**. Any row in Part A is a document
+whose verdict moves; any row in Part B is a document that will refuse until a rate is maintained. Neither is
+an error — they are the work to do before go-live.
 
-**One sub-question that does not depend on the above:** should a *missing* rate for a foreign commitment
-make the exposure unavailable, or should that customer be shown with a stated "commitment not valued"
-flag? Option A forces the choice; the answer shapes whether a broken rate can stop the whole monitor.
+Also confirm, once per tenant: `client_settings.flags.CREDIT_MAX_RATE_AGE_DAYS` is set to the age the
+business accepts (absent means 45), and a rate exists for every currency pair a customer actually trades in.
 
 ---
 
-## What is already true regardless of the decision
+## Where this lives
 
-- The judged amount is translated at the document's date, AVERAGE, rounded to the area currency's
-  precision; no rate is a refusal naming the pair and the date, never a comparison of unlike amounts and
-  never a rate of 1 (`tests/credit-currency.test.ts`).
-- The area currency is verified equal to each company's local currency at runtime, and a mismatch is
-  refused by name rather than summed (`refuseAreaCurrencyMismatch`).
-- The monitor derives `orderExposure` and states the exclusion per currency.
-- DI-019 remains open, with its note corrected and these criteria added.
+- Conversion, staleness and the basis: `src/modules/finance/credit.ts` — `judgedAmountInAreaCurrency`,
+  `convertedCommitments`, `maxRateAgeDays`, `CREDIT_CHECK_RATE_TYPE`, `CREDIT_MAX_RATE_AGE_DAYS`.
+- Bucket reader: `src/modules/sales/exposure.ts` — `openSalesCommitmentBuckets`.
+- Recorded rate: `drizzle/9334_credit_determination_rate.sql` (`rate_used`, `rate_date`).
+- Monitor: `src/app/finance/credit-monitor/CreditMonitorShell.tsx` — the per-currency breakdown table.
+- Tests: `tests/credit-exposure-basis.test.ts` (converted sum of KWD + USD + EUR, no-rate refusal, stale-rate
+  refusal and configuration, rate move between two determinations), `tests/credit-currency.test.ts` (judged
+  amount both directions, area-currency check).
+- Report: `scripts/credit-currency-impact.sql`.

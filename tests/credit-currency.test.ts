@@ -5,6 +5,7 @@ import { withTenant } from '../src/platform/db/client';
 import {
   checkSalesDocumentCredit, evaluateCreditCheck, getCreditExposure, listCreditMonitor,
 } from '../src/modules/finance/credit';
+import { getClearingDocument } from '../src/modules/finance/clearing-reset';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -228,11 +229,56 @@ describe('the exposure unit is verified, not assumed', () => {
   }, 90_000);
 });
 
-describe('the monitor reports the order component', () => {
+describe('the monitor states the basis it converted at', () => {
   it('reports an order exposure figure instead of null', async () => {
     const monitor = await listCreditMonitor(kwdLocal.tenant.client, {});
     const row = monitor.rows.find((r) => r.customer === 'C100');
     expect(row).toBeDefined();
     expect(row!.orderExposure).not.toBeNull();
   }, 90_000);
+
+  it('states the rate type and the maximum rate age it honoured', async () => {
+    const monitor = await listCreditMonitor(kwdLocal.tenant.client, {});
+    expect(monitor.rateType).toBe('AVERAGE');
+    expect(monitor.maxRateAgeDays).toBe(45);
+  }, 90_000);
+});
+
+describe('the clearing-reset view labels its local amount with the local currency', () => {
+  it('prints a foreign clearing in KWD and its document figure in USD', async () => {
+    // A USD clearing on a KWD company: `amount` is the KWD carrying amount, so it must be labelled
+    // KWD. Labelling it USD was the same mislabelling repaired in dunning and ageing.
+    const tenant = await createTenant('clear-reset-ccy', { currency: 'KWD' });
+    try {
+      const company = tenant.companyCode;
+      await withTenant(tenant.client, async (tx) => {
+        // A minimal clearing: an invoice line and a receipt line sharing a clearing document.
+        await tx.execute(sql`
+          insert into journal_entry (client, document_number, fiscal_year, document_type, company_code,
+            document_date, posting_date, posting_period, document_currency, local_currency, status, created_by)
+          values (${tenant.client}, 'FX-INV', 2026, 'DR', ${company}, '2026-10-10', '2026-10-10', 10, 'USD', 'KWD', 'POSTED', ${ACTOR}),
+                 (${tenant.client}, 'FX-RCT', 2026, 'DZ', ${company}, '2026-10-20', '2026-10-20', 10, 'USD', 'KWD', 'POSTED', ${ACTOR})
+          on conflict do nothing`);
+        await tx.execute(sql`
+          insert into journal_entry_line (client, document_number, fiscal_year, line_number, gl_account, company_code,
+            debit_credit, amount_local, amount_document, currency, business_partner, clearing_document, clearing_date)
+          values (${tenant.client}, 'FX-INV', 2026, 1, '110000', ${company}, 'S', 300, 1000, 'USD', 'C100', 'FX-RCT', '2026-10-20'),
+                 (${tenant.client}, 'FX-INV', 2026, 2, '300000', ${company}, 'H', 300, 1000, 'USD', null, null, null),
+                 (${tenant.client}, 'FX-RCT', 2026, 1, '101000', ${company}, 'S', 300, 1000, 'USD', null, null, null),
+                 (${tenant.client}, 'FX-RCT', 2026, 2, '110000', ${company}, 'H', 300, 1000, 'USD', 'C100', null, null)
+          on conflict do nothing`);
+      });
+      const view = await getClearingDocument(tenant.client, {
+        companyCode: company, clearingDocument: 'FX-RCT', fiscalYear: 2026,
+      });
+      const item = view.items.find((i) => i.documentNumber === 'FX-INV')!;
+      // The local amount is KWD 300.0000 and says KWD; the document amount is USD 1000.0000.
+      expect(item.amount).toBe('300.0000');
+      expect(item.currency).toBe('KWD');
+      expect(item.documentAmount).toBe('1000.0000');
+      expect(item.documentCurrency).toBe('USD');
+    } finally {
+      await destroyTenant(tenant.client);
+    }
+  }, 120_000);
 });

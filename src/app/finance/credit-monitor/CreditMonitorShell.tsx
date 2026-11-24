@@ -77,16 +77,43 @@ export default function CreditMonitorShell({ canUse, result, error, filter }: {
       )}
 
       {result && (
-        <p className="mt-1 text-sm text-ink-soft" data-testid="foreign-commitment-exclusion">
-          {t('monitor.foreignExcluded', {
-            count: result.foreignCommitmentExclusion.excluded,
-            detail: result.foreignCommitmentExclusion.byCurrency.length === 0
-              ? t('monitor.foreignExcludedNone')
-              : result.foreignCommitmentExclusion.byCurrency
-                .map((row) => `${row.documents} × ${row.amount.toFixed(2)} ${row.currency}`)
-                .join(' · '),
-          })}
+        <p className="mt-1 text-sm text-ink-soft" data-testid="commitment-basis">
+          {t('monitor.commitmentBasis', { rateType: result.rateType, days: result.maxRateAgeDays })}
         </p>
+      )}
+
+      {result && result.rows.some((row) => row.commitmentBreakdown.length > 0) && (
+        <section className="mt-2 panel overflow-x-auto" aria-label={t('monitor.commitmentBasisTitle')}>
+          <table className="grid-table" data-testid="commitment-breakdown">
+            <thead>
+              <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                <th>{t('monitor.customer')}</th><th>{t('monitor.area')}</th>
+                <th>{t('monitor.breakdownCurrency')}</th>
+                <th className="text-end">{t('monitor.breakdownDocuments')}</th>
+                <th>{t('monitor.breakdownDocumentDate')}</th>
+                <th className="text-end">{t('monitor.breakdownOriginal')}</th>
+                <th className="text-end">{t('monitor.breakdownRate')}</th>
+                <th>{t('monitor.breakdownRateDate')}</th>
+                <th className="text-end">{t('monitor.breakdownConverted')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.rows.flatMap((row) => row.commitmentBreakdown.map((bucket) => (
+                <tr key={`${row.customer}-${row.creditControlArea}-${bucket.currency}-${bucket.documentDate}`}>
+                  <td>{row.customer}</td>
+                  <td>{row.creditControlArea}</td>
+                  <td>{bucket.currency}</td>
+                  <td className="text-end">{bucket.documents}</td>
+                  <td>{bucket.documentDate}</td>
+                  <td className="tabular text-end num">{bucket.originalAmount.toFixed(2)}</td>
+                  <td className="tabular text-end num">{bucket.rate === null ? '—' : bucket.rate.toFixed(6)}</td>
+                  <td>{bucket.rateDate ?? '—'}</td>
+                  <td className="tabular text-end num">{bucket.convertedAmount.toFixed(2)} {row.creditCurrency}</td>
+                </tr>
+              )))}
+            </tbody>
+          </table>
+        </section>
       )}
 
       <section className="panel overflow-x-auto" aria-label={t('monitor.gridTitle')}>

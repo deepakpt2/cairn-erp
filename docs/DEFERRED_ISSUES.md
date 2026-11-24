@@ -31,7 +31,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-016 | Six sibling validators repeat the quantity check that mis-fired at CO01 | Low | PP validation | OPEN |
 | DI-017 | Thirty-five fixtures still choose a material type by which one sorts first | Low | Test fixtures | OPEN |
 | DI-018 | Sales pricing resolves an item price and no other condition type | Medium | SD pricing | OPEN |
-| DI-019 | Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing | Medium | SD credit control | OPEN |
+| DI-019 | Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing | Medium | SD credit control | CLOSED (2026-11-24, option A: foreign commitments converted into the basis) |
 | DI-020 | Delivery, goods issue and billing for a sales order line, credit-bound | High | SD order-to-invoice | PARTLY CLOSED — the re-bill path is closed on the test box by `9227` (see below); open for the returns and credit-memo half, increment 1.3 of `sales-gap-closure-plan.md` |
 | DI-021 | The sales order-to-invoice journey has no browser acceptance run | Medium | Test harness / SD | CLOSED — run on the test box 2026-10-28, `--target sales-order-to-invoice` exits 0 twice with 24 assertions across 11 steps |
 | DI-022 | Quality-inspection stock is a dimension the model carries and no posting can reach | Medium | Inventory / QM boundary | OPEN — blocked at `goods-receipt.ts`, an owner-owned file; the consumer trace is complete (three readers) and the reversal half turned out to need no change. Needs the owner's ruling on how quarantine is expressed |
@@ -454,6 +454,31 @@ blocked milestone), and given acceptance criteria so the next person can close i
   shows the order component and states what the basis excludes, per currency. (e) The basis decision itself
   (convert foreign commitments, or keep them excluded and visible) is still open and is recorded as a proposal,
   not decided in code.
+* **Resolved (2026-11-24) — option A implemented.** The basis decision was taken as **option A**: foreign
+  commitments are converted into the area currency and counted (there is no production database, so the
+  "protect live customers" reason for option B does not apply, and B leaves a permanent under-count in a control
+  that blocks goods issues — `docs/credit-exposure-basis-proposal.md` records the decision).
+  - **Components stated in the engine:** open receivables (`amount_local`, uncleared) plus every open
+    commitment — undelivered order value and delivered-not-billed — each bucket converted at the AVERAGE rate
+    in force **on its own document date** (`openSalesCommitmentBuckets` → `convertedCommitments`).
+  - **Split shown on `/finance/credit-monitor`:** `orderExposure` is derived (no longer null), and a
+    per-currency breakdown gives original amount, rate, rate date and converted amount. `totalExposure`,
+    `availableCredit` and `utilizationPercent` all use the converted basis.
+  - **Proved by tests:** a standing commitment blocks the *next* document and raising the limit re-reads the
+    same basis (`tests/credit-exposure-basis.test.ts`); the converted sum of KWD + USD + EUR equals the
+    exposure; a missing rate refuses by name; a rate older than the 45-day maximum refuses by name.
+  - **Also closed with it:** the judged amount is converted (the earlier correction above), the rate used and
+    its date are recorded on every determination (`drizzle/9334`), and a company whose local currency differs
+    from its area's is refused by name.
+  - `tests/credit-release.test.ts` and `tests/credit-monitor.test.ts` were updated only where the *contract*
+    changed (`orderExposure` null → a stated figure; the exclusion block replaced by the breakdown). No release
+    behaviour changed.
+  - **Still true, and stated rather than fixed:** `deliveryExposure` and `billingExposure` are not separately
+    derived — both are null, and the order/delivery split is not shown, though the total includes both. The
+    basis is complete; only the *presentation* of the two halves as separate columns is not. That is a display
+    gap, not an under-count, and is recorded here rather than claimed done.
+  - Status: **CLOSED** for the defect this entry names (no sales document in the basis before billing). The
+    display split named above is a separate, cosmetic follow-up.
 
 ## DI-020 — The outbound delivery, goods issue and billing links of the sales chain (built; verified on the test box)
 

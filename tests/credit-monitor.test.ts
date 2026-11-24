@@ -84,7 +84,10 @@ describe('SCR-104 credit exposure monitor F.31 (R-152)', () => {
     // The order component is derived now, not "unavailable": this customer has no open order, so it
     // is a stated zero rather than a null that could hide a real commitment.
     expect(within?.orderExposure).toBe(0);
-    expect(result.foreignCommitmentExclusion.excluded).toBe(0);
+    expect(within?.commitmentBreakdown).toEqual([]);
+    // The result states how the basis was translated, so a reader can judge the figures.
+    expect(result.rateType).toBe('AVERAGE');
+    expect(result.maxRateAgeDays).toBe(45);
 
     const noRecord = byCustomer.get('C200');
     expect(noRecord?.noCreditRecord).toBe(true);

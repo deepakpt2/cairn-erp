@@ -87,7 +87,7 @@ import { FANOUT_JOB } from '@/platform/notification/jobs/fanout';
 // The exposure basis is stated by the product document as open orders plus open deliveries plus open
 // receivables. The receivable half is this module's own ledger read; the sales halves can only be counted by
 // the module that owns those documents, so the ladder asks the owner instead of reading its tables (§5.1).
-import { excludedForeignCommitments, openSalesCommitmentTotals, openSalesCommitments } from '@/modules/sales/exposure';
+import { openSalesCommitmentBuckets } from '@/modules/sales/exposure';
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -207,15 +207,20 @@ async function exposureIn(tx: Tx, client: string, customer: string, area: string
 }
 
 /**
- * The judged document's value in the credit control area's currency.
+ * The judged document's value in the credit control area's currency, with the rate and its date.
  *
  * The order or delivery states its value in its own document currency; the limit, the exposure and the
  * area's threshold are all in the area's currency (the company's), so the two can only be compared after
- * one is translated. `amount_local` already translates the ledger, so the missing half was this one.
+ * one is translated.
  *
  * No rate standing is a refusal, never a fallback: comparing unconverted figures is what the defect this
- * replaced did, and translating at 1 would understate a strong currency as badly. The currency pair and
- * the date are named, with the remedy, so an operator can maintain the rate and retry.
+ * replaced did, and translating at 1 would understate a strong currency as badly. A rate older than the
+ * tenant's maximum age is refused for the same reason — an ancient row is not a judgement of today's
+ * commitment. The currency pair, the date and the row's own date are named in both refusals, with the
+ * remedy, so an operator can maintain the rate and retry.
+ *
+ * The rate and its validity date are returned so the determination can record them: a blocked or released
+ * document must be able to say which rate decided it.
  */
 interface ConvertedAmount {
   /** Scaled at MONEY_SCALE, in the area currency. */
@@ -273,6 +278,59 @@ async function judgedAmountInAreaCurrency(
     rate: rate.effectiveRate,
     rateDate: rate.validFrom,
   };
+}
+
+/** One document-currency commitment bucket, and what it is worth in the area currency. */
+export interface ConvertedCommitment {
+  currency: string;
+  /** The document date that selected the rate: the order date, or the delivery date. */
+  documentDate: string;
+  documents: number;
+  /** The document-currency amount, exactly as the sales documents state it. */
+  originalAmount: number;
+  /** The effective rate applied; null when the document stands in the area's currency. */
+  rate: number | null;
+  /** The `valid_from` of the rate row; null when no rate was needed. */
+  rateDate: string | null;
+  /** The amount in the area currency. */
+  convertedAmount: number;
+}
+
+/**
+ * Every open sales commitment of one customer, translated into the area currency, bucket by bucket.
+ *
+ * Option A of the exposure-basis decision: foreign commitments are *in* the basis, converted at their own
+ * document date with the same rate type, the same no-rate refusal and the same staleness rule the judged
+ * amount uses. A customer's whole commitment is therefore compared with the limit in one currency, instead
+ * of the foreign part being silently dropped.
+ *
+ * The same currency is still translated (by the identity), so a row always carries the rate and date it
+ * was judged at rather than leaving a gap only foreign documents fill.
+ */
+async function convertedCommitments(
+  tx: Tx, client: string, customer: string, areaCurrency: string, excludeSalesDocument?: string,
+): Promise<{ total: bigint; buckets: ConvertedCommitment[] }> {
+  const rows = await openSalesCommitmentBuckets(tx, client, excludeSalesDocument);
+  const mine = rows.filter((row) => row.customer === customer);
+  let total = 0n;
+  const buckets: ConvertedCommitment[] = [];
+  for (const row of mine) {
+    const converted = await judgedAmountInAreaCurrency(tx, client, {
+      amount: row.amount, amountCurrency: row.currency,
+      documentDate: row.documentDate, areaCurrency,
+    });
+    total += converted.units;
+    buckets.push({
+      currency: row.currency,
+      documentDate: row.documentDate,
+      documents: row.documents,
+      originalAmount: Number(fromScaled(toScaled(row.amount ?? '0'))),
+      rate: converted.rateDate === null ? null : Number(converted.rate),
+      rateDate: converted.rateDate,
+      convertedAmount: Number(fromScaled(converted.units)),
+    });
+  }
+  return { total, buckets };
 }
 
 export async function getCreditExposure(client: string, customer: string, area: string): Promise<{ exposure: number; currency: string }> {
@@ -514,12 +572,11 @@ export async function evaluateCreditCheck(input: {
     `);
     const record = (rows as unknown as CreditRow[])[0];
     let exposure = await exposureIn(tx, input.client, input.customer, input.creditControlArea);
-    // The un-billed half of the chain, in the area's own currency: an order that has not gone out and a
-    // delivery that has not been invoiced are both money the customer has committed to (§14.8).
-    const commitments = await openSalesCommitments(
-      tx, input.client, input.customer, areaRow.currency, input.excludeSalesDocument,
-    ).catch(() => '0');
-    exposure += toScaled(commitments);
+    // The un-billed half of the chain (§14.8): an order that has not gone out and a delivery that has not
+    // been invoiced are both money the customer has committed to. Each bucket is translated at its own
+    // document date, so a March order is judged on March's rate and not today's.
+    const basis = await convertedCommitments(tx, input.client, input.customer, areaRow.currency, input.excludeSalesDocument);
+    exposure += basis.total;
     // The amount under judgement is compared in the area's currency, never in its document currency:
     // a limit stated in KWD cannot be judged against a number that is a count of USD.
     let amount = 0n;
@@ -604,11 +661,16 @@ export interface CreditMonitorRow {
   creditCurrency: string;
   arExposure: number;
   /**
-   * The standing open sales commitment in the credit basis, in the area currency: open order and
-   * delivery value from each document's current credit determination. Null where nothing is standing.
-   * The delivery and billing splits are not separately derived yet.
+   * The standing open sales commitment in the credit basis, converted into the credit currency: open
+   * order and delivery value, each document translated at its own date. Null where nothing stands.
    */
   orderExposure: number | null;
+  /**
+   * The same commitment broken down per document currency, with the rate and rate date used and the
+   * converted figure. The converted total is never shown alone: a reader must be able to see which
+   * currencies and which rates produced it.
+   */
+  commitmentBreakdown: ConvertedCommitment[];
   deliveryExposure: number | null;
   billingExposure: number | null;
   totalExposure: number;
@@ -623,29 +685,15 @@ export interface CreditMonitorRow {
   lastUpdated: string | null;
 }
 
-/**
- * What the credit basis leaves out because of currency, stated rather than left implicit.
- *
- * `openSalesCommitments` counts only documents in the area's own currency: a foreign order cannot be
- * added to a local limit without a rate rule the credit master does not state. The exclusion is a
- * deliberate decision (DI-019), but a monitor that silently showed a smaller exposure would read as
- * "this customer is fine". This block names the documents outside the basis, per currency, so the
- * figure is understood as a floor and never mistaken for the whole commitment.
- */
-export interface ForeignCommitmentExclusion {
-  /** Documents standing open in a currency other than their area's. */
-  excluded: number;
-  /** Their value per document currency — never summed across currencies. */
-  byCurrency: Array<{ currency: string; documents: number; amount: number }>;
-}
-
 export interface CreditMonitorResult {
   rows: CreditMonitorRow[];
   totalCustomers: number;
   calculatedAt: string;
   reportingCurrency: string | null;
-  /** Documents the basis leaves out for currency reasons, named rather than silently dropped. */
-  foreignCommitmentExclusion: ForeignCommitmentExclusion;
+  /** The rate type every commitment and judged amount in this result was translated at. */
+  rateType: string;
+  /** The tenant's maximum rate age in days, so a reader can tell a fresh rate from a tolerated one. */
+  maxRateAgeDays: number;
 }
 
 const PAGE_CAP = 200;
@@ -729,20 +777,39 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
     const drafts: RowDraft[] = [];
     const seen = new Set<string>();
 
-    // The order half of the basis, grouped per customer and area currency, and the documents the
-    // basis leaves out for currency reasons. Both are reads of the documents' owner, not of its tables.
-    // Neither is caught: a broken read must fail the monitor, never quietly report a zero commitment.
-    const commitmentByArea = new Map<string, bigint>();
-    for (const row of await openSalesCommitmentTotals(tx, client)) {
-      commitmentByArea.set(`${row.customer}|${row.areaCurrency}`, toScaled(row.amount ?? '0'));
+    // The order half of the basis, converted per document currency and date. Read from the documents'
+    // owner, and not caught: a broken read must fail the monitor, never quietly report a zero commitment.
+    // The customer's area currency is the one its credit record names; a customer with several areas is
+    // converted once per area, keyed by `customer|areaCurrency`.
+    const maxAge = await maxRateAgeDays(tx, client);
+    const areaCurrencyByCustomer = new Map<string, string>();
+    for (const record of recordRows as unknown as Array<Record<string, unknown>>) {
+      areaCurrencyByCustomer.set(String(record.customer), String(record.credit_currency));
     }
-    const foreignRows = await excludedForeignCommitments(tx, client);
-    const foreignCommitmentExclusion: ForeignCommitmentExclusion = {
-      excluded: foreignRows.reduce((total, row) => total + row.documents, 0),
-      byCurrency: foreignRows.map((row) => ({
-        currency: row.currency, documents: row.documents, amount: Number(fromScaled(toScaled(row.amount ?? '0'))),
-      })),
-    };
+    const openBuckets = await openSalesCommitmentBuckets(tx, client);
+    const convertedByCustomer = new Map<string, { total: bigint; buckets: ConvertedCommitment[] }>();
+    for (const [customer, areaCurrency] of areaCurrencyByCustomer) {
+      const mine = openBuckets.filter((row) => row.customer === customer);
+      let total = 0n;
+      const buckets: ConvertedCommitment[] = [];
+      for (const row of mine) {
+        const converted = await judgedAmountInAreaCurrency(tx, client, {
+          amount: row.amount, amountCurrency: row.currency,
+          documentDate: row.documentDate, areaCurrency,
+        });
+        total += converted.units;
+        buckets.push({
+          currency: row.currency,
+          documentDate: row.documentDate,
+          documents: row.documents,
+          originalAmount: Number(fromScaled(toScaled(row.amount ?? '0'))),
+          rate: converted.rateDate === null ? null : Number(converted.rate),
+          rateDate: converted.rateDate,
+          convertedAmount: Number(fromScaled(converted.units)),
+        });
+      }
+      convertedByCustomer.set(customer, { total, buckets });
+    }
 
     for (const record of recordRows as unknown as Array<Record<string, unknown>>) {
       const customer = String(record.customer);
@@ -751,7 +818,8 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
       seen.add(key);
       const exposure = exposureByKey.get(key)?.exposure ?? 0n;
       const areaCurrency = String(record.credit_currency);
-      const orderCommitment = commitmentByArea.get(`${customer}|${areaCurrency}`) ?? 0n;
+      const commitment = convertedByCustomer.get(customer) ?? { total: 0n, buckets: [] };
+      const orderCommitment = commitment.total;
       const limit = toScaled(String(record.credit_limit));
       drafts.push({
         customer, customerName: String(record.customer_name), creditControlArea: area,
@@ -759,6 +827,7 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
         creditLimit: Number(fromScaled(limit)), creditCurrency: areaCurrency,
         arExposure: Number(fromScaled(exposure)),
         orderExposure: Number(fromScaled(orderCommitment)),
+        commitmentBreakdown: commitment.buckets,
         deliveryExposure: null, billingExposure: null,
         // The same basis the ladder compares: open receivables plus the standing open commitments.
         totalExposure: Number(fromScaled(exposure + orderCommitment)),
@@ -783,13 +852,38 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
         select name from business_partner where client = ${client} and partner_number = ${customer}
       `);
       const areaCurrencyCode = areaCurrency.get(area) ?? '';
-      const orderCommitment = commitmentByArea.get(`${customer}|${areaCurrencyCode}`) ?? 0n;
+      // A customer with exposure but no credit record still has commitments; they are converted for the
+      // area it is exposed in, so hiding them behind a missing record is not possible either.
+      let commitment = convertedByCustomer.get(customer);
+      if (!commitment) {
+        let total = 0n;
+        const buckets: ConvertedCommitment[] = [];
+        for (const row of openBuckets) {
+          if (row.customer !== customer) continue;
+          const converted = await judgedAmountInAreaCurrency(tx, client, {
+            amount: row.amount, amountCurrency: row.currency,
+            documentDate: row.documentDate, areaCurrency: areaCurrencyCode,
+          });
+          total += converted.units;
+          buckets.push({
+            currency: row.currency, documentDate: row.documentDate, documents: row.documents,
+            originalAmount: Number(fromScaled(toScaled(row.amount ?? '0'))),
+            rate: converted.rateDate === null ? null : Number(converted.rate),
+            rateDate: converted.rateDate,
+            convertedAmount: Number(fromScaled(converted.units)),
+          });
+        }
+        commitment = { total, buckets };
+        convertedByCustomer.set(customer, commitment);
+      }
+      const orderCommitment = commitment.total;
       drafts.push({
         customer, customerName: String((nameRows as unknown as Array<{ name: string }>)[0]?.name ?? customer),
         creditControlArea: area, companyCodes: value.companies,
         creditLimit: null, creditCurrency: areaCurrencyCode,
         arExposure: Number(fromScaled(value.exposure)),
         orderExposure: Number(fromScaled(orderCommitment)),
+        commitmentBreakdown: commitment.buckets,
         deliveryExposure: null, billingExposure: null,
         totalExposure: Number(fromScaled(value.exposure + orderCommitment)), availableCredit: null, utilizationPercent: null,
         riskCategory: null, isBlocked: false, blockReason: null,
@@ -834,7 +928,8 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
     return {
       rows, totalCustomers, calculatedAt,
       reportingCurrency: filter.reportingCurrency ?? null,
-      foreignCommitmentExclusion,
+      rateType,
+      maxRateAgeDays: maxAge,
     };
   });
 }
