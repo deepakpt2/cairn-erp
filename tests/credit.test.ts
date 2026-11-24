@@ -108,10 +108,17 @@ describe('SCR-103 customer credit management FD32 (R-151)', () => {
   });
 
   it('warns at the threshold, blocks beyond the limit, on hold, and when expired', async () => {
-    // Limit stands at 5000 with 4000 exposure.
-    const warn = await evaluateCreditCheck({ client, customer: 'C100', creditControlArea: AREA, amount: '600' });
+    // Limit stands at 5000 with 4000 exposure. The judged amount states USD, the area's own currency,
+    // so no rate is needed and the comparison is direct.
+    const warn = await evaluateCreditCheck({
+      client, customer: 'C100', creditControlArea: AREA,
+      amount: '600', amountCurrency: 'USD', documentDate: '2026-04-10',
+    });
     expect(warn.decision).toBe('WARN'); // 4600/5000 = 92% ≥ 90%
-    const exceeded = await evaluateCreditCheck({ client, customer: 'C100', creditControlArea: AREA, amount: '1500' });
+    const exceeded = await evaluateCreditCheck({
+      client, customer: 'C100', creditControlArea: AREA,
+      amount: '1500', amountCurrency: 'USD', documentDate: '2026-04-10',
+    });
     expect(exceeded.decision).toBe('BLOCK');
     expect(exceeded.reason).toBe('LIMIT_EXCEEDED');
 

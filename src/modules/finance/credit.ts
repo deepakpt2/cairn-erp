@@ -72,7 +72,11 @@ export class CreditError extends Error {
 
 import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
-import { fromScaled, toScaled } from '@/platform/posting/decimal';
+import { MONEY_SCALE, fromScaled, toScaled } from '@/platform/posting/decimal';
+import { moneyFor } from '@/platform/posting/money';
+import {
+  ExchangeRateLookupError, translateAmount, requireExchangeRate,
+} from '@/modules/finance/exchange-rate-lookup';
 import { enqueue } from '@/platform/job/queue';
 import { creatorOf } from '@/platform/notification/creator';
 import { notifyOn } from '@/platform/notification/notify';
@@ -93,6 +97,24 @@ function newAuditId(): string {
 }
 
 const todayUtc = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * The rate type a credit check translates at.
+ *
+ * AVERAGE, the same rate the exposure monitor uses for its reporting-currency conversion (`rateType`
+ * below) and the same one the ledger uses when it carries a foreign document into the local currency.
+ * A credit check is a comparison against a limit that was itself written in local terms, so it must use
+ * the rate the limit's own book already stands at; a spot or buying/selling rate would judge the same
+ * order differently on different days and could never be reconciled to the receivable it later becomes.
+ *
+ * The date that selects the rate is the **document's own date** — the order's order date, or the
+ * delivery's posting date — not today's. The comparison then matches the basis it is compared against:
+ * exposure is `amount_local` as the ledger carried it, every line translated at its own posting date,
+ * so translating the judged amount at its document date compares like with like. Re-judging an old
+ * order therefore restates it at its own rate instead of inventing a gain or loss the documents never
+ * posted.
+ */
+export const CREDIT_CHECK_RATE_TYPE = 'AVERAGE';
 
 interface AreaRow { credit_control_area: string; currency: string; warning_threshold_percent: number; is_active: boolean }
 
@@ -116,6 +138,36 @@ async function assertPartner(tx: Tx, client: string, customer: string): Promise<
   return row.name;
 }
 
+/**
+ * Refuse when a company assigned to the area keeps its books in a currency other than the area's.
+ *
+ * Exposure sums `amount_local`, which is each line's company local currency, and compares it with a
+ * limit stated in the area's currency. That is only the same unit when the two agree. Every supported
+ * path makes them agree — the standard structure writes the area's currency from the company's, and the
+ * setup service refuses a second company whose currency differs (`createCreditControlAreaSetup`) — but
+ * nothing at the database level enforces it, so an out-of-band assignment could still create the
+ * mismatch. Refusing by name beats summing two currencies and calling the result an exposure, and it
+ * beats assuming the invariant holds.
+ */
+async function refuseAreaCurrencyMismatch(
+  tx: Tx, client: string, area: string, areaCurrency: string,
+): Promise<void> {
+  const rows = await tx.execute(sql`
+    select c.company_code, c.currency
+    from company_code c
+    where c.client = ${client} and c.credit_control_area = ${area}
+      and c.currency <> ${areaCurrency}
+    order by c.company_code
+  `);
+  const mismatched = rows as unknown as Array<{ company_code: string; currency: string }>;
+  if (mismatched.length === 0) return;
+  const named = mismatched.map((r) => `${r.company_code} (${r.currency})`).join(', ');
+  fail(
+    `Credit control area ${area} stands in ${areaCurrency}, but company ${mismatched.length === 1 ? 'code' : 'codes'} ${named} keep their books in another currency, so their local exposure cannot be added to a limit in ${areaCurrency}.`,
+    `Move the mismatched company to a credit control area in its own currency, or correct the assignment, then retry. Amounts are never summed across currencies.`,
+  );
+}
+
 async function exposureIn(tx: Tx, client: string, customer: string, area: string): Promise<bigint> {
   const rows = await tx.execute(sql`
     select coalesce(sum(case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end), 0)::text as exposure
@@ -130,9 +182,53 @@ async function exposureIn(tx: Tx, client: string, customer: string, area: string
   return toScaled((rows as unknown as Array<{ exposure: string }>)[0]?.exposure ?? '0');
 }
 
+/**
+ * The judged document's value in the credit control area's currency.
+ *
+ * The order or delivery states its value in its own document currency; the limit, the exposure and the
+ * area's threshold are all in the area's currency (the company's), so the two can only be compared after
+ * one is translated. `amount_local` already translates the ledger, so the missing half was this one.
+ *
+ * No rate standing is a refusal, never a fallback: comparing unconverted figures is what the defect this
+ * replaced did, and translating at 1 would understate a strong currency as badly. The currency pair and
+ * the date are named, with the remedy, so an operator can maintain the rate and retry.
+ */
+async function judgedAmountInAreaCurrency(
+  tx: Tx,
+  client: string,
+  input: { amount: string; amountCurrency: string; documentDate: string; areaCurrency: string },
+): Promise<bigint> {
+  let amountUnits: bigint;
+  try {
+    amountUnits = toScaled(input.amount);
+  } catch {
+    fail('The order value is not a valid amount.');
+  }
+  const from = input.amountCurrency.trim().toUpperCase();
+  const to = input.areaCurrency.trim().toUpperCase();
+  if (from === to) return amountUnits;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.documentDate)) {
+    fail(`Document date ${input.documentDate} is not a calendar date, so the rate for ${from} to ${to} cannot be selected.`,
+      'Give the document a calendar date.');
+  }
+  let rate;
+  try {
+    rate = await requireExchangeRate(tx, client, from, to, input.documentDate, CREDIT_CHECK_RATE_TYPE);
+  } catch (error) {
+    if (error instanceof ExchangeRateLookupError) throw new CreditError(error.message, error.remedy);
+    throw error;
+  }
+  // Rounded at the area currency's own decimals, so a KWD (3) comparison is judged in fils and a
+  // two-decimal currency in cents, rather than at the ledger's storage scale.
+  const targetScale = (await moneyFor(tx, to)).scale;
+  const translated = translateAmount(amountUnits, MONEY_SCALE, targetScale, rate);
+  return translated * 10n ** BigInt(MONEY_SCALE - targetScale);
+}
+
 export async function getCreditExposure(client: string, customer: string, area: string): Promise<{ exposure: number; currency: string }> {
   return withTenant(client, async (tx) => {
     const areaRow = await loadArea(tx, client, area);
+    await refuseAreaCurrencyMismatch(tx, client, area, areaRow.currency);
     const exposure = await exposureIn(tx, client, customer, area);
     return { exposure: Number(fromScaled(exposure)), currency: areaRow.currency };
   });
@@ -347,12 +443,21 @@ export async function listCreditAudit(client: string, customer: string, area: st
 
 export async function evaluateCreditCheck(input: {
   client: string; customer: string; creditControlArea: string; amount?: string;
+  /**
+   * The currency `amount` stands in, and the document date that selects its rate. Required whenever
+   * `amount` is given and its currency differs from the area's: the amount is translated into the area
+   * currency before it is compared, and no rate standing is a refusal. Omit both for a check with no
+   * new amount (the exposure alone).
+   */
+  amountCurrency?: string;
+  documentDate?: string;
   /** The sales document being judged, kept out of the basis it is being judged against. */
   excludeSalesDocument?: string;
 }): Promise<CreditCheckResult> {
-  const amount = input.amount ? toScaled(input.amount) : 0n;
   return withTenant(input.client, async (tx) => {
     const areaRow = await loadArea(tx, input.client, input.creditControlArea);
+    // Exposure is each line's company local currency; the limit is the area's. Verified, not assumed.
+    await refuseAreaCurrencyMismatch(tx, input.client, input.creditControlArea, areaRow.currency);
     const rows = await tx.execute(sql`
       select * from customer_credit
       where client = ${input.client} and customer = ${input.customer} and credit_control_area = ${input.creditControlArea}
@@ -365,6 +470,27 @@ export async function evaluateCreditCheck(input: {
       tx, input.client, input.customer, areaRow.currency, input.excludeSalesDocument,
     ).catch(() => '0');
     exposure += toScaled(commitments);
+    // The amount under judgement is compared in the area's currency, never in its document currency:
+    // a limit stated in KWD cannot be judged against a number that is a count of USD.
+    let amount = 0n;
+    if (input.amount) {
+      if (!input.amountCurrency) {
+        fail(
+          `The judged amount ${input.amount} does not state its currency, so it cannot be compared with a limit in ${areaRow.currency}.`,
+          'Pass the document currency with the amount.',
+        );
+      }
+      if (!input.documentDate) {
+        fail(
+          `The judged amount ${input.amount} does not state a document date, so no ${CREDIT_CHECK_RATE_TYPE} rate for ${input.amountCurrency} to ${areaRow.currency} can be selected.`,
+          'Pass the document date with the amount.',
+        );
+      }
+      amount = await judgedAmountInAreaCurrency(tx, input.client, {
+        amount: input.amount, amountCurrency: input.amountCurrency,
+        documentDate: input.documentDate, areaCurrency: areaRow.currency,
+      });
+    }
     if (!record) {
       return {
         decision: 'BLOCK' as const, reason: 'NO_CREDIT_RECORD',
@@ -771,7 +897,8 @@ export async function checkSalesDocumentCredit(input: {
 
   const check = await evaluateCreditCheck({
     client: input.client, customer: input.customer, creditControlArea: input.creditControlArea,
-    amount: input.orderValue, excludeSalesDocument: document,
+    amount: input.orderValue, amountCurrency: input.orderCurrency, documentDate: input.documentDate,
+    excludeSalesDocument: document,
   });
   const status: DeterminationStatus = check.decision === 'BLOCK' ? 'BLOCKED' : 'PASSED';
   const determinationId = newDeterminationId();
@@ -915,7 +1042,9 @@ export async function releaseDocument(input: {
   }
   const check = await evaluateCreditCheck({
     client, customer: current.customer, creditControlArea: current.credit_control_area,
-    amount: fromScaled(toScaled(current.order_value)), excludeSalesDocument: salesDocument,
+    amount: fromScaled(toScaled(current.order_value)),
+    amountCurrency: current.order_currency, documentDate: current.document_date,
+    excludeSalesDocument: salesDocument,
   });
   const stillBlocked = check.decision === 'BLOCK';
   if (stillBlocked && !input.override) {
@@ -1027,7 +1156,9 @@ export async function reblockDocument(input: {
   // A fresh determination always precedes a reblock.
   const check = await evaluateCreditCheck({
     client: input.client, customer: current.customer, creditControlArea: current.credit_control_area,
-    amount: fromScaled(toScaled(current.order_value)), excludeSalesDocument: input.salesDocument,
+    amount: fromScaled(toScaled(current.order_value)),
+    amountCurrency: current.order_currency, documentDate: current.document_date,
+    excludeSalesDocument: input.salesDocument,
   });
   const reason = check.decision === 'BLOCK' ? check.reason : 'MANUAL_REBLOCK';
   if (check.decision !== 'BLOCK' && !input.reason.trim()) {
