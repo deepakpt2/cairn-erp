@@ -27,6 +27,9 @@ import {
   paymentRunReleaseKey, syncPaymentRunRelease,
 } from './payment-run-release';
 import { paymentInstructionCanonical } from './payment-run-instruction';
+import {
+  notValidApplicationLineSql, openItemBalances, unappliedPaymentCreditSql, validApplicationSql,
+} from './open-item-netting';
 import { activeBlockedInvoiceNumbers } from '../purchasing/blocked-invoice';
 import { supplierInvoice } from '../purchasing/schema';
 import {
@@ -357,6 +360,8 @@ export async function openItems(tx: Tx, client: string, run: PaymentRunView): Pr
     currency: journalEntryLine.currency,
     // The payment settles the item in its own (document) currency, so its open amount is the document amount.
     amount: journalEntryLine.amountDocument,
+    valid: validApplicationSql('document'),
+    paymentCredit: unappliedPaymentCreditSql('document'),
     originClass: journalEntry.originClass,
     originKey: journalEntry.originKey,
     postingDate: journalEntry.postingDate,
@@ -373,25 +378,9 @@ export async function openItems(tx: Tx, client: string, run: PaymentRunView): Pr
       sql`${journalEntry.reversalOf} is null`,
       sql`${journalEntryLine.businessPartner} is not null`,
       sql`${journalEntryLine.clearingDocument} is null`,
-      // The payment journal's own `Settles <document>` debit line is the offset of this invoice.
-      // While that offset is open (a reset payment), the invoice must not be proposed again. The
-      // residual line has a different text and remains a genuine payable.
-      sql`not exists (
-        select 1 from journal_entry_line off
-        join journal_entry offh
-          on offh.client = off.client and offh.document_number = off.document_number
-         and offh.fiscal_year = off.fiscal_year
-        where off.client = journal_entry_line.client
-          and off.company_code = journal_entry_line.company_code
-          and off.business_partner = journal_entry_line.business_partner
-          and off.gl_account = journal_entry_line.gl_account
-          and off.currency = journal_entry_line.currency
-          and off.debit_credit = 'S'
-          and off.clearing_document is null
-          and offh.status = 'POSTED' and offh.reversal_of is null
-          and off.line_text = concat('Settles ', journal_entry_line.document_number)
-          and off.amount_document = journal_entry_line.amount_document
-      )`,
+      // The source line is netted below; an application line must not be proposed beside it.
+      // Reset offsets are already netted through `unappliedPaymentCreditSql`.
+      notValidApplicationLineSql(undefined, { keepResetOffsets: false }),
     ));
   const invoices = new Map<string, { dueDate: string | null }>();
   for (const inv of await tx.select().from(supplierInvoice).where(eq(supplierInvoice.client, client))) {
@@ -408,6 +397,16 @@ export async function openItems(tx: Tx, client: string, run: PaymentRunView): Pr
     // The same manual hold MRBR releases. The line stays open and is not proposed.
     if (isInvoice && blocked.has(line.originKey!)) continue;
     const invoice = isInvoice ? invoices.get(line.originKey!) : undefined;
+    // Open liability less valid applications, then less unapplied payment credits.
+    const liabilityUnits = toScaled(line.amount) - toScaled(String(line.valid ?? '0'));
+    if (liabilityUnits < 0n) {
+      throw new PaymentRunError(
+        `Payable ${line.documentNumber}/${line.fiscalYear}/${line.lineNumber} stands at ${fromScaled(liabilityUnits)} ${line.currency} after valid applications; they exceed the item.`,
+        'Investigate the applications on this item before running payment.',
+      );
+    }
+    const payableUnits = liabilityUnits - toScaled(String(line.paymentCredit ?? '0'));
+    if (payableUnits <= 0n) continue;
     items.push({
       journalDocumentNumber: line.documentNumber,
       journalFiscalYear: line.fiscalYear,
@@ -416,7 +415,7 @@ export async function openItems(tx: Tx, client: string, run: PaymentRunView): Pr
       accountId: line.partner!,
       glAccount: line.glAccount,
       currency: line.currency,
-      amount: Number(line.amount),
+      amount: Number(fromScaled(payableUnits)),
       journalPostingDate: line.postingDate as unknown as string,
       invoiceNumber: isInvoice ? line.originKey! : null,
       dueDate: invoice?.dueDate ?? (line.postingDate as unknown as string),
@@ -573,6 +572,8 @@ export async function executePaymentRun(input: {
         amountDocument: journalEntryLine.amountDocument,
         currency: journalEntryLine.currency,
         businessPartner: journalEntryLine.businessPartner,
+        debitCredit: journalEntryLine.debitCredit,
+        documentNumber: journalEntryLine.documentNumber,
         clearingDocument: journalEntryLine.clearingDocument,
         status: journalEntry.status,
         reversalOf: journalEntry.reversalOf,
@@ -607,15 +608,38 @@ export async function executePaymentRun(input: {
       let lineUnits: bigint;
       let itemUnits: bigint;
       try {
-        lineUnits = documentMoney.entered(line.amountDocument, 'The source item amount');
         itemUnits = documentMoney.entered(item.amount, 'The proposed item amount');
       } catch (error) {
         if (error instanceof MoneyError) throw new PaymentRunError(error.message, error.remedy);
         throw error;
       }
+      // Recompute the eligible payable inside this transaction: the open liability less
+      // unapplied payment credits. The proposal amount is never trusted on its own.
+      const balances = await openItemBalances(tx, input.client, {
+        documentNumber: line.documentNumber, companyCode: line.companyCode,
+        businessPartner: line.businessPartner, glAccount: line.glAccount,
+        currency: line.currency, debitCredit: line.debitCredit,
+      });
+      const liabilityDocument = toScaled(line.amountDocument) - balances.liability.document;
+      const liabilityLocal = toScaled(line.amountLocal) - balances.liability.local;
+      if (liabilityDocument < 0n || liabilityLocal < 0n) {
+        throw new PaymentRunError(
+          `The item for supplier ${item.accountId} carries applications beyond its amount; the payable position cannot be proved.`,
+          'Regenerate the proposal, then execute. Nothing has been posted.',
+        );
+      }
+      const netDocument = liabilityDocument - balances.paymentCredit.document;
+      const netLocal = liabilityLocal - balances.paymentCredit.local;
+      if (netDocument <= 0n || netLocal < 0n) {
+        throw new PaymentRunError(
+          `The item for supplier ${item.accountId} stands fully covered by applications and unapplied payment credits and cannot be paid again.`,
+          'Regenerate the proposal, then execute. Nothing has been posted.',
+        );
+      }
+      lineUnits = documentMoney.units(fromScaled(netDocument));
       if (lineUnits !== itemUnits) {
         throw new PaymentRunError(
-          `The proposed amount for supplier ${item.accountId} differs from the source journal line.`,
+          `The proposed amount for supplier ${item.accountId} differs from the source journal line's remaining payable.`,
           'Regenerate the proposal, then execute. Nothing has been posted.',
         );
       }
@@ -627,7 +651,7 @@ export async function executePaymentRun(input: {
       if (supplier?.isBlocked) throw new PaymentRunError(`Supplier ${item.accountId} is blocked.`, 'Regenerate the proposal, then execute.');
       const key = groupKeyOf(item.companyCode, item.accountId, item.currency);
       const group = groups.get(key) ?? { company: item.companyCode, supplier: item.accountId, currency: item.currency, entries: [] as Entry[] };
-      group.entries.push({ item, glAccount: line.glAccount, amountLocal: line.amountLocal });
+      group.entries.push({ item, glAccount: line.glAccount, amountLocal: fromScaled(netLocal) });
       groups.set(key, group);
     }
 
@@ -794,6 +818,7 @@ export async function executePaymentRun(input: {
         glAccount: e.glAccount, debitCredit: 'S' as const,
         amount: money.text(e.item.amount), amountLocal: e.amountLocal,
         businessPartner: e.item.accountId,
+        lineText: `Settles ${e.item.journalDocumentNumber}`,
       }));
       lines.push({
         glAccount: bank.glAccount, debitCredit: 'H' as const, amount: money.fromUnits(totalUnits),

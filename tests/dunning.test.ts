@@ -5,6 +5,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
 import { cancelDunningRun, excludeDunningAccount, finalizeDunningRun as finalizeDunningRunService, proposeDunningRun as proposeDunningRunService } from '../src/modules/finance/dunning';
+import { getReceivables, postIncomingPayment as postIncomingPaymentRaw } from '../src/modules/finance/incoming-payment';
+import { resetClearing } from '../src/modules/finance/clearing-reset';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 import { financePoster, financeInputPoster } from './helpers/finance-actor';
@@ -13,6 +15,7 @@ import { financePoster, financeInputPoster } from './helpers/finance-actor';
 // test actor, created the first time one of them is called.
 const finalizeDunningRun = financePoster(finalizeDunningRunService);
 const proposeDunningRun = financePoster(proposeDunningRunService);
+const postIncomingPayment = financeInputPoster(postIncomingPaymentRaw);
 
 const ACTOR = 'SCR074_F150_TEST';
 
@@ -185,5 +188,30 @@ describe('SCR-074 dunning programme (F150)', () => {
     await expect(finalizeDunningRun({
       client: c, changedBy: ACTOR, runDate: '2027-01-20', runId: 'DUN004', confirmed: true,
     })).rejects.toThrow('stands CANCELLED');
+  });
+
+  it('does not dun an invoice netted by an open reset payment offset', async () => {
+    const c = await standingClient();
+    const invoice = (await getReceivables(c, 'C10000', '1000')).openItems.find((i) => i.signed === 550)!;
+    const receipt = await postIncomingPayment({
+      client: c, changedBy: ACTOR, customerNumber: 'C10000', companyCode: '1000',
+      documentDate: '2026-11-21', postingDate: '2026-11-21', clearingDate: '2026-11-21',
+      bankGlAccount: '101000', amount: 550, currency: 'USD',
+      reference: 'DUN-RESET-RCPT', requestKey: 'dun-reset-1',
+      items: [{
+        documentNumber: invoice.documentNumber, fiscalYear: invoice.fiscalYear, lineNumber: invoice.lineNumber,
+      }],
+    });
+    await resetClearing({
+      client: c, changedBy: ACTOR, companyCode: '1000',
+      clearingDocument: receipt.journalDocumentNumber, fiscalYear: 2026,
+      reason: 'dunning netting test', requestKey: 'dun-reset-clear',
+    });
+    const view = await proposeDunningRun({
+      client: c, changedBy: ACTOR, runDate: '2027-02-20', runId: 'DUN005',
+      dunningDate: '2027-02-20', postedThrough: '2027-02-20', companyCodes: ['1000'],
+    });
+    // The reopened invoice and its open `Settles` offset cancel: nothing is overdue for it.
+    expect(view.items.some((i) => i.documentNumber === invoice.documentNumber)).toBe(false);
   });
 });

@@ -24,9 +24,11 @@
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { LEDGER_JOURNAL_STATUSES } from './ledger-journal';
+import { notValidApplicationLineSql, SettlementNettingError, validApplicationSql } from './open-item-netting';
 
 import type { Tx } from '../../platform/db/client';
 import { getCompanyCode } from '../../platform/periods';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { businessPartner } from '../foundation/business-partner-schema';
 import { calculatePaymentSchedule, type PaymentTermRule } from '../foundation/payment-term-dates';
 import { paymentTerms as paymentTermsTable } from '../foundation/payment-terms-schema';
@@ -170,6 +172,8 @@ export async function deriveAgeingItems(
     debitCredit: journalEntryLine.debitCredit,
     amount: journalEntryLine.amountLocal,
     documentAmount: journalEntryLine.amountDocument,
+    validLocal: validApplicationSql('local', input.keyDate),
+    validDocument: validApplicationSql('document', input.keyDate),
     currency: journalEntryLine.currency,
     postingDate: journalEntry.postingDate,
     documentDate: journalEntry.documentDate,
@@ -197,6 +201,7 @@ export async function deriveAgeingItems(
       ...(input.partnerTo ? [sql`${journalEntryLine.businessPartner} <= ${input.partnerTo}`] : []),
       sql`${journalEntry.postingDate} <= ${input.keyDate}`,
       sql`(${journalEntryLine.clearingDate} is null or ${journalEntryLine.clearingDate} > ${input.keyDate})`,
+      notValidApplicationLineSql(input.keyDate),
     ))
     .orderBy(journalEntryLine.businessPartner, journalEntry.postingDate, journalEntryLine.documentNumber, journalEntryLine.lineNumber);
 
@@ -260,7 +265,19 @@ export async function deriveAgeingItems(
     for (const row of found) names.set(row.partnerNumber, row.name);
   }
 
-  const items: DerivedAgeingItem[] = rows.map((r) => {
+  const items: DerivedAgeingItem[] = rows.flatMap((r) => {
+    // Ageing balance: the open invoice liability at the key date — the line less the
+    // applications valid by then. A reset application is an unapplied credit, not a reduction.
+    const liabilityLocal = toScaled(r.amount) - toScaled(String(r.validLocal ?? '0'));
+    const liabilityDocument = toScaled(r.documentAmount) - toScaled(String(r.validDocument ?? '0'));
+    if (liabilityLocal < 0n || liabilityDocument < 0n) {
+      throw new SettlementNettingError(
+        `Journal line ${r.documentNumber}/${r.fiscalYear}/${r.lineNumber} stands at ${fromScaled(liabilityLocal)} ${r.currency} after valid applications; they exceed the item.`,
+        'Investigate the applications on this item before ageing it.',
+      );
+    }
+    if (liabilityLocal === 0n) return [];
+    const amount = fromScaled(liabilityLocal);
     const invoice = r.originClass && r.originKey
       ? invoiceSources.get(`${r.originClass}|${r.originKey}`)
       : undefined;
@@ -303,8 +320,8 @@ export async function deriveAgeingItems(
     const overdue = daysBetween(dueDate, input.keyDate);
     const [a, b, c] = input.thresholds;
     const bucket = overdue <= 0 ? 0 : overdue <= a ? 1 : overdue <= b ? 2 : overdue <= c ? 3 : 4;
-    const signed = r.debitCredit === 'S' ? Number(r.amount) : -Number(r.amount);
-    return {
+    const signed = r.debitCredit === 'S' ? Number(amount) : -Number(amount);
+    return [{
       partner: r.partner!,
       partnerName: names.get(r.partner!) ?? '',
       documentNumber: r.documentNumber,
@@ -318,14 +335,14 @@ export async function deriveAgeingItems(
       daysOverdue: Math.max(0, overdue),
       bucket,
       currency: r.currency,
-      amount: r.amount,
-      documentAmount: r.documentAmount,
+      amount,
+      documentAmount: fromScaled(liabilityDocument),
       signed: round4(signed),
       specialGlIndicator: eligible.get(r.glAccount) ?? null,
       paymentTerms: paymentTermsCode,
       clearingDocument: r.clearingDocument,
       clearingDate: r.clearingDate,
-    };
+    }];
   });
 
   const byPartnerDue = (x: DerivedAgeingItem, y: DerivedAgeingItem) =>

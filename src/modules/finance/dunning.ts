@@ -15,12 +15,16 @@ import { type ServiceAuthorityContext, verifyServiceAuthorityInTx } from '../../
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { getCompanyCode } from '../../platform/periods';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { customerCompany } from '../foundation/customer-company-schema';
 import { customerInvoice } from '../purchasing/schema';
 import {
   dunningNotice, dunningRun, dunningRunAccount, dunningRunCompany, dunningRunItem,
   journalEntry, journalEntryLine,
 } from './schema';
+import {
+  notValidApplicationLineSql, unappliedPaymentCreditSql, validApplicationSql,
+} from './open-item-netting';
 
 export const DUNNING_CAPABILITY = 'FIN.AR.DUNNING.RUN';
 const DUNNING_CLASS = 'dunning_run';
@@ -150,6 +154,8 @@ async function selectOverdueItems(
       customer: journalEntryLine.businessPartner,
       debitCredit: journalEntryLine.debitCredit,
       amount: journalEntryLine.amountLocal,
+      valid: validApplicationSql('local', input.postedThrough),
+      paymentCredit: unappliedPaymentCreditSql('local', input.postedThrough),
       currency: journalEntryLine.currency,
       postingDate: journalEntry.postingDate,
       originClass: journalEntry.originClass,
@@ -165,7 +171,11 @@ async function selectOverdueItems(
         eq(journalEntryLine.client, client),
         eq(journalEntryLine.companyCode, companyCode),
         eq(journalEntry.status, 'POSTED'),
+        // A reversal mirror is the undoing of the original, never an obligation of its own.
+        sql`${journalEntry.reversalOf} is null`,
         sql`${journalEntryLine.businessPartner} is not null`,
+        // The source line is netted below; an application line must not be dunned beside it.
+        notValidApplicationLineSql(input.postedThrough, { keepResetOffsets: false }),
       ));
     for (const r of rows) {
       const customer = r.customer!;
@@ -174,6 +184,18 @@ async function selectOverdueItems(
       if (r.debitCredit !== 'S') continue;
       if (r.postingDate > input.postedThrough) continue;
       if (r.clearingDate && r.clearingDate <= input.dunningDate) continue;
+      // The collectible amount is the open liability after valid applications, less
+      // unapplied payment credits. An unapplied advance is not netted.
+      const liabilityUnits = toScaled(r.amount) - toScaled(String(r.valid ?? '0'));
+      if (liabilityUnits < 0n) {
+        throw new DunningError(
+          `Journal line ${r.documentNumber}/${r.fiscalYear}/${r.lineNumber} stands at ${fromScaled(liabilityUnits)} ${r.currency} after valid applications; they exceed the item.`,
+          'Investigate the applications on this item before dunning it.',
+        );
+      }
+      const collectibleUnits = liabilityUnits - toScaled(String(r.paymentCredit ?? '0'));
+      if (collectibleUnits <= 0n) continue;
+      const amount = fromScaled(collectibleUnits);
       const dueDate = r.originClass === 'customer_invoice' && r.originKey
         ? (invoices.get(r.originKey) ?? r.postingDate)
         : r.postingDate;
@@ -182,7 +204,7 @@ async function selectOverdueItems(
       items.push({
         companyCode, customer, documentNumber: r.documentNumber, fiscalYear: r.fiscalYear,
         lineNumber: r.lineNumber, dueDate, daysOverdue: overdue,
-        amount: r.amount, currency: r.currency,
+        amount, currency: r.currency,
       });
     }
   }

@@ -34,6 +34,9 @@ import {
 } from './schema';
 import { requireExchangeRate } from './exchange-rate-lookup';
 import {
+  notValidApplicationLineSql, openItemBalances, unappliedPaymentCreditSql, validApplicationSql,
+} from './open-item-netting';
+import {
   activeValuationConflict, bankCurrencyForGl, bankCurrencyRefusal,
   fxDifferenceAccount, localUnitsOf, lockValuationSettlement, proportionalLocal,
 } from './fx-settlement';
@@ -168,6 +171,8 @@ export async function getPayables(
       originKey: journalEntry.originKey,
       currency: journalEntryLine.currency,
       amount: journalEntryLine.amountDocument,
+      valid: validApplicationSql('document'),
+      paymentCredit: unappliedPaymentCreditSql('document'),
       debitCredit: journalEntryLine.debitCredit,
     }).from(journalEntryLine)
       .innerJoin(journalEntry, and(
@@ -183,46 +188,46 @@ export async function getPayables(
         eq(journalEntry.status, 'POSTED'),
         sql`${journalEntry.reversalOf} is null`,
         sql`${journalEntryLine.clearingDocument} is null`,
-        sql`not exists (
-          select 1 from journal_entry_line off
-          join journal_entry offh
-            on offh.client = off.client and offh.document_number = off.document_number
-           and offh.fiscal_year = off.fiscal_year
-          where off.client = journal_entry_line.client
-            and off.company_code = journal_entry_line.company_code
-            and off.business_partner = journal_entry_line.business_partner
-            and off.gl_account = journal_entry_line.gl_account
-            and off.currency = journal_entry_line.currency
-            and off.debit_credit = 'S'
-            and off.clearing_document is null
-            and offh.status = 'POSTED' and offh.reversal_of is null
-            and off.line_text = concat('Settles ', journal_entry_line.document_number)
-            and off.amount_document = journal_entry_line.amount_document
-        )`,
+        // The source line is netted below; an application line must not stand beside it.
+        // Reset offsets are already netted through `unappliedPaymentCreditSql`.
+        notValidApplicationLineSql(undefined, { keepResetOffsets: false }),
       ))
       .orderBy(journalEntry.postingDate, journalEntryLine.documentNumber);
     // Each item's discount is rounded at its own currency's decimals.
     const itemMoney = new Map<string, Money>();
     for (const code of new Set(rows.map((r) => String(r.currency).trim()))) itemMoney.set(code, await moneyFor(tx, code));
-    const openItems = rows.map((r) => {
+    const openItems = rows.flatMap((r) => {
+      // Open invoice liability: the debit less valid applications (advances and settlements).
+      const liabilityUnits = toScaled(r.amount) - toScaled(String(r.valid ?? '0'));
+      if (liabilityUnits < 0n) {
+        throw new OutgoingPaymentError(
+          `Payable ${r.documentNumber}/${r.fiscalYear}/${r.lineNumber} stands at ${fromScaled(liabilityUnits)} ${r.currency} after valid applications; they exceed the item.`,
+          'Investigate the applications on this item before paying it.',
+        );
+      }
+      // Payable: the liability less unapplied payment credits. An unapplied advance is not
+      // netted here; it stays available for an explicit clearing.
+      const payableUnits = liabilityUnits - toScaled(String(r.paymentCredit ?? '0'));
+      if (payableUnits <= 0n) return [];
+      const amount = fromScaled(payableUnits);
       const m = itemMoney.get(String(r.currency).trim())!;
-      const signed = r.debitCredit === 'H' ? Number(r.amount) : -Number(r.amount);
+      const signed = r.debitCredit === 'H' ? Number(amount) : -Number(amount);
       const terms = r.originClass === 'vendor_invoice' && r.originKey
         ? invoiceTerms.get(r.originKey) : undefined;
       const percent = signed > 0 && terms?.termsCode
         ? eligiblePercent(termsByCode.get(terms.termsCode) ?? null, terms.baseline, today)
         : 0;
-      return {
+      return [{
         documentNumber: r.documentNumber, fiscalYear: r.fiscalYear, lineNumber: r.lineNumber,
         postingDate: r.postingDate,
         dueDate: r.originClass === 'vendor_invoice' && r.originKey
           ? (dueDates.get(r.originKey) ?? r.postingDate)
           : r.postingDate,
-        currency: r.currency, amount: r.amount, signed,
+        currency: r.currency, amount, signed,
         termsCode: terms?.termsCode ?? null,
         discountPercent: percent,
         discountAmount: m.round(m.fromUnits(m.percentOf(signed, percent))),
-      };
+      }];
     });
     return {
       vendor: vendorNumber, companyCode, openItems,
@@ -382,8 +387,31 @@ export async function postOutgoingPayment(input: {
           baseline = inv.baselineDate ?? inv.documentDate;
         }
       }
+      // Recompute the eligible payable inside this transaction: the open liability less
+      // unapplied payment credits. The proposal amount is never trusted on its own.
+      const balances = await openItemBalances(tx, input.client, {
+        documentNumber: line.documentNumber, companyCode: line.companyCode,
+        businessPartner: line.businessPartner, glAccount: line.glAccount,
+        currency: line.currency, debitCredit: line.debitCredit,
+      });
+      const liabilityDocument = toScaled(line.amountDocument) - balances.liability.document;
+      const liabilityLocal = toScaled(line.amountLocal) - balances.liability.local;
+      if (liabilityDocument < 0n || liabilityLocal < 0n) {
+        throw new OutgoingPaymentError(
+          `Document ${ref.documentNumber} line ${ref.lineNumber} carries applications beyond its amount; the payable position cannot be proved.`,
+          'Investigate the applications on this item before paying it.',
+        );
+      }
+      const netDocument = liabilityDocument - balances.paymentCredit.document;
+      const netLocal = liabilityLocal - balances.paymentCredit.local;
+      if (netDocument <= 0n || netLocal < 0n) {
+        throw new OutgoingPaymentError(
+          `Document ${ref.documentNumber} line ${ref.lineNumber} stands fully covered by applications and unapplied payment credits and cannot be paid again.`,
+          'Reload the open items, then post.',
+        );
+      }
       held.push({
-        ref, amount: line.amountDocument, amountLocal: line.amountLocal, currency: line.currency,
+        ref, amount: fromScaled(netDocument), amountLocal: fromScaled(netLocal), currency: line.currency,
         debitCredit: line.debitCredit as 'S' | 'H', reconAccount: line.glAccount,
         termsCode, baseline,
       });

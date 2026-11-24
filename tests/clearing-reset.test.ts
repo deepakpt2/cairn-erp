@@ -6,8 +6,12 @@ import { defineRange } from '../src/platform/numbering';
 import { getClearingDocument, resetClearing } from '../src/modules/finance/clearing-reset';
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
 import { getReceivables, postIncomingPayment } from '../src/modules/finance/incoming-payment';
+import { getCustomerAgeing as getCustomerAgeingService } from '../src/modules/finance/customer-ageing';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { withClientAuth } from './helpers/finance-actor';
 import { createSalesActor, refreshSalesActor, type SalesActor } from './helpers/sales-actor';
+
+const getCustomerAgeing = withClientAuth(getCustomerAgeingService);
 
 const ACTOR = 'SCR071_FBRA_TEST';
 
@@ -154,11 +158,19 @@ describe('SCR-071 reset cleared items (FBRA)', () => {
     expect(reset.clearingDate).toBe('2026-11-21');
     expect(reset.itemsReset).toBeGreaterThanOrEqual(2);
 
-    // The source invoices and the receipt's own `Settles` offsets are both open, so the net
-    // receivable position is zero: the paid invoices must not be proposed for collection again.
+    // The source invoices and the receipt's own `Settles` offsets are both open, so the
+    // payable/receivable position is zero: the paid invoices must not be proposed again.
     const open = await getReceivables(c, 'C10000', '1000');
     expect(open.openItems).toHaveLength(0);
     expect(open.openBalance).toBe(0);
+    // Ageing reports the invoice's own remaining (no effective application) beside the reset
+    // receipt as an unapplied credit; the partner total still nets to zero.
+    const ageing = await getCustomerAgeing(c, {
+      companyCode: '1000', keyDate: '2026-11-30', customerFrom: 'C10000', customerTo: 'C10000',
+    });
+    expect(ageing.grandTotal).toBe(0);
+    expect(ageing.items.filter((i) => i.signed > 0)).toHaveLength(2);
+    expect(ageing.items.filter((i) => i.signed < 0)).toHaveLength(2);
 
     const stamps = await withTenant(c, (tx) => tx.execute(sql`
       select count(*)::int as n from journal_entry_line

@@ -9,6 +9,7 @@ import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
 import { postVendorInvoice } from '../src/modules/finance/vendor-invoice';
 import { getReceivables, postIncomingPayment } from '../src/modules/finance/incoming-payment';
 import { getPayables, postOutgoingPayment } from '../src/modules/finance/outgoing-payment';
+import { getVendorAgeing } from '../src/modules/finance/vendor-ageing';
 import { clearCustomerItems } from '../src/modules/finance/customer-clearing';
 import { clearVendorItems } from '../src/modules/finance/vendor-clearing';
 import { resetClearing } from '../src/modules/finance/clearing-reset';
@@ -815,11 +816,24 @@ describe('4b. valuation uses the key-date clearing position', () => {
     });
     const raw = await openRefs('C10000', '110000', [inv.journalDocumentNumber!]);
     expect(raw).toHaveLength(1);
-    await postIncomingPayment(receive('USD', '2026-04-10', 100, [{
-      documentNumber: raw[0]!.document_number,
-      fiscalYear: raw[0]!.fiscal_year,
-      lineNumber: raw[0]!.line_number,
-    }], 'val-double-second', '116000'));
+    // Re-clear the invoice against the reset payment's unapplied credit, not with a second cash
+    // receipt: after a reset the payment credit already covers the invoice, so a second receipt
+    // would be a double payment and is (correctly) refused by the payment service.
+    const resetCredit = await openRefs('C10000', '110000', [first.journalDocumentNumber]);
+    expect(resetCredit).toHaveLength(1);
+    await clearCustomerItems({
+      client: tenant.client, changedBy: ACTOR, customer: 'C10000', companyCode: COMPANY,
+      clearingDate: '2026-04-10', postingDate: '2026-04-10', documentDate: '2026-04-10',
+      confirmed: true, requestKey: 'val-double-second',
+      items: [
+        { documentNumber: raw[0]!.document_number, fiscalYear: raw[0]!.fiscal_year, lineNumber: raw[0]!.line_number },
+        {
+          documentNumber: resetCredit[0]!.document_number,
+          fiscalYear: resetCredit[0]!.fiscal_year,
+          lineNumber: resetCredit[0]!.line_number,
+        },
+      ],
+    });
 
     const result = await valuation('2026-02-28', 'DBLCLR', 'dblclr-feb');
     // During the first clearing interval the invoice was cleared, even though the current stamp is
@@ -1533,6 +1547,17 @@ describe('9. clearing reset and reversal safety', () => {
     const run = await generateProposal({ client: tenant.client, changedBy: ACTOR, runDate: '2026-10-05', runId: 'RST1' });
     expect(run.proposal.filter((p) => p.accountId === 'V30000')).toHaveLength(0);
     expect(run.proposal.some((p) => p.journalDocumentNumber === inv.journalDocumentNumber)).toBe(false);
+
+    const ageing = await getVendorAgeing(tenant.client, {
+      companyCode: COMPANY, keyDate: '2026-12-31', supplierFrom: 'V30000', supplierTo: 'V30000',
+      authorization: actor.authorization,
+    });
+    // The invoice's own remaining stands beside the reset payment as an unapplied credit.
+    // The key date stands after the reset was recorded: a reset made after the key date is not
+    // effective as of it, so the invoice would still read as cleared then.
+    expect(ageing.grandTotal).toBe(0);
+    expect(ageing.items.find((i) => i.documentNumber === inv.journalDocumentNumber))
+      .toMatchObject({ amount: '31.0000' });
   }, 90_000);
 
   it('proposes only the residual, not the reopened original, after a partial payment reset', async () => {

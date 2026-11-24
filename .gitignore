@@ -58,3 +58,6 @@ tmp/
 
 # Private host storage for generated salary payment artifacts (encrypted).
 payment-files/
+
+# Working plans and reports kept out of version control.
+ccfiles/
