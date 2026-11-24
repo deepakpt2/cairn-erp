@@ -266,11 +266,11 @@ export default async function DunningPage({
                 </thead>
                 <tbody>
                   {view.accounts.map((a) => (
-                    <tr key={`${a.companyCode}|${a.customer}`}>
+                    <tr key={`${a.companyCode}|${a.customer}|${a.currency}`}>
                       <td>{a.companyCode}</td>
                       <td>{a.customer}</td>
                       <td>{a.proposedLevel ?? '—'}</td>
-                      <td>{a.totalOverdue} {a.currency ?? ''}</td>
+                      <td>{a.totalOverdue} {a.currency}</td>
                       <td>{a.status}</td>
                       <td>
                         {a.status === 'PROPOSED' && view.status === 'PROPOSED' && grant ? (
@@ -302,7 +302,7 @@ export default async function DunningPage({
                 </thead>
                 <tbody>
                   {view.items.map((i) => (
-                    <tr key={`${i.companyCode}|${i.customer}|${i.documentNumber}|${i.lineNumber}`}>
+                    <tr key={`${i.companyCode}|${i.customer}|${i.documentNumber}|${i.lineNumber}|${i.currency}`}>
                       <td>{i.customer}</td>
                       <td>{i.documentNumber}</td>
                       <td>{i.dueDate}</td>

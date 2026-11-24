@@ -469,14 +469,15 @@ describe('foreign-currency down-payment clearing — customer', () => {
       { gl_account: FXGAIN, debit_credit: 'H', doc: '0.0000', local: '4.0000', currency: LOCAL, is_local_only: true, line_text: 'Realized exchange gain' },
     ]);
 
-    // Dunning reads the net local overdue amount; the application line never appears.
+    // Dunning states the receivable in its document currency: USD 400 remains, not the
+    // KWD 120.000 carrying amount mislabelled as USD. The application line never appears.
     const run = await proposeDunningRun({
       client: customerFixture.tenant.client, changedBy: ACTOR, runDate: '2026-12-20', runId: 'FC1',
       dunningDate: '2026-12-20', postedThrough: '2026-12-20', companyCodes: [COMPANY],
       customerFrom: partner, customerTo: partner,
     }, { authorization: customerFixture.actor.authorization });
-    expect(run.items.map((i) => [i.documentNumber, i.overdueAmount]))
-      .toEqual([[invoice.journalDocumentNumber, '120.0000']]);
+    expect(run.items.map((i) => [i.documentNumber, i.overdueAmount, i.currency]))
+      .toEqual([[invoice.journalDocumentNumber, '400.0000', DOC]]);
     expect(run.items.some((i) => i.documentNumber === clearing.journalDocumentNumber)).toBe(false);
   }, 90_000);
 

@@ -63,8 +63,11 @@ export interface DerivedAgeingItem {
   dueDate: string;
   daysOverdue: number;
   bucket: number; // 0 = not yet due, 1..4 = overdue buckets
+  /** The company's local currency: the currency `amount` and `signed` stand in, so ageing ties to the G/L. */
   currency: string;
   amount: string;
+  /** The document currency of the line: the currency `documentAmount` stands in. */
+  documentCurrency: string;
   documentAmount: string;
   signed: number;
   specialGlIndicator: string | null;
@@ -334,8 +337,12 @@ export async function deriveAgeingItems(
       dueDate,
       daysOverdue: Math.max(0, overdue),
       bucket,
-      currency: r.currency,
+      // `amount`/`signed` are the local-currency remainder, so they are labelled with the company's
+      // local currency and ageing ties to the G/L account balance. The document-currency remainder
+      // stands beside them with its own currency, never relabelled.
+      currency: company.currency,
       amount,
+      documentCurrency: r.currency,
       documentAmount: fromScaled(liabilityDocument),
       signed: round4(signed),
       specialGlIndicator: eligible.get(r.glAccount) ?? null,

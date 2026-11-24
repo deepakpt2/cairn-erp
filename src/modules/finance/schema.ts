@@ -1706,13 +1706,13 @@ export const dunningRunAccount = pgTable('dunning_run_account', {
   companyCode: varchar('company_code', { length: 10 }).notNull(),
   customer: varchar('customer', { length: 40 }).notNull(),
   proposedLevel: integer('proposed_level'),
-  currency: char('currency', { length: 3 }),
+  currency: char('currency', { length: 3 }).notNull(),
   totalOverdue: numeric('total_overdue', { precision: 23, scale: 4 }).notNull().default('0'),
   status: varchar('status', { length: 12 }).notNull().default('PROPOSED'),
   exceptionReason: varchar('exception_reason', { length: 500 }),
   ...auditColumns,
 }, (t) => [
-  primaryKey({ columns: [t.client, t.runDate, t.runId, t.companyCode, t.customer] }),
+  primaryKey({ columns: [t.client, t.runDate, t.runId, t.companyCode, t.customer, t.currency] }),
   foreignKey({
     columns: [t.client, t.runDate, t.runId, t.companyCode],
     foreignColumns: [dunningRunCompany.client, dunningRunCompany.runDate, dunningRunCompany.runId, dunningRunCompany.companyCode],
@@ -1741,8 +1741,8 @@ export const dunningRunItem = pgTable('dunning_run_item', {
 }, (t) => [
   primaryKey({ columns: [t.client, t.runDate, t.runId, t.companyCode, t.customer, t.documentNumber, t.fiscalYear, t.lineNumber] }),
   foreignKey({
-    columns: [t.client, t.runDate, t.runId, t.companyCode, t.customer],
-    foreignColumns: [dunningRunAccount.client, dunningRunAccount.runDate, dunningRunAccount.runId, dunningRunAccount.companyCode, dunningRunAccount.customer],
+    columns: [t.client, t.runDate, t.runId, t.companyCode, t.customer, t.currency],
+    foreignColumns: [dunningRunAccount.client, dunningRunAccount.runDate, dunningRunAccount.runId, dunningRunAccount.companyCode, dunningRunAccount.customer, dunningRunAccount.currency],
   }).onDelete('cascade'),
   check('dunning_run_item_status_ck', sql`${t.status} in ('PROPOSED', 'EXCLUDED', 'COMPLETED')`),
   check('dunning_run_item_amount_ck', sql`${t.overdueAmount} > 0`),
@@ -1765,7 +1765,7 @@ export const dunningNotice = pgTable('dunning_notice', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.noticeNumber] }),
-  uniqueIndex('dunning_notice_run_account_uq').on(t.client, t.runDate, t.runId, t.companyCode, t.customer),
+  uniqueIndex('dunning_notice_run_account_uq').on(t.client, t.runDate, t.runId, t.companyCode, t.customer, t.currency),
   check('dunning_notice_level_ck', sql`${t.dunningLevel} >= 1`),
 ]);
 

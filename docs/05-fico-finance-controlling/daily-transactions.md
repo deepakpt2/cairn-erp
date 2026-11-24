@@ -223,7 +223,10 @@ Fields mirror the vendor invoice: **Customer** (`CUS-1000`), **Company code**, *
 3. Tick **I confirm finalization** and **Finalize run**. Or **Cancel run**.
 
 > [!NOTE]
-> **What Happens in the Background?** Finalization writes one **notice per account**: a record, **never a posting**. Dunning levels advance only at finalization.
+> **What Happens in the Background?** Finalization writes one **notice per account per currency**: a record, **never a posting**. Dunning levels advance only at finalization.
+
+> [!IMPORTANT]
+> **Amounts are stated in the document currency.** A dunning notice asks the customer for what they owe, and an open item is owed in its own document currency. A USD 1,200 invoice on a KWD company shows **1,200.00 USD**, not its KWD carrying amount. A customer whose items stand in more than one currency therefore receives **one notice per currency**, each stating that currency's total — amounts are never summed across currencies. The **Overdue** figure on the account line is the currency's own total, and its currency is printed beside it. Ageing (`/finance/customer-ageing`, `/finance/vendor-ageing`) is different on purpose: it reports in the company's **local currency** so it ties to the G/L account balance, and shows the document amount and its currency separately.
 
 ### 3.5 Credit management
 

@@ -5,8 +5,13 @@
  * the dunning date, each item at the level its completed history
  * earns; an account without a dunning procedure stands excluded
  * with its reason. Finalization revalidates every item and
- * writes one notice per account — a record, never a posting.
- * Levels advance only at finalization.
+ * writes one notice per account per currency — a record, never
+ * a posting. Levels advance only at finalization.
+ *
+ * Every amount is stated in the item's **document currency**, because that is what the customer
+ * owes and what the notice asks for; the local carrying amount is never presented under a foreign
+ * label. An account holding items in more than one currency is proposed once per currency rather
+ * than excluded or summed, since one notice speaks one currency.
  */
 import { and, eq, sql } from 'drizzle-orm';
 
@@ -60,7 +65,7 @@ export interface DunningRunView {
   companies: string[];
   accounts: Array<{
     companyCode: string; customer: string; proposedLevel: number | null;
-    currency: string | null; totalOverdue: string; status: string; exceptionReason: string | null;
+    currency: string; totalOverdue: string; status: string; exceptionReason: string | null;
   }>;
   items: Array<{
     companyCode: string; customer: string; documentNumber: string; fiscalYear: number; lineNumber: number;
@@ -153,9 +158,9 @@ async function selectOverdueItems(
       lineNumber: journalEntryLine.lineNumber,
       customer: journalEntryLine.businessPartner,
       debitCredit: journalEntryLine.debitCredit,
-      amount: journalEntryLine.amountLocal,
-      valid: validApplicationSql('local', input.postedThrough),
-      paymentCredit: unappliedPaymentCreditSql('local', input.postedThrough),
+      amount: journalEntryLine.amountDocument,
+      valid: validApplicationSql('document', input.postedThrough),
+      paymentCredit: unappliedPaymentCreditSql('document', input.postedThrough),
       currency: journalEntryLine.currency,
       postingDate: journalEntry.postingDate,
       originClass: journalEntry.originClass,
@@ -309,66 +314,69 @@ export async function proposeDunningRun(input: {
       customerFrom: input.customerFrom, customerTo: input.customerTo,
     });
 
-    const byAccount = new Map<string, OverdueItem[]>();
+    // Group by customer first, so the dunning procedure is judged once, then split by currency
+    // within it: a notice states one currency, so an account with items in more than one currency
+    // is proposed once per currency rather than excluded wholesale.
+    const byCustomer = new Map<string, OverdueItem[]>();
     for (const item of overdue) {
       const key = `${item.companyCode}|${item.customer}`;
-      byAccount.set(key, [...(byAccount.get(key) ?? []), item]);
+      byCustomer.set(key, [...(byCustomer.get(key) ?? []), item]);
     }
 
-    for (const [key, accountItems] of byAccount) {
+    let accountRows = 0;
+    for (const [key, customerItems] of byCustomer) {
       const [companyCode, customer] = key.split('|');
       const [extension] = await tx.select().from(customerCompany).where(and(
         eq(customerCompany.client, input.client),
         eq(customerCompany.partnerNumber, customer),
         eq(customerCompany.companyCode, companyCode),
       ));
+      const currencies = [...new Set(customerItems.map((i) => i.currency))].sort();
       if (!extension || !extension.dunningProcedure) {
-        await tx.insert(dunningRunAccount).values({
-          client: input.client, runDate: input.runDate, runId: input.runId,
-          companyCode, customer, proposedLevel: null, currency: null,
-          totalOverdue: '0', status: 'EXCLUDED',
-          exceptionReason: !extension
-            ? `Customer ${customer} does not stand extended to company ${companyCode}.`
-            : `Customer ${customer} carries no dunning procedure in company ${companyCode}.`,
-          createdBy: input.changedBy,
-        });
+        // The account is excluded for a reason that does not depend on currency; one row per
+        // currency keeps every row's currency the currency of the items it stands for.
+        for (const currency of currencies) {
+          accountRows += 1;
+          await tx.insert(dunningRunAccount).values({
+            client: input.client, runDate: input.runDate, runId: input.runId,
+            companyCode, customer, currency, proposedLevel: null,
+            totalOverdue: '0', status: 'EXCLUDED',
+            exceptionReason: !extension
+              ? `Customer ${customer} does not stand extended to company ${companyCode}.`
+              : `Customer ${customer} carries no dunning procedure in company ${companyCode}.`,
+            createdBy: input.changedBy,
+          });
+        }
         continue;
       }
-      const currencies = [...new Set(accountItems.map((i) => i.currency))];
-      if (currencies.length > 1) {
+      for (const currency of currencies) {
+        const accountItems = customerItems.filter((i) => i.currency === currency);
+        let accountLevel = 1;
+        let total = 0;
+        const levelled: Array<{ item: OverdueItem; level: number }> = [];
+        for (const item of accountItems) {
+          const level = (await lastCompletedLevel(tx, input.client, item)) + 1;
+          accountLevel = Math.max(accountLevel, level);
+          total = round4(total + Number(item.amount));
+          levelled.push({ item, level });
+        }
+        accountRows += 1;
         await tx.insert(dunningRunAccount).values({
           client: input.client, runDate: input.runDate, runId: input.runId,
-          companyCode, customer, proposedLevel: null, currency: null,
-          totalOverdue: '0', status: 'EXCLUDED',
-          exceptionReason: `The overdue items stand in ${currencies.join(' and ')}; one notice speaks one currency.`,
-          createdBy: input.changedBy,
+          companyCode, customer, proposedLevel: accountLevel,
+          currency, totalOverdue: String(total),
+          status: 'PROPOSED', exceptionReason: null, createdBy: input.changedBy,
         });
-        continue;
-      }
-      let accountLevel = 1;
-      let total = 0;
-      const levelled: Array<{ item: OverdueItem; level: number }> = [];
-      for (const item of accountItems) {
-        const level = (await lastCompletedLevel(tx, input.client, item)) + 1;
-        accountLevel = Math.max(accountLevel, level);
-        total = round4(total + Number(item.amount));
-        levelled.push({ item, level });
-      }
-      await tx.insert(dunningRunAccount).values({
-        client: input.client, runDate: input.runDate, runId: input.runId,
-        companyCode, customer, proposedLevel: accountLevel,
-        currency: currencies[0], totalOverdue: String(total),
-        status: 'PROPOSED', exceptionReason: null, createdBy: input.changedBy,
-      });
-      for (const { item, level } of levelled) {
-        await tx.insert(dunningRunItem).values({
-          client: input.client, runDate: input.runDate, runId: input.runId,
-          companyCode, customer, documentNumber: item.documentNumber,
-          fiscalYear: item.fiscalYear, lineNumber: item.lineNumber,
-          dueDate: item.dueDate, daysOverdue: item.daysOverdue,
-          overdueAmount: item.amount, currency: item.currency,
-          proposedLevel: level, status: 'PROPOSED', createdBy: input.changedBy,
-        });
+        for (const { item, level } of levelled) {
+          await tx.insert(dunningRunItem).values({
+            client: input.client, runDate: input.runDate, runId: input.runId,
+            companyCode, customer, documentNumber: item.documentNumber,
+            fiscalYear: item.fiscalYear, lineNumber: item.lineNumber,
+            dueDate: item.dueDate, daysOverdue: item.daysOverdue,
+            overdueAmount: item.amount, currency: item.currency,
+            proposedLevel: level, status: 'PROPOSED', createdBy: input.changedBy,
+          });
+        }
       }
     }
 
@@ -381,7 +389,7 @@ export async function proposeDunningRun(input: {
       changeType: 'CREATE', changedBy: input.changedBy, transactionCode: DUNNING_CAPABILITY,
       after: {
         dunningDate: input.dunningDate, postedThrough: input.postedThrough,
-        companies: input.companyCodes.join(','), accounts: byAccount.size,
+        companies: input.companyCodes.join(','), accounts: accountRows,
       },
     });
 
@@ -402,12 +410,13 @@ export async function excludeDunningAccount(input: {
     if (run.status !== 'PROPOSED') {
       throw new DunningError(`Run ${input.runId} of ${input.runDate} stands ${run.status}; its proposal can no longer change.`);
     }
-    const [account] = await tx.select().from(dunningRunAccount).where(and(
+    // An account may stand proposed once per currency; excluding it excludes every one of them.
+    const accounts = await tx.select().from(dunningRunAccount).where(and(
       eq(dunningRunAccount.client, input.client), eq(dunningRunAccount.runDate, input.runDate),
       eq(dunningRunAccount.runId, input.runId), eq(dunningRunAccount.companyCode, input.companyCode),
       eq(dunningRunAccount.customer, input.customer),
     ));
-    if (!account || account.status !== 'PROPOSED') {
+    if (!accounts.some((a) => a.status === 'PROPOSED')) {
       throw new DunningError(`Account ${input.customer} in company ${input.companyCode} does not stand proposed on this run.`);
     }
     await tx.update(dunningRunAccount).set({
@@ -505,10 +514,10 @@ export async function finalizeDunningRun(input: {
     for (const account of view!.accounts.filter((a) => a.status === 'PROPOSED')) {
       await tx.insert(dunningNotice).values({
         client: input.client,
-        noticeNumber: `${input.runId}-${input.runDate}-${account.companyCode}-${account.customer}`,
+        noticeNumber: `${input.runId}-${input.runDate}-${account.companyCode}-${account.customer}-${account.currency}`,
         runDate: input.runDate, runId: input.runId,
         companyCode: account.companyCode, customer: account.customer,
-        dunningLevel: account.proposedLevel!, currency: account.currency!,
+        dunningLevel: account.proposedLevel!, currency: account.currency,
         amount: account.totalOverdue, noticeDate: run.dunningDate,
         createdBy: input.changedBy,
       });

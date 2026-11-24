@@ -44,8 +44,11 @@ export interface AgeingItem {
   dueDate: string;
   daysOverdue: number;
   bucket: number; // 0 = not yet due, 1..4 = overdue buckets
+  /** The company's local currency: the currency `amount` and `signed` stand in, so ageing ties to the G/L. */
   currency: string;
   amount: string;
+  /** The document currency of the line: the currency `documentAmount` stands in. */
+  documentCurrency: string;
   documentAmount: string;
   signed: number;
   specialGlIndicator: string | null;
@@ -121,6 +124,7 @@ export async function getVendorAgeing(client: string, input: {
           baselineDate: item.baselineDate, dueDate: item.dueDate,
           daysOverdue: item.daysOverdue, bucket: item.bucket,
           currency: item.currency, amount: item.amount,
+          documentCurrency: item.documentCurrency,
           documentAmount: item.documentAmount, signed: item.signed,
           specialGlIndicator: item.specialGlIndicator,
           paymentTerms: item.paymentTerms,
@@ -145,12 +149,12 @@ export function vendorAgeingCsv(view: VendorAgeingView): string {
   const [a, b, c] = view.thresholds;
   const bucketLabel = (bucket: number) =>
     ['Not yet due', `1-${a} days`, `${a + 1}-${b} days`, `${b + 1}-${c} days`, `Over ${c} days`][bucket];
-  const header = 'Company Code,Supplier,Supplier Name,Document,Fiscal Year,Line,Document Type,Posting Date,Document Date,Baseline Date,Payment Terms,Due Date,Days Overdue,Bucket,Special G/L,Original Amount,Remaining Amount,Currency,Clearing Document,Clearing Date';
+  const header = 'Company Code,Supplier,Supplier Name,Document,Fiscal Year,Line,Document Type,Posting Date,Document Date,Baseline Date,Payment Terms,Due Date,Days Overdue,Bucket,Special G/L,Document Amount,Document Currency,Remaining Amount (local),Local Currency,Clearing Document,Clearing Date';
   const lines = view.items.map((i) => [
     view.companyCode, i.supplier, i.supplierName, i.documentNumber, i.fiscalYear, i.lineNumber,
     i.documentType, i.postingDate, i.documentDate, i.baselineDate ?? '', i.paymentTerms ?? '',
     i.dueDate, i.daysOverdue, bucketLabel(i.bucket), i.specialGlIndicator ?? '',
-    i.documentAmount, i.signed.toFixed(4), i.currency,
+    i.documentAmount, i.documentCurrency, i.signed.toFixed(4), i.currency,
     i.clearingDocument ?? '', i.clearingDate ?? '',
   ].map(esc).join(','));
   return [header, ...lines].join('\n') + '\n';

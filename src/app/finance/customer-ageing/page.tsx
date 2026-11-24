@@ -168,7 +168,7 @@ export default async function CustomerAgeingPage({ searchParams }: { searchParam
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
                       <th>Document</th><th>Posting date</th>
                       <th>Due date</th><th>Days overdue</th>
-                      <th>Bucket</th><th>Amount</th>
+                      <th>Bucket</th><th>Amount</th><th>Currency</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -42,8 +42,11 @@ export interface AgeingItem {
   dueDate: string;
   daysOverdue: number;
   bucket: number; // 0 = not yet due, 1..4 = overdue buckets
+  /** The company's local currency: the currency `amount` and `signed` stand in, so ageing ties to the G/L. */
   currency: string;
   amount: string;
+  /** The document currency of the line: the currency `documentAmount` stands in. */
+  documentCurrency: string;
   documentAmount: string;
   signed: number;
   specialGlIndicator: string | null;
@@ -119,6 +122,7 @@ export async function getCustomerAgeing(client: string, input: {
           baselineDate: item.baselineDate, dueDate: item.dueDate,
           daysOverdue: item.daysOverdue, bucket: item.bucket,
           currency: item.currency, amount: item.amount,
+          documentCurrency: item.documentCurrency,
           documentAmount: item.documentAmount, signed: item.signed,
           specialGlIndicator: item.specialGlIndicator,
           paymentTerms: item.paymentTerms,

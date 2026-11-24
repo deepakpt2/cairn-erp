@@ -128,8 +128,8 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
             <th>Baseline date</th><th>Terms</th>
             <th>Due date</th><th>Days overdue</th>
             <th>Bucket</th><th>Spec. G/L</th>
-            <th>Original amount</th><th>Remaining amount</th>
-            <th>Currency</th><th>Clearing</th>
+            <th>Original amount</th><th>Original currency</th>
+            <th>Remaining amount</th><th>Local currency</th><th>Clearing</th>
             <th>Document display</th>
           </tr>
         </thead>
@@ -149,6 +149,7 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
               <td>{bucketLabel(view, item.bucket)}</td>
               <td>{item.specialGlIndicator ?? '—'}</td>
               <td>{fmt(Number(item.documentAmount))}</td>
+              <td>{item.documentCurrency}</td>
               <td>{fmt(item.signed)}</td>
               <td>{item.currency}</td>
               <td>{item.clearingDocument ? `${item.clearingDocument} · ${item.clearingDate ?? ''}` : '—'}</td>
@@ -320,7 +321,7 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
                       <th>Supplier</th><th>Document</th>
                       <th>Fiscal year</th><th>Lines</th>
                       <th>Due date</th><th>Days overdue</th>
-                      <th>Remaining amount</th><th>Currency</th>
+                      <th>Remaining amount</th><th>Local currency</th>
                     </tr>
                   </thead>
                   <tbody>
