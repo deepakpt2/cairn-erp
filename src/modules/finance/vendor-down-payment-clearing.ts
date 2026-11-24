@@ -21,11 +21,18 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { moneyFor } from '../../platform/posting/money';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { purchaseOrder } from '../purchasing/schema';
 import {
   journalEntry, journalEntryLine, vendorDownPayment, vendorDownPaymentClearing, vendorInvoice,
 } from './schema';
+import {
+  activeValuationConflict, fxDifferenceAccount, lockValuationSettlement,
+  proportionalLocal, realizedFxDirection, realizedFxLine,
+} from './fx-settlement';
+import { openItemBalances } from './open-item-netting';
 import { resolveSpecialGlAccount } from './vendor-down-payment';
 
 export const VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY = 'FIN.AP.DOWNPAYMENT.CLEAR';
@@ -41,9 +48,6 @@ export class VendorDownPaymentClearingError extends Error {
     this.remedy = remedy;
   }
 }
-
-const round4 = (n: number) => Math.round(n * 10000) / 10000;
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 async function judgeVendor(tx: Tx, client: string, vendorNumber: string, companyCode: string) {
   const [standing] = await tx.select().from(supplierCompany).where(and(
@@ -67,38 +71,17 @@ async function judgeVendor(tx: Tx, client: string, vendorNumber: string, company
   return standing;
 }
 
-/** Signed sum of the offsetting lines naming an item, reversals netting out. */
-async function appliedSoFar(
-  tx: Tx, client: string, companyCode: string, account: string,
-  partner: string, lineText: string, creditSide: boolean,
-): Promise<number> {
-  const rows = await tx.select({
-    debitCredit: journalEntryLine.debitCredit, amount: journalEntryLine.amountLocal,
-  }).from(journalEntryLine)
-    .innerJoin(journalEntry, and(
-      eq(journalEntry.client, journalEntryLine.client),
-      eq(journalEntry.documentNumber, journalEntryLine.documentNumber),
-      eq(journalEntry.fiscalYear, journalEntryLine.fiscalYear),
-    ))
-    .where(and(
-      eq(journalEntryLine.client, client),
-      eq(journalEntryLine.companyCode, companyCode),
-      eq(journalEntryLine.glAccount, account),
-      eq(journalEntryLine.businessPartner, partner),
-      eq(journalEntryLine.lineText, lineText),
-      eq(journalEntry.status, 'POSTED'),
-      // A reversal carries its original's line text with the opposite sign. Counting
-      // it would say the advance had been applied *minus* the amount, so spending it
-      // twice were nearly allowed: the original stands reversed and is already gone
-      // from this sum. A reversal is the undoing of an application, never one itself.
-      sql`${journalEntry.reversalOf} is null`,
-    ));
-  return round2(rows.reduce((s, r) => {
-    const signed = creditSide
-      ? (r.debitCredit === 'H' ? Number(r.amount) : -Number(r.amount))
-      : (r.debitCredit === 'S' ? Number(r.amount) : -Number(r.amount));
-    return s + signed;
-  }, 0));
+/**
+ * The document- and local-currency amounts already applied against one open item, read through the
+ * shared netting helper so the units cannot drift from the reporting side.
+ */
+async function appliedBalances(
+  tx: Tx, client: string, line: {
+    documentNumber: string; companyCode: string; businessPartner: string;
+    glAccount: string; currency: string; debitCredit: 'S' | 'H';
+  },
+): Promise<{ document: bigint; local: bigint }> {
+  return (await openItemBalances(tx, client, line)).liability;
 }
 
 export interface DownPaymentItem {
@@ -107,9 +90,14 @@ export interface DownPaymentItem {
   lineNumber: number;
   postingDate: string;
   currency: string;
+  /** Amount, applied and remaining are in the item's document currency. */
   amount: number;
   applied: number;
   remaining: number;
+  /** The local-currency equivalents, labelled with `localCurrency` at the view level. */
+  amountLocal: number;
+  appliedLocal: number;
+  remainingLocal: number;
   indicator: string;
 }
 
@@ -120,9 +108,14 @@ export interface ClearingInvoiceItem {
   postingDate: string;
   dueDate: string;
   currency: string;
+  /** Amount, applied and remaining are in the item's document currency. */
   amount: number;
   applied: number;
   remaining: number;
+  /** The local-currency equivalents, labelled with `localCurrency` at the view level. */
+  amountLocal: number;
+  appliedLocal: number;
+  remainingLocal: number;
 }
 
 export interface DownPaymentClearingView {
@@ -130,13 +123,15 @@ export interface DownPaymentClearingView {
   companyCode: string;
   indicator: string;
   alternativeAccount: string;
+  /** The company's local currency, which labels every `*Local` amount. */
+  localCurrency: string;
   downPayments: DownPaymentItem[];
   invoices: ClearingInvoiceItem[];
 }
 
 interface OpenLine {
   documentNumber: string; fiscalYear: number; lineNumber: number;
-  postingDate: string; currency: string; amount: string;
+  postingDate: string; currency: string; amountDocument: string; amountLocal: string;
 }
 
 async function openLines(
@@ -149,7 +144,8 @@ async function openLines(
     lineNumber: journalEntryLine.lineNumber,
     postingDate: journalEntry.postingDate,
     currency: journalEntryLine.currency,
-    amount: journalEntryLine.amountLocal,
+    amountDocument: journalEntryLine.amountDocument,
+    amountLocal: journalEntryLine.amountLocal,
   }).from(journalEntryLine)
     .innerJoin(journalEntry, and(
       eq(journalEntry.client, journalEntryLine.client),
@@ -186,19 +182,32 @@ export async function getDownPaymentClearingTx(
     eq(vendorDownPayment.companyCode, companyCode),
     eq(vendorDownPayment.specialGlIndicator, indicator),
   ));
+  const company = await getCompanyCode(tx, client, companyCode);
+  const localCurrency = company?.currency ?? '';
   const dpDocs = new Set(dpRecords.map((r) => r.journalDocumentNumber));
   const dpLines = (await openLines(tx, client, companyCode, alternativeAccount, vendorNumber, 'S'))
     .filter((l) => dpDocs.has(l.documentNumber));
   const downPayments: DownPaymentItem[] = [];
   for (const line of dpLines) {
-    const applied = await appliedSoFar(
-      tx, client, companyCode, alternativeAccount, vendorNumber, `Applied from ${line.documentNumber}`, true,
-    );
-    const amount = Number(line.amount);
+    const applied = await appliedBalances(tx, client, {
+      documentNumber: line.documentNumber, companyCode, businessPartner: vendorNumber,
+      glAccount: alternativeAccount, currency: line.currency, debitCredit: 'S',
+    });
+    const amountDocument = toScaled(line.amountDocument);
+    const amountLocal = toScaled(line.amountLocal);
+    const remainingDocument = amountDocument - applied.document;
+    const remainingLocal = amountLocal - applied.local;
+    if (remainingDocument <= 0n) continue;
     downPayments.push({
       documentNumber: line.documentNumber, fiscalYear: line.fiscalYear, lineNumber: line.lineNumber,
       postingDate: line.postingDate, currency: line.currency,
-      amount, applied, remaining: round2(amount - applied), indicator,
+      amount: Number(fromScaled(amountDocument)),
+      applied: Number(fromScaled(applied.document)),
+      remaining: Number(fromScaled(remainingDocument)),
+      amountLocal: Number(fromScaled(amountLocal)),
+      appliedLocal: Number(fromScaled(applied.local)),
+      remainingLocal: Number(fromScaled(remainingLocal)),
+      indicator,
     });
   }
 
@@ -217,20 +226,33 @@ export async function getDownPaymentClearingTx(
   const invLines = await openLines(tx, client, companyCode, recon, vendorNumber, 'H');
   const invoices: ClearingInvoiceItem[] = [];
   for (const line of invLines) {
-    const applied = await appliedSoFar(
-      tx, client, companyCode, recon, vendorNumber, `Settles ${line.documentNumber}`, false,
-    );
-    const amount = Number(line.amount);
+    const applied = await appliedBalances(tx, client, {
+      documentNumber: line.documentNumber, companyCode, businessPartner: vendorNumber,
+      glAccount: recon, currency: line.currency, debitCredit: 'H',
+    });
+    const amountDocument = toScaled(line.amountDocument);
+    const amountLocal = toScaled(line.amountLocal);
+    const remainingDocument = amountDocument - applied.document;
+    const remainingLocal = amountLocal - applied.local;
+    if (remainingDocument <= 0n) continue;
     const originKey = originKeys.get(line.documentNumber);
     invoices.push({
       documentNumber: line.documentNumber, fiscalYear: line.fiscalYear, lineNumber: line.lineNumber,
       postingDate: line.postingDate,
       dueDate: originKey ? (dueDates.get(originKey) ?? line.postingDate) : line.postingDate,
       currency: line.currency,
-      amount, applied, remaining: round2(amount - applied),
+      amount: Number(fromScaled(amountDocument)),
+      applied: Number(fromScaled(applied.document)),
+      remaining: Number(fromScaled(remainingDocument)),
+      amountLocal: Number(fromScaled(amountLocal)),
+      appliedLocal: Number(fromScaled(applied.local)),
+      remainingLocal: Number(fromScaled(remainingLocal)),
     });
   }
-  return { vendor: vendorNumber, companyCode, indicator, alternativeAccount, downPayments, invoices };
+  return {
+    vendor: vendorNumber, companyCode, indicator, alternativeAccount, localCurrency,
+    downPayments, invoices,
+  };
 }
 
 export async function getDownPaymentClearing(
@@ -374,6 +396,9 @@ export async function clearDownPaymentsTx(
   const replay = await byRequestKey(tx, input.client, input.requestKey);
   if (replay) return replay;
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/dpclear/${input.companyCode}/${input.vendorNumber}`}, 0))`);
+  // Serialize with payments, clearings and period-end valuation for this company, the same
+  // company-scoped settlement lock every other settlement path takes.
+  await lockValuationSettlement(tx, input.client, input.companyCode);
   const replayLocked = await byRequestKey(tx, input.client, input.requestKey);
   if (replayLocked) return replayLocked;
 
@@ -387,12 +412,24 @@ export async function clearDownPaymentsTx(
   if (!company?.fiscalYearVariant) throw new VendorDownPaymentClearingError(`Company code ${input.companyCode} is not configured.`);
   const recon = vendor.reconciliationAccount!;
 
+  const localMoney = await moneyFor(tx, company.currency);
+  const localScale = localMoney.scale;
+
   interface Held {
-    ref: ClearingItemRef; applied: number; remaining: number; currency: string; lineText: string;
+    ref: ClearingItemRef;
+    account: string;
+    /** Document-currency amount applied by this clearing. */
+    appliedDocument: bigint;
+    /** The carrying local amount released, pro-rata of the item's posted local amount. */
+    releasedLocal: bigint;
+    /** Document-currency amount the item stood open at before this clearing. */
+    remainingDocument: bigint;
+    currency: string;
+    lineText: string;
   }
   const holdSide = async (
     refs: ClearingItemRef[], account: string, debitCredit: 'S' | 'H',
-    kind: 'down payment' | 'invoice', textOf: (doc: string) => string, creditSide: boolean,
+    kind: 'down payment' | 'invoice', textOf: (doc: string) => string,
   ): Promise<Held[]> => {
     const held: Held[] = [];
     for (const ref of refs) {
@@ -415,38 +452,55 @@ export async function clearDownPaymentsTx(
           'Reload the open items, then post.',
         );
       }
-      const already = await appliedSoFar(
-        tx, input.client, input.companyCode, account, input.vendorNumber, textOf(ref.documentNumber), creditSide,
-      );
-      const remaining = round2(Number(line.amountLocal) - already);
-      const applied = ref.applied === undefined ? remaining : round2(ref.applied);
-      if (!(applied > 0)) {
+      const applied = await appliedBalances(tx, input.client, {
+        documentNumber: ref.documentNumber, companyCode: input.companyCode,
+        businessPartner: input.vendorNumber, glAccount: account,
+        currency: line.currency, debitCredit,
+      });
+      const openDocument = toScaled(line.amountDocument) - applied.document;
+      const openLocal = toScaled(line.amountLocal) - applied.local;
+      if (openDocument < 0n || openLocal < 0n) {
+        throw new VendorDownPaymentClearingError(
+          `Document ${ref.documentNumber} line ${ref.lineNumber} carries applications that exceed it.`,
+          'Investigate the applications on this item before clearing it.',
+        );
+      }
+      const requestedDocument = ref.applied === undefined ? openDocument : toScaled(ref.applied);
+      if (!(requestedDocument > 0n)) {
         throw new VendorDownPaymentClearingError(
           `Document ${ref.documentNumber} line ${ref.lineNumber}: the applied amount must stand above zero.`,
         );
       }
-      if (applied - remaining > 0.005) {
+      if (requestedDocument > openDocument) {
         throw new VendorDownPaymentClearingError(
-          `The applied ${applied.toFixed(2)} on document ${ref.documentNumber} exceeds its remaining ${remaining.toFixed(2)}.`,
+          `The applied ${fromScaled(requestedDocument)} on document ${ref.documentNumber} exceeds its remaining ${fromScaled(openDocument)} ${line.currency}.`,
           'Apply no more than the item stands open at.',
         );
       }
-      held.push({ ref, applied, remaining, currency: line.currency, lineText: textOf(ref.documentNumber) });
+      // The released local amount is the item's own carrying amount, pro-rata. When the item is
+      // applied in full, `proportionalLocal` returns the exact open local amount, so there is no
+      // rounding drift across several partial applications.
+      const releasedLocal = proportionalLocal(openLocal, openDocument, requestedDocument, localScale);
+      held.push({
+        ref, account, appliedDocument: requestedDocument, releasedLocal,
+        remainingDocument: openDocument, currency: line.currency, lineText: textOf(ref.documentNumber),
+      });
     }
     return held;
   };
 
   const dpHeld = await holdSide(
-    input.downPayments, alternativeAccount, 'S', 'down payment', (doc) => `Applied from ${doc}`, true,
+    input.downPayments, alternativeAccount, 'S', 'down payment', (doc) => `Applied from ${doc}`,
   );
   const invHeld = await holdSide(
-    input.invoices, recon, 'H', 'invoice', (doc) => `Settles ${doc}`, false,
+    input.invoices, recon, 'H', 'invoice', (doc) => `Settles ${doc}`,
   );
 
-  const dpTotal = round2(dpHeld.reduce((s, h) => s + h.applied, 0));
-  if (dpTotal !== round2(invHeld.reduce((s, h) => s + h.applied, 0))) {
+  const dpTotalDocument = dpHeld.reduce((s, h) => s + h.appliedDocument, 0n);
+  const invTotalDocument = invHeld.reduce((s, h) => s + h.appliedDocument, 0n);
+  if (dpTotalDocument !== invTotalDocument) {
     throw new VendorDownPaymentClearingError(
-      `The applied totals do not agree: down payments ${dpTotal.toFixed(2)} against invoices ${round2(invHeld.reduce((s, h) => s + h.applied, 0)).toFixed(2)} ${input.currency.toUpperCase()}.`,
+      `The applied totals do not agree: down payments ${fromScaled(dpTotalDocument)} against invoices ${fromScaled(invTotalDocument)} ${input.currency.toUpperCase()}.`,
       'Apply exactly as much advance as the invoices settle — a clearing transfers value, it never creates it.',
     );
   }
@@ -459,6 +513,53 @@ export async function clearDownPaymentsTx(
       `The clearing and its items stand in ${currencies.join(' and ')}; one clearing settles one currency.`,
       'Clear items in the clearing currency.',
     );
+  }
+
+  // A clearing over an item a period-end valuation already adjusted would count the same exchange
+  // difference twice. Refuse until that valuation is reversed, exactly as the ordinary clearing does.
+  for (const h of [...dpHeld, ...invHeld]) {
+    const conflict = await activeValuationConflict(tx, input.client, input.companyCode, {
+      documentNumber: h.ref.documentNumber, lineNumber: h.ref.lineNumber,
+      accountNumber: h.account, currency: h.currency,
+    }, input.postingDate);
+    if (conflict) {
+      throw new VendorDownPaymentClearingError(
+        `Document ${h.ref.documentNumber} line ${h.ref.lineNumber} was valued at period end by run ${conflict.runId} (key date ${conflict.valuationKeyDate}).`,
+        'Reverse that FX valuation document first, then clear. Clearing over an active valuation would count the same exchange difference twice. Nothing has been posted.',
+      );
+    }
+  }
+
+  const lines: Array<{
+    glAccount: string; debitCredit: 'S' | 'H'; amount: string; amountLocal: string;
+    localOnly?: boolean; businessPartner?: string; lineText?: string;
+  }> = [
+    ...invHeld.map((h) => ({
+      glAccount: recon, debitCredit: 'S' as const,
+      amount: fromScaled(h.appliedDocument), amountLocal: fromScaled(h.releasedLocal),
+      businessPartner: input.vendorNumber, lineText: h.lineText,
+    })),
+    ...dpHeld.map((h) => ({
+      glAccount: alternativeAccount, debitCredit: 'H' as const,
+      amount: fromScaled(h.appliedDocument), amountLocal: fromScaled(h.releasedLocal),
+      businessPartner: input.vendorNumber, lineText: h.lineText,
+    })),
+  ];
+  // The two legs carry different carrying amounts when the advance and the invoice stand at
+  // different rates. Their difference is the realized exchange difference (AP: a debit loss when the
+  // advance's carrying amount is the higher one).
+  const localSigned = invHeld.reduce((s, h) => s + h.releasedLocal, 0n)
+    - dpHeld.reduce((s, h) => s + h.releasedLocal, 0n);
+  if (localSigned !== 0n) {
+    const { event } = realizedFxDirection(localSigned);
+    const account = await fxDifferenceAccount(tx, input.client, company.chartOfAccounts ?? '', event);
+    if (!account) {
+      throw new VendorDownPaymentClearingError(
+        `Account determination for ${event} does not stand in chart ${company.chartOfAccounts ?? ''}, so the realized exchange difference cannot be posted.`,
+        `Maintain the ${event} account determination, then clear again. Nothing has been posted.`,
+      );
+    }
+    lines.push(realizedFxLine(localSigned, account));
   }
 
   const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
@@ -474,18 +575,7 @@ export async function clearDownPaymentsTx(
     localCurrency: company.currency,
     reference: input.reference,
     headerText: `Down payment clearing ${input.vendorNumber}`,
-    lines: [
-      ...invHeld.map((h) => ({
-        glAccount: recon, debitCredit: 'S' as const,
-        amount: h.applied.toFixed(2), businessPartner: input.vendorNumber,
-        lineText: h.lineText,
-      })),
-      ...dpHeld.map((h) => ({
-        glAccount: alternativeAccount, debitCredit: 'H' as const,
-        amount: h.applied.toFixed(2), businessPartner: input.vendorNumber,
-        lineText: h.lineText,
-      })),
-    ],
+    lines,
     origin: { documentClass: CLEARING_CLASS, documentKey: `${input.companyCode}/${input.vendorNumber}` },
     postedBy: input.changedBy,
     transactionCode: VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY,
@@ -519,10 +609,10 @@ export async function clearDownPaymentsTx(
     ));
   };
   for (const h of invHeld) {
-    if (h.applied >= h.remaining - 0.005) await stampItem(h, recon);
+    if (h.appliedDocument === h.remainingDocument) await stampItem(h, recon);
   }
   for (const h of dpHeld) {
-    if (h.applied >= h.remaining - 0.005) await stampItem(h, alternativeAccount);
+    if (h.appliedDocument === h.remainingDocument) await stampItem(h, alternativeAccount);
   }
 
   const clearingNumber = journal.documentNumber;
@@ -532,7 +622,7 @@ export async function clearDownPaymentsTx(
     specialGlIndicator: input.indicator,
     alternativeReconciliationAccount: alternativeAccount,
     documentDate: input.documentDate, postingDate: input.postingDate, clearingDate: input.clearingDate,
-    totalApplied: String(dpTotal),
+    totalApplied: fromScaled(dpTotalDocument),
     currency: currencies[0], reference: input.reference ?? null,
     journalDocumentNumber: journal.documentNumber,
     invoiceNumber: input.invoiceNumber ?? null,
@@ -544,7 +634,7 @@ export async function clearDownPaymentsTx(
     objectKey: `${input.companyCode}/${input.vendorNumber}/${clearingNumber}`,
     changeType: 'CREATE', changedBy: input.changedBy, transactionCode: VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY,
     after: {
-      journal: journal.documentNumber, totalApplied: dpTotal, itemsCleared,
+      journal: journal.documentNumber, totalApplied: fromScaled(dpTotalDocument), itemsCleared,
       invoice: input.invoiceNumber ?? null, order: input.purchaseOrder ?? null,
     },
   });

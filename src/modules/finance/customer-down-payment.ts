@@ -19,8 +19,10 @@ import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { customerCompany } from '../foundation/customer-company-schema';
 import { customerDownPayment, journalEntryLine } from './schema';
+import { validApplicationSql } from './open-item-netting';
 import {
   CustomerDownPaymentRequestError, applyRequestFulfillment, downPaymentCreditLine,
 } from './customer-down-payment-request';
@@ -208,13 +210,27 @@ export async function postCustomerDownPayment(input: {
 // listed here so screens and later clearing can find them.
 export async function getCustomerDownPayments(
   client: string, customerNumber: string, companyCode: string,
-): Promise<Array<{ documentNumber: string; fiscalYear: number; amount: string; postingDate: string }>> {
+): Promise<Array<{
+  documentNumber: string; fiscalYear: number;
+  /** Document-currency amount still available, labelled by `currency`. */
+  amount: string;
+  /** Local-currency carrying amount still available, labelled by `localCurrency`. */
+  amountLocal: string;
+  currency: string; localCurrency: string;
+  postingDate: string;
+}>> {
   return withTenant(client, async (tx) => {
     await judgeCustomer(tx, client, customerNumber, companyCode);
+    const company = await getCompanyCode(tx, client, companyCode);
+    const localCurrency = company?.currency ?? '';
     const rows = await tx.select({
       documentNumber: journalEntryLine.documentNumber,
       fiscalYear: journalEntryLine.fiscalYear,
-      amount: journalEntryLine.amountLocal,
+      currency: journalEntryLine.currency,
+      amountDocument: journalEntryLine.amountDocument,
+      amountLocal: journalEntryLine.amountLocal,
+      offsetDocument: validApplicationSql('document'),
+      offsetLocal: validApplicationSql('local'),
       postingDate: customerDownPayment.postingDate,
     }).from(journalEntryLine)
       .innerJoin(customerDownPayment, and(
@@ -228,9 +244,17 @@ export async function getCustomerDownPayments(
         sql`${journalEntryLine.clearingDocument} is null`,
         sql`${journalEntryLine.lineText} like 'Down payment %'`,
       ));
-    return rows.map((r) => ({
-      documentNumber: r.documentNumber, fiscalYear: r.fiscalYear,
-      amount: r.amount, postingDate: r.postingDate,
-    }));
+    return rows.flatMap((r) => {
+      // The advance stands at what effective applications have not yet consumed, in both currencies.
+      const netDocument = toScaled(r.amountDocument) - toScaled(String(r.offsetDocument ?? '0'));
+      const netLocal = toScaled(r.amountLocal) - toScaled(String(r.offsetLocal ?? '0'));
+      if (netDocument <= 0n) return [];
+      return [{
+        documentNumber: r.documentNumber, fiscalYear: r.fiscalYear,
+        amount: fromScaled(netDocument), amountLocal: fromScaled(netLocal),
+        currency: r.currency, localCurrency,
+        postingDate: r.postingDate,
+      }];
+    });
   });
 }

@@ -9,7 +9,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 
 import type { Tx } from '../../platform/db/client';
-import { MONEY_SCALE, divideRound } from '../../platform/posting/decimal';
+import { MONEY_SCALE, divideRound, fromScaled } from '../../platform/posting/decimal';
 import type { ResolvedExchangeRate } from './exchange-rate-lookup';
 import { translateAmount } from './exchange-rate-lookup';
 import { accountDetermination, bankAccount } from '../foundation/schema';
@@ -57,6 +57,49 @@ export async function fxDifferenceAccount(
     ?? rows.find((r) => r.valuationClass === '')
     ?? rows[0];
   return row?.glAccount ?? null;
+}
+
+/**
+ * The direction and magnitude of a realized exchange difference from a clearing's net local
+ * imbalance. `localSigned` is the signed sum of the clearing legs' local amounts (debit positive).
+ * A positive sum means the release was debit-heavy, so the balancing difference is a credit gain;
+ * a negative sum is a debit loss.
+ */
+export function realizedFxDirection(localSigned: bigint): {
+  event: 'FXGAIN' | 'FXLOSS';
+  debitCredit: 'S' | 'H';
+  magnitude: bigint;
+} {
+  const gain = localSigned > 0n;
+  return {
+    event: gain ? 'FXGAIN' : 'FXLOSS',
+    debitCredit: gain ? 'H' : 'S',
+    magnitude: gain ? localSigned : -localSigned,
+  };
+}
+
+/**
+ * The local-only journal line that books a realized exchange difference. It has no document-currency
+ * amount (`amount: '0'`, `localOnly: true`), so it balances the local currency without inventing a
+ * foreign amount. Shared by every clearing path so the account structure cannot drift.
+ */
+export function realizedFxLine(localSigned: bigint, account: string): {
+  glAccount: string;
+  debitCredit: 'S' | 'H';
+  amount: '0';
+  amountLocal: string;
+  localOnly: true;
+  lineText: string;
+} {
+  const { debitCredit, magnitude, event } = realizedFxDirection(localSigned);
+  return {
+    glAccount: account,
+    debitCredit,
+    amount: '0',
+    amountLocal: fromScaled(magnitude),
+    localOnly: true,
+    lineText: event === 'FXGAIN' ? 'Realized exchange gain' : 'Realized exchange loss',
+  };
 }
 
 export interface ActiveValuation {

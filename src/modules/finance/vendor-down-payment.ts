@@ -19,10 +19,12 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { purchaseOrder } from '../purchasing/schema';
 import { specialGlConfig } from '../foundation/schema';
 import { journalEntryLine, vendorDownPayment, vendorDownPaymentRequest } from './schema';
+import { validApplicationSql } from './open-item-netting';
 import {
   VendorDownPaymentRequestError, applyVendorRequestFulfillment, downPaymentDebitLine,
 } from './vendor-down-payment-request';
@@ -285,15 +287,26 @@ export async function postVendorDownPayment(input: {
 export async function getVendorDownPayments(
   client: string, vendorNumber: string, companyCode: string,
 ): Promise<Array<{
-  documentNumber: string; fiscalYear: number; amount: string; postingDate: string;
-  purchaseOrder: string | null;
+  documentNumber: string; fiscalYear: number;
+  /** Document-currency amount still available, labelled by `currency`. */
+  amount: string;
+  /** Local-currency carrying amount still available, labelled by `localCurrency`. */
+  amountLocal: string;
+  currency: string; localCurrency: string;
+  postingDate: string; purchaseOrder: string | null;
 }>> {
   return withTenant(client, async (tx) => {
     await judgeVendor(tx, client, vendorNumber, companyCode);
+    const company = await getCompanyCode(tx, client, companyCode);
+    const localCurrency = company?.currency ?? '';
     const rows = await tx.select({
       documentNumber: journalEntryLine.documentNumber,
       fiscalYear: journalEntryLine.fiscalYear,
-      amount: journalEntryLine.amountLocal,
+      currency: journalEntryLine.currency,
+      amountDocument: journalEntryLine.amountDocument,
+      amountLocal: journalEntryLine.amountLocal,
+      offsetDocument: validApplicationSql('document'),
+      offsetLocal: validApplicationSql('local'),
       postingDate: vendorDownPayment.postingDate,
       purchaseOrder: vendorDownPayment.purchaseOrder,
     }).from(journalEntryLine)
@@ -308,9 +321,17 @@ export async function getVendorDownPayments(
         sql`${journalEntryLine.clearingDocument} is null`,
         sql`${journalEntryLine.lineText} like 'Down payment %'`,
       ));
-    return rows.map((r) => ({
-      documentNumber: r.documentNumber, fiscalYear: r.fiscalYear,
-      amount: r.amount, postingDate: r.postingDate, purchaseOrder: r.purchaseOrder,
-    }));
+    return rows.flatMap((r) => {
+      // The advance stands at what effective applications have not yet consumed, in both currencies.
+      const netDocument = toScaled(r.amountDocument) - toScaled(String(r.offsetDocument ?? '0'));
+      const netLocal = toScaled(r.amountLocal) - toScaled(String(r.offsetLocal ?? '0'));
+      if (netDocument <= 0n) return [];
+      return [{
+        documentNumber: r.documentNumber, fiscalYear: r.fiscalYear,
+        amount: fromScaled(netDocument), amountLocal: fromScaled(netLocal),
+        currency: r.currency, localCurrency,
+        postingDate: r.postingDate, purchaseOrder: r.purchaseOrder,
+      }];
+    });
   });
 }

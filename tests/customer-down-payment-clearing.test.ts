@@ -4,12 +4,19 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { postCustomerInvoice } from '../src/modules/finance/customer-invoice';
-import { postCustomerDownPayment } from '../src/modules/finance/customer-down-payment';
+import { getCustomerDownPayments, postCustomerDownPayment } from '../src/modules/finance/customer-down-payment';
+import { getReceivables } from '../src/modules/finance/incoming-payment';
+import { getCustomerAgeing as getCustomerAgeingService } from '../src/modules/finance/customer-ageing';
+import { proposeDunningRun as proposeDunningRunService } from '../src/modules/finance/dunning';
 import {
   clearCustomerDownPayments, getCustomerDownPaymentClearing,
   type ClearingAllocation, type ClearingItemRef,
 } from '../src/modules/finance/customer-down-payment-clearing';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { financePoster, withClientAuth } from './helpers/finance-actor';
+
+const getCustomerAgeing = withClientAuth(getCustomerAgeingService);
+const proposeDunningRun = financePoster(proposeDunningRunService);
 
 const ACTOR = 'SCR084_F39_TEST';
 
@@ -223,5 +230,83 @@ describe('SCR-084 customer down payment clearing (F-39)', () => {
     const after = await view();
     expect(after.downPayments.map((i) => i.amount)).toEqual([8000]);
     expect(after.invoices.map((i) => i.remaining)).toEqual([150]);
+  });
+
+  async function scenarioInvoice(key: string) {
+    return postCustomerInvoice({
+      client, changedBy: ACTOR, customerNumber: 'C10000', companyCode: '1000',
+      documentDate: '2026-11-01', postingDate: '2026-11-02',
+      reference: key, currency: 'USD', grossAmount: 1200, requestKey: key,
+      lines: [{ glAccount: '300000', netAmount: 1200 }],
+    });
+  }
+
+  async function scenarioAdvance(key: string) {
+    return postCustomerDownPayment({
+      client, changedBy: ACTOR, customerNumber: 'C10000', companyCode: '1000',
+      documentDate: '2026-11-03', postingDate: '2026-11-03',
+      bankGlAccount: '101000', amount: 1000, currency: 'USD',
+      specialGlIndicator: 'A', requestKey: key,
+    });
+  }
+
+  it('Scenario 1 — fully applied advance: collectible 200, available advance 0', async () => {
+    const c = await standingClient();
+    const invoice = await scenarioInvoice('ar-sc1-inv');
+    const advance = await scenarioAdvance('ar-sc1-dp');
+    const before = await view();
+    const dp = before.downPayments.find((d) => d.documentNumber === advance.journalDocumentNumber)!;
+    const inv = before.invoices.find((i) => i.documentNumber === invoice.journalDocumentNumber)!;
+    await clearCustomerDownPayments(clearing([
+      { downPayment: ref(dp), invoice: ref(inv), amount: 1000 },
+    ], { requestKey: 'ar-sc1-apply' }));
+
+    const collectible = (await getReceivables(c, 'C10000', '1000')).openItems
+      .find((i) => i.documentNumber === invoice.journalDocumentNumber)!;
+    expect(collectible.amount).toBe('200.0000');
+    expect((await getCustomerDownPayments(c, 'C10000', '1000'))
+      .some((d) => d.documentNumber === advance.journalDocumentNumber)).toBe(false);
+    const ageing = await getCustomerAgeing(c, {
+      companyCode: '1000', keyDate: '2026-11-20', customerFrom: 'C10000', customerTo: 'C10000',
+    });
+    expect(ageing.items.find((i) => i.documentNumber === invoice.journalDocumentNumber)?.amount)
+      .toBe('200.0000');
+  });
+
+  it('Scenario 2 — partially applied advance: collectible 400, available advance 200, dunned 400', async () => {
+    const c = await standingClient();
+    const invoice = await scenarioInvoice('ar-sc2-inv');
+    const advance = await scenarioAdvance('ar-sc2-dp');
+    const before = await view();
+    const dp = before.downPayments.find((d) => d.documentNumber === advance.journalDocumentNumber)!;
+    const inv = before.invoices.find((i) => i.documentNumber === invoice.journalDocumentNumber)!;
+    await clearCustomerDownPayments(clearing([
+      { downPayment: ref(dp), invoice: ref(inv), amount: 800 },
+    ], { requestKey: 'ar-sc2-apply' }));
+
+    // The collectible amount is the invoice liability; the unapplied advance is separate.
+    const collectible = (await getReceivables(c, 'C10000', '1000')).openItems
+      .find((i) => i.documentNumber === invoice.journalDocumentNumber)!;
+    expect(collectible.amount).toBe('400.0000');
+    expect((await view()).downPayments
+      .find((d) => d.documentNumber === advance.journalDocumentNumber)?.remaining).toBe(200);
+    expect((await getCustomerDownPayments(c, 'C10000', '1000'))
+      .find((d) => d.documentNumber === advance.journalDocumentNumber)?.amount).toBe('200.0000');
+    const ageing = await getCustomerAgeing(c, {
+      companyCode: '1000', keyDate: '2026-11-20', customerFrom: 'C10000', customerTo: 'C10000',
+    });
+    expect(ageing.items.find((i) => i.documentNumber === invoice.journalDocumentNumber)?.amount)
+      .toBe('400.0000');
+
+    await withTenant(c, (tx) => tx.execute(sql`
+      update customer_company_code set dunning_procedure = 'DUN1'
+      where client = ${c} and partner_number = 'C10000' and company_code = '1000'
+    `));
+    const run = await proposeDunningRun({
+      client: c, changedBy: ACTOR, runDate: '2026-12-20', runId: 'ARSC2',
+      dunningDate: '2026-12-20', postedThrough: '2026-12-20', companyCodes: ['1000'],
+    });
+    expect(run.items.find((i) => i.documentNumber === invoice.journalDocumentNumber)?.overdueAmount)
+      .toBe('400.0000');
   });
 });

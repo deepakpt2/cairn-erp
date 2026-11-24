@@ -19,7 +19,10 @@ import { MONEY_SCALE, fromScaled } from '../../platform/posting/decimal';
 import { MoneyError, moneyFor } from '../../platform/posting/money';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { journalEntry, journalEntryLine } from './schema';
-import { activeValuationConflict, fxDifferenceAccount, lockValuationSettlement } from './fx-settlement';
+import {
+  activeValuationConflict, fxDifferenceAccount, lockValuationSettlement,
+  realizedFxDirection, realizedFxLine,
+} from './fx-settlement';
 
 export const VENDOR_CLEARING_CAPABILITY = 'FIN.AP.CLEAR';
 const JOURNAL_DOCUMENT_TYPE = 'KZ';
@@ -266,7 +269,7 @@ export async function clearVendorItems(input: {
     // The clearing line stands opposite the open item: a debit item is credited, and vice versa.
     const localSigned = held.reduce((total, h) => total - h.direction * h.localUnits, 0n);
     if (localSigned !== 0n) {
-      const event = localSigned > 0n ? 'FXGAIN' : 'FXLOSS';
+      const { event } = realizedFxDirection(localSigned);
       const account = await fxDifferenceAccount(tx, input.client, company.chartOfAccounts ?? '', event);
       if (!account) {
         throw new VendorClearingError(
@@ -274,14 +277,7 @@ export async function clearVendorItems(input: {
           `Maintain the ${event} account determination, then clear again. Nothing has been posted.`,
         );
       }
-      lines.push({
-        glAccount: account,
-        debitCredit: localSigned > 0n ? 'H' : 'S',
-        amount: '0',
-        amountLocal: fromScaled(localSigned < 0n ? -localSigned : localSigned),
-        localOnly: true,
-        lineText: localSigned > 0n ? 'Realized exchange gain' : 'Realized exchange loss',
-      });
+      lines.push(realizedFxLine(localSigned, account));
     }
 
     const journal = await postJournalEntry(tx, {
