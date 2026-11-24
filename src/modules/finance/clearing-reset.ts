@@ -12,6 +12,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
+import { getCompanyCode } from '../../platform/periods';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
 import { activeBankMatchForJournal } from './bank-reconciliation';
 import { lockValuationSettlement } from './fx-settlement';
@@ -37,8 +38,13 @@ export interface ClearedItemView {
   businessPartner: string | null;
   glAccount: string;
   debitCredit: string;
+  /** The company's local currency: the currency `amount` stands in. */
   amount: string;
+  /** The company's local currency, printed beside `amount` so a local figure is never labelled foreign. */
   currency: string;
+  /** The line's own document currency: the currency `documentAmount` stands in. */
+  documentCurrency: string;
+  documentAmount: string;
 }
 
 export interface ClearingDocumentView {
@@ -121,10 +127,18 @@ export async function getClearingDocument(client: string, input: {
         'FBRA resets a document that performed clearing; name the clearing document.',
       );
     }
+    const company = await getCompanyCode(tx, client, input.companyCode);
+    if (!company) {
+      throw new ClearingResetError(`Company code ${input.companyCode} does not stand configured in this tenant.`);
+    }
+    const localCurrency = company.currency;
     const items: ClearedItemView[] = sourceItems.map((l) => ({
       documentNumber: l.documentNumber, fiscalYear: l.fiscalYear, lineNumber: l.lineNumber,
       businessPartner: l.businessPartner, glAccount: l.glAccount, debitCredit: l.debitCredit,
-      amount: l.amountLocal, currency: l.currency,
+      // `amountLocal` is the company's carrying amount, so it is labelled with the company currency —
+      // never with the line's document currency, which is a different figure on a foreign document.
+      amount: l.amountLocal, currency: localCurrency,
+      documentCurrency: l.currency, documentAmount: l.amountDocument,
     }));
     return {
       companyCode: input.companyCode, clearingDocument: input.clearingDocument,

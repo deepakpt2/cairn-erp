@@ -131,7 +131,8 @@ export default async function ClearingResetPage({
                   <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                     <th>Document</th><th>Partner</th>
                     <th>Account</th><th>D/C</th>
-                    <th className="text-right">Amount {view.items[0]?.currency}</th>
+                    <th className="text-right">Amount ({view.items[0]?.currency})</th>
+                    <th className="text-right">Document ({view.items[0]?.documentCurrency})</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -142,6 +143,7 @@ export default async function ClearingResetPage({
                       <td>{i.glAccount}</td>
                       <td>{i.debitCredit}</td>
                       <td className="text-right">{Number(i.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="text-right">{Number(i.documentAmount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
