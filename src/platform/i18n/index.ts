@@ -4723,6 +4723,8 @@ const en: Catalogue = {
   'monitor.blockedOnly': 'Blocked',
   'monitor.run': 'Display overview',
   'monitor.calculatedAt': 'Calculated {when} · {count} customers',
+  'monitor.foreignExcluded': 'Foreign-currency commitments excluded from exposure: {count} document(s) · {detail}',
+  'monitor.foreignExcludedNone': 'none',
   'monitor.gridTitle': 'Credit exposure overview',
   'monitor.customer': 'Customer',
   'monitor.area': 'Area',

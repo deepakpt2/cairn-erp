@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import {
-  checkSalesDocumentCredit, evaluateCreditCheck, getCreditExposure,
+  checkSalesDocumentCredit, evaluateCreditCheck, getCreditExposure, listCreditMonitor,
 } from '../src/modules/finance/credit';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
@@ -220,5 +220,22 @@ describe('the exposure unit is verified, not assumed', () => {
     await withTenant(kwdLocal.tenant.client, async (tx) => {
       await tx.execute(sql`delete from company_code where client = ${kwdLocal.tenant.client} and company_code = '2000'`);
     });
+  }, 90_000);
+});
+
+describe('the monitor renders the order component and names what it excludes', () => {
+  it('reports an order exposure figure instead of null', async () => {
+    const monitor = await listCreditMonitor(kwdLocal.tenant.client, {});
+    const row = monitor.rows.find((r) => r.customer === 'C100');
+    expect(row).toBeDefined();
+    expect(row!.orderExposure).not.toBeNull();
+  }, 90_000);
+
+  it('states how many foreign-currency documents stand outside the basis', async () => {
+    const monitor = await listCreditMonitor(kwdLocal.tenant.client, {});
+    // A tenant with no foreign open orders says so explicitly rather than leaving it implicit.
+    expect(monitor.foreignCommitmentExclusion).toBeDefined();
+    expect(monitor.foreignCommitmentExclusion.excluded).toBe(0);
+    expect(monitor.foreignCommitmentExclusion.byCurrency).toEqual([]);
   }, 90_000);
 });

@@ -76,6 +76,19 @@ export default function CreditMonitorShell({ canUse, result, error, filter }: {
         </p>
       )}
 
+      {result && (
+        <p className="mt-1 text-sm text-ink-soft" data-testid="foreign-commitment-exclusion">
+          {t('monitor.foreignExcluded', {
+            count: result.foreignCommitmentExclusion.excluded,
+            detail: result.foreignCommitmentExclusion.byCurrency.length === 0
+              ? t('monitor.foreignExcludedNone')
+              : result.foreignCommitmentExclusion.byCurrency
+                .map((row) => `${row.documents} × ${row.amount.toFixed(2)} ${row.currency}`)
+                .join(' · '),
+          })}
+        </p>
+      )}
+
       <section className="panel overflow-x-auto" aria-label={t('monitor.gridTitle')}>
         <table className="grid-table min-w-[72rem]">
           <thead>

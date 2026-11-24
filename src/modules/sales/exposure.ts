@@ -97,3 +97,143 @@ export async function openSalesCommitments(
   `) as unknown as Array<{ value: string }>;
   return rows[0]?.value ?? '0';
 }
+
+/**
+ * The open commitment of every customer of a tenant, per area currency, in one read.
+ *
+ * Same documents and same arithmetic as `openSalesCommitments`, grouped instead of summed for one
+ * customer, so the exposure monitor can show the order component without calling the per-customer
+ * query once per row. Keys are `customer|areaCurrency` because the area's currency is what decides
+ * which documents count; the monitor joins on the customer's area currency.
+ */
+export async function openSalesCommitmentTotals(
+  tx: Tx, client: string,
+): Promise<Array<{ customer: string; areaCurrency: string; amount: string }>> {
+  const rows = await tx.execute(sql`
+    select customer, area_currency, sum(value)::text as amount
+      from (
+        select o.customer_number as customer, o.currency as area_currency,
+               (l.net_amount + l.tax_amount)
+                 * (l.order_quantity - coalesce(open.delivered, 0)) / l.order_quantity as value
+          from sales_order_line l
+          join sales_order o
+            on o.client = l.client and o.order_number = l.order_number
+          left join (
+            select dl.client, dl.order_number, dl.order_line_number,
+                   sum(dl.delivery_quantity) as delivered
+              from delivery_line dl
+              join delivery d
+                on d.client = dl.client and d.delivery_number = dl.delivery_number
+             and d.status <> 'CANCELLED'
+             and d.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
+             group by 1, 2, 3
+          ) open on open.client = l.client and open.order_number = l.order_number
+               and open.order_line_number = l.line_number
+         where l.client = ${client}
+           and o.status = 'OPEN'
+           and o.document_type <> ${STANDARD_RETURNS_ORDER_TYPE}
+           and l.status = 'OPEN'
+           and l.order_quantity > coalesce(open.delivered, 0)
+
+        union all
+
+        select o.customer_number as customer, o.currency as area_currency,
+               (l.net_amount + l.tax_amount) * dl.delivery_quantity / l.order_quantity as value
+          from delivery_line dl
+          join delivery d
+            on d.client = dl.client and d.delivery_number = dl.delivery_number
+          join sales_order o
+            on o.client = d.client and o.order_number = d.order_number
+          join sales_order_line l
+            on l.client = dl.client and l.order_number = dl.order_number and l.line_number = dl.order_line_number
+          left join billing_document bd
+            on bd.client = dl.client and bd.delivery_number = dl.delivery_number and bd.status = 'POSTED'
+         where dl.client = ${client}
+           and d.status <> 'CANCELLED'
+           and d.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
+           and o.status <> 'CANCELLED'
+           and bd.billing_number is null
+      ) commitments
+     group by customer, area_currency
+  `) as unknown as Array<{ customer: string; area_currency: string; amount: string }>;
+  return rows.map((row) => ({
+    customer: row.customer, areaCurrency: String(row.area_currency).trim().toUpperCase(), amount: row.amount,
+  }));
+}
+
+/**
+ * What the credit basis leaves out for currency reasons, named rather than silently dropped.
+ *
+ * `openSalesCommitments` and `openSalesCommitmentTotals` both count only documents in the area's own
+ * currency. An open order or un-billed delivery in any other currency is therefore outside the basis;
+ * this read counts those documents and their value per currency so a monitor can say so. The value is
+ * never summed across currencies and is never added to exposure — it is disclosure, not a basis change.
+ */
+export async function excludedForeignCommitments(
+  tx: Tx, client: string,
+): Promise<Array<{ currency: string; documents: number; amount: string }>> {
+  const rows = await tx.execute(sql`
+    select currency, count(distinct document_number)::int as documents, sum(value)::text as amount
+      from (
+        select o.order_number as document_number, o.currency as currency,
+               (l.net_amount + l.tax_amount)
+                 * (l.order_quantity - coalesce(open.delivered, 0)) / l.order_quantity as value
+          from sales_order_line l
+          join sales_order o
+            on o.client = l.client and o.order_number = l.order_number
+          left join (
+            select dl.client, dl.order_number, dl.order_line_number,
+                   sum(dl.delivery_quantity) as delivered
+              from delivery_line dl
+              join delivery d
+                on d.client = dl.client and d.delivery_number = dl.delivery_number
+             and d.status <> 'CANCELLED'
+             and d.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
+             group by 1, 2, 3
+          ) open on open.client = l.client and open.order_number = l.order_number
+               and open.order_line_number = l.line_number
+          join company_code c
+            on c.client = o.client and c.company_code = o.company_code
+          join credit_control_area cca
+            on cca.client = c.client and cca.credit_control_area = c.credit_control_area
+         where l.client = ${client}
+           and o.status = 'OPEN'
+           and o.document_type <> ${STANDARD_RETURNS_ORDER_TYPE}
+           and l.status = 'OPEN'
+           and l.order_quantity > coalesce(open.delivered, 0)
+           -- Foreign to its area: exactly what the basis drops.
+           and o.currency <> cca.currency
+
+        union all
+
+        select d.delivery_number as document_number, o.currency as currency,
+               (l.net_amount + l.tax_amount) * dl.delivery_quantity / l.order_quantity as value
+          from delivery_line dl
+          join delivery d
+            on d.client = dl.client and d.delivery_number = dl.delivery_number
+          join sales_order o
+            on o.client = d.client and o.order_number = d.order_number
+          join sales_order_line l
+            on l.client = dl.client and l.order_number = dl.order_number and l.line_number = dl.order_line_number
+          left join billing_document bd
+            on bd.client = dl.client and bd.delivery_number = dl.delivery_number and bd.status = 'POSTED'
+          join company_code c
+            on c.client = o.client and c.company_code = o.company_code
+          join credit_control_area cca
+            on cca.client = c.client and cca.credit_control_area = c.credit_control_area
+         where dl.client = ${client}
+           and d.status <> 'CANCELLED'
+           and d.document_type <> ${STANDARD_RETURNS_DELIVERY_TYPE}
+           and o.status <> 'CANCELLED'
+           and bd.billing_number is null
+           and o.currency <> cca.currency
+      ) foreign_commitments
+     group by currency
+     order by currency
+  `) as unknown as Array<{ currency: string; documents: number; amount: string }>;
+  return rows.map((row) => ({
+    currency: String(row.currency).trim().toUpperCase(),
+    documents: Number(row.documents),
+    amount: row.amount,
+  }));
+}

@@ -84,7 +84,7 @@ import { FANOUT_JOB } from '@/platform/notification/jobs/fanout';
 // The exposure basis is stated by the product document as open orders plus open deliveries plus open
 // receivables. The receivable half is this module's own ledger read; the sales halves can only be counted by
 // the module that owns those documents, so the ladder asks the owner instead of reading its tables (§5.1).
-import { openSalesCommitments } from '@/modules/sales/exposure';
+import { excludedForeignCommitments, openSalesCommitmentTotals, openSalesCommitments } from '@/modules/sales/exposure';
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -546,7 +546,11 @@ export interface CreditMonitorRow {
   creditLimit: number | null;
   creditCurrency: string;
   arExposure: number;
-  /** SD components have no canon yet: null = unavailable, never a silent zero. */
+  /**
+   * The standing open sales commitment in the credit basis, in the area currency: open order and
+   * delivery value from each document's current credit determination. Null where nothing is standing.
+   * The delivery and billing splits are not separately derived yet.
+   */
   orderExposure: number | null;
   deliveryExposure: number | null;
   billingExposure: number | null;
@@ -562,11 +566,29 @@ export interface CreditMonitorRow {
   lastUpdated: string | null;
 }
 
+/**
+ * What the credit basis leaves out because of currency, stated rather than left implicit.
+ *
+ * `openSalesCommitments` counts only documents in the area's own currency: a foreign order cannot be
+ * added to a local limit without a rate rule the credit master does not state. The exclusion is a
+ * deliberate decision (DI-019), but a monitor that silently showed a smaller exposure would read as
+ * "this customer is fine". This block names the documents outside the basis, per currency, so the
+ * figure is understood as a floor and never mistaken for the whole commitment.
+ */
+export interface ForeignCommitmentExclusion {
+  /** Documents standing open in a currency other than their area's. */
+  excluded: number;
+  /** Their value per document currency — never summed across currencies. */
+  byCurrency: Array<{ currency: string; documents: number; amount: number }>;
+}
+
 export interface CreditMonitorResult {
   rows: CreditMonitorRow[];
   totalCustomers: number;
   calculatedAt: string;
   reportingCurrency: string | null;
+  /** Documents the basis leaves out for currency reasons, named rather than silently dropped. */
+  foreignCommitmentExclusion: ForeignCommitmentExclusion;
 }
 
 const PAGE_CAP = 200;
@@ -649,21 +671,42 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
     interface RowDraft extends CreditMonitorRow { exposureScaled: bigint; limitScaled: bigint | null }
     const drafts: RowDraft[] = [];
     const seen = new Set<string>();
+
+    // The order half of the basis, grouped per customer and area currency, and the documents the
+    // basis leaves out for currency reasons. Both are reads of the documents' owner, not of its tables.
+    // Neither is caught: a broken read must fail the monitor, never quietly report a zero commitment.
+    const commitmentByArea = new Map<string, bigint>();
+    for (const row of await openSalesCommitmentTotals(tx, client)) {
+      commitmentByArea.set(`${row.customer}|${row.areaCurrency}`, toScaled(row.amount ?? '0'));
+    }
+    const foreignRows = await excludedForeignCommitments(tx, client);
+    const foreignCommitmentExclusion: ForeignCommitmentExclusion = {
+      excluded: foreignRows.reduce((total, row) => total + row.documents, 0),
+      byCurrency: foreignRows.map((row) => ({
+        currency: row.currency, documents: row.documents, amount: Number(fromScaled(toScaled(row.amount ?? '0'))),
+      })),
+    };
+
     for (const record of recordRows as unknown as Array<Record<string, unknown>>) {
       const customer = String(record.customer);
       const area = String(record.credit_control_area);
       const key = `${customer}|${area}`;
       seen.add(key);
       const exposure = exposureByKey.get(key)?.exposure ?? 0n;
+      const areaCurrency = String(record.credit_currency);
+      const orderCommitment = commitmentByArea.get(`${customer}|${areaCurrency}`) ?? 0n;
       const limit = toScaled(String(record.credit_limit));
       drafts.push({
         customer, customerName: String(record.customer_name), creditControlArea: area,
         companyCodes: exposureByKey.get(key)?.companies ?? [],
-        creditLimit: Number(fromScaled(limit)), creditCurrency: String(record.credit_currency),
-        arExposure: Number(fromScaled(exposure)), orderExposure: null, deliveryExposure: null, billingExposure: null,
-        totalExposure: Number(fromScaled(exposure)),
-        availableCredit: Number(fromScaled(limit - exposure)),
-        utilizationPercent: limit === 0n ? null : Number(exposure) / Number(limit) * 100,
+        creditLimit: Number(fromScaled(limit)), creditCurrency: areaCurrency,
+        arExposure: Number(fromScaled(exposure)),
+        orderExposure: Number(fromScaled(orderCommitment)),
+        deliveryExposure: null, billingExposure: null,
+        // The same basis the ladder compares: open receivables plus the standing open commitments.
+        totalExposure: Number(fromScaled(exposure + orderCommitment)),
+        availableCredit: Number(fromScaled(limit - exposure - orderCommitment)),
+        utilizationPercent: limit === 0n ? null : Number(exposure + orderCommitment) / Number(limit) * 100,
         riskCategory: String(record.risk_category),
         isBlocked: Boolean(record.is_on_hold), blockReason: (record.block_reason as string) ?? null,
         noCreditRecord: false,
@@ -682,15 +725,19 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
       const nameRows = await tx.execute(sql`
         select name from business_partner where client = ${client} and partner_number = ${customer}
       `);
+      const areaCurrencyCode = areaCurrency.get(area) ?? '';
+      const orderCommitment = commitmentByArea.get(`${customer}|${areaCurrencyCode}`) ?? 0n;
       drafts.push({
         customer, customerName: String((nameRows as unknown as Array<{ name: string }>)[0]?.name ?? customer),
         creditControlArea: area, companyCodes: value.companies,
-        creditLimit: null, creditCurrency: areaCurrency.get(area) ?? '',
-        arExposure: Number(fromScaled(value.exposure)), orderExposure: null, deliveryExposure: null, billingExposure: null,
-        totalExposure: Number(fromScaled(value.exposure)), availableCredit: null, utilizationPercent: null,
+        creditLimit: null, creditCurrency: areaCurrencyCode,
+        arExposure: Number(fromScaled(value.exposure)),
+        orderExposure: Number(fromScaled(orderCommitment)),
+        deliveryExposure: null, billingExposure: null,
+        totalExposure: Number(fromScaled(value.exposure + orderCommitment)), availableCredit: null, utilizationPercent: null,
         riskCategory: null, isBlocked: false, blockReason: null,
         noCreditRecord: true, limitExpired: false, conversionMissing: false, lastUpdated: null,
-        exposureScaled: value.exposure, limitScaled: null,
+        exposureScaled: value.exposure + orderCommitment, limitScaled: null,
       });
     }
 
@@ -708,6 +755,10 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
         if (!rate) { draft.conversionMissing = true; continue; }
         const factor = Number(rate.rate) * Number(rate.ratio_to) / Number(rate.ratio_from);
         draft.arExposure = draft.arExposure * factor;
+        // Every component moves with the total, or the row would add up in two currencies.
+        if (draft.orderExposure !== null) draft.orderExposure = draft.orderExposure * factor;
+        if (draft.deliveryExposure !== null) draft.deliveryExposure = draft.deliveryExposure * factor;
+        if (draft.billingExposure !== null) draft.billingExposure = draft.billingExposure * factor;
         draft.totalExposure = draft.totalExposure * factor;
         if (draft.creditLimit !== null) draft.creditLimit = draft.creditLimit * factor;
         if (draft.availableCredit !== null) draft.availableCredit = draft.availableCredit * factor;
@@ -723,7 +774,11 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
     filtered.sort((a, b) => (b.utilizationPercent ?? -1) - (a.utilizationPercent ?? -1));
     const totalCustomers = filtered.length;
     const rows = filtered.slice(0, PAGE_CAP).map(({ exposureScaled: _e, limitScaled: _l, ...row }) => row);
-    return { rows, totalCustomers, calculatedAt, reportingCurrency: filter.reportingCurrency ?? null };
+    return {
+      rows, totalCustomers, calculatedAt,
+      reportingCurrency: filter.reportingCurrency ?? null,
+      foreignCommitmentExclusion,
+    };
   });
 }
 
