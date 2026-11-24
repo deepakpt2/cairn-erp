@@ -424,10 +424,36 @@ blocked milestone), and given acceptance criteria so the next person can close i
 * **Status (the pass that built DI-020).** Unchanged as a defect, narrowed in one respect: the basis is now
   `openSalesCommitments`, which adds the standing `credit_determination` value of sales documents that are not
   yet billed, so a delivery or a blocked order does move the ladder — and the exclusion of the document being
-  judged (`excludeSalesDocument`) is passed at all three call sites, so a document never blocks itself. What is
-  still true of DI-019 is the part it names: the exposure figure is `amount_local` of unclosed journal lines with
-  no currency conversion, and open orders are counted only through their determinations rather than as receivable
-  equivalents. Left open on purpose; nothing in the fulfillment work depended on closing it.
+  judged (`excludeSalesDocument`) is passed at all three call sites, so a document never blocks itself.
+  What is still true of DI-019 is the part it names: open orders are counted only through their determinations
+  rather than as receivable equivalents, and a document in a currency other than its area's is left out of the
+  basis entirely. Left open on purpose; nothing in the fulfillment work depended on closing it.
+* **Correction (2026-11-24).** The note above said the defect was that "the exposure figure is `amount_local`
+  … with no currency conversion". That pointed at the wrong side, and is withdrawn. The exposure needs no
+  conversion — `amount_local` *is* the area's currency, because every supported path keeps the credit control
+  area's currency equal to its company's, and the check now verifies that at runtime and refuses by name when
+  an out-of-band assignment breaks it (`refuseAreaCurrencyMismatch`). The two real defects were:
+  1. **The judged amount was never converted.** `evaluateCreditCheck` took document-currency value with no
+     currency, and compared it directly with a local-currency limit — so a KWD 400 order passed a USD 1,000
+     limit it exceeded (USD 1,200), and a USD 3,200 order was blocked against a KWD 1,000 limit it was well
+     inside (KWD 960). **Fixed:** the amount now carries `amountCurrency` and `documentDate`, is translated at
+     AVERAGE to the area currency and rounded to that currency's precision, and a missing rate is a refusal
+     naming the pair and the date — never an unconverted comparison and never a rate of 1
+     (`tests/credit-currency.test.ts`).
+  2. **The basis excluded foreign documents silently.** `openSalesCommitments` counts only documents in the
+     area's currency. That exclusion is deliberate (there is no rate rule the credit master states), but it was
+     invisible: a monitor showing a smaller exposure reads as "this customer is fine". **Not fixed, made
+     visible:** the monitor now derives `orderExposure` and states
+     `foreignCommitmentExclusion` (documents and amount per currency). Whether to convert those commitments
+     into the basis or keep them excluded-but-visible is a business decision and stands open.
+* **Acceptance criteria, added.** (a) A judged amount in a currency other than the area's is translated at the
+  document's own date, rounded to the area currency's precision, before it is compared — proved both just under
+  and just over a limit in each direction. (b) No rate standing refuses with the pair, the date and the
+  maintenance path; it never falls back to comparing unconverted amounts or to a rate of 1. (c) A company in
+  the area whose local currency differs from the area's is refused by name rather than summed. (d) The monitor
+  shows the order component and states what the basis excludes, per currency. (e) The basis decision itself
+  (convert foreign commitments, or keep them excluded and visible) is still open and is recorded as a proposal,
+  not decided in code.
 
 ## DI-020 — The outbound delivery, goods issue and billing links of the sales chain (built; verified on the test box)
 
