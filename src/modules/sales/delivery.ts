@@ -29,7 +29,9 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { unitOfMeasure } from '../../platform/tables/reference';
-import { checkSalesDocumentCredit, listCreditDeterminations, type CreditDeterminationView } from '../finance/credit';
+import {
+  checkSalesDocumentCredit, checkSalesDocumentCreditInTx, listCreditDeterminations, type CreditDeterminationView,
+} from '../finance/credit';
 import { GoodsIssueError, postGoodsIssue } from '../inventory/goods-issue';
 import { StorageLocationError, resolveStorageLocation, storageLocationRequired } from '../inventory/storage-location';
 import { UnitConversionError } from '../inventory/unit-conversion';
@@ -205,12 +207,26 @@ export async function standingDetermination(
   return rows[0] ?? null;
 }
 
+/**
+ * Refuse unless the standing determination explicitly cleared the document.
+ *
+ * A block refuses, as it always did. A document with no determination is refused too: it has never
+ * been judged, and an unjudged document is not a passed one. Treating absence as clearance is what
+ * let a document whose credit check failed at save time — leaving it committed but unjudged — walk
+ * through delivery, picking and the goods issue. Only PASSED or RELEASED may proceed.
+ */
 async function refuseStandingBlock(client: string, document: string, label: string, act: string): Promise<void> {
   const determination = await standingDetermination(client, document);
   if (determination?.status === 'BLOCKED') {
     throw new DeliveryError(
       `${label} is credit-blocked${determination.reason ? ` (${determination.reason})` : ''}: nothing was ${act}.`,
       'Release the blocked document at /finance/credit-release, then act again.',
+    );
+  }
+  if (!determination) {
+    throw new DeliveryError(
+      `${label} has no credit determination, so nothing was ${act}.`,
+      'An unjudged document is not a cleared one. Run the credit check for the document, then act again.',
     );
   }
 }
@@ -787,7 +803,7 @@ export async function createDelivery(
         eq(delivery.client, parsed.client), eq(delivery.requestKey, parsed.requestKey),
       )).limit(1);
       if (existing) {
-        return { deliveryNumber: existing.number, replayed: true, order, creditArea: '', value: '0' };
+        return { deliveryNumber: existing.number, replayed: true, order, creditArea: '', value: '0', credit: null };
       }
     }
 
@@ -1183,23 +1199,20 @@ export async function createDelivery(
       objectClass: DELIVERY_OBJECT_CLASS,
     });
     const creditArea = await creditAreaFor(tx, parsed.client, order.customerNumber, order.companyCode);
-    return { deliveryNumber: number, replayed: false, order, creditArea, value: round2(value) };
+    // The delivery is its own credit-relevant document and is judged here, in the transaction that
+    // wrote it. A rate the check cannot use rolls the delivery back with the judgement, so a delivery
+    // never stands unjudged for the picking and goods-issue controls to wave through.
+    const credit = await checkSalesDocumentCreditInTx(tx, {
+      client: parsed.client, changedBy: parsed.changedBy, salesDocument: number,
+      documentDate: parsed.deliveryDate, salesOrg: order.salesOrg, customer: order.customerNumber,
+      creditControlArea: creditArea, orderValue: round2(value), orderCurrency: order.currency,
+    });
+    return { deliveryNumber: number, replayed: false, order, creditArea, value: round2(value), credit };
   });
 
   const view = await getDeliveryForProvisioning(parsed.client, created.deliveryNumber);
   if (!view) throw new DeliveryError(`Delivery ${created.deliveryNumber} could not be read back.`);
-
-  // The delivery is its own credit-relevant document: it enters the blocked worklist under its own number,
-  // which is what lets a goods issue and a billing be refused on a block raised here (D-029).
-  let credit = view.credit;
-  if (!created.replayed) {
-    credit = await checkSalesDocumentCredit({
-      client: parsed.client, changedBy: parsed.changedBy, salesDocument: created.deliveryNumber,
-      documentDate: parsed.deliveryDate, salesOrg: view.salesOrg, customer: view.customerNumber,
-      creditControlArea: created.creditArea, orderValue: created.value, orderCurrency: created.order.currency,
-    });
-  }
-  return { ...view, credit: credit ?? view.credit, replayed: created.replayed };
+  return { ...view, credit: created.credit ?? view.credit, replayed: created.replayed };
 }
 
 /**
@@ -1738,7 +1751,10 @@ export async function postDeliveryGoodsIssue(
   // The goods issue is the second check point the product document names. A breach it causes holds the
   // receivable rather than undoing the movement: the goods have left the plant, and no act on this screen
   // reverses a posted material document — that belongs to the inventory screen that owns it.
-  let blockedForBilling = (await standingDetermination(parsed.client, view.deliveryNumber))?.status === 'BLOCKED';
+  // Fail closed: a delivery with no determination has not been cleared, so the receivable is held.
+  // The re-judgement below may still clear it, but its absence or its failure never frees the invoice.
+  const standing = await standingDetermination(parsed.client, view.deliveryNumber);
+  let blockedForBilling = standing ? standing.status === 'BLOCKED' : true;
   const judged = await withTenant(parsed.client, async (tx) => {
     const [order] = await tx.select().from(salesOrder).where(and(
       eq(salesOrder.client, parsed.client), eq(salesOrder.orderNumber, view.orderNumber),
@@ -1748,12 +1764,18 @@ export async function postDeliveryGoodsIssue(
     return area ? { area, currency: order.currency } : null;
   });
   if (judged) {
-    const determination = await checkSalesDocumentCredit({
-      client: parsed.client, changedBy: parsed.changedBy, salesDocument: view.deliveryNumber,
-      documentDate: parsed.postingDate, salesOrg: view.salesOrg, customer: view.customerNumber,
-      creditControlArea: judged.area, orderValue: view.value, orderCurrency: judged.currency,
-    }).catch(() => null);
-    if (determination) blockedForBilling = determination.status === 'BLOCKED';
+    try {
+      const determination = await checkSalesDocumentCredit({
+        client: parsed.client, changedBy: parsed.changedBy, salesDocument: view.deliveryNumber,
+        documentDate: parsed.postingDate, salesOrg: view.salesOrg, customer: view.customerNumber,
+        creditControlArea: judged.area, orderValue: view.value, orderCurrency: judged.currency,
+      });
+      blockedForBilling = determination.status === 'BLOCKED';
+    } catch {
+      // The movement has posted and cannot be undone. A receivable that cannot be judged is held,
+      // never released on the strength of a check that did not run.
+      blockedForBilling = true;
+    }
   }
 
   return {

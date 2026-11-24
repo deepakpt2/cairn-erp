@@ -40,7 +40,7 @@ import { companyCode, plant, salesArea } from '../foundation/schema';
 import { material } from '../inventory/schema';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import {
-  checkSalesDocumentCredit, listCreditDeterminations, releaseDocument,
+  checkSalesDocumentCreditInTx, creditAreaOfDocumentInTx, listCreditDeterminations, releaseDocument,
   type CreditDeterminationView, type ReleaseOutcome,
 } from '../finance/credit';
 import { customerCredit } from '../finance/schema';
@@ -718,9 +718,13 @@ async function recordSchedule(
 }
 
 /**
- * Create the order and raise its credit determination. The determination is written by the credit
- * engine, in its own transaction, after the document stands: the engine is the only writer of that
- * table, and a block is a judgement about the document rather than a column of it.
+ * Create the order and raise its credit determination in the same transaction.
+ *
+ * The engine is still the only writer of the determination table, and a block is a judgement about
+ * the document rather than a column of it. But the judgement now commits with the document: if the
+ * check cannot run — a missing or stale rate, for instance — the whole save rolls back. An order
+ * that stands always has the determination that judged it, so no downstream control has to decide
+ * what an unjudged document means.
  */
 /** The authority a sales order is raised under. */
 export const SALES_ORDER_CREATE_CAPABILITY = 'SALES.ORDER.CREATE';
@@ -845,7 +849,7 @@ export async function createSalesOrder(
         .where(and(eq(salesOrder.client, parsed.client), eq(salesOrder.requestKey, parsed.requestKey))).limit(1);
       // A replay returns the document the first attempt created, and re-runs no part of the save.
       if (existing) {
-        return { orderNumber: existing.orderNumber, replayed: true, creditArea, orderDate: parsed.orderDate };
+        return { orderNumber: existing.orderNumber, replayed: true, creditArea, orderDate: parsed.orderDate, credit: null };
       }
     }
 
@@ -963,16 +967,27 @@ export async function createSalesOrder(
     await markSalesPlanning(tx, parsed.client, parsed.changedBy, `Sales order ${number} created`,
       lines.map((line) => ({ materialNumber: line.materialNumber, plant: line.plant })));
 
-    return { orderNumber: number, replayed: false, creditArea, orderDate: parsed.orderDate };
+    // The credit determination is raised here, inside the transaction that wrote the order and at
+    // the value the order now carries. It is not deferred to a second transaction: a document that
+    // committed without its judgement is exactly the state the delivery controls cannot trust.
+    const credit = await checkSalesDocumentCreditInTx(tx, {
+      client: parsed.client, changedBy: parsed.changedBy, salesDocument: number,
+      documentDate: parsed.orderDate, salesOrg: parsed.salesOrg, customer: parsed.customerNumber,
+      creditControlArea: creditArea, orderValue: grossValue, orderCurrency: parsed.currency,
+    });
+    return { orderNumber: number, replayed: false, creditArea, orderDate: parsed.orderDate, credit };
   });
 
   const view = await readSalesOrder(parsed.client, created.orderNumber);
   if (!view) throw new SalesOrderError(`Sales order ${created.orderNumber} could not be read back.`);
-  const credit = await checkSalesDocumentCredit({
-    client: parsed.client, changedBy: parsed.changedBy, salesDocument: created.orderNumber,
-    documentDate: created.orderDate, salesOrg: parsed.salesOrg, customer: parsed.customerNumber,
-    creditControlArea: created.creditArea, orderValue: view.grossValue, orderCurrency: parsed.currency,
-  });
+  // A replay returns the order the first attempt created, whose determination already stands.
+  const credit = created.credit ?? await readCredit(parsed.client, created.orderNumber);
+  if (!credit) {
+    throw new SalesOrderError(
+      `Sales order ${created.orderNumber} stands without a credit determination.`,
+      'Run the credit check for the order before using it.',
+    );
+  }
   return { ...view, credit, replayed: created.replayed };
 }
 
@@ -1218,19 +1233,23 @@ export async function changeSalesOrder(
       ...standing.map((row) => ({ materialNumber: row.materialNumber, plant: row.plant })),
       ...lines.map((line) => ({ materialNumber: line.materialNumber, plant: line.plant })),
     ]);
-    return { orderDate: before.orderDate };
+    // Re-judged against the value the change produced, in the same transaction, so a change that
+    // cannot be judged (a missing or stale rate) rolls back instead of leaving the order restated
+    // under a determination that still describes the old value. The area the order already stood in
+    // is reused; only a document that was never judged falls back to the company's area.
+    const creditArea = await creditAreaOfDocumentInTx(tx, parsed.client, parsed.orderNumber)
+      ?? await creditAreaFor(tx, parsed.client, before.customerNumber, before.companyCode, parsed.creditControlArea);
+    const credit = await checkSalesDocumentCreditInTx(tx, {
+      client: parsed.client, changedBy: parsed.changedBy, salesDocument: parsed.orderNumber,
+      documentDate: before.orderDate, salesOrg: before.salesOrg, customer: before.customerNumber,
+      creditControlArea: creditArea, orderValue: gross, orderCurrency: before.currency,
+    });
+    return { orderDate: before.orderDate, credit };
   });
 
   const view = await readSalesOrder(parsed.client, parsed.orderNumber);
   if (!view) throw new SalesOrderError(`Sales order ${parsed.orderNumber} does not exist.`);
-  const creditArea = view.credit?.creditControlArea
-    ?? await withTenant(parsed.client, (tx) => creditAreaFor(tx, parsed.client, parsed.customerNumber, parsed.companyCode, parsed.creditControlArea));
-  const credit = await checkSalesDocumentCredit({
-    client: parsed.client, changedBy: parsed.changedBy, salesDocument: parsed.orderNumber,
-    documentDate: view.orderDate, salesOrg: view.salesOrg, customer: view.customerNumber,
-    creditControlArea: creditArea, orderValue: view.grossValue, orderCurrency: view.currency,
-  });
-  return { ...view, credit };
+  return { ...view, credit: changed.credit };
 }
 
 /**

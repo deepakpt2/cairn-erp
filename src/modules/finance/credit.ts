@@ -51,6 +51,8 @@ export interface CreditCheckResult {
   /** The rate the judged amount was translated at, and the date that rate took effect. */
   rateUsed: string | null;
   rateDate: string | null;
+  /** The judged amount in the area currency; zero when the check judges no new amount. */
+  judgedAmount: number;
 }
 
 export interface CreditAuditView {
@@ -549,7 +551,7 @@ export async function listCreditAudit(client: string, customer: string, area: st
   });
 }
 
-export async function evaluateCreditCheck(input: {
+export interface CreditCheckInput {
   client: string; customer: string; creditControlArea: string; amount?: string;
   /**
    * The currency `amount` stands in, and the document date that selects its rate. Required whenever
@@ -561,8 +563,18 @@ export async function evaluateCreditCheck(input: {
   documentDate?: string;
   /** The sales document being judged, kept out of the basis it is being judged against. */
   excludeSalesDocument?: string;
-}): Promise<CreditCheckResult> {
-  return withTenant(input.client, async (tx) => {
+}
+
+export async function evaluateCreditCheck(input: CreditCheckInput): Promise<CreditCheckResult> {
+  return withTenant(input.client, (tx) => evaluateCreditCheckIn(tx, input));
+}
+
+/**
+ * The check inside the caller's transaction, for the document save that must commit with its decision.
+ * When the rate is missing or stale this throws, and the caller's transaction rolls the document back
+ * with it — the document is never committed without the determination that judged it.
+ */
+async function evaluateCreditCheckIn(tx: Tx, input: CreditCheckInput): Promise<CreditCheckResult> {
     const areaRow = await loadArea(tx, input.client, input.creditControlArea);
     // Exposure is each line's company local currency; the limit is the area's. Verified, not assumed.
     await refuseAreaCurrencyMismatch(tx, input.client, input.creditControlArea, areaRow.currency);
@@ -603,11 +615,12 @@ export async function evaluateCreditCheck(input: {
       rateUsed = converted.rate;
       rateDate = converted.rateDate;
     }
+    const judgedAmount = Number(fromScaled(amount));
     if (!record) {
       return {
         decision: 'BLOCK' as const, reason: 'NO_CREDIT_RECORD',
         exposure: Number(fromScaled(exposure)), creditLimit: null, availableCredit: null, utilizationPercent: null,
-        rateUsed, rateDate,
+        rateUsed, rateDate, judgedAmount,
       };
     }
     const limit = toScaled(record.credit_limit);
@@ -616,7 +629,7 @@ export async function evaluateCreditCheck(input: {
       exposure: Number(fromScaled(exposure)), creditLimit: Number(fromScaled(limit)),
       availableCredit: Number(fromScaled(available)),
       utilizationPercent: limit === 0n ? null : Number(exposure) / Number(limit) * 100,
-      rateUsed, rateDate,
+      rateUsed, rateDate, judgedAmount,
     };
     if (record.is_on_hold) return { decision: 'BLOCK' as const, reason: 'MANUAL_HOLD', ...base };
     if (record.credit_limit_valid_to && record.credit_limit_valid_to < todayUtc()) {
@@ -629,7 +642,6 @@ export async function evaluateCreditCheck(input: {
       return { decision: 'WARN' as const, reason: 'WARNING_THRESHOLD', ...base, utilizationPercent: utilizationAfter };
     }
     return { decision: 'OK' as const, reason: 'WITHIN_LIMIT', ...base };
-  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1095,51 +1107,96 @@ async function currentDeterminationIn(tx: Tx, client: string, salesDocument: str
   return (rows as unknown as DeterminationRow[])[0] ?? null;
 }
 
-export async function checkSalesDocumentCredit(input: {
+export interface CheckSalesDocumentCreditInput {
   client: string; changedBy: string; salesDocument: string; documentDate: string;
   salesOrg?: string; customer: string; creditControlArea: string;
   orderValue: string; orderCurrency: string;
-}): Promise<CreditDeterminationView> {
+}
+
+/**
+ * The credit area the current determination of a document names, read inside the caller's
+ * transaction. A changed order is re-judged in the area it already stood in, so a re-pricing does
+ * not move an order to a different area and silently restate it.
+ */
+export async function creditAreaOfDocumentInTx(
+  tx: Tx, client: string, salesDocument: string,
+): Promise<string | null> {
+  return (await currentDeterminationIn(tx, client, salesDocument))?.credit_control_area ?? null;
+}
+
+/**
+ * Judge a sales document and record the determination inside the caller's transaction.
+ *
+ * This is the atomic half of the workflow: the order or delivery is written and judged in one
+ * transaction, so a missing or stale exchange rate — which throws from `evaluateCreditCheckIn` —
+ * rolls the document back rather than leaving it committed and unjudged. The returned view is built
+ * from the values just written; it does not re-read via the monitor, which would open a second
+ * transaction and cannot see inside this one.
+ */
+export async function checkSalesDocumentCreditInTx(
+  tx: Tx, input: CheckSalesDocumentCreditInput,
+): Promise<CreditDeterminationView> {
   const document = input.salesDocument.trim();
   if (!document || document.length > 20) fail('A sales document key of at most 20 characters is required.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.documentDate)) fail('A valid document date is required.');
   const value = (() => { try { return toScaled(input.orderValue || '0'); } catch { return fail('The order value is not a valid amount.'); } })();
   if (value < 0n) fail('The order value cannot be negative.');
 
-  const check = await evaluateCreditCheck({
+  const check = await evaluateCreditCheckIn(tx, {
     client: input.client, customer: input.customer, creditControlArea: input.creditControlArea,
     amount: input.orderValue, amountCurrency: input.orderCurrency, documentDate: input.documentDate,
     excludeSalesDocument: document,
   });
+  const customerName = await assertPartner(tx, input.client, input.customer);
   const status: DeterminationStatus = check.decision === 'BLOCK' ? 'BLOCKED' : 'PASSED';
   const determinationId = newDeterminationId();
 
-  await withTenant(input.client, async (tx) => {
-    await assertPartner(tx, input.client, input.customer);
-    const previous = await currentDeterminationIn(tx, input.client, document);
-    await tx.execute(sql`
-      insert into credit_determination
-        (client, determination_id, sales_document, document_date, sales_org, customer, credit_control_area,
-         order_value, order_currency, status, reason, exposure_at_check, limit_at_check,
-         rate_used, rate_date, supersedes, created_by)
-      values (${input.client}, ${determinationId}, ${document}, ${input.documentDate}, ${input.salesOrg ?? null},
-              ${input.customer}, ${input.creditControlArea}, ${fromScaled(value)}, ${input.orderCurrency},
-              ${status}, ${check.reason}, ${check.exposure.toFixed(4)}, ${check.creditLimit?.toFixed(4) ?? null},
-              ${check.rateUsed}, ${check.rateDate},
-              ${previous?.determination_id ?? null}, ${input.changedBy})
-    `);
-    await recordReleaseEvent(tx, input.client, determinationId, document, 'CHECK', input.changedBy,
-      check.reason, undefined, previous?.status, status);
+  const previous = await currentDeterminationIn(tx, input.client, document);
+  await tx.execute(sql`
+    insert into credit_determination
+      (client, determination_id, sales_document, document_date, sales_org, customer, credit_control_area,
+       order_value, order_currency, status, reason, exposure_at_check, limit_at_check,
+       rate_used, rate_date, supersedes, created_by)
+    values (${input.client}, ${determinationId}, ${document}, ${input.documentDate}, ${input.salesOrg ?? null},
+            ${input.customer}, ${input.creditControlArea}, ${fromScaled(value)}, ${input.orderCurrency},
+            ${status}, ${check.reason}, ${check.exposure.toFixed(4)}, ${check.creditLimit?.toFixed(4) ?? null},
+            ${check.rateUsed}, ${check.rateDate},
+            ${previous?.determination_id ?? null}, ${input.changedBy})
+  `);
+  await recordReleaseEvent(tx, input.client, determinationId, document, 'CHECK', input.changedBy,
+    check.reason, undefined, previous?.status, status);
 
-    // A document that was already blocked and still is has not moved. Only the
-    // transition into a block is an episode worth telling people about.
-    if (status === 'BLOCKED' && previous?.status !== 'BLOCKED') {
-      await enqueueCreditBlocked(tx, {
-        client: input.client, salesDocument: document, determinationId,
-        creditControlArea: input.creditControlArea, salesOrg: input.salesOrg ?? null,
-      });
-    }
-  });
+  // A document that was already blocked and still is has not moved. Only the
+  // transition into a block is an episode worth telling people about.
+  if (status === 'BLOCKED' && previous?.status !== 'BLOCKED') {
+    await enqueueCreditBlocked(tx, {
+      client: input.client, salesDocument: document, determinationId,
+      creditControlArea: input.creditControlArea, salesOrg: input.salesOrg ?? null,
+    });
+  }
+
+  const exposureAfter = check.exposure + check.judgedAmount;
+  return {
+    determinationId, salesDocument: document, documentDate: input.documentDate,
+    salesOrg: input.salesOrg ?? null, customer: input.customer, customerName,
+    creditControlArea: input.creditControlArea,
+    orderValue: Number(fromScaled(value)), orderCurrency: input.orderCurrency,
+    rateUsed: check.rateUsed === null ? null : Number(check.rateUsed), rateDate: check.rateDate,
+    status, reason: check.reason,
+    exposureAtCheck: check.exposure, limitAtCheck: check.creditLimit,
+    currentExposure: exposureAfter, currentLimit: check.creditLimit,
+    utilizationPercent: check.creditLimit ? exposureAfter / check.creditLimit * 100 : null,
+    releasedBy: null, releasedAt: null, override: false, approvalRef: null,
+    version: 1, determinedAt: new Date().toISOString(),
+  };
+}
+
+export async function checkSalesDocumentCredit(
+  input: CheckSalesDocumentCreditInput,
+): Promise<CreditDeterminationView> {
+  const document = input.salesDocument.trim();
+  const determinationId = await withTenant(input.client, async (tx) =>
+    (await checkSalesDocumentCreditInTx(tx, input)).determinationId);
 
   const rows = await listCreditDeterminations(input.client, { documentFrom: document, documentTo: document, blockedOnly: false, includeReleased: true });
   const view = rows.find((r) => r.determinationId === determinationId) ?? rows[0];
