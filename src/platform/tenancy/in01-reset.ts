@@ -328,6 +328,14 @@ function databaseName(url: string | undefined): string {
  * Written before the first phase, so an interrupted run can be recognised and a reset has
  * something that says "this data was installer-made". A record naming another database is a
  * refusal, not something to overwrite.
+ *
+ * **The read is deliberately not filtered by operation.** `demo_installation_one_uq` is an
+ * index on `((true))` — one row for the whole table, whoever wrote it — because the marker's
+ * meaning is "this database is installer-made". Filtering by our own operation would make a
+ * row written by the automatic demo dataset invisible, so this function would decide the
+ * database was unclaimed, insert, and fail on the index with a raw `23505`
+ * (`duplicate key value violates unique constraint "demo_installation_one_uq"`) instead of
+ * saying what stood in the way. `claimDemoInstallation` reads every row for the same reason.
  */
 export async function claimInstallation(input: {
   timeline: unknown;
@@ -340,11 +348,21 @@ export async function claimInstallation(input: {
     const existing = (await tx.execute(sql`
       select installation_id as "id", database_name as "database", operation
         from demo_installation
-       where operation = ${IN01_OPERATION}
        for update
     `)) as unknown as Array<{ id: string; database: string; operation: string }>;
 
     const row = existing[0];
+
+    // A different dataset owns this database. Refusing by name beats letting the unique index
+    // report it: the operator needs to know which dataset stands there and what to do about it.
+    if (row && row.operation !== IN01_OPERATION) {
+      throw new In01ResetError(
+        `This database already holds the dataset ${row.operation} (${row.database}), not this one.`,
+        'The India UAT dataset needs its own empty database: set CAIRN_DATABASE_NAME and '
+        + 'ENABLE_DUMMY_DATA=false before the first `docker compose up`, as 00-HOW-TO-START §C2–C3 says.',
+      );
+    }
+
     if (row && row.database !== database) {
       throw new In01ResetError(
         `The installation record belongs to database ${row.database}, not ${database}.`,

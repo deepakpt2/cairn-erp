@@ -256,6 +256,50 @@ describe('the reset refuses rather than deletes', () => {
   });
 });
 
+describe('the installation ledger is shared, and a foreign dataset is refused by name', () => {
+  const source = readFileSync('src/platform/tenancy/in01-reset.ts', 'utf8');
+  const migration = readFileSync('drizzle/9273_demo_installation.sql', 'utf8');
+
+  it('reads every ledger row, because the index permits only one', () => {
+    // The defect this guards, found when `demo:provision` had already run in the target
+    // database: filtering the read by IN01's own operation made the demo's row invisible, so
+    // the claim inserted a second row and PostgreSQL answered with a raw
+    // `duplicate key value violates unique constraint "demo_installation_one_uq"`.
+    expect(migration).toContain('create unique index if not exists demo_installation_one_uq');
+    expect(migration).toMatch(/on demo_installation \(\(true\)\)/);
+
+    // The claim's SELECT must not carry an operation predicate. `claimDemoInstallation` reads
+    // every row for the same reason and refuses a foreign operation afterwards.
+    const claim = source.slice(
+      source.indexOf('export async function claimInstallation'),
+      source.indexOf('export async function installationRecordExists'),
+    );
+    expect(claim).not.toMatch(/where\s+operation\s*=/i);
+    expect(claim).toContain('row.operation !== IN01_OPERATION');
+  });
+
+  it('says which dataset stands in the database, not that a constraint was violated', () => {
+    const claim = source.slice(
+      source.indexOf('export async function claimInstallation'),
+      source.indexOf('export async function installationRecordExists'),
+    );
+    expect(claim).toMatch(/already holds the dataset/);
+    expect(claim).toMatch(/CAIRN_DATABASE_NAME/);
+    expect(claim).toMatch(/ENABLE_DUMMY_DATA=false/);
+  });
+
+  it('refuses a ledger naming another database, rather than adopting it', () => {
+    // The other half of the same read: a row is never adopted across databases, because a
+    // marker found in one says nothing about another.
+    const claim = source.slice(
+      source.indexOf('export async function claimInstallation'),
+      source.indexOf('export async function installationRecordExists'),
+    );
+    expect(claim).toMatch(/row\.database !== database/);
+    expect(claim).toMatch(/never adopted across databases/);
+  });
+});
+
 describe('the credential report', () => {
   const rows = [
     {

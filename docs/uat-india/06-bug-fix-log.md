@@ -526,3 +526,83 @@ deployment. Both `db:sync-role` calls remain, still bracketing `db:migrate`. On 
 `db:ensure-migrator` finds the role present and exits 0 without changing anything. On a volume
 initialised before that script existed, it creates the missing role — which is the defect it was
 added to fix.
+
+## ID-008 — the IN01 installer crashed on a shared ledger instead of refusing
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** |
+| Discovered | The owner's first `in01-install.ts` run, against a database the demo had already filled |
+| Application code changed | **none** — installer only |
+| Files changed | `src/platform/tenancy/in01-reset.ts`, `scripts/in01-install.ts`, `tests/in01-install-contract.test.ts` |
+
+### What failed
+
+```
+India install failed: duplicate key value violates unique constraint "demo_installation_one_uq"
+    at ErrorResponse (…/node_modules/postgres/cjs/src/connection.js:815:30)
+    …
+```
+
+Reached by running the documented C6 command against a database where `demo:provision` had already
+run, which is what the `migrate` service's CMD does on every `docker compose up`.
+
+### Why it is an installer defect
+
+`demo_installation_one_uq` is an index on `((true))` — **one row for the whole table**, whoever
+wrote it — because the marker's meaning is "this database is installer-made". Both datasets share
+the table and are told apart by `operation`.
+
+- `claimDemoInstallation` selects **every** row, then refuses a foreign operation by name: *"This
+  database holds a demo dataset from build X; this build produces Y."*
+- `claimInstallation` (IN01) selected `where operation = 'in01-uat-dataset/2026-11'`, so a row the
+  demo had written was **invisible to it**. It concluded the database was unclaimed, inserted, and
+  PostgreSQL answered with `23505`.
+
+Measured on a disposable database holding only the demo's row:
+
+```
+IN01 claim saw:   0
+Actually existed: DEMO_PROVISION_V1 | COMPLETED
+Index permits:     1
+```
+
+So IN01 could never report the conflict, and the operator got a constraint violation naming an
+index rather than the dataset standing in their way.
+
+### The fix
+
+1. The claim now reads **every** ledger row and refuses a foreign `operation` by name, saying which
+   dataset holds the database and what to do — the mirror of `claimDemoInstallation`'s check. The
+   cross-database refusal is unchanged.
+2. `scripts/in01-install.ts` prints an `In01ResetError` as a refusal with its remedy, the way the
+   reset path already did, instead of a five-frame stack trace. A refusal is a decision, not a
+   crash.
+
+### Verification
+
+Reproduced, then fixed, on disposable databases (both dropped afterwards):
+
+| Scenario | Before | After |
+|---|---|---|
+| Fresh database | Installs, exit 0 | Installs, exit 0; a second run is idempotent, exit 0 |
+| Database already holding `DEMO_PROVISION_V1` | `23505` on `demo_installation_one_uq` | `India installer refused:` names the dataset and the remedy, exit 1, no stack |
+
+The refusal now reads:
+
+```
+India installer refused:
+  This database already holds the dataset DEMO_PROVISION_V1 (cairn_…), not this one.
+  The India UAT dataset needs its own empty database: set CAIRN_DATABASE_NAME and
+  ENABLE_DUMMY_DATA=false before the first `docker compose up`, as 00-HOW-TO-START §C2–C3 says.
+```
+
+`tests/in01-install-contract.test.ts` pins both halves: the claim carries no `where operation =`
+predicate and does refuse a foreign operation, and the index really is `((true))`. 41 tests pass.
+
+### Not fixed in this commit
+
+The owner's `.env` still carries `ENABLE_DUMMY_DATA=true` and the default database name. §C2–C3 of
+`00-HOW-TO-START.md` require `CAIRN_DATABASE_NAME=cairn_in01_uat` and `ENABLE_DUMMY_DATA=false`
+**before the first** `up`, so the two datasets never share a database in the first place. That is
+operator configuration, not code, and it is the owner's to change.

@@ -220,6 +220,15 @@ export async function main(argv: string[]): Promise<number> {
     await claimInstallation({ timeline: { scenario, phases: args.until }, completed: true });
     return finish(args, fixtures, passwords, results);
   } catch (error) {
+    // A refusal is a decision with a remedy, not a crash: say what stood in the way and what to
+    // do, the way the reset path already does. A stack trace here reads like a defect in the
+    // installer when the installer in fact declined to touch the database.
+    if (error instanceof In01ResetError) {
+      console.error('India installer refused:');
+      console.error(`  ${error.message}`);
+      console.error(`  ${error.remedy}`);
+      return 1;
+    }
     console.error(`India install failed: ${error instanceof Error ? error.message : String(error)}`);
     if (error instanceof Error && error.stack) console.error(error.stack.split('\n').slice(1, 6).join('\n'));
     return 1;
