@@ -273,24 +273,34 @@ shipped file. B1 you must decide on; B3 is handled by running in the right conta
 ```bash
 git clone https://github.com/deepakpt2/cairn-erp.git cairn-erp
 cd cairn-erp
-git checkout 2fa5b3b1
-git rev-parse HEAD      # must print 2fa5b3b143de57bce7cf8a438ecfa81b557bbfb6
+git fetch origin
+git checkout development
+
+# Resolve the deploy commit rather than trusting a hash written in this file.
+# A document cannot contain the hash of the commit that contains it, so any
+# hash printed here is one commit stale by the time you read it. This does not
+# go stale.
+DEPLOY=$(git rev-parse origin/development)
+echo "deploying $DEPLOY"
 ```
 
-> **Deploy commit: `2fa5b3b143de57bce7cf8a438ecfa81b557bbfb6`** — pushed to `origin/development` and
-> verified identical to the remote (`git ls-remote origin refs/heads/development`).
+> **Deploy commit: the tip of `origin/development`, resolved by the commands above.** It is not
+> written here as a literal because a document cannot name the commit that contains it — any hash
+> printed in this file is one commit stale by the time you read it. `DEPLOY` above is the answer,
+> and it does not go stale.
 >
-> Every commit from `0262c5d5` onward carries an identical installer, fixture set, schema,
-> Dockerfile and Compose file; after `0262c5d5` only files under `docs/uat-india/` changed.
-> Verified:
+> **The invariant that makes this safe.** Every commit from `0262c5d5` onward carries an identical
+> installer, fixture set, schema, Dockerfile and Compose file — after `0262c5d5` only files under
+> `docs/uat-india/` changed. Confirm before you deploy:
 >
 > ```
-> git diff --stat 0262c5d5..development -- src scripts fixtures \
->     package.json docker-compose.yml Dockerfile      # → empty
+> git diff --stat 0262c5d5..origin/development -- src scripts fixtures \
+>     package.json docker-compose.yml Dockerfile      # → must be empty
 > ```
 >
-> So any commit in `0262c5d5..development` is interchangeable **for the application**. Use
-> `2fa5b3b1`, and re-run that diff if you are reading this later and `development` has moved.
+> Empty means the application is exactly what was tested and the docs are the only difference. **If
+> it is not empty**, the application has moved since the UAT build: read what changed before
+> deploying it, and do not assume the guide still matches.
 
 ### C2. Environment file
 
@@ -521,7 +531,7 @@ Take this **before** any Phase 3 posting, so a failed scenario is one restore aw
 ```bash
 # Custom format (-Fc), compressed, named with the deploy commit so a restore
 # months later still says what it belongs to.
-COMMIT=$(git rev-parse --short HEAD)   # the commit you deployed (C1)
+COMMIT=$(git rev-parse --short origin/development)   # resolved in C1
 STAMP=$(date +%Y%m%dT%H%M%SZ)
 docker compose exec -T db pg_dump -U cairn -d cairn_in01_uat -Fc \
   > "in01-phase2-$STAMP-$COMMIT.dump"
