@@ -10,12 +10,17 @@
  * That is the situation the account-type design exists for, and the one a simpler
  * implementation would get wrong.
  */
-import { describe, expect, it, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { withTenant, closeDb } from '@/platform/db/client';
 import { postJournalEntry, PostingError } from '@/platform/posting';
 import { derivePosition, periodStatus, PeriodError } from '@/platform/periods';
 import { postingPeriodRule } from '@/modules/foundation/schema';
+import {
+  listFiscalYearVariants,
+  saveFiscalYearPeriods,
+  saveFiscalYearVariant,
+} from '@/modules/foundation/fiscal-year-variant-maintenance';
 import { createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
 
 const tenant: TestTenant = await createTenant('periods');
@@ -92,6 +97,118 @@ describe('fiscal year derivation', () => {
     ).catch((e) => e)) as PeriodError;
 
     expect(error).toBeInstanceOf(PeriodError);
+  });
+
+  /**
+   * The extra `dateYear - 1` candidate, proved harmless on the calendar-year variant.
+   *
+   * A calendar year's periods all carry `yearShift: 0`, so the windows derived for `dateYear - 1`
+   * end on 31 December of that year and cannot contain a date in `dateYear`. Before the shifted-year
+   * fix this passed trivially because the candidate did not exist; it is asserted now so that a
+   * future change to the candidate list cannot silently reassign a calendar-year date to the
+   * previous fiscal year.
+   */
+  it('never resolves a calendar-year date into the previous fiscal year', async () => {
+    for (const date of [`${fiscalYear}-01-01`, `${fiscalYear}-03-31`, `${fiscalYear}-12-31`]) {
+      const position = await withTenant(tenant.client, (tx) =>
+        derivePosition(tx, tenant.client, 'K4', date),
+      );
+      expect(position.fiscalYear, `date ${date}`).toBe(fiscalYear);
+    }
+  });
+});
+
+/**
+ * A shifted fiscal year — April to March — which is the Indian and British convention.
+ *
+ * The defect these tests were written against: `derivePosition` tested only the posting date's own
+ * calendar year and the next, so a date in January, February or March of an April-to-March year
+ * belonged to no candidate at all and was refused with "does not fall in any period". With the year
+ * starting in April, 90 of 365 days were unresolvable.
+ */
+describe('fiscal year derivation — a year that does not start in January', () => {
+  const shifted = 'A4';
+
+  beforeAll(async () => {
+    await saveFiscalYearVariant({
+      client: tenant.client,
+      changedBy: 'TEST',
+      mode: 'CREATE',
+      expectedVersion: 0,
+      variant: shifted,
+      name: 'April to March',
+      isCalendarYear: false,
+      regularPeriods: 12,
+      specialPeriods: 0,
+      isYearDependent: false,
+      reason: 'Shifted-year derivation test',
+    });
+
+    // Period ends, as a person would maintain them: April to December close in the year the
+    // fiscal year starts, January to March in the year after it.
+    const ends: Array<[number, number, number]> = [
+      [4, 30, 0], [5, 31, 0], [6, 30, 0], [7, 31, 0], [8, 31, 0], [9, 30, 0],
+      [10, 31, 0], [11, 30, 0], [12, 31, 0], [1, 31, 1], [2, 28, 1], [3, 31, 1],
+    ];
+    const definition = await listFiscalYearVariants(tenant.client);
+    const created = definition.find((row) => row.variant === shifted)!;
+
+    await saveFiscalYearPeriods({
+      client: tenant.client,
+      changedBy: 'TEST',
+      variant: shifted,
+      calendarYear: 0,
+      expectedVersion: created.version,
+      reason: 'Shifted-year derivation test',
+      periods: ends.map(([month, day, yearShift], index) => ({
+        period: index + 1, month, day, yearShift,
+      })),
+    });
+  });
+
+  it('places January to March in the fiscal year that started the previous April', async () => {
+    for (const [date, expectedFiscalYear, expectedPeriod] of [
+      ['2026-04-01', 2026, 1],
+      ['2026-06-15', 2026, 3],
+      ['2026-12-31', 2026, 9],
+      ['2027-01-15', 2026, 10],
+      ['2027-02-10', 2026, 11],
+      ['2027-03-31', 2026, 12],
+    ] as Array<[string, number, number]>) {
+      const position = await withTenant(tenant.client, (tx) =>
+        derivePosition(tx, tenant.client, shifted, date),
+      );
+      expect(position, `date ${date}`).toMatchObject({
+        fiscalYear: expectedFiscalYear,
+        period: expectedPeriod,
+        periodType: 'REGULAR',
+      });
+    }
+  });
+
+  it('covers every day of a shifted year, with no gaps', async () => {
+    // The regression: 90 days — all of January, February and March — used to throw.
+    let unresolved = 0;
+    for (let month = 1; month <= 12; month++) {
+      const lastDay = new Date(Date.UTC(2026, month, 0)).getUTCDate();
+      for (let day = 1; day <= lastDay; day++) {
+        const date = `2026-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const position = await withTenant(tenant.client, (tx) =>
+          derivePosition(tx, tenant.client, shifted, date),
+        ).catch(() => null);
+        if (!position) unresolved += 1;
+      }
+    }
+    expect(unresolved, 'days of 2026 that fall in no period').toBe(0);
+  });
+
+  it('keeps each shifted year contiguous across the boundary', async () => {
+    const marchLast = await withTenant(tenant.client, (tx) =>
+      derivePosition(tx, tenant.client, shifted, '2027-03-31'));
+    const aprilFirst = await withTenant(tenant.client, (tx) =>
+      derivePosition(tx, tenant.client, shifted, '2027-04-01'));
+    expect(marchLast).toMatchObject({ fiscalYear: 2026, period: 12 });
+    expect(aprilFirst).toMatchObject({ fiscalYear: 2027, period: 1 });
   });
 });
 

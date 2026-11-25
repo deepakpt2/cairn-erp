@@ -87,7 +87,14 @@ export async function derivePosition(
   // calendar year or to the one starting in this, so both are tested rather than guessed
   // from a start month. A year-dependent variant reads the row set of the fiscal year being
   // tested, because that is the whole point of maintaining periods per year.
-  for (const fiscalYear of [dateYear, dateYear + 1]) {
+  //
+  // The previous fiscal year is a candidate too, and it is not symmetry for its own sake. A
+  // shifted year — April to March, the Indian and British convention — puts January, February
+  // and March in the fiscal year that *started* in the calendar year before them. Testing only
+  // `dateYear` and `dateYear + 1` left those three months unresolvable. The windows are
+  // contiguous and non-overlapping, so for a calendar-year variant the extra candidate cannot
+  // match a date in `dateYear`, and for a shifted one it is the only candidate that can.
+  for (const fiscalYear of [dateYear - 1, dateYear, dateYear + 1]) {
     const regular = await regularPeriods(tx, client, variantCode, variant.isYearDependent, fiscalYear);
     if (regular.length === 0) {
       throw new PeriodError(
