@@ -90,8 +90,18 @@ describe('demo company structure', () => {
       expect(source).not.toMatch(new RegExp(`roleCode:\\s*'${protectedCode}'`));
       expect(source).not.toMatch(new RegExp(`code:\\s*'${protectedCode}'`));
     }
-    // And every role it does define is namespaced so it can never collide with one.
-    expect(source).toMatch(/code:\s*'DEMO_/);
+    // And every role it does define is namespaced so it can never collide with one. The
+    // definitions live in the country-neutral fixture (one copy, shared with the India UAT
+    // installer); the module reads them from there, so the namespace is asserted where the
+    // codes stand rather than on a second copy in this file.
+    const core = JSON.parse(readFileSync(
+      join(process.cwd(), 'fixtures/core/organisation.json'),
+      'utf8',
+    )) as { roles: Array<{ code: string }> };
+    expect(core.roles.length).toBeGreaterThan(0);
+    for (const definition of core.roles) expect(definition.code).toMatch(/^DEMO_/);
+    // And the module really does read them rather than restating them.
+    expect(source).toContain("'core', 'organisation.json'");
   });
 
   it('expands its capability patterns instead of smuggling a wildcard past the guard', () => {

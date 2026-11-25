@@ -31,6 +31,9 @@
  *   `CFG.PLT.USER.ROLE.MAINTAIN`).
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { and, eq, sql } from 'drizzle-orm';
 
 import { withTenant } from '../db/client';
@@ -49,8 +52,12 @@ import {
   DEMO_IDENTITY,
   DEMO_STRUCTURE,
 } from './demo-organisation';
+import { FIXTURE_ROOT, type CoreOrganisation } from './in01-fixtures';
 import type { DemoAccount } from './demo-credentials';
 import type { DemoTimeline } from './demo-provisioning';
+
+/** One role as the country-neutral fixture states it. */
+type FixtureRole = CoreOrganisation['roles'][number];
 
 /** What the acting administrator holds. `ADMINISTRATOR` is the wildcard, so this is literally its pattern. */
 const ADMINISTRATOR_PATTERNS = ['*'] as const;
@@ -159,6 +166,17 @@ const EMPLOYEES = [
 /**
  * The custom roles.
  *
+ * **Defined once, in `fixtures/core/organisation.json`.** The India UAT role build
+ * (`in01-phase1.ts`) and this demo both create the same twelve `DEMO_*` roles, and they used to
+ * keep a copy each. The copies drifted: `1819f764` added `SALES.DELIVERY.PICK` to the delivery
+ * service, and neither copy followed, so D3_SALES stopped on the first pick (ID-003). Fixing one
+ * copy and not the other then left the two disagreeing outright.
+ *
+ * The fixture is the source of truth because `core/` is where a country-neutral role belongs,
+ * and because a fixture-driven installer already reads it. This module imports it rather than
+ * restating it, so a role can only be wrong in one place. `tests/demo-role-fixtures.test.ts`
+ * pins the invariant in both directions.
+ *
  * The capability patterns are the ones the product's own system roles use, spelled
  * out rather than inherited: a buyer buys, a warehouse clerk moves stock, an
  * accountant posts to the ledger. Deliberately scoped, deliberately separate — a
@@ -169,132 +187,31 @@ const EMPLOYEES = [
  * have it resolved at authorisation time, but a custom role must name what it holds.
  * Expanding here keeps the definitions readable without smuggling a wildcard past a
  * guard that exists on purpose.
+ *
+ * Two authorities are worth stating here because the fixture cannot carry the reasoning:
+ *
+ * - The production clerk's component issue asks for the goods-issue authority as well as the
+ *   production one — it moves stock, and a movement is posted by somebody who may move stock.
+ *   The clerk holds it for the manufacturing plant alone; the warehouse clerk holds the same
+ *   authority for every other movement and not this one.
+ * - The controller releases what the accountant parks. That separation is a *person*-level rule
+ *   (`parked-journal-release.ts`: the preparer cannot release), which is why holding
+ *   `FIN.JOURNAL.POST` does not breach it. The controller is also management's side of the audit:
+ *   they grant an auditor access and answer the auditor's requests.
  */
-const ROLES = [
-  {
-    code: 'DEMO_BUYER',
-    name: 'Buyer',
-    description: 'Requisitions, purchase orders and supplier negotiation',
-    capabilities: ['PROC.*', 'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW'],
-  },
-  {
-    code: 'DEMO_PLANNER',
-    name: 'Production planner',
-    description: 'MRP, planned orders and production orders',
-    capabilities: ['PROD.*', 'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW'],
-  },
-  {
-    code: 'DEMO_PROD_CLERK',
-    name: 'Production clerk',
-    description: 'Shop-floor confirmations and goods movements',
-    // The component issue to an order asks for the goods-issue authority as well as the
-    // production one: it moves stock, and a movement is posted by somebody who may move
-    // stock. The clerk holds it for the manufacturing plant alone; the warehouse clerk
-    // next door holds the same authority for every other movement and not this one.
-    capabilities: [
-      'PROD.CONFIRM.*', 'PROD.ORDER.GI', 'PROD.ORDER.GR', 'INV.GI.POST',
-      'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW',
-    ],
-  },
-  {
-    code: 'DEMO_WH_CLERK_MFG',
-    name: 'Warehouse clerk — manufacturing plant',
-    description: 'Goods movements at the manufacturing plant',
-    // Shipping is warehouse work, so the clerk who empties the shelf is also the
-    // clerk who ships the delivery: the pick that readies it asks for
-    // SALES.DELIVERY.PICK, and the 601 the delivery then posts asks for the
-    // goods-issue authority *and* the one that ships to a customer. The clerk
-    // holds all of them for the plant they stand in. The sales clerk raises the
-    // order and the billing document and holds none of them.
-    capabilities: [
-      'INV.*', 'QM.LOT.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
-      'SALES.RETURNS.RECEIPT.POST', 'AUDIT.TRAIL.VIEW',
-    ],
-  },
-  {
-    code: 'DEMO_WH_CLERK_DIST',
-    name: 'Warehouse clerk — distribution centre',
-    description: 'Goods movements at the distribution centre',
-    // The same authorities as the manufacturing clerk: the two are told apart by
-    // the plant they stand in, not by what they may do.
-    capabilities: [
-      'INV.*', 'QM.LOT.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
-      'SALES.RETURNS.RECEIPT.POST', 'AUDIT.TRAIL.VIEW',
-    ],
-  },
-  {
-    code: 'DEMO_SALES_CLERK',
-    name: 'Sales clerk',
-    description: 'Quotations, orders, deliveries and billing',
-    capabilities: ['SALES.*', 'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW'],
-  },
-  {
-    code: 'DEMO_ACCOUNTANT',
-    name: 'Accountant',
-    description: 'General ledger, payables, receivables and banking',
-    capabilities: ['FIN.*', 'COST.*', 'AUDIT.TRAIL.VIEW'],
-  },
-  {
-    code: 'DEMO_CONTROLLER',
-    name: 'Controller',
-    description: 'Costing, profitability, internal orders and their settlement',
-    // `CO.*` is what an internal order and its settlement ask for: the controller
-    // maintains the order, keeps its budget, and runs the settlement that moves
-    // what the order collected onto the receivers its rules name. `COST.*` is the
-    // cost-centre and activity side of the same job, and the two are not the same
-    // pattern even though they read as though they might be.
-    // The controller is also who grants an auditor access and answers the auditor's
-    // requests (`/audit/grants`, `/audit/findings`): management's side of the audit.
-    capabilities: [
-      'CO.*', 'COST.*', 'FIN.RPT.*', 'AUDIT.TRAIL.VIEW', 'AUDIT.ACCESS.GRANT', 'AUDIT.REQUEST.RESPOND',
-      // The controller releases what the accountant parks and what the payment run proposes.
-      'FIN.JOURNAL.RELEASE', 'FIN.AP.PAYMENTRUN.RELEASE',
-    ],
-  },
-  {
-    code: 'DEMO_AUDITOR',
-    name: 'Auditor',
-    description: 'External auditor: read-only, under a time-boxed audit grant',
-    // Display only, by name — no wildcard that could reach a posting capability. The
-    // grant the audit phase gives this account cuts anything else away regardless
-    // (src/modules/audit/read-only.ts); the role is display-only so that the demo
-    // shows an auditor who never held a write in the first place.
-    capabilities: [
-      'AUDIT.WORKSPACE', 'AUDIT.TRAIL.VIEW', 'AUDIT.EVIDENCE.EXPORT', 'AUDIT.PERIOD.EVIDENCE',
-      'FIN.RPT.BALANCESHEET', 'FIN.RPT.PROFITLOSS', 'FIN.RPT.TRIALBALANCE', 'FIN.RPT.CASHFLOW',
-      'FIN.RPT.SUBLEDGER.TIE', 'FIN.RPT.CONSOLIDATE.STMT',
-      'FIN.GL.BALANCE', 'FIN.JOURNAL.LIST', 'FIN.JOURNAL.DISPLAY', 'FIN.DOC.FLOW', 'FIN.AP.AGEING', 'FIN.AR.AGEING',
-      'PROC.PO.LIST', 'PROC.PO.DISPLAY', 'SALES.DOCUMENTS.LIST', 'INV.MATERIALDOC.LIST', 'INV.STOCK.VIEW',
-      'PLT.LOCK.DISPLAY', 'PLT.JOB.DISPLAY', 'PLT.NOTIFY.DISPLAY',
-    ],
-  },
-  {
-    code: 'DEMO_HR_CLERK',
-    name: 'HR clerk (plant)',
-    description: 'Requests hires and maintains employee data for the plant they are scoped to; cannot approve',
-    capabilities: ['PEOPLE.EMPLOYEE.CREATE', 'PEOPLE.RECORD.MAINTAIN', 'PEOPLE.ASSIGNMENT.MAINTAIN', 'PEOPLE.AUTHORITY.VIEW', 'PEOPLE.TIME.ENTER', 'AUDIT.TRAIL.VIEW'],
-  },
-  {
-    code: 'DEMO_HR_OFFICER',
-    name: 'HR officer / manager (company)',
-    description: 'Maintains employee data company-wide, sets position tiers and approves hires of a lower tier',
-    capabilities: ['PEOPLE.EMPLOYEE.CREATE', 'PEOPLE.RECORD.MAINTAIN', 'PEOPLE.ASSIGNMENT.MAINTAIN', 'PEOPLE.AUTHORITY.VIEW', 'PEOPLE.TIME.ENTER', 'AUDIT.TRAIL.VIEW', 'PEOPLE.EMPLOYEE.APPROVE', 'PEOPLE.POSITION.CREATE', 'PEOPLE.LEAVE.*'],
-  },
-  {
-    code: 'DEMO_QUALITY',
-    name: 'Quality inspector',
-    description: 'Inspection lots, results and usage decisions',
-    // The decision that moves goods out of inspection stock posts a transfer, so the
-    // inspector holds the transfer authority as well as the quality ones: the same rule
-    // the production clerk's component issue lives under, where the actor holds the
-    // movement authority as well as the one belonging to their own module. What they do
-    // *not* hold is a goods receipt or a goods issue: an inspector decides what the
-    // goods are, and a clerk is the one who books them in and out.
-    capabilities: [
-      'QM.*', 'INV.TRANSFER.POST', 'INV.STOCK.VIEW', 'AUDIT.TRAIL.VIEW',
-    ],
-  },
-] as const;
+const CORE_ROLES: FixtureRole[] = JSON.parse(
+  readFileSync(join(FIXTURE_ROOT, 'core', 'organisation.json'), 'utf8'),
+).roles;
+
+const ROLES = CORE_ROLES.map((definition) => ({
+  code: definition.code,
+  name: definition.name,
+  description: definition.description,
+  capabilities: definition.capabilities,
+})) satisfies ReadonlyArray<{
+  code: string; name: string; description: string; capabilities: readonly string[];
+}>;
+
 
 /**
  * The accounts.

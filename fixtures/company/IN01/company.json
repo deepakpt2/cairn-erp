@@ -1378,7 +1378,10 @@
       "personnelNumber": "10000034",
       "role": "DEMO_SALES_CLERK",
       "department": "Sales",
-      "plants": []
+      "plants": [
+        "1000",
+        "2000"
+      ]
     },
     {
       "username": "in01.ap",

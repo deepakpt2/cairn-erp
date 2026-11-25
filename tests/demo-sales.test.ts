@@ -106,15 +106,19 @@ describe('demo sales phase, as it is written', () => {
     // actor without SALES.DELIVERY.PICK. The phase picks as demo.warehouse1 and
     // demo.warehouse2, so those roles must hold it — a role that ships the goods
     // issue but cannot pick leaves the whole chain unprovisioned at D3_SALES.
-    const people = readFileSync(
-      join(process.cwd(), 'src/platform/tenancy/demo-people.ts'),
+    //
+    // The roles are defined once, in the country-neutral fixture, and the demo
+    // imports them; asserting on the fixture is therefore asserting on what the
+    // installer will actually grant.
+    const core = JSON.parse(readFileSync(
+      join(process.cwd(), 'fixtures/core/organisation.json'),
       'utf8',
-    );
+    )) as { roles: Array<{ code: string; capabilities: string[] }> };
     for (const role of ['DEMO_WH_CLERK_MFG', 'DEMO_WH_CLERK_DIST']) {
-      const block = new RegExp(`code: '${role}'[\\s\\S]*?capabilities: \\[([\\s\\S]*?)\\]`).exec(people);
-      expect(block?.[1], `${role} declares no capabilities`).toBeTruthy();
-      expect(block![1]).toContain("'SALES.DELIVERY.PICK'");
-      expect(block![1]).toContain("'SALES.GI.POST'");
+      const definition = core.roles.find((r) => r.code === role);
+      expect(definition, `${role} is not defined in the core fixture`).toBeTruthy();
+      expect(definition!.capabilities).toContain('SALES.DELIVERY.PICK');
+      expect(definition!.capabilities).toContain('SALES.GI.POST');
     }
   });
 

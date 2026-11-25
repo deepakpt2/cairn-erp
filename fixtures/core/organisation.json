@@ -148,6 +148,7 @@
       "capabilities": [
         "INV.*",
         "QM.LOT.CREATE",
+        "SALES.DELIVERY.PICK",
         "SALES.GI.POST",
         "SALES.RETURNS.RECEIPT.POST",
         "AUDIT.TRAIL.VIEW"
@@ -160,6 +161,7 @@
       "capabilities": [
         "INV.*",
         "QM.LOT.CREATE",
+        "SALES.DELIVERY.PICK",
         "SALES.GI.POST",
         "SALES.RETURNS.RECEIPT.POST",
         "AUDIT.TRAIL.VIEW"
@@ -182,7 +184,8 @@
       "capabilities": [
         "FIN.*",
         "COST.*",
-        "AUDIT.TRAIL.VIEW"
+        "AUDIT.TRAIL.VIEW",
+        "PROC.INV.RECORD"
       ]
     },
     {
@@ -197,7 +200,13 @@
         "AUDIT.ACCESS.GRANT",
         "AUDIT.REQUEST.RESPOND",
         "FIN.JOURNAL.RELEASE",
-        "FIN.AP.PAYMENTRUN.RELEASE"
+        "FIN.AP.PAYMENTRUN.RELEASE",
+        "PROD.ORDER.SETTLE",
+        "PROC.GRIR.MAINTAIN.POST",
+        "FIN.ASSET.DEPRECIATE",
+        "FIN.JOURNAL.POST",
+        "CFG.COST.ALLOCATION.DEFINE",
+        "FIN.CLOSE.COCKPIT"
       ]
     },
     {
