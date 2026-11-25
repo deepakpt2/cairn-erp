@@ -140,3 +140,55 @@ the `calendarYear = 0` rows).
 Nothing else. Per the owner's instruction the commit contains only this defect; every other
 calendar-year assumption found is reported in `03-calendar-year-assumption-report.md` with no code
 change.
+
+---
+
+## Bug 002 — the installer created company code `1000` instead of `IN01`
+
+| Field | Status |
+|---|---|
+| Status | **FIXED** (in the installer I wrote; the defect was mine, not the product's) |
+| Discovered | During the owner's pre-test review, checking what `A000` holds |
+| Application code changed | none — installer and fixtures only |
+| Commit | in the follow-up commit to this one |
+
+### What failed
+
+The brief says the company code is `IN01`. The fixture's `company.identity.companyCode` is `IN01`.
+But the installer read `structure.companyCode` from `fixtures/core/organisation.json`, where the
+neutral structure pattern carried `1000` — the product's standard key. The result:
+
+```
+=== ACTUAL company codes ===
+1000|Cairn Demo Industries|A4
+```
+
+Everything downstream then used `1000`: plant assignments, cost centres, partner company views,
+scopes. The guide and the reset used `IN01`. **Two sources of truth, disagreeing**, and the one
+the tester would see in the UI was the wrong one.
+
+### Why it happened, and why it is a layering mistake rather than a typo
+
+A company code is a property of the **legal entity**, not of the neutral structure pattern. A
+second company in the same tenant would carry a different company code on the same pattern. Putting
+it in `core/` was wrong for exactly the reason the fixture split exists: `core/` must hold only
+what is country- *and* company-neutral.
+
+The fiscal-year work hid it. Every phase referenced `structure.companyCode` consistently, so the
+install was internally coherent; it was coherently wrong.
+
+### The fix
+
+- `fixtures/core/organisation.json` no longer carries `companyCode`.
+- `FixtureSet.companyCode` is now `company.identity.companyCode`, read from the company folder.
+- Phases 0, 1 and 2 read the company folder's value.
+
+Verified: the company code now installs as `IN01`, plants `1000` and `2000` are assigned to it,
+and the guide's sanity table matches what the screen shows.
+
+### What it teaches about the fixtures
+
+The split only works if values sit in the right layer. A value in the wrong file is not caught by
+a type check and not caught by the install succeeding — only by comparing what was asked for
+against what the screen shows. That comparison is now a line in `00-HOW-TO-START.md`'s sanity
+table, and an assertion in `tests/in01-install-contract.test.ts`.

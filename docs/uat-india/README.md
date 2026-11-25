@@ -5,6 +5,7 @@ a gap; where they disagree with a fixture, the fixture wins.
 
 | # | Deliverable | File | State |
 |---|---|---|---|
+| — | **How to start** | [`00-HOW-TO-START.md`](./00-HOW-TO-START.md) | The five commands, where the credentials are, the order to run Phase 3. |
 | 1 | Audit of the existing installer | [`01-installer-audit.md`](./01-installer-audit.md) | Complete. Includes the decisions taken after the audit. |
 | 2 | Refactored installer + fixture files | `fixtures/` + `scripts/in01-install.ts` + `src/platform/tenancy/in01-*.ts` | **Built and exercised** on a scratch database. Phases 0–2. |
 | 3 | Generated users and credentials | [`04-users-and-credentials.md`](./04-users-and-credentials.md) | Complete. 15 accounts, per-user passwords, file + in-app view. |
@@ -13,10 +14,12 @@ a gap; where they disagree with a fixture, the fixture wins.
 | 6 | BUG FIX LOG | [`06-bug-fix-log.md`](./06-bug-fix-log.md) | One bug, fixed and committed (`28bed70d`). |
 | 7 | E2E proposal | [`07-e2e-proposal.md`](./07-e2e-proposal.md) | Proposal only, as asked. |
 | — | Calendar-year findings | [`03-calendar-year-assumption-report.md`](./03-calendar-year-assumption-report.md) | Requested with the bug approval. Nothing changed in it. |
+| — | Failing-test triage | [`08-failing-test-triage.md`](./08-failing-test-triage.md) | The 22 failures with a probable cause each. Not fixed. |
+| — | Controlling-area analysis | [`09-controlling-area-analysis.md`](./09-controlling-area-analysis.md) | What `A000` is, and the proposal for `IN00`. Awaiting approval. |
 
 ## The dataset
 
-- **Company** Cairn Demo Industries Private Limited, `IN01`, Pune, Maharashtra — fictional.
+- **Company** Cairn Demo Industries Private Limited, company code `IN01`, Pune, Maharashtra — fictional.
 - **Business** fabricated steel storage racks and shelving.
 - **Structure** one company code, two plants, eleven cost centres, 52 employees, 15 sign-ins.
 - **Fiscal year** April–March (`A4`), built by the installer.

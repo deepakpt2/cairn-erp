@@ -739,23 +739,58 @@ shown as TARGET (GAP) wherever they belong.
 
 ### 3.1.1 Purchase requisition
 - **As** `in01.buyer` · **Path** Purchasing → Purchase requisitions
-- **Data** 500 kg `RM-MSROD-05`, plant `1000`, required 25 Nov 2026, for cost centre CC1000.
-- **Expect** A requisition with one item, released (amount below the release threshold).
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Material | `RM-MSROD-05` MS iron rod 5mm |
+  | Quantity | **500 KG** |
+  | Plant | `1000` |
+  | Required date | **25 Nov 2026** |
+  | Requisition date | **18 Nov 2026** |
+  | Account assignment | Cost centre **CC1000** (Cutting) |
+  | Estimated price | ₹62.50/KG → **₹31,250.00** |
+
+- **Expect** A requisition with one item, released — the value is below the release strategy's
+  threshold, so one release clears it.
 - **Journal** None — a requisition is a request, not a commitment.
 - **Verify** The requisition appears in the purchase-order conversion list.
 
 ### 3.1.2 Purchase order
 - **As** `in01.buyer` · **Path** Purchasing → Purchase orders
-- **Data** Vendor `SUP-1000` (Pune, 27). 500 kg `RM-MSROD-05` at ₹62.50/kg, GST code `G18`,
-  delivery 25 Nov 2026.
-- **Expect** Order total ₹31,250.00 + 18 % GST ₹5,625.00 = **₹36,875.00**.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Vendor | `SUP-1000` Deccan Steel Traders Pvt Ltd, Pune, GSTIN `27AABCD5678E1Z2` |
+  | Purchasing org / group | `1000` / `001` |
+  | Company code | `IN01` |
+  | Material | `RM-MSROD-05` |
+  | Quantity / unit | **500 KG** |
+  | Net price | **₹62.50** per KG → ₹31,250.00 |
+  | GST code / amount | `G18` / **₹5,625.00** |
+  | Gross | **₹36,875.00** |
+  | Order date | **19 Nov 2026** |
+  | Delivery date | **24 Nov 2026** |
+
+- **Expect** Order total ₹31,250.00 + 18 % GST ₹5,625.00 = **₹36,875.00**; the order is released.
 - **Journal** None — a commitment, not a posting.
-- **Verify** The order's tax line shows 18 % and ₹5,625.00.
+- **Verify** The order's tax line shows 18 % and ₹5,625.00, and the order status is released.
 
 ### 3.1.3 Goods receipt
 - **As** `in01.storekeeper` · **Path** Inventory → Goods receipt
-- **Data** 500 kg against the PO, plant `1000`, storage location `0001`.
-- **Expect** Stock rises by 500 kg; the PO's received quantity updates.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Purchase order | The order from 3.1.2 |
+  | Material | `RM-MSROD-05` |
+  | Quantity | **500 KG** |
+  | Plant / storage location | `1000` / `0001` Raw materials store |
+  | Posting date | **24 Nov 2026** (period 8, FY 2026) |
+  | Movement type | 101 (goods receipt against a purchase order) |
+
+- **Expect** Stock rises by 500 KG at ₹62.50; the PO's received quantity updates to 500.
 - **Journal** — the entry the product posts:
 
   | Dr/Cr | Account | Amount (₹) |
@@ -771,7 +806,17 @@ shown as TARGET (GAP) wherever they belong.
 
 ### 3.1.4 Invoice verification, with GST input
 - **As** `in01.ap` · **Path** Purchasing → Invoice verification
-- **Data** Supplier invoice `DST/2026/1187` dated 22 Nov 2026, ₹31,250.00 + GST 18 %.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Supplier invoice number | `DST/2026/1187` |
+  | Invoice date | **25 Nov 2026** |
+  | Posting date | **25 Nov 2026** (period 8, FY 2026) |
+  | Net amount | ₹31,250.00 |
+  | GST code / amount | `G18` / **₹5,625.00** |
+  | Gross | **₹36,875.00** |
+  | Reference | The purchase order from 3.1.2 |
 - **Expect** A three-way match: invoice, order and receipt agree, so no block.
 - **Journal**
 
@@ -791,7 +836,16 @@ shown as TARGET (GAP) wherever they belong.
 
 ### 3.1.5 Payment, with TDS (**GAP A7**)
 - **As** `in01.ap` · **Path** Finance → Outgoing payment
-- **Data** Pay ₹36,875.00 to `SUP-1000` on 30 Nov 2026 by NEFT.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Payee | `SUP-1000` Deccan Steel Traders Pvt Ltd |
+  | Amount | **₹36,875.00** |
+  | Payment date | **30 Nov 2026** (period 8, FY 2026) |
+  | Method | NEFT |
+  | Bank account | `101000` Bank — current account |
+  | Invoices cleared | `DST/2026/1187` |
 - **Journal**
 
   | Dr/Cr | Account | Amount (₹) |
@@ -831,85 +885,197 @@ shown as TARGET (GAP) wherever they belong.
 
 ### 3.2.1 Demand and MRP
 - **As** `in01.planner` · **Path** Production → MRP run
-- **Data** A sales-order demand for 40 `FG-RACK-2000` (from 3.3.2), run at plant `1000`.
-- **Expect** MRP proposes a production order for 40 racks and dependent requirements for frames,
-  pipe, bolts, powder, primer and packing.
-- **Journal** None.
-- **Verify** The MRP exception monitor shows no missing-master exception for any component.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Plant | `1000` |
+  | Requirement source | The sales order from 3.3.2 — 40 `FG-RACK-2000`, requested **28 Nov 2026** |
+  | Run date | **20 Nov 2026** |
+  | Planning horizon | 30 days |
+  | Processing key | Net change (or regenerative — either is fine for one run) |
+
+- **Expect** MRP proposes a production order for 40 `FG-RACK-2000` and dependent requirements for
+  `SF-WELDFRAME` (40 PC), `RM-MSPIPE-1IN` (160 KG), `CON-HEXBOLT-M10` (960 PC),
+  `CON-POWDER-R7035` (72 KG), `CON-ROXIDE-20L` (14 L) and `CON-PACK-CORR` (80 PC).
+- **Journal** None — MRP plans, it does not post.
+- **Verify** The MRP exception monitor shows no missing-master exception for any component, and the
+  planned order carries quantity 40.
+- **Why** MRP reads the demand, explodes the BOM and proposes what to make or buy. It is the step
+  that turns a customer's order into work the factory can start.
 
 ### 3.2.2 Production order and goods issue
-- **As** `in01.planner` (order) then `in01.supervisor` (issue) · **Path** Production → Orders
-- **Data** Order for 40 `FG-RACK-2000`, plant `1000`, per BOM.
-- **Journal** Component issue, at moving-average/standard values:
+- **As** `in01.planner` raises and releases the order; `in01.supervisor` issues the components
+  · **Path** Production → Orders (`/production/orders`), then Inventory → Goods issue
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Material | `FG-RACK-2000` |
+  | Plant | `1000` |
+  | Order quantity | **40 PC** |
+  | Basic start | **21 Nov 2026** |
+  | Basic finish | **27 Nov 2026** |
+  | Order type | The production order type the standard package delivers (e.g. `PP01`) |
+
+  Component issue, at the BOM base of **10 PC** scaled to 40 (×4):
+
+  | Item | Component | Quantity to issue | Unit |
+  |---|---|---|---|
+  | 0010 | `SF-WELDFRAME` | 40 | PC |
+  | 0020 | `RM-MSPIPE-1IN` | 160 | KG |
+  | 0030 | `CON-HEXBOLT-M10` | 960 | PC |
+  | 0040 | `CON-POWDER-R7035` | 72 | KG |
+  | 0050 | `CON-ROXIDE-20L` | 14 | L |
+  | 0060 | `CON-PACK-CORR` | 80 | PC |
+
+- **Journal** Component issue, valued at the materials' own values. `SF-WELDFRAME` is a
+  semi-finished material carried at a **standard price of ₹1,480.00**, so the issue values it at
+  that standard, not at its own components:
 
   | Dr/Cr | Account | Amount (₹) |
   |---|---|---|
-  | Dr | `410000` Raw material consumption | *(sum of components)* |
-  | Cr | `120000` Raw materials inventory | *(same)* |
+  | Dr | `410000` Raw material consumption | **1,15,626.00** |
+  | Cr | `120000` Raw materials inventory | 1,15,626.00 |
 
-- **Verify** Stock of each component falls by the BOM quantity × 40.
+  The credit is split across the items it drew from:
+  `SF-WELDFRAME` 40 × 1,480.00 = 59,200.00 · `RM-MSPIPE-1IN` 160 × 66.20 = 10,592.00 ·
+  `CON-HEXBOLT-M10` 960 × 9.40 = 9,024.00 · `CON-POWDER-R7035` 72 × 385.00 = 27,720.00 ·
+  `CON-ROXIDE-20L` 14 × 295.00 = 4,130.00 · `CON-PACK-CORR` 80 × 62.00 = 4,960.00.
+
+- **Verify** Stock falls by exactly those quantities in plant `1000`. `410000` carries a debit of
+  ₹1,15,626.00 against this order.
 - **Why** The order takes materials out of stock and into work in progress. The consumption
   account is where the cost of those materials goes.
 
 ### 3.2.3 Confirmation
-- **As** `in01.supervisor` · **Path** Production → Order confirmation
-- **Data** Confirm operations 0010, 0020, 0030 for the full 40 units.
+- **As** `in01.supervisor` · **Path** Production → Order confirmation (`CO15`-equivalent)
+- **Data**
+
+  | Op | Work centre | Yield | Scrap | Confirmation date |
+  |---|---|---|---|---|
+  | 0010 Cutting | `WC01` | 40 PC | 0 | **25 Nov 2026** |
+  | 0020 Welding | `WC02` | 40 PC | 0 | **26 Nov 2026** |
+  | 0030 Powder coating | `WC03` | 40 PC | 0 | **27 Nov 2026** |
+
+  Posting date on the confirmation: **27 Nov 2026** (period 8, FY 2026).
+
 - **Journal** **None.** A confirmation records that the work happened, not what it cost
   (**GAP C5**). Activity cost is not posted at confirmation in this product.
-- **Verify** The order's confirmed quantity is 40 and its status is delivered/closed to the extent
-  the product allows.
+- **Verify** The order's confirmed quantity is 40 on each operation, and its status shows the
+  operations confirmed.
 - **Why** A confirmation is the shop floor's statement of output. In a system with activity
   costing it would also debit the order and credit the cost centres for the hours; here it does
   not, so conversion cost appears later as a balance on the consumption account.
 
 ### 3.2.4 FG receipt and inspection
-- **As** `in01.supervisor` then `in01.qc` · **Path** Inventory → Goods receipt (production)
-- **Data** Receive 40 `FG-RACK-2000` into `0003`, then inspect and accept.
-- **Journal** Receipt at standard:
+- **As** `in01.supervisor` (receipt) then `in01.qc` (inspection) · **Path** Inventory → Goods
+  receipt (production), Quality → Inspection lots
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Material | `FG-RACK-2000` |
+  | Quantity | **40 PC** |
+  | Plant / storage location | `1000` / `0003` Finished goods warehouse |
+  | Posting date | **27 Nov 2026** |
+  | Movement type | The production receipt movement (101 for the order) |
+  | Inspection | Create a lot, record the results, take a usage decision of **accept** |
+
+- **Journal** Receipt at standard, at ₹4,250.00 each:
 
   | Dr/Cr | Account | Amount (₹) |
   |---|---|---|
-  | Dr | `120200` Finished goods inventory | 1,70,000.00 |
-  | Cr | `400000` Cost of goods sold *(production output offset)* | 1,70,000.00 |
+  | Dr | `120200` Finished goods inventory | **1,70,000.00** |
+  | Cr | `410000` Raw material consumption *(production output offset)* | 1,70,000.00 |
 
-- **Verify** Finished goods stock rises by 40 at ₹4,250.00 each.
+- **Verify** Finished goods stock rises by 40 at ₹4,250.00 each. `410000` now carries
+  **₹1,70,000.00 credit − ₹1,15,626.00 debit = ₹54,374.00 credit**, which is the conversion
+  "residue" the next step discusses.
+- **Why** The receipt puts the finished racks into stock at their standard value and offsets the
+  consumption account, which is where production cost has been accumulating.
 
 ### 3.2.5 Settlement and variance — **TARGET (GAP C1)**
-- **As** `in01.controller` · **Path** Production → Order settlement
+- **As** `in01.controller` · **Path** Production → Order settlement (`KO88`-equivalent)
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Order | The production order from 3.2.2 (40 `FG-RACK-2000`) |
+  | Settlement period | **8** (November 2026) |
+  | Fiscal year | **2026** |
+  | Test run | Start with **test run** on, then repeat with it off |
+
 - **Expect** The screen **calculates and displays** the order's balance; it **posts nothing**.
   `productionOrderSettlementPosting()` returns `posts: false`. WIP at period end and variance
   splitting are deferred (DV-003, DV-004).
-- **TARGET (GAP C1)** A localised system would post the variance to the order's receiver:
+- **TARGET (GAP C1)** A localised system would post the variance to the order's receiver. On the
+  figures above, the order's actual charge is ₹1,15,626.00 and its credit on receipt is
+  ₹1,70,000.00, so the residue is a **₹54,374.00 credit** on `410000`. A settlement would move it
+  to a variance account:
 
-  | Dr/Cr | Account | Amount |
+  | Dr/Cr | Account | Amount (₹) |
   |---|---|---|
-  | Dr | `410100` Production variance | actual − standard |
-  | Cr | order / WIP | same |
+  | Dr | `410000` Raw material consumption (clear the order) | 54,374.00 |
+  | Cr | `410100` Production variance | 54,374.00 |
 
   and, where WIP stands at period end, capitalise it to a WIP account against a WIP-change P&L
-  line. Neither exists as a posting here.
+  line. Neither posting exists here.
 - **Verify — not possible yet.** The reconciliation checklist marks "production variance
-  explained" as **not testable — GAP C1**. What *is* visible is the residue: the balance left on
-  `410000` Raw material consumption after the receipt above, which is where the conversion cost
-  sits.
-- **Why** Settlement is how a production order hands its cost to the thing it was made for. Without
-  it the order's balance has nowhere to go, and the consumption account carries the difference.
+  explained" as **not testable — GAP C1**. What *is* visible and checkable is the residue: after
+  3.2.4, `410000` carries a **₹54,374.00 credit** for this order, and that figure is the number a
+  settlement would have cleared.
+- **Why** Settlement is how a production order hands its cost to the thing it was made for.
+  Without it the order's balance has nowhere to go, and the consumption account carries the
+  difference.
 
 ## 3.3 Order to cash (O2C)
 
 ### 3.3.1 Quotation
 - **As** `in01.sales` · **Path** Sales → Quotations (`/sales/quotations`)
-- **Data** `CUS-2000`, 40 `FG-RACK-2000` at ₹4,450.00, valid 30 days.
-- **Journal** None.
-- **Verify** The quotation prices from the condition record, not from typing.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Customer | `CUS-2000` Maharashtra Warehouse Solutions Pvt Ltd |
+  | Sales area | `1000` / `01` / `01` |
+  | Material | `FG-RACK-2000` |
+  | Quantity | **40 PC** |
+  | Price | ₹4,450.00 each (the distributor level, read from the condition record) |
+  | Net value | **₹1,78,000.00** before GST |
+  | Valid from | **20 Nov 2026** |
+  | Valid to | **20 Dec 2026** (30 days) |
+
+- **Expect** The quotation prices at ₹4,450.00 from the condition record. Typing a price is not
+  what this step tests.
+- **Journal** None — a quotation is an offer, not a posting.
+- **Verify** The line price is ₹4,450.00 and the net value ₹1,78,000.00, with no GST on a
+  quotation.
+- **Why** A quotation tells the customer what the goods would cost. The price comes from the
+  condition record so that two clerks quote the same customer the same figure.
 
 ### 3.3.2 Sales order (credit and pricing)
 - **As** `in01.sales` · **Path** Sales → Orders (`/sales/orders`)
-- **Data** The quotation raised to an order. Credit limit ₹25,00,000; combined exposure with this
-  order stays inside it.
-- **Expect** The order is not credit-blocked. A quantity pushed past the limit would block it.
-- **Journal** None at order entry.
-- **Verify** Credit determination shows the exposure and the headroom.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Customer | `CUS-2000` |
+  | Reference | The quotation from 3.3.1, raised to an order |
+  | Material / quantity | `FG-RACK-2000`, **40 PC** |
+  | Price | ₹4,450.00 → net **₹1,78,000.00** |
+  | GST code | `G18` → **₹32,040.00** → gross **₹2,10,040.00** |
+  | Requested delivery | **28 Nov 2026** |
+  | Order date | **20 Nov 2026** |
+  | Credit limit | ₹25,00,000; this order's exposure is ₹2,10,040.00, well inside it |
+
+- **Expect** The order is **not** credit-blocked. The credit determination shows exposure
+  ₹2,10,040.00 against the ₹25,00,000 limit.
+- **Journal** None at order entry — an order is a commitment, not a posting.
+- **Verify** The order status is not `BLOCKED`, and the credit monitor shows the headroom.
+  (Push the quantity to 600 and the order blocks — that is the control working; then undo it.)
+- **Why** Credit checking stops the company promising goods to a customer who already owes more
+  than it is willing to risk.
 
 ### 3.3.3 Delivery and PGI
 - **As** `in01.sales` (delivery) then `in01.dispatch` (PGI) · **Path** Sales → Delivery
@@ -958,14 +1124,40 @@ shown as TARGET (GAP) wherever they belong.
 - **Verify** The customer's open item is cleared.
 
 ### 3.3.6 Customer complaint — **TARGET (GAP C3)**
-- **As** `in01.qc` · **Path** (none — no QM notification object)
-- **Expect** There is no quality notification. A complaint is recorded as a **sales returns
-  order** (`/sales/returns`): the returns order type and the complaint type are configured on the
-  returns configuration, and the goods come back on a returns delivery.
+- **As** `in01.sales` (returns order) then `in01.storekeeper` (returns receipt) · **Path**
+  Sales → Returns (`/sales/returns`) — there is no QM notification screen
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Customer | `CUS-2000` |
+  | Reference | The delivery from 3.3.3 |
+  | Material | `FG-RACK-2000` |
+  | Quantity returned | **2 PC** |
+  | Reason | Cosmetic — powder coat flaking at the weld seam |
+  | Complaint date | **29 Nov 2026** |
+  | Returns delivery date | **30 Nov 2026** |
+  | Credit memo | `G18`, ₹4,450.00 × 2 = **₹8,900.00** + GST ₹1,602.00 = **₹10,502.00** |
+
+- **Expect** There is no quality notification. The complaint is recorded as a **sales returns
+  order**, whose type and complaint type are configured on the returns configuration, and the
+  goods come back on a returns delivery.
+- **Journal** Returns receipt, at standard:
+
+  | Dr/Cr | Account | Amount (₹) |
+  |---|---|---|
+  | Dr | `120200` Finished goods inventory | 8,500.00 |
+  | Cr | `400000` Cost of goods sold *(returns offset)* | 8,500.00 |
+
+  and the credit memo: **Dr `300000` Revenue 8,900.00 / Dr `220000` Output tax 1,602.00 /
+  Cr `110000` Trade receivables 10,502.00**.
 - **TARGET (GAP C3)** A localised system opens a QM notification (type Q1/Q2) linked to the
   delivery and the lot, with defects and a task list. That object does not exist here.
 - **Verify** A returns order can be raised and the goods received back on a returns delivery; the
-  complaint itself is the returns order's reference, not a notification.
+  complaint is the returns order's reference, not a notification. The customer's open item falls
+  by ₹10,502.00.
+- **Why** Goods coming back are a reversal of both the stock movement and the sale. The complaint
+  record is what justifies the return to an auditor.
 
 ## 3.4 Import (international slice)
 
@@ -1057,37 +1249,148 @@ shown as TARGET (GAP) wherever they belong.
 
 ## 4.1 GR/IR clearing
 - **As** `in01.controller` · **Path** Purchasing → GR/IR clearing
-- **Data** Reclassify any residual GR/IR at 30 Nov 2026 to `230000` Accrued liabilities.
-- **Journal** Dr `210000` / Cr `230000` (or the reverse, for the residual's sign).
-- **Verify** `210000` is **zero** after the run.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Company code | `IN01` |
+  | Key date | **30 Nov 2026** |
+  | Residual to reclassify | whatever the run displays (expected **zero** after 3.1.4) |
+  | Target account | `230000` Accrued liabilities |
+
+  On the scenario as written, every receipt has been invoiced by 3.1.4, so the run should report
+  **nothing to reclassify**. If it reports a residual, the step that invoiced the receipt is the
+  one to look at — not this step.
+
+- **Journal** Only when a residual stands: Dr `210000` / Cr `230000` for a credit residual, or the
+  reverse for a debit one.
+- **Verify** `210000` is **zero** after the run, and the run reports no residual.
+- **Why** GR/IR holds the gap between "goods arrived" and "invoice arrived". At month end that gap
+  should be empty; anything left is either a missing invoice or a missing receipt, so it is moved
+  to accruals where it is visible rather than left in a clearing account pretending to be real.
 
 ## 4.2 Depreciation
 - **As** `in01.controller` · **Path** Finance → Assets → Depreciate (`/finance/assets/depreciate`)
-- **Journal** Dr `520100` / Cr `150100` for the month's charge.
-- **Verify** Accumulated depreciation rose by exactly the month's charge.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Company code | `IN01` |
+  | Fiscal year | **2026** |
+  | Posting period | **8** (November 2026) |
+  | Posting date | **30 Nov 2026** |
+  | Asset | Plant and machinery, gross **₹62,00,000.00** |
+  | Rate | 10 % straight line, monthly posting |
+
+- **Journal** The month's charge: ₹62,00,000.00 × 10 % ÷ 12 = **₹51,666.67**
+
+  | Dr/Cr | Account | Amount (₹) |
+  |---|---|---|
+  | Dr | `520100` Depreciation — plant and machinery | 51,666.67 |
+  | Cr | `150100` Accumulated depreciation — plant and machinery | 51,666.67 |
+
+- **Verify** Accumulated depreciation rises from ₹14,50,000.00 to **₹15,01,666.67** for this run.
+- **Why** Depreciation spreads the cost of a machine over the years it earns money in. The asset
+  stays at what it cost; a separate accumulated account records how much of that cost has been
+  used up.
 
 ## 4.3 Accruals
 - **As** `in01.ap` · **Path** Finance → Accruals (`/finance/accruals`)
-- **Journal** Dr expense / Cr `230000` accrued liabilities, reversed next period.
-- **Verify** The accrual stands with a reversal date.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Accrual | November power bill, not yet invoiced by the utility |
+  | Amount | **₹1,85,000.00** |
+  | Cost centre | **CC1000** (Cutting — the largest consumer) |
+  | Expense account | `510300` Power and fuel |
+  | Liability account | `230000` Accrued liabilities |
+  | Accrual date | **30 Nov 2026** |
+  | Reversal date | **01 Dec 2026** |
+
+- **Journal** Dr `510300` Power and fuel 1,85,000.00 / Cr `230000` Accrued liabilities 1,85,000.00,
+  reversed on 1 December.
+- **Verify** The accrual stands with a reversal date of 01 Dec 2026, and the power cost appears on
+  CC1000 in the November cost-centre report.
+- **Why** The factory used electricity in November and has not been billed. Booking the cost now
+  puts it in the month that incurred it; the reversal stops it being counted again when the real
+  invoice arrives.
 
 ## 4.4 Cost centre allocation
 - **As** `in01.controller` · **Path** Controlling → Cost allocation cycles
-- **Journal** Assessment from service centres to production centres, on account `600000`.
-- **Verify** The allocation nets to zero in its own document; no new external expense appears.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Cycle | Service-centre assessment |
+  | Senders | `CC7000` Maintenance, `CC6000` Quality |
+  | Receivers | `CC1000` Cutting, `CC1010` Welding, `CC1020` Painting |
+  | Allocation account | `600000` Cost centre allocation — clearing |
+  | Period | **8** (November 2026) |
+  | Fiscal year | **2026** |
+  | Basis | The senders' own November actual cost |
+
+- **Journal** One document: the senders are credited and the receivers debited, both on `600000`:
+
+  | Dr/Cr | Account | Amount (₹) |
+  |---|---|---|
+  | Dr | `600000` (receivers, by cost centre) | sender total |
+  | Cr | `600000` (senders, by cost centre) | same |
+
+- **Verify** The document nets to zero; no new external expense appears; each receiver's cost
+  centre report now carries its share.
+- **Why** Maintenance and quality serve the whole factory but do not sell anything. Assessment
+  moves their cost onto the departments that use them, so each product's cost reflects the
+  support it consumed.
 
 ## 4.5 Production order settlement — **TARGET (GAP C1)**
 See 3.2.5. Display only; nothing posts.
 
 ## 4.6 Period close and statements
-- **As** `in01.controller` / `in01.ap` · **Path** Finance → Close cockpit (`/finance/close-cockpit`),
-  Trial balance, P&L, Balance sheet
-- **Verify** Trial balance nets to zero; P&L and balance sheet agree; no document sits outside the
-  open periods.
+- **As** `in01.controller` · **Path** Finance → Close cockpit (`/finance/close-cockpit`), Trial
+  balance (`/finance/trial-balance`), P&L (`/finance/profit-loss`), Balance sheet
+  (`/finance/balance-sheet`)
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Company code | `IN01` |
+  | Fiscal year | **2026** |
+  | Period | **8** (November 2026) |
+  | Close cycle | November 2026, company code `IN01` |
+
+  Walk the cockpit's tasks in order; each is a check the close depends on. Do **not** close the
+  period until the reconciliation checklist below passes.
+
+- **Expect** The cockpit lists its tasks with their completion state; the statements open for
+  FY 2026 period 8.
+- **Verify** Trial balance nets to zero; total assets = total liabilities + equity; the P&L's
+  result equals the change in the current-year result account; no document sits outside the open
+  periods.
+- **Why** Closing a period is the month-end lock: after it, nothing more can be posted to
+  November, which is what makes November's numbers final.
 
 ## 4.7 GST summary — GSTR-3B style
 - **As** `in01.ap` · **Path** Finance → Tax (`/finance/tax`)
-- **Data** Run for 1–30 Nov 2026, country `IN`.
+- **Data**
+
+  | Field | Value |
+  |---|---|
+  | Company code | `IN01` |
+  | Country | **IN** |
+  | From | **01 Nov 2026** |
+  | To | **30 Nov 2026** |
+  | Corrected return | off |
+  | Test run | run once as a test, then once for real |
+
+  Expected figures on the scenario as written — output from 3.3.4 (₹32,040.00) and the credit memo
+  in 3.3.6 (₹1,602.00), input from 3.1.4 (₹5,625.00):
+
+  | Line | Amount (₹) |
+  |---|---|
+  | Output tax (`G18`) | 32,040.00 − 1,602.00 = **30,438.00** |
+  | Input tax (`G18`) | **5,625.00** |
+  | Net payable | **24,813.00** |
 - **Expect** A per-tax-code summary: output tax, input tax, taxable base.
 - **Journal (clearing transfer)** Dr/Cr between `220000` and a clearing account for the net.
 - **TARGET (GAP A6)** This is **GSTR-3B-style**, not GSTR-3B. It is not invoice-wise, so it is not
@@ -1095,8 +1398,17 @@ See 3.2.5. Display only; nothing posts.
 - **Verify** Output − input = the net payable the run reports.
 
 ## 4.8 Payroll summary — **GAP B8**
-PF, ESI, PT and TDS **registers do not exist**. The payroll result screen and the payslip are the
-only views. The reconciliation's register checks are marked **not verifiable — GAP B8**.
+- **As** `in01.admin` (only this account reaches payroll) · **Path** People → Payroll results
+  (`/people/payroll-results`)
+- **Data** The November 2026 run for company code `IN01`, fiscal year 2026, period 8.
+- **Expect** A result per employee, with gross, deductions and net; a printable payslip per
+  result. **PF, ESI, PT and TDS registers do not exist.**
+- **Verify** For each result, gross − deductions = net; the sum of net pay equals the credit on
+  `251000`; the sum by cost centre equals the `500000` debit by cost centre.
+- **GAP B8.** The reconciliation's register checks are marked **not verifiable — GAP B8**.
+- **Why** Payroll results are what each person was paid and why. The registers a payroll officer
+  files with the PF, ESI and tax authorities are separate statutory reports, and this product
+  does not produce them.
 
 ---
 
