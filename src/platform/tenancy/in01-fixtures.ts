@@ -24,7 +24,6 @@ import { join } from 'node:path';
 export interface CoreOrganisation {
   version: number;
   structure: {
-    companyCode: string;
     chartOfAccounts: string;
     manufacturingPlant: string;
     distributionPlant: string;
@@ -179,6 +178,11 @@ export interface FixtureSet {
   core: CoreOrganisation;
   country: CountryPack;
   company: CompanyFixture;
+  /**
+   * The legal entity's code. It comes from the company folder, never from the neutral structure:
+   * a second company in the same tenant would carry a different code on the same pattern.
+   */
+  companyCode: string;
   /** Which folder each part came from, for the report and the guide. */
   sources: { core: string; country: string; company: string };
 }
@@ -227,6 +231,7 @@ export function loadFixtures(input: {
     core,
     country,
     company,
+    companyCode: company.identity.companyCode,
     sources: { core: corePath, country: countryPath, company: companyPath },
   };
 }
@@ -237,7 +242,7 @@ export function loadFixtures(input: {
  * Named individually rather than as one loop so that a failure says which relationship
  * was broken, which is the difference between "fix the data" and "read the installer".
  */
-export function validate(set: Omit<FixtureSet, 'sources'>): void {
+export function validate(set: Pick<FixtureSet, 'core' | 'country' | 'company'>): void {
   const { core, country, company } = set;
   const fail = (message: string): never => {
     throw new Error(`Fixture validation failed: ${message}`);

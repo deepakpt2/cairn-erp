@@ -118,6 +118,13 @@ export async function performReset(input: {
   installationId: string;
   /** The accounts a tester signs in with. A row written by one of these means a person worked. */
   testerAccounts: readonly string[];
+  /**
+   * The founder accounts. The installer writes as them while it runs, so their rows are expected
+   * — but only up to the moment the installation completed. A founder row written *after* that
+   * means a person signed in as an administrator and changed something, which a reset may not
+   * erase.
+   */
+  founderAccounts: readonly string[];
 }): Promise<ResetResult> {
   return db().transaction(async (tx) => {
     // The row-level security policy reads `cairn.client`, so the tenant must be set before the
@@ -192,6 +199,68 @@ export async function performReset(input: {
         `A tester has worked in this data: ${foreign[0]!.table_name} holds rows written by ${foreign[0]!.actor}.`,
         'A reset removes only installer-created data. Provision a fresh database for a new dataset.',
       );
+    }
+
+    // 2b. A founder account must not have written anything after the installation completed.
+    //
+    // The installer writes as its founder accounts — the scope grants record the signed-in
+    // administrator rather than a provisioning actor — so their name on a row is expected during
+    // the run. What is not expected is a founder row timestamped *after* the installation
+    // finished: that is somebody signed in as `in01.admin` and changing data by hand, which is
+    // exactly what this reset must not silently erase. The comparison is against
+    // `demo_installation.completed_at`, so an installation that never completed has no grace
+    // period at all and any founder row refuses.
+    if (input.founderAccounts.length > 0) {
+      const [installed] = (await tx.execute(sql`
+        select completed_at as "completedAt"
+          from demo_installation
+         where installation_id = ${input.installationId}
+      `)) as unknown as Array<{ completedAt: Date | null }>;
+
+      const afterInstallation: Array<{ table_name: string; actor: string; when: string }> = [];
+      const founders = input.founderAccounts.map((a) => a.toLowerCase());
+      const founderList = sql.join(founders.map((a) => sql`${a}`), sql`, `);
+      const completedAt = installed?.completedAt ?? null;
+      for (const { tableName } of clientTables) {
+        if (!/^[a-z_][a-z0-9_]*$/.test(tableName)) continue;
+        // The two audit columns are checked *separately*, not coalesced. A row the installer
+        // created and a founder later changed has `created_by = IN01_PROVISION` and
+        // `changed_by = in01.admin`; coalescing would report the creator and miss the edit,
+        // which is exactly the edit a reset must notice.
+        const rows = (await tx.execute(sql`
+          select actor, "when" from (
+            select lower(jsonb_extract_path_text(to_jsonb(r), 'created_by')) as actor,
+                   nullif(jsonb_extract_path_text(to_jsonb(r), 'created_at'), '')::timestamptz as "when"
+              from ${sql.raw(`public."${tableName}"`)} r
+             where r.client = ${tenant.client}
+            union all
+            select lower(jsonb_extract_path_text(to_jsonb(r), 'changed_by')) as actor,
+                   nullif(jsonb_extract_path_text(to_jsonb(r), 'changed_at'), '')::timestamptz as "when"
+              from ${sql.raw(`public."${tableName}"`)} r
+             where r.client = ${tenant.client}
+          ) events
+           where events.actor in (${founderList})
+             and events."when" is not null
+             and events."when" > coalesce(${completedAt}::timestamptz, 'epoch'::timestamptz)
+           limit 5
+        `)) as unknown as Array<{ actor: string; when: Date }>;
+        for (const row of rows) {
+          afterInstallation.push({
+            table_name: tableName,
+            actor: row.actor,
+            when: row.when instanceof Date ? row.when.toISOString() : String(row.when),
+          });
+        }
+        if (afterInstallation.length >= 20) break;
+      }
+      if (afterInstallation.length > 0) {
+        const first = afterInstallation[0]!;
+        throw new In01ResetError(
+          `A founder account changed data after the installation completed: ${first.table_name} holds a row written by ${first.actor} at ${first.when}.`,
+          `The installation completed at ${installed?.completedAt ? new Date(installed.completedAt).toISOString() : 'an unrecorded time'}. `
+          + 'A reset removes only what the installer wrote. Provision a fresh database for a new dataset.',
+        );
+      }
     }
 
     // 3. No document may stand: Phase 3 data is not a reset's to erase.

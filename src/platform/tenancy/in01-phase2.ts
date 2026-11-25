@@ -398,11 +398,11 @@ async function ensureVendor(
     }).catch(ignoreExisting);
   }
 
-  if (!(await getSupplierCompany(client, number, structure.companyCode))) {
+  if (!(await getSupplierCompany(client, number, company.identity.companyCode))) {
     await saveSupplierCompany({
       client,
       partnerNumber: number,
-      companyCode: structure.companyCode,
+      companyCode: company.identity.companyCode,
       expectedVersion: 0,
       changedBy: IN01_ACTOR,
       reason: 'Phase 2 master data',
@@ -492,11 +492,11 @@ async function ensureCustomer(
     }).catch(ignoreExisting);
   }
 
-  if (!(await getCustomerCompany(client, number, structure.companyCode))) {
+  if (!(await getCustomerCompany(client, number, company.identity.companyCode))) {
     await saveCustomerCompany({
       client,
       partnerNumber: number,
-      companyCode: structure.companyCode,
+      companyCode: company.identity.companyCode,
       expectedVersion: 0,
       changedBy: IN01_ACTOR,
       reason: 'Phase 2 master data',

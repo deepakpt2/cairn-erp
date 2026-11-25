@@ -291,9 +291,9 @@ async function runReset(args: ParsedArgs, fixtures: FixtureSet): Promise<number>
     return 1;
   }
 
-  // Every account a tester signs in with. The two founder accounts are excluded: the installer
-  // itself writes as them (the scope grants record the signed-in administrator), so their name
-  // on a row is the installer's hand, not a person's.
+  // Every account a tester signs in with. The two founder accounts are passed separately: the
+  // installer writes as them while it runs, so their rows are expected up to the moment the
+  // installation completed and refused after it.
   const founders = new Set([
     fixtures.company.founderAccounts.platformAdmin.username.toLowerCase(),
     fixtures.company.founderAccounts.administrator.username.toLowerCase(),
@@ -303,7 +303,13 @@ async function runReset(args: ParsedArgs, fixtures: FixtureSet): Promise<number>
     .filter((username) => !founders.has(username));
 
   try {
-    const result = await performReset({ client, companyCode, installationId, testerAccounts });
+    const result = await performReset({
+      client,
+      companyCode,
+      installationId,
+      testerAccounts,
+      founderAccounts: [...founders],
+    });
     console.log(`Reset ${result.client}: the tenant and its master data were removed.`);
     console.log('Run the installer without --reset-demo to build a fresh dataset.');
     return 0;

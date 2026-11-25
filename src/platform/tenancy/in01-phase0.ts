@@ -108,6 +108,8 @@ export async function buildPhase0(input: {
   const { core, country, company } = fixtures;
   const client = company.identity.clientKey;
   const structure = core.structure;
+  // The company code is the company's, not the neutral pattern's: see FixtureSet.companyCode.
+  const companyCode = company.identity.companyCode;
 
   const standing = (await listTenants()).find((tenant) => tenant.client === client);
   if (!standing) {
@@ -130,7 +132,7 @@ export async function buildPhase0(input: {
   // The standard company structure, then what this company is.
   await applyStandardStructure({
     client,
-    companyCode: structure.companyCode,
+    companyCode: companyCode,
     companyName: company.identity.name,
     country: country.country.code,
     currency: country.country.currency,
@@ -145,7 +147,7 @@ export async function buildPhase0(input: {
   // sides are moved to April-to-March, and the link is restored once they agree.
   const areaCode = structure.controllingArea;
   const areaWasLinked = await unlinkAreaAssignment({
-    client, areaCode, companyCode: structure.companyCode, targetVariant: fiscalYearVariant.variant,
+    client, areaCode, companyCode: companyCode, targetVariant: fiscalYearVariant.variant,
   });
   await moveControllingAreaToVariant({ client, country, areaCode, variant: fiscalYearVariant.variant });
 
@@ -153,7 +155,7 @@ export async function buildPhase0(input: {
   await defineCompanyCode({
     client,
     changedBy: IN01_ACTOR,
-    companyCode: structure.companyCode,
+    companyCode: companyCode,
     name: company.identity.name,
     country: country.country.code,
     currency: country.country.currency,
@@ -164,7 +166,7 @@ export async function buildPhase0(input: {
   await upsertCompanyCode({
     client,
     changedBy: IN01_ACTOR,
-    companyCode: structure.companyCode,
+    companyCode: companyCode,
     name: company.identity.name,
     chartOfAccounts: structure.chartOfAccounts,
     fiscalYearVariant: fiscalYearVariant.variant,
@@ -178,7 +180,7 @@ export async function buildPhase0(input: {
   // Both sides now carry the April-to-March year, so the link is restored through OX19's own
   // assignment service.
   if (areaWasLinked) {
-    await restoreAreaAssignment({ client, areaCode, companyCode: structure.companyCode });
+    await restoreAreaAssignment({ client, areaCode, companyCode: companyCode });
   }
 
   // The chart additions: the Indian accounts the delivered chart does not carry.
@@ -256,7 +258,7 @@ export async function buildPhase0(input: {
       name: centre.name,
       personResponsible: '',
       category: centre.category,
-      companyCode: structure.companyCode,
+      companyCode: companyCode,
       reason: 'Phase 0 organisation structure',
     }).catch(swallowDuplicate);
   }
@@ -299,7 +301,7 @@ export async function buildPhase0(input: {
     client,
     changedBy: IN01_ACTOR,
     objectCode: 'RF_BELEG',
-    companyCode: structure.companyCode,
+    companyCode: companyCode,
     subObject: 'GENERAL',
     fiscalYear: 0,
     prefix: 'JE',
@@ -317,7 +319,7 @@ export async function buildPhase0(input: {
 
   return {
     client,
-    companyCode: structure.companyCode,
+    companyCode: companyCode,
     tenantCreated: !standing,
     fiscalYearVariant: fiscalYearVariant.variant,
     chartAdditions,
@@ -489,6 +491,20 @@ async function ensureDetermination(client: string, chart: string): Promise<numbe
     // The three events the sales and production chains need and the standard chart does not seed.
     { event: 'SALES_ISSUE', valuationClass: 'FINISHED_INVENTORY', glAccount: '400000' },
     { event: 'SALES_ISSUE', valuationClass: 'TRADE_INVENTORY', glAccount: '400000' },
+    // Production posting. A component issue to an order asks PRODUCTION_CONSUMPTION, a receipt
+    // of finished material asks PRODUCTION_OUTPUT, and scrap asks SCRAP. Without them the first
+    // production order in Phase 3 is refused at the goods-issue step, which is exactly the state
+    // the installer must not leave behind.
+    { event: 'PRODUCTION_CONSUMPTION', valuationClass: 'RAW_INVENTORY', glAccount: '410000' },
+    { event: 'PRODUCTION_CONSUMPTION', valuationClass: 'SEMI_INVENTORY', glAccount: '410000' },
+    { event: 'PRODUCTION_CONSUMPTION', valuationClass: 'FINISHED_INVENTORY', glAccount: '410000' },
+    { event: 'PRODUCTION_CONSUMPTION', valuationClass: 'TRADE_INVENTORY', glAccount: '410000' },
+    { event: 'PRODUCTION_OUTPUT', valuationClass: 'SEMI_INVENTORY', glAccount: '410000' },
+    { event: 'PRODUCTION_OUTPUT', valuationClass: 'FINISHED_INVENTORY', glAccount: '410000' },
+    { event: 'PRODUCTION_OUTPUT', valuationClass: 'TRADE_INVENTORY', glAccount: '410000' },
+    { event: 'SCRAP', valuationClass: 'RAW_INVENTORY', glAccount: '410300' },
+    { event: 'SCRAP', valuationClass: 'SEMI_INVENTORY', glAccount: '410300' },
+    { event: 'SCRAP', valuationClass: 'FINISHED_INVENTORY', glAccount: '410300' },
     { event: 'PAYROLL_NET_PAY', valuationClass: '', glAccount: '251000' },
   ];
 
@@ -530,7 +546,7 @@ async function ensureDistributionPlant(client: string, fixtures: FixtureSet): Pr
     },
   }).catch(swallowDuplicate);
 
-  await assignPlantCompanyCode({ client, changedBy: IN01_ACTOR, plant, companyCode: core.structure.companyCode })
+  await assignPlantCompanyCode({ client, changedBy: IN01_ACTOR, plant, companyCode: company.identity.companyCode })
     .catch(swallowDuplicate);
 
   for (const location of core.distributionStorageLocations) {

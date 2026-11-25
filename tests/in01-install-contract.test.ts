@@ -56,6 +56,14 @@ describe('the fixture tree', () => {
     expect(fixtures.company.users.length).toBeLessThan(fixtures.company.employees.length);
   });
 
+  it('takes the company code from the company folder, not the neutral pattern', () => {
+    // The defect this guards: `core/` carried `1000` and the installer read it, so the company
+    // installed under the product's standard key instead of the code the brief asks for.
+    expect(fixtures.companyCode).toBe('IN01');
+    expect(fixtures.company.identity.companyCode).toBe('IN01');
+    expect((fixtures.core.structure as unknown as Record<string, unknown>).companyCode).toBeUndefined();
+  });
+
   it('runs a company that is not the demo dataset and not a real undertaking', () => {
     // The old dataset stays in git history; this installer must not touch it.
     expect(fixtures.company.identity.clientKey).toBe('IN01');
@@ -226,6 +234,25 @@ describe('the reset refuses rather than deletes', () => {
     const refusal = judgeReset({ ...safe, installationExists: false });
     expect(refusal?.reason).toMatch(/No installation record/);
     expect(refusal?.detail.join(' ')).toMatch(/Nothing was deleted/);
+  });
+
+  /**
+   * The founder rule is enforced inside `performReset`, against the installation's `completed_at`
+   * and the two audit columns, so it cannot be unit-tested without a database. What can be
+   * checked here is that the caller passes the founder accounts at all: without them the whole
+   * check is skipped, which is the failure mode worth guarding against.
+   */
+  it('is wired to receive the founder accounts as well as the tester accounts', () => {
+    const source = readFileSync('scripts/in01-install.ts', 'utf8');
+    expect(source).toMatch(/founderAccounts:\s*\[\.\.\.founders\]/);
+  });
+
+  it('checks the two audit columns separately, so an edit to an installer row is seen', () => {
+    const source = readFileSync('src/platform/tenancy/in01-reset.ts', 'utf8');
+    // A row the installer created and a founder later changed must be attributed to the founder;
+    // coalescing the columns would report the creator and hide the edit.
+    expect(source).toMatch(/'changed_by'\)\) as actor/);
+    expect(source).toMatch(/events\."when" > coalesce\(/);
   });
 });
 

@@ -77,7 +77,7 @@ export async function buildPhase1(input: {
   const { fixtures, passwords, scenario } = input;
   const { core, country, company } = fixtures;
   const client = company.identity.clientKey;
-  const companyCode = core.structure.companyCode;
+  const companyCode = company.identity.companyCode;
 
   // ── Org chart ────────────────────────────────────────────────────────────────
   // Parents before children, because a unit's parent must exist when it is attached.
