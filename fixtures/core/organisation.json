@@ -1,0 +1,141 @@
+{
+  "$comment": "Country-NEUTRAL enterprise-structure pattern. Keys here are the product's standard keys; nothing in this file names a country, a currency or a tax jurisdiction. The country pack supplies currency, country, fiscal year and tax; the company folder supplies the names and the business data.",
+  "version": 1,
+  "structure": {
+    "companyCode": "1000",
+    "chartOfAccounts": "CA01",
+    "manufacturingPlant": "1000",
+    "distributionPlant": "2000",
+    "purchasingOrg": "1000",
+    "salesOrg": "1000",
+    "distributionChannel": "01",
+    "division": "01",
+    "controllingArea": "A000",
+    "creditControlArea": "0001",
+    "manufacturingShippingPoint": "1000",
+    "distributionShippingPoint": "2000"
+  },
+  "manufacturingStorageLocations": [
+    { "code": "0001", "name": "Raw materials store" },
+    { "code": "0002", "name": "Production floor" },
+    { "code": "0003", "name": "Finished goods warehouse" },
+    { "code": "0099", "name": "Goods receipt area" }
+  ],
+  "distributionStorageLocations": [
+    { "code": "0001", "name": "Finished goods hall" },
+    { "code": "0002", "name": "Dispatch bay" },
+    { "code": "0099", "name": "Goods receipt area" }
+  ],
+  "workCentreCategories": [
+    { "code": "MACH", "description": "Machine" },
+    { "code": "LINE", "description": "Production line" }
+  ],
+  "unitsOfMeasure": [
+    "KG", "PC", "M", "L", "SET", "BOX"
+  ],
+  "materialTypes": [
+    { "code": "RAW", "name": "Raw material" },
+    { "code": "SEMI", "name": "Semi-finished" },
+    { "code": "FIN", "name": "Finished product" },
+    { "code": "TRAD", "name": "Traded good" }
+  ],
+  "costCentreCategories": {
+    "production": "PRODUCTION",
+    "service": "SERVICE",
+    "support": "SUPPORT",
+    "sales": "SALES",
+    "administration": "ADMINISTRATION"
+  },
+  "documentTypes": {
+    "$comment": "The standard package delivers these; listed so the guide can name them. No value here is created by the installer.",
+    "journal": "SA",
+    "payrollPosting": "PR",
+    "payrollPayment": "PY"
+  },
+  "accountKeys": {
+    "$comment": "Country-neutral event vocabulary the installer maintains account determination against. The GL account each event points at comes from the country pack's chart.",
+    "inventoryByValuationClass": "INVENTORY",
+    "grIrClearing": "GR_IR_CLEARING",
+    "consumption": "CONSUMPTION",
+    "priceDifference": "PRICE_DIFFERENCE",
+    "tax": "TAX",
+    "salesRevenue": "SALES_REVENUE",
+    "payrollNetPay": "PAYROLL_NET_PAY",
+    "fxGain": "FXGAIN",
+    "fxLoss": "FXLOSS"
+  },
+  "roles": [
+    {
+      "code": "DEMO_BUYER",
+      "name": "Buyer",
+      "description": "Requisitions, purchase orders and supplier negotiation",
+      "capabilities": ["PROC.*", "INV.STOCK.VIEW", "AUDIT.TRAIL.VIEW"]
+    },
+    {
+      "code": "DEMO_PLANNER",
+      "name": "Production planner",
+      "description": "MRP, planned orders and production orders",
+      "capabilities": ["PROD.*", "INV.STOCK.VIEW", "AUDIT.TRAIL.VIEW"]
+    },
+    {
+      "code": "DEMO_PROD_CLERK",
+      "name": "Production clerk",
+      "description": "Shop-floor confirmations and goods movements",
+      "capabilities": ["PROD.CONFIRM.*", "PROD.ORDER.GI", "PROD.ORDER.GR", "INV.GI.POST", "INV.STOCK.VIEW", "AUDIT.TRAIL.VIEW"]
+    },
+    {
+      "code": "DEMO_WH_CLERK_MFG",
+      "name": "Storekeeper — plant",
+      "description": "Goods movements at the manufacturing plant",
+      "capabilities": ["INV.*", "QM.LOT.CREATE", "SALES.GI.POST", "SALES.RETURNS.RECEIPT.POST", "AUDIT.TRAIL.VIEW"]
+    },
+    {
+      "code": "DEMO_WH_CLERK_DIST",
+      "name": "Storekeeper — distribution centre",
+      "description": "Goods movements at the distribution centre",
+      "capabilities": ["INV.*", "QM.LOT.CREATE", "SALES.GI.POST", "SALES.RETURNS.RECEIPT.POST", "AUDIT.TRAIL.VIEW"]
+    },
+    {
+      "code": "DEMO_SALES_CLERK",
+      "name": "Sales clerk",
+      "description": "Quotations, orders, deliveries and billing",
+      "capabilities": ["SALES.*", "INV.STOCK.VIEW", "AUDIT.TRAIL.VIEW"]
+    },
+    {
+      "code": "DEMO_ACCOUNTANT",
+      "name": "Accountant (AP/AR)",
+      "description": "General ledger, payables, receivables and banking",
+      "capabilities": ["FIN.*", "COST.*", "AUDIT.TRAIL.VIEW"]
+    },
+    {
+      "code": "DEMO_CONTROLLER",
+      "name": "Controller",
+      "description": "Costing, profitability, internal orders and their settlement",
+      "capabilities": ["CO.*", "COST.*", "FIN.RPT.*", "AUDIT.TRAIL.VIEW", "AUDIT.ACCESS.GRANT", "AUDIT.REQUEST.RESPOND", "FIN.JOURNAL.RELEASE", "FIN.AP.PAYMENTRUN.RELEASE"]
+    },
+    {
+      "code": "DEMO_AUDITOR",
+      "name": "Auditor",
+      "description": "Read-only, under a time-boxed audit grant",
+      "capabilities": ["AUDIT.WORKSPACE", "AUDIT.TRAIL.VIEW", "AUDIT.EVIDENCE.EXPORT", "AUDIT.PERIOD.EVIDENCE", "FIN.RPT.BALANCESHEET", "FIN.RPT.PROFITLOSS", "FIN.RPT.TRIALBALANCE", "FIN.RPT.CASHFLOW", "FIN.RPT.SUBLEDGER.TIE", "FIN.RPT.CONSOLIDATE.STMT", "FIN.GL.BALANCE", "FIN.JOURNAL.LIST", "FIN.JOURNAL.DISPLAY", "FIN.DOC.FLOW", "FIN.AP.AGEING", "FIN.AR.AGEING", "PROC.PO.LIST", "PROC.PO.DISPLAY", "SALES.DOCUMENTS.LIST", "INV.MATERIALDOC.LIST", "INV.STOCK.VIEW", "PLT.LOCK.DISPLAY", "PLT.JOB.DISPLAY", "PLT.NOTIFY.DISPLAY"]
+    },
+    {
+      "code": "DEMO_HR_CLERK",
+      "name": "HR clerk",
+      "description": "Requests hires and maintains employee data for the plant they are scoped to; cannot approve",
+      "capabilities": ["PEOPLE.EMPLOYEE.CREATE", "PEOPLE.RECORD.MAINTAIN", "PEOPLE.ASSIGNMENT.MAINTAIN", "PEOPLE.AUTHORITY.VIEW", "PEOPLE.TIME.ENTER", "AUDIT.TRAIL.VIEW"]
+    },
+    {
+      "code": "DEMO_HR_OFFICER",
+      "name": "HR officer / manager",
+      "description": "Maintains employee data company-wide, sets position tiers and approves hires of a lower tier",
+      "capabilities": ["PEOPLE.EMPLOYEE.CREATE", "PEOPLE.RECORD.MAINTAIN", "PEOPLE.ASSIGNMENT.MAINTAIN", "PEOPLE.AUTHORITY.VIEW", "PEOPLE.TIME.ENTER", "AUDIT.TRAIL.VIEW", "PEOPLE.EMPLOYEE.APPROVE", "PEOPLE.POSITION.CREATE", "PEOPLE.LEAVE.*"]
+    },
+    {
+      "code": "DEMO_QUALITY",
+      "name": "QC inspector",
+      "description": "Inspection lots, results and usage decisions",
+      "capabilities": ["QM.*", "INV.TRANSFER.POST", "INV.STOCK.VIEW", "AUDIT.TRAIL.VIEW"]
+    }
+  ]
+}

@@ -1,0 +1,2216 @@
+{
+  "$comment": "COMPANY IN01 — Cairn Demo Industries Pvt Ltd, Pune, Maharashtra. Fictional. One company folder per company; replacing this file is all that is needed to repoint the installer at another Indian company. Employees, materials, partners and prices live here; the India behaviour (GST, PF/ESI/PT, Apr-Mar year) comes from country/IN.",
+  "version": 1,
+  "identity": {
+    "clientKey": "IN01",
+    "name": "Cairn Demo Industries",
+    "legalName": "Cairn Demo Industries Private Limited",
+    "companyCode": "IN01",
+    "city": "Pune",
+    "state": "Maharashtra",
+    "stateCode": "27",
+    "country": "IN",
+    "currency": "INR",
+    "address": "Plot 47, Bhosari MIDC Industrial Area, Pune 411026, Maharashtra, India",
+    "pan": "AABCC1234D",
+    "gstin": "27AABCC1234D1ZV",
+    "cin": "U28999PN2011PTC098765",
+    "email": "accounts@cairndemoindustries.example.in",
+    "phone": "+91 20 6789 4500",
+    "business": "Fabricated steel storage racks and shelving for warehouses and retail"
+  },
+  "founderAccounts": {
+    "platformAdmin": {
+      "username": "in01.owner",
+      "fullName": "Demo Platform Administrator",
+      "email": "owner@cairndemoindustries.example.in"
+    },
+    "administrator": {
+      "username": "in01.admin",
+      "fullName": "Demo Tenant Administrator",
+      "email": "admin@cairndemoindustries.example.in"
+    }
+  },
+  "costCentres": [
+    {
+      "code": "CC1000",
+      "name": "Cutting",
+      "category": "PRODUCTION"
+    },
+    {
+      "code": "CC1010",
+      "name": "Welding",
+      "category": "PRODUCTION"
+    },
+    {
+      "code": "CC1020",
+      "name": "Painting",
+      "category": "PRODUCTION"
+    },
+    {
+      "code": "CC2000",
+      "name": "Stores and warehousing",
+      "category": "SERVICE"
+    },
+    {
+      "code": "CC3000",
+      "name": "Purchase",
+      "category": "SUPPORT"
+    },
+    {
+      "code": "CC4000",
+      "name": "Sales and marketing",
+      "category": "SALES"
+    },
+    {
+      "code": "CC5000",
+      "name": "Administration",
+      "category": "ADMINISTRATION"
+    },
+    {
+      "code": "CC5100",
+      "name": "Human resources",
+      "category": "ADMINISTRATION"
+    },
+    {
+      "code": "CC6000",
+      "name": "Quality",
+      "category": "SERVICE"
+    },
+    {
+      "code": "CC7000",
+      "name": "Maintenance",
+      "category": "SERVICE"
+    },
+    {
+      "code": "CC8000",
+      "name": "Dispatch",
+      "category": "SERVICE"
+    }
+  ],
+  "profitCentres": [
+    {
+      "code": "PC1000",
+      "name": "Manufactured racks",
+      "segment": "FABR"
+    },
+    {
+      "code": "PC2000",
+      "name": "Traded components",
+      "segment": "FABR"
+    }
+  ],
+  "workCentres": [
+    {
+      "code": "WC01",
+      "description": "Cutting line",
+      "category": "MACH",
+      "costCentre": "CC1000"
+    },
+    {
+      "code": "WC02",
+      "description": "Welding station",
+      "category": "MACH",
+      "costCentre": "CC1010"
+    },
+    {
+      "code": "WC03",
+      "description": "Powder coating line",
+      "category": "LINE",
+      "costCentre": "CC1020"
+    }
+  ],
+  "orgUnits": [
+    {
+      "code": "CDI",
+      "name": "Cairn Demo Industries"
+    },
+    {
+      "code": "CDIMGT",
+      "name": "Management",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDFIN",
+      "name": "Finance",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDHR",
+      "name": "Human Resources",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDPUR",
+      "name": "Purchase",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDSTR",
+      "name": "Stores",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDPRD",
+      "name": "Production",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDCUT",
+      "name": "Production — Cutting",
+      "parentCode": "CDPRD"
+    },
+    {
+      "code": "CDWEL",
+      "name": "Production — Welding",
+      "parentCode": "CDPRD"
+    },
+    {
+      "code": "CDPNT",
+      "name": "Production — Painting",
+      "parentCode": "CDPRD"
+    },
+    {
+      "code": "CDQUA",
+      "name": "Quality",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDMNT",
+      "name": "Maintenance",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDSAL",
+      "name": "Sales",
+      "parentCode": "CDI"
+    },
+    {
+      "code": "CDDSP",
+      "name": "Dispatch",
+      "parentCode": "CDI"
+    }
+  ],
+  "jobs": [
+    {
+      "code": "JMD",
+      "name": "Managing Director"
+    },
+    {
+      "code": "JFINMGR",
+      "name": "Finance Manager"
+    },
+    {
+      "code": "JACCT",
+      "name": "Accounts Executive"
+    },
+    {
+      "code": "JHRMGR",
+      "name": "HR Manager"
+    },
+    {
+      "code": "JHRCLK",
+      "name": "HR Executive"
+    },
+    {
+      "code": "JPURMGR",
+      "name": "Purchase Manager"
+    },
+    {
+      "code": "JBUYER",
+      "name": "Buyer"
+    },
+    {
+      "code": "JSTRSUP",
+      "name": "Stores Supervisor"
+    },
+    {
+      "code": "JSTRKEEP",
+      "name": "Storekeeper"
+    },
+    {
+      "code": "JPRODMGR",
+      "name": "Production Manager"
+    },
+    {
+      "code": "JSHIFTSUP",
+      "name": "Shift Supervisor"
+    },
+    {
+      "code": "JMACHOP",
+      "name": "Machine Operator"
+    },
+    {
+      "code": "JWELDER",
+      "name": "Welder"
+    },
+    {
+      "code": "JHELPER",
+      "name": "Helper"
+    },
+    {
+      "code": "JQCMGR",
+      "name": "Quality Manager"
+    },
+    {
+      "code": "JQCINSP",
+      "name": "QC Inspector"
+    },
+    {
+      "code": "JMNTECH",
+      "name": "Maintenance Technician"
+    },
+    {
+      "code": "JSALMGR",
+      "name": "Sales Manager"
+    },
+    {
+      "code": "JSALEXEC",
+      "name": "Sales Executive"
+    },
+    {
+      "code": "JDISPATCH",
+      "name": "Dispatch Clerk"
+    }
+  ],
+  "positions": [
+    {
+      "code": "P1000",
+      "title": "Managing Director",
+      "jobCode": "JMD",
+      "orgUnitCode": "CDIMGT",
+      "tier": 9,
+      "costCentre": "CC5000"
+    },
+    {
+      "code": "P5000",
+      "title": "Finance Manager",
+      "jobCode": "JFINMGR",
+      "orgUnitCode": "CDFIN",
+      "superiorCode": "P1000",
+      "tier": 6,
+      "costCentre": "CC5000"
+    },
+    {
+      "code": "P5100",
+      "title": "Accounts Executive — Payables",
+      "jobCode": "JACCT",
+      "orgUnitCode": "CDFIN",
+      "superiorCode": "P5000",
+      "tier": 2,
+      "costCentre": "CC5000"
+    },
+    {
+      "code": "P5110",
+      "title": "Accounts Executive — Receivables",
+      "jobCode": "JACCT",
+      "orgUnitCode": "CDFIN",
+      "superiorCode": "P5000",
+      "tier": 2,
+      "costCentre": "CC5000"
+    },
+    {
+      "code": "P5120",
+      "title": "Payroll Officer",
+      "jobCode": "JACCT",
+      "orgUnitCode": "CDFIN",
+      "superiorCode": "P5000",
+      "tier": 2,
+      "costCentre": "CC5000"
+    },
+    {
+      "code": "P5200",
+      "title": "Costing Controller",
+      "jobCode": "JACCT",
+      "orgUnitCode": "CDFIN",
+      "superiorCode": "P5000",
+      "tier": 4,
+      "costCentre": "CC5000"
+    },
+    {
+      "code": "P7000",
+      "title": "HR Manager",
+      "jobCode": "JHRMGR",
+      "orgUnitCode": "CDHR",
+      "superiorCode": "P1000",
+      "tier": 6,
+      "costCentre": "CC5100"
+    },
+    {
+      "code": "P7100",
+      "title": "HR Executive",
+      "jobCode": "JHRCLK",
+      "orgUnitCode": "CDHR",
+      "superiorCode": "P7000",
+      "tier": 3,
+      "costCentre": "CC5100"
+    },
+    {
+      "code": "P3000",
+      "title": "Purchase Manager",
+      "jobCode": "JPURMGR",
+      "orgUnitCode": "CDPUR",
+      "superiorCode": "P1000",
+      "tier": 6,
+      "costCentre": "CC3000"
+    },
+    {
+      "code": "P3100",
+      "title": "Buyer",
+      "jobCode": "JBUYER",
+      "orgUnitCode": "CDPUR",
+      "superiorCode": "P3000",
+      "tier": 2,
+      "costCentre": "CC3000"
+    },
+    {
+      "code": "P2000",
+      "title": "Stores Supervisor",
+      "jobCode": "JSTRSUP",
+      "orgUnitCode": "CDSTR",
+      "superiorCode": "P1000",
+      "tier": 3,
+      "costCentre": "CC2000"
+    },
+    {
+      "code": "P2100",
+      "title": "Storekeeper — Raw material",
+      "jobCode": "JSTRKEEP",
+      "orgUnitCode": "CDSTR",
+      "superiorCode": "P2000",
+      "tier": 2,
+      "costCentre": "CC2000"
+    },
+    {
+      "code": "P2110",
+      "title": "Storekeeper — Finished goods",
+      "jobCode": "JSTRKEEP",
+      "orgUnitCode": "CDSTR",
+      "superiorCode": "P2000",
+      "tier": 2,
+      "costCentre": "CC2000"
+    },
+    {
+      "code": "P2120",
+      "title": "Stores Assistant",
+      "jobCode": "JSTRKEEP",
+      "orgUnitCode": "CDSTR",
+      "superiorCode": "P2000",
+      "tier": 2,
+      "costCentre": "CC2000"
+    },
+    {
+      "code": "P4000",
+      "title": "Production Manager",
+      "jobCode": "JPRODMGR",
+      "orgUnitCode": "CDPRD",
+      "superiorCode": "P1000",
+      "tier": 6,
+      "costCentre": "CC1000"
+    },
+    {
+      "code": "P4100",
+      "title": "Shift Supervisor — Cutting",
+      "jobCode": "JSHIFTSUP",
+      "orgUnitCode": "CDCUT",
+      "superiorCode": "P4000",
+      "tier": 3,
+      "costCentre": "CC1000"
+    },
+    {
+      "code": "P4110",
+      "title": "Shift Supervisor — Welding",
+      "jobCode": "JSHIFTSUP",
+      "orgUnitCode": "CDWEL",
+      "superiorCode": "P4000",
+      "tier": 3,
+      "costCentre": "CC1010"
+    },
+    {
+      "code": "P4120",
+      "title": "Shift Supervisor — Painting",
+      "jobCode": "JSHIFTSUP",
+      "orgUnitCode": "CDPNT",
+      "superiorCode": "P4000",
+      "tier": 3,
+      "costCentre": "CC1020"
+    },
+    {
+      "code": "P4200",
+      "title": "Machine Operator — Cutting",
+      "jobCode": "JMACHOP",
+      "orgUnitCode": "CDCUT",
+      "superiorCode": "P4100",
+      "tier": 1,
+      "costCentre": "CC1000"
+    },
+    {
+      "code": "P4210",
+      "title": "Welder",
+      "jobCode": "JWELDER",
+      "orgUnitCode": "CDWEL",
+      "superiorCode": "P4110",
+      "tier": 1,
+      "costCentre": "CC1010"
+    },
+    {
+      "code": "P4220",
+      "title": "Painter",
+      "jobCode": "JMACHOP",
+      "orgUnitCode": "CDPNT",
+      "superiorCode": "P4120",
+      "tier": 1,
+      "costCentre": "CC1020"
+    },
+    {
+      "code": "P4230",
+      "title": "Helper — Production",
+      "jobCode": "JHELPER",
+      "orgUnitCode": "CDPRD",
+      "superiorCode": "P4000",
+      "tier": 1,
+      "costCentre": "CC1000"
+    },
+    {
+      "code": "P6000",
+      "title": "Quality Manager",
+      "jobCode": "JQCMGR",
+      "orgUnitCode": "CDQUA",
+      "superiorCode": "P1000",
+      "tier": 6,
+      "costCentre": "CC6000"
+    },
+    {
+      "code": "P6100",
+      "title": "QC Inspector",
+      "jobCode": "JQCINSP",
+      "orgUnitCode": "CDQUA",
+      "superiorCode": "P6000",
+      "tier": 2,
+      "costCentre": "CC6000"
+    },
+    {
+      "code": "P6500",
+      "title": "Maintenance Fitter",
+      "jobCode": "JMNTECH",
+      "orgUnitCode": "CDMNT",
+      "superiorCode": "P1000",
+      "tier": 2,
+      "costCentre": "CC7000"
+    },
+    {
+      "code": "P8000",
+      "title": "Sales Manager",
+      "jobCode": "JSALMGR",
+      "orgUnitCode": "CDSAL",
+      "superiorCode": "P1000",
+      "tier": 6,
+      "costCentre": "CC4000"
+    },
+    {
+      "code": "P8100",
+      "title": "Sales Executive",
+      "jobCode": "JSALEXEC",
+      "orgUnitCode": "CDSAL",
+      "superiorCode": "P8000",
+      "tier": 2,
+      "costCentre": "CC4000"
+    },
+    {
+      "code": "P9000",
+      "title": "Dispatch Clerk",
+      "jobCode": "JDISPATCH",
+      "orgUnitCode": "CDDSP",
+      "superiorCode": "P1000",
+      "tier": 2,
+      "costCentre": "CC8000"
+    }
+  ],
+  "salaryStructureNotes": "Two structures. MGMT for management/staff, WORKER for the shop floor and unskilled grades. Rules apply to the assignment base amount. BASIC 100% of base; HRA 40% for staff, 20% for workers; conveyance fixed; special allowance balances to gross. ESI is applied only to employees marked esiEligible, because the payroll engine has no wage-ceiling rule.",
+  "salaryStructures": {
+    "MGMT": {
+      "name": "Management and staff",
+      "rules": [
+        {
+          "component": "BASIC",
+          "kind": "PERCENT_OF_BASE",
+          "value": "100"
+        },
+        {
+          "component": "HRA",
+          "kind": "PERCENT_OF_BASE",
+          "value": "40"
+        },
+        {
+          "component": "CONVEY",
+          "kind": "FIXED",
+          "value": "1600"
+        },
+        {
+          "component": "PFEE",
+          "kind": "PERCENT_OF_BASE",
+          "value": "12"
+        },
+        {
+          "component": "PFER",
+          "kind": "PERCENT_OF_BASE",
+          "value": "12"
+        },
+        {
+          "component": "PTAX",
+          "kind": "FIXED",
+          "value": "200"
+        },
+        {
+          "component": "TDS192",
+          "kind": "FIXED",
+          "value": "0"
+        }
+      ]
+    },
+    "WORKER": {
+      "name": "Shop floor and unskilled",
+      "rules": [
+        {
+          "component": "BASIC",
+          "kind": "PERCENT_OF_BASE",
+          "value": "100"
+        },
+        {
+          "component": "HRA",
+          "kind": "PERCENT_OF_BASE",
+          "value": "20"
+        },
+        {
+          "component": "CONVEY",
+          "kind": "FIXED",
+          "value": "800"
+        },
+        {
+          "component": "PFEE",
+          "kind": "PERCENT_OF_BASE",
+          "value": "12"
+        },
+        {
+          "component": "PFER",
+          "kind": "PERCENT_OF_BASE",
+          "value": "12"
+        },
+        {
+          "component": "ESIEE",
+          "kind": "PERCENT_OF_BASE",
+          "value": "0.75"
+        },
+        {
+          "component": "ESIER",
+          "kind": "PERCENT_OF_BASE",
+          "value": "3.25"
+        },
+        {
+          "component": "PTAX",
+          "kind": "FIXED",
+          "value": "200"
+        }
+      ]
+    }
+  },
+  "leaveTypes": [
+    {
+      "code": "CL",
+      "name": "Casual leave",
+      "reducesQuota": true,
+      "isPaid": true
+    },
+    {
+      "code": "SL",
+      "name": "Sick leave",
+      "reducesQuota": true,
+      "isPaid": true
+    },
+    {
+      "code": "EL",
+      "name": "Earned / privilege leave",
+      "reducesQuota": true,
+      "isPaid": true
+    },
+    {
+      "code": "LOP",
+      "name": "Loss of pay",
+      "reducesQuota": false,
+      "isPaid": false
+    }
+  ],
+  "leaveQuotas": {
+    "CL": "12",
+    "SL": "8",
+    "EL": "15"
+  },
+  "employeeRecordTypes": [
+    {
+      "code": "PAN",
+      "name": "Permanent account number",
+      "fields": [
+        {
+          "code": "PANNO",
+          "label": "PAN",
+          "valueKind": "TEXT"
+        }
+      ]
+    },
+    {
+      "code": "UAN",
+      "name": "Universal account number (PF)",
+      "fields": [
+        {
+          "code": "UANNO",
+          "label": "UAN",
+          "valueKind": "TEXT"
+        }
+      ]
+    },
+    {
+      "code": "ESIC",
+      "name": "ESIC insurance number",
+      "fields": [
+        {
+          "code": "ESICNO",
+          "label": "ESIC No.",
+          "valueKind": "TEXT"
+        }
+      ]
+    },
+    {
+      "code": "BANK",
+      "name": "Salary bank account",
+      "fields": [
+        {
+          "code": "BANKNAME",
+          "label": "Bank",
+          "valueKind": "TEXT"
+        },
+        {
+          "code": "ACCOUNT",
+          "label": "Account number",
+          "valueKind": "TEXT"
+        }
+      ]
+    }
+  ],
+  "employees": [
+    {
+      "personnelNumber": "10000001",
+      "fullName": "Rajesh Deshpande",
+      "positionCode": "P1000",
+      "costCentre": "CC5000",
+      "structure": "MGMT",
+      "base": "180000",
+      "dob": "1971-03-14",
+      "joined": "2011-06-01",
+      "grade": "Management",
+      "tdsMonthly": "22000"
+    },
+    {
+      "personnelNumber": "10000002",
+      "fullName": "Sunita Kulkarni",
+      "positionCode": "P5000",
+      "costCentre": "CC5000",
+      "structure": "MGMT",
+      "base": "95000",
+      "dob": "1979-11-02",
+      "joined": "2013-04-15",
+      "grade": "Management",
+      "tdsMonthly": "8000"
+    },
+    {
+      "personnelNumber": "10000003",
+      "fullName": "Amit Joshi",
+      "positionCode": "P5100",
+      "costCentre": "CC5000",
+      "structure": "MGMT",
+      "base": "38000",
+      "dob": "1988-07-21",
+      "joined": "2016-08-01",
+      "grade": "Staff",
+      "tdsMonthly": "1500"
+    },
+    {
+      "personnelNumber": "10000004",
+      "fullName": "Priya Nair",
+      "positionCode": "P5110",
+      "costCentre": "CC5000",
+      "structure": "MGMT",
+      "base": "36000",
+      "dob": "1990-01-30",
+      "joined": "2017-02-13",
+      "grade": "Staff",
+      "tdsMonthly": "1200"
+    },
+    {
+      "personnelNumber": "10000005",
+      "fullName": "Deepak Patil",
+      "positionCode": "P5120",
+      "costCentre": "CC5000",
+      "structure": "MGMT",
+      "base": "32000",
+      "dob": "1991-09-09",
+      "joined": "2018-11-05",
+      "grade": "Staff",
+      "tdsMonthly": "900"
+    },
+    {
+      "personnelNumber": "10000006",
+      "fullName": "Meera Iyer",
+      "positionCode": "P5200",
+      "costCentre": "CC5000",
+      "structure": "MGMT",
+      "base": "52000",
+      "dob": "1984-05-17",
+      "joined": "2015-03-02",
+      "grade": "Staff",
+      "tdsMonthly": "2800"
+    },
+    {
+      "personnelNumber": "10000007",
+      "fullName": "Vikram Shinde",
+      "positionCode": "P7000",
+      "costCentre": "CC5100",
+      "structure": "MGMT",
+      "base": "78000",
+      "dob": "1980-12-11",
+      "joined": "2014-07-14",
+      "grade": "Management",
+      "tdsMonthly": "5200"
+    },
+    {
+      "personnelNumber": "10000008",
+      "fullName": "Anjali More",
+      "positionCode": "P7100",
+      "costCentre": "CC5100",
+      "structure": "MGMT",
+      "base": "30000",
+      "dob": "1992-04-26",
+      "joined": "2019-01-07",
+      "grade": "Staff",
+      "tdsMonthly": "700"
+    },
+    {
+      "personnelNumber": "10000009",
+      "fullName": "Sandeep Bhosale",
+      "positionCode": "P3000",
+      "costCentre": "CC3000",
+      "structure": "MGMT",
+      "base": "72000",
+      "dob": "1981-08-03",
+      "joined": "2013-10-21",
+      "grade": "Management",
+      "tdsMonthly": "4500"
+    },
+    {
+      "personnelNumber": "10000010",
+      "fullName": "Kavita Pawar",
+      "positionCode": "P3100",
+      "costCentre": "CC3000",
+      "structure": "MGMT",
+      "base": "34000",
+      "dob": "1989-06-18",
+      "joined": "2017-09-11",
+      "grade": "Staff",
+      "tdsMonthly": "1100"
+    },
+    {
+      "personnelNumber": "10000011",
+      "fullName": "Ramesh Jadhav",
+      "positionCode": "P2000",
+      "costCentre": "CC2000",
+      "structure": "MGMT",
+      "base": "42000",
+      "dob": "1978-02-07",
+      "joined": "2012-05-28",
+      "grade": "Staff",
+      "tdsMonthly": "1900"
+    },
+    {
+      "personnelNumber": "10000012",
+      "fullName": "Sanjay Gaikwad",
+      "positionCode": "P2100",
+      "costCentre": "CC2000",
+      "structure": "WORKER",
+      "base": "21000",
+      "dob": "1986-10-14",
+      "joined": "2016-01-18",
+      "grade": "Skilled worker",
+      "esiEligible": false
+    },
+    {
+      "personnelNumber": "10000013",
+      "fullName": "Pooja Kadam",
+      "positionCode": "P2110",
+      "costCentre": "CC2000",
+      "structure": "WORKER",
+      "base": "20000",
+      "dob": "1994-03-22",
+      "joined": "2020-07-06",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000014",
+      "fullName": "Mahesh Chavan",
+      "positionCode": "P4000",
+      "costCentre": "CC1000",
+      "structure": "MGMT",
+      "base": "85000",
+      "dob": "1977-07-30",
+      "joined": "2012-02-20",
+      "grade": "Management",
+      "tdsMonthly": "6000"
+    },
+    {
+      "personnelNumber": "10000015",
+      "fullName": "Santosh Waghmare",
+      "positionCode": "P4100",
+      "costCentre": "CC1000",
+      "structure": "MGMT",
+      "base": "40000",
+      "dob": "1983-01-09",
+      "joined": "2015-06-15",
+      "grade": "Staff",
+      "tdsMonthly": "1700"
+    },
+    {
+      "personnelNumber": "10000016",
+      "fullName": "Imran Shaikh",
+      "positionCode": "P4110",
+      "costCentre": "CC1010",
+      "structure": "MGMT",
+      "base": "39000",
+      "dob": "1985-11-25",
+      "joined": "2016-04-04",
+      "grade": "Staff",
+      "tdsMonthly": "1600"
+    },
+    {
+      "personnelNumber": "10000017",
+      "fullName": "Nitin Salunkhe",
+      "positionCode": "P4120",
+      "costCentre": "CC1020",
+      "structure": "MGMT",
+      "base": "37000",
+      "dob": "1987-05-12",
+      "joined": "2018-03-19",
+      "grade": "Staff",
+      "tdsMonthly": "1400"
+    },
+    {
+      "personnelNumber": "10000018",
+      "fullName": "Ganesh Kamble",
+      "positionCode": "P4200",
+      "costCentre": "CC1000",
+      "structure": "WORKER",
+      "base": "19500",
+      "dob": "1990-08-08",
+      "joined": "2019-05-13",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000019",
+      "fullName": "Sachin Mane",
+      "positionCode": "P4200",
+      "costCentre": "CC1000",
+      "structure": "WORKER",
+      "base": "19000",
+      "dob": "1993-02-16",
+      "joined": "2021-01-11",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000020",
+      "fullName": "Prakash Sawant",
+      "positionCode": "P4210",
+      "costCentre": "CC1010",
+      "structure": "WORKER",
+      "base": "20000",
+      "dob": "1988-12-04",
+      "joined": "2018-08-20",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000021",
+      "fullName": "Ashok Pawar",
+      "positionCode": "P4210",
+      "costCentre": "CC1010",
+      "structure": "WORKER",
+      "base": "19800",
+      "dob": "1991-06-27",
+      "joined": "2019-11-25",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000022",
+      "fullName": "Rafiq Mulla",
+      "positionCode": "P4210",
+      "costCentre": "CC1010",
+      "structure": "WORKER",
+      "base": "20500",
+      "dob": "1986-03-19",
+      "joined": "2017-07-31",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000023",
+      "fullName": "Vijay Dhumal",
+      "positionCode": "P4220",
+      "costCentre": "CC1020",
+      "structure": "WORKER",
+      "base": "18500",
+      "dob": "1995-09-02",
+      "joined": "2022-02-14",
+      "grade": "Semi-skilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000024",
+      "fullName": "Suresh Yadav",
+      "positionCode": "P4220",
+      "costCentre": "CC1020",
+      "structure": "WORKER",
+      "base": "18000",
+      "dob": "1992-11-11",
+      "joined": "2020-03-09",
+      "grade": "Semi-skilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000025",
+      "fullName": "Dattatray Jagtap",
+      "positionCode": "P4230",
+      "costCentre": "CC1000",
+      "structure": "WORKER",
+      "base": "16000",
+      "dob": "1996-04-05",
+      "joined": "2022-09-12",
+      "grade": "Unskilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000026",
+      "fullName": "Kiran Waghmode",
+      "positionCode": "P4230",
+      "costCentre": "CC1000",
+      "structure": "WORKER",
+      "base": "15800",
+      "dob": "1997-07-23",
+      "joined": "2023-01-16",
+      "grade": "Unskilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000027",
+      "fullName": "Balu Thorat",
+      "positionCode": "P4230",
+      "costCentre": "CC1000",
+      "structure": "WORKER",
+      "base": "15600",
+      "dob": "1994-10-30",
+      "joined": "2021-06-21",
+      "grade": "Unskilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000028",
+      "fullName": "Snehal Deshmukh",
+      "positionCode": "P6000",
+      "costCentre": "CC6000",
+      "structure": "MGMT",
+      "base": "70000",
+      "dob": "1982-09-15",
+      "joined": "2014-11-03",
+      "grade": "Management",
+      "tdsMonthly": "4200"
+    },
+    {
+      "personnelNumber": "10000029",
+      "fullName": "Arun Kulkarni",
+      "positionCode": "P6100",
+      "costCentre": "CC6000",
+      "structure": "MGMT",
+      "base": "33000",
+      "dob": "1990-03-08",
+      "joined": "2018-04-23",
+      "grade": "Staff",
+      "tdsMonthly": "1000"
+    },
+    {
+      "personnelNumber": "10000030",
+      "fullName": "Swati Bhosale",
+      "positionCode": "P6100",
+      "costCentre": "CC6000",
+      "structure": "MGMT",
+      "base": "31000",
+      "dob": "1993-12-19",
+      "joined": "2020-08-17",
+      "grade": "Staff",
+      "tdsMonthly": "800"
+    },
+    {
+      "personnelNumber": "10000031",
+      "fullName": "Yogesh Patil",
+      "positionCode": "P6500",
+      "costCentre": "CC7000",
+      "structure": "WORKER",
+      "base": "24000",
+      "dob": "1985-06-02",
+      "joined": "2016-10-10",
+      "grade": "Skilled worker",
+      "esiEligible": false
+    },
+    {
+      "personnelNumber": "10000032",
+      "fullName": "Nilesh Chavan",
+      "positionCode": "P6500",
+      "costCentre": "CC7000",
+      "structure": "WORKER",
+      "base": "23000",
+      "dob": "1987-01-27",
+      "joined": "2018-01-08",
+      "grade": "Skilled worker",
+      "esiEligible": false
+    },
+    {
+      "personnelNumber": "10000033",
+      "fullName": "Rahul Bhise",
+      "positionCode": "P8000",
+      "costCentre": "CC4000",
+      "structure": "MGMT",
+      "base": "80000",
+      "dob": "1979-04-11",
+      "joined": "2013-01-14",
+      "grade": "Management",
+      "tdsMonthly": "5500"
+    },
+    {
+      "personnelNumber": "10000034",
+      "fullName": "Neha Kulkarni",
+      "positionCode": "P8100",
+      "costCentre": "CC4000",
+      "structure": "MGMT",
+      "base": "35000",
+      "dob": "1991-08-29",
+      "joined": "2018-06-04",
+      "grade": "Staff",
+      "tdsMonthly": "1200"
+    },
+    {
+      "personnelNumber": "10000035",
+      "fullName": "Rohit Deshmukh",
+      "positionCode": "P8100",
+      "costCentre": "CC4000",
+      "structure": "MGMT",
+      "base": "33000",
+      "dob": "1994-02-06",
+      "joined": "2021-03-15",
+      "grade": "Staff",
+      "tdsMonthly": "900"
+    },
+    {
+      "personnelNumber": "10000036",
+      "fullName": "Sameer Shaikh",
+      "positionCode": "P8100",
+      "costCentre": "CC4000",
+      "structure": "MGMT",
+      "base": "32000",
+      "dob": "1992-10-21",
+      "joined": "2020-11-09",
+      "grade": "Staff",
+      "tdsMonthly": "850"
+    },
+    {
+      "personnelNumber": "10000037",
+      "fullName": "Akash Pawar",
+      "positionCode": "P9000",
+      "costCentre": "CC8000",
+      "structure": "WORKER",
+      "base": "22000",
+      "dob": "1993-05-16",
+      "joined": "2019-09-02",
+      "grade": "Skilled worker",
+      "esiEligible": false
+    },
+    {
+      "personnelNumber": "10000038",
+      "fullName": "Pravin Sawant",
+      "positionCode": "P9000",
+      "costCentre": "CC8000",
+      "structure": "WORKER",
+      "base": "21000",
+      "dob": "1990-07-07",
+      "joined": "2018-12-17",
+      "grade": "Skilled worker",
+      "esiEligible": false
+    },
+    {
+      "personnelNumber": "10000039",
+      "fullName": "Rupali Jagtap",
+      "positionCode": "P4230",
+      "costCentre": "CC1020",
+      "structure": "WORKER",
+      "base": "15000",
+      "dob": "1998-01-13",
+      "joined": "2023-04-10",
+      "grade": "Unskilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000040",
+      "fullName": "Manisha Kale",
+      "positionCode": "P4230",
+      "costCentre": "CC1000",
+      "structure": "WORKER",
+      "base": "15500",
+      "dob": "1996-11-28",
+      "joined": "2022-05-23",
+      "grade": "Unskilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000041",
+      "fullName": "Dinesh Kamble",
+      "positionCode": "P4200",
+      "costCentre": "CC1000",
+      "structure": "WORKER",
+      "base": "19200",
+      "dob": "1989-09-18",
+      "joined": "2017-11-06",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000042",
+      "fullName": "Sachin Bhosale",
+      "positionCode": "P4210",
+      "costCentre": "CC1010",
+      "structure": "WORKER",
+      "base": "20200",
+      "dob": "1984-02-24",
+      "joined": "2016-07-18",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000043",
+      "fullName": "Ramkrishna More",
+      "positionCode": "P4220",
+      "costCentre": "CC1020",
+      "structure": "WORKER",
+      "base": "18200",
+      "dob": "1997-03-30",
+      "joined": "2022-12-05",
+      "grade": "Semi-skilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000044",
+      "fullName": "Jyoti Deshpande",
+      "positionCode": "P2120",
+      "costCentre": "CC2000",
+      "structure": "MGMT",
+      "base": "42000",
+      "dob": "1988-12-22",
+      "joined": "2017-05-15",
+      "grade": "Staff",
+      "tdsMonthly": "1800"
+    },
+    {
+      "personnelNumber": "10000045",
+      "fullName": "Amol Chavan",
+      "positionCode": "P3100",
+      "costCentre": "CC3000",
+      "structure": "MGMT",
+      "base": "33000",
+      "dob": "1990-09-01",
+      "joined": "2019-02-25",
+      "grade": "Staff",
+      "tdsMonthly": "1000"
+    },
+    {
+      "personnelNumber": "10000046",
+      "fullName": "Sneha Jadhav",
+      "positionCode": "P7100",
+      "costCentre": "CC5100",
+      "structure": "MGMT",
+      "base": "29000",
+      "dob": "1994-06-14",
+      "joined": "2021-08-02",
+      "grade": "Staff",
+      "tdsMonthly": "600"
+    },
+    {
+      "personnelNumber": "10000047",
+      "fullName": "Vinod Thorat",
+      "positionCode": "P4230",
+      "costCentre": "CC4000",
+      "structure": "WORKER",
+      "base": "16500",
+      "dob": "1995-10-08",
+      "joined": "2022-03-14",
+      "grade": "Unskilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000048",
+      "fullName": "Shubham Patil",
+      "positionCode": "P4230",
+      "costCentre": "CC1010",
+      "structure": "WORKER",
+      "base": "16000",
+      "dob": "1999-04-19",
+      "joined": "2023-07-10",
+      "grade": "Unskilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000049",
+      "fullName": "Kiran Deshmukh",
+      "positionCode": "P4230",
+      "costCentre": "CC1020",
+      "structure": "WORKER",
+      "base": "15800",
+      "dob": "1998-08-25",
+      "joined": "2023-10-16",
+      "grade": "Unskilled",
+      "esiEligible": true
+    },
+    {
+      "personnelNumber": "10000050",
+      "fullName": "Prashant Mane",
+      "positionCode": "P6500",
+      "costCentre": "CC7000",
+      "structure": "WORKER",
+      "base": "22500",
+      "dob": "1986-07-31",
+      "joined": "2017-02-06",
+      "grade": "Skilled worker",
+      "esiEligible": false
+    },
+    {
+      "personnelNumber": "10000051",
+      "fullName": "Anita Gaikwad",
+      "positionCode": "P6100",
+      "costCentre": "CC6000",
+      "structure": "MGMT",
+      "base": "30000",
+      "dob": "1991-11-07",
+      "joined": "2019-04-29",
+      "grade": "Staff",
+      "tdsMonthly": "700"
+    },
+    {
+      "personnelNumber": "10000052",
+      "fullName": "Suraj Kamble",
+      "positionCode": "P4200",
+      "costCentre": "CC1000",
+      "structure": "WORKER",
+      "base": "18800",
+      "dob": "1992-01-05",
+      "joined": "2020-02-10",
+      "grade": "Skilled worker",
+      "esiEligible": true
+    }
+  ],
+  "users": [
+    {
+      "username": "in01.admin",
+      "personnelNumber": "10000001",
+      "role": "ADMINISTRATOR",
+      "department": "Management",
+      "plants": []
+    },
+    {
+      "username": "in01.buyer",
+      "personnelNumber": "10000010",
+      "role": "DEMO_BUYER",
+      "department": "Purchase",
+      "plants": []
+    },
+    {
+      "username": "in01.planner",
+      "personnelNumber": "10000014",
+      "role": "DEMO_PLANNER",
+      "department": "Production",
+      "plants": [
+        "1000"
+      ]
+    },
+    {
+      "username": "in01.supervisor",
+      "personnelNumber": "10000015",
+      "role": "DEMO_PROD_CLERK",
+      "department": "Production — Cutting",
+      "plants": [
+        "1000"
+      ]
+    },
+    {
+      "username": "in01.storekeeper",
+      "personnelNumber": "10000012",
+      "role": "DEMO_WH_CLERK_MFG",
+      "department": "Stores",
+      "plants": [
+        "1000"
+      ]
+    },
+    {
+      "username": "in01.dispatch",
+      "personnelNumber": "10000037",
+      "role": "DEMO_WH_CLERK_DIST",
+      "department": "Dispatch",
+      "plants": [
+        "2000"
+      ]
+    },
+    {
+      "username": "in01.sales",
+      "personnelNumber": "10000034",
+      "role": "DEMO_SALES_CLERK",
+      "department": "Sales",
+      "plants": []
+    },
+    {
+      "username": "in01.ap",
+      "personnelNumber": "10000003",
+      "role": "DEMO_ACCOUNTANT",
+      "department": "Finance",
+      "plants": []
+    },
+    {
+      "username": "in01.ar",
+      "personnelNumber": "10000004",
+      "role": "DEMO_ACCOUNTANT",
+      "department": "Finance",
+      "plants": []
+    },
+    {
+      "username": "in01.payroll",
+      "personnelNumber": "10000005",
+      "role": "DEMO_ACCOUNTANT",
+      "department": "Finance",
+      "plants": []
+    },
+    {
+      "username": "in01.controller",
+      "personnelNumber": "10000006",
+      "role": "DEMO_CONTROLLER",
+      "department": "Finance",
+      "plants": []
+    },
+    {
+      "username": "in01.qc",
+      "personnelNumber": "10000029",
+      "role": "DEMO_QUALITY",
+      "department": "Quality",
+      "plants": [
+        "1000"
+      ]
+    },
+    {
+      "username": "in01.hr",
+      "personnelNumber": "10000007",
+      "role": "DEMO_HR_OFFICER",
+      "department": "Human Resources",
+      "plants": []
+    },
+    {
+      "username": "in01.auditor",
+      "personnelNumber": "10000051",
+      "role": "DEMO_AUDITOR",
+      "department": "Quality",
+      "plants": []
+    }
+  ],
+  "materials": [
+    {
+      "number": "RM-MSROD-05",
+      "description": "MS iron rod 5mm",
+      "type": "RAW",
+      "group": "RAW",
+      "unit": "KG",
+      "procurement": "BUY",
+      "plants": [
+        "1000"
+      ],
+      "valuationClass": "RAW_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "62.50",
+      "safetyStock": "4000",
+      "hsn": "72149990",
+      "gstCode": "G18"
+    },
+    {
+      "number": "RM-MSANG-4040",
+      "description": "MS angle 40x40x5mm",
+      "type": "RAW",
+      "group": "RAW",
+      "unit": "KG",
+      "procurement": "BUY",
+      "plants": [
+        "1000"
+      ],
+      "valuationClass": "RAW_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "64.00",
+      "safetyStock": "3500",
+      "hsn": "72161000",
+      "gstCode": "G18"
+    },
+    {
+      "number": "RM-CRCA-12",
+      "description": "CRCA sheet 1.2mm",
+      "type": "RAW",
+      "group": "RAW",
+      "unit": "KG",
+      "procurement": "BUY",
+      "plants": [
+        "1000"
+      ],
+      "valuationClass": "RAW_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "68.75",
+      "safetyStock": "3000",
+      "hsn": "72091790",
+      "gstCode": "G18"
+    },
+    {
+      "number": "RM-MSPIPE-1IN",
+      "description": "MS square pipe 25x25x2mm",
+      "type": "RAW",
+      "group": "RAW",
+      "unit": "KG",
+      "procurement": "BUY",
+      "plants": [
+        "1000"
+      ],
+      "valuationClass": "RAW_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "66.20",
+      "safetyStock": "2500",
+      "hsn": "73063000",
+      "gstCode": "G18"
+    },
+    {
+      "number": "CON-HEXBOLT-M10",
+      "description": "Hex bolt M10x50 zinc plated",
+      "type": "RAW",
+      "group": "CONSUM",
+      "unit": "PC",
+      "procurement": "BUY",
+      "plants": [
+        "1000",
+        "2000"
+      ],
+      "valuationClass": "RAW_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "9.40",
+      "safetyStock": "12000",
+      "hsn": "73181500",
+      "gstCode": "G18"
+    },
+    {
+      "number": "CON-ROXIDE-20L",
+      "description": "Red oxide primer 20L",
+      "type": "RAW",
+      "group": "CONSUM",
+      "unit": "L",
+      "procurement": "BUY",
+      "plants": [
+        "1000"
+      ],
+      "valuationClass": "RAW_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "295.00",
+      "safetyStock": "400",
+      "hsn": "32089029",
+      "gstCode": "G18"
+    },
+    {
+      "number": "CON-POWDER-R7035",
+      "description": "Powder coat RAL 7035, 20kg",
+      "type": "RAW",
+      "group": "CONSUM",
+      "unit": "KG",
+      "procurement": "BUY",
+      "plants": [
+        "1000"
+      ],
+      "valuationClass": "RAW_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "385.00",
+      "safetyStock": "300",
+      "hsn": "39073010",
+      "gstCode": "G18"
+    },
+    {
+      "number": "CON-PACK-CORR",
+      "description": "Corrugated packing sheet",
+      "type": "RAW",
+      "group": "PACKAGING",
+      "unit": "PC",
+      "procurement": "BUY",
+      "plants": [
+        "1000"
+      ],
+      "valuationClass": "RAW_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "62.00",
+      "safetyStock": "800",
+      "hsn": "48191010",
+      "gstCode": "G12"
+    },
+    {
+      "number": "SF-WELDFRAME",
+      "description": "Welded frame assembly, cut",
+      "type": "SEMI",
+      "group": "PRODUCTS",
+      "unit": "PC",
+      "procurement": "MAKE",
+      "plants": [
+        "1000"
+      ],
+      "valuationClass": "SEMI_INVENTORY",
+      "priceControl": "STANDARD",
+      "price": "1480.00",
+      "safetyStock": "120",
+      "hsn": "73089090",
+      "gstCode": "G18"
+    },
+    {
+      "number": "FG-RACK-2000",
+      "description": "Heavy duty storage rack 2000x1000x450",
+      "type": "FIN",
+      "group": "PRODUCTS",
+      "unit": "PC",
+      "procurement": "MAKE",
+      "plants": [
+        "1000",
+        "2000"
+      ],
+      "valuationClass": "FINISHED_INVENTORY",
+      "priceControl": "STANDARD",
+      "price": "4250.00",
+      "safetyStock": "150",
+      "sellable": true,
+      "hsn": "73089090",
+      "gstCode": "G18"
+    },
+    {
+      "number": "FG-RACK-1500",
+      "description": "Medium duty storage rack 1500x900x400",
+      "type": "FIN",
+      "group": "PRODUCTS",
+      "unit": "PC",
+      "procurement": "MAKE",
+      "plants": [
+        "1000",
+        "2000"
+      ],
+      "valuationClass": "FINISHED_INVENTORY",
+      "priceControl": "STANDARD",
+      "price": "3150.00",
+      "safetyStock": "120",
+      "sellable": true,
+      "hsn": "73089090",
+      "gstCode": "G18"
+    },
+    {
+      "number": "FG-SHELF-1200",
+      "description": "Slotted angle shelf 1200x600x300",
+      "type": "FIN",
+      "group": "PRODUCTS",
+      "unit": "PC",
+      "procurement": "MAKE",
+      "plants": [
+        "1000",
+        "2000"
+      ],
+      "valuationClass": "FINISHED_INVENTORY",
+      "priceControl": "STANDARD",
+      "price": "1980.00",
+      "safetyStock": "200",
+      "sellable": true,
+      "hsn": "73089090",
+      "gstCode": "G18"
+    },
+    {
+      "number": "TRD-CASTOR-100",
+      "description": "Castor wheel 100mm, swivel",
+      "type": "TRAD",
+      "group": "PRODUCTS",
+      "unit": "PC",
+      "procurement": "BUY",
+      "plants": [
+        "1000",
+        "2000"
+      ],
+      "valuationClass": "TRADE_INVENTORY",
+      "priceControl": "MOVING_AVERAGE",
+      "price": "420.00",
+      "safetyStock": "80",
+      "sellable": true,
+      "hsn": "83022000",
+      "gstCode": "G18"
+    }
+  ],
+  "boms": [
+    {
+      "material": "SF-WELDFRAME",
+      "plant": "1000",
+      "baseQuantity": "1",
+      "usage": "P",
+      "items": [
+        {
+          "itemNumber": 10,
+          "component": "RM-MSROD-05",
+          "quantity": "8.5",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 20,
+          "component": "RM-MSANG-4040",
+          "quantity": "6.2",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 30,
+          "component": "RM-CRCA-12",
+          "quantity": "2.4",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 40,
+          "component": "CON-HEXBOLT-M10",
+          "quantity": "12",
+          "unit": "PC"
+        }
+      ]
+    },
+    {
+      "material": "FG-RACK-2000",
+      "plant": "1000",
+      "baseQuantity": "10",
+      "usage": "P",
+      "items": [
+        {
+          "itemNumber": 10,
+          "component": "SF-WELDFRAME",
+          "quantity": "10",
+          "unit": "PC"
+        },
+        {
+          "itemNumber": 20,
+          "component": "RM-MSPIPE-1IN",
+          "quantity": "40",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 30,
+          "component": "CON-HEXBOLT-M10",
+          "quantity": "240",
+          "unit": "PC"
+        },
+        {
+          "itemNumber": 40,
+          "component": "CON-POWDER-R7035",
+          "quantity": "18",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 50,
+          "component": "CON-ROXIDE-20L",
+          "quantity": "3.5",
+          "unit": "L"
+        },
+        {
+          "itemNumber": 60,
+          "component": "CON-PACK-CORR",
+          "quantity": "20",
+          "unit": "PC"
+        }
+      ]
+    },
+    {
+      "material": "FG-RACK-1500",
+      "plant": "1000",
+      "baseQuantity": "10",
+      "usage": "P",
+      "items": [
+        {
+          "itemNumber": 10,
+          "component": "SF-WELDFRAME",
+          "quantity": "8",
+          "unit": "PC"
+        },
+        {
+          "itemNumber": 20,
+          "component": "RM-MSPIPE-1IN",
+          "quantity": "30",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 30,
+          "component": "CON-HEXBOLT-M10",
+          "quantity": "180",
+          "unit": "PC"
+        },
+        {
+          "itemNumber": 40,
+          "component": "CON-POWDER-R7035",
+          "quantity": "13",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 50,
+          "component": "CON-PACK-CORR",
+          "quantity": "10",
+          "unit": "PC"
+        }
+      ]
+    },
+    {
+      "material": "FG-SHELF-1200",
+      "plant": "1000",
+      "baseQuantity": "10",
+      "usage": "P",
+      "items": [
+        {
+          "itemNumber": 10,
+          "component": "RM-CRCA-12",
+          "quantity": "11",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 20,
+          "component": "RM-MSANG-4040",
+          "quantity": "20",
+          "unit": "KG"
+        },
+        {
+          "itemNumber": 30,
+          "component": "CON-HEXBOLT-M10",
+          "quantity": "80",
+          "unit": "PC"
+        },
+        {
+          "itemNumber": 40,
+          "component": "CON-POWDER-R7035",
+          "quantity": "9",
+          "unit": "KG"
+        }
+      ]
+    }
+  ],
+  "routings": [
+    {
+      "material": "FG-RACK-2000",
+      "plant": "1000",
+      "usage": "1",
+      "taskListType": "N",
+      "operations": [
+        {
+          "operation": 10,
+          "workCentre": "WC01",
+          "description": "Cutting",
+          "hours": "0.75",
+          "controlKey": "PP01"
+        },
+        {
+          "operation": 20,
+          "workCentre": "WC02",
+          "description": "Welding",
+          "hours": "1.40",
+          "controlKey": "PP01"
+        },
+        {
+          "operation": 30,
+          "workCentre": "WC03",
+          "description": "Powder coating",
+          "hours": "0.55",
+          "controlKey": "PP01"
+        }
+      ]
+    },
+    {
+      "material": "FG-RACK-1500",
+      "plant": "1000",
+      "usage": "1",
+      "taskListType": "N",
+      "operations": [
+        {
+          "operation": 10,
+          "workCentre": "WC01",
+          "description": "Cutting",
+          "hours": "0.55",
+          "controlKey": "PP01"
+        },
+        {
+          "operation": 20,
+          "workCentre": "WC02",
+          "description": "Welding",
+          "hours": "1.05",
+          "controlKey": "PP01"
+        },
+        {
+          "operation": 30,
+          "workCentre": "WC03",
+          "description": "Powder coating",
+          "hours": "0.40",
+          "controlKey": "PP01"
+        }
+      ]
+    },
+    {
+      "material": "FG-SHELF-1200",
+      "plant": "1000",
+      "usage": "1",
+      "taskListType": "N",
+      "operations": [
+        {
+          "operation": 10,
+          "workCentre": "WC01",
+          "description": "Cutting",
+          "hours": "0.35",
+          "controlKey": "PP01"
+        },
+        {
+          "operation": 20,
+          "workCentre": "WC03",
+          "description": "Powder coating",
+          "hours": "0.30",
+          "controlKey": "PP01"
+        }
+      ]
+    }
+  ],
+  "vendors": [
+    {
+      "number": "SUP-1000",
+      "name": "Deccan Steel Traders Pvt Ltd",
+      "city": "Pune",
+      "state": "Maharashtra",
+      "stateCode": "27",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "27AABCD5678E1Z2",
+      "pan": "AABCD5678E",
+      "address": "Gat No. 214, Chakan Industrial Area, Pune 410501",
+      "supplies": [
+        "RM-MSROD-05",
+        "RM-MSANG-4040",
+        "RM-CRCA-12",
+        "RM-MSPIPE-1IN"
+      ],
+      "intraState": true
+    },
+    {
+      "number": "SUP-2000",
+      "name": "Sahyadri Fasteners",
+      "city": "Satara",
+      "state": "Maharashtra",
+      "stateCode": "27",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "27AABCS9012F1Z5",
+      "pan": "AABCS9012F",
+      "address": "Plot 12, Satara MIDC, Satara 415004",
+      "supplies": [
+        "CON-HEXBOLT-M10",
+        "TRD-CASTOR-100"
+      ],
+      "intraState": true
+    },
+    {
+      "number": "SUP-3000",
+      "name": "Vidarbha Coatings and Chemicals",
+      "city": "Nagpur",
+      "state": "Maharashtra",
+      "stateCode": "27",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "27AABCV3456G1Z8",
+      "pan": "AABCV3456G",
+      "address": "29 Wardha Road, Nagpur 440015",
+      "supplies": [
+        "CON-ROXIDE-20L",
+        "CON-POWDER-R7035"
+      ],
+      "intraState": true
+    },
+    {
+      "number": "SUP-4000",
+      "name": "Gujarat Steel Corporation",
+      "city": "Ahmedabad",
+      "state": "Gujarat",
+      "stateCode": "24",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "24AABCG7890H1Z3",
+      "pan": "AABCG7890H",
+      "address": "Plot 88, Odhav Industrial Estate, Ahmedabad 382415",
+      "supplies": [
+        "RM-CRCA-12"
+      ],
+      "intraState": false
+    },
+    {
+      "number": "SUP-5000",
+      "name": "Karnataka Packaging Supplies",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "stateCode": "29",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "29AABCK2345J1Z7",
+      "pan": "AABCK2345J",
+      "address": "14, Peenya Industrial Area, Bengaluru 560058",
+      "supplies": [
+        "CON-PACK-CORR"
+      ],
+      "intraState": false
+    },
+    {
+      "number": "SUP-6000",
+      "name": "Zhejiang Precision Fasteners Co Ltd",
+      "city": "Ningbo",
+      "state": null,
+      "stateCode": null,
+      "country": "CN",
+      "terms": "NET60",
+      "currency": "USD",
+      "gstin": null,
+      "pan": null,
+      "address": "No. 8 Jinyuan Road, Beilun District, Ningbo, Zhejiang, China",
+      "supplies": [
+        "CON-HEXBOLT-M10"
+      ],
+      "intraState": false,
+      "foreign": true,
+      "note": "Import vendor. PO, GR and invoice in USD; customs duty, Bill of Entry and import IGST are GAPs."
+    }
+  ],
+  "customers": [
+    {
+      "number": "CUS-1000",
+      "name": "Bhosari Hardware Mart",
+      "city": "Pune",
+      "state": "Maharashtra",
+      "stateCode": "27",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "27AABCB1111K1Z4",
+      "pan": "AABCB1111K",
+      "address": "Shop 4, Bhosari Gaon Road, Pune 411039",
+      "deliveringPlant": "2000",
+      "creditLimit": "1500000",
+      "intraState": true
+    },
+    {
+      "number": "CUS-2000",
+      "name": "Maharashtra Warehouse Solutions Pvt Ltd",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "stateCode": "27",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "27AABCM2222L1Z9",
+      "pan": "AABCM2222L",
+      "address": "Unit 7, Andheri East MIDC, Mumbai 400093",
+      "deliveringPlant": "2000",
+      "creditLimit": "2500000",
+      "intraState": true
+    },
+    {
+      "number": "CUS-3000",
+      "name": "Nashik Agro Storage",
+      "city": "Nashik",
+      "state": "Maharashtra",
+      "stateCode": "27",
+      "country": "IN",
+      "terms": "NET15",
+      "gstin": "27AABCN3333M1Z6",
+      "pan": "AABCN3333M",
+      "address": "Gat 77, Ambad Industrial Area, Nashik 422010",
+      "deliveringPlant": "2000",
+      "creditLimit": "800000",
+      "intraState": true
+    },
+    {
+      "number": "CUS-4000",
+      "name": "Rajasthan Steel Racks",
+      "city": "Jaipur",
+      "state": "Rajasthan",
+      "stateCode": "08",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "08AABCR4444N1Z1",
+      "pan": "AABCR4444N",
+      "address": "Plot 22, Sitapura Industrial Area, Jaipur 302022",
+      "deliveringPlant": "2000",
+      "creditLimit": "1200000",
+      "intraState": false
+    },
+    {
+      "number": "CUS-5000",
+      "name": "Coimbatore Industrial Supplies",
+      "city": "Coimbatore",
+      "state": "Tamil Nadu",
+      "stateCode": "33",
+      "country": "IN",
+      "terms": "NET30",
+      "gstin": "33AABCC5555P1Z8",
+      "pan": "AABCC5555P",
+      "address": "Plot 9, SIDCO Industrial Estate, Coimbatore 641021",
+      "deliveringPlant": "2000",
+      "creditLimit": "900000",
+      "intraState": false
+    },
+    {
+      "number": "CUS-6000",
+      "name": "Souq Trading LLC",
+      "city": "Dubai",
+      "state": null,
+      "stateCode": null,
+      "country": "AE",
+      "terms": "NET30",
+      "currency": "USD",
+      "gstin": null,
+      "pan": null,
+      "address": "Warehouse 14, Jebel Ali Free Zone, Dubai, UAE",
+      "deliveringPlant": "2000",
+      "creditLimit": "1800000",
+      "intraState": false,
+      "foreign": true,
+      "note": "Export customer. Quotation, order and invoice in USD, zero-rated (GZ0)."
+    }
+  ],
+  "sellingPrices": {
+    "$comment": "INR per selling unit, before GST. Two price levels: PL01 list, PL02 distributor.",
+    "FG-RACK-2000": {
+      "PL01": "4850.00",
+      "PL02": "4450.00"
+    },
+    "FG-RACK-1500": {
+      "PL01": "3650.00",
+      "PL02": "3320.00"
+    },
+    "FG-SHELF-1200": {
+      "PL01": "2250.00",
+      "PL02": "2050.00"
+    },
+    "TRD-CASTOR-100": {
+      "PL01": "520.00",
+      "PL02": "470.00"
+    }
+  },
+  "purchasePrices": {
+    "RM-MSROD-05": "62.50",
+    "RM-MSANG-4040": "64.00",
+    "RM-CRCA-12": "68.75",
+    "RM-MSPIPE-1IN": "66.20",
+    "CON-HEXBOLT-M10": "9.40",
+    "CON-ROXIDE-20L": "295.00",
+    "CON-POWDER-R7035": "385.00",
+    "CON-PACK-CORR": "62.00",
+    "TRD-CASTOR-100": "420.00"
+  },
+  "foreignCurrency": {
+    "$comment": "Decision 3 — the international slice. FX is supported (exchange-rate maintenance, payment-run FX gain/loss). Customs duty, Bill of Entry and import IGST are GAPs.",
+    "usd": {
+      "currency": "USD",
+      "rates": [
+        {
+          "validFrom": "2026-04-01",
+          "rate": "83.2500"
+        },
+        {
+          "validFrom": "2026-07-01",
+          "rate": "83.9000"
+        },
+        {
+          "validFrom": "2026-10-01",
+          "rate": "84.4500"
+        }
+      ],
+      "importVendor": "SUP-6000",
+      "exportCustomer": "CUS-6000"
+    }
+  },
+  "openingBalances": {
+    "$comment": "Carried forward as at the first day of the scenario month, so the trial balance has history. All INR.",
+    "journal": [
+      {
+        "glAccount": "101000",
+        "debit": "4500000",
+        "credit": "0",
+        "text": "Opening bank balance"
+      },
+      {
+        "glAccount": "120000",
+        "debit": "2350000",
+        "credit": "0",
+        "text": "Opening raw material stock"
+      },
+      {
+        "glAccount": "110000",
+        "debit": "1820000",
+        "credit": "0",
+        "text": "Opening receivables"
+      },
+      {
+        "glAccount": "150000",
+        "debit": "6200000",
+        "credit": "0",
+        "text": "Opening plant and machinery"
+      },
+      {
+        "glAccount": "150100",
+        "debit": "0",
+        "credit": "1450000",
+        "text": "Opening accumulated depreciation"
+      },
+      {
+        "glAccount": "200000",
+        "debit": "0",
+        "credit": "1680000",
+        "text": "Opening payables"
+      },
+      {
+        "glAccount": "260000",
+        "debit": "0",
+        "credit": "3200000",
+        "text": "Opening bank borrowing"
+      },
+      {
+        "glAccount": "280000",
+        "debit": "0",
+        "credit": "5000000",
+        "text": "Opening share capital"
+      },
+      {
+        "glAccount": "290000",
+        "debit": "0",
+        "credit": "3540000",
+        "text": "Opening retained earnings"
+      }
+    ]
+  },
+  "materialGroups": [
+    {
+      "code": "CONSUM",
+      "name": "Consumables and coatings",
+      "shortName": "Consumables"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
   "name": "cairn",
   "version": "0.1.0",
   "private": true,
-  "description": "Cairn \u2014 enterprise resource planning system",
+  "description": "Cairn — enterprise resource planning system",
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
@@ -69,7 +69,8 @@
     "docs:check": "node scripts/docs-check.mjs",
     "payment-file:maintenance": "tsx scripts/payment-file-maintenance.ts",
     "test:ui": "vitest run --config vitest.ui.config.ts",
-    "fx:audit": "tsx scripts/fx-rate-audit.ts"
+    "fx:audit": "tsx scripts/fx-rate-audit.ts",
+    "in01:install": "tsx scripts/in01-install.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",

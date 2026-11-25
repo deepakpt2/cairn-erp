@@ -1,0 +1,131 @@
+{
+  "$comment": "INDIA country pack. Everything here is what is true of India and not of another country: the fiscal year, the currency, the GST codes as this product can model them, the India-specific chart accounts, and the statutory payroll components. A second country is a sibling folder and no installer change. Rates marked DEMONSTRATION are the product's configured approximations, never a compliance claim — see 02-gap-list.md.",
+  "version": 1,
+  "country": {
+    "code": "IN",
+    "name": "India",
+    "currency": "INR",
+    "timezone": "Asia/Kolkata",
+    "dateFormat": "DD-MM-YYYY",
+    "numberFormat": "en-IN"
+  },
+  "fiscalYear": {
+    "$comment": "April to March. The company code is pointed at this variant. Built with the existing variant and period services; no code change (see 06-bug-fix-log.md for the derivation defect that had to be fixed first).",
+    "variant": "A4",
+    "name": "April to March",
+    "isCalendarYear": false,
+    "isYearDependent": false,
+    "regularPeriods": 12,
+    "specialPeriods": 4,
+    "periodEnds": [
+      { "period": 1, "month": 4, "day": 30, "yearShift": 0, "label": "April" },
+      { "period": 2, "month": 5, "day": 31, "yearShift": 0, "label": "May" },
+      { "period": 3, "month": 6, "day": 30, "yearShift": 0, "label": "June" },
+      { "period": 4, "month": 7, "day": 31, "yearShift": 0, "label": "July" },
+      { "period": 5, "month": 8, "day": 31, "yearShift": 0, "label": "August" },
+      { "period": 6, "month": 9, "day": 30, "yearShift": 0, "label": "September" },
+      { "period": 7, "month": 10, "day": 31, "yearShift": 0, "label": "October" },
+      { "period": 8, "month": 11, "day": 30, "yearShift": 0, "label": "November" },
+      { "period": 9, "month": 12, "day": 31, "yearShift": 0, "label": "December" },
+      { "period": 10, "month": 1, "day": 31, "yearShift": 1, "label": "January" },
+      { "period": 11, "month": 2, "day": 28, "yearShift": 1, "label": "February" },
+      { "period": 12, "month": 3, "day": 31, "yearShift": 1, "label": "March" }
+    ],
+    "specialPeriodEnds": [
+      { "period": 13, "month": 3, "day": 31, "yearShift": 1 },
+      { "period": 14, "month": 3, "day": 31, "yearShift": 1 },
+      { "period": 15, "month": 3, "day": 31, "yearShift": 1 },
+      { "period": 16, "month": 3, "day": 31, "yearShift": 1 }
+    ]
+  },
+  "chartOfAccounts": {
+    "$comment": "The delivered chart CA01 is generic. These accounts are ADDED to it by the installer through the G/L account service. Nothing in the delivered chart is removed. Account numbers follow the chart's own numbering convention (1 assets, 2 liabilities, 3 revenue, 4 cost of sales, 5 operating expenses).",
+    "additions": [
+      { "number": "140100", "name": "GST input credit — CGST", "type": "ASSET", "isBalanceSheet": true, "taxRelevant": true, "gapNote": "The product posts all input tax to the single TAX determination account; this account exists for the TARGET (GAP) entry only and is not posted to." },
+      { "number": "140200", "name": "GST input credit — SGST", "type": "ASSET", "isBalanceSheet": true, "taxRelevant": true, "gapNote": "TARGET (GAP) only." },
+      { "number": "140300", "name": "GST input credit — IGST", "type": "ASSET", "isBalanceSheet": true, "taxRelevant": true, "gapNote": "TARGET (GAP) only." },
+      { "number": "220100", "name": "GST output payable — CGST", "type": "LIABILITY", "isBalanceSheet": true, "taxRelevant": true, "gapNote": "TARGET (GAP) only." },
+      { "number": "220200", "name": "GST output payable — SGST", "type": "LIABILITY", "isBalanceSheet": true, "taxRelevant": true, "gapNote": "TARGET (GAP) only." },
+      { "number": "220300", "name": "GST output payable — IGST", "type": "LIABILITY", "isBalanceSheet": true, "taxRelevant": true, "gapNote": "TARGET (GAP) only." },
+      { "number": "251100", "name": "Provident fund payable", "type": "LIABILITY", "isBalanceSheet": true },
+      { "number": "251200", "name": "ESI payable", "type": "LIABILITY", "isBalanceSheet": true },
+      { "number": "251300", "name": "Professional tax payable", "type": "LIABILITY", "isBalanceSheet": true },
+      { "number": "251400", "name": "TDS payable — salary (u/s 192)", "type": "LIABILITY", "isBalanceSheet": true, "taxRelevant": true },
+      { "number": "221100", "name": "TDS payable — contractors (u/s 194C)", "type": "LIABILITY", "isBalanceSheet": true, "taxRelevant": true, "gapNote": "GAP: no withholding engine, nothing posts here." },
+      { "number": "221200", "name": "TDS payable — professional fees (u/s 194J)", "type": "LIABILITY", "isBalanceSheet": true, "taxRelevant": true, "gapNote": "GAP: no withholding engine, nothing posts here." },
+      { "number": "510300", "name": "Power and fuel", "type": "EXPENSE", "isBalanceSheet": false, "requiresCostObject": true },
+      { "number": "510400", "name": "Consumables — factory", "type": "EXPENSE", "isBalanceSheet": false, "requiresCostObject": true },
+      { "number": "520100", "name": "Depreciation — plant and machinery", "type": "EXPENSE", "isBalanceSheet": false, "requiresCostObject": true },
+      { "number": "550100", "name": "Insurance — plant and machinery", "type": "EXPENSE", "isBalanceSheet": false, "requiresCostObject": true },
+      { "number": "580100", "name": "Rates and taxes — municipal", "type": "EXPENSE", "isBalanceSheet": false, "requiresCostObject": true },
+      { "number": "500400", "name": "Provident fund — employer contribution", "type": "EXPENSE", "isBalanceSheet": false, "requiresCostObject": true },
+      { "number": "500500", "name": "ESI — employer contribution", "type": "EXPENSE", "isBalanceSheet": false, "requiresCostObject": true },
+      { "number": "250100", "name": "Salary advances recoverable", "type": "ASSET", "isBalanceSheet": true, "gapNote": "GAP: no salary-advance subledger; a manual FI journal and a payroll deduction component are the workaround." }
+    ]
+  },
+  "taxCodes": {
+    "$comment": "This product models ONE rate per document line and ONE TAX determination account per chart. A GST invoice therefore carries a single consolidated rate here, not a CGST + SGST pair. The rates are the statutory headline rates; the *split* and the *place-of-supply decision* are GAPs (02-gap-list.md A1-A3).",
+    "standardTaxAccount": "220000",
+    "codes": [
+      { "code": "G18", "name": "GST 18% — standard", "taxType": "MWS", "ratePercent": "18.00", "accountKey": "MWS", "appliesTo": "Fabricated steel products, consumables at 18%" },
+      { "code": "G12", "name": "GST 12% — reduced", "taxType": "MWS", "ratePercent": "12.00", "accountKey": "MWS", "appliesTo": "Certain inputs; used here for packing materials" },
+      { "code": "G05", "name": "GST 5% — reduced", "taxType": "MWS", "ratePercent": "5.00", "accountKey": "MWS", "appliesTo": "Not used in the base scenario; available" },
+      { "code": "G28", "name": "GST 28% — luxury", "taxType": "MWS", "ratePercent": "28.00", "accountKey": "MWS", "appliesTo": "Not used in the base scenario; available" },
+      { "code": "GZ0", "name": "GST 0% — export / zero-rated", "taxType": "MWS", "ratePercent": "0.00", "accountKey": "MWS", "appliesTo": "Foreign customer export invoice" },
+      { "code": "GEX", "name": "GST exempt", "taxType": "MWS", "ratePercent": "0.00", "accountKey": "MWS", "appliesTo": "Exempt supply; not used in the base scenario" }
+    ],
+    "targetEntries": {
+      "$comment": "Shown in the UAT guide as TARGET (GAP) beside the entry the product actually posts. Intra-state at 18%: CGST 9% + SGST 9%. Inter-state at 18%: IGST 18%.",
+      "intraState": { "cgstAccount": "220100", "sgstAccount": "220200", "inputCgst": "140100", "inputSgst": "140200", "rate": "9.00+9.00" },
+      "interState": { "igstAccount": "220300", "inputIgst": "140300", "rate": "18.00" }
+    }
+  },
+  "payrollStatutory": {
+    "$comment": "Configured approximations posted through the payroll engine as pay components, NOT statutory computation. PF is a flat 12% of the structure base. ESI is 0.75%/3.25% applied only to employees the fixture marks as under the wage ceiling; there is no ceiling rule in the engine. Professional tax is a flat monthly amount. TDS u/s 192 is a pre-calculated fixed monthly amount per employee. See 02-gap-list.md B1-B2.",
+    "components": [
+      { "code": "PFEE", "name": "Provident fund — employee 12%", "kind": "DEDUCTION", "debit": null, "credit": "251100", "receiver": "NONE", "rule": { "kind": "PERCENT_OF_BASE", "value": "12" } },
+      { "code": "PFER", "name": "Provident fund — employer 12%", "kind": "EMPLOYER_CONTRIBUTION", "debit": "500400", "credit": "251100", "receiver": "ASSIGNMENT", "rule": { "kind": "PERCENT_OF_BASE", "value": "12" } },
+      { "code": "ESIEE", "name": "ESI — employee 0.75%", "kind": "DEDUCTION", "debit": null, "credit": "251200", "receiver": "NONE", "rule": { "kind": "PERCENT_OF_BASE", "value": "0.75" } },
+      { "code": "ESIER", "name": "ESI — employer 3.25%", "kind": "EMPLOYER_CONTRIBUTION", "debit": "500500", "credit": "251200", "receiver": "ASSIGNMENT", "rule": { "kind": "PERCENT_OF_BASE", "value": "3.25" } },
+      { "code": "PTAX", "name": "Professional tax — Maharashtra", "kind": "DEDUCTION", "debit": null, "credit": "251300", "receiver": "NONE", "rule": { "kind": "FIXED", "value": "200" } },
+      { "code": "TDS192", "name": "TDS u/s 192 — salary", "kind": "DEDUCTION", "debit": null, "credit": "251400", "receiver": "NONE", "rule": { "kind": "FIXED", "value": "0", "gapNote": "Per-employee monthly amount; see the employee's tdsMonthly in company/IN01." } }
+    ],
+    "earningComponents": [
+      { "code": "BASIC", "name": "Basic salary", "kind": "EARNING", "debit": "500000", "credit": null, "receiver": "ASSIGNMENT" },
+      { "code": "HRA", "name": "House rent allowance", "kind": "EARNING", "debit": "500000", "credit": null, "receiver": "ASSIGNMENT" },
+      { "code": "CONVEY", "name": "Conveyance allowance", "kind": "EARNING", "debit": "500000", "credit": null, "receiver": "ASSIGNMENT" },
+      { "code": "SPECIAL", "name": "Special allowance", "kind": "EARNING", "debit": "500000", "credit": null, "receiver": "ASSIGNMENT" },
+      { "code": "OT", "name": "Overtime", "kind": "EARNING", "debit": "500300", "credit": null, "receiver": "ASSIGNMENT", "gapNote": "GAP B3: the payroll run reads no overtime time type; a recurring employee component is the workaround." }
+    ],
+    "esiWageCeiling": "21000",
+    "professionalTaxState": "Maharashtra"
+  },
+  "holidayCalendar": {
+    "id": "IM",
+    "name": "India — Maharashtra",
+    "days": [
+      { "date": "2026-04-14", "name": "Dr. Babasaheb Ambedkar Jayanti" },
+      { "date": "2026-05-01", "name": "Maharashtra Day" },
+      { "date": "2026-08-15", "name": "Independence Day" },
+      { "date": "2026-10-02", "name": "Gandhi Jayanti" },
+      { "date": "2026-11-08", "name": "Diwali — Laxmi Puja" },
+      { "date": "2026-12-25", "name": "Christmas" },
+      { "date": "2027-01-26", "name": "Republic Day" },
+      { "date": "2027-03-05", "name": "Holi" }
+    ]
+  },
+  "formats": {
+    "$comment": "What the product validates today. Everything else in this block is what a GST-compliant system would validate — a GAP.",
+    "gstin": { "pattern": "^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$", "stateCodeLength": 2, "enforced": false },
+    "pan": { "pattern": "^[A-Z]{5}[0-9]{4}[A-Z]$", "enforced": false },
+    "hsn": { "lengths": [4, 6, 8], "enforced": false, "fieldExistsOnMaterial": false },
+    "paymentTerms": ["NET15", "NET30", "NET45", "NET60", "IMMEDIATE"]
+  },
+  "stateCodes": [
+    { "code": "27", "name": "Maharashtra" },
+    { "code": "24", "name": "Gujarat" },
+    { "code": "29", "name": "Karnataka" },
+    { "code": "07", "name": "Delhi" },
+    { "code": "33", "name": "Tamil Nadu" }
+  ]
+}
