@@ -8,6 +8,11 @@
  * writes one notice per account per currency — a record, never
  * a posting. Levels advance only at finalization.
  *
+ * A proposal states what stood overdue when it was made; the notice demands what stands owed now.
+ * Finalization therefore recomputes each item's net collectible inside its own transaction, under
+ * the company settlement lock every payment and clearing path takes, and refuses a proposal whose
+ * amount no longer stands. It never writes the figure the proposal happens to carry.
+ *
  * Every amount is stated in the item's **document currency**, because that is what the customer
  * owes and what the notice asks for; the local carrying amount is never presented under a foreign
  * label. An account holding items in more than one currency is proposed once per currency rather
@@ -27,8 +32,9 @@ import {
   dunningNotice, dunningRun, dunningRunAccount, dunningRunCompany, dunningRunItem,
   journalEntry, journalEntryLine,
 } from './schema';
+import { lockValuationSettlement } from './fx-settlement';
 import {
-  notValidApplicationLineSql, unappliedPaymentCreditSql, validApplicationSql,
+  notValidApplicationLineSql, openItemBalances, unappliedPaymentCreditSql, validApplicationSql,
 } from './open-item-netting';
 
 export const DUNNING_CAPABILITY = 'FIN.AR.DUNNING.RUN';
@@ -159,8 +165,14 @@ async function selectOverdueItems(
       customer: journalEntryLine.businessPartner,
       debitCredit: journalEntryLine.debitCredit,
       amount: journalEntryLine.amountDocument,
-      valid: validApplicationSql('document', input.postedThrough),
-      paymentCredit: unappliedPaymentCreditSql('document', input.postedThrough),
+      // The amount basis is **now**, not the posting cutoff. Finalization recomputes the same
+      // figure through `openItemBalances`, which reads every posted application regardless of its
+      // posting date; a proposal that stopped at the cutoff would charge an advance the notice
+      // cannot honour, and would never match — re-proposing on the same cutoff would reproduce
+      // the stale figure. These two calls pass no `asOf` for exactly that reason, so the two
+      // paths read one expression. The cutoff still decides *which* items are in scope (below).
+      valid: validApplicationSql('document'),
+      paymentCredit: unappliedPaymentCreditSql('document'),
       currency: journalEntryLine.currency,
       postingDate: journalEntry.postingDate,
       originClass: journalEntry.originClass,
@@ -486,8 +498,32 @@ export async function finalizeDunningRun(input: {
       }
     }
 
+    // The notice demands what the customer owes now, so serialize with every settlement path that
+    // could still move an item after the proposal was made. Companies are taken in a stable order,
+    // as the payment run does, so two finalizations covering the same companies cannot deadlock.
+    for (const companyCode of [...new Set(runCompanies.map((row) => row.companyCode))].sort()) {
+      await lockValuationSettlement(tx, input.client, companyCode);
+    }
+
     const view = await loadRunView(tx, input.client, input.runDate, input.runId);
     const proposedItems = view!.items.filter((i) => i.status === 'PROPOSED');
+    // Recompute every proposed item's net collectible from its standing journal line, inside this
+    // transaction. An advance or payment applied after the proposal leaves the original line open,
+    // so the line still existing proves nothing about the amount: the recomputed figure is what the
+    // notice may state, and a proposal that no longer matches it is refused.
+    //
+    // The recompute reads the item's state *now*, through the same helper the proposal reads, which
+    // is why an unchanged ledger always agrees (the proposal's own cutoff governs which items are
+    // in scope and how far they are overdue, not how much is owed).
+    //
+    // The whole run is judged before anything is written: an all-or-nothing finalization means a run
+    // either issues every notice or none, never a half-issued set. So every stale item is collected
+    // and reported together, rather than the first one hiding the rest.
+    const collectibleByAccount = new Map<string, bigint>();
+    const stale: string[] = [];
+    const integrity: string[] = [];
+    const itemLabel = (item: { documentNumber: string; lineNumber: number }) =>
+      `Document ${item.documentNumber} line ${item.lineNumber}`;
     for (const item of proposedItems) {
       const [line] = await tx.select().from(journalEntryLine).where(and(
         eq(journalEntryLine.client, input.client),
@@ -496,10 +532,8 @@ export async function finalizeDunningRun(input: {
         eq(journalEntryLine.lineNumber, item.lineNumber),
       ));
       if (!line || line.clearingDocument) {
-        throw new DunningError(
-          `Document ${item.documentNumber} line ${item.lineNumber} no longer stands open; the proposal is stale.`,
-          'Cancel this run and propose a new run identity.',
-        );
+        stale.push(`${itemLabel(item)} no longer stands open; the proposal is stale.`);
+        continue;
       }
       const [journal] = await tx.select().from(journalEntry).where(and(
         eq(journalEntry.client, input.client),
@@ -507,24 +541,82 @@ export async function finalizeDunningRun(input: {
         eq(journalEntry.fiscalYear, item.fiscalYear),
       ));
       if (!journal || journal.status !== 'POSTED') {
-        throw new DunningError(`Document ${item.documentNumber} does not stand posted; the proposal is stale.`, 'Cancel this run and propose a new run identity.');
+        stale.push(`${itemLabel(item)} does not stand posted; the proposal is stale.`);
+        continue;
       }
+      const balances = await openItemBalances(tx, input.client, {
+        documentNumber: item.documentNumber, companyCode: line.companyCode,
+        businessPartner: line.businessPartner!, glAccount: line.glAccount,
+        currency: line.currency, debitCredit: line.debitCredit,
+      });
+      const liability = toScaled(line.amountDocument) - balances.liability.document;
+      if (liability < 0n) {
+        // Not a dunning judgement: applications summing beyond the line itself mean the ledger no
+        // longer proves the position. Every settlement path refuses this at posting time
+        // (`incoming-payment.ts:390`, `gl-clearing.ts:498`), so reaching it here means an
+        // application was written by something other than a settlement — an integrity fault to
+        // investigate, not a reason to cancel and re-propose.
+        integrity.push(
+          `${itemLabel(item)} carries applications of ${fromScaled(-liability)} ${item.currency} beyond its amount.`,
+        );
+        continue;
+      }
+      const net = liability - balances.paymentCredit.document;
+      if (net <= 0n) {
+        stale.push(
+          `${itemLabel(item)} stands fully covered by applications and unapplied payment credits since the proposal was made; the proposal is stale.`,
+        );
+        continue;
+      }
+      if (net !== toScaled(item.overdueAmount)) {
+        stale.push(
+          `${itemLabel(item)} stands open at ${fromScaled(net)} ${item.currency} since the proposal was made, not the ${item.overdueAmount} ${item.currency} it states; the proposal is stale.`,
+        );
+        continue;
+      }
+      const key = `${item.companyCode}|${item.customer}|${item.currency}`;
+      collectibleByAccount.set(key, (collectibleByAccount.get(key) ?? 0n) + net);
+    }
+
+    if (integrity.length > 0) {
+      throw new DunningError(
+        `Run ${input.runId} of ${input.runDate} cannot finalize: a data-integrity fault means the ledger no longer proves the collectible position. ${integrity.join(' ')}`,
+        'This is not a stale proposal: applications exceeding the line they settle are written only by something other than a settlement, since every settlement path refuses them at posting time. Investigate the applications on these items. Nothing has been written.',
+      );
+    }
+    if (stale.length > 0) {
+      throw new DunningError(
+        `Run ${input.runId} of ${input.runDate} cannot finalize: ${stale.length} proposed item(s) stand stale. ${stale.join(' ')}`,
+        'Cancel this run and propose a new run identity. Nothing has been written.',
+      );
     }
 
     for (const account of view!.accounts.filter((a) => a.status === 'PROPOSED')) {
+      // The notice states the sum of what its items stand at now, not the total the proposal carries.
+      const amount = collectibleByAccount.get(`${account.companyCode}|${account.customer}|${account.currency}`);
+      if (amount === undefined) {
+        throw new DunningError(
+          `Account ${account.customer} in company ${account.companyCode} no longer stands owed in ${account.currency}; the proposal is stale.`,
+          'Cancel this run and propose a new run identity.',
+        );
+      }
       await tx.insert(dunningNotice).values({
         client: input.client,
         noticeNumber: `${input.runId}-${input.runDate}-${account.companyCode}-${account.customer}-${account.currency}`,
         runDate: input.runDate, runId: input.runId,
         companyCode: account.companyCode, customer: account.customer,
         dunningLevel: account.proposedLevel!, currency: account.currency,
-        amount: account.totalOverdue, noticeDate: run.dunningDate,
+        amount: fromScaled(amount), noticeDate: run.dunningDate,
         createdBy: input.changedBy,
       });
-      await tx.update(dunningRunAccount).set({ status: 'COMPLETED', changedBy: input.changedBy }).where(and(
+      // The account row carries the same figure the notice does, so the proposal the operator
+      // reviews and the notice that was written never disagree after a finalized run.
+      await tx.update(dunningRunAccount).set({
+        status: 'COMPLETED', totalOverdue: fromScaled(amount), changedBy: input.changedBy,
+      }).where(and(
         eq(dunningRunAccount.client, input.client), eq(dunningRunAccount.runDate, input.runDate),
         eq(dunningRunAccount.runId, input.runId), eq(dunningRunAccount.companyCode, account.companyCode),
-        eq(dunningRunAccount.customer, account.customer),
+        eq(dunningRunAccount.customer, account.customer), eq(dunningRunAccount.currency, account.currency),
       ));
     }
     await tx.update(dunningRunItem).set({ status: 'COMPLETED', changedBy: input.changedBy }).where(and(
