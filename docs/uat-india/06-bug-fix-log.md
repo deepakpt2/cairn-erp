@@ -1,5 +1,9 @@
 # BUG FIX LOG — India UAT work
 
+**Application code only.** This log lists changes to the application itself. Defects in the
+installer and fixture code I wrote are in a separate section at the end, so that this list answers
+the question it exists to answer: *what did we change in the product, and why?*
+
 Each entry is a genuine defect in the application (not a data problem), approved by the owner
 before any code changed, fixed minimally, and committed on its own with a test that reproduces it.
 
@@ -143,52 +147,38 @@ change.
 
 ---
 
-## Bug 002 — the installer created company code `1000` instead of `IN01`
+# Installer defects (not application code)
 
-| Field | Status |
+Defects I introduced in the installer and fixtures. They are recorded because the installer is a
+deliverable and a reader deserves to know what went wrong in it, but they are **not** changes to
+the application's behaviour and do not belong in the log above.
+
+## ID-002 — the installer created company code `1000` instead of `IN01`
+
+| Field | Value |
 |---|---|
-| Status | **FIXED** (in the installer I wrote; the defect was mine, not the product's) |
-| Discovered | During the owner's pre-test review, checking what `A000` holds |
-| Application code changed | none — installer and fixtures only |
-| Commit | in the follow-up commit to this one |
+| Status | **FIXED** |
+| Discovered | Owner's pre-test review, checking what `A000` held |
+| Application code changed | **none** — installer and fixtures only |
+| Commit | `67599eb3` |
 
 ### What failed
 
-The brief says the company code is `IN01`. The fixture's `company.identity.companyCode` is `IN01`.
-But the installer read `structure.companyCode` from `fixtures/core/organisation.json`, where the
-neutral structure pattern carried `1000` — the product's standard key. The result:
+The brief says the company code is `IN01`, and `fixtures/company/IN01/company.json` carries
+`identity.companyCode: "IN01"`. But the installer read `structure.companyCode` from
+`fixtures/core/organisation.json`, where the neutral pattern carried the product's standard key
+`1000`. Everything downstream used `1000` — plant assignments, cost centres, partner company
+views, scopes — while the guide and the reset used `IN01`. Two sources of truth, disagreeing.
 
-```
-=== ACTUAL company codes ===
-1000|Cairn Demo Industries|A4
-```
+### Why it is a layering mistake rather than a typo
 
-Everything downstream then used `1000`: plant assignments, cost centres, partner company views,
-scopes. The guide and the reset used `IN01`. **Two sources of truth, disagreeing**, and the one
-the tester would see in the UI was the wrong one.
-
-### Why it happened, and why it is a layering mistake rather than a typo
-
-A company code is a property of the **legal entity**, not of the neutral structure pattern. A
-second company in the same tenant would carry a different company code on the same pattern. Putting
-it in `core/` was wrong for exactly the reason the fixture split exists: `core/` must hold only
-what is country- *and* company-neutral.
-
-The fiscal-year work hid it. Every phase referenced `structure.companyCode` consistently, so the
-install was internally coherent; it was coherently wrong.
+A company code belongs to the **legal entity**, not to the neutral structure pattern. A second
+company in the same tenant would carry a different code on the same pattern. Putting it in `core/`
+was wrong for exactly the reason the fixture split exists: `core/` holds only what is country-
+*and* company-neutral.
 
 ### The fix
 
-- `fixtures/core/organisation.json` no longer carries `companyCode`.
-- `FixtureSet.companyCode` is now `company.identity.companyCode`, read from the company folder.
-- Phases 0, 1 and 2 read the company folder's value.
-
-Verified: the company code now installs as `IN01`, plants `1000` and `2000` are assigned to it,
-and the guide's sanity table matches what the screen shows.
-
-### What it teaches about the fixtures
-
-The split only works if values sit in the right layer. A value in the wrong file is not caught by
-a type check and not caught by the install succeeding — only by comparing what was asked for
-against what the screen shows. That comparison is now a line in `00-HOW-TO-START.md`'s sanity
-table, and an assertion in `tests/in01-install-contract.test.ts`.
+`core/` no longer carries `companyCode`; `FixtureSet.companyCode` is `company.identity.companyCode`,
+and phases 0, 1 and 2 read the company folder. Verified: company code now installs as `IN01`, and
+`tests/in01-install-contract.test.ts` asserts the neutral file has no company code.
