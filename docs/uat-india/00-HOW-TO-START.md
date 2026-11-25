@@ -256,14 +256,20 @@ shipped file. B1 you must decide on; B3 is handled by running in the right conta
 ```bash
 git clone <repository-url> cairn-erp
 cd cairn-erp
-git checkout 0262c5d5
-git rev-parse HEAD      # must print 0262c5d561e3d5bcbd83287a1dc8221acffcf531
+git checkout d0edbf59
+git rev-parse HEAD      # must print d0edbf59d4b6756b9c241a314d082a4d866369a0
 ```
 
-> **`0262c5d5` is not pushed.** It is the tip of `development` on my workbench and is 9 commits ahead
-> of `origin/development`. Push it first, or `git checkout` will fail on your server.
-> **Commit:** `0262c5d561e3d5bcbd83287a1dc8221acffcf531`
-> **Subject:** Finalise the failing-test triage from a full baseline run
+> **`d0edbf59` is not pushed.** It is the tip of `development` on my workbench and is ahead of
+> `origin/development`. Push it first, or `git checkout` will fail on your server.
+>
+> **Deploy commit:** `d0edbf59d4b6756b9c241a314d082a4d866369a0`
+> ("Add the self-hosted Docker install path for the India UAT")
+>
+> `0262c5d5` is equally valid if you have already pushed that one: the two differ **only** in this
+> document. Verified with `git diff --name-only 0262c5d5..d0edbf59`, which lists
+> `docs/uat-india/00-HOW-TO-START.md` and nothing else — so the installer, fixtures, schema and
+> Compose file are byte-identical.
 
 ### C2. Environment file
 
@@ -461,14 +467,23 @@ Both must print `India installer refused the reset:` and leave the data intact. 
 Take this **before** any Phase 3 posting, so a failed scenario is one restore away.
 
 ```bash
-# Custom format, compressed, tagged with the commit and the phase.
+# Custom format (-Fc), compressed, named with the deploy commit so a restore
+# months later still says what it belongs to.
+COMMIT=d0edbf59            # the deploy commit from C1
+STAMP=$(date +%Y%m%dT%H%M%SZ)
 docker compose exec -T db pg_dump -U cairn -d cairn_in01_uat -Fc \
-  > "in01-phase2-$(date +%Y%m%dT%H%M%SZ)-0262c5d5.dump"
+  > "in01-phase2-$STAMP-$COMMIT.dump"
 
 # Record what it should contain, so a restore can be checked rather than assumed.
 docker compose exec -T db psql -U cairn -d cairn_in01_uat -tAc \
-  "select 'employees='||count(*) from employee where client='IN01'" >> in01-phase2-manifest.txt
+  "select 'employees='||count(*) from employee where client='IN01'" \
+  > "in01-phase2-$STAMP-$COMMIT.manifest.txt"
+
+ls -l in01-phase2-$STAMP-$COMMIT.*
 ```
+
+Keep the dump **off the database host** as well as on it — a snapshot on the same disk protects
+against a bad restore, not against losing the disk.
 
 **Optional:** if you want this as a *consistent* dump rather than one taken while the app is
 writing, either stop the writers first (`docker compose stop app worker worker-intensive`) or use
@@ -478,23 +493,33 @@ is fine.
 ### C9. Restore
 
 ```bash
-# Stop the writers so nothing reconnects mid-restore.
+DUMP=in01-phase2-<timestamp>-<commit>.dump    # the file you wrote in C8
+
+# 1. Stop the writers so nothing reconnects mid-restore.
 docker compose stop app worker worker-intensive
 
-# Drop and recreate, owned by the migrator (the baseline assigns every object to it).
+# 2. Copy the dump INTO the container. Streaming it through stdin works with
+#    `exec -T`, but a file is easier to reason about and to retry.
+docker compose cp "$DUMP" db:/tmp/restore.dump
+
+# 3. Drop and recreate, owned by the migrator (the baseline assigns every object to it).
 docker compose exec -T db psql -U cairn -d postgres -c \
-  "drop database if exists cairn_in01_uat" 
+  "drop database if exists cairn_in01_uat"
 docker compose exec -T db psql -U cairn -d postgres -c \
   "create database cairn_in01_uat owner cairn_integration_migrator"
 
-# Restore. --no-owner because the roles are created by the init script, not the dump.
-# DO NOT add --no-privileges: it strips cairn_app's table grants and db:sync-role does
-# not put them back (it only reconciles three auth tables — see the note below).
+# 4. Restore. --no-owner because the roles are created by the init script, not the dump.
+#    DO NOT add --no-privileges: it strips cairn_app's table grants and db:sync-role
+#    does not put them back (it reconciles three auth tables only — see the trap below).
 docker compose exec -T db pg_restore -U cairn -d cairn_in01_uat \
-  --no-owner < in01-phase2-0262c5d5.dump
+  --no-owner /tmp/restore.dump
+docker compose exec -T db rm -f /tmp/restore.dump
 
+# 5. Bring the application back.
 docker compose start app worker worker-intensive
 ```
+
+`pg_restore` exits non-zero on any error; check `echo $?` after step 4 before starting the app.
 
 Then re-run the C7 checks. The **sanity table** in the section above this one is the fastest way to
 confirm the restore landed intact: company code `IN01`/INR/`A4`, 52 employees, 13 materials, 15
