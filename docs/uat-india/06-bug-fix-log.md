@@ -264,3 +264,112 @@ was wrong for exactly the reason the fixture split exists: `core/` holds only wh
 `core/` no longer carries `companyCode`; `FixtureSet.companyCode` is `company.identity.companyCode`,
 and phases 0, 1 and 2 read the company folder. Verified: company code now installs as `IN01`, and
 `tests/in01-install-contract.test.ts` asserts the neutral file has no company code.
+
+## ID-003 — the demo warehouse clerks could not pick, so D3_SALES stopped
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** |
+| Discovered | The owner's `demo:provision` run, which stopped at `D3_SALES` |
+| Application code changed | **none** — demo fixtures only |
+| Commit | `86570093` |
+| Files changed | `src/platform/tenancy/demo-people.ts`, `tests/demo-sales.test.ts` |
+
+### What failed
+
+```
+Dummy-data provisioning failed in D3_SALES:
+You do not hold the authority SALES.DELIVERY.PICK.
+```
+
+`D1_PROCUREMENT` and `D2_PRODUCTION` completed; the run died on the first **pick** of the sales
+chain. The partial installation was left in place and marked failed, as designed.
+
+### Why it is a fixture defect and not an application bug
+
+The service was right. Commit `1819f764` ("Sales: company, sales-area and plant scope for
+deliveries") added a `SALES.DELIVERY.PICK` check to `confirmDeliveryPicks`. The demo phase picks as
+`demo.warehouse1` and `demo.warehouse2`, which hold `DEMO_WH_CLERK_MFG` and `DEMO_WH_CLERK_DIST` —
+and those two roles were never given the new authority. They held:
+
+```
+INV.*, QM.LOT.CREATE, SALES.GI.POST, SALES.RETURNS.RECEIPT.POST, AUDIT.TRAIL.VIEW
+```
+
+`INV.*` is a whole-segment match: it reaches every `INV.` capability and nothing under `SALES.`.
+So the clerk could ship the goods issue (`SALES.GI.POST`) but not ready it (`SALES.DELIVERY.PICK`).
+Nothing in the application needed to change; the fixture roles had drifted behind the service's
+authority list.
+
+### The fix
+
+Both warehouse-clerk roles now hold `SALES.DELIVERY.PICK` alongside the authorities they already
+had for shipping. The clerk who empties the shelf is the clerk who picks it, which is what the
+surrounding comment already said the role was for. The two roles are told apart by the plant they
+stand in, not by what they may do, so both carry the same list.
+
+### Verification
+
+Run on `cairn_dp_pickcheck_20261125_140249`, a disposable database created for the purpose and
+dropped afterwards — never a persistent one.
+
+| Check | Result |
+|---|---|
+| `demo:provision` before the fix | Stops at `D3_SALES` with the refusal above |
+| `demo:provision` after the fix | `D3_SALES \| COMPLETED \| {picks: 5, orders: 6, deliveries: 5, goodsIssues: 5}` |
+| The tenant's own rows (`set local cairn.client='DMO1'`) | 5 deliveries, 5 picked or goods-issued, 7 pick rows |
+| Regression test against the pre-fix source | Fails, naming the missing authority |
+| `tests/demo-sales.test.ts` | 15 passed |
+
+The regression test reads the role blocks in `demo-people.ts` and refuses a warehouse role that
+can ship a delivery but not pick one. Proven both ways: with the authority removed the test fails;
+with it restored, it passes.
+
+## ID-004 — D7 assigned no structure to the HR employees, so D9 could not release the run
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** |
+| Discovered | The same end-to-end run, after ID-003 was fixed and D3 no longer stopped it |
+| Application code changed | **none** — demo fixtures only |
+| Files changed | `src/platform/tenancy/demo-payroll.ts`, `tests/demo-provisioning-contract.test.ts` |
+
+### What failed
+
+With ID-003 fixed the run continued past `D3_SALES` and stopped at `D9_PAYROLL_POST`:
+
+> `D9_PAYROLL_POST: run … still names 10000020 (NO_STRUCTURE), 10000101 (NO_STRUCTURE),
+> 10000102 (NO_STRUCTURE), 10000103 (NO_STRUCTURE).`
+
+### Why it is a fixture defect and not a payroll bug
+
+Payroll behaved exactly as designed, and the design is deliberate on both sides:
+
+- `proposePayrollRun` (D8) selects **every active employee** of the company for the period and
+  records a named reason for anyone it cannot pay. It does not silently skip them.
+- `recalculatePayrollRun` (D9) refuses to release a run that still names an exception, because a
+  released result is frozen and a partly-paid run is not a payroll.
+
+The four people it named are the HR population — Rania Khoury, Bassam Idris, Salma Nabil and
+Hadi Mourad (10000101–10000103 and 10000020). They were added to `B_PEOPLE` by `dbd53a36`
+("People: leave policies, plant/company scope, position tiers and hire approval") on 2026-11-19.
+`D7_PAYROLL`'s assignment list was last touched by `5ba0c777` on 2026-11-15 — four days earlier —
+and was never extended, so it assigned the fifteen employees that existed when it was written and
+left the four that came after with no structure at all.
+
+### The fix
+
+The four HR employees are assigned in `D7_PAYROLL` with the rest: the HR Manager on `MGMT` and the
+three HR staff on `STAFF`, at demonstration bases consistent with their tier. Payroll behaviour is
+untouched — no engine change, no tolerance for exceptions, no skip. The controller (10000016)
+remains the one deliberate exception, because D9 exists to show an exception being cleared.
+
+### Verification
+
+- A cross-phase invariant test now pins the rule: every employee `B_PEOPLE` hires, except the one
+  named as `DEMO_PAYROLL_UNASSIGNED`, holds a structure by the time D8 proposes the run. It reads
+  the employee list and the three phases that assign or hire, so a fifth HR employee added later
+  without a structure fails the test rather than the installation.
+- Proven both ways: with the four lines removed the test fails and names all four employees; with
+  the fix restored it passes.
+- `tests/demo-provisioning-contract.test.ts` — 10 passed.

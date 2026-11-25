@@ -82,7 +82,15 @@ const STRUCTURES: ReadonlyArray<{ code: string; name: string; rules: Rule[] }> =
   },
 ];
 
-/** Who is on which structure, and their base (KWD). 10000016 is deliberately absent. */
+/**
+ * Who is on which structure, and their base (KWD). 10000016 is deliberately absent.
+ *
+ * The HR population (10000101–10000103, 10000020) is assigned here too. They were added to
+ * B_PEOPLE after this list was written and were never given a structure, so D8's run named
+ * them as `NO_STRUCTURE` exceptions and D9 refused to release a run that still named anybody.
+ * Readiness is a property of the people the run selects, so every employee an earlier phase
+ * hires is assigned here; only the controller is left out, and on purpose.
+ */
 const ASSIGNMENTS: ReadonlyArray<{ personnelNumber: string; structure: string; base: string }> = [
   { personnelNumber: '10000001', structure: 'MGMT', base: '4200' },
   { personnelNumber: '10000002', structure: 'MGMT', base: '3100' },
@@ -99,6 +107,10 @@ const ASSIGNMENTS: ReadonlyArray<{ personnelNumber: string; structure: string; b
   { personnelNumber: '10000013', structure: 'STAFF', base: '980' },
   { personnelNumber: '10000014', structure: 'MGMT', base: '3000' },
   { personnelNumber: '10000015', structure: 'STAFF', base: '1300' },
+  { personnelNumber: '10000101', structure: 'MGMT', base: '3200' },
+  { personnelNumber: '10000102', structure: 'STAFF', base: '1450' },
+  { personnelNumber: '10000103', structure: 'STAFF', base: '900' },
+  { personnelNumber: '10000020', structure: 'STAFF', base: '880' },
 ];
 
 /** The employee left without a structure, so the readiness check has something to name. */

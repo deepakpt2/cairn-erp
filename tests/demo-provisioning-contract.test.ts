@@ -81,6 +81,36 @@ describe('dummy-data provisioning', () => {
     }
   });
 
+  it('gives every demo employee a pay structure, except the one the readiness check names', () => {
+    // D8 proposes a run over every active employee; D9 refuses to release a run that
+    // still names an exception. So an employee hired by an earlier phase and never
+    // assigned a structure is not a cosmetic gap — it stops the installation at D9.
+    // The four HR people were added to B_PEOPLE after D7's list was written and were
+    // left out exactly that way, so this pins the cross-phase invariant.
+    const people = readFileSync('src/platform/tenancy/demo-people.ts', 'utf8');
+    const payroll = readFileSync('src/platform/tenancy/demo-payroll.ts', 'utf8');
+    const run = readFileSync('src/platform/tenancy/demo-payroll-run.ts', 'utf8');
+    const offcycle = readFileSync('src/platform/tenancy/demo-payroll-offcycle.ts', 'utf8');
+
+    const employees = new Set(
+      [...people.split('const EMPLOYEES')[1]!.split('as const')[0]!.matchAll(/personnelNumber: '(\d+)'/g)]
+        .map((m) => m[1]!),
+    );
+    expect(employees.size).toBeGreaterThan(0);
+
+    // D7 assigns; D8 projects the joiner and leaver; D11 hires the late joiner.
+    const assigned = new Set([
+      ...[...payroll.matchAll(/personnelNumber: '(\d+)', structure/g)].map((m) => m[1]!),
+      ...[...run.matchAll(/personnelNumber: '(\d+)', fullName/g)].map((m) => m[1]!),
+      ...[...offcycle.matchAll(/personnelNumber: '(\d+)', fullName/g)].map((m) => m[1]!),
+    ]);
+    // The controller is the deliberate exception: the run names him until D9 assigns him.
+    const deliberate = /DEMO_PAYROLL_UNASSIGNED = '(\d+)'/.exec(payroll)![1]!;
+
+    const unassigned = [...employees].filter((pn) => !assigned.has(pn) && pn !== deliberate);
+    expect(unassigned).toEqual([]);
+  });
+
   it('leaves a failed installation visible instead of cleaning it up', () => {
     expect(provisioner).toContain('It will not be resumed automatically');
     // The phase is marked failed by the module, and the installation with it: a run
