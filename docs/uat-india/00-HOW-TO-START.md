@@ -289,18 +289,20 @@ echo "deploying $DEPLOY"
 > printed in this file is one commit stale by the time you read it. `DEPLOY` above is the answer,
 > and it does not go stale.
 >
-> **The invariant that makes this safe.** Every commit from `0262c5d5` onward carries an identical
-> installer, fixture set, schema, Dockerfile and Compose file — after `0262c5d5` only files under
-> `docs/uat-india/` changed. Confirm before you deploy:
+> **What has changed in the application since the UAT build.** From `0262c5d5` onward, exactly one
+> source file differs:
 >
 > ```
 > git diff --stat 0262c5d5..origin/development -- src scripts fixtures \
->     package.json docker-compose.yml Dockerfile      # → must be empty
+>     package.json docker-compose.yml Dockerfile
+>   src/app/people/payroll-runs/payment-file/route.ts | 4 ----
 > ```
 >
-> Empty means the application is exactly what was tested and the docs are the only difference. **If
-> it is not empty**, the application has moved since the UAT build: read what changed before
-> deploying it, and do not assume the guide still matches.
+> That is Bug 003 (`06-bug-fix-log.md`) — a route file exporting a non-route symbol, which made
+> `next build` fail outright. The four deleted lines remove dead code and change no behaviour; the
+> build was broken without them, so deploying a commit that still has them cannot work. **Expect
+> exactly this one file.** If the diff shows anything else, the application has moved since the UAT
+> build: read what changed before deploying, and do not assume the guide still matches.
 
 ### C2. Environment file
 
