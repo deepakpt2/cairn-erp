@@ -256,20 +256,25 @@ shipped file. B1 you must decide on; B3 is handled by running in the right conta
 ```bash
 git clone <repository-url> cairn-erp
 cd cairn-erp
-git checkout d0edbf59
-git rev-parse HEAD      # must print d0edbf59d4b6756b9c241a314d082a4d866369a0
+git checkout <deploy-commit>        # see below
+git rev-parse HEAD
 ```
 
-> **`d0edbf59` is not pushed.** It is the tip of `development` on my workbench and is ahead of
-> `origin/development`. Push it first, or `git checkout` will fail on your server.
+> **Which commit to deploy.** Use the tip of `development` at the time you clone. Every commit from
+> **`0262c5d5` onward** carries an identical installer, fixture set, schema, Dockerfile and Compose
+> file; the only file that changed after `0262c5d5` is this document. Verified:
 >
-> **Deploy commit:** `d0edbf59d4b6756b9c241a314d082a4d866369a0`
-> ("Add the self-hosted Docker install path for the India UAT")
+> ```
+> git diff --stat 0262c5d5..development -- src scripts fixtures \
+>     package.json docker-compose.yml Dockerfile      # → empty
+> ```
 >
-> `0262c5d5` is equally valid if you have already pushed that one: the two differ **only** in this
-> document. Verified with `git diff --name-only 0262c5d5..d0edbf59`, which lists
-> `docs/uat-india/00-HOW-TO-START.md` and nothing else — so the installer, fixtures, schema and
-> Compose file are byte-identical.
+> So `0262c5d5`, `d0edbf59`, `b824bde1` and anything later on `development` are interchangeable
+> **for the application**. Deploy the newest, and confirm the diff above is empty against whichever
+> you picked. If it is not empty, read what changed before you deploy it.
+>
+> **Nothing here is pushed yet.** `development` on the workbench is ahead of `origin/development`;
+> push it, or `git checkout` will fail on your server.
 
 ### C2. Environment file
 
@@ -469,7 +474,7 @@ Take this **before** any Phase 3 posting, so a failed scenario is one restore aw
 ```bash
 # Custom format (-Fc), compressed, named with the deploy commit so a restore
 # months later still says what it belongs to.
-COMMIT=d0edbf59            # the deploy commit from C1
+COMMIT=$(git rev-parse --short HEAD)   # the commit you deployed (C1)
 STAMP=$(date +%Y%m%dT%H%M%SZ)
 docker compose exec -T db pg_dump -U cairn -d cairn_in01_uat -Fc \
   > "in01-phase2-$STAMP-$COMMIT.dump"
