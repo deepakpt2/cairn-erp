@@ -616,7 +616,7 @@ reopened by a later phase.
 | Docker verification | Not executed — no Docker on the test host. Verified only as a static contract, and every report says so. |
 | Material period | A material period that has been advanced is never re-opened — the control refuses reinitialization by design. Each document phase therefore posts into the periods still open when it runs. `D1_PROCUREMENT` walks the three open periods to their end; `D2_PRODUCTION` and the phases after it reach the last two. A phase that needs a period must take it before an earlier phase shifts past it. `D5_QUALITY` posts a stock movement through the usage decision, and the usage decision takes a posting date for exactly this reason: a movement dated by the clock lands outside the period the goods arrived in. |
 | Production accounting | No activity cost is posted by any service — a confirmation records that an operation happened, not what the labour or the machine cost, and settlement does not post. The conversion cost baked into a made material's standard price therefore appears where production's two legs meet, as the balance on the consumption account. It is expected, not a defect. |
-| Phases | `A_FOUNDATION`, `B_ORGANISATION`, `B_PEOPLE`, `C_MASTERS`, `D1_PROCUREMENT`, `D2_PRODUCTION`, `D3_SALES`, `D4_FINANCE`, `D5_QUALITY`, `D6_AUDIT`, `D7_PAYROLL`, `D8_PAYROLL_RUN`, `D9_PAYROLL_POST`, `D10_PAYROLL_PAY`, `D11_PAYROLL_OFFCYCLE`, `D12_CO_PLAN`, `D13_ACTIVITY_PRICE`, `D14_ASSESSMENT`, `D15_BOM_STRUCTURE`, `D16_COST_ESTIMATE`, `D17_SALES_AVAILABILITY`, `D18_SALES_QUOTATION`. Later work appends; it never reorders. |
+| Phases | `A_FOUNDATION`, `B_ORGANISATION`, `B_PEOPLE`, `C_MASTERS`, `D1_PROCUREMENT`, `D2_PRODUCTION`, `D3_SALES`, `D4_FINANCE`, `D5_QUALITY`, `D6_AUDIT`, `D7_PAYROLL`, `D8_PAYROLL_RUN`, `D9_PAYROLL_POST`, `D10_PAYROLL_PAY`, `D11_PAYROLL_OFFCYCLE`, `D12_CO_PLAN`, `D13_ACTIVITY_PRICE`, `D14_ASSESSMENT`, `D15_BOM_STRUCTURE`, `D16_COST_ESTIMATE`, `D17_SALES_AVAILABILITY`, `D18_SALES_QUOTATION`, `D19_RELEASE`. Later work appends; it never reorders. |
 | Masters scope (`C_MASTERS`) | Materials, partners, purchasing info records, selling prices, tax codes, bills of material, routings and production versions. **No documents.** A biscuit factory with no orders is a company on its first morning, and that is what the document phases start from. |
 | Masters the demo must define itself | BOM usages, BOM statuses, BOM item categories, routing task list types, usages, statuses and control keys are empty in a new tenant, and no seed creates them; a BOM cannot be written without a usage and a routing cannot be written without a task list type. Tax codes are likewise empty and every purchase names one. The demo defines them; the product is left as it was. |
 | Master data is fictional | Partners, prices and tax rates are invented. The tax codes are explicitly **not** any real jurisdiction's rates. |
@@ -637,3 +637,32 @@ reopened by a later phase.
 A static decision belongs in §10 of this file, because this file is read at the start
 of every session. A procedure belongs in one of the two documents above, because
 someone will follow it at a terminal rather than in a code review.
+
+---
+
+## 12. India UAT dataset (`in01:install`) — separate from the demo dataset
+
+A second, independent installer for the India UAT scenario. It shares the phase-ledger idea with
+§10 and nothing else: §10 is a Gulf biscuit company provisioned automatically at deployment, this
+is one named Indian company installed by a person on a database they chose.
+
+| Item | Value |
+|---|---|
+| Command | `npx tsx scripts/in01-install.ts` (`npm run in01:install`), **not** `demo:provision` |
+| Company | Cairn Demo Industries Pvt Ltd, `IN01`, Pune, Maharashtra — fictional |
+| Phases | `phase0` (organisation), `phase1` (people and accounts), `phase2` (masters). Default `--until=phase2`. |
+| Fixtures | `fixtures/core/` (country-neutral), `fixtures/country/IN/` (India pack), `fixtures/company/IN01/` (this company). **The single source of truth**; the installer invents no business value. |
+| Transactions | **Not installed.** `--with-transactions` is parsed and refused by name (GAP D1). |
+| Credentials | One generated password **per account**, written to `credentials/demo-credentials.txt` at mode 0600 and shown at `/platform/users/test-credentials` (404 outside development). The database holds only a hash. |
+| Reset | `npx tsx scripts/in01-install.ts --reset-demo IN01 --confirm IN01`. Development only; requires an installation record; refuses if a tester has written anything or a document stands. Deletes the tenant, whose children cascade. No force flag, no general delete grant. |
+| Fiscal year | April–March, variant `A4`, built by the installer. Requires the controlling area to move too; the installer unlinks through OX19's services, moves both, relinks. |
+| Tax | One consolidated rate per line. CGST/SGST split, place of supply, separate input/output accounts, HSN and GSTIN validation are **GAPs**. |
+| Documents | `docs/uat-india/` — audit, GAP list, calendar-year findings, users, UAT guide, bug log, E2E proposal. |
+
+**Databases.** The installer refuses `cairn_b210`, `cairn_hr_accept`, `cairn_demo`,
+`cairn_acceptance` and `cairn_integration` by name, on top of the target guard. It is meant for a
+disposable `cairn_in01_*` or `cairn_migration_test_*` database.
+
+**There is no automatic refusal for a database that already holds business data**, unlike
+§10's provisioner (GAP D2). The reset's own checks catch a mistake, but a pre-filled database
+should not be aimed at in the first place.

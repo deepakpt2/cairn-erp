@@ -47,12 +47,12 @@ one transaction with the eligibility survey. It is handed one of four answers.
 |---|---|---|
 | `FRESH` | No installation record, and every tenant-owned table is empty. | Writes the record and all eleven pending phases, then runs all eleven. |
 | `RESUME` | A record stands for this database and this build, not failed, with phases outstanding. | Skips the phases already `COMPLETED`, and resumes at the first one that is not — a phase left `RUNNING` by a dead process is resumed and counted as a retry. Also: a record that is `COMPLETED` but does not name a phase a later build added (e.g. `D6_AUDIT`) has that phase appended and run; a phase it names but never finished is still refused. A resumed run resets every account to a new password and rewrites the credential file. |
-| `ALREADY_COMPLETE` | The record is `COMPLETED` and all nineteen phases are. | Changes nothing. Rewrites the credential file, because a deployment that lost the file cannot be given the password back — with the password shown as *not recoverable* rather than blank. Returns 0. |
+| `ALREADY_COMPLETE` | The record is `COMPLETED` and all twenty-three phases are. | Changes nothing. Rewrites the credential file, because a deployment that lost the file cannot be given the password back — with the password shown as *not recoverable* rather than blank. Returns 0. |
 | `REFUSE` | Any of the five refusals in §4. | Writes nothing. Returns 1, so the application never starts. |
 
 ---
 
-## 3. The nineteen phases
+## 3. The twenty-three phases
 
 A phase is a unit of resumption, not a unit of tidiness. The organisation and the
 people are split because the second takes minutes and opens administrator sessions: a
@@ -190,7 +190,7 @@ database; the report says so.
 
 | Claim | Evidence |
 |---|---|
-| All nineteen phases complete, first attempt, one record naming the right database | `tests/demo-safety-matrix.test.ts`, against a provisioned database |
+| All twenty-three phases complete, first attempt, one record naming the right database | `tests/demo-safety-matrix.test.ts`, against a provisioned database |
 | The disposition, refusal, lock and ordering guarantees | `tests/demo-safety-matrix.test.ts`, against the source |
 | Every phase request-keyed, or idempotent by adoption | `tests/demo-safety-matrix.test.ts`, against the phase modules |
 | Credential file permissions, ownership and atomic write | `tests/demo-credentials.test.ts` |
