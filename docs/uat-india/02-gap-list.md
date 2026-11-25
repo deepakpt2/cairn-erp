@@ -64,6 +64,29 @@ Where the guide shows a target that cannot be posted, the entry is labelled **TA
 | D3 | **The reset deletes the tenant rather than the company code.** The product's tenancy model is one tenant per company, and its `client` rows cascade from the tenant. A product that later hosts several company codes in one tenant would need this revisited. | **P2** |
 | D4 | **No CSV export of the credentials from the app.** The page shows the rows and the file is the export; `renderIn01CredentialCsv` exists but no route serves it. | **P2** |
 
+## D2. Two features are gated on the wrong switch (security)
+
+Both the UAT credentials view and web tenant provisioning are gated on `CAIRN_ENV`, which is a
+build-mode switch, not a feature switch. The consequence is that turning either one on turns off
+authentication somewhere else.
+
+| # | Gap | Sev |
+|---|---|---|
+| D5 | **The credentials page is gated on `CAIRN_ENV`, not on its own flag.** `src/app/platform/users/test-credentials/page.tsx:73` returns 404 unless `CAIRN_ENV === 'development'`. It should read a dedicated `CAIRN_UAT_CREDENTIALS=1`, so a host can show test passwords *without* entering development mode. | **P1** |
+| D6 | **Web tenant provisioning is bypassed entirely in development mode**, server-side. `src/platform/tenancy/provisioning.ts:28` (`assertProvisioningToken` returns early) and `:46` mean the token is not checked at all, and `src/app/clients/new/page.tsx:14` then hides the token field. In development mode **anyone who can reach `/clients/new` can create a tenant**, with no secret. It should be gated on its own explicit provisioning switch. | **P0** |
+| D7 | **Development mode removes authentication from two pages that enumerate tenants.** `src/app/page.tsx:20` and `src/app/clients/page.tsx:11` set `session = null` when `CAIRN_ENV === 'development'`, and `cairn_list_tenants()` is `SECURITY DEFINER` (granted to `cairn_app`), so it returns every tenant to an anonymous caller. There is **no middleware** and no session gate in `src/app/layout.tsx`, so nothing else catches it. | **P0** |
+
+**Why this matters.** `CAIRN_ENV=development` is the only way to switch on the credentials view
+today (D5), so any deployment that wants that view also accepts D6 and D7. On a host reachable by
+anyone else, that publishes the tenant list and allows unauthenticated tenant creation. The UAT
+workaround is a network boundary — a Tailscale-only or firewall-restricted host, never a public
+port — recorded in `00-HOW-TO-START.md` §Self-hosted box. That is a mitigation, not a fix.
+
+**Proposed fix, not built:** a dedicated credentials flag (D5), a dedicated provisioning switch
+that is checked regardless of build mode (D6), and an explicit decision that the launchpad and
+tenant list require a session in every mode (D7). All three are small application changes and need
+owner approval like any other.
+
 ## E. Localisation — what is missing for India, and what is missing for a second country
 
 Requested with the fixture split. For each area: **what India still needs**, and **what any

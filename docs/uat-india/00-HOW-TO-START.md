@@ -160,6 +160,23 @@ step — that is a bug, not a setup problem.
 
 # Self-hosted install (Docker, on your own server)
 
+> ## ⚠️ TEST HOST ONLY
+>
+> **Tailscale or firewall-restricted. Never public. Never real data.**
+>
+> This deployment runs with `CAIRN_ENV=development`, which is the only way to switch the
+> credentials view on today. In that mode the launchpad and the tenant list render **without a
+> sign-in**, and web tenant provisioning accepts **no token at all** — server-side, not merely in
+> the form. On a host anyone else can reach, that publishes your tenant list and lets them create
+> tenants.
+>
+> Put it behind Tailscale, a VPN, or an IP-allowlisted firewall, and publish **no** public port.
+> If you cannot guarantee that, do not use this deployment for real data, and see §E for the
+> alternative.
+>
+> The underlying defect is recorded as **GAPs D5–D7** in `02-gap-list.md`. The fix is a dedicated
+> credentials flag and a provisioning switch that is checked in every build mode. It is not built.
+
 For running Phase 3 on a fresh machine, separate from the workbench. This section is **not**
 a repeat of `docs/fresh-server-installation.md` — read that for the product's own install. This is
 what is **different** when the purpose is the India UAT, and where the shipped Compose file does not
@@ -178,19 +195,19 @@ give you what you need out of the box.
 |---|---|---|
 | Linux host, Docker Engine + Compose **v2** | `docker compose` (space, not `docker-compose`) | `docker compose version` |
 | 2 CPU / 4 GB RAM / 20 GB disk | The Next.js build is the peak; PostgreSQL needs room | `nproc`, `free -g`, `df -h` |
-| A DNS name and a reverse proxy on an external network named `proxy` | `docker-compose.yml` declares `proxy` as **external**; Compose refuses to start without it | `docker network inspect proxy` |
+| A `proxy` Docker network to exist (empty is fine) | `docker-compose.yml` declares it **external**, so Compose refuses to start without it. The UAT override in C4 binds a port instead of using a proxy on it. | `docker network inspect proxy` |
+| **Tailscale** (or equivalent) on the host | The recommendation for a test box: the app binds to the tailnet address, never a public interface | `tailscale ip -4` |
 | Git + outbound internet | The images are built on the host | `git --version` |
-| A TLS-terminating proxy | The app listens on `:3000` inside the network and is reached only through it | — |
 
 ```bash
 docker compose version                     # must print v2.x
 docker network inspect proxy >/dev/null 2>&1 \
-  && echo "proxy network found" \
-  || echo "STOP: create it, and attach a reverse proxy, before continuing"
+  || docker network create proxy           # required by the base file; nothing rides on it here
+tailscale ip -4                            # e.g. 100.64.0.5 — no public address is used
 ```
 
-If `proxy` is missing, `docker network create proxy` lets Compose start — it does **not** make the
-site reachable. That needs a proxy attached to it.
+On this host the application is reached at `http://<tailscale-ip>:3000`. **No port is published on
+a public interface**, and there is no reverse proxy in front of it.
 
 ## B. Three blockers in the shipped Compose file
 
@@ -296,7 +313,8 @@ Then in `.env`:
 | `SESSION_SECRET` | the fourth generated value | Required |
 | `CAIRN_PROVISIONING_TOKEN` | a fifth generated value | Disables web tenant creation **only when the app is in `production`**. With `CAIRN_ENV=development` (C4) the token is bypassed server-side — see B1. Set it anyway, so the `production` fallback in §E is safe. |
 | `ENABLE_DUMMY_DATA` | **`false`** | The Gulf demo dataset must not be created; this install uses IN01 |
-| `CAIRN_HOST` | your DNS name | The proxy rule and the printed login URL |
+| `CAIRN_HOST` | your Tailscale hostname (e.g. `uat-box.tailnet-name.ts.net`) | Printed as the login URL in the credential file. The Traefik labels also use it, but no proxy rides on them here. |
+| `CAIRN_UAT_BIND_IP` | your Tailscale IPv4 (`tailscale ip -4`) | What C4's `ports:` entry binds to — never `0.0.0.0` |
 | `CAIRN_DEMO_CREDENTIALS_UID` / `_GID` | `$(id -u):$(id -g)` | So you can read the credential file without sudo |
 
 `ENABLE_DUMMY_DATA=false` matters: with it `true` the deployment also provisions the Vantage Foods
@@ -349,26 +367,51 @@ created — on a machine you manage, `db:ensure-migrator` creates or repairs tha
 `CAIRN_DB_OWNER_PASSWORD`/`CAIRN_DB_OWNER_USER` point at a superuser on that server. Never
 `cairn_b210`, `cairn_hr_accept`, `cairn_demo`, `cairn_acceptance` or `cairn_integration`.
 
-### C4. Override for the credentials file (B2)
+### C4. Override for the credentials file (B2) and the Tailscale route
 
 Write `docker-compose.uat.yml` in the repository root:
 
 ```yaml
-# UAT override. Makes the credential file readable by the app so
-# /platform/users/test-credentials can render it, and pins CAIRN_ENV for the
-# two services that need development mode. Read §B1 before using the CAIRN_ENV lines.
+# UAT override — TEST HOST ONLY (see the warning at the top of this section).
+# 1. Lets the app read the credential file so /platform/users/test-credentials renders.
+# 2. Pins CAIRN_ENV=development for the two services that need it.
+# 3. Binds the app to the Tailscale address instead of requiring a reverse proxy.
 services:
   app:
     environment:
-      # B1: required for the credentials page. ONLY on a private network — see §B1.
+      # Required for the credentials page. Only behind Tailscale / a firewall — see §B1.
       CAIRN_ENV: development
       CAIRN_DEMO_CREDENTIALS_DIR: /app/credentials
     volumes:
       - ./credentials:/app/credentials:ro
+    # The base file publishes no port and expects a Traefik on the external
+    # `proxy` network. On a Tailscale-only host there is no proxy, so bind to
+    # the tailnet address directly. `tailscale ip -4` prints it; use the
+    # loopback form 127.0.0.1:3000 if you only ever browse from this machine.
+    ports:
+      - "${CAIRN_UAT_BIND_IP:-127.0.0.1}:3000:3000"
   migrate:
     environment:
       CAIRN_ENV: development
 ```
+
+The base file still declares `proxy` as an external network, so **create it once** even though the
+override binds a port — Compose refuses to start without it:
+
+```bash
+docker network create proxy      # harmless; the app simply does not use it here
+```
+
+That network does not make anything reachable. The `ports:` entry above is what does, and it is
+bound to `CAIRN_UAT_BIND_IP` — set it to your Tailscale address:
+
+```bash
+export CAIRN_UAT_BIND_IP=$(tailscale ip -4)     # e.g. 100.x.y.z
+echo "$CAIRN_UAT_BIND_IP"                        # must be a 100.x address, not 0.0.0.0
+```
+
+> **Never use `0.0.0.0` here.** It would expose development mode on every interface, which is
+> exactly what the warning at the top of this section forbids.
 
 `CAIRN_DEMO_CREDENTIALS_DIR` is read by the page (`demo-credentials.ts:183,245`), so setting it
 explicitly means the path is not an assumption. `:ro` is enough: the app only reads.
@@ -382,10 +425,12 @@ explicitly means the path is not an assumption. `:ro` is enough: the app only re
 ### C5. First start
 
 ```bash
-# The commands below use $CAIRN_HOST; the value lives in .env for Compose, so
-# source it here too rather than retyping the name.
+# The commands below use $CAIRN_HOST and $CAIRN_UAT_BIND_IP; the values live in
+# .env for Compose, so source it here rather than retyping them.
+export CAIRN_UAT_BIND_IP=$(tailscale ip -4)
 set -a; . ./.env; set +a
-echo "host: $CAIRN_HOST"     # must print your DNS name
+echo "bind: $CAIRN_UAT_BIND_IP"   # must be 100.x.y.z, never 0.0.0.0
+echo "host: $CAIRN_HOST"
 
 mkdir -p credentials        # the migrate service writes here
 docker compose -f docker-compose.yml -f docker-compose.uat.yml up -d --build
@@ -411,7 +456,7 @@ docker compose -f docker-compose.yml -f docker-compose.uat.yml \
   run --rm --no-deps \
   -e CAIRN_ENV=development \
   -e CAIRN_DEMO_CREDENTIALS_DIR=/app/credentials \
-  -e CAIRN_DEMO_LOGIN_URL="https://$CAIRN_HOST" \
+  -e CAIRN_DEMO_LOGIN_URL="http://$CAIRN_UAT_BIND_IP:3000" \
   migrate npx tsx scripts/in01-install.ts --until=phase2
 ```
 
@@ -438,11 +483,14 @@ override in C4, so `/platform/users/test-credentials` renders it.
 **The credentials view:**
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' "https://$CAIRN_HOST/platform/users/test-credentials"
+curl -s -o /dev/null -w '%{http_code}\n' \
+  "http://$CAIRN_UAT_BIND_IP:3000/platform/users/test-credentials"
 ```
 
 - `404` — `CAIRN_ENV` is not `development` in the **app** container. Check
   `docker compose exec app printenv CAIRN_ENV`.
+- connection refused — the port is bound to the wrong interface. Check
+  `docker compose port app 3000`; it must print `100.x.y.z:3000`, not `0.0.0.0:3000`.
 - `307`/`302` to `/signin` — correct. The page is gated by a session, so sign in first.
 - `200` after signing in as `in01.admin` and re-requesting — working.
 
@@ -567,15 +615,23 @@ against `docker-compose.yml`, `Dockerfile`, `.dockerignore`, `package.json` and 
 If any of those disagrees with this page, **the host is right and this page is wrong** — the same
 rule the runbook states for itself.
 
-## E. The security decision you need to make
+## E. The security decision — decided
 
 `CAIRN_ENV=development` in the `app` container is what turns the credentials page on. It also turns
 off sign-in on the launchpad and the tenant list, and removes the owner token from tenant creation.
 
-| Situation | Recommendation |
-|---|---|
-| Test box on a private network / VPN / IP-allowlisted | Accept it. Use C4 as written. |
-| Reachable from the internet | **Do not** set `CAIRN_ENV=development` on `app`. Either (a) keep `production` and read passwords from `credentials/demo-credentials.txt` on the host instead of the page, or (b) ask for a change that gates the credentials page on its own flag rather than on `CAIRN_ENV`. |
+**Owner's decision: run in `CAIRN_ENV=development` on a Tailscale-only host with no public port,
+using the C4 override. Do not add a separate credentials flag now.** That is what C4 and the
+warning at the top of this section implement. The flag is recorded as **GAP D5** for later.
 
-Option (b) is the right long-term answer and is a small application change — a separate
-`CAIRN_UAT_CREDENTIALS=1` read only by that one page, leaving `CAIRN_ENV` alone. I have not made it.
+The constraint this places on you, stated plainly:
+
+| Rule | Why |
+|---|---|
+| Bind to Tailscale or a firewall-restricted interface, **never** `0.0.0.0` | C4's `ports:` entry uses `CAIRN_UAT_BIND_IP`; verify with `docker compose port app 3000` |
+| Never put real business data in this deployment | It is a UAT with fictional data and one generated password per account |
+| Treat the tenant list and `/clients/new` as unauthenticated | They are, in this mode. Anyone on the tailnet can read and create |
+
+If the host ever becomes reachable by anyone outside the tailnet, stop and either drop back to
+`CAIRN_ENV=production` (losing the in-app credentials view; read the file instead) or build GAP D5
+first.
