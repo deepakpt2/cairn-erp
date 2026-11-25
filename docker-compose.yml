@@ -70,6 +70,12 @@ services:
       - cairn_internal
 
   app:
+    # One tag per build target: `cairn-app` here, `cairn-worker` for both workers. All three
+    # are built from the same Dockerfile but stop at different stages, and each stage has its
+    # own CMD (`node server.js` versus `npm run worker`). When they shared one tag, whichever
+    # build ran last claimed it, so `docker compose up --build` could start this container from
+    # the worker stage: it ran `npm run worker`, refused for want of CAIRN_WORKER_QUEUES, and
+    # nothing served :3000.
     image: cairn-app:local
     build:
       context: .
@@ -117,7 +123,7 @@ services:
   # Queue lists are fixed here and disjoint. An unset list would mean "every queue",
   # so the worker refuses to start without one (see src/worker/config.ts).
   worker:
-    image: cairn-app:local
+    image: cairn-worker:local
     build:
       context: .
       target: worker
@@ -145,7 +151,7 @@ services:
       - cairn_internal
 
   worker-intensive:
-    image: cairn-app:local
+    image: cairn-worker:local
     build:
       context: .
       target: worker

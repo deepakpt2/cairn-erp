@@ -396,9 +396,12 @@ docker compose logs migrate | grep -E "credentials, central-auth table grants|St
 # 6. Verify app is healthy
 docker compose ps app
 
-# 7. Build the app image and verify its packaged manual walkthrough script
-docker compose build app
-docker run --rm --entrypoint sh cairn-app:local -c 'test -s /app/walkthrough-seed.ts'
+# 7. Build the operations image and verify its packaged manual walkthrough script
+#    The seed ships in `operations` only (Dockerfile `COPY walkthrough-seed.ts`), and
+#    `tests/docker-provisioning-contract.test.ts` asserts that `app` carries none of it.
+#    Use the `operations` tag: `cairn-app` and `cairn-worker` stop at stages without it.
+docker compose build migrate
+docker run --rm --entrypoint sh cairn-operations:local -c 'test -s /app/walkthrough-seed.ts'
 ```
 
 ### Application liveness and readiness

@@ -89,6 +89,34 @@ describe('compose', () => {
     }
   });
 
+  it('gives each build target its own image tag, so a build cannot overwrite another stage', () => {
+    // The defect this guards. `app`, `worker` and `worker-intensive` are built from one
+    // Dockerfile but stop at different stages, and each stage carries its own CMD:
+    // `node server.js` for `app`, `npm run worker` for both workers. They used to share
+    // `cairn-app:local`, so `docker compose up --build` left the tag pointing at whichever
+    // stage was built last. When that was a worker, the app container ran the worker, which
+    // refused for want of CAIRN_WORKER_QUEUES — and nothing served :3000.
+    const app = services['app']!;
+    // Anchored to a key line and not a comment: the block's own comment quotes `target:` and
+    // the stage names, and a loose match would read the prose instead of the configuration.
+    // `image` sits at four spaces and `target` at six (it nests under `build:`).
+    const keyOf = (block: string, name: string) =>
+      new RegExp(`^ {4,6}${name}:\\s*(\\S+)\\s*$`, 'm').exec(block)?.[1];
+    const tagOf = (block: string) => keyOf(block, 'image');
+    const targetOf = (block: string) => keyOf(block, 'target');
+
+    expect(targetOf(app)).toBe('app');
+    expect(targetOf(regular)).toBe('worker');
+    expect(targetOf(intensive)).toBe('worker');
+
+    // Two distinct stages, two distinct tags. One tag for two stages is the whole bug.
+    expect(tagOf(app)).toBeTruthy();
+    expect(tagOf(regular)).toBeTruthy();
+    expect(tagOf(app)).not.toBe(tagOf(regular));
+    // The two workers really are the same build, so they may share one.
+    expect(tagOf(intensive)).toBe(tagOf(regular));
+  });
+
   it('passes a legacy CAIRN_JOB_QUEUES through to both so it is validated, not ignored', () => {
     expect(envOf(regular, 'CAIRN_JOB_QUEUES')).toContain('CAIRN_JOB_QUEUES');
     expect(envOf(intensive, 'CAIRN_JOB_QUEUES')).toContain('CAIRN_JOB_QUEUES');

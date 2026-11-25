@@ -606,3 +606,67 @@ The owner's `.env` still carries `ENABLE_DUMMY_DATA=true` and the default databa
 `00-HOW-TO-START.md` require `CAIRN_DATABASE_NAME=cairn_in01_uat` and `ENABLE_DUMMY_DATA=false`
 **before the first** `up`, so the two datasets never share a database in the first place. That is
 operator configuration, not code, and it is the owner's to change.
+
+## ID-009 — the app container ran the worker, because three targets shared one image tag
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** |
+| Discovered | The owner's `docker compose up`, where `app-1` printed the worker's queue refusal |
+| Application code changed | **none** — Compose and a doc command |
+| Files changed | `docker-compose.yml`, `tests/worker-split.test.ts`, `docs/DEVELOPMENT-OPERATIONS.md` |
+
+### What failed
+
+```
+app-1  | > cairn@0.1.0 worker
+app-1  | > tsx src/worker/index.ts
+app-1  | [worker] refusing to start: No queue filter: an empty CAIRN_WORKER_QUEUES makes this
+          worker claim every queue, which defeats the worker split. …
+```
+
+The **app** container was running `npm run worker`, and refusing because the `app` service — as
+one would expect — sets no `CAIRN_WORKER_QUEUES`. Nothing served `:3000`.
+
+### Why it is a configuration defect
+
+`docker-compose.yml` declares three services from one Dockerfile, each stopping at a different
+stage:
+
+| Service | `build.target` | Stage `CMD` |
+|---|---|---|
+| `app` | `app` | `["node", "server.js"]` |
+| `worker` | `worker` | `["npm", "run", "worker"]` |
+| `worker-intensive` | `worker` | `["npm", "run", "worker"]` |
+
+All three declared `image: cairn-app:local`. A Compose image tag is a single mutable reference,
+so the tag held whichever stage was built **last**. `docker compose up --build` builds all three,
+which means the `app` container was started from the final image → the `worker` stage. The image
+contents agree: the `app` stage copies `docs`, `public` and `.next/standalone`, while the
+`worker` stage is `COPY . .`.
+
+The collision is older than the worker split — `worker` already shared the tag before `7906642d`
+added `worker-intensive` — so `docker compose up --build` had been able to start the site from the
+wrong stage since the worker service was introduced. It went unnoticed because `worker` refuses to
+start without a queue list: before the split, an empty `CAIRN_JOB_QUEUES` was legal (it meant
+"every queue"), so a mis-tagged app came up as a functional worker and nothing looked broken.
+
+### The fix
+
+One tag per build target: `cairn-app:local` for the app stage, `cairn-worker:local` for both
+worker services (they genuinely are the same build, and may share). `cairn-operations:local` was
+already distinct.
+
+`tests/worker-split.test.ts` now asserts that no two targets share a tag, reading the same parsed
+Compose blocks the other checks use. Reverting `docker-compose.yml` makes it fail with
+`expected 'cairn-app:local' not to be 'cairn-app:local'`; with the fix it passes.
+
+### A doc command this corrected
+
+`docs/DEVELOPMENT-OPERATIONS.md` §“Deployment verification” step 7 ran
+`docker run … cairn-app:local … 'test -s /app/walkthrough-seed.ts'`. That could only ever have
+passed **because of** the collision: the seed is copied in the `operations` stage alone, and the
+`app` stage carries none of it. `tests/docker-provisioning-contract.test.ts` already asserts
+exactly that — `expect(app).not.toContain('walkthrough-seed.ts')` — so the doc disagreed with a
+test that was passing. The step now builds `migrate` and checks `cairn-operations:local`, which is
+the image the seed actually ships in.
