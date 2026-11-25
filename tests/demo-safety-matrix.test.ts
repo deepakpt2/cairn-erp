@@ -212,7 +212,16 @@ describe('the demo installation, stopped part way through', () => {
     expect(command).not.toBe('');
     const steps = command.split('&&').map((step) => step.trim());
     expect(steps[steps.length - 1]).toBe('npm run demo:provision');
-    expect(steps[0]).toBe('npm run db:sync-role');
+    // The command must also actually migrate before it provisions. `166e1789` put
+    // `db:ensure-migrator` in front (the baseline assigns every object to
+    // `cairn_integration_migrator`, which a compose-created volume had never made), so the
+    // first step is no longer `db:sync-role`. What this test cares about is the order that
+    // makes the last-step claim true: migrations, then reference data, then the demo.
+    // The exact sync-role bracketing is asserted in `tests/docker-provisioning-contract.test.ts`.
+    expect(steps[0]).toBe('npm run db:ensure-migrator');
+    expect(steps.indexOf('npm run db:migrate')).toBeGreaterThan(-1);
+    expect(steps.indexOf('npm run db:migrate')).toBeLessThan(steps.indexOf('npm run db:init-reference'));
+    expect(steps.indexOf('npm run db:init-reference')).toBeLessThan(steps.indexOf('npm run demo:provision'));
 
     for (const service of ['app', 'worker']) {
       const block = compose.split(new RegExp(`^  ${service}:`, 'm'))[1]?.split(/\n  [a-z_]+:/)[0] ?? '';

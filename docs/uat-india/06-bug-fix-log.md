@@ -384,3 +384,145 @@ remains the one deliberate exception, because D9 exists to show an exception bei
 | `payroll_run` at the run's period | POSTED, 22 employees, **0** exceptions |
 | Employees holding a structure | 23 of 23, including 10000101–10000103 and 10000020 |
 | `tests/demo-provisioning-contract.test.ts` | 10 passed |
+
+## ID-005 — the IN01 roles could not reach twelve Phase 3/4 steps
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** |
+| Discovered | The owner asked whether ID-003's root cause also affected IN01 |
+| Application code changed | **none** — fixtures only |
+| Files changed | `fixtures/core/organisation.json`, `fixtures/company/IN01/company.json`, `tests/demo-sales.test.ts`, `tests/demo-organisation.test.ts` |
+
+### What failed
+
+IN01 builds its roles from `fixtures/core/organisation.json`, a **second copy** of the twelve
+`DEMO_*` roles that the demo keeps in `demo-people.ts`. ID-003 fixed the demo copy. The fixture
+copy still lacked `SALES.DELIVERY.PICK`, so `in01.dispatch` could not pick a delivery — the same
+defect, still live for the company the UAT guide is written against.
+
+A dry-run of every Phase 3/4 step against that fixture found **twelve** refusals, not one:
+
+| Section | Account | Role | Refused because |
+|---|---|---|---|
+| 3.1.4, 3.4 | `in01.ap` | `DEMO_ACCOUNTANT` | lacks `PROC.INV.RECORD` |
+| 3.2.5 | `in01.controller` | `DEMO_CONTROLLER` | lacks `PROD.ORDER.SETTLE` |
+| 3.3.1 | `in01.sales` | `DEMO_SALES_CLERK` | no Plant scope; the quotation service requires one |
+| 3.3.2 | `in01.sales` | `DEMO_SALES_CLERK` | no Plant scope; cannot raise **or release** an order |
+| 3.3.3 | `in01.sales` | `DEMO_SALES_CLERK` | no Plant scope; cannot create the delivery |
+| 3.3.3 | `in01.dispatch` | `DEMO_WH_CLERK_DIST` | lacks `SALES.DELIVERY.PICK` |
+| 3.3.4 | `in01.sales` | `DEMO_SALES_CLERK` | no Plant scope; cannot bill |
+| 4.1 | `in01.controller` | `DEMO_CONTROLLER` | lacks `PROC.GRIR.MAINTAIN.POST` |
+| 4.2 | `in01.controller` | `DEMO_CONTROLLER` | lacks `FIN.ASSET.DEPRECIATE` and `FIN.JOURNAL.POST` |
+| 4.4 | `in01.controller` | `DEMO_CONTROLLER` | lacks `CFG.COST.ALLOCATION.DEFINE` |
+| 4.6 | `in01.controller` | `DEMO_CONTROLLER` | lacks `FIN.CLOSE.COCKPIT` |
+
+The Plant-scope rows are the subtle ones. `sales-order.ts`, `delivery.ts`, `billing.ts` and
+`quotation.ts` call `verifyServiceAuthorityInTx` **without** `requirePlantScope: false`, and that
+function fails closed for an actor holding no Plant grant. A capability alone was therefore not
+enough, and the guide's own 1.4 note — "`DEMO_SALES_CLERK` … cannot move stock" — says nothing
+about a delivery being a plant document. The demo had already given its own `demo.sales` both
+plants for this reason; IN01 had not.
+
+### The fix
+
+Fixture only, as the owner directed:
+
+- `in01.dispatch` (`DEMO_WH_CLERK_DIST`) gets `SALES.DELIVERY.PICK` through the shared role.
+- `in01.ap` (`DEMO_ACCOUNTANT`) gets `PROC.INV.RECORD`.
+- `in01.sales` gets plants `1000` and `2000`, mirroring the demo's `demo.sales`.
+- The controller gets exactly six authorities: `PROD.ORDER.SETTLE`, `PROC.GRIR.MAINTAIN.POST`,
+  `FIN.ASSET.DEPRECIATE`, `FIN.JOURNAL.POST`, `CFG.COST.ALLOCATION.DEFINE`, `FIN.CLOSE.COCKPIT`.
+  Named, never a wildcard.
+
+**Nothing breaks segregation of duties.** The controller still cannot raise an order, record a
+supplier invoice, post a goods receipt or issue stock — asserted in
+`tests/in01-role-authority.test.ts`. The accountant/releaser separation is a **person**-level rule,
+not a role one: `releaseDocument` refuses a releaser who is the document's preparer
+("was prepared by you; you cannot release it"), so `FIN.*` including `FIN.JOURNAL.RELEASE` on the
+accountant was never a breach, and the demo's `D19_RELEASE` depends on exactly that structure.
+
+### Verification
+
+The full dry-run after the fix — 50 authorities across 34 guide steps, every Phase 3 and Phase 4
+section, including the release, approval, payroll, quality, display and report steps:
+
+```
+steps=50  refusals=0
+```
+
+Each of the twelve refusals above was reproduced first by reverting both fixtures to `HEAD` and
+re-running the test: it named every one, including all five Plant-scope rows. With the fix applied
+it passes.
+
+## ID-006 — the twelve roles were defined twice, so a fix to one left the other wrong
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** |
+| Discovered | While fixing ID-005: the demo copy and the fixture copy had drifted apart |
+| Application code changed | **none** — fixture and platform-module wiring only |
+| Files changed | `src/platform/tenancy/demo-people.ts`, `fixtures/core/organisation.json` |
+
+### What failed
+
+`demo-people.ts` restated all twelve roles inline; `fixtures/core/organisation.json` carried the
+same twelve for the IN01 installer. They were identical when written and then diverged twice:
+
+1. `1819f764` added `SALES.DELIVERY.PICK` to the delivery service. Neither copy followed, which is
+   ID-003.
+2. ID-003 fixed the **demo** copy only, which left the two copies actively disagreeing —
+   `DEMO_WH_CLERK_MFG` and `DEMO_WH_CLERK_DIST` held the pick in one file and not the other.
+
+Two sources of truth for one grant is the defect; ID-003 was its first symptom and ID-005 its
+second.
+
+### The fix
+
+`demo-people.ts` now **reads** the roles from `fixtures/core/organisation.json` instead of restating
+them. The fixture is the right home: `core/` is where a country-neutral role belongs, the
+fixture-driven installer already reads it, and the demo's operations image ships it. One copy
+remains, so a role can be wrong in exactly one place. The reasoning that used to live in code
+comments (why the production clerk holds `INV.GI.POST`, why the controller may hold
+`FIN.JOURNAL.POST`) moved into the module docblock, where it still sits next to the code that
+grants it.
+
+### Verification
+
+- `tests/in01-role-authority.test.ts` refuses a `code: 'DEMO_…', name: …` block in
+  `demo-people.ts`, so the second copy cannot come back.
+- The full demo installation was re-run end to end on a disposable database
+  (`cairn_dp_roles_20261125_150049`, dropped afterwards): 23 phases complete, exit 0, 23 roles
+  created, and the created rows carry the added authorities (`SALES.DELIVERY.PICK` on both
+  warehouse clerks and the sales clerk; `FIN.JOURNAL.POST` on the controller).
+- `tests/demo-organisation.test.ts`, `tests/demo-sales.test.ts` — 27 passed.
+
+## ID-007 — the deployment-invariant test still expected the pre-`166e1789` command
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** |
+| Discovered | While confirming the Dockerfile's effect on `db:sync-role` |
+| Application code changed | **none** |
+| Files changed | `tests/demo-safety-matrix.test.ts` |
+
+### What failed
+
+`tests/demo-safety-matrix.test.ts` asserted `steps[0] === 'npm run db:sync-role'`. `166e1789`
+("Create the migration role on deployments and migrate as it") put `db:ensure-migrator` in front,
+so the test failed on `development` for a reason that had nothing to do with the demo.
+
+### The fix
+
+The test's claim is that the demo step runs **last**, so a refused installation stops the
+application. It now asserts that directly: the last step is `demo:provision`, the first is
+`db:ensure-migrator`, and migrations precede reference data precede the demo. The exact
+sync-role bracketing is already asserted, and still passes, in
+`tests/docker-provisioning-contract.test.ts`.
+
+**Answering the owner's question:** the CMD change does not affect `db:sync-role` on a fresh
+deployment. Both `db:sync-role` calls remain, still bracketing `db:migrate`. On a fresh volume
+`docker/postgres/10-app-role.sh` creates both roles before the container runs, so
+`db:ensure-migrator` finds the role present and exits 0 without changing anything. On a volume
+initialised before that script existed, it creates the missing role — which is the defect it was
+added to fix.
