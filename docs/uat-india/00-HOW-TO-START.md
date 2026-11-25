@@ -271,27 +271,26 @@ shipped file. B1 you must decide on; B3 is handled by running in the right conta
 ### C1. Get the exact commit
 
 ```bash
-git clone <repository-url> cairn-erp
+git clone https://github.com/deepakpt2/cairn-erp.git cairn-erp
 cd cairn-erp
-git checkout <deploy-commit>        # see below
-git rev-parse HEAD
+git checkout 2fa5b3b1
+git rev-parse HEAD      # must print 2fa5b3b143de57bce7cf8a438ecfa81b557bbfb6
 ```
 
-> **Which commit to deploy.** Use the tip of `development` at the time you clone. Every commit from
-> **`0262c5d5` onward** carries an identical installer, fixture set, schema, Dockerfile and Compose
-> file; the only file that changed after `0262c5d5` is this document. Verified:
+> **Deploy commit: `2fa5b3b143de57bce7cf8a438ecfa81b557bbfb6`** — pushed to `origin/development` and
+> verified identical to the remote (`git ls-remote origin refs/heads/development`).
+>
+> Every commit from `0262c5d5` onward carries an identical installer, fixture set, schema,
+> Dockerfile and Compose file; after `0262c5d5` only files under `docs/uat-india/` changed.
+> Verified:
 >
 > ```
 > git diff --stat 0262c5d5..development -- src scripts fixtures \
 >     package.json docker-compose.yml Dockerfile      # → empty
 > ```
 >
-> So `0262c5d5`, `d0edbf59`, `b824bde1` and anything later on `development` are interchangeable
-> **for the application**. Deploy the newest, and confirm the diff above is empty against whichever
-> you picked. If it is not empty, read what changed before you deploy it.
->
-> **Nothing here is pushed yet.** `development` on the workbench is ahead of `origin/development`;
-> push it, or `git checkout` will fail on your server.
+> So any commit in `0262c5d5..development` is interchangeable **for the application**. Use
+> `2fa5b3b1`, and re-run that diff if you are reading this later and `development` has moved.
 
 ### C2. Environment file
 
