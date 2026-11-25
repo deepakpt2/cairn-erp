@@ -169,3 +169,26 @@ If any were to be fixed first, the two worth attention are:
    action reading its tenant from the form is the wrong trust boundary.
 
 That is a report, not a recommendation to act. You said not to fix them.
+
+## E. A build blocker the test suite could not see
+
+The 21 failures above are **test** failures. They were not the thing that stopped the deployment:
+`next build` failed on a type error in an App Router file that no test executes — see
+`06-bug-fix-log.md` Bug 003. It had been there since 2026-11-22.
+
+This is the gap in the current checks, and it is worth naming because the triage would otherwise
+look complete:
+
+| Check | Catches | Missed Bug 003? |
+|---|---|---|
+| `vitest run` (674 files) | runtime behaviour | **Yes** — no test exercises the route module's export surface |
+| `tsc --noEmit` | TypeScript, including the generated route types | **No** — it reported the error, but as 1 of 13, among 12 genuine test-only errors |
+| `next build` | the route contract Next enforces | **No** — this is the check that says it plainly |
+
+`tsc` *did* report it, which is how I found it when the build failed. The problem is signal: one
+build-blocking error sat in a list of twelve that do not block anything, and I read the list as one
+category. **`next build` in CI separates them for free**, and would have failed on the commit that
+introduced it.
+
+Recommended, not done: run `npm run build` (or `build:check`) on `development` in CI. It needs no
+database and takes about four minutes.

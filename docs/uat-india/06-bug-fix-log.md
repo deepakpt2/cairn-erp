@@ -15,6 +15,10 @@ Rules this log obeys, from the brief:
   by weakening the application. Those are not in this log; they are in `02-gap-list.md`.
 - A missing feature is a **GAP**, not a bug. It is recorded in `02-gap-list.md` and is not built.
 
+**Numbering.** Bug 002 is not missing: it was an installer defect, and it now lives under
+"Installer defects" at the end as **ID-002**. The numbers are not renumbered so that a reference in
+a commit message or a review thread still points at the same thing.
+
 ---
 
 ## Bug 001 — A shifted fiscal year (April–March) cannot resolve dates in January to March
@@ -144,6 +148,84 @@ the `calendarYear = 0` rows).
 Nothing else. Per the owner's instruction the commit contains only this defect; every other
 calendar-year assumption found is reported in `03-calendar-year-assumption-report.md` with no code
 change.
+
+---
+
+## Bug 003 — A route file exports a non-route symbol, so the production build cannot succeed
+
+| Field | Value |
+|---|---|
+| Status | **FIXED** |
+| Discovered | The owner's `docker compose build` failed at `Dockerfile:24` (`npm run build`) |
+| Approved | Owner, before the fix was applied |
+| Commit | `e5add696` |
+| Files changed | `src/app/people/payroll-runs/payment-file/route.ts` |
+| Application code changed | 4 lines deleted |
+
+### What failed
+
+```
+src/app/people/payroll-runs/payment-file/route.ts
+Type error: Route "src/app/people/payroll-runs/payment-file/route.ts" does not match the
+required types of a Next.js Route.
+  "getPaymentFile" is not a valid Route export field.
+```
+
+A Next.js route module may export only the HTTP verbs and a fixed set of route options
+(`dynamic`, `revalidate`, `runtime`, …). This one also exported a plain function.
+
+### Why it is a bug and not a data problem
+
+Deterministic, total, and independent of the data: the build's generated route-type check rejects
+any export outside the permitted set, so `next build` cannot pass. Nothing in the UAT dataset,
+fixtures or environment can change that.
+
+### Pre-existing, and how long
+
+`git blame` attributes the line to `2ca9cb76` (2026-11-22, "Add salary payment files, employee bank
+details and controlled reissue"). The same two lines are present on `aa8bc08b`, the commit before
+any India UAT work, so **the repository has not built since 2026-11-22**.
+
+### Why the export was dead
+
+Nothing imports `getPaymentFile` from the route:
+
+| File | Imports it from |
+|---|---|
+| `src/app/people/payroll-runs/page.tsx:26` | `@/modules/people/payroll-payment-file` |
+| `tests/payroll-payment-file.test.ts:46` | `../../modules/people/payroll-payment-file` |
+
+The only importer of the route is `tests/payroll-payment-file.test.ts:53`, which uses `GET`,
+`POST` and `dynamic` — never the re-export.
+
+### The fix
+
+Delete the `getPaymentFile` import and the `export { getPaymentFile };` line. Four lines, no
+behaviour change: the route serves the same GET and POST.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `next build` on a scratch worktree at `aa8bc08b` with the fix applied | **Compiled successfully in 2.2 min**, type check passed, route table printed |
+| `next build` without the fix | Fails at the type check, as the owner saw |
+| `tsc --noEmit` on this tree | The `.next/types/.../payment-file/route.ts` error is **gone** |
+| `tests/payroll-payment-file.test.ts` | **21 passed** |
+
+### Not fixed in this commit
+
+The 12 remaining `tsc` errors, all in four `tests/` files (`ensure-migrator-role`,
+`payment-file-artifact`, `payment-reissue.ui`, `payroll-payment-reissue`). They do **not** block the
+build — Next type-checks only the app tree it generates, and the successful build above proves
+it — and they are pre-existing, listed in `08-failing-test-triage.md`.
+
+### A note on how this was missed
+
+I ran `tsc --noEmit` several times during this work and saw this error each time, alongside 12 in
+`tests/`. I classified the set as "pre-existing and unrelated" and moved on — correct that it was
+pre-existing, wrong that it was unrelated: it stops the build. A `next build` in CI would have
+caught it in one line, which is why the triage now distinguishes build-blocking errors from test
+errors.
 
 ---
 

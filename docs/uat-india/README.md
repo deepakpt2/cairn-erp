@@ -11,7 +11,7 @@ a gap; where they disagree with a fixture, the fixture wins.
 | 3 | Generated users and credentials | [`04-users-and-credentials.md`](./04-users-and-credentials.md) | Complete. 15 accounts, per-user passwords, file + in-app view. |
 | 4 | UAT guide | [`05-uat-guide.md`](./05-uat-guide.md) | Complete for Phases 0–2. Phase 3/4 specified, not installed (GAP D1). |
 | 5 | GAP list | [`02-gap-list.md`](./02-gap-list.md) | Complete, with the localisation section. |
-| 6 | BUG FIX LOG | [`06-bug-fix-log.md`](./06-bug-fix-log.md) | One bug, fixed and committed (`28bed70d`). |
+| 6 | BUG FIX LOG | [`06-bug-fix-log.md`](./06-bug-fix-log.md) | Two application bugs fixed (`28bed70d`, `e5add696`), plus installer defects in a separate section. |
 | 7 | E2E proposal | [`07-e2e-proposal.md`](./07-e2e-proposal.md) | Proposal only, as asked. |
 | — | Calendar-year findings | [`03-calendar-year-assumption-report.md`](./03-calendar-year-assumption-report.md) | Requested with the bug approval. Nothing changed in it. |
 | — | Failing-test triage | [`08-failing-test-triage.md`](./08-failing-test-triage.md) | **Definitive**: 21 of 22 reproduce on `aa8bc08b`; 4 are flaky; none introduced here. Not fixed. |
