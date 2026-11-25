@@ -14,7 +14,6 @@ import { getSession } from '@/platform/auth/current';
 import {
   PAYMENT_FILE_WARNING,
   downloadPaymentFile,
-  getPaymentFile,
   isPaymentFileError,
   preparePaymentFile,
 } from '@/modules/people/payroll-payment-file';
@@ -100,6 +99,3 @@ export async function GET(request: Request): Promise<Response> {
     return refusal(statusOf(error.code), error.message, error.remedy);
   }
 }
-
-// The screen shows the prepared state through the same service; exported so it can be imported from one place.
-export { getPaymentFile };
