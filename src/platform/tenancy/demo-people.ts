@@ -201,17 +201,26 @@ const ROLES = [
     name: 'Warehouse clerk — manufacturing plant',
     description: 'Goods movements at the manufacturing plant',
     // Shipping is warehouse work, so the clerk who empties the shelf is also the
-    // clerk who ships the delivery: the 601 a delivery posts asks for the
-    // goods-issue authority *and* the one that ships to a customer, and the clerk
-    // holds both for the plant they stand in. The sales clerk raises the order and
-    // the billing document and holds neither.
-    capabilities: ['INV.*', 'QM.LOT.CREATE', 'SALES.GI.POST', 'SALES.RETURNS.RECEIPT.POST', 'AUDIT.TRAIL.VIEW'],
+    // clerk who ships the delivery: the pick that readies it asks for
+    // SALES.DELIVERY.PICK, and the 601 the delivery then posts asks for the
+    // goods-issue authority *and* the one that ships to a customer. The clerk
+    // holds all of them for the plant they stand in. The sales clerk raises the
+    // order and the billing document and holds none of them.
+    capabilities: [
+      'INV.*', 'QM.LOT.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
+      'SALES.RETURNS.RECEIPT.POST', 'AUDIT.TRAIL.VIEW',
+    ],
   },
   {
     code: 'DEMO_WH_CLERK_DIST',
     name: 'Warehouse clerk — distribution centre',
     description: 'Goods movements at the distribution centre',
-    capabilities: ['INV.*', 'QM.LOT.CREATE', 'SALES.GI.POST', 'SALES.RETURNS.RECEIPT.POST', 'AUDIT.TRAIL.VIEW'],
+    // The same authorities as the manufacturing clerk: the two are told apart by
+    // the plant they stand in, not by what they may do.
+    capabilities: [
+      'INV.*', 'QM.LOT.CREATE', 'SALES.DELIVERY.PICK', 'SALES.GI.POST',
+      'SALES.RETURNS.RECEIPT.POST', 'AUDIT.TRAIL.VIEW',
+    ],
   },
   {
     code: 'DEMO_SALES_CLERK',

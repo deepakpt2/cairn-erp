@@ -100,6 +100,32 @@ describe('demo sales phase, as it is written', () => {
     expect(text).toContain('WAREHOUSE_CLERK_CENTRE');
     expect(text).toContain('plan.plant === DEMO_STRUCTURE.manufacturingPlant');
   });
+
+  it('gives the clerk who picks the authority the pick service asks for', () => {
+    // The pick is judged inside the service: `confirmDeliveryPicks` refuses an
+    // actor without SALES.DELIVERY.PICK. The phase picks as demo.warehouse1 and
+    // demo.warehouse2, so those roles must hold it — a role that ships the goods
+    // issue but cannot pick leaves the whole chain unprovisioned at D3_SALES.
+    const people = readFileSync(
+      join(process.cwd(), 'src/platform/tenancy/demo-people.ts'),
+      'utf8',
+    );
+    for (const role of ['DEMO_WH_CLERK_MFG', 'DEMO_WH_CLERK_DIST']) {
+      const block = new RegExp(`code: '${role}'[\\s\\S]*?capabilities: \\[([\\s\\S]*?)\\]`).exec(people);
+      expect(block?.[1], `${role} declares no capabilities`).toBeTruthy();
+      expect(block![1]).toContain("'SALES.DELIVERY.PICK'");
+      expect(block![1]).toContain("'SALES.GI.POST'");
+    }
+  });
+
+  it('hands the picking clerk its own session to the pick service', () => {
+    // The authority is the session's, never a name on the form: the pick must be
+    // called with the actor resolved for the clerk, or the service has no identity
+    // to judge and refuses it.
+    const text = source();
+    expect(text).toContain('withActingUser(client, clerk, (actor) =>');
+    expect(text).toContain('authorization: actor');
+  });
 });
 
 describe('demo sales, when the demo stands', () => {
