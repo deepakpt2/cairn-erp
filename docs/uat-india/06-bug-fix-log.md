@@ -332,6 +332,7 @@ with it restored, it passes.
 | Status | **FIXED** |
 | Discovered | The same end-to-end run, after ID-003 was fixed and D3 no longer stopped it |
 | Application code changed | **none** — demo fixtures only |
+| Commit | `5e1330df` |
 | Files changed | `src/platform/tenancy/demo-payroll.ts`, `tests/demo-provisioning-contract.test.ts` |
 
 ### What failed
@@ -372,4 +373,14 @@ remains the one deliberate exception, because D9 exists to show an exception bei
   without a structure fails the test rather than the installation.
 - Proven both ways: with the four lines removed the test fails and names all four employees; with
   the fix restored it passes.
-- `tests/demo-provisioning-contract.test.ts` — 10 passed.
+- End-to-end on `cairn_dp_d9check_20261125_143051`, a disposable database created for the purpose
+  and dropped afterwards. The whole installation runs `A_FOUNDATION` → `D19_RELEASE` with exit 0.
+
+| Check | Result |
+|---|---|
+| `D7_PAYROLL` / `D8_PAYROLL_RUN` / `D9_PAYROLL_POST` | COMPLETED / COMPLETED / COMPLETED |
+| D8 detail | 21 employees, **1** exception — the controller, by design |
+| D9 detail | POSTED, document `1000/2026/100`, debit `56961.7200` |
+| `payroll_run` at the run's period | POSTED, 22 employees, **0** exceptions |
+| Employees holding a structure | 23 of 23, including 10000101–10000103 and 10000020 |
+| `tests/demo-provisioning-contract.test.ts` | 10 passed |
